@@ -14,7 +14,8 @@ Input-entry detection (`is_input_entry`) reads `JournalEntry.input`, the
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -95,6 +96,12 @@ _REQUIREMENTS_HEADING = "## Requirements"
 _DEFERRED_HEADING = "## Deferred from input"
 _REQUIREMENTS_HEADER = ["id", "requirement", "source"]
 _DEFERRED_HEADER = ["input", "reason"]
+_ROW_SHAPES = {
+    _REQUIREMENTS_HEADING: "| R<n> | <requirement> | <source> |",
+    _DEFERRED_HEADING: '| "<verbatim quote>" | <reason> |',
+}
+"""Each section's data-row shape — what every error from that section shows,
+so an agent fixes the row rather than deleting the section (#776, take 10)."""
 
 _ID_RE = re.compile(r"^R[1-9][0-9]*$")
 _INPUT_SOURCE_RE = re.compile(r'^input\s+"(.*)"$', re.DOTALL)
@@ -274,9 +281,32 @@ def parse_requirements(spec_text: str) -> Requirements:
     section = _locate_section(spec_text, _REQUIREMENTS_HEADING)
     if section is None:
         raise RequirementsError(f"no `{_REQUIREMENTS_HEADING}` section found")
-    lines, first_line_no = section
-    rows = _parse_table(lines, first_line_no, _REQUIREMENTS_HEADER, _REQUIREMENTS_HEADING)
+    with _in_section(_REQUIREMENTS_HEADING):
+        items = _parse_requirement_rows(*section)
 
+    deferred: list[Deferred] = []
+    deferred_section = _locate_section(spec_text, _DEFERRED_HEADING)
+    if deferred_section is not None:
+        with _in_section(_DEFERRED_HEADING):
+            deferred = _parse_deferred_rows(*deferred_section)
+
+    return Requirements(items=tuple(items), deferred=tuple(deferred))
+
+
+@contextmanager
+def _in_section(heading: str) -> Iterator[None]:
+    """Re-raise a `RequirementsError` prefixed with the section it came from
+    and that section's row shape (#776)."""
+    try:
+        yield
+    except RequirementsError as exc:
+        raise RequirementsError(
+            f"`{heading}`: {exc} — each row is `{_ROW_SHAPES[heading]}`"
+        ) from exc
+
+
+def _parse_requirement_rows(lines: list[str], first_line_no: int) -> list[Requirement]:
+    rows = _parse_table(lines, first_line_no, _REQUIREMENTS_HEADER, _REQUIREMENTS_HEADING)
     items: list[Requirement] = []
     seen_ids: dict[str, int] = {}
     for cells, line_no in rows:
@@ -297,20 +327,18 @@ def parse_requirements(spec_text: str) -> Requirements:
         row = "| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |"
         sources = _parse_sources(source_cell, line_no, row)
         items.append(Requirement(id=rid, text=req_text, sources=sources))
+    return items
 
+
+def _parse_deferred_rows(lines: list[str], first_line_no: int) -> list[Deferred]:
     deferred: list[Deferred] = []
-    deferred_section = _locate_section(spec_text, _DEFERRED_HEADING)
-    if deferred_section is not None:
-        d_lines, d_first_line_no = deferred_section
-        d_rows = _parse_table(d_lines, d_first_line_no, _DEFERRED_HEADER, _DEFERRED_HEADING)
-        for cells, line_no in d_rows:
-            input_cell, reason = cells
-            quote = _unescape_quote(_extract_quote(input_cell, line_no))
-            if not reason:
-                raise RequirementsError(f"line {line_no}: Deferred entry has an empty `reason`")
-            deferred.append(Deferred(quote=quote, reason=reason))
-
-    return Requirements(items=tuple(items), deferred=tuple(deferred))
+    for cells, line_no in _parse_table(lines, first_line_no, _DEFERRED_HEADER, _DEFERRED_HEADING):
+        input_cell, reason = cells
+        quote = _unescape_quote(_extract_quote(input_cell, line_no))
+        if not reason:
+            raise RequirementsError(f"line {line_no}: Deferred entry has an empty `reason`")
+        deferred.append(Deferred(quote=quote, reason=reason))
+    return deferred
 
 
 # --- §B: quote matching ------------------------------------------------------
@@ -414,32 +442,43 @@ def check_requirements(
     matrix: Matrix,
     spec_ref: str,
     *,
-    input_pending: bool = False,
+    pending: list[str] | None = None,
 ) -> list[str]:
     """The §C structural gate: problems with the spec's Requirements capture,
     empty when sound. `spec_ref` is `<repo>:<spec-path>` (no fragment) — a
     requirement `R<n>` is cited when a matrix row's `origin` names
     `spec_ref#R<n>` (its archive twin resolves too).
 
-    `input_pending` is the pre-check's stance (`fr spec requirements`, run
-    before the brainstorm resolve that writes the input entry, #776): with no
-    input entry yet, neither its absence nor the quotes it would match is a
-    problem. The resolve gate never passes it, so it stays strict."""
+    `pending` is the pre-check's stance (`fr spec requirements`, run before
+    the brainstorm resolve, #776): whatever that resolve's record writes — the
+    input entry, a `journal:` decision, an `acceptance:` row citing a
+    requirement — is not on disk yet, so its absence is appended to `pending`
+    rather than to the problems. Only ABSENCE is pending: an id already in
+    the journal under another kind, or a quote that misses an input entry
+    that exists, is wrong now and after the resolve. The resolve gate never
+    passes it, so it stays strict."""
     problems: list[str] = []
+    missing = problems if pending is None else pending
 
     input_entries = [e for e in entries if is_input_entry(e)]
-    skip_quotes = input_pending and not input_entries
-    if not input_entries and not skip_quotes:
-        problems.append(
-            "no input entry (a `kind=discovery` entry carrying `input`) found in the spec journal"
+    skip_quotes = pending is not None and not input_entries
+    if not input_entries:
+        missing.append(
+            "input entry: none in the spec journal yet, so input quotes are unchecked — "
+            "the brainstorm record's `journal:` entry with `input: true` writes it "
+            "(standalone: `fr journal add --scope spec --kind discovery --input`)"
+            if skip_quotes
+            else "no input entry (a `kind=discovery` entry carrying `input`) found in the "
+            "spec journal"
         )
 
+    entry_ids = {e.id for e in entries}
     decision_ids = {e.id for e in entries if getattr(e, "kind", None) == "decision"}
 
     try:
         parsed = parse_requirements(spec_text)
     except RequirementsError as exc:
-        problems.append(f"`{_REQUIREMENTS_HEADING}`: {exc}")
+        problems.append(str(exc))
         return problems
 
     if not parsed.items:
@@ -457,13 +496,25 @@ def check_requirements(
                         "any input entry in the spec journal"
                     )
             else:
-                if src.value not in decision_ids:
+                if pending is not None and src.value not in entry_ids:
+                    pending.append(
+                        f"requirement {req.id}: decision {src.value!r} is not in the spec "
+                        "journal yet — the brainstorm record's `journal:` must write it as a "
+                        "`kind: decision`"
+                    )
+                elif src.value not in decision_ids:
                     problems.append(
                         f"requirement {req.id}: source cites decision {src.value!r}, which "
                         "is not a `kind=decision` entry in the spec journal"
                     )
         if not is_cited(req.id, matrix, spec_ref):
-            problems.append(uncited_problem(req.id, spec_ref))
+            if pending is None:
+                problems.append(uncited_problem(req.id, spec_ref))
+            else:
+                pending.append(
+                    f"requirement {req.id}: no matrix row cites {spec_ref}#{req.id} yet — "
+                    "the brainstorm record's `acceptance:` must stage one with that origin"
+                )
 
     for d in parsed.deferred:
         if not skip_quotes and not _quote_ok(d.quote):

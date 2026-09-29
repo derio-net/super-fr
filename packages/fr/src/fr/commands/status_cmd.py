@@ -26,6 +26,7 @@ from fr.commands.common import (
     require_migrated_layout,
     resolve_repo_root,
 )
+from fr.git import GitUnavailableError
 from fr.labels import FR_SYNCED
 from fr.parser import PlanSchemaError
 
@@ -144,7 +145,43 @@ def _sweep_lists(repo_root: Path) -> PlanSweep:
     return plan_sweep(repo_root, evidence)
 
 
-def _sweep_json(sweep: PlanSweep, owed: OwedArtifacts) -> dict[str, Any]:
+def _behind_ref(repo_root: Path, sweep: PlanSweep) -> int | None:
+    """Commits HEAD lacks from the default ref, when HEAD is strictly BEHIND
+    it (an ancestor, not equal); None otherwise — a diverged feature branch is
+    not stale, its own work is the point (gh#811).
+
+    The sweep reads plans and owed artifacts from the working tree but merge
+    evidence from the fetched ref, and its header names that ref. In a base
+    clone that has not pulled a merge, the merged plan is simply not on disk,
+    so no bucket lists it and the report reads as "nothing owed" against a
+    ref it never evaluated. Saying so is the fix; pulling is the operator's
+    call, since a read-only verb never moves a branch."""
+    from fr.git import git_answer
+
+    ref = sweep.evidence.ref
+    if ref is None:
+        return None
+    try:
+        if git_answer(repo_root, "merge-base", "--is-ancestor", "HEAD", ref.ref).returncode:
+            return None
+        count = git_answer(repo_root, "rev-list", "--count", f"HEAD..{ref.ref}")
+    except GitUnavailableError:
+        return None
+    n = int(count.stdout.strip() or 0) if count.returncode == 0 else 0
+    return n or None
+
+
+def _behind_block(behind: int | None, sweep: PlanSweep) -> _Block:
+    ref = sweep.evidence.ref
+    if not behind or ref is None:
+        return []
+    return [
+        f"working tree is {behind} commit(s) behind {ref.ref} — this report lists what is "
+        "on disk, so it is stale: pull the default branch (`git pull --ff-only`) and re-run."
+    ]
+
+
+def _sweep_json(sweep: PlanSweep, owed: OwedArtifacts, behind: int | None) -> dict[str, Any]:
     ev = sweep.evidence
     return {
         "archivable": sweep.archivable,
@@ -162,6 +199,7 @@ def _sweep_json(sweep: PlanSweep, owed: OwedArtifacts) -> dict[str, Any]:
             }
         ),
         "ref_error": ev.ref_error,
+        "behind_ref": behind,
         "unparsed_on_ref": list(ev.unparsed_on_ref),
         # §C: everything `owed_artifacts` reports, alongside the buckets
         # above (unchanged) — new keys, nothing removed or renamed.
@@ -239,9 +277,10 @@ def _held_block(held: tuple[HeldSpec, ...]) -> _Block:
     return [f"held live (spec): {h.spec} — {h.note}" for h in held]
 
 
-def _sweep_text(sweep: PlanSweep, owed: OwedArtifacts) -> str:
+def _sweep_text(sweep: PlanSweep, owed: OwedArtifacts, behind: int | None) -> str:
     ref = sweep.evidence.ref
-    blocks = _unknown_ref_blocks(sweep) if ref is None else _known_ref_blocks(sweep, ref)
+    blocks = [b for b in [_behind_block(behind, sweep)] if b]
+    blocks += _unknown_ref_blocks(sweep) if ref is None else _known_ref_blocks(sweep, ref)
     owed_block = _owed_block(owed.owed)
     if owed_block:
         blocks.append(owed_block)
@@ -299,10 +338,12 @@ def status_command(
         # One merge-evidence read for the whole sweep (#544) — reused here,
         # never re-fetched.
         owed = owed_artifacts(repo_root, sweep.evidence)
+        behind = _behind_ref(repo_root, sweep)
         if output_format == "json":
-            console.print_json(_json.dumps(_sweep_json(sweep, owed)))
+            console.print_json(_json.dumps(_sweep_json(sweep, owed, behind)))
         else:
-            console.print(_sweep_text(sweep, owed), markup=False, highlight=False, soft_wrap=True)
+            text = _sweep_text(sweep, owed, behind)
+            console.print(text, markup=False, highlight=False, soft_wrap=True)
         return
 
     gh = _make_gh_client()

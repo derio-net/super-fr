@@ -187,6 +187,12 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
             f"{record.step}: section(s) {', '.join(extra)} not allowed — the step emits "
             f"{emits}, which allows {sorted(allowed)} (spec §5.C.2.1)"
         )
+    if record.shape is not None:
+        # §A (R1): refused before any write, by the same rules resolve applies.
+        try:
+            run_cmd._rebind_shape(state, manifest, record.step, record.shape, repo_root)
+        except RunStateError as e:
+            raise RecordRefusedError(str(e)) from e
     owner_emits = tuple(step.emits) or (tuple(parent.emits) if parent is not None else ())
     scope = journal_scope(owner_emits)
     plan_rel = run_cmd._emitted_plan(state) or record.emitted.get("plan")
@@ -642,7 +648,14 @@ def _acceptance_writes(
     from typing import get_args
 
     from fr.acceptance.edit import drop_levels, insert_row, merge_levels, replace_row
-    from fr.acceptance.model import AcceptanceError, Row, Status, parse_matrix, split_ref
+    from fr.acceptance.model import (
+        AcceptanceError,
+        Row,
+        Status,
+        parse_matrix,
+        pipeline_ref_error,
+        split_ref,
+    )
     from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set
 
     matrix_path = repo_root / MATRIX_REL
@@ -718,6 +731,12 @@ def _acceptance_writes(
                 )
             for ref in row.refs():
                 split_ref(ref)
+            # Only the refs this write adds: refused where written, not where
+            # loaded, so a row that already carries one still moves (gh#775).
+            for refs in item.levels.values():
+                for ref in refs:
+                    if (why := pipeline_ref_error(ref)) is not None:
+                        raise RecordRefusedError(f"acceptance {item.id}: {why}")
         except AcceptanceError as e:
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
         except ValueError as e:
@@ -929,6 +948,7 @@ def apply_record(
             also_commit=commit_paths,
             guard=guard,
             visual=record.visual,
+            shape=record.shape,
         )
     except BaseException:
         if not guard.landed:

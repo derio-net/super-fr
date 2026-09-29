@@ -2055,7 +2055,15 @@ def _tier_issues(plan: Plan) -> list[ReviewIssue]:
        indistinguishable from working tiering at every observable point.
        Manual phases are never dispatched to a model, so a missing tier there
        is not a gap.
+    3. Reason above `standard` (#813) — `standard` is the default; `hard`
+       costs the most expensive model for the whole phase, so it is a claim
+       and is recorded as one: a `tier-<plan>-p<N>` spec-journal decision (or
+       a `tier:` phase-split decision for that phase). An error, like the
+       split ceiling it mirrors — take 10's plans both chose `hard` with no
+       reason, and nothing between plan and dispatch asked.
     """
+    from fr.phase_sizing import tier_id, tier_reasons
+
     out: list[ReviewIssue] = []
     tiered = any(ph.phase.tier is not None for ph in plan.phases)
     if tiered and plan.meta.fr_version:
@@ -2084,7 +2092,52 @@ def _tier_issues(plan: Plan) -> list[ReviewIssue]:
                 ),
             )
         )
+
+    above = [
+        ph.phase
+        for ph in plan.phases
+        if ph.phase.tag == "agentic" and ph.phase.tier in _TIERS_NEEDING_A_REASON
+    ]
+    if above:
+        reasoned = tier_reasons(_spec_journal_entries(plan), plan.meta.plan)
+        slug = _spec_journal_slug(plan)
+        for h in above:
+            if h.number in reasoned:
+                continue
+            if slug is None:
+                # No same-repo spec journal (a cross-repo spec, or none): there
+                # is nowhere here to record the reason, so an error could only
+                # be cleared by lowering the tier. Say it instead.
+                out.append(
+                    ReviewIssue(
+                        severity="warn",
+                        message=(
+                            f"phase {h.number} declares tier: {h.tier} — standard is the "
+                            "default, and this plan has no same-repo spec journal to "
+                            "record why; state the reason in the phase prose."
+                        ),
+                    )
+                )
+                continue
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {h.number} declares tier: {h.tier} with no recorded reason — "
+                        "standard is the default. Lower it, or record why: "
+                        f"`fr journal add --scope spec --slug {slug} --kind decision "
+                        f'--id {tier_id(plan.meta.plan, h.number)} --title "<reason>"`.'
+                    ),
+                )
+            )
     return out
+
+
+_TIERS_NEEDING_A_REASON: frozenset[str] = frozenset(
+    PHASE_TIERS[PHASE_TIERS.index("standard") + 1 :]
+)
+"""The tiers above `standard` — derived from `fr.types.PHASE_TIERS`, which is
+ordered cheapest first, so a new top tier needs a reason with no edit here."""
 
 
 def _scope_field_issues(plan: Plan) -> list[ReviewIssue]:

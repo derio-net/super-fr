@@ -16,7 +16,6 @@ import yaml
 from tests.integration.test_fr_goal_shape import (
     _drive_to_implement,
     _fr,
-    _walk_brief,
     _workspace,
 )
 
@@ -141,11 +140,9 @@ def started_run(tmp_path: Path) -> Path:
     )
     _plan(root)
     commit_all(root, "spec and plan")
-    _drive_to_implement(root, RUN, "feat/rec", "docs/spec.md", PLAN_REL)
-    out = fr(root, ["run", "advance", RUN])
-    assert out.exit_code == 0, out.output
-    brief = _walk_brief(out.stdout)
-    assert (brief["step"], brief["item"]) == ("implement-phase", "phase/1"), out.output
+    # plan-review's advance goes on to brief implement-phase phase/1 (R5).
+    brief = _drive_to_implement(root, RUN, "feat/rec", "docs/spec.md", PLAN_REL)
+    assert (brief["step"], brief["item"]) == ("implement-phase", "phase/1"), brief
     LAST_BRIEF.clear()
     LAST_BRIEF.update(brief)
     commit_all(root, "cursor")

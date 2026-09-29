@@ -891,3 +891,51 @@ def test_a_partial_migration_says_how_many_landed(
     err = capsys.readouterr().err
     assert "1 artifact(s) migrated" in err
     assert "1 left unmodified" in err
+
+
+# --- #812: an unreadable artifact is not a stale one ----------------------
+
+
+def _scratch(tmp_path: Path, name: str, text: str) -> Path:
+    d = tmp_path / "docs" / "superpowers" / "runs" / "r1.records"
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / name
+    p.write_text(text)
+    return p
+
+
+@pytest.mark.parametrize(
+    ("name", "text", "why"),
+    [
+        # take 10 run A: `fr plan create`'s phase list parked under .records/
+        ("phases.yaml", "- title: one\n- title: two\n", "top level must be a mapping, got list"),
+        # take 10 run B: a record with an unquoted colon
+        ("code__phase-1.yaml", "step: code\nnote: a: b\n", "line 2"),
+    ],
+)
+def test_a_non_interactive_refusal_names_an_unreadable_file_not_a_migration(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str, text: str, why: str
+) -> None:
+    """#812: the refusal said "written for a different fr and must be migrated"
+    about a file that is not stale but unreadable, and `fr migrate` could never
+    fix it. The operator needs the file, the parse error, and where scratch
+    inputs belong."""
+    bad = _scratch(tmp_path, name, text)
+
+    with pytest.raises(typer.Exit) as e:
+        trigger.ensure_artifacts_current(
+            argv=["plan", "create"],
+            invoked_subcommand="plan",
+            env={},
+            repo_root=tmp_path,
+            interactive=False,
+            commit=lambda root, report: None,
+        )
+
+    assert e.value.exit_code == 2
+    assert bad.read_text() == text
+    err = " ".join(capsys.readouterr().err.split())
+    assert "must be migrated" not in err
+    assert "docs/superpowers/runs/r1.records/" + name in err
+    assert why in err
+    assert "outside the repository" in err

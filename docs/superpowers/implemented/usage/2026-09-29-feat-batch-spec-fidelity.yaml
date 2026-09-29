@@ -1,0 +1,92 @@
+schema_version: 1
+run: 2026-09-29-feat-batch-spec-fidelity
+captures:
+- host: h-7e4ce15d
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-29T11:13:15+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: 162a91cf-03fd-4d78-a879-ea25fe65194f
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 410
+        cache_write: 594489
+        cache_read: 31997010
+        output: 102962
+        usd: 15.535681600000007
+        usd_source: exact
+      claude-sonnet-5-5:
+        input: 194
+        cache_write: 447228
+        cache_read: 10435561
+        output: 3771
+        usd: 4.826356000000005
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001436
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 7.858309433698686
+        turns: 154
+      other:
+        usd: 5.607534707504757
+        turns: 78
+      paperwork:
+        usd: 6.8976294587965565
+        turns: 86
+    steps:
+      (outside run):
+        usd: 0.8381706726996064
+        turns: 6
+      brainstorm:
+        usd: 2.122506345596932
+        turns: 25
+      spec-review:
+        usd: 2.2242782420053056
+        turns: 35
+      plan:
+        usd: 0.8098001668181848
+        turns: 8
+      implement:
+        usd: 13.556274350918258
+        turns: 213
+      deliver:
+        usd: 0.8124438219617081
+        turns: 7
+    briefs:
+      a0c97987cd9487b99: 1872
+      phase/1/implement-phase: 5629
+      a71e833bc4d9ed6f5: 2854
+      phase/2/implement-phase: 11236
+      a9218249853492e8b: 3769
+  - session: 7e788550-33ac-4ff2-931b-3675df8ba267
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 28
+        cache_write: 95152
+        cache_read: 1382026
+        output: 6786
+        usd: null
+        usd_source: none
+    activity:
+      other:
+        usd: null
+        turns: 5
+      paperwork:
+        usd: null
+        turns: 9
+    steps:
+      (outside run):
+        usd: null
+        turns: 14

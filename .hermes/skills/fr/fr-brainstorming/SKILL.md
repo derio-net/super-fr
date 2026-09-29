@@ -87,7 +87,7 @@ The brainstorm's design document becomes the spec
 worktree), written in this shape, in order: `## Requirements` (one row per
 requirement, quoting the input verbatim in `source` — paraphrase only in the
 requirement's own text), `## Deferred from input` (optional, one-line reason),
-then `## Design`. A `source` cell is one or more forms joined by `<br>`: `input "<verbatim quote>"` (straight quotes; a `"` inside stays as-is, since the quote runs from the first `"` to the last, so never cut a quote short to dodge one; ` … ` elides between in-order fragments; a `|` is `\|`; no `<br>` inside) or `decision <id>` (a `kind=decision` spec-journal entry), e.g. `input "labelled "✓ 680–720 g" when in range"<br>decision d-scan`; `fr spec requirements <spec>` checks the table before you resolve, reporting the input entry as pending until the resolve writes it. **Standalone:** resolve the cursor §0 started with its step
+then `## Design`. A `source` cell is one or more forms joined by `<br>`: `input "<verbatim quote>"` (straight quotes; a `"` inside stays as-is, since the quote runs from the first `"` to the last, so never cut a quote short to dodge one; ` … ` elides between in-order fragments; a `|` is `\|`; no `<br>` inside) or `decision <id>` (a `kind=decision` spec-journal entry), e.g. `input "labelled "✓ 680–720 g" when in range"<br>decision d-scan`; `fr spec requirements <spec>` checks the table before you resolve: whatever the record writes (the input entry, a cited `decision`, an `acceptance:` row citing `<spec>#R<n>`) prints as pending, never as an error, so write it into the record rather than editing the spec. Every error names its section and that section's row shape (`| R<n> | <requirement> | <source> |`; `## Deferred from input`: `| "<verbatim quote>" | <reason> |`) — fix the row, never delete the section. **Standalone:** resolve the cursor §0 started with its step
 record — `emitted: {spec: <path>}`, each answer a `decision` in `journal:`,
 the input entry from §1, each §3 row in `acceptance:` — in ONE `fr run
 resolve <run-id> --step brainstorm --record <file>`, then `fr run advance
@@ -104,7 +104,7 @@ requirements — an `acceptance:` entry of the brainstorm record (`status:
 not-implemented`, `origin: [<repo>:<new-spec-path>#R<n>]`, `verify:
 post-merge` when only a live run can prove it), or with no run
 `fr acceptance add --origin <repo>:<spec>#R<n> …` (run `fr acceptance init`
-first if the repo has no matrix). A UI row also carries `visual`: states and interactions, limits included (§1 asks any the input leaves unstated). **The brainstorm ENDS by presenting the
+first if the repo has no matrix; it commits what it writes). A row states what the product does, never how the pipeline runs ("delivered in one phase", "a browser check was done"): a process directive is not a row, and a level ref into `docs/superpowers/` is refused. A UI row also carries `visual`: states and interactions, limits included (§1 asks any the input leaves unstated). **The brainstorm ENDS by presenting the
 rows to the operator with a one-line defense each** — the business claim,
 the target verification level, why it is business-level not implementation
 detail. Silent row creation is not acceptance-of-scope; the presentation is.

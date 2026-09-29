@@ -58,12 +58,16 @@ def test_install_delivers_four_agents_to_opencode_dir(
     # Alphabetical order: '-' (ASCII 45) comes before '.' (ASCII 46), so tiered
     # agents sort before the base agent
     # fr-spec-reviewer since 2026-09-24 spec §E — base + three tiers, the same
-    # four-file delivery as the phase executor.
+    # four-file delivery as the phase executor; fr-phase-reviewer since #778.
     expected_agents = [
         "fr-phase-executor-hard.md",
         "fr-phase-executor-mechanical.md",
         "fr-phase-executor-standard.md",
         "fr-phase-executor.md",
+        "fr-phase-reviewer-hard.md",
+        "fr-phase-reviewer-mechanical.md",
+        "fr-phase-reviewer-standard.md",
+        "fr-phase-reviewer.md",
         "fr-spec-reviewer-hard.md",
         "fr-spec-reviewer-mechanical.md",
         "fr-spec-reviewer-standard.md",

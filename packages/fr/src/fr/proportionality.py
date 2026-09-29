@@ -219,7 +219,9 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
         d = decisions.get(pa.number)
         why = f"split reason: {d.title}" if d is not None else "no split reason"
         bullets.append(f"phase {pa.number} — no ask of its own; {why}")
-    return out + _bullets(bullets)
+    # Not `_bullets`: its `none.` answers a list heading, and here the count
+    # line is the heading's whole answer when every phase has an ask (#815).
+    return out + [f"- {b}" for b in bullets]
 
 
 def _meta_at_head(repo_root: Path, plan: Plan) -> dict[str, object]:

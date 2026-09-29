@@ -240,6 +240,23 @@ a step that quietly never runs
 (`docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`,
 section 4.A).
 
+**A second shape ships beside it, for small goals.** Much of what a run costs
+is fixed: it does not shrink when the goal does. On a goal that fits in one
+phase, those fixed costs were most of the bill. `fr-goal-light`
+(`plugins/super-fr/workflows/fr-goal-light.yaml`) is the same pipeline with
+one review stage fewer before any code exists. The plan is written first. Then
+a single reviewer reads the specification and the plan together, where
+`fr-goal` reviews the specification first and the plan in a stage of its own.
+The per-phase code review stays. You can start
+there with `fr run start fr-goal-light`. More often the question round decides
+it: the brainstorm's record says `shape: fr-goal-light`, and the run moves onto
+the lighter shape. That is allowed only at the first step, before anything
+else has moved, and only onto a shape that begins with that same step. The
+light `plan` step then refuses a plan with more than one agentic phase and
+names them. So "this goal is small" is checked when the plan is written; it is
+not a hope carried through the run
+(`docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md`, section A).
+
 ### The run keeps its place
 
 Starting a run creates `docs/superpowers/runs/<run-id>.yaml` inside the isolated
@@ -598,8 +615,12 @@ meant.
 Your raw input does not stop at the specification. It stays recorded, verbatim,
 in the specification's journal, and later — when the code is built and
 reviewed — it travels on beside your recorded answers as a read-only reference.
-The specification still governs; the input is there only so a clause the
-requirements lost along the way can be caught.
+It is not handed along by the orchestrator: the agent that builds each phase
+and the agent that reviews it each fetch it themselves, first thing, on every
+dispatch, because a copy passed through someone else's prompt can arrive
+paraphrased, as a pointer, or not at all. The specification still governs; the
+input is there only so a clause the requirements lost along the way can be
+caught.
 
 That check is not done by the agent that wrote the specification. An author
 re-reading their own document finds what they meant to write, not what they
@@ -787,7 +808,10 @@ without changing that behavior. This test-first cycle is commonly called
 **TDD**, or test-driven development.
 
 Each phase carries a difficulty **tier**, assigned when the plan was written,
-and that tier is what chooses the model the phase is implemented with. Every
+and that tier is what chooses the model the phase is implemented with. The
+middle tier, `standard`, is the default. `hard` sends the whole phase to the
+most expensive model, so the plan has to say why: the plan check refuses a
+`hard` phase with no reason recorded in the spec's journal. Every
 turn of the loop is the same four moves: dispatch the executor, claim the
 dispatch so the run knows who is holding this phase, wait for it, then resolve
 the phase with how it went. The claim is a single extra command, and it is what

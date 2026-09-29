@@ -5025,8 +5025,9 @@ def _drive_the_group(repo: Path, shipped: Path) -> list[str]:
     raise AssertionError("the group never completed")
 
 
-def _fr_goal_at_implement(repo: Path, shipped: Path) -> None:
-    """Drive the REAL shipped `fr-goal` manifest to its `implement` group.
+def _fr_goal_at_implement(repo: Path, shipped: Path):
+    """Drive the REAL shipped `fr-goal` manifest to its `implement` group, and
+    return the advance that ran `plan-review` and briefed `phase/1/implement-phase`.
 
     #501 is a message about `fr-goal`'s own ids (`phase/1/implement-phase`,
     workflow `'fr-goal'`), so the fixture is the shipped file itself rather
@@ -5087,8 +5088,12 @@ def _fr_goal_at_implement(repo: Path, shipped: Path) -> None:
             f"plan={plan_rel}",
         ]
     )
-    step(["run", "advance", "r1"])  # plan-review: kind cli, executed here
+    # plan-review is kind cli, executed here — and the same advance goes on to
+    # brief phase/1/implement-phase (spec 2026-09-29-fr-goal-light-path §B, R5).
+    briefed = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert briefed.exit_code == 0, briefed.output
     assert load_run_state(repo, "r1").cursor == "implement"
+    return briefed
 
 
 def _isolation_state_for(repo: Path, branch: str) -> None:
@@ -5358,8 +5363,7 @@ def test_resolve_composite_member_id_teaches_the_two_flags(tmp_path: Path) -> No
     to the shape file instead of to the flag list."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _fr_goal_at_implement(repo, shipped)
-    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/implement-phase
+    _fr_goal_at_implement(repo, shipped)  # also dispatches phase/1/implement-phase
 
     result = _invoke(
         repo,
@@ -5380,9 +5384,7 @@ def test_advance_prints_the_resolve_command_before_the_json(tmp_path: Path) -> N
     ordering constraint the gate-degradation notice documents)."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _fr_goal_at_implement(repo, shipped)
-
-    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+    result = _fr_goal_at_implement(repo, shipped)
 
     assert result.exit_code == 0, result.output
     expected = "fr run resolve r1 --step implement-phase --item phase/1 --state done"
@@ -5407,9 +5409,7 @@ def test_the_printed_resolve_command_actually_runs_as_printed(tmp_path: Path) ->
     holds."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _fr_goal_at_implement(repo, shipped)
-
-    advanced = _invoke(repo, shipped, ["run", "advance", "r1"])
+    advanced = _fr_goal_at_implement(repo, shipped)
     hint = next(line for line in advanced.output.splitlines() if "resolve with:" in line).split(
         "resolve with:", 1
     )[1]
@@ -5434,8 +5434,7 @@ def test_the_composite_id_refusal_survives_a_narrow_console(tmp_path: Path) -> N
     unusable."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _fr_goal_at_implement(repo, shipped)
-    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _fr_goal_at_implement(repo, shipped)  # also briefs phase/1/implement-phase
 
     result = _invoke(
         repo,
@@ -5463,8 +5462,7 @@ def test_advance_refuses_a_running_member(tmp_path: Path) -> None:
     branch."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _fr_goal_at_implement(repo, shipped)
-    first = _invoke(repo, shipped, ["run", "advance", "r1"])
+    first = _fr_goal_at_implement(repo, shipped)
     assert first.exit_code == 0, first.output
     # Decision u1: the dispatch record is the witness, so the moment the
     # refusal names is the RECORD's `dispatched`, not the group's `at` — the
@@ -5570,8 +5568,7 @@ def test_a_running_member_with_no_dispatch_record_is_still_refused(
     holder to name and inventing one would be worse than saying less."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _fr_goal_at_implement(repo, shipped)
-    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _fr_goal_at_implement(repo, shipped)  # also briefs phase/1/implement-phase
     _forget_dispatch_records(repo, "implement", shape=shape)
     before = load_run_state(repo, "r1")
     if shape == "migrated":  # the helper really did leave the synthesized attempt
@@ -5618,8 +5615,7 @@ def test_redispatch_is_the_way_out_of_a_recordless_running_unit(tmp_path: Path, 
     re-briefs, and opens the first record this unit has ever had."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _fr_goal_at_implement(repo, shipped)
-    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _fr_goal_at_implement(repo, shipped)  # also briefs phase/1/implement-phase
     _forget_dispatch_records(repo, "implement", shape=shape)
 
     result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
@@ -5657,8 +5653,7 @@ def test_a_failed_unit_whose_only_attempt_is_synthesized_can_still_be_retried(
 
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _fr_goal_at_implement(repo, shipped)
-    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _fr_goal_at_implement(repo, shipped)  # also briefs phase/1/implement-phase
     failed = _invoke(
         repo,
         shipped,
@@ -5820,8 +5815,7 @@ def test_the_refusals_two_commands_actually_run_as_printed(tmp_path: Path) -> No
     someone wrote `<done|failed>`."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _fr_goal_at_implement(repo, shipped)
-    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _fr_goal_at_implement(repo, shipped)  # also briefs phase/1/implement-phase
 
     refusal = _invoke(repo, shipped, ["run", "advance", "r1"])
     assert refusal.exit_code == 2, refusal.output
