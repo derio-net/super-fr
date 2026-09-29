@@ -4487,9 +4487,16 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R2
     levels: {}
-    status: not-implemented
-    notes: 'Operator-driven live check after the 5.0.0 release, before the talk recording;
-      verify: post-merge so deliver counts it as owed.'
+    status: skipped
+    notes: 'Verified live 2026-09-29 (super-fr-3 take 12: feature-C brief, OpenCode
+      1.18.33, gpt-6-sol everywhere, fr 5.0.0, fr-goal-light@1, self-hosted GitLab without
+      CI): the spec journal carries the brief verbatim (basket-goal-brief, input=true)
+      and the Q1 answer verbatim (decision missing-model-staff-check); the spec has
+      a plain R1..R7 list; spec-plan-review ran once (one fr-spec-reviewer dispatch,
+      4 in-scope findings fixed, no loop); deliver resolved (MR merged). $3.50 / 32.0
+      min to deliver. Hit the 5.0.0 plan fr_version ceiling bug at the plan step; the
+      agent widened _meta.yaml by hand and went on. Passes for this harness and model
+      only (#822).'
     verify: post-merge
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
