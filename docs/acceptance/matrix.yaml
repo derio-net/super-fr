@@ -4471,9 +4471,14 @@ rows:
       and visual evidence work on both
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: Added at planning (spec-is-the-contract); moves to ci in phase 1.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_spec_requirements_list.py
+      - super-fr:tests/unit/test_plan_phase_sizing.py
+      - super-fr:tests/unit/test_plan_proportionality.py
+    status: ci
+    notes: The plain R<n> list and the pre-5.0 table parse to the same ids and text;
+      phase sizing and proportionality give the same result on both.
   - id: spec-contract-dry-run
     capability: fr-goal-methodology
     acceptance: A super-fr-3 feature-C run on 5.0.0 records the brief and answers at
