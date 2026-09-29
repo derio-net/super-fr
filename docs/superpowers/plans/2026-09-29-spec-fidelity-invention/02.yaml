@@ -1,0 +1,142 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Delegated decisions, the PR body's Design inventory, and the reviewer/skill
+    prose
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - spec-fidelity-delegated-decisions
+  - spec-fidelity-pr-design-inventory
+  tier: standard
+  files:
+  - packages/fr/src/fr/journal/model.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/record/model.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/record/template.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/record_delegated.py
+  - plugins/super-fr/agents/fr-spec-reviewer.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-brainstorming/SKILL.md
+  - .opencode/*
+  - .hermes/*
+  - docs/explainers/01-fr-goal.md
+  - docs/explainers/01-fr-goal.html
+  - docs/superpowers/runs/*
+  - tests/unit/*
+  - docs/acceptance/*
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: '`delegated=true` on decision entries, and the record 4 → 5 bump (spec §E)'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_journal_model.py — a spec `decision` with `delegated=True` serialises
+      the header token `delegated=true` and round-trips; the token is absent when False; the
+      model refuses `delegated` on a non-decision or a plan-scope entry.
+      tests/unit/test_journal_cmd.py — `fr journal add --scope spec --kind decision --delegated`
+      writes it. tests/unit/test_record_schema.py — `JournalItem(delegated=True)` parses and
+      applies through record/apply.py as the token. New tests/unit/test_migration_record_delegated.py
+      modelled on test_migration_record_visual.py: a v4 record is stamped 5 unchanged otherwise,
+      and the record kind's chain is `[2, 3, 4, 5]`. Fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: `JournalEntry.delegated` + `_HEADER_FIELDS` + parse (like `input`); validator;
+      `--delegated` on `fr journal add`; `JournalItem.delegated` carried in `_journal_writes`;
+      `RECORD_SCHEMA_VERSION = 5` (record/model.py, docstring line) and `current_version=5`
+      (artifacts/registry.py, comment); new `fr/artifacts/record_delegated.py` stamp-only
+      `SchemaMigration` copied from record_visual.py; import it in fr/artifacts/__init__.py
+      beside record_visual. Update the record template's journal comment to name
+      `delegated: true` on a decision. Run `uv run fr migrate artifacts --yes` and commit the
+      migrated live records (this run's own). Green.
+- number: 2
+  title: PR body — delegated decisions and `## Design inventory` (spec §F)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_deliver_pr_body.py — `## Built without operator confirmation` lists
+      each delegated decision (id, title) with the requirement ids whose source cites it, then
+      any legacy unconfirmed finding, else `None.`; `## Design inventory` sits after
+      `## Input coverage` in REQUIRED_SECTIONS, renders the review's design-inventory table
+      inside `<details>`, and reads `Not recorded (predates the fidelity gate).` both when
+      spec-review has no `fidelity` evidence and when it holds `REQUIREMENTS_PREDATES`;
+      `missing_sections` reports it absent. Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement in record/pr_body.py (extend `_predates_gate` by name for `fidelity`; read
+      the spec's Requirements via `fr.requirements.parse_requirements` to find citing ids; the
+      inventory via the fidelity module's block extractor). Green.
+- number: 3
+  title: Reviewer, fr-goal and fr-brainstorming prose; mirrors; explainer (spec §G,
+    §I)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_spec_reviewer_agent.py — the agent file names both new blocks
+      (`requirement-fidelity`, `design-inventory`) in its checks and return template, and no
+      longer tells the orchestrator to resolve invented/reinterpreted `unconfirmed`. Fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: edit plugins/super-fr/agents/fr-spec-reviewer.md (Faithful → clause-by-clause with
+      the fidelity block; Nothing invented → the inventory block; resolution guidance "removed
+      or refuted, never confirmed"; both blocks in the return YAML); fr-goal SKILL.md §1 ("Your
+      call." → `delegated: true`), §2 (removal, `fidelity` beside `coverage`), §8 (section list);
+      fr-brainstorming SKILL.md §1 (delegated). Run `uv run --no-project python scripts/sync-opencode.py`
+      AND `uv run --no-project python scripts/sync-hermes.py`; the three mirror tripwires and
+      test_tripwire_skill_tool_neutrality.py green.
+  - id: P2.T3.S3
+    text: |-
+      Update docs/explainers/01-fr-goal.md where it names `unconfirmed` and the spec-review
+      checks; regenerate 01-fr-goal.html per .claude/rules/explainers-currency.md (from `/`,
+      `uv run --isolated --no-project --with markdown --with pyyaml`, byte-identical check of the
+      unmodified source first). test_tripwire_explainers_fresh.py green.
+  - id: P2.T3.S4
+    text: |-
+      REFACTOR + quality gate: ruff format/check, mypy, full suite into a log; move
+      spec-fidelity-delegated-decisions and spec-fidelity-pr-design-inventory to `ci` with their
+      unit refs via the step record's `acceptance:` section; `fr acceptance check` green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,205 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — fr/fidelity.py (clause partition, design inventory) behind the
+    `fidelity` evidence; invented/reinterpreted removed, never unconfirmed
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - spec-fidelity-clause-partition
+  - spec-fidelity-design-inventory
+  - spec-fidelity-remove-only
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/fidelity.py
+  - packages/fr/src/fr/requirements.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/record/template.py
+  - plugins/super-fr/workflows/fr-goal.yaml
+  - packages/fr/src/fr/workflows/fr-goal.yaml
+  - tests/unit/test_fidelity.py
+  - tests/unit/test_run_evidence_fidelity.py
+  - tests/unit/requirements_support.py
+  - tests/unit/test_run_evidence_requirements.py
+  - tests/unit/test_journal_cmd.py
+  - tests/unit/test_record_apply.py
+  - tests/unit/test_record_schema.py
+  - tests/unit/test_deliver_pr_body.py
+  - tests/unit/test_spec_reviewer_agent.py
+  - .changes/feat-batch-spec-fidelity.yaml
+  - .test_durations
+  - docs/acceptance/*
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Walking skeleton — a sound review entry yields the `fidelity` evidence line
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: tests/unit/test_fidelity.py — build a minimal spec text (a one-row `## Requirements`
+      table `| R1 | x | input "alpha beta" |`, a `## Design` with one `### A. One` subsection)
+      and a review body carrying three fenced blocks: `input-coverage` (one span "alpha beta" → R1),
+      `requirement-fidelity` (`| R1 | "alpha beta" | kept |`) and `design-inventory`
+      (`| A. One | none | none |`). Assert `check_fidelity(review_body, spec_text, entries)` and
+      `check_inventory(review_body, spec_text, entries)` return `([], counts)` and that
+      `fidelity_summary(fc, ic)` == `1 clauses over 1 requirements (kept=1 flagged=0); 1 sections, 0 behaviours (invented=0)`.
+      Fails: no module.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/fidelity.py with `FidelityCounts`, `InventoryCounts`,
+      `check_fidelity`, `check_inventory`, `parse_design_sections`, `fidelity_summary`, minimal
+      bodies making S1 pass; it imports from `fr.requirements` (`parse_requirements`,
+      `coverage_block` pattern, `ELLIPSIS`, `_split_row`) and is never imported by it. Add
+      `.changes/feat-batch-spec-fidelity.yaml` (`bump: minor`, summary: "Spec review checks
+      clause fidelity and design invention, not coverage alone: fr verifies the reviewer's
+      requirement-fidelity and design-inventory blocks, invented/reinterpreted findings are
+      removed rather than confirmed, and \"Your call.\" answers are delegated decisions (#773)").
+      `uv run pytest tests/unit/test_fidelity.py -q --no-cov` green; ruff clean.
+- number: 2
+  title: requirement-fidelity block — clause partition (spec §A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: parametrised cases in tests/unit/test_fidelity.py (spec Test Plan 1): an input-sourced
+      requirement with no rows (including one added after the review) refused; a skipped clause,
+      reordered clauses, and requirements out of table order refused; a clause spanning an
+      elision boundary (quote `A … B`, single clause `"A B"`) refused while `"A"` + `"B"` passes;
+      an unknown finding id, and a label naming a non-`finding` entry, refused; a decision-only
+      requirement given rows refused; an unknown requirement id refused; a clause holding a raw
+      `|` parses (three-column protection); a missing or duplicated `requirement-fidelity` block
+      refused. Each refusal's message names the requirement / row. Fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement the block parser (fence `requirement-fidelity`, header
+      `requirement | clause | fidelity`, a three-column variant of `_protect_span_pipes` that
+      protects the quoted MIDDLE cell) and the check: per input-sourced requirement, split each
+      quote on `ELLIPSIS` into fragments; walk the requirement's clauses consuming fragments with
+      whitespace removed, refusing a clause that crosses a fragment boundary or does not match;
+      labels `kept` or a `kind=finding` spec-journal id. Counts kept/flagged. Cases green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: share the whitespace-stripped comparison with `check_coverage`'s `_coverage_form`
+      rather than duplicating it (import, do not copy); keep `fr/requirements.py` free of any
+      `fr.fidelity` import. Full test_requirements.py + test_fidelity.py green.
+- number: 3
+  title: design-inventory block — fence-aware Design sections (spec §B)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests for `parse_design_sections` — `### ` subsections of `## Design` in order; a
+      fenced ``` or ~~~ block holding `## Requirements` / `### X` lines ignored (the Design does
+      not end, no phantom section); `#### ` stays inside its `###`; a Design with no `###` is one
+      section `Design`; no `## Design` raises a clear error. Tests for `check_inventory` (spec Test
+      Plan 2): missing, reordered, non-contiguous or unknown section refused; unknown `R<n>`;
+      `decision <id>` that is not a decision; `invented <id>` that is not a finding; `none`
+      backing beside a real behaviour; a behaviour cell with an unescaped `|` (wrong cell count)
+      refused; `R1, decision d2` backing passes. Fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement both; counts sections, behaviours (rows whose behaviour is not `none`)
+      and invented. Cases green.
+- number: 4
+  title: The `fidelity` derived evidence on spec-review, and remove-only (spec §C,
+    §D, §H)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_run_evidence_fidelity.py, reusing tests/unit/requirements_support.py's
+      run/spec/journal builders (extend them to emit the two new blocks by default): resolving
+      spec-review with a record whose review entry lacks the blocks exits 2 naming `fidelity` and
+      printing `_REDISPATCH`; with sound blocks it records the `fidelity_summary` line; with an
+      `invented s7` row whose finding is resolved `out-of-scope` (or `deferred`) it exits 2
+      naming s7 and the `fr journal resolve … --state fixed` line; `fixed` and `refuted` pass;
+      a run predating the requirements gate records `REQUIREMENTS_PREDATES` for `fidelity`.
+      Also assert `fidelity` is in `_VERIFIABLE_EVIDENCE`, `_DERIVED_EVIDENCE`, `_DERIVED_FROM`
+      and `_REQUIREMENTS_EVIDENCE`. Fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `fidelity` to the four run_cmd.py tables (with a `_DERIVED_FROM` "from …" text)
+      and `_fidelity_witness` beside `_coverage_witness`, reading the same review entry and the
+      spec journal (including this record's staged resolves) to enforce §D's fixed|refuted rule
+      for every finding a flagged fidelity row or an `invented` inventory row names. Add
+      `fidelity` to spec-review's `evidence:` in plugins/super-fr/workflows/fr-goal.yaml and
+      copy the manifest to packages/fr/src/fr/workflows/fr-goal.yaml. Update existing
+      test_run_evidence_requirements.py fixtures that now need the blocks. Green, and
+      tests/unit/test_tripwire_shipped_workflows.py green.
+  - id: P1.T4.S3
+    text: |-
+      RED: tests/unit/test_journal_cmd.py and test_record_apply.py — `fr journal resolve --state
+      unconfirmed` exits 2 citing d1-remove-only; a step record resolving `state: unconfirmed`
+      is refused (RecordRefusedError, nothing written); an existing journal carrying an
+      `unconfirmed=true` record still parses, folds to `unconfirmed` and renders under
+      `## Built without operator confirmation` in test_deliver_pr_body.py. Fails on the first two.
+  - id: P1.T4.S4
+    text: |-
+      GREEN: make `unconfirmed_refusal` (record/apply.py) refuse every new write with the
+      d1-remove-only message (keep the state in RESOLUTION_STATES / ResolutionState / the fold);
+      update journal_cmd.py's `--state` help text; replace the `unconfirmed` comment line in
+      record/template.py with "invented/reinterpreted spec findings close fixed (removed) or
+      refuted". Update tests that wrote `unconfirmed` as a happy path to build the journal
+      directly instead. Green.
+  - id: P1.T4.S5
+    text: |-
+      REFACTOR + quality gate: ruff format/check, mypy on packages/fr/src; run the full suite
+      into a log (see the long_commands rule in the brief) and fix any fallout; refresh
+      `.test_durations` only if a new file is large. Move acceptance rows
+      spec-fidelity-clause-partition, spec-fidelity-design-inventory and spec-fidelity-remove-only
+      to `ci` with their unit refs via the step record's `acceptance:` section.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

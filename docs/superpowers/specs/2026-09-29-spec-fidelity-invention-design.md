@@ -339,3 +339,9 @@ blocks, which fails closed.
 8. **Live (R2), post-merge.** Take 10's fr arm, run with this change on the
    feature-C brief, produces a spec-review with an `invented` finding for any
    card-click toggle the spec carries, and the delivered spec has none.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-29-spec-fidelity-invention | `derio-net/super-fr` | `2026-09-29-spec-fidelity-invention` | — |
