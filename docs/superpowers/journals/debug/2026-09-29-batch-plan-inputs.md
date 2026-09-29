@@ -52,3 +52,8 @@ plan_ops._tier_issues, phase_sizing.tier_reasons; tests/unit/test_plan_tier_reas
 
 <!-- fr:journal kind=finding scope=debug id=pr-body-tier-model created=2026-09-29T11:56:08+00:00 state=open -->
 ### pr-body-tier-model · finding [open] · #813 expectation 3: PR body shows each phase's tier and model
+
+<!-- fr:journal kind=finding scope=debug id=pr-body-tier-model-resolved created=2026-09-29T11:56:29+00:00 state=open resolves=pr-body-tier-model tracked_by=derio-net/super-fr#838 -->
+### pr-body-tier-model-resolved · finding [deferred → derio-net/super-fr#838] · resolves pr-body-tier-model: #813 expectation 3: PR body shows each phase's tier and model
+
+a new PR-body section with its own required-section gate; out of this batch
