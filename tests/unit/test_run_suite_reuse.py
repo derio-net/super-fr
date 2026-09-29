@@ -14,6 +14,7 @@ import os
 import subprocess
 from pathlib import Path
 
+from fr.record.model import RECORD_SCHEMA_VERSION
 from fr.run import units
 from fr.run.code_tree import (
     FR_ARTIFACT_PREFIXES,
@@ -462,7 +463,7 @@ def test_a_phase_record_may_name_its_suite_log(tmp_path: Path) -> None:
     record.write_text(
         json.dumps(
             {
-                "schema_version": 4,
+                "schema_version": RECORD_SCHEMA_VERSION,
                 "run": "r1",
                 "step": "code",
                 "item": "phase/1",
