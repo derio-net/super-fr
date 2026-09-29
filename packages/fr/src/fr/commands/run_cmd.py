@@ -2076,12 +2076,27 @@ def _reviewer_dispatches(since: str | None) -> list[ChildDispatch] | None:
     return view.dispatches(start) if view is not None and start is not None else None
 
 
-def _return_unobserved(key: str, reviewer: str, why: str) -> None:
+def _return_unobserved(key: str, who: str, why: str) -> None:
+    """A reviewer-return check skipped: warned, noted, never silent (§D)."""
     _note_unobserved("reviewer-return")
     err_console.print(
-        f"[yellow]{key}: could not read what {reviewer} returned — {why}; "
+        f"[yellow]{key}: could not read what {who} returned — {why}; "
         "the record is taken as claimed (evidence: unobserved=reviewer-return).[/yellow]",
         soft_wrap=True,
+    )
+
+
+def _return_refusal(key: str, problems: list[str], remedy: str) -> NoReturn:
+    """THE refusal of the reviewer-return checks (spec 2026-09-29
+    opencode-observe §D): the record against what the reviewer returned, each
+    problem on its own line, then what to do — exit 2."""
+    _requirements_refusal(
+        key,
+        [
+            "refused — the record does not match what the reviewer returned:",
+            *(f"- {p}" for p in problems),
+            remedy,
+        ],
     )
 
 
@@ -2105,25 +2120,19 @@ def _check_returned_coverage(key: str, body: str, reviewer: str, since: str | No
         )
         return
     returned = returned_coverage(dispatch.returned)
-    if returned is None:
-        _requirements_refusal(
-            key,
-            [
-                f"refused — the reviewer returned no input-coverage block (reviewer {reviewer}). "
-                "Re-dispatch it: its return must end with the block the review entry records."
-            ],
-        )
     recorded = coverage_block(body) or ""
-    divergence = coverage_divergence(recorded, returned)
-    if divergence is not None:
-        _requirements_refusal(
+    divergence = None if returned is None else coverage_divergence(recorded, returned)
+    if returned is None or divergence is not None:
+        _return_refusal(
             key,
             [
-                f"refused — the recorded input-coverage block differs from the one reviewer "
-                f"{reviewer} returned, at {divergence}.",
-                "Record the reviewer's block unedited, or re-dispatch the reviewer; "
-                "fr never accepts a partition the reviewer did not return.",
+                f"the reviewer returned no input-coverage block (reviewer {reviewer})"
+                if returned is None
+                else f"the recorded input-coverage block differs from the one reviewer "
+                f"{reviewer} returned, at {divergence}"
             ],
+            "Record the reviewer's block unedited, or re-dispatch the reviewer with this "
+            "message; fr never accepts a partition the reviewer did not return.",
         )
 
 
@@ -2568,12 +2577,11 @@ def _check_returned_findings(
                 "out-of-scope"
             )
     if problems:
-        _requirements_refusal(
+        _return_refusal(
             key,
-            [
-                "refused — the review record does not match what the phase reviewers returned:",
-                *(f"- {p}" for p in problems),
-            ],
+            problems,
+            "Journal every returned finding under its id with the reviewer's tag, or "
+            "re-dispatch a reviewer whose return is malformed; never edit a return.",
         )
 
 
