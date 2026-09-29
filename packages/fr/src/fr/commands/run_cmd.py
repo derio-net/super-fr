@@ -2155,7 +2155,7 @@ def _verify_reviewer(
         if dispatched is None
         else next((d for d in dispatched if d.agent_id == agent_id), False)
     )
-    if observed and observed.agent_type == PHASE_EXECUTOR_AGENT:
+    if observed and _same_agent(observed.agent_type, PHASE_EXECUTOR_AGENT):
         # Review r1-11: a phase executor is an IMPLEMENTER by construction —
         # any phase's — so it is never the separate context a review needs.
         err_console.print(
@@ -2196,12 +2196,15 @@ def _verify_reviewer(
 
 
 def _same_agent(observed: str | None, expected: str) -> bool:
-    """`observed` is `expected`, in its plugin-qualified or bare spelling
-    (`super-fr:fr-spec-reviewer` / `fr-spec-reviewer`)."""
+    """`observed` is `expected`, in any spelling `fr.run.observed.agent_name`
+    folds: plugin-qualified or bare (`super-fr:fr-spec-reviewer` /
+    `fr-spec-reviewer`), and OpenCode's tiered name (`fr-spec-reviewer-hard`,
+    review p1-r1)."""
+    from fr.run.observed import agent_name
+
     if observed is None:
         return False
-    bare = expected.split(":", 1)[-1]
-    return observed in (expected, bare)
+    return agent_name(observed) == agent_name(expected)
 
 
 def _wrote_before(

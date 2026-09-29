@@ -432,10 +432,13 @@ def _unobservable(env: Mapping[str, str]) -> str:
 
 
 def _same_agent(observed: str | None, expected: str) -> bool:
-    """`observed` is `expected`, plugin-qualified or bare, on either side."""
+    """`observed` is `expected`, plugin-qualified or bare and with or without
+    an OpenCode tier suffix, on either side (`fr.run.observed.agent_name`)."""
+    from fr.run.observed import agent_name
+
     if observed is None:
         return False
-    return observed.split(":", 1)[-1] == expected.split(":", 1)[-1]
+    return agent_name(observed) == agent_name(expected)
 
 
 _Witness = tuple[Path | Literal[False, "unclaimed"], str, str | None]
