@@ -3,7 +3,7 @@ run: 2026-09-29-feat-batch-light-path
 workflow: fr-goal@1
 branch: feat/batch-light-path
 started: '2026-09-29T06:32:52+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -16,8 +16,8 @@ steps:
         evidence:
           requirements: 8 requirements:fb380d61fb413850d73a3ac4181f6512432e9d9781583e2af68ae3ed2fc5c163
   spec-review:
-    state: running
-    at: '2026-09-29T07:19:30+00:00'
+    state: done
+    at: '2026-09-29T07:25:12+00:00'
     units:
       step/spec-review:
         attempts:
@@ -27,6 +27,14 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 180aad7a-775d-4ce0-85ee-3cb109642dfc
+          returned: '2026-09-29T07:25:12+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: a80e42db2bd88615f
+          requirements: 8 requirements:fb380d61fb413850d73a3ac4181f6512432e9d9781583e2af68ae3ed2fc5c163
+          coverage: '30 spans: R=14 deferred=0 context=16 missing=0'
+          findings: s1,s2,s3,s4,s5,s6,s7
   plan:
     state: pending
   plan-review:
