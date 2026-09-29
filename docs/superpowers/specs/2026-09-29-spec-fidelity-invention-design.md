@@ -87,9 +87,14 @@ reviewer returns a second fenced block:
 ````
 
 - **requirement:** a requirement id.
-- **clause:** a verbatim piece of that requirement's `input` quotes. The cell
-  follows the input-coverage span grammar in
-  `fr.requirements` (`_protect_span_pipes`, the `\|`/`\"` escapes).
+- **clause:** a verbatim piece of that requirement's `input` quotes, in
+  straight quotes, with the input-coverage escapes (`\|`, `\"`). Raw `|`
+  protection must work on the MIDDLE column: `_protect_span_pipes`
+  (`fr/requirements.py:493`) matches only a row whose first cell is the quoted
+  span (`_QUOTED_SPAN_ROW_RE`, `:485`), so the fidelity parser uses a
+  three-column variant, a leading unquoted requirement cell, then the quoted
+  clause, then one label cell. Without it, an input that quotes a Markdown
+  table (the #777 shape) would split the row.
 - **fidelity:** `kept` (the requirement text carries the clause's meaning) or
   a finding id (a `kind=finding` spec-journal entry, the `reinterpreted`
   finding raised for the clause).
@@ -97,16 +102,20 @@ reviewer returns a second fenced block:
 The rows of one requirement are contiguous, and requirements appear in
 `## Requirements` table order. A requirement's clauses, concatenated in table
 order, EQUAL its `input` quotes concatenated in source order. The comparison
-is the same whitespace-insensitive one `check_coverage` uses, with the
-quote's elision token (` … `) removed as well, because an elision joins two
-quoted fragments and no clause can contain it. A decision-only requirement
-has no rows, since it has no quote to be faithful to.
+is the same whitespace-insensitive one `check_coverage` uses, applied to
+fragments. Each quote is split on the elision token (`ELLIPSIS`,
+`fr/requirements.py:318`) into fragments, and every fragment boundary must
+also be a clause boundary. A clause never spans an elision, because the text
+the elision skipped is not part of the quote. A decision-only requirement has
+no rows, since it has no quote to be faithful to.
 
-Completeness is taken over the requirements the reviewer saw. Every
-requirement with an `input` source that the review's own `input-coverage`
-block cites must have rows. A requirement added after the review, to fix a
-`dropped` finding, is exempt; its span was labelled `missing <id>`, so the
-review never saw it.
+Completeness is taken over the Requirements table as it stands at resolve
+(d3): every requirement with an `input` source must have rows. A requirement
+added after the review, for example to fix a `dropped` finding, therefore
+needs the reviewer dispatched again to account for its clauses. That costs a
+dispatch, but otherwise the requirement nobody reviewed would be the one
+whose clauses nobody checked, which is how take 9's dropped clauses would
+come back.
 
 ### B. The `design-inventory` block (R2, R3)
 
@@ -127,7 +136,9 @@ In the same review entry the reviewer returns a third block:
   `Design`.
 - **behaviour:** one user-visible behaviour the section adds (an interaction,
   output, demo data, a configuration key, a default) in the reviewer's words,
-  or `none` when the section adds none.
+  or `none` when the section adds none. The cell is unquoted, so a `|` inside
+  it must be escaped as `\|`; an unescaped one splits the row, and the row
+  is refused for having the wrong number of cells.
 - **backing:** one or more of `R<n>` and `decision <id>`, comma-separated;
   `invented <finding-id>`; or `none`, which is allowed only beside a `none`
   behaviour.
@@ -153,11 +164,18 @@ visible, not correct, as the coverage partition did for coverage.
 
 ### C. The `fidelity` derived evidence on spec-review (R3)
 
-`plugins/super-fr/workflows/fr-goal.yaml`'s `spec-review` step gains a
-derived evidence name, `fidelity`, beside `coverage`. It is wired like
-`coverage` in `packages/fr/src/fr/commands/run_cmd.py`: it joins
-`_REQUIREMENTS_EVIDENCE` and the derived-name set, and its witness reads the
-same review entry. It runs the two checks of §A and §B from a new module,
+The `spec-review` step gains a derived evidence name, `fidelity`, beside
+`coverage`, in BOTH copies of the shipped manifest:
+`plugins/super-fr/workflows/fr-goal.yaml` and the wheel copy
+`packages/fr/src/fr/workflows/fr-goal.yaml`, which
+`test_tripwire_shipped_workflows.py` guards. It is wired like `coverage` in
+`packages/fr/src/fr/commands/run_cmd.py`, in every table `coverage` is in:
+`_VERIFIABLE_EVIDENCE` (`:1389`), `_DERIVED_EVIDENCE` (`:1405`),
+`_DERIVED_FROM` (`:1416`, with its "from …" text) and
+`_REQUIREMENTS_EVIDENCE` (`:1862`). The comment at `:1402` warns that a name
+missing from any of them makes resolve refuse the step as unverifiable. Its
+witness, `_fidelity_witness`, reads the same review entry
+`_coverage_witness` reads. It runs the two checks of §A and §B from a new module,
 `packages/fr/src/fr/fidelity.py` (`check_fidelity`, `check_inventory`,
 `parse_design_sections`). `fr/requirements.py` is already 629 lines and owns
 the requirements grammar; this module consumes it (`parse_requirements`,
@@ -205,9 +223,16 @@ records what was chosen and why.
   spec-scope `decision`. It is carried like `input=true`, so an older fr
   ignores the token and reads a plain decision; no journal bump.
 - `JournalItem.delegated` in the step record (`fr/record/model.py`), which is
-  `extra="forbid"`. This is a record shape change: the stamp moves 4 → 5 with
-  a stamp-only migration, `fr.artifacts.record_delegated`, following
-  `record_input_unconfirmed`.
+  `extra="forbid"`. This is a record shape change under
+  `.claude/rules/artifact-versioning.md`. The stamp moves 4 → 5 in both
+  places it lives, `current_version` in `fr/artifacts/registry.py:441` and
+  `RECORD_SCHEMA_VERSION` in `fr/record/model.py:54`. The move uses a
+  stamp-only `SchemaMigration`, `fr.artifacts.record_delegated`, modelled on
+  `record_visual` (the 3 → 4 hop), and is imported in
+  `fr/artifacts/__init__.py` beside it, since a migration nobody imports
+  never runs. The field is additive and nothing moves or is removed, so no
+  frozen legacy model is owed. The record kind's structure validator already
+  exists (`validate_record`).
 - `fr journal add --delegated` for the verb path.
 - A delegated decision is a valid `decision <id>` source and a valid
   inventory backing.
@@ -222,9 +247,13 @@ In `packages/fr/src/fr/record/pr_body.py`:
   finding the journal still carries, or `None.`.
 - **`## Design inventory`** is new and joins `REQUIRED_SECTIONS` after
   `## Input coverage`. It renders the review's `design-inventory` table inside
-  `<details>`, or, for a run whose spec-review recorded no `fidelity`
-  evidence, `Not recorded (predates the fidelity gate).`. `deliver`'s
-  existing live-PR check then refuses a PR missing it.
+  `<details>`. For a run whose spec-review recorded no `fidelity` evidence,
+  or recorded the predates line (`REQUIREMENTS_PREDATES`) for it, the
+  section reads `Not recorded (predates the fidelity gate).`. That test
+  extends `pr_body._predates_gate` (`pr_body.py:124-141`) by name, as it
+  already does for `coverage`, so the predates string is never mistaken for
+  a recorded inventory. `deliver`'s existing live-PR check then refuses a PR
+  missing the section.
 
 ### G. Reviewer and skill prose (R1, R2, R4, R5)
 
@@ -236,6 +265,12 @@ In `packages/fr/src/fr/record/pr_body.py`:
 - `plugins/super-fr/skills/fr-goal/SKILL.md` §2: invented and reinterpreted
   findings are resolved `fixed` by removal, no longer `unconfirmed`; the
   `fidelity` evidence joins `coverage` in the refusal list.
+- `plugins/super-fr/skills/fr-goal/SKILL.md` §1: a "Your call." answer is a
+  `decision` with `delegated: true` in the brainstorm record (d5 applies to
+  every question round, and fr-goal §1 is where its questions are recorded).
+- `plugins/super-fr/skills/fr-goal/SKILL.md` §8: the PR-body section list
+  says `## Built without operator confirmation` holds the delegated decisions
+  and the requirements citing them, and it names `## Design inventory`.
 - `plugins/super-fr/skills/fr-brainstorming/SKILL.md` §1: a "Your call."
   answer is recorded as a decision with `delegated: true`.
 - `packages/fr/src/fr/record/template.py`: the `unconfirmed` comment line is
@@ -273,15 +308,17 @@ blocks, which fails closed.
 ## Test Plan
 
 1. **Clause partition (R1, R3).** Unit tests on `check_fidelity`: a sound
-   block passes; a missing requirement, a skipped or reordered clause, a
-   clause crossing an elision, an unknown finding id, and a decision-only
-   requirement given rows are each refused; a requirement added after the
-   review (absent from `input-coverage`) is not demanded.
+   block passes; a missing requirement (including one added after the
+   review), a skipped or reordered clause, a clause spanning an elision
+   boundary, an unknown finding id, and a decision-only requirement given
+   rows are each refused; a clause containing a raw `|` parses through the
+   three-column pipe protection.
 2. **Design inventory (R2, R3).** Unit tests on `parse_design_sections` and
    `check_inventory`: fenced `## ` / `### ` lines ignored; a Design without
    subsections is one section `Design`; a missing, reordered or unknown
    section, an unknown `R`/decision id, an `invented` id that is not a
-   finding, and a `none` backing beside a real behaviour are each refused.
+   finding, a `none` backing beside a real behaviour, and a behaviour cell
+   with an unescaped `|` are each refused.
 3. **Evidence wiring (R3, R4).** `fr run resolve --step spec-review` with a
    record: refused without the blocks, refused while an invented or
    reinterpreted finding is closed other than `fixed`/`refuted`, passes and
@@ -290,10 +327,15 @@ blocks, which fails closed.
    and a record `state: unconfirmed` are refused; an existing journal with an
    `unconfirmed` record still folds and renders.
 5. **Delegated (R5).** Journal round-trip of `delegated=true`; refused on a
-   non-decision; record 4 → 5 migration; `fr journal add --delegated`.
+   non-decision; the record kind is reachable hop by hop to 5
+   (`[2, 3, 4, 5]`) and the 4 → 5 hop is stamp-only; `fr journal add
+   --delegated`.
 6. **PR body (R6, R7).** `## Built without operator confirmation` lists
    delegated decisions with their citing requirements; `## Design inventory`
-   renders the table, or the predates line; `missing_sections` requires it.
-7. **Live (R2), post-merge.** Take 10's fr arm, run with this change on the
+   renders the table, or the predates line both when `fidelity` is absent
+   and when it holds `REQUIREMENTS_PREDATES`; `missing_sections` requires it.
+7. **Wiring (R3).** `fidelity` is in all four `run_cmd.py` tables and in both
+   manifest copies (the shipped-workflow tripwire stays green).
+8. **Live (R2), post-merge.** Take 10's fr arm, run with this change on the
    feature-C brief, produces a spec-review with an `invented` finding for any
    card-click toggle the spec carries, and the delivered spec has none.
