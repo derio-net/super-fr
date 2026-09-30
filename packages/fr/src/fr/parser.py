@@ -101,6 +101,28 @@ _PHASE_FILE_RE = re.compile(r"^(\d{2})\.yaml$")
 INSTALLED_FR_VERSION = importlib.metadata.version("fr")
 
 
+def _installed_has_outgrown(spec: SpecifierSet, installed: Version) -> bool:
+    """Is every bound that excludes `installed` at or below it?
+
+    True for a stale ceiling (`<5.0.0` under 5.0.0) or a pin (`==4.0.0`): the fix
+    is on the plan's side. False when some excluding bound is ABOVE `installed`
+    (`>=99.0.0`): the plan needs a newer fr, and installing one is the fix.
+    """
+    for s in spec:
+        if installed in SpecifierSet(str(s)):
+            continue
+        try:
+            bound = Version(s.version.removesuffix(".*"))
+        except InvalidVersion:
+            return False
+        # `>X` excludes X itself, so a `>` bound EQUAL to the installed version
+        # is still a plan that wants a newer fr (migrate treats `>` as a floor
+        # problem and does nothing, so "run migrate" would leave the user stuck).
+        if bound > installed or (s.operator == ">" and bound == installed):
+            return False
+    return True
+
+
 def _enforce_fr_version(plan_dir: Path, declared: object) -> None:
     """Refuse the plan when the installed fr is outside its `fr_version`.
 
@@ -126,6 +148,16 @@ def _enforce_fr_version(plan_dir: Path, declared: object) -> None:
             f"installed fr version {INSTALLED_FR_VERSION!r} is not a valid PEP 440 version: {e}"
         ) from e
     if installed not in spec:
+        if _installed_has_outgrown(spec, installed):
+            # The plan is behind this fr, not ahead of it. Installing a version
+            # the constraint admits would be a DOWNGRADE, so never say to; the
+            # repair that widens a stale ceiling is the way forward.
+            raise PlanSchemaError(
+                f"plan {plan_dir} requires fr_version {declared} "
+                f"but installed is {INSTALLED_FR_VERSION}. The plan is stale, not the "
+                f"install: run `fr migrate artifacts --yes` to widen its ceiling "
+                f"(a bound it cannot widen is reported for a hand edit)."
+            )
         raise PlanSchemaError(
             f"plan {plan_dir} requires fr_version {declared} "
             f"but installed is {INSTALLED_FR_VERSION}. "

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from fr.version_floor import CEILING_VERSION
 
 
 @pytest.fixture()
@@ -38,7 +39,7 @@ def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
         slug="2026-05-10-lifecycle",
         spec="docs/superpowers/specs/2026-05-10-fixture.md",
         target_repo="derio-net/superpowers-for-vk",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,
@@ -121,7 +122,7 @@ def test_full_lifecycle_manual_phase(tmp_repo):
         slug="2026-05-10-manual",
         spec="docs/superpowers/specs/2026-05-10-fixture.md",
         target_repo="derio-net/superpowers-for-vk",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="Manual setup", tag="manual")],
         prose="# Manual\n",
     )

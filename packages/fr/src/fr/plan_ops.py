@@ -39,6 +39,7 @@ from fr.plan_validator_wrapper import (
 )
 from fr.render import plan_locally_complete
 from fr.types import PHASE_TIERS, PhaseDoc, Step
+from fr.version_floor import CEILING_VERSION
 
 
 class StepSpec(TypedDict):
@@ -810,7 +811,7 @@ def rework_create(parent_plan_dir: Path) -> Plan:
         "spec": parent_spec,
         "target_repo": parent_plan.meta.target_repo,
         # Widened past the 4.0.0 major bump, same reasoning as plan_cmd.py's default.
-        "fr_version": parent_plan.meta.fr_version or ">=3.0.0,<5.0.0",
+        "fr_version": parent_plan.meta.fr_version or f">=3.0.0,<{CEILING_VERSION}",
         "created": _dt.date.today().isoformat(),
         "parent_plan": parent_rel,
     }
@@ -1638,7 +1639,7 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
             message=(
                 f"phases link acceptance rows but fr_version "
                 f"{plan.meta.fr_version!r} admits a pre-acceptance fr — "
-                f"floor it at '>=3.7.0,<4.0.0'."
+                f"floor it at '>=3.7.0,<{CEILING_VERSION}'."
             ),
         )
         if floor is not None:
@@ -1761,7 +1762,7 @@ def _skeleton_issues(plan: Plan) -> list[ReviewIssue]:
             message=(
                 "a phase marks the skeleton but fr_version "
                 f"{plan.meta.fr_version!r} admits a pre-skeleton fr — "
-                "floor it at '>=4.2.0,<5.0.0'."
+                f"floor it at '>=4.2.0,<{CEILING_VERSION}'."
             ),
         )
         if floor is not None:
@@ -2071,7 +2072,7 @@ def _tier_issues(plan: Plan) -> list[ReviewIssue]:
             probe_version="3.11.99",
             message=(
                 f"phases carry a tier but fr_version {plan.meta.fr_version!r} "
-                f"admits a pre-tier fr — floor it at '>=3.12.0,<5.0.0'."
+                f"admits a pre-tier fr — floor it at '>=3.12.0,<{CEILING_VERSION}'."
             ),
         )
         if floor is not None:
@@ -2160,7 +2161,7 @@ def _scope_field_issues(plan: Plan) -> list[ReviewIssue]:
             message=(
                 f"phases carry files/estimate_lines but fr_version "
                 f"{plan.meta.fr_version!r} admits a pre-4.20.0 fr, which cannot parse "
-                f"them — floor it at '>=4.20.0,<5.0.0'."
+                f"them — floor it at '>=4.20.0,<{CEILING_VERSION}'."
             ),
         )
         if floor is not None:

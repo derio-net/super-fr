@@ -29,6 +29,7 @@ import pytest
 from fr.cli import app
 from fr.run import units
 from fr.run.model import load_run_state
+from fr.version_floor import CEILING_VERSION
 from fr.workflow.model import Step
 from fr.workflow.resolve import resolve_workflow
 from typer.testing import CliRunner
@@ -354,7 +355,7 @@ def _toy_plan(root: Path) -> str:
         slug=slug,
         spec="docs/spec.md",
         target_repo="derio-net/super-fr",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=n,
@@ -892,7 +893,7 @@ def test_a_phases_file_tier_reaches_the_dispatch_brief(tmp_path: Path, monkeypat
             "--spec",
             spec_rel,
             "--fr-version",
-            ">=4.2.0,<5.0.0",
+            f">=4.2.0,<{CEILING_VERSION}",
             "--phases-file",
             str(phases_file),
         ],

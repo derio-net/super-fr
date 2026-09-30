@@ -22,6 +22,7 @@ from fr.cli import app
 from fr.parser import parse as parse_plan
 from fr.plan_ops import PhaseSpec, create, self_review
 from fr.types import PhaseHeader
+from fr.version_floor import CEILING_VERSION
 from pydantic import ValidationError
 from typer.testing import CliRunner
 
@@ -121,7 +122,7 @@ def test_create_omits_both_fields_when_unset(tmp_path: Path) -> None:
         slug="2026-09-24-plain",
         spec=None,
         target_repo="derio-net/test",
-        fr_version=">=4.2.0,<5.0.0",
+        fr_version=f">=4.2.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="Build", tag="agentic", skeleton=True)],
         prose="# x\n",
     )
@@ -146,7 +147,7 @@ def test_create_floors_fr_version_when_a_phase_sets_the_fields(
 
     assert result.exit_code == 0, result.output
     meta = (_plan_dir(repo) / "_meta.yaml").read_text()
-    assert "fr_version: '>=4.20.0,<5.0.0'" in meta
+    assert f"fr_version: '>=4.20.0,<{CEILING_VERSION}'" in meta
     header = yaml.safe_load((_plan_dir(repo) / "01.yaml").read_text())["phase"]
     assert header["files"] == ["packages/fr/src/fr/*.py", "tests/unit/test_x.py"]
     assert header["estimate_lines"] == 120
@@ -164,7 +165,7 @@ def test_create_floors_when_only_estimate_lines_is_set(
     result = _cli_create(repo, monkeypatch, phases)
 
     assert result.exit_code == 0, result.output
-    assert "'>=4.20.0,<5.0.0'" in (_plan_dir(repo) / "_meta.yaml").read_text()
+    assert f"'>=4.20.0,<{CEILING_VERSION}'" in (_plan_dir(repo) / "_meta.yaml").read_text()
 
 
 def test_create_refuses_an_explicit_constraint_admitting_a_pre_4_20_fr(
@@ -174,7 +175,9 @@ def test_create_refuses_an_explicit_constraint_admitting_a_pre_4_20_fr(
     operator's, so it is refused rather than rewritten."""
     repo = _repo(tmp_path)
 
-    result = _cli_create(repo, monkeypatch, SCOPED_PHASES, "--fr-version", ">=4.0.0,<5.0.0")
+    result = _cli_create(
+        repo, monkeypatch, SCOPED_PHASES, "--fr-version", f">=4.0.0,<{CEILING_VERSION}"
+    )
 
     assert result.exit_code == 2, result.output
     assert "4.20.0" in result.output
@@ -199,7 +202,9 @@ def test_create_leaves_fr_version_alone_without_the_fields(
     result = _cli_create(repo, monkeypatch, PLAIN_PHASES)
 
     assert result.exit_code == 0, result.output
-    assert "fr_version: '>=3.0.0,<5.0.0'" in (_plan_dir(repo) / "_meta.yaml").read_text()
+    assert (
+        f"fr_version: '>=3.0.0,<{CEILING_VERSION}'" in (_plan_dir(repo) / "_meta.yaml").read_text()
+    )
 
 
 # ── fr plan self-review ──────────────────────────────────────────────────────
@@ -229,14 +234,16 @@ def _messages(plan_dir: Path, needle: str) -> list:
 
 
 def test_self_review_warns_on_an_agentic_phase_with_no_files(tmp_path: Path) -> None:
-    issues = _messages(_programmatic(tmp_path, fr_version=">=4.2.0,<5.0.0"), "lists no files")
+    issues = _messages(
+        _programmatic(tmp_path, fr_version=f">=4.2.0,<{CEILING_VERSION}"), "lists no files"
+    )
 
     assert [i.severity for i in issues] == ["warn"], issues
     assert "phase 1" in issues[0].message
 
 
 def test_self_review_is_silent_about_files_on_a_manual_phase(tmp_path: Path) -> None:
-    issues = _messages(_programmatic(tmp_path, fr_version=">=4.2.0,<5.0.0"), "phase 2")
+    issues = _messages(_programmatic(tmp_path, fr_version=f">=4.2.0,<{CEILING_VERSION}"), "phase 2")
 
     assert not [i for i in issues if "files" in i.message], issues
 
@@ -244,7 +251,7 @@ def test_self_review_is_silent_about_files_on_a_manual_phase(tmp_path: Path) -> 
 def test_self_review_errors_when_the_fields_ride_a_pre_4_20_fr_version(
     tmp_path: Path,
 ) -> None:
-    plan_dir = _programmatic(tmp_path, fr_version=">=3.0.0,<5.0.0", files=("a/*.py",))
+    plan_dir = _programmatic(tmp_path, fr_version=f">=3.0.0,<{CEILING_VERSION}", files=("a/*.py",))
 
     floor = _messages(plan_dir, "4.20.0")
 
@@ -253,7 +260,7 @@ def test_self_review_errors_when_the_fields_ride_a_pre_4_20_fr_version(
 
 
 def test_self_review_floor_also_catches_estimate_lines_alone(tmp_path: Path) -> None:
-    plan_dir = _programmatic(tmp_path, fr_version=">=3.0.0,<5.0.0", estimate_lines=5)
+    plan_dir = _programmatic(tmp_path, fr_version=f">=3.0.0,<{CEILING_VERSION}", estimate_lines=5)
 
     assert [i.severity for i in _messages(plan_dir, "4.20.0")] == ["error"]
 
@@ -262,7 +269,7 @@ def test_self_review_has_no_floor_issue_under_a_4_20_floor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "4.20.0")
-    plan_dir = _programmatic(tmp_path, fr_version=">=4.20.0,<5.0.0", files=("a/*.py",))
+    plan_dir = _programmatic(tmp_path, fr_version=f">=4.20.0,<{CEILING_VERSION}", files=("a/*.py",))
 
     assert not _messages(plan_dir, "4.20.0")
 
@@ -289,9 +296,9 @@ def test_self_review_floor_catches_constraints_that_exclude_4_19_99(
 ) -> None:
     """Probing only 4.19.99 passed every constraint that happens to exclude it
     while still admitting an older fr."""
-    plan_dir = _programmatic(tmp_path, fr_version=">=3.0.0,<5.0.0", files=("a/*.py",))
+    plan_dir = _programmatic(tmp_path, fr_version=f">=3.0.0,<{CEILING_VERSION}", files=("a/*.py",))
     meta = plan_dir / "_meta.yaml"
-    meta.write_text(meta.read_text().replace("'>=3.0.0,<5.0.0'", repr(constraint)))
+    meta.write_text(meta.read_text().replace(f"'>=3.0.0,<{CEILING_VERSION}'", repr(constraint)))
 
     floor = [
         i

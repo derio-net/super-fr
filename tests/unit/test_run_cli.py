@@ -22,6 +22,7 @@ import pytest
 from fr.cli import app
 from fr.run import units
 from fr.run.model import load_run_state
+from fr.version_floor import CEILING_VERSION
 from fr_dispatch.work_item import run_item_id
 from typer.testing import CliRunner
 
@@ -5147,7 +5148,7 @@ def _plan_with_tags(
         slug=slug,
         spec=spec_rel,
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=n,

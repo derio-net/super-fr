@@ -25,16 +25,19 @@ from fr.plan_ops import (
 )
 from fr.plan_validator_wrapper import validator_wrapper_path
 from fr.records_commit import commit_records
-from fr.version_floor import PRE_4_20_PROBES, PRE_4_PROBES, admits_below
+from fr.version_floor import CEILING_VERSION, PRE_4_20_PROBES, PRE_4_PROBES, admits_below
 
 console = Console()
 err_console = Console(stderr=True)
 
-# Widened past the 3.19.0 -> 4.0.0 major bump (Phase 11 of the 2026-08-14
-# workflow-shapes plan) — a <4.0.0 ceiling would make every plan created on
-# 4.0.0+ fr fail its own version gate at parse time. See that plan's spec
-# §5 "fr_version must span the bump".
-DEFAULT_FR_VERSION = ">=3.0.0,<5.0.0"
+# Every default below carries a DERIVED ceiling (`CEILING_VERSION`: the next
+# major after the installed fr) and a LITERAL floor. The ceiling was once a
+# literal too — `<5.0.0`, widened by hand at 4.0.0 so a plan created there could
+# pass its own version gate (2026-08-14 workflow-shapes plan, spec §5 "fr_version
+# must span the bump") — and 5.0.0 then refused every plan it wrote. The floor
+# stays literal on purpose: `scripts/floors.py` reads it to check it names the
+# release that ships the field it guards.
+DEFAULT_FR_VERSION = f">=3.0.0,<{CEILING_VERSION}"
 
 # The floor a plan that names a `workflow:` shape must carry (spec §4.A.1).
 # `PlanMeta` is extra="forbid", so fr < 4.0.0 does not skip the unknown
@@ -49,14 +52,14 @@ DEFAULT_FR_VERSION = ">=3.0.0,<5.0.0"
 # installed is …". The constraint is still the plan's way of telling an
 # older fr not to try; the reason to carry it is that the NEXT field
 # addition will be announced properly, not that 3.x ever was.
-WORKFLOW_FR_VERSION = ">=4.0.0,<5.0.0"
+WORKFLOW_FR_VERSION = f">=4.0.0,<{CEILING_VERSION}"
 
 # The floor a plan whose phases set `files` or `estimate_lines` must carry
 # (2026-09-24 fr-goal-scope-proportion-cost spec §C). `PhaseHeader` is
 # extra="forbid", so an fr older than the release that added them fails the
 # parse instead of ignoring the keys — the same reasoning as the `workflow:`
 # floor above, one release-line later.
-SCOPE_FR_VERSION = ">=4.20.0,<5.0.0"
+SCOPE_FR_VERSION = f">=4.20.0,<{CEILING_VERSION}"
 
 
 def _admits_pre_4(constraint: str) -> bool:
@@ -186,8 +189,8 @@ def create_cmd(
     prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"
 
     # "Did the operator state a constraint?" is asked of the sentinel default
-    # (None), not of click: an explicit `--fr-version '>=3.0.0,<5.0.0'` is
-    # byte-identical to the default, and silently upgrading it would be
+    # (None), not of click: an explicit `--fr-version` equal to the default
+    # is byte-identical to it, and silently upgrading it would be
     # exactly the kind of quiet substitution this phase exists to stop.
     # (click's ParameterSource introspection would answer the same question
     # but click is typer's transitive dep, not ours — see skills_cmd.py's

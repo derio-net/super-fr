@@ -15,6 +15,7 @@ from pathlib import Path
 from fr.cli import app
 from fr.parser import parse as parse_plan
 from fr.plan_ops import self_review
+from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -88,7 +89,9 @@ def test_self_review_no_tier_version_warn_with_raised_floor(tmp_path: Path, monk
     _spec(repo)
     plan_dir = _create_plan(repo, monkeypatch, TIERED_PHASES)
     meta = plan_dir / "_meta.yaml"
-    meta.write_text(meta.read_text().replace(">=3.0.0,<5.0.0", ">=3.12.0,<5.0.0"))
+    meta.write_text(
+        meta.read_text().replace(f">=3.0.0,<{CEILING_VERSION}", f">=3.12.0,<{CEILING_VERSION}")
+    )
     issues = _issues(plan_dir)
     assert not any("3.12.0" in i.message and "admits a pre" in i.message for i in issues), issues
 
@@ -128,6 +131,8 @@ def test_self_review_silent_for_tiered_agentic_phase(tmp_path: Path, monkeypatch
     _spec(repo)
     plan_dir = _create_plan(repo, monkeypatch, TIERED_PHASES)
     meta = plan_dir / "_meta.yaml"
-    meta.write_text(meta.read_text().replace(">=3.0.0,<5.0.0", ">=3.12.0,<5.0.0"))
+    meta.write_text(
+        meta.read_text().replace(f">=3.0.0,<{CEILING_VERSION}", f">=3.12.0,<{CEILING_VERSION}")
+    )
     issues = _issues(plan_dir)
     assert not any("no tier" in i.message or "declares no" in i.message for i in issues), issues

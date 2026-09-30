@@ -17,6 +17,7 @@ from fr.journal.model import JournalEntry, append_journal_entry, journal_path
 from fr.parser import parse as parse_plan
 from fr.plan_ops import PhaseSpec, create
 from fr.proportionality import build_report, run_report
+from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -70,7 +71,7 @@ def _repo(
         slug=SLUG,
         spec=None,
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,
@@ -688,7 +689,7 @@ def _sized_repo(
         slug=SIZED,
         spec=SIZED_SPEC,
         target_repo="derio-net/own",
-        fr_version=">=4.20.0,<5.0.0",
+        fr_version=f">=4.20.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(number=i, title=f"P{i}", tag=tag, acceptance=rows)  # type: ignore[arg-type]
             for i, (rows, tag) in enumerate(phases, start=1)

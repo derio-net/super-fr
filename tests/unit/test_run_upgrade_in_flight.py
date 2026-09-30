@@ -27,6 +27,7 @@ import yaml
 from fr.artifacts import artifact_kind, run_migrations
 from fr.run.legacy import RunStateV4, parse_run_state_v4
 from fr.usage.file import load_usage, usage_path
+from fr.version_floor import CEILING_VERSION
 
 from tests.unit.test_run_cli import _SHIPPED_FR_GOAL, _invoke, _repo, _squash
 
@@ -63,7 +64,7 @@ def _plan(repo: Path, plan_rel: str, *, phases: int) -> None:
         slug=slug,
         spec=spec_rel,
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=n,

@@ -32,6 +32,7 @@ from fr.artifacts.fr_version import (
 from fr.artifacts.runner import MIGRATIONS, run_migrations
 from fr.cli import app
 from fr.types import PlanMeta
+from fr.version_floor import CEILING_VERSION, ceiling_for
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from typer.testing import CliRunner
@@ -165,7 +166,10 @@ def test_a_floor_problem_is_still_silent(tmp_path: Path) -> None:
     floor. Widening the ceiling would not admit us and downgrades are a
     non-goal (spec §2), so there is nothing for the operator to do and nothing
     to report."""
-    meta = _plan(tmp_path, "future", fr_version=">=5.0.0,<6.0.0")
+    # A floor above the installed fr: the ceiling constant is the next major.
+    meta = _plan(
+        tmp_path, "future", fr_version=f">={CEILING_VERSION},<{ceiling_for(CEILING_VERSION)}"
+    )
     before = _freeze(meta)
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -184,7 +188,7 @@ def test_a_ceiling_excluding_the_installed_major_is_widened(tmp_path: Path) -> N
 
     assert [a.path for a in report.applied] == [meta]
     assert report.applied[0].repair == CEILING_REPAIR.name
-    assert yaml.safe_load(meta.read_text())["fr_version"] == ">=3.0.0,<5.0.0"
+    assert yaml.safe_load(meta.read_text())["fr_version"] == f">=3.0.0,<{CEILING_VERSION}"
 
 
 def test_widening_rewrites_the_constraint_and_nothing_else(tmp_path: Path) -> None:
@@ -196,7 +200,9 @@ def test_widening_rewrites_the_constraint_and_nothing_else(tmp_path: Path) -> No
     after = meta.read_text().splitlines()
     changed = [(b, a) for b, a in zip(before, after, strict=True) if b != a]
     assert len(before) == len(after), "no line added or removed"
-    assert changed == [("fr_version: '>=3.7.0,<4.0.0'", "fr_version: '>=3.7.0,<5.0.0'")]
+    assert changed == [
+        ("fr_version: '>=3.7.0,<4.0.0'", f"fr_version: '>=3.7.0,<{CEILING_VERSION}'")
+    ]
     assert "'" in after[before.index("fr_version: '>=3.7.0,<4.0.0'")], "quoting is preserved"
 
 
@@ -213,7 +219,7 @@ def test_the_repair_does_not_move_the_plan_stamp(tmp_path: Path) -> None:
 
 
 def test_a_plan_already_admitting_the_installed_version_is_untouched(tmp_path: Path) -> None:
-    meta = _plan(tmp_path, "current", fr_version=">=3.19.0,<5.0.0")
+    meta = _plan(tmp_path, "current", fr_version=f">=3.19.0,<{CEILING_VERSION}")
     before = _freeze(meta)
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -302,12 +308,12 @@ def test_fr_migrate_artifacts_yes_applies(tmp_path: Path, monkeypatch) -> None:
     result = runner_cli.invoke(app, ["migrate", "artifacts", "--yes"])
 
     assert result.exit_code == 0, result.output
-    assert yaml.safe_load(meta.read_text())["fr_version"] == ">=3.0.0,<5.0.0"
+    assert yaml.safe_load(meta.read_text())["fr_version"] == f">=3.0.0,<{CEILING_VERSION}"
     assert "dry-run" not in result.output
 
 
 def test_fr_migrate_artifacts_reports_nothing_to_do(tmp_path: Path, monkeypatch) -> None:
-    _plan(tmp_path, "current", fr_version=">=4.0.0,<5.0.0")
+    _plan(tmp_path, "current", fr_version=f">=4.0.0,<{CEILING_VERSION}")
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
 
     result = runner_cli.invoke(app, ["migrate", "artifacts", "--yes"])

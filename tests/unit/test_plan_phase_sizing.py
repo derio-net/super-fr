@@ -23,6 +23,7 @@ from fr.journal.model import (
 from fr.parser import Plan
 from fr.parser import parse as parse_plan
 from fr.plan_ops import PhaseSpec, ReviewIssue, _phase_sizing_issues, create
+from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -113,7 +114,7 @@ def _plan(repo: Path, *phases: P, spec: str = SPEC_REL) -> Plan:
         slug=PLAN,
         spec=spec,
         target_repo="derio-net/own",
-        fr_version=">=4.20.0,<5.0.0",
+        fr_version=f">=4.20.0,<{CEILING_VERSION}",
         phases=specs,
         prose="# toy\n",
     )

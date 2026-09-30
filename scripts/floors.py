@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Hand-written `fr_version` floors (spec 2026-09-26-version-bump-churn §3.E).
 
-A floor is a `>=X.Y.Z,<X.Y.Z` literal inside a Python string under
-`packages/*/src` — `SCOPE_FR_VERSION = ">=4.20.0,<5.0.0"`, or the same text in
-a refusal message. Only its **lower bound** matters: one newer than the base
+A floor is a `>=X.Y.Z,<…` literal inside a Python string under
+`packages/*/src` — `SCOPE_FR_VERSION = f">=4.20.0,<{CEILING_VERSION}"`, or the
+same text in a refusal message. The ceiling is derived from the installed major
+(a literal one is a bug: it strands at the next major bump), so only the lower
+bound is ever a literal. Only its **lower bound** matters: one newer than the base
 version names a release that does not exist yet, and must equal the predicted
 release (`base + this PR's fragment bump`, or at release time the version being
 released). A lower bound at or below base names an existing release and always
@@ -21,8 +23,12 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+# The upper bound is either a literal version, or NOT one: a derived ceiling,
+# `f">=4.20.0,<{CEILING_VERSION}"`. Python 3.11 hands the tokenizer that whole
+# f-string as one STRING (`<` then `{`); 3.12+ splits it, and the FSTRING_MIDDLE
+# piece simply ends after the `<`. Either way group 2 is None.
 FLOOR_RE = re.compile(
-    r"(?<![\w.])>=\s*(\d+\.\d+\.\d+)\s*,\s*<\s*(\d+\.\d+\.\d+)(?![\w.])",
+    r"(?<![\w.])>=\s*(\d+\.\d+\.\d+)\s*,\s*<\s*(?:(\d+\.\d+\.\d+)(?![\w.])|(?=\{|$))",
 )
 _STRING_TOKENS = {tokenize.STRING, getattr(tokenize, "FSTRING_MIDDLE", tokenize.STRING)}
 
@@ -30,7 +36,7 @@ _STRING_TOKENS = {tokenize.STRING, getattr(tokenize, "FSTRING_MIDDLE", tokenize.
 @dataclass(frozen=True)
 class Floor:
     lower: str
-    upper: str
+    upper: str | None  # None: a derived ceiling, not a literal
     line: int
 
 

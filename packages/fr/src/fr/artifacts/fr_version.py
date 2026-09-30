@@ -40,6 +40,7 @@ from packaging.version import InvalidVersion, Version
 
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, Repair
+from fr.version_floor import ceiling_for
 
 FR_VERSION_KEY = "fr_version"
 REPAIR_NAME = "widen-fr-version-ceiling"
@@ -117,7 +118,7 @@ def widen_ceiling(constraint: str, installed: Version) -> str | None:
     if excluding and all(s.operator in _LOWER_BOUND_OPERATORS for s in excluding):
         return None  # a floor problem; see the docstring
 
-    new_ceiling = f"<{installed.major + 1}.0.0"
+    new_ceiling = f"<{ceiling_for(str(installed))}"
     widened = [new_ceiling if s.operator in _UPPER_BOUND_OPERATORS else str(s) for s in specifiers]
     candidate = ",".join(widened)
     if candidate != constraint and installed in SpecifierSet(candidate):
