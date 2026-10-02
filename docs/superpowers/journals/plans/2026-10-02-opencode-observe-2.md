@@ -59,3 +59,38 @@ Smoke task: a fixture addition beside main's rows and a stub module; the stub wa
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 Each edit replaced a gate's reader in place with the session-protocol call (no duplicated logic left behind); _this_session is now imported by no gate (the T2.S3 refactor), so the wiring had nothing further to consolidate.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-02T19:57:58+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · _open_dispatch dropped main's harness guard: an undetected harness records the stale CLAUDE_CODE_SESSION_ID (gh#537 regression; becomes R3 evidence) (phase 1)
+
+run_cmd.py:3011 recorded run_session(os.environ) unconditionally; with detect_harness → None (mixed CLAUDECODE+OPENCODE env, pid not placeable) current_session (telemetry.py:436) falls back to Claude Code's key, so the inherited stale session was recorded and then counted as positive evidence by candidates(ambient=False). Spec §B: record only on a harness that OWNS its key. Untested because every test set FR_HARNESS.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-02T19:57:58+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · OpenCode backend reopens sqlite per query and loads unfiltered parts; run_session runs detect_harness twice (phase 1)
+
+observed.py _parts/_children opened a second connection for _known on every call; _final_text decoded every part of each child to find its last text part; run_session detected the harness twice (each may run ps). Not quadratic, but megabytes of JSON per gate on a long session.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-10-02T19:57:58+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · session.ts assigns output.env[...] without ensuring env exists; a missing env object fails R1 invisibly (phase 1)
+
+packages/fr-opencode-plugin/src/session.ts:30 — a binary handing over no env object raised a swallowed TypeError and the session was never exported.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-10-02T19:57:58+00:00 phase=1 -->
+### review-p1 · review · phase 1 independent code review: 3 findings (p1-r1 important, p1-r2/p1-r3 low), all in scope (phase 1)
+
+Reviewer checked the seven focus areas (three-valued contract, run_session root walk and call sites, §C ambient threading with no caller left ambient, gates routed through the protocol with no Claude Code behaviour change, fixture added beside main's rows, plugin never throws / no parity marker, tests non-tautological) and found them correct apart from p1-r1, p1-r2, p1-r3. Received: each verified against the code; p1-r1 reproduced by a failing test first.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-02T19:57:58+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: _open_dispatch dropped main's harness guard: an undetected harness records the stale CLAUDE_CODE_SESSION_ID (gh#537 regression; becomes R3 evidence) (phase 1)
+
+dc098745: _open_dispatch records run_session only when the detected harness is in SESSION_ID_ENVS (None otherwise, as main); test_advance_records_no_session_when_no_harness_owns_one (red first).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-02T19:57:58+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: OpenCode backend reopens sqlite per query and loads unfiltered parts; run_session runs detect_harness twice (phase 1)
+
+dc098745: _parts/_children ask _known only on an empty answer (one connection in the common case); _final_text filters text parts in SQL (json_valid/json_extract); run_session detects the harness once via _session_under.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-10-02T19:57:58+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: session.ts assigns output.env[...] without ensuring env exists; a missing env object fails R1 invisibly (phase 1)
+
+dc098745: output.env ??= {} before assigning; bun test 'creates the env object when the output carries none' (red first).
