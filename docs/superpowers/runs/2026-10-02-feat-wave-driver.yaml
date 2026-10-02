@@ -224,8 +224,10 @@ steps:
     stdout: "10 out-of-scope finding(s): rf-4, rf-5, p2-closeout-state-archived-unreachable,\
       \ \nrg-16, rh-2, rh-6, rh-7, ri-6, rj-7, rk-8\n"
   deliver:
-    state: running
-    at: '2026-10-02T22:16:03+00:00'
+    state: done
+    at: '2026-10-02T22:30:45+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/876
     units:
       step/deliver:
         attempts:
@@ -233,3 +235,9 @@ steps:
           harness: claude-code
           model: claude-sonnet-5-5
           session: 12cefec0-8bfd-4945-9a41-9fef359abbef
+          returned: '2026-10-02T22:30:43+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-suite.log@26bee4805951
+          proportionality: 6a8eca45b983a3a16180d4bccccdff3ff6c25778:d0a03554bcd46a7e4e70e6cb777ae02c7e5ed0917d6768588c27f38ba2f7460c
+          visual: none
