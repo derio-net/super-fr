@@ -15,3 +15,12 @@ The batch rule says to stop and ask before fixing anything when there is more th
 ### dcaa57ca57da · decision · Operator: fix all four in one PR, one failing test per cause
 
 #844: a MERGED PR counts as this workspace's only if it merged after the state's created_at; otherwise fall back to merged-by-content. #553: fail closed on drift between HEAD's branch and the marker's branch, and gc refuses to reap a drifted workspace. #578: save state before devcontainer up. #843: write a newline before appending to info/exclude.
+
+<!-- fr:journal kind=repro scope=debug id=820a49a90f94 created=2026-10-02T16:45:20+00:00 -->
+### 820a49a90f94 · repro · All four reproduce as failing tests on 599ba629
+
+tests/unit/test_isolation_reap_names.py and three new tests in test_isolation_decision_core.py, all red for the reported reason:
+- #844: a gh PR MERGED at 2020-01-01 is reported as verdict=merged, action=reaped for a workspace created today.
+- #553: a worktree drifted to fix/other gets reaped on feat/registered's PR, and the edit gate still allows edits there.
+- #578: with fail_on=devcontainer, up raises and load_state returns None.
+- #843: an exclude file ending in '*.log' with no newline becomes '*.log.fr-isolation'.
