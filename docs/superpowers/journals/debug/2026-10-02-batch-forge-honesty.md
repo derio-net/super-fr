@@ -29,3 +29,8 @@ gitseam.Worktree.merge overrode rerere only. With merge.directoryRenames at git'
 ### 6f8d6bfbd307 · finding [fixed] · #800 fixed: -c merge.directoryRenames=false on the scratch merge
 
 gitseam.py Worktree.merge; pinned by test_an_archive_that_empties_a_live_directory_is_not_a_rename (real repo, failed first). It is the only git merge fr runs (grep: no other merge/rebase call site in packages/*/src). The base clone's local merge.directoryRenames=false workaround can be dropped once this ships.
+
+<!-- fr:journal kind=root-cause scope=debug id=4295173f790f created=2026-10-02T18:12:42+00:00 -->
+### 4295173f790f · root-cause · #803: the tracking gate is per verb, and only apply/dispatch call it
+
+require_tracker is called from apply_cmd._apply_one and triage_batch_cmd._tracking_gate (dispatch only, :801). batch cancel (:380-406, edit_issue_labels + comment_issue) and fr undispatch (comment_issue + edit_issue_state) never call it. batch merge was named by the issue but writes nothing to an issue: batch_merge.py's only forge writes are pr_merge (the forge, not the tracker) — ruled out, left ungated. Failing tests: test_tracking_none.py::test_cancel_* / test_undispatch_*.
