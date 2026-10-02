@@ -18,11 +18,7 @@ result dies with the session, syncs are invisible, a refresh redoes it all. `fr 
 Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for
 `--org OWNER`, lowercased; `--dir D` overrides). Pass the same `--repo`/`--org`/`--dir` to every command.
 
-`--repo` also takes a comma-separated **group**, `--repo A/B,C/D` (owners may differ): one board, one state
-directory (the sorted `owner--repo` slugs joined by `+`, shortened with an eight-character hash past 80
-characters) and one `--max-inflight` cap shared across the repos. A group may not hold two repos with the same
-name (judgement keys are `<repo-name>#<n>`; refused, exit 2). Batches stay single-repo, and `batch drive` over a
-group needs a `--checkout OWNER/REPO=PATH` for every repo of the group before it runs anything.
+`--repo A/B,C/D` is a **group** (owners may differ): one board, one directory (sorted `owner--repo` slugs joined by `+`, hashed past 80 characters), one `--max-inflight` cap. Two repos with the same name are refused (exit 2: keys are `<repo-name>#<n>`); batches stay single-repo; `batch drive` needs `--checkout OWNER/REPO=PATH` for every repo of the group.
 
 | File | Written by | Holds |
 |---|---|---|
@@ -109,8 +105,7 @@ merges its archive PR, and dispatches by wave up to `--max-inflight`. `--once` e
 3. **Record line drift** in `detail` (`was :1013, now :1312`); a bug already fixed on main is a close
    recommendation, not a ranking.
 4. **Hunt duplicates and batches.** Same predicate, same file, same sentence: link duplicates in `note`, and
-   name the batch when issues share a subsystem. A shared root cause across three or more issues becomes a
-   `patterns` entry.
+   name the batch when issues share a subsystem. A shared root cause across three or more issues becomes a `patterns` entry.
 5. **Forge actions are unrun commands.** A close, a dedupe or a relabel is the exact `gh` command in `note` or your
    report, for the operator to run. Never act on the forge unasked. `batch dispatch|merge|cancel|drive` act only
    with `--yes` (without it they print the plan; `drive` with no ids plans the batches with a wave, else all); pass
@@ -122,5 +117,4 @@ After render, give the board's path and the delta (newly judged, settled, orphan
 
 ## Privacy
 
-The state directory is outside every repo on purpose. When the scope is outside the operator's own org, keep its
-facts, judgements and board local — never in a commit, PR, journal or issue (`.claude/rules/third-party-privacy.md`).
+The state directory is outside every repo on purpose. When the scope is outside the operator's own org, keep its facts, judgements and board local — never in a commit, PR, journal or issue (`.claude/rules/third-party-privacy.md`).
