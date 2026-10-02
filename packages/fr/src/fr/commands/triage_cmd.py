@@ -364,5 +364,6 @@ def render_command(
 # helpers above and registers its commands on `batch_app`, so it is imported
 # LAST: whichever of the two modules loads first, every name the other needs
 # already exists.
+import fr.commands.triage_architecture_cmd  # noqa: E402, F401
 import fr.commands.triage_batch_cmd  # noqa: E402, F401
 import fr.commands.triage_origins_cmd  # noqa: E402, F401

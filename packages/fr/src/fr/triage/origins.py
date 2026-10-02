@@ -658,3 +658,8 @@ def render_origins(
         f"{_conclusion(facts, origins, titles)}\n"
         f"</main>\n<script>{FILTER_SCRIPT}</script>\n</body>\n</html>\n"
     )
+
+
+# Public names for the pieces the architecture page reuses (wave-driver R11).
+origin_counts = _counts
+filings_chart = _chart

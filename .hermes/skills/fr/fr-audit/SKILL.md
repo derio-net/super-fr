@@ -76,17 +76,38 @@ comparison silently, and never count it as zero.
 $HOME/.cache/fr/usage/<name>.html`. Report the pooled shares and the per-session
 range, name the sessions, and state what was unavailable.
 
-**Architecture page (two halves).**
+**Architecture page.** The engine builds it: `fr triage architecture render --repo
+<owner/repo> [--checkout <clone>] [--now-ref <ref>]` writes `architecture.html` into the
+triage state directory (the same scope options as every `fr triage` verb), and nothing
+else. Its sections are generated, so you never type a figure into it: the snapshot
+timeline first, then the measured sections (summary strip, waves and batch order, subsystem
+cards, size table, filings per day, origins, operator actions), then the fragments you
+authored. You supply three inputs, all in the state directory:
 
-1. *Current state* is measured: the audit page's figures, per step.
-2. *Future state* is design, authored from the spec, never measured. For each step
-   the spec changes, state the turns it removes or adds and why. Derive the expected
-   effect from the current-state figures (for example "the resolve step drops from ~6
-   turns to ≤2"), and label every such figure a projection. A future-state number
-   presented as measured is the defect this skill exists to prevent.
+- `subsystems.yaml`: a `subsystems:` list, each with `name`, `path` (globs; `*` spans `/`),
+  `then_ref` (the git ref "then" is measured at) and `themes` (the judgement themes that place
+  an open issue on it). An open issue whose theme maps nowhere lands under *Other*. The verb
+  counts lines with `git ls-tree` and `git show` at both refs and names each commit; a figure
+  it could not take is `—`.
+- `architecture/<name>.html`: authored fragments (diagrams, narrative, inline SVG). Each must
+  be well-formed (no `<script>`, `<html>`, `<head>`, `<body>` or `<title>`); a malformed one is
+  refused by name and nothing is written. Use the page's tokens (`var(--accent)`, `var(--ink)`).
+- `architecture/manifest.yaml`: `sections:`, an ordered list of generated section names
+  (`summary`, `waves`, `subsystems`, `size-table`, `filings-per-day`, `origin-counts`,
+  `operator-actions`) and fragment file names. A listed file that does not exist is reported
+  and shown on the page; with no manifest every generated section shows and no fragment.
 
-When the change ships, run a comparable run through `fr usage report` and put the
-measured figure beside the projection. Keep both; do not overwrite the projection.
+**Measured versus projected is the rule.** The verb's sections are measurements. Everything
+you author is design: for each step the spec changes, state the turns it removes or adds and
+why, derive it from the measured figures, and label every such figure a projection (put the
+label in the fragment itself). A projection presented as a measurement is the defect this skill
+exists to prevent. When the change ships, render again and put the measured figure beside the
+projection; keep both.
+
+Refresh the inputs first when you want a current page: `fr triage render` stores a snapshot, and
+`fr triage origins collect` plus the `fr-origins` skill provide the origins data. **Publishing
+stays yours**: fr writes a file under `$HOME/.cache/fr/triage/<scope>/`; copy or host it
+wherever the operator publishes, after redacting any third-party identity it carries.
 
 ## Red flags
 

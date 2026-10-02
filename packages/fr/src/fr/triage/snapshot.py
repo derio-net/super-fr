@@ -189,6 +189,22 @@ def _readable(state_dir: Path) -> Iterator[Snapshot]:
             continue
 
 
+def stored_snapshots(state_dir: Path) -> list[tuple[datetime, Snapshot]]:
+    """Every READABLE stored snapshot with the time its file name records (UTC), oldest
+    first. A corrupt file, or one whose name is not a stamp, is skipped as absent."""
+    target = state_dir / SNAPSHOT_DIR
+    out: list[tuple[datetime, Snapshot]] = []
+    if not target.is_dir():
+        return out
+    for path in sorted(target.glob("*.json")):
+        try:
+            when = datetime.strptime(path.stem, _STAMP).replace(tzinfo=UTC)
+            out.append((when, Snapshot.model_validate_json(path.read_text(encoding="utf-8"))))
+        except (ValueError, ValidationError, OSError, UnicodeDecodeError):
+            continue
+    return out
+
+
 def latest_snapshot(state_dir: Path) -> Snapshot | None:
     """The newest READABLE snapshot, or None. A corrupt one is skipped as absent."""
     return next(_readable(state_dir), None)

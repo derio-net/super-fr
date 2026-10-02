@@ -143,6 +143,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
     inputs), `snapshot.py` stores/diffs the per-render snapshots (`render.py` reads no clock; the command passes it),
     `components.py` holds the colour tokens, the phone gutter and the one `tabs()` component. `Judgement.kind` and
     `Judgements.features` load on any schema; `check` has an `unplaced` set.
+    **Origins and the architecture page** (same spec, E and F): `fr triage origins {collect,check,render}`
+    (`origins.py`; classification is the `fr-origins` skill's) and `fr triage architecture render`
+    (`architecture.py`): the snapshot timeline, measured sections (line counts via the `gitseam`
+    `ls-tree`/`show` at each `subsystems.yaml` ref), then authored `architecture/` fragments in manifest order.
     **Waves and the driver** (2026-10-02 spec, `wave-driver`): judgements
     schema 3 adds `wave`/`after` per batch and the `post_merge`/`closeout`
     events; `fr triage batch drive` runs the waves to completion.

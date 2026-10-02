@@ -1,0 +1,53 @@
+schema_version: 7
+run: 2026-10-02-feat-wave-driver
+step: implement-phase
+item: phase/6
+outcome: done
+ticks: [P6.T1.S1, P6.T2.S1, P6.T2.S2, P6.T3.S1]
+refactor:
+  P6.T1: "red-only task: tests, no production code to clean"
+  P6.T2: "nothing beyond sharing the page shell: the page already builds on components.TOKENS_CSS/GUTTER_CSS/TABS_CSS/tabs and the origins chart and chips, which gained public aliases (filings_chart, origin_counts) instead of copies"
+  P6.T3: "acceptance row, gates and mirrors only: no production code to clean"
+journal:
+  - kind: decision
+    id: p6-timeline-from-stored-snapshots
+    title: The timeline steps through the stored snapshots, one tab per snapshot
+    body: |
+      A snapshot stores figures, batch stages, issue and PR states, not the rendered sections, so
+      "the measured sections as they were" is each snapshot's figures table (with change against the
+      snapshot before), its batch stages and the diff to the previous one. It reuses `tabs()` (newest
+      preselected, every step shown without JavaScript). `snapshot.stored_snapshots` reads the stamp
+      from the file name; unreadable files are skipped as absent. Zero snapshots says none; one says
+      there is nothing to step through yet.
+  - kind: decision
+    id: p6-r20-groups-manifest-orders-within
+    title: R20 fixes the groups; the manifest orders within them
+    body: |
+      The timeline is always first and is not a manifest entry. Generated sections then follow in
+      manifest order and the authored fragments after them in manifest order, whatever the interleaving
+      in the file. No manifest means every generated section and no fragments. A name that is neither a
+      generated section nor a plain file name directly inside `architecture/` is refused (exit 2), so a
+      manifest cannot reach outside the directory.
+  - kind: decision
+    id: p6-fragment-rules
+    title: Fragments are parsed strictly; scripts and document elements are refused
+    body: |
+      Well-formed means every non-void element is closed in order (optional end tags such as an
+      unclosed `<li>` are refused too). `<script>`, `<html>`, `<head>`, `<body>` and `<title>` are
+      refused: the page keeps one script element (a constant) and its own real title. Beyond the
+      spec's "well-formed", stated here so the skill can say it. A manifest entry with no file is
+      reported on stderr and as a note on the page, exit 0; a malformed one is exit 2 with nothing written.
+  - kind: decision
+    id: p6-missing-is-a-dash
+    title: A measurement that cannot be taken, or that matched no file, is a dash
+    body: |
+      An unresolvable ref, a glob matching no file at that ref, or no git checkout at all gives no
+      figure (an em dash and a warning), never 0. A subsystem that genuinely did not exist at its
+      then_ref therefore reads as a dash with its commit still named in the other column.
+  - kind: discovery
+    id: p6-checkout-option
+    title: The verb takes --checkout and --now-ref
+    body: |
+      Measuring needs a clone, which `fr triage` scope options do not name, so the command takes
+      `--checkout` (default the current toplevel, via the existing Checkout.at) and `--now-ref`
+      (default HEAD). Git processes start only in gitseam (new Checkout.short_rev and files_at).

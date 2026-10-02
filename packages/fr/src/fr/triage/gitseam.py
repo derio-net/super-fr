@@ -135,6 +135,22 @@ class Checkout:
     def rev_parse(self, ref: str) -> str:
         return git(["rev-parse", ref], self.path).strip()
 
+    def short_rev(self, ref: str) -> str | None:
+        """*ref*'s abbreviated commit, or None when it names no commit here."""
+        try:
+            return (
+                git(
+                    ["rev-parse", "--verify", "--quiet", "--short", f"{ref}^{{commit}}"], self.path
+                ).strip()
+                or None
+            )
+        except GitError:
+            return None
+
+    def files_at(self, ref: str) -> list[str]:
+        """Every file path in the tree at *ref* (`git ls-tree -r --name-only`)."""
+        return git(["ls-tree", "-r", "--name-only", ref], self.path).splitlines()
+
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return git_ok(["merge-base", "--is-ancestor", ancestor, descendant], self.path)
 
