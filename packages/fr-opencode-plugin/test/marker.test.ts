@@ -142,4 +142,29 @@ describe("resolveMarker", () => {
     const result = resolveMarker(join(repo, "README.md"));
     expect(result.hasValidMarker).toBe(false);
   });
+
+  test("a worktree marker whose HEAD drifted to another branch is invalid and names both (gh#553)", () => {
+    const wt = mkdtempSync(join(tmpdir(), "fr-opencode-marker-wt-"));
+    rmSync(wt, { recursive: true, force: true });
+    sh("git", ["worktree", "add", "--quiet", "-b", "feat/target", wt], repo);
+    try {
+      mkdirSync(join(wt, "docs", "superpowers", "plans"), { recursive: true });
+      const top = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: wt })
+        .toString()
+        .trim();
+      writeFileSync(
+        join(wt, ".fr-isolation"),
+        JSON.stringify({ toplevel: top, branch: "feat/target", mode: "worktree" })
+      );
+      sh("git", ["checkout", "--quiet", "-b", "chore/elsewhere"], wt);
+      const result = resolveMarker(join(wt, "README.md"));
+      expect(result.hasValidMarker).toBe(false);
+      expect(result.drift).toEqual({ marker: "feat/target", head: "chore/elsewhere" });
+
+      sh("git", ["checkout", "--quiet", "--detach"], wt); // mid-rebase shape: not drift
+      expect(resolveMarker(join(wt, "README.md")).hasValidMarker).toBe(true);
+    } finally {
+      rmSync(wt, { recursive: true, force: true });
+    }
+  });
 });

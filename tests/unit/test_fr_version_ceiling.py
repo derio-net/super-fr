@@ -261,3 +261,78 @@ def test_no_shortened_ceiling_literal_slips_past_the_floor_scan() -> None:
     ]
 
     assert hits == [], "hardcoded fr_version ceiling(s):\n  " + "\n  ".join(hits)
+
+
+# ── an explicit --fr-version must admit the installed fr, checked before writing (#855) ──
+
+
+@pytest.mark.parametrize("constraint", [">=4.20.0,<5.0.0", ">=99.0.0", "==4.0.0"])
+def test_an_explicit_constraint_excluding_the_installed_fr_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, constraint: str
+) -> None:
+    """Live: `--fr-version '>=4.20.0,<5.0.0'` on fr 5.0.1 wrote the plan dir, its
+    journal and the validator wrapper, then failed its own re-parse and left all
+    three staged and uncommitted."""
+    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "5.0.0")
+    repo = _repo(tmp_path)
+    before = sorted(p.relative_to(repo) for p in repo.rglob("*") if ".git" not in p.parts)
+
+    result = _create(repo, monkeypatch, "--fr-version", constraint)
+
+    assert result.exit_code == 2, result.output
+    assert "5.0.0" in result.output and constraint in result.output
+    after = sorted(p.relative_to(repo) for p in repo.rglob("*") if ".git" not in p.parts)
+    assert after == before
+    status = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, text=True
+    )
+    assert status.stdout == ""
+
+
+# ── a pre-release installed fr is inside a spec that spans it (#855) ───────────
+
+
+def _packaging_25_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What `installed in spec` meant before packaging 26: a pre-release is
+    excluded unless the spec names one. fr declares `packaging>=24`, so an
+    install may still resolve that behaviour."""
+    from packaging.specifiers import SpecifierSet
+
+    monkeypatch.setattr(
+        SpecifierSet, "__contains__", lambda self, item: self.contains(item, prereleases=False)
+    )
+
+
+def test_a_dev_install_parses_a_plan_whose_spec_spans_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _packaging_25_default(monkeypatch)
+    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "5.0.1.dev0")
+
+    parse(_plan_with(tmp_path, ">=4,<6"))
+
+
+def test_the_repair_agrees_with_the_parser_about_a_dev_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr.artifacts.fr_version import widen_ceiling
+
+    _packaging_25_default(monkeypatch)
+
+    assert widen_ceiling(">=4,<6", Version("5.0.1.dev0")) is None
+    assert widen_ceiling(">=4,<5.0.0", Version("5.0.1.dev0")) == ">=4,<6.0.0"
+
+
+def test_no_bare_specifier_membership_test_survives_in_src() -> None:
+    """Tripwire: `x in SpecifierSet(...)` leaves pre-release handling to the
+    library default, which moved in packaging 26. Use `fr.version_floor.admits`."""
+    import re
+
+    bare = re.compile(r"\bin SpecifierSet\(|\binstalled (?:not )?in \w")
+    hits = [
+        f"{p.relative_to(REPO)}:{n}"
+        for p in (REPO / "packages").glob("*/src/**/*.py")
+        for n, line in enumerate(p.read_text().splitlines(), 1)
+        if bare.search(line.split("#", 1)[0])
+    ]
+    assert hits == []

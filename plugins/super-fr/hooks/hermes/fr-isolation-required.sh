@@ -74,5 +74,10 @@ if fr_isolation_decide_edit "$file"; then
   exit 0
 fi
 
+drift=$(fr_isolation_drift_reason "$file")
+if [ -n "$drift" ]; then
+  emit_block "fr-isolation: edit to '$file' blocked — $drift"
+  exit 0
+fi
 emit_block "fr-isolation: edit to '$file' blocked — not inside an fr-isolation workspace. Enter isolation ('fr isolation up' / fr-goal) and edit in the worktree; or add the path to '.fr-isolation-allow'; or set FR_BASE_OK=1 for a deliberate base-clone edit."
 exit 0

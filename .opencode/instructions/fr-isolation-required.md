@@ -45,7 +45,13 @@ pipeline skill ran this session.
    - `worktree` (devcontainer **or** host-worktree mode — an fr linked
      worktree either way) → the toplevel must be a real **linked worktree**
      (`git rev-parse --git-common-dir` ≠ `--git-dir`). Defeats a stale marker
-     copied into the primary working tree.
+     copied into the primary working tree. **And** HEAD must not have drifted
+     to a branch other than the marker's `branch`: a `git checkout -b` inside
+     the workspace decouples it from fr's state, which is keyed on that branch
+     (super-fr#553). The deny names both branches and the way back (`git switch
+     <registered>`). A detached HEAD (mid-rebase) is not drift. Only the edit
+     gate refuses — the Bash guards still treat the worktree as a workspace, so
+     the switch back is never blocked — and gc / `down` refuse to reap it.
    - `external` (preparer-adopted container) → the toplevel match **plus
      container evidence** — any of `/.dockerenv`, `/run/.containerenv`, or
      `$KUBERNETES_SERVICE_HOST`. A marker forged on a bare host never

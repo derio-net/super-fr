@@ -341,11 +341,17 @@ strong{font-weight:600;color:#f2ecdd}.lead-in{color:var(--paper-dim)}
         <span class="verdict">else deny</span>
         <p class="defeats">Fails <b>closed</b> on anything unknown or mistyped, rather than waving it through.</p>
       </div>
-      <div class="gate pass">
+      <div class="gate">
         <p class="q">Is this a genuine linked worktree? <small><code>git-common-dir ≠ git-dir</code></small></p>
         <span class="verdict">else deny</span>
         <p class="defeats">Defeats a <b>marker copied into your base clone</b> — where those two paths are
-          identical, so even a byte-perfect forgery fails the last step.</p>
+          identical, so even a byte-perfect forgery fails this step.</p>
+      </div>
+      <div class="gate pass">
+        <p class="q">Is HEAD still on the marker's branch? <small><code>symbolic-ref HEAD = branch</code></small></p>
+        <span class="verdict">else deny</span>
+        <p class="defeats">Defeats a <b>workspace that drifted</b> — a <code>git checkout -b</code> inside it
+          leaves fr's state describing one branch while you edit another. A detached HEAD, mid-rebase, still passes.</p>
       </div>
       <div class="stair-end"><span class="mark">✓ allow</span><span class="txt">the edit is written.</span></div>
     </div>

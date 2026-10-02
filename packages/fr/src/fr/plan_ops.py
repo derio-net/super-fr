@@ -39,7 +39,7 @@ from fr.plan_validator_wrapper import (
 )
 from fr.render import plan_locally_complete
 from fr.types import PHASE_TIERS, PhaseDoc, Step
-from fr.version_floor import CEILING_VERSION
+from fr.version_floor import CEILING_VERSION, admits
 
 
 class StepSpec(TypedDict):
@@ -139,6 +139,33 @@ class PhaseSpec:
         return bool(self.files) or self.estimate_lines is not None
 
 
+def _preflight_fr_version_error(fr_version: str) -> str | None:
+    """Why the plan's own re-parse would refuse `fr_version`, or `None`.
+
+    An explicit `--fr-version` was checked only for admitting an fr that is too
+    OLD, never the one running, so a constraint excluding it wrote the plan and
+    then failed the post-write parse, stranding the folder, its journal and the
+    validator wrapper (gh#855). Same doctrine as the phase pre-flight: refuse
+    before the first byte. `fr.parser.INSTALLED_FR_VERSION` is read here, not
+    imported by name, so it is the value the re-parse will enforce.
+    """
+    from packaging.specifiers import InvalidSpecifier
+
+    from fr import parser
+
+    installed = parser.INSTALLED_FR_VERSION
+    try:
+        if admits(fr_version, installed):
+            return None
+    except InvalidSpecifier as e:
+        return f"invalid fr_version {fr_version!r}: {e}"
+    return (
+        f"fr_version {fr_version!r} excludes the installed fr {installed}, so the plan "
+        f"would fail its own parse; nothing was written. Pass an fr_version that admits "
+        f"{installed}, or omit --fr-version for the default."
+    )
+
+
 def _preflight_phase_error(ps: PhaseSpec) -> str | None:
     """The first pre-flight validation error for `ps`, or None.
 
@@ -211,6 +238,9 @@ def create(
         error = _preflight_phase_error(ps)
         if error is not None:
             raise PlanEditError(error)
+    error = _preflight_fr_version_error(fr_version)
+    if error is not None:
+        raise PlanEditError(error)
     spec_path: Path | None = None
     if spec_str:
         candidate = (repo_root / spec_str).resolve()
