@@ -14,3 +14,8 @@ Shared theme (forge/tracker honesty) only for #803/#804; #490 and #800 are separ
 ### 2f7b0b916b2d · decision · Operator: fix all four in one PR; #804 — the plan repo's tracking setting governs
 
 Asked after the split finding. Answer: keep the one-PR contract, one failing test + one fix per cause. #804: the plan repo's `tracking` governs `fr apply --yes` for a cross-repo plan (fr has no checkout of target_repo; the plan repo declared intent). Pin it with a test and state it in the spec + code.
+
+<!-- fr:journal kind=repro scope=debug id=b6486b64443f created=2026-10-02T18:10:12+00:00 -->
+### b6486b64443f · repro · #800 reproduced: emptied docs/runs/ makes the scratch merge report a phantom path
+
+tests/unit/test_triage_gitseam.py::test_an_archive_that_empties_a_live_directory_is_not_a_rename — main moves the last file of docs/runs/ into docs/implemented/runs/; the PR adds docs/runs/new.yaml. `Worktree.merge('origin/main')` returns ['docs/implemented/runs/new.yaml'] (exists on neither side), with merge.directoryRenames=conflict (git's default).
