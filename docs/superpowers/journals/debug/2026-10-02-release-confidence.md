@@ -35,3 +35,8 @@ Ran the real _run_staged_tests on a scratch clone bumped to 6.0.0: probe reporte
 ### major-release-stale-own-plans-resolved · finding [deferred → derio-net/super-fr#861] · resolves major-release-stale-own-plans: Simulated 6.0.0 release: the new gate refuses it (2 red); the repo's own live plans go stale at a major
 
 A separate root cause from the batch (the batch rules say stop rather than widen). The new gate already refuses such a release, so the gap cannot ship unnoticed.
+
+<!-- fr:journal kind=review scope=debug id=81954be9d9fc created=2026-10-02T17:19:03+00:00 -->
+### 81954be9d9fc · review · Independent review: no defects at medium or above; three low notes
+
+An independent read-only reviewer covered the editable re-sync, the dirty-tree/race path, the release-job context, every SpecifierSet call site, the create pre-flight and the regex edge cases, and found no defects. Low notes: (1) each lost push race reruns the whole suite (correct, slower; up to 3x on a raced release); (2) the src tripwire catches only the two spellings that existed; (3) the dotted-key regex's \s* can span newlines, but the tomllib re-parse backstops it. It asked for two things to be checked by running them. Untracked files after the suite: none (git status empty after both simulations). HEAD on main: covered by ci.yml on main pushes.
