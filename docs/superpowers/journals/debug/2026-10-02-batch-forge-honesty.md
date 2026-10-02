@@ -9,3 +9,8 @@ Batch premise: one root cause. Investigation of the code each issue names finds 
 - #804: apply_cmd.py:265 reads require_tracker(plan repo). Not a defect yet: the spec does not say whose setting governs; needs an operator decision.
 - #800: gitseam.py:186 merge passes `-c rerere.enabled=false` but not `merge.directoryRenames=false`; git infers a directory rename when an archive empties runs/ or journals/plans/. Cause: git default config, unrelated to forge writes.
 Shared theme (forge/tracker honesty) only for #803/#804; #490 and #800 are separate. Per the batch's debugging rules, stopping to ask before fixing any.
+
+<!-- fr:journal kind=decision scope=debug id=2f7b0b916b2d created=2026-10-02T18:08:51+00:00 -->
+### 2f7b0b916b2d · decision · Operator: fix all four in one PR; #804 — the plan repo's tracking setting governs
+
+Asked after the split finding. Answer: keep the one-PR contract, one failing test + one fix per cause. #804: the plan repo's `tracking` governs `fr apply --yes` for a cross-repo plan (fr has no checkout of target_repo; the plan repo declared intent). Pin it with a test and state it in the spec + code.
