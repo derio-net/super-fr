@@ -133,6 +133,33 @@ def test_apply_dry_run_default_tracking_has_no_tracking_warning(tmp_path: Path) 
     assert "tracking: {type: none}" not in text
 
 
+def test_a_cross_repo_plan_is_gated_by_the_plan_repos_tracking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gh#804 (operator decision, 2026-10-02): for a plan whose `target_repo`
+    is another repo, the PLAN repo's `tracking` governs `fr apply --yes`. fr
+    has no checkout of the target to read a declaration from, and the plan
+    repo is the one that declared where its work is tracked."""
+    plan_dir = apply_fixtures._ticked_plan_repo(tmp_path)
+    meta = (plan_dir / "_meta.yaml").read_text()
+    assert "target_repo: derio-net/superpowers-for-vk" in meta  # not this repo
+    _profiles(tmp_path, NONE)
+    seen: list[Path] = []
+    real = apply_cmd.require_tracker
+
+    def _spy(root: Path) -> None:
+        seen.append(root)
+        real(root)
+
+    monkeypatch.setattr(apply_cmd, "require_tracker", _spy)
+    gh = FakeGhClient()
+    rc, text, _ = apply_cmd._apply_one(plan_dir, gh, yes=True, force=True)
+    assert seen == [tmp_path.resolve()]
+    assert rc == 2
+    assert "tracking: {type: none}" in text
+    assert gh.calls == []
+
+
 # --- fr triage batch dispatch --------------------------------------------
 
 
