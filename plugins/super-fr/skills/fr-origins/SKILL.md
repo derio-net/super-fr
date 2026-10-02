@@ -53,10 +53,11 @@ causes:                         # optional
 
 ## Classification discipline
 
-- **Category is what the defect IS**, not who noticed it. **latent**: it was always there and nothing changed it. **regression**: a change broke something that worked, and you can name the PR that did. **new-feature**: a defect in something recently added. **leftover**: work a PR should have finished and did not (a skipped edge, a TODO, a mirror not regenerated). **gap**: a missing capability or test nobody had claimed. **duplicate**: the same defect as another issue; name that one in `reason`.
+- **Category is what the defect IS**, not who noticed it. **latent**: it was always there and nothing changed it. **regression**: a change broke something that worked, and you can name the PR that did. **new-feature**: a defect in something recently added. **leftover**: work a PR should have finished and did not (a skipped edge, a TODO, a mirror not regenerated). **gap**: a missing capability or test nobody had claimed. **duplicate**: the same defect as another issue; name that one in `reason` (nothing checks this: it is prose-only discipline, so re-read each duplicate's reason before you render).
 - **Source is who found it**: `pipeline` (a gate, review or test in the run), `recording` (a person watching a live run or demo), `hand` (someone using the product).
 - **Read the evidence.** Open the body and the code or the PR diff it names; never infer a category from the title alone. A title that says "broken after the change" is a hypothesis, not a regression.
 - **A regression names its PR.** If you cannot find the PR that broke it, it is latent or a gap; say which and why.
+- **A bad `origins.yaml` fails every verb that reads it.** One invalid entry (a regression with no `pr:`, say) makes `check` and `render` exit 2 until you fix it; nothing is skipped or partly rendered.
 - **Hunt duplicates.** Compare each new issue against the rest of the window before you give it a category of its own; a duplicate counts once as a duplicate, not twice as a defect.
 - **Say plainly what you did not verify.** Put "not checked against the code" in `evidence` rather than leave a guess looking like a finding, and list those issues in your report.
 - Severity is the damage if it ships, not how annoying the report was.

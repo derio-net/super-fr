@@ -33,7 +33,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from fr.triage.collect import Forge, parse_prs, scope_repos
+from fr.triage.collect import ORIGINS_ISSUE_LIST_FIELDS, REPO_LIMIT, Forge, parse_prs, scope_repos
 from fr.triage.components import GUTTER_CSS, TOKENS_CSS
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.model import Judgements, Scope, issue_key, normalize_key
@@ -112,6 +112,7 @@ def collect_origins(
     now: datetime,
     issue_limit: int = ISSUE_LIMIT,
     pr_limit: int = PR_LIMIT,
+    repo_limit: int = REPO_LIMIT,
 ) -> OriginsFacts:
     """The issues created on or after *since* in *scope*, with how each one ended.
 
@@ -119,14 +120,19 @@ def collect_origins(
     unmerged closed nothing). In org and group scope a repo that cannot be read is a
     warning and the rest collect; in repo scope it is the error.
     """
-    repos, _ = scope_repos(forge, scope)
+    repos, truncations = scope_repos(forge, scope, repo_limit=repo_limit)
     cutoff = datetime(since.year, since.month, since.day, tzinfo=UTC)
     out: list[OriginIssue] = []
-    warnings: list[str] = []
+    warnings: list[str] = [
+        f"{t.target}: repo list hit its limit ({t.limit}); repos may be missing"
+        for t in truncations
+    ]
     collected = 0
     for repo in repos:
         try:
-            raw_issues = forge.list_issues(repo=repo, state="all", limit=issue_limit)
+            raw_issues = forge.list_issues(
+                repo=repo, state="all", limit=issue_limit, fields=ORIGINS_ISSUE_LIST_FIELDS
+            )
             raw_prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
         except ForgeError as exc:
             if scope.kind == "repo":
@@ -368,14 +374,15 @@ section > h2 { margin: 0 0 8px; font-size: 1.15rem; font-weight: 600; }
 .chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
   padding: 2px 10px; font-size: .85rem; }
 .chip b { font-family: var(--mono); font-weight: 500; }
-table { width: 100%; border-collapse: collapse; background: var(--surface);
+table { width: 100%; min-width: 760px; border-collapse: collapse; background: var(--surface);
   border: 1px solid var(--line); font-size: .88rem; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line);
-  vertical-align: top; overflow-wrap: anywhere; }
+  vertical-align: top; }
+td.wrap, th.wrap { overflow-wrap: break-word; min-width: 180px; }
 th { color: var(--muted); font-weight: 500; }
 td.n, th.n { text-align: right; font-family: var(--mono); }
 .scroll { overflow-x: auto; }
-svg.chart { width: 100%; height: auto; display: block; }
+svg.chart { display: block; height: auto; }
 svg.chart text { font-family: var(--mono); font-size: 10px; }
 .bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 .btn { font: inherit; font-size: .82rem; color: var(--muted); background: var(--surface);
@@ -457,23 +464,31 @@ def _counts(facts: OriginsFacts, origins: Origins) -> str:
     )
 
 
+MIN_CHART_W = 280
+LABEL_W, LABEL_GAP = 30, 6  # a "09-01" label at 10px monospace, and the air between two
+
+
 def _chart(facts: OriginsFacts) -> str:
     days = day_buckets(facts)
     head = '<section id="filings-per-day"><h2>Filings per day</h2>'
     if not days:
         return head + f'<p class="lede">{DASH} no issues were filed in the window.</p></section>'
-    slot, width, plot = 28, 20, 100.0
+    slot, width, plot, pad = 28, 20, 100.0, 8
     peak = max(c for _, c in days)
-    step = max(1, math.ceil(len(days) / 14))
-    total_w = slot * len(days) + 8
+    # Drawn at natural size: one 28px slot per day, never scaled to the container. A label
+    # is five 10px monospace glyphs (about 30px), so label every Nth day, N fixed by the
+    # slot and the label width, not by how many days there are.
+    step = math.ceil((LABEL_W + LABEL_GAP) / slot)
+    total_w = max(MIN_CHART_W, slot * len(days) + 2 * pad)
     parts = [
-        f'<svg class="chart" viewBox="0 0 {total_w} 150" role="img" '
+        f'<div class="scroll"><svg class="chart" width="{total_w}" height="150" '
+        f'viewBox="0 0 {total_w} 150" style="max-width:{total_w}px" role="img" '
         f'aria-label="Issues filed per day, {days[0][0]} to {days[-1][0]}">',
         f'<line x1="0" y1="124" x2="{total_w}" y2="124" style="stroke:var(--line)"/>',
     ]
     for pos, (day, count) in enumerate(days):
         h = plot * count / peak if peak else 0.0
-        x = 4 + pos * slot
+        x = pad + pos * slot
         parts.append(
             f'<rect class="bar-rect" style="fill:var(--accent)" data-day="{day}" '
             f'data-count="{count}" x="{x}" '
@@ -487,7 +502,7 @@ def _chart(facts: OriginsFacts) -> str:
                 f'<text style="fill:var(--muted)" x="{x + width / 2}" y="140" '
                 f'text-anchor="middle">{day[5:]}</text>'
             )
-    parts.append("</svg>")
+    parts.append("</svg></div>")
     return head + "".join(parts) + "</section>"
 
 
@@ -556,17 +571,18 @@ def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
         rows.append(
             f'<tr data-category="{cat}" data-key="{esc(i.key)}">'
             f'<td><a href="{esc(i.url) if i.url.startswith("https://") else "#"}">'
-            f"{esc(i.key)}</a></td><td>{esc(i.title)}</td><td>{cat}</td>"
+            f'{esc(i.key)}</a></td><td class="wrap">{esc(i.title)}</td><td>{cat}</td>'
             f"<td>{o.source if o else DASH}</td>"
             f'<td class="sev-{o.severity if o else "low"}">{o.severity if o else DASH}</td>'
             f"<td>{_pr_link(o.pr if o else None)}</td>"
-            f"<td>{closed}{f' by {esc(by)}' if by else ''}</td><td>{detail}</td></tr>"
+            f'<td>{closed}{f" by {esc(by)}" if by else ""}</td><td class="wrap">{detail}</td></tr>'
         )
     return (
         '<section id="issue-table"><h2>Every issue</h2>'
         f'<div class="bar" data-filter-bar hidden>{buttons}</div>'
-        '<div class="scroll"><table><thead><tr><th>Issue</th><th>Title</th><th>Category</th>'
-        "<th>Source</th><th>Severity</th><th>Related PR</th><th>Ended</th><th>Why</th></tr>"
+        '<div class="scroll"><table><thead><tr><th>Issue</th>'
+        '<th class="wrap">Title</th><th>Category</th><th>Source</th><th>Severity</th>'
+        '<th>Related PR</th><th>Ended</th><th class="wrap">Why</th></tr>'
         f"</thead><tbody>{''.join(rows)}</tbody></table></div></section>"
     )
 

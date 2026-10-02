@@ -286,7 +286,10 @@ def list_repos(
     return [r for r in repos if not r.get("isArchived", False)]
 
 
-ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body,state,closedAt,stateReason"
+ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body"
+# `fr triage origins` alone needs how an issue ended; `stateReason` wants a newer gh, so no
+# other issue-list verb asks for it.
+ORIGINS_ISSUE_LIST_FIELDS = ISSUE_LIST_FIELDS + ",state,closedAt,stateReason"
 PR_LIST_FIELDS = (
     "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences"
 )
@@ -295,7 +298,9 @@ OPEN_PR_LIST_FIELDS = (
 )
 
 
-def list_issues(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
+def list_issues(
+    *, repo: str, state: str, limit: int, fields: str = ISSUE_LIST_FIELDS
+) -> list[dict[str, object]]:
     """Return issues in *repo* via one bulk ``gh issue list``.
 
     ``--limit`` is always explicit: gh's default is 30, which would silently
@@ -314,7 +319,7 @@ def list_issues(*, repo: str, state: str, limit: int) -> list[dict[str, object]]
             "--limit",
             str(limit),
             "--json",
-            ISSUE_LIST_FIELDS,
+            fields,
         ]
     )
     issues: list[dict[str, object]] = json.loads(out) if out else []

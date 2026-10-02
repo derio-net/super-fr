@@ -346,3 +346,274 @@ def test_a_regression_without_its_pr_is_refused(
     )
     r = _run(monkeypatch, "check", tmp_path)
     assert r.exit_code == 2 and "must name the PR" in r.output.replace("\n", " ")
+
+
+# ------------------------------------------- review rj-1..rj-5 (legibility, scope, fields)
+
+
+def _days_facts(n_days: int) -> Any:
+    """Facts with `n_days` consecutive days, day i holding 1 + i % 4 issues."""
+    from datetime import UTC, datetime
+
+    from fr.triage.model import Scope
+    from fr.triage.origins import collect_origins, parse_since
+
+    forge = OriginsForge()
+    forge.issues = []
+    forge.prs = []
+    n = 1
+    base = datetime(2026, 7, 1, tzinfo=UTC)
+    for i in range(n_days):
+        day = base.toordinal() + i
+        stamp = datetime.fromordinal(day).strftime("%Y-%m-%d")
+        for _ in range(1 + i % 4):
+            forge.issues.append(
+                __import__("tests.unit.triage_origins_fixtures", fromlist=["raw_issue"]).raw_issue(
+                    n, f"{stamp}T08:00:00Z", None, ""
+                )
+            )
+            n += 1
+    return collect_origins(
+        forge,
+        Scope(kind="repo", target=REPO),
+        since=parse_since("2026-07-01"),
+        now=datetime(2026, 10, 1, tzinfo=UTC),
+    )
+
+
+def _chart_numbers(svg: str) -> dict[str, Any]:
+    view = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
+    assert view
+    labels = [
+        (float(x), t)
+        for x, t in re.findall(r'<text[^>]*x="([\d.]+)" y="140"[^>]*>([^<]+)</text>', svg)
+    ]
+    bars = [
+        (int(c), float(h)) for c, h in re.findall(r'data-count="(\d+)"[^>]*height="([\d.]+)"', svg)
+    ]
+    return {"w": int(view.group(1)), "labels": labels, "bars": bars, "svg": svg}
+
+
+@pytest.mark.parametrize("days", [5, 14, 60])
+def test_chart_is_drawn_at_its_natural_size_never_stretched(days: int) -> None:
+    from fr.triage.origins import CSS, _chart
+
+    page = _chart(_days_facts(days))
+    c = _chart_numbers(page)
+    # a fixed pixel size: the svg carries its own width and caps at it
+    assert f'width="{c["w"]}"' in c["svg"] and f"max-width:{c['w']}px" in c["svg"]
+    assert c["w"] >= 28 * days  # at least one natural slot per day
+    assert c["w"] >= 280  # a minimum width, so five days is not blown up either
+    # only the chart scrolls: it sits in an overflow-x wrapper, the CSS never makes it 100%
+    assert '<div class="scroll"><svg class="chart"' in page
+    assert re.search(r"\.scroll\s*\{[^}]*overflow-x:\s*auto", CSS)
+    rule = re.search(r"svg\.chart\s*\{([^}]*)\}", CSS)
+    assert rule and "width: 100%" not in rule.group(1) and "width:100%" not in rule.group(1)
+    assert "stroke:var(--line)" in page and "fill:var(--accent)" in page
+    assert "fill:var(--muted)" in page
+
+
+@pytest.mark.parametrize("days", [5, 14, 60])
+def test_chart_x_labels_never_overlap_and_stay_inside_the_chart(days: int) -> None:
+    from fr.triage.origins import _chart
+
+    c = _chart_numbers(_chart(_days_facts(days)))
+    char_w = 6.0  # a 10px monospace glyph advances ~6px
+    spans = [(x - len(t) * char_w / 2, x + len(t) * char_w / 2) for x, t in c["labels"]]
+    assert spans
+    for (_, right), (left, _) in zip(spans, spans[1:], strict=False):
+        assert right < left, "x labels overlap"
+    assert spans[0][0] >= 0 and spans[-1][1] <= c["w"]
+    assert c["labels"][0][1] == "07-01"  # the first day is always labelled
+
+
+@pytest.mark.parametrize("days", [5, 14, 60])
+def test_chart_bar_heights_stay_proportional_to_the_count(days: int) -> None:
+    from fr.triage.origins import _chart
+
+    bars = _chart_numbers(_chart(_days_facts(days)))["bars"]
+    assert len(bars) == days
+    per_issue = {round(h / count, 2) for count, h in bars if count}
+    assert len(per_issue) == 1  # every bar is the same height per issue
+    assert max(h for _, h in bars) == 100.0  # the tallest fills the plot
+
+
+def test_issue_table_keeps_short_columns_whole_and_scrolls_instead() -> None:
+    from fr.triage.origins import CSS
+
+    assert not re.search(r"th,\s*td\s*\{[^}]*overflow-wrap:\s*anywhere", CSS)
+    assert re.search(r"table\s*\{[^}]*min-width:\s*\d+px", CSS)
+    assert re.search(r"(td|th)\.(wrap|title|why)[^{]*\{[^}]*overflow-wrap:\s*break-word", CSS)
+
+
+def test_issue_table_sits_in_the_scroll_wrapper_and_title_why_cells_may_wrap(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    table = _section(_page(monkeypatch, tmp_path), "issue-table")
+    assert '<div class="scroll"><table' in table
+    assert re.search(r'<th class="wrap">Title</th>', table)
+    assert re.search(r'<th class="wrap">Why</th>', table)
+    assert re.search(r'<td class="wrap">Widget defect 1</td>', table)
+    assert "<th>Severity</th>" in table  # a short column stays a plain cell
+
+
+class _ManyForge:
+    """Per-repo issues and PRs, with optional repos that fail and optional full lists."""
+
+    def __init__(self, repos: list[str], *, fail: tuple[str, ...] = ()) -> None:
+        self.repos = repos
+        self.fail = fail
+        self.listed: list[str] = []
+        self.fields: list[Any] = []
+
+    def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
+        return [{"name": r.split("/")[1], "isArchived": False} for r in self.repos]
+
+    def list_issues(self, *, repo: str, state: str, limit: int, **kw: Any) -> list[dict[str, Any]]:
+        from fr.triage.errors import ForgeError
+
+        from tests.unit.triage_origins_fixtures import raw_issue
+
+        if repo in self.fail:
+            raise ForgeError("HTTP 404")
+        self.listed.append(repo)
+        self.fields.append(kw.get("fields"))
+        row = raw_issue(1, "2026-09-02T08:00:00Z", "2026-09-02T09:00:00Z", "COMPLETED")
+        row["url"] = f"https://github.com/{repo}/issues/1"
+        return [row]
+
+    def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+        owner, name = repo.split("/")
+        pr: dict[str, Any] = {
+            "number": 7 if name == "alpha" else 8,
+            "title": f"fix {name}",
+            "state": "MERGED",
+            "isDraft": False,
+            "createdAt": "2026-09-01T00:00:00Z",
+            "mergedAt": "2026-09-02T09:00:00Z",
+            "url": f"https://github.com/{repo}/pull/9",
+            "headRefName": "x",
+            "closingIssuesReferences": [
+                {"number": 1, "repository": {"name": name, "owner": {"login": owner}}}
+            ],
+        }
+        return [pr]
+
+
+def _collect_scope(forge: Any, scope: Any, **kw: Any) -> Any:
+    from datetime import UTC, datetime
+
+    from fr.triage.origins import collect_origins, parse_since
+
+    return collect_origins(
+        forge, scope, since=parse_since("2026-09-01"), now=datetime(2026, 10, 1, tzinfo=UTC), **kw
+    )
+
+
+def test_group_scope_collects_each_repo_with_its_own_closing_pr_map() -> None:
+    from fr.triage.model import Scope
+
+    forge = _ManyForge(["example-org/alpha", "example-org/beta"])
+    facts = _collect_scope(forge, Scope.group(["example-org/beta", "example-org/alpha"]))
+    assert forge.listed == ["example-org/alpha", "example-org/beta"]
+    by_repo = {i.repo: i for i in facts.issues}
+    # #1 of each repo is closed by THAT repo's PR, not the other's
+    assert [(p.repo, p.number) for p in by_repo["example-org/alpha"].closing_prs] == [
+        ("example-org/alpha", 7)
+    ]
+    assert [(p.repo, p.number) for p in by_repo["example-org/beta"].closing_prs] == [
+        ("example-org/beta", 8)
+    ]
+    assert facts.warnings == []
+
+
+def test_org_scope_lists_the_owners_repos_and_skips_archived() -> None:
+    from fr.triage.model import Scope
+
+    forge = _ManyForge(["example-org/alpha", "example-org/beta"])
+    facts = _collect_scope(forge, Scope(kind="org", target="example-org"))
+    assert forge.listed == ["example-org/alpha", "example-org/beta"]
+    assert facts.scope == "example-org" and len(facts.issues) == 2
+
+
+def test_org_with_more_repos_than_the_limit_warns_it_is_truncated() -> None:
+    from fr.triage.model import Scope
+
+    forge = _ManyForge(["example-org/alpha", "example-org/beta"])
+    facts = _collect_scope(forge, Scope(kind="org", target="example-org"), repo_limit=2)
+    assert any("repo list" in w and "(2)" in w and "example-org" in w for w in facts.warnings)
+    quiet = _collect_scope(forge, Scope(kind="org", target="example-org"), repo_limit=3)
+    assert quiet.warnings == []
+
+
+def test_a_repo_that_cannot_be_read_is_a_warning_and_the_rest_collect() -> None:
+    from fr.triage.model import Scope
+
+    forge = _ManyForge(["example-org/alpha", "example-org/beta"], fail=("example-org/beta",))
+    facts = _collect_scope(forge, Scope.group(["example-org/alpha", "example-org/beta"]))
+    assert [i.repo for i in facts.issues] == ["example-org/alpha"]
+    assert facts.warnings == ["skipped example-org/beta: HTTP 404"]
+
+
+def test_no_readable_repo_is_the_error() -> None:
+    from fr.triage.errors import ForgeError
+    from fr.triage.model import Scope
+
+    forge = _ManyForge(["example-org/alpha"], fail=("example-org/alpha",))
+    with pytest.raises(ForgeError, match="no repo of .* could be read.*HTTP 404"):
+        _collect_scope(forge, Scope.group(["example-org/alpha"]))
+
+
+def test_a_full_issue_list_and_a_full_pr_list_each_warn() -> None:
+    from fr.triage.model import Scope
+
+    scope = Scope(kind="repo", target="example-org/alpha")
+    forge = _ManyForge(["example-org/alpha"])
+    facts = _collect_scope(forge, scope, issue_limit=1, pr_limit=1)
+    assert any("issue list hit its limit (1)" in w for w in facts.warnings)
+    assert any("PR list hit its limit (1)" in w for w in facts.warnings)
+    quiet = _collect_scope(forge, scope, issue_limit=2, pr_limit=2)
+    assert quiet.warnings == []
+
+
+def test_origins_asks_for_its_own_issue_fields_and_triage_collect_is_unchanged() -> None:
+    from fr import gh
+    from fr.triage.model import Scope
+
+    # the shared constant is what it was before origins existed
+    assert gh.ISSUE_LIST_FIELDS == "number,title,labels,createdAt,updatedAt,url,body"
+    for needed in ("state", "closedAt", "stateReason"):
+        assert needed in gh.ORIGINS_ISSUE_LIST_FIELDS.split(",")
+    assert set(gh.ISSUE_LIST_FIELDS.split(",")) <= set(gh.ORIGINS_ISSUE_LIST_FIELDS.split(","))
+    forge = _ManyForge(["example-org/alpha"])
+    _collect_scope(forge, Scope(kind="repo", target="example-org/alpha"))
+    assert forge.fields == [gh.ORIGINS_ISSUE_LIST_FIELDS]
+
+
+def test_gh_issue_list_passes_the_fields_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr import gh
+
+    seen: list[list[str]] = []
+    monkeypatch.setattr(gh, "_run_gh", lambda args: seen.append(args) or "[]")
+    gh.list_issues(repo="example-org/alpha", state="open", limit=5)
+    gh.list_issues(
+        repo="example-org/alpha", state="all", limit=5, fields=gh.ORIGINS_ISSUE_LIST_FIELDS
+    )
+    assert seen[0][-1] == gh.ISSUE_LIST_FIELDS
+    assert seen[1][-1] == gh.ORIGINS_ISSUE_LIST_FIELDS
+
+
+def test_a_bad_origins_yaml_fails_every_verb_that_reads_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    (tmp_path / "origins.yaml").write_text(
+        "schema: 1\nissues:\n  widgets#2: {category: regression, source: pipeline,"
+        " severity: low, reason: x}\n",
+        encoding="utf-8",
+    )
+    for verb in ("check", "render"):
+        assert _run(monkeypatch, verb, tmp_path).exit_code == 2
+    skill = Path("plugins/super-fr/skills/fr-origins/SKILL.md").read_text(encoding="utf-8")
+    assert "fails every verb that reads it" in skill
+    assert "prose-only" in skill

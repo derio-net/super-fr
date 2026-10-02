@@ -42,6 +42,7 @@ from fr.triage.stage import pr_rank
 ISSUE_LIMIT = 1000
 PR_LIMIT = 200
 REPO_LIMIT = 200
+ORIGINS_ISSUE_LIST_FIELDS = gh.ORIGINS_ISSUE_LIST_FIELDS  # origins' own, wider issue fields
 BODY_LIMIT = 2000
 CONFIG_PATH = ".fr/triage.yaml"
 # GitHub's contents API resolves HEAD to the default branch (verified live
@@ -58,7 +59,9 @@ class Forge(Protocol):
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]: ...
 
-    def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
+    def list_issues(
+        self, *, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]: ...
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]: ...
@@ -98,9 +101,13 @@ class GhForge:
         with _forge_errors():
             return gh.list_repos(owner=owner, limit=limit, include_archived=True)
 
-    def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+    def list_issues(
+        self, *, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
         with _forge_errors():
-            return gh.list_issues(repo=repo, state=state, limit=limit)
+            if fields is None:
+                return gh.list_issues(repo=repo, state=state, limit=limit)
+            return gh.list_issues(repo=repo, state=state, limit=limit, fields=fields)
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         with _forge_errors():

@@ -81,7 +81,9 @@ class OriginsForge:
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         return [{"name": "widgets", "isArchived": False}]
 
-    def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+    def list_issues(
+        self, *, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
         self.calls.append(("list_issues", state))
         return self.issues
 
