@@ -288,7 +288,8 @@ def merge_ready(ctx: MergeContext, slot: Slot, previous: str | None) -> MergeAtt
     if pending:
         return MergeAttempt("pending", head=head, checks=tuple(pending))
     new = _land(ctx, slot, head, previous)
-    ctx.say(f"{batch.id}: {'merged' if new is None else 'updated; checks run again'}")
+    if new is not None:
+        ctx.say(f"{batch.id}: updated; checks run again")
     return MergeAttempt("merged" if new is None else "updated", head=new or head)
 
 

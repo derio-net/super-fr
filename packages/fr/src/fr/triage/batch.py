@@ -249,8 +249,7 @@ CloseoutState = Literal["none", "started", "archived"]
 def closeout_state(batch: Batch, facts: Facts) -> CloseoutState:
     """The close-out column of `batch list`: not a stage. `started` once a `closeout`
     event exists, `archived` once the archive PR for the batch branch is merged."""
-    # The event kind is the next phase's (`CloseoutEvent`); matched by name until then.
-    if not any(getattr(e, "kind", "") == "closeout" for e in batch.events):
+    if not any(e.kind == "closeout" for e in batch.events):
         return "none"
     last = last_dispatch(batch)
     head = "chore/closeout-" + (last.branch if last else "").replace("/", "-")

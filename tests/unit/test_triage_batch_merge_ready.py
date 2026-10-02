@@ -5,6 +5,7 @@ Built on the fakes of `test_triage_batch_merge` (an in-memory forge and clone).
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -104,3 +105,12 @@ def test_a_pr_behind_its_base_is_updated_and_left_for_a_later_pass(
     got = merge_ready(ctx, slot, None)
     assert got.outcome == "updated"
     assert forge.merged == [] and forge.waits == []
+
+
+def test_a_merge_emits_exactly_one_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    lines: list[str] = []
+    ctx = dataclasses.replace(ctx, say=lines.append)
+    assert merge_ready(ctx, slot, None).outcome == "merged"
+    assert len(lines) == 1 and lines[0].startswith("merged PR #")

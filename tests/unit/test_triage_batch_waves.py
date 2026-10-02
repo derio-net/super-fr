@@ -282,3 +282,64 @@ def test_a_cancelled_dependency_is_unsatisfiable(tmp_path: Path) -> None:
 
 def test_judgements_model_has_a_schema_of_3() -> None:
     assert Judgements.model_validate({"schema": 3}).schema_ == 3
+
+
+# ------------------------------------------------- clearing, close-out event
+
+CLOSEOUT = """\
+      - {kind: closeout, at: 2026-09-26T10:00:00Z, runner: fake, handle: "w2:p0"}
+"""
+
+
+def test_no_after_and_no_wave_clear_them_on_a_dispatched_unmerged_batch(tmp_path: Path) -> None:
+    _state(
+        tmp_path,
+        _batch_yaml("a", 1) + _batch_yaml("b", 2, "    wave: 2\n    after: [a]\n", dispatched=True),
+        schema=3,
+    )
+    code, out = _run(tmp_path, "edit", "b", "--no-after")
+    assert code == 0, out
+    b = next(x for x in _batches(tmp_path) if x.id == "b")
+    assert (b.wave, b.after) == (2, [])
+    code, out = _run(tmp_path, "edit", "b", "--no-wave")
+    assert code == 0, out
+    b = next(x for x in _batches(tmp_path) if x.id == "b")
+    assert (b.wave, b.after) == (None, [])
+
+
+@pytest.mark.parametrize("args", [["--no-after", "--after", "a"], ["--no-wave", "--wave", "1"]])
+def test_a_clear_flag_refuses_its_value_option_and_the_file_is_unchanged(
+    tmp_path: Path, args: list[str]
+) -> None:
+    _state(
+        tmp_path,
+        _batch_yaml("a", 1) + _batch_yaml("b", 2, "    wave: 2\n    after: [a]\n"),
+        schema=3,
+    )
+    before = (tmp_path / "judgements.yaml").read_text("utf-8")
+    code, out = _run(tmp_path, "edit", "b", *args)
+    assert code == 2 and "contradict" in out
+    assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
+
+
+def _closeout_batch(*, schema_events: bool = True) -> Batch:
+    text = _batch_yaml("b", 2, dispatched=True) + (CLOSEOUT if schema_events else "")
+    doc = yaml.safe_load(f"batches:\n{text}")
+    return Batch.model_validate(doc["batches"][0])
+
+
+def test_closeout_state_none_started_archived() -> None:
+    from fr.triage.batch import closeout_state
+
+    assert closeout_state(_closeout_batch(schema_events=False), _facts()) == "none"
+    assert closeout_state(_closeout_batch(), _facts()) == "started"
+    archive = _pr("b", "MERGED", 701).model_copy(update={"head_ref": "chore/closeout-feat-batch-b"})
+    assert closeout_state(_closeout_batch(), _facts(prs=[archive])) == "archived"
+
+
+def test_a_closeout_event_needs_schema_3(tmp_path: Path) -> None:
+    _state(tmp_path, _batch_yaml("b", 2, dispatched=True) + CLOSEOUT, schema=3)
+    assert load_judgements(tmp_path / "judgements.yaml").batches[0].events[-1].kind == "closeout"
+    _state(tmp_path, _batch_yaml("b", 2, dispatched=True) + CLOSEOUT, schema=2)
+    with pytest.raises(Exception, match="closeout"):
+        load_judgements(tmp_path / "judgements.yaml")

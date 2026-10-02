@@ -367,7 +367,17 @@ class CancelEvent(_Strict):
     reason: str = ""
 
 
-BatchEvent = Annotated[DispatchEvent | CancelEvent, Field(discriminator="kind")]
+class CloseoutEvent(_Strict):
+    """A batch's close-out was started (wave-driver §A). Needs judgements schema 3.
+    Written by the engine only."""
+
+    kind: Literal["closeout"]
+    at: AwareDatetime
+    runner: str
+    handle: str  # opaque to triage; never posted to the forge
+
+
+BatchEvent = Annotated[DispatchEvent | CancelEvent | CloseoutEvent, Field(discriminator="kind")]
 
 
 class Batch(_Strict):
@@ -432,7 +442,9 @@ class Batch(_Strict):
 
     @field_validator("events")
     @classmethod
-    def _events_are_time_ordered(cls, v: list[DispatchEvent | CancelEvent]) -> list[Any]:
+    def _events_are_time_ordered(
+        cls, v: list[DispatchEvent | CancelEvent | CloseoutEvent]
+    ) -> list[Any]:
         for earlier, later in zip(v, v[1:], strict=False):
             if later.at < earlier.at:
                 raise ValueError(
@@ -516,6 +528,10 @@ class Judgements(_Strict):
         if self.schema_ < 3 and any(b.wave is not None or b.after for b in self.batches):
             raise ValueError(
                 f"`wave` and `after` need schema 3, but this file is stamped schema {self.schema_}"
+            )
+        if self.schema_ < 3 and any(e.kind == "closeout" for b in self.batches for e in b.events):
+            raise ValueError(
+                f"`closeout` events need schema 3, but this file is stamped schema {self.schema_}"
             )
         return self
 

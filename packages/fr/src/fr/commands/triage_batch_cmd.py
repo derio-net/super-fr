@@ -342,6 +342,10 @@ def batch_edit_command(
     order: OrderOpt = None,
     wave: WaveOpt = None,
     after: AfterOpt = None,
+    no_wave: Annotated[bool, typer.Option("--no-wave", help="Clear the wave.")] = False,
+    no_after: Annotated[
+        bool, typer.Option("--no-after", help="Clear every dependency (`after`).")
+    ] = False,
     bump: BumpOpt = None,
     skill: SkillOpt = None,
     runner: RunnerOpt = None,
@@ -353,6 +357,10 @@ def batch_edit_command(
 ) -> None:
     """Change a proposed batch; past `proposed`, only --order (and, until it merges,
     --wave and --after) may change."""
+    if no_wave and wave is not None:
+        _fail("--no-wave and --wave contradict each other")
+    if no_after and after is not None:
+        _fail("--no-after and --after contradict each other")
     target, facts, judgements = _load_state(_scope(repo, org), dir_override)
     batch = _find(judgements.batches, batch_id)
     changes: dict[str, object] = {}
@@ -371,7 +379,9 @@ def batch_edit_command(
         ids = [k for k in batch.ids if k not in drop]
         ids += list(add_issue or [])  # a key already present is refused by the model
         changes["ids"] = ids
-    if not changes and order is None and wave is None and after is None:
+    set_wave = wave is not None or no_wave
+    set_after = after is not None or no_after
+    if not changes and order is None and not set_wave and not set_after:
         _fail("nothing to change: give at least one option")
     stage = derive_batch_stage(batch, facts)
     if changes and stage != "proposed":
@@ -379,14 +389,14 @@ def batch_edit_command(
             f"batch {batch.id!r} is {stage}; past proposed only --order, --wave and --after "
             "may change"
         )
-    if (wave is not None or after is not None) and stage not in LIVE_WAVE_EDIT:
+    if (set_wave or set_after) and stage not in LIVE_WAVE_EDIT:
         _fail(f"batch {batch.id!r} is {stage}; --wave and --after change only until it merges")
     if order is not None:
         changes["order"] = order
-    if wave is not None:
-        changes["wave"] = wave
-    if after is not None:
-        changes["after"] = list(after)
+    if set_wave:
+        changes["wave"] = wave  # None under --no-wave
+    if set_after:
+        changes["after"] = list(after or [])
     try:
         doc = batch.model_dump(by_alias=True, exclude_defaults=True) | changes
         new = Batch.model_validate(doc)
