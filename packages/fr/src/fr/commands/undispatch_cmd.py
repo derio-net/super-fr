@@ -11,7 +11,8 @@ Idempotent: re-running skips already-closed Issues and already-null
 fields. Per-phase failures accumulate (apply's doctrine) — the field is
 NOT nulled when the gh side failed, so a retry can find the Issue again.
 
-Exit codes: 0 done (or clean no-op); 2 usage / legacy layout;
+Exit codes: 0 done (or clean no-op); 2 usage / legacy layout /
+`tracking: {type: none}` with --yes;
 4 gh failures (partial work reported); 5 parse error.
 """
 
@@ -25,9 +26,10 @@ from rich.console import Console
 
 from fr import plan_ops
 from fr._urls import parse_issue_url
-from fr.commands.common import require_migrated_layout
+from fr.commands.common import require_migrated_layout, resolve_repo_root
 from fr.parser import PlanSchemaError, parse
 from fr.plan_ops import PlanEditError
+from fr.services import ServicesError, require_tracker
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
@@ -54,6 +56,16 @@ def undispatch_command(
     """Close a plan's tracking Issues (reason: not planned) and null the
     tracking_issue fields — one command instead of N manual gh calls."""
     require_migrated_layout()
+    # gh#803: closing and commenting are tracker writes, gated as `fr apply
+    # --yes` is — on the plan's own repo, which governs a cross-repo plan too
+    # (gh#804). Strict: a malformed declaration refuses as well.
+    try:
+        require_tracker(resolve_repo_root(plan_dir.resolve()))
+    except ServicesError as e:
+        if yes:
+            err_console.print(str(e), markup=False, soft_wrap=True)
+            raise typer.Exit(2) from e
+        typer.echo(f"warning: --yes would be refused — {e}")
     gh = _make_gh_client()
 
     try:
