@@ -20,7 +20,6 @@ import fnmatch
 import re
 import shlex
 import subprocess
-from datetime import datetime
 from pathlib import Path
 
 from fr.triage.errors import TriageError
@@ -155,14 +154,39 @@ class Checkout:
             )
         git(["merge", "--ff-only", "--quiet", f"origin/{default}"], self.path)
 
-    def released_since(self, when: datetime) -> bool:
-        """Whether `origin/<default>` carries a `release: ...` commit made at or after
-        *when* — the release commit that follows a merge (wave-driver §B step 2)."""
-        default = self.default_branch()
-        out = git(
-            ["log", f"origin/{default}", f"--since={when.isoformat()}", "--format=%s"], self.path
-        )
-        return any(line.startswith("release: ") for line in out.splitlines())
+    def released_after(self, merge_commit: str) -> bool:
+        """Whether `origin/<default>` carries a `release: ...` commit that descends
+        from *merge_commit* — the release that follows THIS merge (wave-driver §B
+        step 2). A release cut before the merge, or from a side line the merge is
+        not on, does not count (review rg-9); an unknown merge commit is never
+        released, so the caller falls back to the ten-minute rule."""
+        if not merge_commit:
+            return False
+        tip = f"origin/{self.default_branch()}"
+        if not self.is_ancestor(merge_commit, tip):
+            return False
+        out = git(["log", f"{merge_commit}..{tip}", "--format=%H %s"], self.path)
+        for line in out.splitlines():
+            sha, _, subject = line.partition(" ")
+            if subject.startswith("release: ") and self.is_ancestor(merge_commit, sha):
+                return True
+        return False
+
+    def snapshot_paths(self, ref: str, paths: tuple[str, ...], dest: Path) -> None:
+        """Write *paths* (files or directories) as they are at *ref* into *dest*, a
+        fresh git repo with this clone's origin, so a reader that resolves a repo's
+        declarations reads the default branch's, never this working tree's (review
+        rg-5). Nothing in this clone changes."""
+        git(["init", "--quiet", str(dest)], self.path)
+        git(["remote", "add", "origin", self.origin_url()], dest)
+        listed = git(["ls-tree", "-r", "--name-only", ref, "--", *paths], self.path)
+        for name in listed.splitlines():
+            text = self.show(ref, name)
+            if text is None:
+                continue
+            target = dest / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8")
 
     def run_command(self, argv: list[str]) -> str:
         """Run the repo's declared `post_merge` argument list in this clone (R14).

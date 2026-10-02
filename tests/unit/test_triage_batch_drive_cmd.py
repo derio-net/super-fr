@@ -25,6 +25,8 @@ from typer.testing import CliRunner
 
 from tests.unit.test_triage_batch_dispatch import FakeRunner
 
+REAL_CI_IS_NONE = triage_batch_cmd.ci_is_none
+
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 DISPATCHED = "2026-10-01T10:00:00Z"
@@ -107,7 +109,8 @@ class World:
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         self.calls.append(f"pr_view {number}")
         p = self.prs[number]
-        return {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
+        view = {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
+        return {**view, "merge_commit": p.get("merge_commit", f"merge-{number}")}
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
@@ -131,7 +134,7 @@ class World:
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         return [
             {"number": n, "state": p["state"], "isDraft": p["draft"], "headRefName": branch,
-             "headRefOid": p["head_oid"]}
+             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]]}
             for n, p in self.prs.items() if p["head_ref"] == branch
         ]  # fmt: skip
 
@@ -163,6 +166,7 @@ class DriveCheckout:
         self.command_fails: str | None = None
         self.forwarded = 0
         self.files: dict[tuple[str, str], str] = {}
+        self.release_probes: list[str] = []
 
     def origin_repo(self) -> str | None:
         return REPO
@@ -193,8 +197,16 @@ class DriveCheckout:
     def fast_forward(self) -> None:
         self.forwarded += 1
 
-    def released_since(self, when: datetime) -> bool:
+    def released_after(self, merge_commit: str) -> bool:
+        self.release_probes.append(merge_commit)
         return self.released
+
+    def snapshot_paths(self, ref: str, paths: tuple[str, ...], dest: Path) -> None:
+        """origin/<default>'s copy of *paths*: what `ci none` is read from."""
+        for (at, file), text in self.files.items():
+            if at == ref and any(file == p or file.startswith(p + "/") for p in paths):
+                (dest / file).parent.mkdir(parents=True, exist_ok=True)
+                (dest / file).write_text(text)
 
     def run_command(self, argv: list[str]) -> str:
         self.commands.append(list(argv))
@@ -659,8 +671,9 @@ def test_the_attributed_archive_pr_is_merged_and_the_batch_finishes(
         "run: r1, archive: chore/archive-p1}\n"
     )
     _merged(world, tmp_path, events=closeout)
-    world.pr(201, "chore/archive-p1", [])
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
     world.pr(202, "chore/archive-someone-else", [])
+    world.pr(203, "chore/archive-p1-lookalike", [])  # no run file: never attributed
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
@@ -763,3 +776,416 @@ def test_a_kill_between_launch_and_event_never_launches_twice(
     assert code == 2
     assert runner.dispatched == []
     assert "already holds" in out
+
+
+# ---------------------------------------------- phase 2 review fixes (rg-*)
+
+
+class _StopError(Exception):
+    """Ends a loop-mode test from its sleep hook."""
+
+
+def _drive_named(tmp_path: Path, *args: str) -> Any:
+    return CliRunner().invoke(
+        app, ["triage", "batch", "drive", *args, "--repo", REPO, "--dir", str(tmp_path)]
+    )
+
+
+def _unwaved(bid: str, n: int, *, events: str = "", **kw: Any) -> str:
+    extra = "".join(f"    {k}: {v}\n" for k, v in kw.items())
+    ev = f"    events:\n{events}" if events else ""
+    return (
+        f'  - id: {bid}\n    title: {bid}\n    ids: ["super-fr#{n}"]\n'
+        f"    launch: {LAUNCH}\n{extra}{ev}"
+    )
+
+
+def test_a_dependent_is_not_dispatched_when_its_dependencys_merge_did_not_land(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-1: b1 is behind its base, so the pass updates it instead of merging it;
+    b2 (`after: [b1]`) must not start, and the summary must not count b1 merged."""
+    world.issues.update({1: "open", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1])
+    checkout.behind.add("sha-101")
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
+           _batch("b2", 2, after="[b1]"))  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out  # the update push is an act
+    assert world.merged == [] and runner.dispatched == []
+    assert _lines(out, "dispatch") == [
+        "dispatch b2: held: waits on b1, whose merge did not land this pass"
+    ]
+    assert out.rstrip().splitlines()[-1] == "in flight 1, merged 0, pending 1, closing 0"
+
+
+def test_a_merge_held_at_act_time_holds_its_dependent(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-1/rg-15: the snapshot judged b1 green, but at the merge a required check is
+    pending again; b1 is held and b2 does not start."""
+    world.issues.update({1: "open", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
+           _batch("b2", 2, after="[b1]"))  # fmt: skip
+    seen: list[int] = []
+
+    def _checks(repo: str, number: int) -> list[dict[str, Any]]:
+        seen.append(number)
+        bucket = "pass" if len(seen) == 1 else "pending"
+        return [{"name": "test", "bucket": bucket}]
+
+    monkeypatch.setattr(world, "pr_required_checks", _checks)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == [] and runner.dispatched == []
+    assert _lines(out, "merge") == ["merge b1: held: PR #101 is pending: test"]
+    assert "merged 0" in out
+
+
+@pytest.mark.parametrize("required", [True, False], ids=["required-checks", "no-required"])
+def test_a_head_that_moves_after_the_snapshot_is_not_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, required: bool,
+) -> None:  # fmt: skip
+    """rg-2: the merge is pinned to the head whose checks were judged."""
+    _pr_open(world, tmp_path)
+    if not required:
+        world.checks[101] = []
+    views: list[int] = []
+    real_view = world.pr_view
+
+    def _view(repo: str, number: int) -> dict[str, Any]:
+        views.append(number)
+        if len(views) == 2:  # after the snapshot read it: someone pushes
+            world.prs[101]["head_oid"] = "sha-pushed"
+        return real_view(repo, number)
+
+    monkeypatch.setattr(world, "pr_view", _view)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [], out
+    assert _lines(out, "merge") == [
+        "merge b1: held: PR #101 head moved from sha-101 to sha-pushed since its checks "
+        "were judged; it is judged again next pass"
+    ]
+    assert code == 3
+
+
+def test_the_cap_counts_batches_outside_the_selection(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-3: `drive b5` with four other batches in flight dispatches nothing."""
+    for n in range(1, 6):
+        world.issues[n] = "open"
+    others = [_batch(f"o{n}", n, events=_dispatch_event(f"o{n}")) for n in range(1, 5)]
+    _state(tmp_path, world, *others, _batch("b5", 5))
+    code, out = _drive(tmp_path, "--once", "--yes", "b5")
+    assert code == 3, out
+    assert runner.dispatched == []
+
+
+def test_a_merged_dependency_outside_the_selection_is_not_blocking(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-3: `drive b2` where b1 (unselected) is merged dispatches b2."""
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1], state="MERGED", merged_at=NOW.isoformat())
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
+           _batch("b2", 2, after="[b1]"))  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes", "b2")
+    assert code == 0, out
+    assert _lines(out, "blocked") == []
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+
+
+def test_a_waved_batch_on_an_unwaved_merged_batch_is_not_blocked(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-3: the default selection (batches with a wave) still resolves its
+    dependencies over every batch."""
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b0", [1], state="MERGED", merged_at=NOW.isoformat())
+    _state(tmp_path, world, _unwaved("b0", 1, events=_dispatch_event("b0")),
+           _batch("b2", 2, after="[b0]"))  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "blocked") == []
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+
+
+def test_zero_reported_checks_are_not_green(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-4: no required checks and no checks at all (CI not queued yet) waits."""
+    _pr_open(world, tmp_path)
+    world.checks[101] = []
+    world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == []
+
+
+def test_a_merge_stop_does_not_end_the_loop_and_is_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-4: a repo with required checks the forge does not report (`--required`
+    says none) gets a merge refusal; the loop reports it once and keeps going."""
+    _pr_open(world, tmp_path)
+    world.checks[101] = []
+    world.refuse_merge = "required status check is expected"
+    naps: list[float] = []
+
+    def _nap(seconds: float) -> None:
+        naps.append(seconds)
+        if len(naps) == 3:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("required status check is expected") == 1
+    assert world.calls.count("pr_merge 101") == 3
+
+
+def test_ci_none_is_read_from_the_default_branch_not_the_working_tree(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-5: a clone on a feature branch whose tree declares `ci none` does not make
+    the driver merge on non-draft alone; origin/main has CI."""
+    monkeypatch.setattr(triage_batch_cmd, "ci_is_none", REAL_CI_IS_NONE)
+    _pr_open(world, tmp_path)
+    world.checks[101] = []
+    world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 2}
+    profiles = "version: 2\nforge: {type: github}\nci: {type: none}\n"
+    (checkout.path / ".devcontainer").mkdir()
+    (checkout.path / ".devcontainer" / "fr-profiles.yaml").write_text(profiles)
+    checkout.files[("origin/main", ".github/workflows/ci.yml")] = "on: push\njobs: {}\n"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == []
+    # and when origin/main itself declares it, the merge goes ahead
+    checkout.files[("origin/main", ".devcontainer/fr-profiles.yaml")] = profiles
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_an_archive_merged_by_file_attribution_finishes_the_batch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-6: the archive PR's head is neither the close-out's own nor the recorded
+    archive branch, so only its files attribute it; once the driver merged it, the
+    next pass sees the batch archived and `--once` exits 0."""
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _merged(world, tmp_path, events=closeout)
+    world.pr(201, "chore/archive-renamed", [], files=["docs/superpowers/runs/r1.yaml"])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [m[0] for m in world.merged] == [201]
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    assert batch.events[-1].archived == 201  # type: ignore[union-attr]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert out.rstrip().splitlines()[-1] == "in flight 0, merged 1, pending 0, closing 0"
+
+
+def test_an_unparsable_lock_is_held_for_its_grace_period(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-7a: a lock another starter created but has not written yet is not stale."""
+    _proposed(world, tmp_path, 1)
+    (tmp_path / "drive.lock").write_text("")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 2, out
+    assert world.passes == []  # type: ignore[attr-defined]
+    assert (tmp_path / "drive.lock").read_text() == ""
+
+
+def test_an_unparsable_lock_past_its_grace_period_is_taken_over(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    lock = tmp_path / "drive.lock"
+    lock.write_text("")
+    old = lock.stat().st_mtime - 3600
+    os.utime(lock, (old, old))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert not lock.exists()
+
+
+def test_a_stale_lock_retaken_by_another_starter_is_not_removed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-7b: between reading the stale lock and taking it, another driver took it
+    over; this starter must neither remove that lock nor run."""
+    _proposed(world, tmp_path, 1)
+    lock = tmp_path / "drive.lock"
+    lock.write_text(json.dumps({"pid": 999_999_999, "started": "x"}))
+    rival = json.dumps({"pid": 4242, "started": "rival"})
+
+    def _alive(pid: int) -> bool:
+        if pid == 999_999_999:
+            lock.write_text(rival)  # the rival replaced the stale lock meanwhile
+            return False
+        return pid == 4242
+
+    monkeypatch.setattr(triage_batch_cmd, "_pid_alive", _alive)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 2, out
+    assert lock.read_text() == rival
+    assert world.passes == []  # type: ignore[attr-defined]
+
+
+def test_a_driver_does_not_remove_a_lock_it_no_longer_owns(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-7c: the lock is released only when it is still this driver's."""
+    _proposed(world, tmp_path, 1)
+    lock = tmp_path / "drive.lock"
+    rival = json.dumps({"pid": 4242, "started": "rival"})
+    real = triage_batch_cmd.recollect
+
+    def _recollect(scope: Any, target: Path) -> None:
+        lock.write_text(rival)
+        real(scope, target)
+
+    monkeypatch.setattr(triage_batch_cmd, "recollect", _recollect)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert lock.read_text() == rival
+
+
+def test_the_lock_is_written_whole_before_it_is_visible(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-7a: the lock appears with its pid already in it (link of a written file),
+    never as an empty O_EXCL file."""
+    _proposed(world, tmp_path, 1)
+    lock = tmp_path / "drive.lock"
+    seen: list[str] = []
+    real = triage_batch_cmd.recollect
+
+    def _recollect(scope: Any, target: Path) -> None:
+        seen.append(lock.read_text())
+        real(scope, target)
+
+    monkeypatch.setattr(triage_batch_cmd, "recollect", _recollect)
+    assert _drive(tmp_path, "--once", "--yes")[0] == 0
+    assert json.loads(seen[0])["pid"] == os.getpid()
+    assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith("drive.lock")) == []
+
+
+def test_closeout_and_batch_dispatch_resolve_the_same_model(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-8: the close-out reads the clone's models.yaml as `batch dispatch` does,
+    also when no --checkout is given."""
+    no_model = "{runner: fake, harness: claude}"
+    models = checkout.path / "docs" / "superpowers" / "models.yaml"
+    models.parent.mkdir(parents=True)
+    models.write_text("claude-code:\n  orchestrator: repo-model\n")
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
+    b1 = _batch("b1", 1, events=_dispatch_event("b1")).replace(LAUNCH, no_model)
+    b2 = _batch("b2", 2).replace(LAUNCH, no_model)
+    _state(tmp_path, world, b1, b2)
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    models_by_item = {i.id: i.payload["model"] for i in runner.dispatched}
+    assert models_by_item == {
+        f"{REPO}/run/closeout-b1": "repo-model",
+        f"{REPO}/run/batch-b2": "repo-model",
+    }
+
+
+def test_the_release_probe_names_the_batchs_merge_commit(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-9: the release must follow THIS merge, so the probe is by merge commit."""
+    _merged(world, tmp_path)
+    world.prs[101]["merge_commit"] = "c0ffee"
+    _drive(tmp_path, "--once", "--yes")
+    assert checkout.release_probes == ["c0ffee"]
+
+
+def test_a_preflight_refusal_does_not_stop_a_merge_when_no_closeout_is_due(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-10: only a due close-out is probed through its runner."""
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
+    world.pr(102, "feat/batch-b2", [2])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
+           _batch("b2", 2, events=_dispatch_event("b2")))  # fmt: skip
+    runner.refusal = "HERDR_ENV is not set"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(102, "sha-102", "squash")]
+    assert "HERDR_ENV" not in out
+
+
+def _blocked_state(world: World, tmp_path: Path) -> None:
+    world.issues.update({1: "open", 2: "open"})
+    cancel = "      - {kind: cancel, at: 2026-10-01T11:00:00Z}\n"
+    _state(tmp_path, world, _batch("b0", 1, events=_dispatch_event("b0") + cancel),
+           _batch("b1", 2, after="[b0]"))  # fmt: skip
+
+
+def test_once_with_only_blocked_work_left_exits_3(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-11: blocked work needs the operator, so it is not `done`."""
+    _blocked_state(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert _lines(out, "blocked") == ["blocked b1: waits on b0 is cancelled"]
+
+
+def test_the_loop_ends_with_exit_3_naming_the_blocked_batches(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, sleeps: list[float]
+) -> None:
+    _blocked_state(world, tmp_path)
+    code, out = _drive(tmp_path, "--yes")
+    assert code == 3, out
+    assert sleeps == []
+    assert out.rstrip().splitlines()[-1] == (
+        "stopped: only blocked batches remain (b1); they need the operator"
+    )
+
+
+@pytest.mark.parametrize(
+    ("required", "all_checks", "merged"),
+    [
+        ([], {"pass": 2, "fail": 0, "pending": 0}, True),
+        ([], {"pass": 2, "fail": 1, "pending": 0}, False),
+        ([{"name": "test", "bucket": "pass"}], {"pass": 0, "fail": 3, "pending": 0}, True),
+        ([{"name": "test", "bucket": "fail"}], {"pass": 5, "fail": 0, "pending": 0}, False),
+    ],
+    ids=["none-required-all-green", "none-required-one-failing", "required-passing",
+         "required-failing"],
+)  # fmt: skip
+def test_required_checks_when_there_are_any_else_all_checks(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    required: list[dict[str, Any]], all_checks: dict[str, int], merged: bool,
+) -> None:  # fmt: skip
+    """rg-15: the World default (one passing required check) must not hide the
+    all-checks fallback."""
+    _pr_open(world, tmp_path)
+    world.checks[101] = required
+    world.all_checks[101] = all_checks
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert bool(world.merged) is merged, out

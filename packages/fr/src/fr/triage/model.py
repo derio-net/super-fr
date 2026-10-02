@@ -381,6 +381,9 @@ class CloseoutEvent(_Strict):
     handle: str  # opaque to triage; never posted to the forge
     run: str | None = None  # the run id the brief named (`fr pickup --run`), if any
     archive: str | None = None  # the housekeeping branch the close-out will push
+    # The archive PR the driver merged (review rg-6): a later event repeats the
+    # close-out with this set, so the batch reads as finished without the PR in view.
+    archived: int | None = None
 
 
 class PostMergeEvent(_Strict):

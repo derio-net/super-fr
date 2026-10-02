@@ -34,6 +34,7 @@ from fr.triage.model import Batch, PullRequest
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 DISPATCHED = "2026-10-01T10:00:00Z"
+RUNS = "docs/superpowers/runs"
 
 
 def _batch(bid: str, n: int, *, wave: int | None = 1, **kw: Any) -> Batch:
@@ -360,7 +361,7 @@ def _archive(n: int, head_ref: str, **kw: Any) -> LivePr:
 
 def test_an_attributed_ready_green_archive_pr_is_merged() -> None:
     b = _closed("x", 1, archive="chore/archive-2026-10-01-x", run="r-x")
-    pr = _archive(7, "chore/archive-2026-10-01-x")
+    pr = _archive(7, "chore/archive-2026-10-01-x", files=("docs/superpowers/runs/r-x.yaml",))
     got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
     (action,) = got.actions
     assert (action.kind, action.pr, action.head) == ("archive", 7, "h7")
@@ -368,10 +369,9 @@ def test_an_attributed_ready_green_archive_pr_is_merged() -> None:
 
 @pytest.mark.parametrize("kw", [dict(draft=True), dict(checks="pending"), dict(checks="failing")])
 def test_an_archive_pr_not_ready_and_green_waits(kw: dict[str, Any]) -> None:
-    b = _closed("x", 1, archive="chore/archive-p")
-    got = drive_pass(
-        _snap([b], {"x": "merged"}, archives={REPO: (_archive(7, "chore/archive-p", **kw),)})
-    )
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), **kw)
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
     assert [a.kind for a in got.actions if a.kind == "archive"] == []
     assert got.summary.closing == 1
 
@@ -395,8 +395,8 @@ def test_attribution_by_head_or_by_the_run_file() -> None:
 
 
 def test_a_merged_archive_pr_finishes_the_batch() -> None:
-    b = _closed("x", 1, archive="chore/archive-p")
-    merged = _archive(7, "chore/archive-p", state="MERGED")
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    merged = _archive(7, "chore/archive-p", state="MERGED", files=(f"{RUNS}/r-x.yaml",))
     got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (merged,)}))
     assert got.actions == ()
     assert got.summary.closing == 0 and got.summary.done
@@ -431,3 +431,94 @@ def test_the_pass_module_reaches_no_runner_git_process_or_clock() -> None:
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
     }
     assert not calls & {"now", "utcnow", "today"}
+
+
+# ------------------------------------------- review fixes (phase 2 review rg-*)
+
+
+def test_the_cap_counts_in_flight_batches_outside_the_selection() -> None:
+    """rg-3: `drive b5` with four other batches in flight dispatches nothing."""
+    others = [_dispatched(f"o{i}", i) for i in range(1, 5)]
+    b5 = _batch("b5", 5)
+    stages = {**{b.id: "dispatched" for b in others}, "b5": "proposed"}
+    got = drive_pass(_snap([*others, b5], stages, selected=frozenset({"b5"}), max_inflight=4))
+    assert got.actions == ()
+    assert got.summary.pending == 1 and not got.summary.done
+
+
+def test_a_dependency_outside_the_selection_resolves_by_its_stage() -> None:
+    """rg-3: `drive b2` where b1 (unselected) is merged does not report b2 blocked."""
+    batches = [_dispatched("b1", 1), _batch("b2", 2, after=["b1"])]
+    stages = {"b1": "merged", "b2": "proposed"}
+    got = drive_pass(_snap(batches, stages, selected=frozenset({"b2"})))
+    assert _kinds(got.actions) == [("dispatch", "b2")]
+
+
+def test_only_selected_batches_are_acted_on() -> None:
+    batches = [_dispatched("in", 1), _dispatched("out", 2), _batch("p", 3)]
+    stages = {"in": "pr-open", "out": "pr-open", "p": "proposed"}
+    got = drive_pass(_snap(batches, stages, selected=frozenset({"in", "p"})))
+    assert _kinds(got.actions) == [("merge", "in"), ("dispatch", "p")]
+
+
+def test_unknown_merge_time_is_not_yet_due() -> None:
+    """rg-9: no merge time and no release is not a reason to close out now."""
+    snap = _snap([_merged("x", 1)], {"x": "merged"})
+    got = drive_pass(snap)
+    assert got.actions == () and got.summary.closing == 1
+
+
+@pytest.mark.parametrize("all_checks", [{}, {"pass": 0, "fail": 0, "pending": 0}])
+def test_zero_reported_checks_are_pending_not_green(all_checks: dict[str, int]) -> None:
+    """rg-4: no check registered yet (a fresh push, a just-readied PR) is not green."""
+    assert checks_verdict([], all_checks, ci_none=False)[0] == "pending"
+    assert checks_verdict([], all_checks, ci_none=True)[0] == "green"
+
+
+def test_head_only_attribution_is_the_branch_named_closeout_alone() -> None:
+    """rg-12: `chore/archive-<plan>` and `chore/closeout-<run>` need the run file or
+    the journal in their files; only `chore/closeout-<batch branch>` is head-only."""
+    b = _closed("x", 1, archive="chore/archive-2026-10-01-x", run="r-x")
+    event = b.events[-1]
+    bare = _archive(1, "chore/archive-2026-10-01-x")
+    by_run = _archive(2, "chore/archive-2026-10-01-x", files=("docs/superpowers/runs/r-x.yaml",))
+    journal = "docs/superpowers/journals/plans/2026-10-01-x.md"
+    by_journal = _archive(3, "chore/archive-2026-10-01-x", files=(journal,))
+    run_head = _archive(4, "chore/closeout-r-x")
+    branch_head = _archive(5, "chore/closeout-feat-batch-x")
+    assert not attributed(bare, b, event)  # type: ignore[arg-type]
+    assert attributed(by_run, b, event)  # type: ignore[arg-type]
+    assert attributed(by_journal, b, event)  # type: ignore[arg-type]
+    assert not attributed(run_head, b, event)  # type: ignore[arg-type]
+    assert attributed(branch_head, b, event)  # type: ignore[arg-type]
+
+
+def test_a_recorded_archive_finishes_the_batch_without_the_pr_in_view() -> None:
+    """rg-6: an archive the driver merged is recorded on the close-out event; the
+    batch is finished even when no candidate lists that PR any more."""
+    event: dict[str, Any] = {
+        "kind": "closeout", "at": "2026-10-02T11:00:00Z", "runner": "fake", "handle": "h",
+        "run": "r-x", "archive": "chore/archive-p", "archived": 77,
+    }  # fmt: skip
+    b = _merged("x", 1, events=[event])
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: ()}))
+    assert got.actions == () and got.summary.closing == 0 and got.summary.done
+
+
+def test_only_blocked_work_left_is_not_done() -> None:
+    """rg-11: blocked work needs the operator; the pass does not call it done."""
+    batches = [_dispatched("base", 1), _batch("child", 2, after=["base"])]
+    got = drive_pass(_snap(batches, {"base": "cancelled", "child": "proposed"}))
+    assert got.summary.blocked == 1
+    assert not got.summary.done and got.summary.waiting_on_operator
+
+
+def test_settle_moves_a_merge_that_did_not_land_back_in_flight() -> None:
+    """rg-1: the summary must not claim a merge that did not happen."""
+    from fr.triage.batch_drive import settle
+
+    batches = [_dispatched("b1", 1), _batch("b2", 2, after=["b1"])]
+    got = drive_pass(_snap(batches, {"b1": "pr-open", "b2": "proposed"}))
+    assert got.summary.merged == 1
+    settled = settle(got.summary, unlanded=1, held=1)
+    assert (settled.in_flight, settled.merged, settled.pending, settled.closing) == (1, 0, 1, 0)

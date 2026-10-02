@@ -15,7 +15,7 @@ testable. `tests/unit/test_triage_batch_drive.py` pins that.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
@@ -39,6 +39,7 @@ IN_FLIGHT: frozenset[BatchStage] = frozenset({"dispatched", "pr-open"})
 LANDED: frozenset[BatchStage] = frozenset({"merged", "partial"})
 ARCHIVE_PREFIXES = ("chore/archive-", "chore/closeout-")
 RUNS_DIR = "docs/superpowers/runs"
+JOURNAL_DIRS = ("docs/superpowers/journals/", "docs/superpowers/implemented/journals/")
 
 ChecksVerdict = Literal["green", "pending", "failing"]
 ActionKind = Literal["merge", "closeout", "archive", "dispatch", "blocked", "warn"]
@@ -64,7 +65,7 @@ class LivePr:
 class Snapshot:
     """Everything one pass decides from. Built fresh each pass, never stored."""
 
-    batches: tuple[Batch, ...]
+    batches: tuple[Batch, ...]  # every batch of the state file
     stages: Mapping[str, BatchStage]
     queue: tuple[QueueEntry, ...]  # pr-open batches with their collected PR
     live: Mapping[str, LivePr]  # batch id -> its PR as read now
@@ -76,6 +77,10 @@ class Snapshot:
     archives: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)  # repo -> PRs
     existing: frozenset[str] = frozenset()  # runner item ids live now
     warned: frozenset[str] = frozenset()  # head shas whose failing CI was reported
+    # The batches this drive acts on (None: all). The in-flight cap and dependency
+    # resolution always read every batch: a batch outside the selection still holds
+    # a slot, and a dependency outside it is still merged or not (review rg-3).
+    selected: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -100,9 +105,32 @@ class Summary:
     blocked: int = 0
 
     @property
-    def done(self) -> bool:
-        """Nothing pending, in flight or closing (a blocked batch waits on the operator)."""
+    def idle(self) -> bool:
+        """Nothing pending, in flight or closing: nothing the driver can still move."""
         return self.in_flight == 0 and self.pending == 0 and self.closing == 0
+
+    @property
+    def done(self) -> bool:
+        """Idle and nothing blocked: every driven batch is finished."""
+        return self.idle and self.blocked == 0
+
+    @property
+    def waiting_on_operator(self) -> bool:
+        """Idle, but a blocked batch remains: only the operator can move it (R7)."""
+        return self.idle and self.blocked > 0
+
+
+def settle(summary: Summary, *, unlanded: int = 0, held: int = 0) -> Summary:
+    """The pass's summary once its actions ran: *unlanded* planned merges did not
+    land (held, updated, refused), so they are still in flight and not closing, and
+    *held* planned dispatches did not start, so they are still pending (review rg-1)."""
+    return replace(
+        summary,
+        in_flight=summary.in_flight + unlanded - held,
+        merged=summary.merged - unlanded,
+        closing=summary.closing - unlanded,
+        pending=summary.pending + held,
+    )
 
 
 @dataclass(frozen=True)
@@ -122,7 +150,9 @@ def checks_verdict(
 
     *required* is `GhClient.pr_required_checks`; *all_checks* is the collected
     `PullRequest.checks` counts (`pass`, `fail`, `pending`). `SKIPPED` and
-    `NEUTRAL` read as passed.
+    `NEUTRAL` read as passed. No check reported at all is `pending`, never green: a
+    head the driver just pushed, or a PR just readied, has no check registered yet
+    (review rg-4); only a `ci none` repo merges without one.
     """
     if ci_none:
         return "green", ()
@@ -140,7 +170,18 @@ def checks_verdict(
         return "failing", (f"{all_checks['fail']} failing check(s)",)
     if all_checks.get("pending", 0):
         return "pending", (f"{all_checks['pending']} pending check(s)",)
+    if not all_checks.get("pass", 0):
+        return "pending", ("no check reported yet",)
     return "green", ()
+
+
+def closeout_due(*, released: bool, merged_at: datetime | None, now: datetime) -> bool:
+    """§B step 2: the release commit that follows the merge is on the base branch,
+    or ten minutes passed since the merge with none. An unknown merge time is not
+    yet due (review rg-9): the caller supplies when it first saw the merge."""
+    if released:
+        return True
+    return merged_at is not None and now - merged_at >= CLOSEOUT_FALLBACK
 
 
 # ---------------------------------------------------------- close-out (§C)
@@ -194,19 +235,25 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
 
 
 def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
-    """Whether archive PR *pr* belongs to *batch*'s close-out (§B step 3): its head is
-    the close-out's own housekeeping branch, or `chore/closeout-<batch branch>`, or
-    any `chore/archive-*` / `chore/closeout-*` head that changes the batch's run file."""
+    """Whether archive PR *pr* belongs to *batch*'s close-out (§B step 3).
+
+    Its head alone attributes it only when the head is `chore/closeout-<batch branch
+    with / as ->`, a name no other batch can produce. Any other `chore/archive-*` or
+    `chore/closeout-*` head (`chore/archive-<plan>`, `chore/closeout-<run-id>`) must
+    also change the batch's run file or its plan journal (review rg-12)."""
     branch = batch_branch(batch)
-    own = {f"chore/closeout-{branch.replace('/', '-')}"}
-    if event.archive:
-        own.add(event.archive)
-    if pr.head_ref in own:
+    if pr.head_ref == f"chore/closeout-{branch.replace('/', '-')}":
         return True
-    if not pr.head_ref.startswith(ARCHIVE_PREFIXES) or not event.run:
+    if not pr.head_ref.startswith(ARCHIVE_PREFIXES):
         return False
-    run_file = f"{RUNS_DIR}/{event.run}.yaml"
-    return any(f == run_file or f.endswith(f"/{event.run}.yaml") for f in pr.files)
+    archive = event.archive or ""
+    plan = archive.removeprefix("chore/archive-") if archive.startswith("chore/archive-") else ""
+    for f in pr.files:
+        if event.run and (f == f"{RUNS_DIR}/{event.run}.yaml" or f.endswith(f"/{event.run}.yaml")):
+            return True
+        if plan and f.startswith(JOURNAL_DIRS) and PurePosixPath(f).stem == plan:
+            return True
+    return False
 
 
 def closeout_event(batch: Batch) -> CloseoutEvent | None:
@@ -232,10 +279,13 @@ def drive_pass(snap: Snapshot) -> Pass:
     actions: list[Action] = []
     stages = dict(snap.stages)
     merging: set[str] = set()
+    chosen = tuple(b for b in snap.batches if snap.selected is None or b.id in snap.selected)
 
     # 1. Merge.
     for entry in merge_order(list(snap.queue)):
         bid = entry.batch.id
+        if snap.selected is not None and bid not in snap.selected:
+            continue
         pr = snap.live.get(bid)
         if pr is None or pr.state != "OPEN" or pr.draft or pr.head != entry.pr.head_oid:
             continue
@@ -255,18 +305,17 @@ def drive_pass(snap: Snapshot) -> Pass:
 
     # 2. Close out.
     closing = 0
-    for batch in snap.batches:
+    for batch in chosen:
         if stages.get(batch.id) not in LANDED or batch.id in merging:
             continue
         event = closeout_event(batch)
         if event is not None:
             continue
         closing += 1
-        merged_at = snap.merged_at.get(batch.id)
-        due = (
-            batch.id in snap.released
-            or merged_at is None
-            or snap.now - merged_at >= CLOSEOUT_FALLBACK
+        due = closeout_due(
+            released=batch.id in snap.released,
+            merged_at=snap.merged_at.get(batch.id),
+            now=snap.now,
         )
         if not due:
             continue
@@ -278,10 +327,12 @@ def drive_pass(snap: Snapshot) -> Pass:
             actions.append(Action("closeout", batch.id, f"start {item}", post_merge=owed))
 
     # 3. Archive.
-    for batch in snap.batches:
+    for batch in chosen:
         event = closeout_event(batch)
         if event is None or stages.get(batch.id) not in LANDED:
             continue
+        if event.archived is not None:
+            continue  # the driver merged its archive PR: the batch is finished
         mine = [
             p
             for p in snap.archives.get(snap.repos.get(batch.id, ""), ())
@@ -300,13 +351,16 @@ def drive_pass(snap: Snapshot) -> Pass:
             )  # fmt: skip
 
     # 4. Dispatch.
-    driven = {b.id for b in snap.batches}
+    # The cap counts every batch in flight, selected or not (review rg-3); the
+    # summary's own figure is the selection's, which is what this drive waits on.
+    cap_used = sum(1 for b in snap.batches if stages.get(b.id) in IN_FLIGHT) - len(merging)
+    driven = {b.id for b in chosen}
     in_flight = sum(1 for b in driven if stages.get(b) in IN_FLIGHT) - len(merging)
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
     pending = blocked = 0
-    for batch in sorted(snap.batches, key=_dispatch_key):
+    for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed":
             continue
         dead = [
@@ -321,9 +375,10 @@ def drive_pass(snap: Snapshot) -> Pass:
         if any(stages.get(d) != "merged" for d in batch.after):
             pending += 1
             continue
-        if in_flight >= snap.max_inflight:
+        if cap_used >= snap.max_inflight:
             pending += 1
             continue
+        cap_used += 1
         in_flight += 1
         actions.append(
             Action("dispatch", batch.id, f"wave {batch.wave if batch.wave is not None else '-'}")

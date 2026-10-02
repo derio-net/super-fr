@@ -33,7 +33,9 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import tempfile
 import time
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -47,6 +49,7 @@ from pydantic import ValidationError
 from rich.markup import escape
 
 from fr._hosts import backend_for_url
+from fr.acceptance.ci import CI_CONFIG_PATHS
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
@@ -102,14 +105,17 @@ from fr.triage.batch_drive import (
     Action,
     LivePr,
     Snapshot,
+    Summary,
     action_line,
     checks_verdict,
     closeout_brief,
+    closeout_due,
     closeout_event,
     closeout_item_id,
     drive_pass,
     find_run,
     housekeeping_branch,
+    settle,
     summary_line,
 )
 from fr.triage.batch_merge import (
@@ -1143,6 +1149,14 @@ def batch_merge_command(
 
 DRIVE_LOCK = "drive.lock"
 DEFAULT_INTERVAL = 120
+LOCK_GRACE = 10.0
+"""Seconds an unreadable `drive.lock` is held: long enough for a starter that
+created it to have written it (review rg-7)."""
+SERVICE_PATHS: tuple[str, ...] = (
+    ".devcontainer/fr-profiles.yaml",
+    *sorted({p for paths in CI_CONFIG_PATHS.values() for p in paths}),
+)
+"""What `ci none` is resolved from: the services declaration and the CI configs."""
 
 DriveCheckoutOpt = Annotated[
     list[str] | None,
@@ -1192,42 +1206,81 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def _lock_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+
+
+def _lock_pid(text: str) -> int | None:
+    """The pid a lock names, or None when it is not (yet) a whole lock."""
+    try:
+        return int(json.loads(text)["pid"])
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
 @contextmanager
 def drive_lock(target: Path) -> Iterator[None]:
     """`<state dir>/drive.lock` (pid, start time) for as long as a driver runs (R6).
 
-    A second driver on the same state directory refuses (exit 2); a lock whose
-    pid is gone is stale and taken over. Created with O_EXCL, so two drivers
-    starting together cannot both win.
+    It serialises drivers only. A second driver on the same state directory refuses
+    (exit 2). The lock is written to a private file first and linked into place, so
+    it is never visible half-written; one that cannot be read anyway is held for
+    `LOCK_GRACE` seconds before it counts as stale. A stale lock (its pid is gone)
+    is moved aside atomically and checked to be the one judged stale, so two
+    starters never both take it; and a driver removes the lock on exit only while
+    it is still its own (review rg-7).
     """
     path = target / DRIVE_LOCK
     target.mkdir(parents=True, exist_ok=True)
-    for _ in range(3):
+    mine = json.dumps({"pid": os.getpid(), "started": _now().isoformat()})
+    for _ in range(5):
+        private = target / f".{DRIVE_LOCK}.{os.getpid()}.{uuid.uuid4().hex}"
+        private.write_text(mine, encoding="utf-8")
         try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            os.link(private, path)
+            break
         except FileExistsError:
+            pass
+        finally:
+            private.unlink(missing_ok=True)
+        held = _lock_text(path)
+        if held is None:
+            continue  # released meanwhile: try again
+        pid = _lock_pid(held)
+        if pid is None:
             try:
-                held = json.loads(path.read_text(encoding="utf-8"))
-                pid = int(held["pid"])
-            except (OSError, ValueError, KeyError, TypeError):
-                pid = 0
-                held = {}
-            if pid and _pid_alive(pid):
-                _fail(
-                    f"another driver holds {path} (pid {pid}, started {held.get('started')}); "
-                    "stop it first, or wait for it to finish"
-                )
-            path.unlink(missing_ok=True)
+                age = time.time() - path.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if age < LOCK_GRACE:
+                _fail(f"another driver is taking {path}; wait for it, or stop it first")
+        elif _pid_alive(pid):
+            started = json.loads(held).get("started")
+            _fail(
+                f"another driver holds {path} (pid {pid}, started {started}); "
+                "stop it first, or wait for it to finish"
+            )
+        aside = target / f".{DRIVE_LOCK}.stale.{uuid.uuid4().hex}"
+        try:
+            os.rename(path, aside)
+        except FileNotFoundError:
             continue
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump({"pid": os.getpid(), "started": _now().isoformat()}, fh)
-        break
+        if _lock_text(aside) != held:  # another starter took it over meanwhile
+            try:
+                os.link(aside, path)  # put theirs back
+            except FileExistsError:
+                pass
+        aside.unlink(missing_ok=True)
     else:
         _fail(f"cannot take {path}: another driver keeps re-creating it")
     try:
         yield
     finally:
-        path.unlink(missing_ok=True)
+        if _lock_text(path) == mine:
+            path.unlink(missing_ok=True)
 
 
 def _checkout_map(
@@ -1289,6 +1342,9 @@ def _live_head_prs(client: GhClient, repo: str, head: str) -> list[LivePr]:
                 head=str(rec.get("headRefOid") or ""),
                 checks="pending",  # an open one's checks come from the facts' record
                 head_ref=str(rec.get("headRefName") or head),
+                files=tuple(
+                    str(f.get("path") if isinstance(f, dict) else f) for f in rec.get("files") or ()
+                ),
             )
         )
     return out
@@ -1312,6 +1368,12 @@ class _Driver:
         self.checkout_paths = checkouts
         self.max_inflight, self.yes = max_inflight, yes
         self.warned: set[str] = set()
+        self.reported: set[str] = set()  # merge refusals already printed in full
+        self.failed_write = False  # a forge write failed this pass (--once exits 1)
+        self._first_seen: dict[str, datetime] = {}  # merged with no merge time known
+        self._ci: dict[str, bool] = {}  # per pass: repo -> origin/<default> says ci none
+        self._unlanded: set[str] = set()  # per pass: planned merges that did not land
+        self._held = 0  # per pass: planned dispatches that did not start
         self._clients: dict[str, GhClient] = {}
         self._checkouts: dict[str, Checkout] = {}
         self._runners: dict[str, Runner] = {}
@@ -1361,6 +1423,8 @@ class _Driver:
     # ------------------------------------------------------------------ snapshot
 
     def snapshot(self, facts: Facts, judgements: Judgements, now: datetime) -> Snapshot:
+        """Every batch of the file, with the selection marked: the in-flight cap and
+        the dependencies read them all, the actions only the selection (rg-3)."""
         chosen = _chosen(judgements.batches, self.named)
         ids = {b.id for b in chosen}
         repos = {b.id: r for b in judgements.batches if (r := batch_repo(b, facts)) is not None}
@@ -1374,7 +1438,7 @@ class _Driver:
         merged_at: dict[str, datetime] = {}
         released: set[str] = set()
         archives: dict[str, tuple[LivePr, ...]] = {}
-        closing: list[Batch] = []
+        due: list[Batch] = []
         try:
             for e in queue:
                 repo = repos[e.batch.id]
@@ -1383,7 +1447,7 @@ class _Driver:
                 verdict, failing = checks_verdict(
                     client.pr_required_checks(repo, e.pr.number),
                     e.pr.checks,
-                    ci_none=ci_is_none(self._ci_root(repo)),
+                    ci_none=self._ci_none(repo),
                 )
                 live[e.batch.id] = LivePr(
                     number=e.pr.number,
@@ -1399,14 +1463,23 @@ class _Driver:
                     continue
                 event = closeout_event(b)
                 if event is None:
+                    repo = repos[b.id]
                     pr = batch_pr(b, facts)
                     when = _parse_at(pr.merged_at if pr else None)
-                    if when is not None:
-                        merged_at[b.id] = when
-                        if self._released(repos[b.id], when):
-                            released.add(b.id)
-                    closing.append(b)
+                    merged_at[b.id] = when or self._first_seen.setdefault(b.id, now)
+                    merge = (
+                        str(self.client(facts, repo).pr_view(repo, pr.number).get("merge_commit")
+                            or "")
+                        if pr is not None
+                        else ""
+                    )  # fmt: skip
+                    if self._released(repo, merge):
+                        released.add(b.id)
+                    if closeout_due(released=b.id in released, merged_at=merged_at[b.id], now=now):
+                        due.append(b)
                     continue
+                if event.archived is not None:
+                    continue  # its archive PR was merged by the driver: finished
                 archives[repos[b.id]] = (
                     *archives.get(repos[b.id], ()),
                     *self._archive_prs(facts, repos[b.id], b, event),
@@ -1416,7 +1489,7 @@ class _Driver:
         except FORGE_ERRORS as exc:
             _fail(f"a forge read failed: {exc}", code=1)
         return Snapshot(
-            batches=tuple(chosen),
+            batches=tuple(judgements.batches),
             stages=stages,
             queue=queue,
             live=live,
@@ -1426,24 +1499,38 @@ class _Driver:
             merged_at=merged_at,
             released=frozenset(released),
             archives=archives,
-            existing=self._existing(facts, closing, repos) if self.yes else frozenset(),
+            existing=self._existing(facts, due, repos) if self.yes else frozenset(),
             warned=frozenset(self.warned),
+            selected=frozenset(ids),
         )
 
-    def _ci_root(self, repo: str) -> Path:
-        path = self.path_of(repo)
-        if path is not None:
-            return path
-        try:
-            return make_checkout(None).path
-        except TriageError:
-            return Path.cwd()
+    def _reader(self, repo: str) -> Checkout:
+        """The clone for a read: the checked one with --yes, else leniently opened
+        (plan mode never refuses on a clone it does not write)."""
+        return self.checkout(repo) if self.yes else make_checkout(self.path_of(repo))
 
-    def _released(self, repo: str, when: datetime) -> bool:
+    def _ci_none(self, repo: str) -> bool:
+        """Whether `origin/<default>` declares `ci none` (R4), read from the default
+        branch the way `_fresh_config` reads `.fr/triage.yaml` — never from the
+        clone's working tree, which may be on any branch (review rg-5). Cached for
+        the pass; an unreadable declaration is not `none`."""
+        if repo not in self._ci:
+            try:
+                checkout = self._reader(repo)
+                checkout.fetch()
+                ref = f"origin/{checkout.default_branch()}"
+                with tempfile.TemporaryDirectory(prefix="fr-ci-") as tmp:
+                    checkout.snapshot_paths(ref, SERVICE_PATHS, Path(tmp))
+                    self._ci[repo] = ci_is_none(Path(tmp))
+            except TriageError:
+                self._ci[repo] = False
+        return self._ci[repo]
+
+    def _released(self, repo: str, merge_commit: str) -> bool:
         try:
-            checkout = self.checkout(repo) if self.yes else make_checkout(self.path_of(repo))
+            checkout = self._reader(repo)
             checkout.fetch()
-            return checkout.released_since(when)
+            return checkout.released_after(merge_commit)
         except TriageError as exc:
             if self.yes:
                 _fail(str(exc))
@@ -1466,7 +1553,7 @@ class _Driver:
             verdict, failing = checks_verdict(
                 client.pr_required_checks(repo, pr.number),
                 pr.checks,
-                ci_none=ci_is_none(self._ci_root(repo)),
+                ci_none=self._ci_none(repo),
             )
             out[pr.number] = LivePr(
                 number=pr.number, state="OPEN", draft=pr.is_draft, head=pr.head_oid,
@@ -1485,8 +1572,10 @@ class _Driver:
         self, facts: Facts, closing: list[Batch], repos: dict[str, str]
     ) -> frozenset[str]:
         """The close-out items the runners already hold live, so a kill between the
-        dispatch and its event never starts a second session (§B step 2). A runner's
-        preflight refusal is reported once and exits 2."""
+        dispatch and its event never starts a second session (§B step 2). Only the
+        close-outs that are due are probed (review rg-10): a runner that cannot start
+        one now must not stop a merge or a dispatch. A runner's preflight refusal is
+        reported once and exits 2."""
         from fr_dispatch.work_item import WorkItem
 
         found: set[str] = set()
@@ -1514,19 +1603,21 @@ class _Driver:
 
     def _launch(self, facts: Facts, batch: Batch, repo: str) -> Launch:
         try:
-            return resolve_launch(
-                batch, facts.config_for(repo), orchestrator=_orchestrator(self.path_of(repo))
+            return resolve_launch(  # the clone's models.yaml, as dispatch_batch reads it (rg-8)
+                batch, facts.config_for(repo), orchestrator=_orchestrator(self.checkout(repo).path)
             ).launch
         except TriageError as exc:
             _fail(str(exc))
 
     # ------------------------------------------------------------------- execute
 
-    def run_pass(self) -> tuple[bool, bool]:
+    def run_pass(self) -> tuple[bool, Summary, list[str]]:
         """One pass: re-collect, decide, act (with --yes) or print the plan.
-        Returns (acted, done)."""
+        Returns whether it acted, the settled summary, and the blocked batch ids."""
         recollect(self.scope, self.target)
         _, facts, judgements = _load_state(self.scope, self.target)
+        self._ci, self._unlanded, self._held = {}, set(), 0
+        self.failed_write = False
         snap = self.snapshot(facts, judgements, _now())
         plan = drive_pass(snap)
         acted = False
@@ -1538,10 +1629,11 @@ class _Driver:
             outcome, did, in_flight = self._act(action, facts, in_flight)
             acted = acted or did
             _say(action_line(action, outcome))
-        _say(summary_line(plan.summary))
+        summary = settle(plan.summary, unlanded=len(self._unlanded), held=self._held)
+        _say(summary_line(summary))
         if not self.yes:
             _say("nothing done; re-run with --yes to act")
-        return acted, plan.summary.done
+        return acted, summary, [a.batch for a in plan.actions if a.kind == "blocked"]
 
     def _act(self, action: Action, facts: Facts, in_flight: int) -> tuple[str, bool, int]:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
@@ -1559,8 +1651,17 @@ class _Driver:
             outcome, did = self._close_out(action, facts, judgements, batch, repo)
             return outcome, did, in_flight
         if action.kind == "archive":
-            return self._archive(action, facts, repo), True, in_flight
+            return self._archive(action, facts, judgements, batch, repo), True, in_flight
+        waits = sorted(d for d in batch.after if d in self._unlanded)
+        if waits:  # the pass planned this dispatch on a merge that did not land (rg-1)
+            self._held += 1
+            return (
+                f"held: waits on {', '.join(waits)}, whose merge did not land this pass",
+                False,
+                in_flight,
+            )
         if in_flight >= self.max_inflight:  # a planned merge did not land this pass
+            self._held += 1
             return "held: the in-flight cap is reached", False, in_flight
         with console.capture():  # dispatch_batch's own plan: one line per action here
             dispatch_batch(
@@ -1595,18 +1696,36 @@ class _Driver:
             for e in pr_open_queue(judgements.batches, facts, judgements.issues)
             if e.batch.id == batch.id
         ]
+        self._unlanded.add(batch.id)  # until the forge says it merged
         try:
             slots, _ = plan_queue(ctx, entries)
             if not slots:
-                return f"PR #{action.pr} is already merged", False, in_flight
+                self._unlanded.discard(batch.id)
+                return f"PR #{action.pr} is already merged", False, in_flight - 1
+            if slots[0].head != action.head:  # pinned to the head whose checks were judged
+                return (
+                    f"held: PR #{action.pr} head moved from {action.head[:12]} to "
+                    f"{slots[0].head[:12]} since its checks were judged; it is judged "
+                    "again next pass",
+                    False,
+                    in_flight,
+                )
             attempt = merge_ready(ctx, slots[0], None)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except MergeStopError as exc:
-            _fail(f"merge {batch.id} stopped: {exc}", code=1)
+            # A refusal ends neither the loop nor the pass (rg-4): it is reported in
+            # full once per batch, head and reason, and `--once` exits 1 on it.
+            self.failed_write = True
+            key = f"{batch.id}\0{action.head}\0{exc}"
+            if key in self.reported:
+                return f"stopped again at {action.head[:12]} (reported above)", False, in_flight
+            self.reported.add(key)
+            return f"stopped: {exc}", False, in_flight
         except TriageError as exc:
             _fail(str(exc))
-        if attempt.outcome == "merged":
+        if attempt.outcome in ("merged", "already-merged"):
+            self._unlanded.discard(batch.id)
             return f"merged PR #{action.pr} at {attempt.head[:12]}", True, in_flight - 1
         if attempt.outcome == "updated":
             return (
@@ -1675,7 +1794,9 @@ class _Driver:
         _write(self.target, _replace(judgements.batches, new), facts, read=judgements.batches)
         return new
 
-    def _archive(self, action: Action, facts: Facts, repo: str) -> str:
+    def _archive(
+        self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
+    ) -> str:
         ctx = self.merge_ctx(facts, repo)
         assert action.pr is not None
         try:
@@ -1684,6 +1805,14 @@ class _Driver:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             _fail(f"archive PR #{action.pr}: the forge refused the merge: {exc}", code=1)
+        # Record it: a PR attributed by its files alone is not found again once it
+        # left the open-PR list, and the batch would read as closing forever (rg-6).
+        event = closeout_event(batch)
+        if event is not None:
+            self._append(
+                judgements, facts, batch,
+                event.model_copy(update={"at": _now_after(batch), "archived": action.pr}),
+            )  # fmt: skip
         return f"merged archive PR #{action.pr}"
 
 
@@ -1777,13 +1906,21 @@ def batch_drive_command(
     )
     with drive_lock(target):
         while True:
-            acted, done = driver.run_pass()
+            acted, summary, blocked = driver.run_pass()
             if not yes:
                 return  # the plan of one pass, in loop mode too
             if once:
-                if acted or done:
+                if driver.failed_write:
+                    raise typer.Exit(code=1)
+                if acted or summary.done:
                     return
                 raise typer.Exit(code=3)
-            if done:
+            if summary.done:
                 return
+            if summary.waiting_on_operator:
+                _say(
+                    f"stopped: only blocked batches remain ({', '.join(blocked)}); "
+                    "they need the operator"
+                )
+                raise typer.Exit(code=3)
             _sleep(interval)
