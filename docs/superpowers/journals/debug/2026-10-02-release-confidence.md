@@ -12,3 +12,8 @@
 ### b280ddfd52c4 · root-cause · Version-dependent behaviour is checked against a version other than the one that will run it
 
 One class, three sites: the release checks the diff, not the code running at the bumped number (#854); plan create checks an explicit fr_version only against OLDER fr, never the installed one, and only after writing (#855.1); membership tests leave pre-release handling to the library default, which moved between packaging 25 and 26 (#855.2). #681 is the batch's chore lane (release-script hygiene), not this cause; the brief batched it knowingly.
+
+<!-- fr:journal kind=ruled-out scope=debug id=f31ec21494d1 created=2026-10-02T16:46:33+00:00 -->
+### f31ec21494d1 · ruled-out · A curated version-sensitive test subset for the release job
+
+The issue offered 'the suite, or a fast subset'. Rejected: a hand-picked subset is a literal list that goes stale as the code moves, the exact class of the <5.0.0 ceiling. The full suite costs ~10 min per release (4 CI shards x 2-3 min); release.yml gets budget_seconds: 900 in .github/ci-budget.yaml instead.
