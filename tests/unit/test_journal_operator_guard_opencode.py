@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit.opencode_fixture import opencode_env, shifted
 from tests.unit import test_journal_cmd as jc
+from tests.unit.opencode_fixture import opencode_env, shifted
 from tests.unit.test_journal_cmd import _init_repo, _journal_file
 
 # Referenced through the module so pytest does not collect the class twice.
