@@ -179,3 +179,6 @@ True, but not caused by this change.
 ### sr-14-resolved · finding [out-of-scope] · resolves sr-14: Verified-correct claims: soft point, single-repo --repo today, no schema clash
 
 Informational; no change needed.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-wave-driver-p2 created=2026-10-02T19:00:19+00:00 -->
+### phase-split-2026-10-02-wave-driver-p2 · decision · ask: the driver is its own ask (R2-R8, R13, R14) after the schema ask of phase 1
