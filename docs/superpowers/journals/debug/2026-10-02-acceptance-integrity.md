@@ -9,3 +9,8 @@ Reproduced in-process: a matrix whose `rows:` items are flush-left (`- id:`, PyY
 ### 2bd438baedc7 · hypothesis · The batch does not share one root cause
 
 Investigation of the 8 members finds at least five independent causes, each in a different place: (1) #470 render_row_block hardcodes a 2-space item indent (edit.py); (2) #531 split_ref carries the #L fragment through and check.py strips it for existence only — no anchor validation exists; (3) #769 set_status_cmd's commit subject is always '{old} → {new}' (acceptance_cmd.py:486); (4) #655 record engine _check_drops never compares drops against additions, while the CLI does (acceptance_cmd.py:443); (5) #654/#656 wording + missing test on _refuse_unknown_levels/merge_levels; (6) #663/#676 are matrix-data chores, not code. They share a SURFACE (the acceptance edit helpers), not a cause. Per the brief's debugging rule, stopping to ask before fixing any.
+
+<!-- fr:journal kind=ruled-out scope=debug id=829530044400 created=2026-10-02T18:29:28+00:00 -->
+### 829530044400 · ruled-out · One root cause for the batch
+
+Ruled out: the members share a surface (the acceptance edit helpers), not a cause. Operator chose to fix all in one PR, each with its own failing test, and chose name anchors (not a line-target tripwire) for #531.
