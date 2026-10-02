@@ -432,6 +432,34 @@ def orchestrator_model(env: Mapping[str, str]) -> str | None:
     return None
 
 
+def subagent_model(env: Mapping[str, str], session: str | None, agent_id: str) -> str | None:
+    """The model subagent `agent_id` of `session` ran on — the `message.model`
+    of its last real assistant message — or `None` when that cannot be
+    observed (gh#637).
+
+    The counterpart of `orchestrator_model` for a DISPATCHED unit. `advance`
+    records the tier binding for a dispatch before anything runs; a dispatch
+    sent without a model argument runs on the orchestrator's model instead,
+    and the binding then names a model that never ran. The transcript is the
+    only witness: the `agent-<id>.meta.json` companion carries no model.
+    Paired by `attribute_dispatches`' exact tool_use id (`witness_transcript`),
+    so a foreign agent file is never read. Claude Code only; never raises."""
+    try:
+        if detect_harness(env) != ClaudeCodeReader.harness:
+            return None
+        transcript = claude_code_session(env, session)
+        found = witness_transcript(transcript, agent_id) if transcript is not None else None
+        records = _read_records(found) if isinstance(found, Path) else None
+    except (OSError, HarnessError):
+        return None
+    models = [
+        first["message"].get("model")
+        for first, _usage, _blocks in message_groups(records or [])
+        if _is_real_model(first["message"].get("model"))
+    ]
+    return models[-1] if models else None
+
+
 QUESTION_TOOL = "AskUserQuestion"
 """Claude Code's operator-question tool — the one `operator_answered_since`
 looks for. Named once, here, beside the only reader that knows its records."""

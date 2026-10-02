@@ -3171,8 +3171,51 @@ def _close_on_resolve(
                 "model": model if model is not None else open_record.model,
             }
         )
+    open_record = _observed_model(open_record, key)
     record = units.with_last_attempt_replaced(record, key, open_record)
     return _with_step(state, owner_id, _close_dispatch(record, key, outcome))
+
+
+def _observed_model(attempt: UnitAttempt, key: str) -> UnitAttempt:
+    """`attempt` carrying the model its subagent's transcript says RAN (gh#637).
+
+    `advance` wrote the tier binding for a dispatched attempt — what SHOULD
+    run. Resolve is the first point that knows the agent id, so the transcript
+    can now say what DID: a dispatch sent without a model argument runs on
+    the orchestrator's model, and the binding then named a model that never
+    ran (run 2026-09-26-fix-624: haiku/sonnet recorded, opus throughout).
+    Observed beats bound and beats reported, as `orchestrator_model` already
+    does for the orchestrator's own units; a difference is said aloud, never
+    blocked. Unobservable leaves the attempt as it was — an absence is not
+    a mismatch."""
+    from fr.run.telemetry import subagent_model
+
+    if attempt.agent is None or attempt.agent_type is None:
+        return attempt
+    observed = subagent_model(os.environ, attempt.session, attempt.agent)
+    if observed is None or observed == attempt.model:
+        return attempt
+    if attempt.model is not None and _model_family(observed) != _model_family(attempt.model):
+        err_console.print(
+            f"[yellow]{key}: agent {attempt.agent} ran on {observed}, but the cursor "
+            f"recorded {attempt.model}. fr records what ran. If the tier's binding was "
+            "meant, pass that model in the dispatch.[/yellow]",
+            soft_wrap=True,
+        )
+    return attempt.model_copy(update={"model": observed})
+
+
+_MODEL_DATE = re.compile(r"-\d{8}$")
+
+
+def _model_family(model: str) -> str:
+    """`model` without a context-window suffix or a trailing snapshot date, so
+    a binding's `claude-haiku-4-5` and a transcript's
+    `claude-haiku-4-5-20251001` compare equal: the dispatch honoured the
+    binding, and a warning would be noise (review of gh#637)."""
+    from fr.usage.readers.claude_code import normalize_model
+
+    return _MODEL_DATE.sub("", normalize_model(model))
 
 
 def _build_member_brief(
