@@ -384,6 +384,7 @@ class Batch(_Strict):
     ids: list[str] = Field(min_length=1)
     rationale: str = ""
     order: int | None = None
+    wave: int | None = None
     bump: Bump = "patch"
     skill: BatchSkill = "goal"
     launch: Launch = Launch()
