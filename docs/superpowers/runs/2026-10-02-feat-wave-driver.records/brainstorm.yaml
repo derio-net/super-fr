@@ -1,0 +1,106 @@
+schema_version: 7
+run: 2026-10-02-feat-wave-driver
+step: brainstorm
+outcome: done
+journal:
+- kind: decision
+  id: scope-all-three
+  title: One spec for the driver, the board views and the page skills
+  body: 'Operator: the three parts fit together, so one spec.'
+- kind: decision
+  id: verb-drive-loop-once
+  title: fr triage batch drive, a loop with --once
+  body: Operator chose the foreground loop plus a single-pass --once over a single-pass-only verb or a daemon.
+- kind: decision
+  id: closeout-through-runner
+  title: Close-out starts through the runner
+  body: Operator chose a runner work item (unit run, payload kind closeout) over printing the command or running the steps in-process.
+- kind: decision
+  id: waves-as-batch-fields
+  title: wave and after are fields on each batch
+  body: Operator chose fields on Batch (judgements schema 3) over a separate plan file; the in-flight cap is a drive flag.
+- kind: decision
+  id: post-merge-config
+  title: The host install is a per-repo post_merge command
+  body: 'Raised by the operator: without install.sh the harnesses on the host run a stale fr. The driver runs a post_merge command from .fr/triage.yaml once per merge, before the close-out.'
+- kind: decision
+  id: scope-groups-and-views
+  title: Comma-separated repo groups; three new board views; nothing removed
+  body: 'Operator asked for a comma-separated repo list as one group, wave tabs with the latest preselected, and a reorganisation around what changed and what to do next. Operator: the same three artifacts,
+    nothing removed, just reordered, plus three new views (Since last report, Needs you now, Next up).'
+resolves: []
+acceptance:
+- id: batch-waves-and-deps
+  capability: triage-batch-drive
+  acceptance: An operator can give a triage batch a wave and prerequisite batches, and invalid prerequisites (unknown, self, cycle) are refused before anything is written
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R1
+  status: not-implemented
+- id: batch-drive-pass
+  capability: triage-batch-drive
+  acceptance: fr triage batch drive keeps at most N batches dispatched and unmerged, dispatches in wave order, skips a batch whose prerequisites are unmerged, resumes after a stop without repeating work,
+    and signals done, waiting or refused through its exit code
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R2
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R3
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R6
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R7
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R13
+  status: not-implemented
+- id: batch-drive-operator-boundary
+  capability: triage-batch-drive
+  acceptance: The driver merges a batch PR only when it is not a draft and every check is green, and never readies, approves or un-drafts a PR
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R4
+  status: not-implemented
+- id: batch-closeout-after-merge
+  capability: triage-batch-drive
+  acceptance: After a batch merges, the driver runs the repo's post_merge command, starts the close-out session through the batch's runner, and merges the archive PR when it is ready and green
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R14
+  status: not-implemented
+- id: triage-scope-groups
+  capability: triage-scope
+  acceptance: fr triage collects, ranks, renders and drives a comma-separated group of repos, owners allowed to differ, as one board
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R15
+  status: not-implemented
+- id: board-decision-views
+  capability: triage-views
+  acceptance: The triage board opens with what changed since the last report, what needs the operator now, and what would start next, shows waves as tabs with the latest preselected, and keeps every section
+    it showed before
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R9
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R16
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R17
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R18
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R19
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R20
+  status: not-implemented
+- id: defect-origins-page
+  capability: triage-views
+  acceptance: A defect-origins page is generated from classified issues, with counts by category and source, filings per day and time to fix
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R10
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
+  status: not-implemented
+- id: architecture-page
+  capability: triage-views
+  acceptance: The architecture page's measured sections are generated from the triage state and the repo, and authored fragments are spliced in in manifest order
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R11
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
+  status: not-implemented
+- id: wave-driven-live
+  capability: triage-batch-drive
+  acceptance: A real wave of two batches runs from dispatch to a merged archive PR with no hand step but the operator readying the PRs
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R3
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R4
+  - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
+  status: not-implemented
+  verify: post-merge
+emitted:
+  spec: docs/superpowers/specs/2026-10-02-wave-driver-design.md
+evidence: {}
