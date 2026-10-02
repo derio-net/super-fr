@@ -41,6 +41,12 @@ if fr_isolation_decide_edit "$file"; then
   exit 0
 fi
 
+drift=$(fr_isolation_drift_reason "$file")
+if [ -n "$drift" ]; then
+  jq -n --arg reason "fr-isolation: edit to \`$file\` blocked — $drift (#553)" \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
+  exit 0
+fi
 jq -n --arg reason "fr-isolation: edit to \`$file\` blocked — not inside an fr-isolation workspace. Enter isolation (\`fr isolation up\` / fr-goal) and edit in the worktree; or add the path to \`.fr-isolation-allow\`; or set FR_BASE_OK=1 for a deliberate base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)." \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
 exit 0

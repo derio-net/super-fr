@@ -145,3 +145,16 @@ def test_external_marker_with_container_evidence_allows_end_to_end(tmp_path: Pat
     if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
         pytest.skip("container evidence file present on host — negative case can't hold")
     assert blocked(run_hook(payload(repo / "src.py"), env={"KUBERNETES_SERVICE_HOST": ""}))
+
+
+def test_drifted_checkout_blocks_naming_both_branches(tmp_path: Path) -> None:
+    # super-fr#553: the marker records feat/x; HEAD moved to another branch.
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)  # writes the feat/x marker
+    subprocess.run(["git", "-C", str(wt), "checkout", "-q", "-b", "chore/elsewhere"], check=True)
+
+    result = run_hook(payload(wt / "src.py"))
+
+    assert blocked(result)
+    reason = json.loads(result.stdout)["reason"]
+    assert "feat/x" in reason and "fr isolation up --branch chore/elsewhere" in reason
