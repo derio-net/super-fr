@@ -110,4 +110,5 @@ Post-merge, operator-driven:
 
 ## Implementation Plans
 
-To be written by `fr-plan` after spec review.
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
