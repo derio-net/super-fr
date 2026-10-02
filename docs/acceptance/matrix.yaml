@@ -5627,9 +5627,16 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+      - super-fr:tests/unit/test_fr_herdr_closeout.py
+      - super-fr:tests/unit/test_triage_gitseam.py
+    status: ci
+    notes: post_merge runs once after the release commit (or the ten-minute fallback)
+      and before the close-out, a failure holds it; the close-out goes through the runner
+      as a run item with payload.kind closeout and --run/--branch; an attributed archive
+      PR is merged; herdr characterised unchanged.
   - id: wave-driven-live
     capability: triage-batch-drive
     acceptance: A real wave of two batches runs from dispatch to a merged archive PR
