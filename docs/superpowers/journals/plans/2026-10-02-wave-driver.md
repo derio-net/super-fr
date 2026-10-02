@@ -84,3 +84,90 @@ Phase 2's driver pass owns the check rule; not caused by phase 1.
 ### rf-5-resolved · finding [out-of-scope] · resolves rf-5: fr-triage SKILL.md still says to create judgements.yaml with schema: 2 (phase 1)
 
 Skill and mirror updates ship with the phase that changes the driver; harmless until then.
+
+<!-- fr:journal kind=decision scope=plan id=p2-post-merge-runs-in-gitseam created=2026-10-02T19:49:22+00:00 phase=2 -->
+### p2-post-merge-runs-in-gitseam · decision · post_merge's process starts in gitseam.Checkout.run_command, invoked by the command layer (phase 2)
+
+Spec §B says the post_merge subprocess runs in the command layer, but the §3.J tripwire
+(test_forge_adapter_batch_ops.py) bans `subprocess` from every batch module, triage_batch_cmd.py
+included. The command decides and invokes; the process starts in gitseam, the one module allowed
+subprocess, next to the other repo-declared commands (version.set/relock). Still an argument list,
+never a shell. fast_forward() and released_since() live there too.
+
+<!-- fr:journal kind=decision scope=plan id=p2-default-driven-set created=2026-10-02T19:49:22+00:00 phase=2 -->
+### p2-default-driven-set · decision · drive drives the batches with a wave by default (else all), or the ids named (phase 2)
+
+Without a selection rule the driver would start close-outs for every batch merged before it existed
+(no closeout event). The default set is every batch with a `wave` (all batches when none has one);
+positional ids name others. The in-flight cap counts the driven set.
+
+<!-- fr:journal kind=decision scope=plan id=p2-r4-all-checks-from-facts created=2026-10-02T19:49:22+00:00 phase=2 -->
+### p2-r4-all-checks-from-facts · decision · R4's "else all checks" reads the re-collected statusCheckRollup counts (phase 2)
+
+checks_verdict uses GhClient.pr_required_checks when the branch has any required check, else the
+collected PullRequest.checks counts (facts are re-collected at the start of every pass), and a repo
+whose services resolve `ci none` is green on non-draft alone. No new GhClient method. merge_ready
+still gates on required checks only, so the driver only calls it when its own verdict is green.
+
+<!-- fr:journal kind=decision scope=plan id=p2-warned-and-exit-codes created=2026-10-02T19:49:22+00:00 phase=2 -->
+### p2-warned-and-exit-codes · decision · failing-CI warnings are remembered per driver process; plan mode exits 0; a merge stop exits 1 (phase 2)
+
+R6 forbids driver state on disk, so the set of head shas already warned lives in the running driver
+(loop mode warns once per head; each --once invocation reports it again). Without --yes the verb
+prints one pass's plan and exits 0 in either mode. A MergeStopError while merging (a forge refusal,
+a conflict) exits 1, as `batch merge` does; a runner preflight refusal exits 2 on first sight.
+
+<!-- fr:journal kind=decision scope=plan id=p2-closeout-event-fields created=2026-10-02T19:49:22+00:00 phase=2 -->
+### p2-closeout-event-fields · decision · CloseoutEvent gains optional run and archive (the housekeeping branch) (phase 2)
+
+The command reads the run cursor on the fast-forwarded default branch at close-out time; recording
+the run id and the housekeeping branch (fr.run.closeout's naming, mirrored in batch_drive) lets the
+archive step attribute and detect the merged archive PR exactly (list_prs_by_head on that head), since
+facts.prs carries only open unlinked PRs.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-collect-last-dispatch created=2026-10-02T19:49:22+00:00 phase=2 -->
+### p2-collect-last-dispatch · discovery · collect only looked up batch PRs whose LAST event was a dispatch (phase 2)
+
+With post_merge and closeout events after the dispatch, collect would stop looking a merged batch's
+PR up by head. collect_into (shared by `collect` and every driver pass) now uses the last dispatch
+unless the batch's last event is a cancel.
+
+<!-- fr:journal kind=decision scope=plan id=p2-herdr-tests-location created=2026-10-02T19:49:22+00:00 phase=2 -->
+### p2-herdr-tests-location · decision · herdr characterisation tests live in tests/unit/test_fr_herdr_closeout.py; fr_herdr unchanged (phase 2)
+
+pytest's testpaths is `tests` and no packages/fr-herdr/tests exists, so the characterisation tests
+sit beside test_fr_herdr_runner.py. They pass against unchanged fr_herdr: agent_name is stable and
+distinct per batch, can_dispatch ignores payload.kind, dispatch takes --cwd and --model from the payload.
+
+<!-- fr:journal kind=finding scope=plan id=p2-closeout-state-archived-unreachable created=2026-10-02T19:49:22+00:00 phase=2 state=open review_scope=out -->
+### p2-closeout-state-archived-unreachable · finding [open] (reviewer: out of scope) · batch list's close-out column can never read `archived` (phase 2)
+
+closeout_state (phase 1) looks for a MERGED chore/closeout-<branch> PR in facts.prs, but collect stores
+only OPEN unlinked PRs there, and the housekeeping branch is usually chore/archive-<plan>. The driver
+does not depend on it (it reads list_prs_by_head on the recorded archive head); the list column needs
+the same forge read or a recorded archive event.
+
+<!-- fr:journal kind=finding scope=plan id=rf-4-resolved-2 created=2026-10-02T19:49:22+00:00 phase=2 state=fixed resolves=rf-4 -->
+### rf-4-resolved-2 · finding [fixed] · resolves rf-4: merge_ready uses required checks only, not the R4 'else all checks / ci none' rule (phase 2)
+
+the driver applies R4 itself: checks_verdict (required checks, else the collected all-checks counts, ci none on non-draft alone) gates every merge before merge_ready is called
+
+<!-- fr:journal kind=finding scope=plan id=rf-5-resolved-2 created=2026-10-02T19:49:22+00:00 phase=2 state=fixed resolves=rf-5 -->
+### rf-5-resolved-2 · finding [fixed] · resolves rf-5: fr-triage SKILL.md still says to create judgements.yaml with schema: 2 (phase 2)
+
+fr-triage SKILL.md now teaches schema 3 (first-run line and the example), pinned by test_the_skill_teaches_schema_3_and_batches
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-02T19:49:22+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+red-only task: the pass's tests, no production code to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-02T19:49:22+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+cleaned in the green commits: closeout_event and housekeeping_branch are shared by the pure pass and the command, and action_line/summary_line are the one formatter for --once and loop mode; nothing duplicated is left
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-02T19:49:22+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+the lock is one context manager and kill-safety needed no new code beyond the recorded post_merge/closeout events the pass already reads; nothing to fold
