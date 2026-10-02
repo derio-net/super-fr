@@ -30,3 +30,8 @@ The issue offered 'the suite, or a fast subset'. Rejected: a hand-picked subset 
 ### major-release-stale-own-plans · finding [open] · Simulated 6.0.0 release: the new gate refuses it (2 red); the repo's own live plans go stale at a major
 
 Ran the real _run_staged_tests on a scratch clone bumped to 6.0.0: probe reported 6.0.0, 7607 passed, 2 failed in test_install_opencode_agents.py. Both pass at the clone's pre-bump commit. Cause: live plans carry <6.0.0, the migration gate refuses install.sh's 'fr models apply' (cwd = repo), '|| true' hides it. A separate root cause from this batch, so not fixed here; filed as super-fr#861. The tree stayed clean after the full suite (git status empty), which settles the review's retry/untracked-files question.
+
+<!-- fr:journal kind=finding scope=debug id=major-release-stale-own-plans-resolved created=2026-10-02T17:06:35+00:00 state=open resolves=major-release-stale-own-plans tracked_by=derio-net/super-fr#861 -->
+### major-release-stale-own-plans-resolved · finding [deferred → derio-net/super-fr#861] · resolves major-release-stale-own-plans: Simulated 6.0.0 release: the new gate refuses it (2 red); the repo's own live plans go stale at a major
+
+A separate root cause from the batch (the batch rules say stop rather than widen). The new gate already refuses such a release, so the gap cannot ship unnoticed.
