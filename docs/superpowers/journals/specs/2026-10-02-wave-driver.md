@@ -191,3 +191,6 @@ Informational; no change needed.
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-wave-driver-p5 created=2026-10-02T19:00:21+00:00 -->
 ### phase-split-2026-10-02-wave-driver-p5 · decision · ask: defect origins is its own ask (R10): a new engine, verbs and skill
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-wave-driver-p6 created=2026-10-02T19:00:22+00:00 -->
+### phase-split-2026-10-02-wave-driver-p6 · decision · ask: the architecture page is its own ask (R11, R12) and reuses the snapshots and tabs
