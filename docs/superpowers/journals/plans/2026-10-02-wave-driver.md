@@ -698,3 +698,60 @@ Fixed in 92ec0f54 with tests.
 ### rj-7-resolved · finding [out-of-scope] · resolves rj-7: Closing-PR and issue lists rely on newest-first 1000-row pages (phase 5)
 
 Matches the existing collector's limit handling; not caused by this change.
+
+<!-- fr:journal kind=decision scope=plan id=p6-timeline-from-stored-snapshots created=2026-10-02T22:06:44+00:00 phase=6 -->
+### p6-timeline-from-stored-snapshots · decision · The timeline steps through the stored snapshots, one tab per snapshot (phase 6)
+
+A snapshot stores figures, batch stages, issue and PR states, not the rendered sections, so
+"the measured sections as they were" is each snapshot's figures table (with change against the
+snapshot before), its batch stages and the diff to the previous one. It reuses `tabs()` (newest
+preselected, every step shown without JavaScript). `snapshot.stored_snapshots` reads the stamp
+from the file name; unreadable files are skipped as absent. Zero snapshots says none; one says
+there is nothing to step through yet.
+
+<!-- fr:journal kind=decision scope=plan id=p6-r20-groups-manifest-orders-within created=2026-10-02T22:06:44+00:00 phase=6 -->
+### p6-r20-groups-manifest-orders-within · decision · R20 fixes the groups; the manifest orders within them (phase 6)
+
+The timeline is always first and is not a manifest entry. Generated sections then follow in
+manifest order and the authored fragments after them in manifest order, whatever the interleaving
+in the file. No manifest means every generated section and no fragments. A name that is neither a
+generated section nor a plain file name directly inside `architecture/` is refused (exit 2), so a
+manifest cannot reach outside the directory.
+
+<!-- fr:journal kind=decision scope=plan id=p6-fragment-rules created=2026-10-02T22:06:44+00:00 phase=6 -->
+### p6-fragment-rules · decision · Fragments are parsed strictly; scripts and document elements are refused (phase 6)
+
+Well-formed means every non-void element is closed in order (optional end tags such as an
+unclosed `<li>` are refused too). `<script>`, `<html>`, `<head>`, `<body>` and `<title>` are
+refused: the page keeps one script element (a constant) and its own real title. Beyond the
+spec's "well-formed", stated here so the skill can say it. A manifest entry with no file is
+reported on stderr and as a note on the page, exit 0; a malformed one is exit 2 with nothing written.
+
+<!-- fr:journal kind=decision scope=plan id=p6-missing-is-a-dash created=2026-10-02T22:06:44+00:00 phase=6 -->
+### p6-missing-is-a-dash · decision · A measurement that cannot be taken, or that matched no file, is a dash (phase 6)
+
+An unresolvable ref, a glob matching no file at that ref, or no git checkout at all gives no
+figure (an em dash and a warning), never 0. A subsystem that genuinely did not exist at its
+then_ref therefore reads as a dash with its commit still named in the other column.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-checkout-option created=2026-10-02T22:06:44+00:00 phase=6 -->
+### p6-checkout-option · discovery · The verb takes --checkout and --now-ref (phase 6)
+
+Measuring needs a clone, which `fr triage` scope options do not name, so the command takes
+`--checkout` (default the current toplevel, via the existing Checkout.at) and `--now-ref`
+(default HEAD). Git processes start only in gitseam (new Checkout.short_rev and files_at).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-10-02T22:06:44+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+red-only task: tests, no production code to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t2 created=2026-10-02T22:06:44+00:00 phase=6 -->
+### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
+
+nothing beyond sharing the page shell: the page already builds on components.TOKENS_CSS/GUTTER_CSS/TABS_CSS/tabs and the origins chart and chips, which gained public aliases (filings_chart, origin_counts) instead of copies
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t3 created=2026-10-02T22:06:44+00:00 phase=6 -->
+### no-refactor-p6-t3 · discovery · no-refactor-because P6.T3 (phase 6)
+
+acceptance row, gates and mirrors only: no production code to clean
