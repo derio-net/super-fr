@@ -28,9 +28,8 @@ Stages (`backlog`, `blocked`, `in-progress`, `pr-draft`, `pr-ready`, `merged`, `
 
 ## The loop (a re-run of it is the sync)
 
-1. **Collect.** `fr triage collect --repo OWNER/REPO` (or `--org OWNER`). If it warns that the **PR list** hit
-   its limit, re-run once with `--pr-limit 1000`; if it still warns, go on and say so in your report. An
-   issue- or repo-list warning has no flag: go on, and say rows may be missing.
+1. **Collect.** `fr triage collect --repo OWNER/REPO` (or `--org OWNER`). If the **PR list** hit its limit, re-run
+   once with `--pr-limit 1000`, then go on and report it; for an issue- or repo-list warning, say rows may be missing.
 2. **Check.** `fr triage check --repo OWNER/REPO [--json]` prints six sets and always exits 0:
    - **unranked** / **unranked PRs**: open, with no judgement. Your work queue (PRs: see below).
    - **settled**: judged, now closed or merged. Report what shipped; keep the judgement.
@@ -40,17 +39,15 @@ Stages (`backlog`, `blocked`, `in-progress`, `pr-draft`, `pr-ready`, `merged`, `
      access): **never prune on it**. "Judged after the last collect" means collect again; not-found is a deleted
      issue or typo'd number: confirm with `gh issue view`, then fix the number or recommend removing it.
    - **stale dispatch**: a batch dispatch with no PR after `stale_dispatch_days`. Report it.
-3. **Judge the unranked.** Read each from `facts.json` (bodies stop at 2,000 characters; use `gh issue view`
-   when cut off) and the code; on a first run, create the file with `schema: 2` and your `tiers` first. Compare
-   every new issue against ALL judgements.
+3. **Judge the unranked.** Read each from `facts.json` (bodies stop at 2,000 characters; `gh issue view` when cut
+   off) and the code; a first run creates the file with `schema: 3` and `tiers`. Compare against ALL judgements.
 4. **Render.** `fr triage render --repo OWNER/REPO --open` writes and opens `triage.html`; unranked issues come first.
 5. **Batch.** Propose groups of judged issues to ship as one run and one PR (`fr triage batch suggest` is input,
    never the answer); create the accepted ones with `fr triage batch create <id> --title T --issue KEY...`.
 
-Open PRs are triaged in the same loop: `check` reports unranked PRs alongside unranked issues. Each carries an
-intent anchor (closing issue, then spec, then debug journal, else `unanchored`) with CI/merge badges. Judge the
-diff against the anchor — `delivers | partial | drift | unanchored` plus one line in `delivery_note`. Shallow by
-design: never a code review.
+Open PRs are triaged in the same loop: `check` reports unranked PRs too. Each carries an intent anchor (closing
+issue, then spec, then debug journal, else `unanchored`) with CI/merge badges. Judge the diff against the anchor —
+`delivers | partial | drift | unanchored` plus one line in `delivery_note`. Shallow by design: never a code review.
 
 To sync later, run the same loop. `check` names exactly what arrived, shipped or could not be found since the last triage, so a refresh costs the delta, not the backlog.
 
@@ -59,7 +56,7 @@ To sync later, run the same loop. `check` names exactly what arrived, shipped or
 This file is your whole interface, and `fr triage --help` does not document it:
 
 ```yaml
-schema: 2
+schema: 3
 ranked_at: 2026-09-21
 tiers:                      # every tier an issue names must be declared here
   - n: 1
@@ -79,17 +76,22 @@ patterns:
 batches:                    # written by the `batch` verbs; judged keys, one repo, one open batch
   - id: merged-trust        # a slug: [a-z][a-z0-9-]{0,39}
     title: "Stop trusting MERGED for local teardown"
-    ids: ["super-fr#435"]   # optional: rationale, order, bump (patch|minor|major), skill (goal|debug), launch
+    ids: ["super-fr#435"]   # optional: rationale, order, wave, after, bump (patch|minor|major), skill, launch
 ```
 
-Keep this block style and quote every title, description, detail, note and body: a `: ` inside unquoted text, or
-a leading `-`, breaks the file. Set `ranked_at` to today whenever you add or change a judgement; the board shows
-it. Keys are case-insensitive, so two keys differing only by case are refused as a conflict. `detail`, `note`
-and pattern `body` interpret exactly two inline forms, `` `code` `` and `**bold**`; everything else is shown as
-literal text. **Schema 2:** schema 1 still loads (as zero batches); the first batch write upgrades it. The engine
-appends each batch's `events:` (`dispatch`, `cancel`): never write them; its stage is derived like an issue's.
-`batch dispatch` runs a batch as `/fr-goal` or `/fr-debugging` (its `skill`), on the launch model else the harness's
-orchestrator binding, and marks its issues taken; `batch merge` merges batch PRs in order; `batch cancel` withdraws one.
+Keep this block style and quote every title, description, detail, note and body: a `: ` inside unquoted text, or a
+leading `-`, breaks the file. Set `ranked_at` to today whenever you change a judgement. Keys are case-insensitive (two
+differing only by case conflict). `detail`, `note` and pattern `body` interpret only `` `code` `` and `**bold**`.
+**Schema 3:** schemas 1 and 2 still load; the first batch write upgrades the file. The engine appends each batch's
+`events:` (`dispatch`, `cancel`, `post_merge`, `closeout`): never write them; its stage is derived. `batch create|edit
+--wave N --after ID` set a wave and dependencies (an unknown id, self or a cycle is refused); only a `merged`
+dependency is met, and a cancelled, abandoned or partial one blocks. `batch dispatch` runs a batch as `/fr-goal` or
+`/fr-debugging` (its `skill`) on the launch model, else the harness's orchestrator binding, and marks its issues
+taken; `batch merge` merges batch PRs in order; `batch cancel` withdraws one. **The driver:** `fr triage batch drive`
+runs the waved batches (or those named) to completion: each pass merges every green non-draft batch PR (readying one
+stays the operator's), closes out each merged batch through its runner after the repo's `post_merge` argument list,
+merges its archive PR, and dispatches by wave up to `--max-inflight`. `--once` exits 0 acted or done, 3 waiting, 2
+refused; `--checkout REPO=PATH` names each clone; a second driver on the state directory is refused.
 
 ## The shape of a judgement
 
@@ -103,18 +105,15 @@ orchestrator binding, and marks its issues taken; `batch merge` merges batch PRs
 4. **Hunt duplicates and batches.** Same predicate, same file, same sentence: link duplicates in `note`, and
    name the batch when issues share a subsystem. A shared root cause across three or more issues becomes a
    `patterns` entry.
-5. **Forge actions are unrun commands.** A close, a dedupe or a relabel is written as the exact `gh` command in
-   `note` or in your report, for the operator to run. Never act on the forge unasked.
-   `batch dispatch|merge|cancel` act only with `--yes` (without it they print the plan); pass `--yes` only
-   when the operator asked for that action in this session.
+5. **Forge actions are unrun commands.** A close, a dedupe or a relabel is the exact `gh` command in `note` or your
+   report, for the operator to run. `batch dispatch|merge|cancel|drive` act only with `--yes` (without it they print
+   the plan); pass `--yes` only when the operator asked for that action in this session.
 
 ## Report back
 
-After render, tell the operator the board's path and the delta: newly judged, settled,
-orphaned/unreachable, and the handful of `gh` commands you recommend. The board holds the ranking.
+After render, give the board's path and the delta (newly judged, settled, orphaned/unreachable) and the `gh` commands you recommend.
 
 ## Privacy
 
 The state directory is outside every repo on purpose. When the scope is outside the operator's own org, keep its
-facts, judgements and board local — never into a commit, PR, journal or issue
-(`.claude/rules/third-party-privacy.md`).
+facts, judgements and board local — never in a commit, PR, journal or issue (`.claude/rules/third-party-privacy.md`).
