@@ -5571,3 +5571,104 @@ rows:
     status: ci
     notes: Record chain reaches 7 hop by hop through the frozen RecordV6; delegated
       dropped; unconfirmed left byte-identical and reported; RecordV6 source pinned.
+  - id: batch-waves-and-deps
+    capability: triage-batch-drive
+    acceptance: An operator can give a triage batch a wave and prerequisite batches,
+      and invalid prerequisites (unknown, self, cycle) are refused before anything is
+      written
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: batch-drive-pass
+    capability: triage-batch-drive
+    acceptance: fr triage batch drive keeps at most N batches dispatched and unmerged,
+      dispatches in wave order, skips a batch whose prerequisites are unmerged, resumes
+      after a stop without repeating work, and signals done, waiting or refused through
+      its exit code
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: batch-drive-operator-boundary
+    capability: triage-batch-drive
+    acceptance: The driver merges a batch PR only when it is not a draft and every check
+      is green, and never readies, approves or un-drafts a PR
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: batch-closeout-after-merge
+    capability: triage-batch-drive
+    acceptance: After a batch merges, the driver runs the repo's post_merge command,
+      starts the close-out session through the batch's runner, and merges the archive
+      PR when it is ready and green
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-driven-live
+    capability: triage-batch-drive
+    acceptance: A real wave of two batches runs from dispatch to a merged archive PR
+      with no hand step but the operator readying the PRs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
+  - id: triage-scope-groups
+    capability: triage-scope
+    acceptance: fr triage collects, ranks, renders and drives a comma-separated group
+      of repos, owners allowed to differ, as one board
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: board-decision-views
+    capability: triage-views
+    acceptance: The triage board opens with what changed since the last report, what
+      needs the operator now, and what would start next, shows waves as tabs with the
+      latest preselected, and keeps every section it showed before
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R16
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R18
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R19
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R20
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: defect-origins-page
+    capability: triage-views
+    acceptance: A defect-origins page is generated from classified issues, with counts
+      by category and source, filings per day and time to fix
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: architecture-page
+    capability: triage-views
+    acceptance: The architecture page's measured sections are generated from the triage
+      state and the repo, and authored fragments are spliced in in manifest order
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''

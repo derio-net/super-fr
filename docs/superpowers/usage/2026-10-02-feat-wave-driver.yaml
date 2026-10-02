@@ -1,0 +1,56 @@
+schema_version: 1
+run: 2026-10-02-feat-wave-driver
+captures:
+- host: h-859790e2
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-02T18:54:09+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 12cefec0-8bfd-4945-9a41-9fef359abbef
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 2132
+        cache_write: 5947931
+        cache_read: 336678377
+        output: 720667
+        usd: 147.41569620000018
+        usd_source: exact
+      claude-sonnet-5-5:
+        input: 368
+        cache_write: 1307454
+        cache_read: 38763196
+        output: 197953
+        usd: 6.478674200000002
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.00106
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 19.783426975303406
+        turns: 142
+      other:
+        usd: 117.23612821532382
+        turns: 866
+      paperwork:
+        usd: 16.87587520937294
+        turns: 138
+    steps:
+      (outside run):
+        usd: 153.0073726171059
+        turns: 1095
+      brainstorm:
+        usd: 0.8880577828942814
+        turns: 31
+    briefs:
+      toolu_016VsborF9AFafSkuDY467Jd: 685
+      toolu_01TBQrR3TN9iMmDTvxMBzNkw: 685
+      a4b4bc45c3cb892bc: 3982
+      ad45f1d1aafb3c7d5: 2009
