@@ -86,7 +86,7 @@ if TYPE_CHECKING:
 
     from fr.record.model import QuestionRounds, VisualEvidence
     from fr.run.telemetry import Round
-from fr.run.provenance import agent_cleared_gates, gates
+from fr.run.provenance import cleared_gates, gates
 from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.types import PHASE_TIERS
@@ -6227,13 +6227,19 @@ def check_cmd(
     record = state.steps.get(state.cursor)
     step_state = record.state if record is not None else "unknown"
     console.print(f"{state.run}: cursor={state.cursor} ({step_state})")
-    for gate in agent_cleared_gates(state):
+    for gate in cleared_gates(state):
+        # An observed operator answer is the gate working — nothing to report.
+        # An agent clearance, or an operator answer fr only has the caller's
+        # word for (R11, p3-r2), is reported in the sentence `gates` prints.
+        if gate.by_agent:
+            line = _agent_clearance(gate.unobserved)
+        elif gate.unobserved:
+            line = _operator_answer(unobserved=True)
+        else:
+            continue
         # soft_wrap: this line is read for the step id it names, and rich
         # would fold a long id across a line break at a narrow width.
-        console.print(
-            f"{gate.step}: operator gate {_agent_clearance(gate.unobserved)}",
-            soft_wrap=True,
-        )
+        console.print(f"{gate.step}: operator gate {line}", soft_wrap=True)
     open_dispatches = _open_dispatches(state)
     for step_id, key, held in open_dispatches:
         console.print(
@@ -6277,6 +6283,12 @@ def _agent_clearance(unobserved: bool) -> str:
     return "cleared by the agent (answered_by: agent) — no operator answered it"
 
 
+def _operator_answer(unobserved: bool) -> str:
+    """One sentence for an `operator` answer, shared by `check` and `gates`
+    (R11, p3-r2): an unobserved one is the caller's claim, and says so."""
+    return "answered by the operator" + (", as claimed — unobserved" if unobserved else "")
+
+
 @run_app.command("gates")
 def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """Every `gate: operator` step this run's manifest declares, and who
@@ -6314,8 +6326,7 @@ def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             )
         elif status.outcome == "recorded":
             console.print(
-                f"{status.step}: operator gate answered by the operator"
-                + (", as claimed — unobserved" if status.unobserved else ""),
+                f"{status.step}: operator gate {_operator_answer(status.unobserved)}",
                 soft_wrap=True,
             )
         else:

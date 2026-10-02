@@ -121,9 +121,13 @@ def test_a_claimed_operator_on_an_unobserved_gate_says_so(tmp_path: Path) -> Non
     shipped = tmp_path / "shipped"
     _clear_cli_gate(repo, shipped, "--answered-by", "operator")
 
-    result = _invoke(repo, shipped, ["run", "gates", "r1"])
-
-    assert "answered by the operator, as claimed — unobserved" in _squash(result.output)
+    # p3-r2: `check` reports it too, in the same sentence `gates` uses.
+    for verb in ("check", "gates"):
+        result = _invoke(repo, shipped, ["run", verb, "r1"])
+        assert result.exit_code == 0, result.output
+        out = _squash(result.output)
+        expected = "brainstorm: operator gate answered by the operator, as claimed — unobserved"
+        assert expected in out, verb
 
 
 def test_an_observed_agent_keeps_no_operator_answered_it(tmp_path: Path) -> None:
