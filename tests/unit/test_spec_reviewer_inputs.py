@@ -33,6 +33,4 @@ def test_the_reviewer_agent_says_no_step_record_is_an_input() -> None:
 
 def test_fr_goal_dispatches_the_reviewer_with_the_spec_and_journal_only() -> None:
     text = _squash(SKILL.read_text())
-    assert (
-        "with the spec and spec-journal paths — only those: no step record is an input" in text
-    )
+    assert "with the spec and spec-journal paths — only those: no step record is an input" in text

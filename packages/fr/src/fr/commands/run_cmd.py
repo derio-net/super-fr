@@ -1262,7 +1262,11 @@ def _gate_provenance(
     observed = None if rounds is None else bool(rounds)
     if observed is True and not no_questions:
         assert rounds is not None
-        refusal = question_rounds_refusal(rounds, questions)
+        # gh#761: standalone fr-brainstorming asks one question per turn, so
+        # every question is a round to the transcript; the cap is fr-goal's.
+        refusal = (
+            None if state.driver == "standalone" else question_rounds_refusal(rounds, questions)
+        )
         if refusal is not None:
             err_console.print(f"{step_id}: {refusal}", style="red", markup=False, soft_wrap=True)
             raise typer.Exit(2)
@@ -3704,6 +3708,12 @@ def start_cmd(
     harness: str = typer.Option(
         "unknown", "--harness", help="claude | hermes | opencode | unknown (with --session)."
     ),
+    driver: str | None = typer.Option(
+        None,
+        "--driver",
+        help="`standalone` when standalone fr-brainstorming starts the run: its operator "
+        "gate is not held to fr-goal's two-round cap (gh#761). Omit under /fr-goal.",
+    ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
 
@@ -3715,6 +3725,13 @@ def start_cmd(
     The shape is resolved BEFORE isolation is ensured, so a typo'd shape name
     fails without provisioning a worktree or starting a container.
     """
+    if driver not in (None, "standalone"):
+        err_console.print(
+            f"[red]--driver {driver!r}: the only driver is `standalone` (omit it when "
+            "/fr-goal drives the run)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     repo_root = resolve_repo_root()
     try:
         manifest = resolve_workflow(workflow, repo_root)
@@ -3832,6 +3849,7 @@ def start_cmd(
         started=_now(),
         cursor=manifest.steps[0].id,
         steps=steps,
+        driver="standalone" if driver == "standalone" else None,
     )
     _save_run_state(workspace, state)
     console.print(f"started run {rid} ({state.workflow}) — cursor: {state.cursor}")
