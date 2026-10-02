@@ -236,7 +236,7 @@ def _cost(repo_root: Path, state: RunState) -> str:
     # gh#680: `deliver` renders this before its own capture, so the file holds
     # only what the last capture on this host saw — fold a live reading over it.
     entries, _replayed, _ignored = effective_entries(
-        live_usage(repo_root, state, "deliver", os.environ, usage)
+        live_usage(repo_root, state, "deliver", os.environ, usage, ambient=True)
     )
     summary = summarize(entries, list(state.steps))
     note = ""

@@ -450,7 +450,11 @@ def _capture_usage(
     from fr.usage.file import usage_path
 
     _remember(usage_path(repo_root, state.run))
-    path = capture(repo_root, state, at, os.environ, require_sessions=require_sessions)
+    # `ambient=True`: a step resolve's caller is the run's orchestrator, so its
+    # own session is evidence (spec 2026-10-02-opencode-observe-2 §C).
+    path = capture(
+        repo_root, state, at, os.environ, ambient=True, require_sessions=require_sessions
+    )
     if path is not None:
         _note_record_write(repo_root, path)
 
@@ -4210,6 +4214,13 @@ def cost_cmd(
         f"sessions: {summary.read} read, {summary.unavailable} unavailable; {note}",
         soft_wrap=True,
     )
+    # Each unavailable session's reason, so `--recompute` reads exactly as the
+    # committed file does (`unavailable: no session found`, spec
+    # 2026-10-02-opencode-observe-2 §C).
+    for entry in entries:
+        if entry.unavailable is not None:
+            who = f"{entry.session}: " if entry.session else ""
+            console.print(f"  {who}unavailable: {entry.unavailable}", soft_wrap=True, markup=False)
 
 
 @run_app.command("advance")
