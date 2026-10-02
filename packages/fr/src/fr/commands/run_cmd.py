@@ -248,6 +248,21 @@ def _why_unobservable(what: str) -> str:
         harness = None
     if harness is None:
         return "no harness detected"
+    if harness == "opencode":
+        # OpenCode HAS a reader (`fr.run.observed`); what is missing is the
+        # session to read, or the database that holds it (#837 review p1-r5).
+        if not os.environ.get("FR_OPENCODE_SESSION_ID"):
+            return (
+                f"your harness (opencode) exported no session id to fr, so its {what} "
+                "cannot be read (FR_OPENCODE_SESSION_ID is unset: the super-fr OpenCode "
+                "plugin is missing or older than this release)"
+            )
+        return (
+            "the session your harness (opencode) exported (FR_OPENCODE_SESSION_ID) is not "
+            f"in the OpenCode database fr read, or that database could not be read, so its "
+            f"{what} cannot be read — check FR_OPENCODE_DB / XDG_DATA_HOME; the super-fr "
+            "OpenCode plugin exports the id"
+        )
     if harness != "claude-code":
         return f"fr has no transcript reader for {harness}'s {what}"
     return "no readable transcript for this session"
@@ -435,7 +450,11 @@ def _capture_usage(
     from fr.usage.file import usage_path
 
     _remember(usage_path(repo_root, state.run))
-    path = capture(repo_root, state, at, os.environ, require_sessions=require_sessions)
+    # `ambient=True`: a step resolve's caller is the run's orchestrator, so its
+    # own session is evidence (spec 2026-10-02-opencode-observe-2 §C).
+    path = capture(
+        repo_root, state, at, os.environ, ambient=True, require_sessions=require_sessions
+    )
     if path is not None:
         _note_record_write(repo_root, path)
 
@@ -2089,13 +2108,16 @@ def _verify_reviewer(
 
     A spec review (`target.phase is None`, 2026-09-24 spec §E) has no
     implementer to exclude — the spec's author is the orchestrator, which has
-    no agent id and so can never pass the dispatch check. On OpenCode and
-    Hermes there is no dispatch reader, so the id is recorded as claimed.
+    no agent id and so can never pass the dispatch check. Dispatches are read
+    through `fr.run.observed` — Claude Code's transcript, OpenCode's child
+    sessions (once the super-fr plugin exports the run session); on Hermes, or
+    wherever the session cannot be read, the id is recorded as claimed.
     When the step names its reviewer (`expected_agent`, spec-review's
     `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
-    is refused (review p4-f2) — qualified or bare spelling both match.
+    is refused (review p4-f2) — every spelling `agent_name` folds matches.
     """
-    from fr.run.telemetry import subagent_dispatch_since
+    from fr.run.observed import ChildDispatch, observed_session
+    from fr.run.telemetry import parse_timestamp
 
     phase = target.phase
     # The review unit's own holders are reviewers by construction: a reviewer
@@ -2121,8 +2143,17 @@ def _verify_reviewer(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    observed = subagent_dispatch_since(os.environ, agent_id, opened) if opened else None
-    if observed and observed.agent_type == PHASE_EXECUTOR_AGENT:
+    # Through the session protocol (spec 2026-10-02-opencode-observe-2 §A):
+    # the dispatch named by the id, among those since the review opened.
+    start = parse_timestamp(opened)
+    view = observed_session(os.environ) if start is not None else None
+    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    observed: ChildDispatch | Literal[False] | None = (
+        None
+        if dispatched is None
+        else next((d for d in dispatched if d.agent_id == agent_id), False)
+    )
+    if observed and _same_agent(observed.agent_type, PHASE_EXECUTOR_AGENT):
         # Review r1-11: a phase executor is an IMPLEMENTER by construction —
         # any phase's — so it is never the separate context a review needs.
         err_console.print(
@@ -2163,12 +2194,14 @@ def _verify_reviewer(
 
 
 def _same_agent(observed: str | None, expected: str) -> bool:
-    """`observed` is `expected`, in its plugin-qualified or bare spelling
-    (`super-fr:fr-spec-reviewer` / `fr-spec-reviewer`)."""
+    """`observed` is `expected`, in any spelling `fr.run.observed.agent_name`
+    folds: plugin-qualified or bare (`super-fr:fr-spec-reviewer` /
+    `fr-spec-reviewer`), and OpenCode's tiered name (`fr-spec-reviewer-hard`)."""
+    from fr.run.observed import agent_name
+
     if observed is None:
         return False
-    bare = expected.split(":", 1)[-1]
-    return observed in (expected, bare)
+    return agent_name(observed) == agent_name(expected)
 
 
 def _wrote_before(
@@ -2307,33 +2340,36 @@ def _log_witness(path: Path, data: bytes, repo_root: Path) -> str:
 def _phase_log_windows(
     path: Path, opened: str | None, holder: str | None
 ) -> list[tuple[_dt.datetime, _dt.datetime]] | str | Literal[False] | None:
-    """The run windows of the holder's commands that wrote `path` — read from
-    the holder's own transcript: the claimed agent's subagent transcript, or
-    the orchestrator's main thread when the unit ran inline (no holder).
+    """The run windows of the holder's commands that wrote `path` — read
+    through `fr.run.observed` from the holder's own session: the claimed
+    agent's child (a Claude Code subagent transcript, an OpenCode child
+    session), or the run session itself when the unit ran inline (no holder).
 
     `False` when this session dispatched no agent `holder` (a bogus or foreign
     id: refused, never unobserved); a `str` reason when nothing can be read —
-    including OpenCode and Hermes, which have no child-session reader today
-    (spec 2026-09-29-fr-goal-light-path §D, §E)."""
-    from fr.run.telemetry import _this_session, witness_transcript, wrote_since
+    including Hermes, which has no session reader (spec
+    2026-09-29-fr-goal-light-path §D, §E; 2026-10-02-opencode-observe-2 §A)."""
+    from fr.run.observed import observed_session
+    from fr.run.telemetry import parse_timestamp
 
     try:
         harness = detect_harness(os.environ)
     except HarnessError:
         harness = None
-    if harness in ("opencode", "hermes"):
+    if harness == "hermes":
         return f"fr has no child-session reader for {harness}, so a phase log is not witnessed"
-    session = _this_session(os.environ)
-    if session is None or opened is None:
-        return _why_unobservable("commands") if session is None else "the unit has no opening stamp"
-    found = witness_transcript(session, holder)
+    view = observed_session(os.environ)
+    start = parse_timestamp(opened)
+    if view is None or start is None:
+        return _why_unobservable("commands") if view is None else "the unit has no opening stamp"
+    found = view.child(holder) if holder is not None else view
     if found is None:
-        return f"the session transcript {session} could not be read"
+        return f"the session {view.session} could not be read"
     if found is False:
         return False
-    windows = wrote_since(found, path, opened, main_thread=holder is None)
+    windows = found.wrote_windows(path, start)
     if windows is None:
-        return f"the holder's transcript {found} could not be read"
+        return f"the holder's session {found.session} could not be read"
     return windows
 
 
@@ -3005,7 +3041,7 @@ def _open_dispatch(
     `blocked`, not `running`, so nothing was dispatched and there is nothing
     to hold.
     """
-    from fr.run.telemetry import ClaudeCodeReader, current_session, orchestrator_model
+    from fr.run.telemetry import SESSION_ID_ENVS, orchestrator_model, run_session
 
     record = state.steps[step_id]
     # Detected ONCE and both recorded and used (finding f8): the harness is
@@ -3043,11 +3079,16 @@ def _open_dispatch(
             # and never as zero. No hostname beside it: a missing session
             # directory already says "elsewhere".
             #
-            # Only when the harness fr runs under OWNS the session key
-            # (gh#537): the one key read is Claude Code's, and an OpenCode
-            # started from a Claude Code shell inherits it — recording it
-            # there named a session that never held this unit.
-            session=(current_session(os.environ) if harness == ClaudeCodeReader.harness else None),
+            # `current_session` reads only the key the detected harness OWNS
+            # (gh#537): an OpenCode started from a Claude Code shell inherits
+            # Claude Code's key, which names a session that never held this
+            # unit; OpenCode's own arrives through the super-fr plugin's
+            # `shell.env` export (spec 2026-10-02-opencode-observe-2 §B).
+            # `run_session` walks a child's id up to the run's. An UNDETECTED
+            # harness owns no key (review p1-r1): there `current_session`
+            # falls back to Claude Code's, which in gh#537's mixed shell is
+            # the inherited, stale one — record nothing, as main did.
+            session=(run_session(os.environ) if harness in SESSION_ID_ENVS else None),
         ),
     )
     return _with_step(state, step_id, new_record)
@@ -4267,6 +4308,13 @@ def cost_cmd(
         f"sessions: {summary.read} read, {summary.unavailable} unavailable; {note}",
         soft_wrap=True,
     )
+    # Each unavailable session's reason, so `--recompute` reads exactly as the
+    # committed file does (`unavailable: no session found`, spec
+    # 2026-10-02-opencode-observe-2 §C).
+    for entry in entries:
+        if entry.unavailable is not None:
+            who = f"{entry.session}: " if entry.session else ""
+            console.print(f"  {who}unavailable: {entry.unavailable}", soft_wrap=True, markup=False)
 
 
 @run_app.command("advance")

@@ -55,7 +55,7 @@ import datetime as _dt
 import json
 import os
 import re
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, TypeGuard
@@ -81,7 +81,20 @@ SESSION_ID_ENV = "CLAUDE_CODE_SESSION_ID"
 """Set in every Claude Code tool call. Verified live (2026-09-20) from inside
 a dispatched subagent: the value there is the ORCHESTRATOR's session id, which
 is exactly what this module needs — the orchestrator's file is where the
-dispatch tool_use ids live."""
+dispatch tool_use ids live. Claude Code's entry of `SESSION_ID_ENVS`, kept
+under its old name for importers."""
+
+OPENCODE_SESSION_ID_ENV = "FR_OPENCODE_SESSION_ID"
+"""Exported into every OpenCode `bash` call by the super-fr OpenCode plugin's
+`shell.env` hook (spec 2026-10-02-opencode-observe-2 §B): the id of the session
+that issued the command — a CHILD's id when a subagent runs it."""
+
+SESSION_ID_ENVS: Mapping[str, str] = {
+    "claude-code": SESSION_ID_ENV,
+    "opencode": OPENCODE_SESSION_ID_ENV,
+}
+"""The key each harness's session id arrives under, by `detect_harness` key.
+A harness absent here has no session fr can learn."""
 
 
 # --- 1. reading: a path in, numbers out ----------------------------------
@@ -241,15 +254,19 @@ def session_dir(session: Path) -> Path:
     return session.parent / name
 
 
-def tool_use_ids(session: Path) -> dict[str, _dt.datetime | None]:
+def tool_use_ids(
+    session: Path, records: list[dict[str, Any]] | None = None
+) -> dict[str, _dt.datetime | None]:
     """Every tool_use id in the orchestrator stream, with when it was issued.
 
     Indexed by id and NOT filtered by tool name. The pairing below is by id,
     which is unique and exact, so filtering on the dispatch tool's name would
     add nothing except a way to go silent the day that name changes (it has
-    already changed once, `Task` -> `Agent`).
+    already changed once, `Task` -> `Agent`). `records` are `session`'s,
+    already read — a caller holding them does not parse the file again.
     """
-    records = _read_records(session)
+    if records is None:
+        records = _read_records(session)
     if records is None:
         return {}
     found: dict[str, _dt.datetime | None] = {}
@@ -268,15 +285,18 @@ def _first_timestamp(path: Path) -> _dt.datetime | None:
     return None
 
 
-def attribute_dispatches(session: Path) -> list[Dispatch]:
+def attribute_dispatches(
+    session: Path, records: list[dict[str, Any]] | None = None
+) -> list[Dispatch]:
     """Every subagent transcript of `session` that THIS session dispatched.
 
     File-to-file, keyed on the metadata's `toolUseId`: an agent file whose id
     matches no tool_use in the orchestrator stream is not attributed at all.
     That is the whole difference between this and a glob over `subagents/`,
     and it is why an unrelated agent file cannot be charged to a unit here.
+    `records` are `session`'s own, when the caller already read them.
     """
-    known = tool_use_ids(session)
+    known = tool_use_ids(session, records)
     if not known:
         return []
     subagents = session_dir(session) / "subagents"
@@ -314,6 +334,75 @@ def attribute_dispatches(session: Path) -> list[Dispatch]:
     return dispatches
 
 
+def dispatch_results(records: list[dict[str, Any]]) -> dict[str, str]:
+    """`tool_use id -> text` of every main-thread `tool_result` in an
+    orchestrator stream: what the orchestrator RECEIVED for each call, its text
+    blocks joined by newlines (a plain-string content is taken whole). The
+    reading `ChildDispatch.returned` is built from (spec
+    2026-10-02-opencode-observe-2 §A) — not the subagent file's last text block,
+    which is a one-line handback stub."""
+    results: dict[str, str] = {}
+    for record in records:
+        if record.get("type") != "user" or record.get("isSidechain") is True:
+            continue
+        if _is_async_ack(record):
+            continue  # a backgrounded dispatch's launch ack is not what it returned
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if not (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_result"
+                and isinstance(block.get("tool_use_id"), str)
+            ):
+                continue
+            body = block.get("content")
+            if isinstance(body, str):
+                text = body
+            elif isinstance(body, list):
+                text = "\n".join(
+                    b["text"]
+                    for b in body
+                    if isinstance(b, Mapping)
+                    and b.get("type") == "text"
+                    and isinstance(b.get("text"), str)
+                )
+            else:
+                continue
+            results.setdefault(block["tool_use_id"], text)
+    return results
+
+
+HANDBACK_TOOL = "SubagentHandback"
+"""The tool a backgrounded Claude Code subagent reports through: its report is
+the `input.message` of its own final call (review p1-r3; shape in
+`tests/fixtures/transcripts/claude-code-session.NOTE.md`)."""
+
+
+def _is_async_ack(record: Mapping[str, Any]) -> bool:
+    """Is this `tool_result` record the launch ack of a backgrounded dispatch
+    (`toolUseResult.isAsync`, `status: async_launched`) or command
+    (`backgroundTaskId`), rather than what the call returned?"""
+    result = record.get("toolUseResult")
+    return isinstance(result, Mapping) and (
+        result.get("isAsync") is True
+        or result.get("status") == "async_launched"
+        or bool(result.get("backgroundTaskId"))
+    )
+
+
+def handback_message(records: list[dict[str, Any]]) -> str | None:
+    """The `input.message` of the LAST `HANDBACK_TOOL` call in a subagent's own
+    file, or `None` when it made none."""
+    found: str | None = None
+    for _, block in _tool_uses(records):
+        tool_input = block.get("input")
+        message = tool_input.get("message") if isinstance(tool_input, Mapping) else None
+        if block.get("name") == HANDBACK_TOOL and isinstance(message, str):
+            found = message
+    return found
+
+
 # --- 3. harness scoping --------------------------------------------------
 
 
@@ -330,12 +419,50 @@ def current_session(env: Mapping[str, str]) -> str | None:
     Derived from fr's own environment, the way `detect_harness` derives the
     harness — `fr run advance` records it on every attempt it opens, and
     `fr run status` compares against it, so the two must be one rule and not
-    two `env.get(...)` calls that can drift. One harness has a session concept
-    today, hence one key; an empty value is `None`, never the empty string,
-    because `"" == ""` would make two session-less processes "the same
-    session".
+    two `env.get(...)` calls that can drift. The key read is the one the
+    DETECTED harness owns (`SESSION_ID_ENVS`, gh#537): an OpenCode started
+    from a Claude Code shell inherits `CLAUDE_CODE_SESSION_ID`, which names a
+    session that never ran this process, so under OpenCode only OpenCode's
+    own key counts. With no harness detected the Claude Code key is read, as
+    it always was — only Claude Code sets it. An empty value is `None`, never
+    the empty string, because `"" == ""` would make two session-less
+    processes "the same session". Never raises: a mistyped `FR_HARNESS` is
+    `None`.
     """
-    return env.get(SESSION_ID_ENV) or None
+    try:
+        harness = detect_harness(env)
+    except HarnessError:
+        return None
+    return _session_under(env, harness)
+
+
+def _session_under(env: Mapping[str, str], harness: str | None) -> str | None:
+    """`current_session` for an already-detected `harness` — detection may run
+    `ps`, so `run_session` does it once (review p1-r2)."""
+    key = SESSION_ID_ENV if harness is None else SESSION_ID_ENVS.get(harness)
+    return (env.get(key) or None) if key else None
+
+
+def run_session(env: Mapping[str, str]) -> str | None:
+    """The RUN's session id — the one fr records on an attempt, binds a
+    workspace to, captures usage from and compares windows against (review
+    p1-r6). Claude Code's key already names the orchestrator's session from
+    inside a subagent, so there it is `current_session`. OpenCode's plugin
+    exports the CALLING session, a child's when a subagent runs the command,
+    so there it is walked up `parent_id` to the top-level session in the
+    database — the raw id when the database cannot say."""
+    try:
+        harness = detect_harness(env)
+    except HarnessError:
+        return None
+    session = _session_under(env, harness)
+    if session is None:
+        return None
+    if harness != OpenCodeReader.harness:
+        return session
+    from fr.run.observed import opencode_root
+
+    return opencode_root(OpenCodeReader().database(env), session)
 
 
 def dispatched_from_this_session(env: Mapping[str, str], session: str | None) -> bool:
@@ -347,7 +474,7 @@ def dispatched_from_this_session(env: Mapping[str, str], session: str | None) ->
     concept — does not get this session's window, and neither does a real
     session id compared against a process that has none.
     """
-    current = current_session(env)
+    current = run_session(env)
     return session is not None and current is not None and session == current
 
 
@@ -512,8 +639,10 @@ class Round:
 
 def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | None:
     """The ANSWERED question rounds of this session at or after `since`, in
-    order; `None` exactly where `operator_answered_since` is `None` (another
-    harness, no session id, no readable transcript).
+    order; `None` exactly where `operator_answered_since` is `None` (a harness
+    with no backend, no session id, no readable transcript). Read through
+    `fr.run.observed` (spec 2026-10-02-opencode-observe-2 §A): Claude Code's
+    transcript as below, OpenCode's `question` parts by the same round rule.
 
     Only main-thread (non-sidechain) assistant records stamped at or after
     `since` are walked. Consecutive `QUESTION_TOOL` tool_uses form one round —
@@ -523,43 +652,84 @@ def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | N
     calls has a `tool_result` whose `toolUseResult` carries a non-empty
     `answers` map; a round that was only declined is not returned.
     """
+    from fr.run.observed import observed_session
+
     start = parse_timestamp(since)
-    transcript = _this_session(env)
-    if start is None or transcript is None:
-        return None
+    view = observed_session(env) if start is not None else None
+    return None if start is None or view is None else view.answered_rounds(start)
+
+
+def answered_rounds_in(transcript: Path, start: _dt.datetime) -> list[Round] | None:
+    """`answered_rounds_since` over one transcript file — the Claude Code
+    backend of `fr.run.observed`."""
     records = _read_records(transcript)
     if records is None:
         return None
-    groups: list[tuple[list[str], list[str]]] = []  # (tool_use ids, question texts)
+
+    def events() -> Iterator[RoundEvent]:
+        for record in records:
+            if record.get("type") != "assistant" or record.get("isSidechain") is True:
+                continue
+            stamp = parse_timestamp(record.get("timestamp"))
+            message = record.get("message")
+            content = message.get("content") if isinstance(message, Mapping) else None
+            for block in content if isinstance(content, list) else ():
+                if not isinstance(block, Mapping) or block.get("type") != "tool_use":
+                    continue
+                name = str(block.get("name"))
+                block_id = block.get("id")
+                yield (
+                    name,
+                    block_id if isinstance(block_id, str) else None,
+                    _question_texts(block.get("input")) if name == QUESTION_TOOL else [],
+                    stamp,
+                )
+
+    return question_rounds(
+        events(),
+        start,
+        question_tool=QUESTION_TOOL,
+        neutral=ROUND_NEUTRAL_TOOLS,
+        answered=lambda: _answered_ids(records),
+    )
+
+
+RoundEvent = tuple[str, str | None, list[str], _dt.datetime | None]
+"""One tool call as the round rule reads it: `(tool name, call id, question
+texts, when issued)` — the whole of what either harness's reader hands over."""
+
+
+def question_rounds(
+    events: Iterable[RoundEvent],
+    start: _dt.datetime,
+    *,
+    question_tool: str,
+    neutral: frozenset[str],
+    answered: Callable[[], set[str]],
+) -> list[Round]:
+    """THE round rule (spec 2026-09-26 §3.C), shared by the Claude Code and
+    OpenCode readers so the two cannot drift: consecutive `question_tool` calls
+    issued at or after `start` form one round; a `neutral` call does not break
+    it; any other tool call closes it. A round counts when any of its call ids
+    is in `answered()` (called only when some round exists)."""
+    groups: list[tuple[list[str], list[str]]] = []  # (call ids, question texts)
     open_group: tuple[list[str], list[str]] | None = None
-    for record in records:
-        if record.get("type") != "assistant" or record.get("isSidechain") is True:
+    for tool, call_id, texts, stamp in events:
+        if stamp is None or stamp < start or tool in neutral:
             continue
-        stamp = parse_timestamp(record.get("timestamp"))
-        if stamp is None or stamp < start:
+        if tool != question_tool or call_id is None:
+            open_group = None
             continue
-        message = record.get("message")
-        content = message.get("content") if isinstance(message, Mapping) else None
-        for block in content if isinstance(content, list) else ():
-            if not isinstance(block, Mapping) or block.get("type") != "tool_use":
-                continue
-            if block.get("name") in ROUND_NEUTRAL_TOOLS:
-                continue
-            if block.get("name") != QUESTION_TOOL or not isinstance(block.get("id"), str):
-                open_group = None
-                continue
-            if open_group is None:
-                open_group = ([], [])
-                groups.append(open_group)
-            open_group[0].append(block["id"])
-            open_group[1].extend(_question_texts(block.get("input")))
+        if open_group is None:
+            open_group = ([], [])
+            groups.append(open_group)
+        open_group[0].append(call_id)
+        open_group[1].extend(texts)
     if not groups:
         return []
-    answered = _answered_ids(records)
+    done = answered()
     return [
-        Round(question_texts=tuple(texts))
-        for ids, texts in groups
-        if any(i in answered for i in ids)
+        Round(question_texts=tuple(texts)) for ids, texts in groups if any(i in done for i in ids)
     ]
 
 
@@ -600,8 +770,9 @@ def _answered_ids(records: list[dict[str, Any]]) -> set[str]:
 
 def _this_session(env: Mapping[str, str]) -> Path | None:
     """This process's own Claude Code session transcript, or `None` when there
-    is none to read — another harness included. The shared front half of the
-    three "did X happen in this session?" predicates."""
+    is none to read — another harness included. Private to the Claude Code
+    reading (`subagent_dispatch_since`): every gate goes through
+    `fr.run.observed.observed_session` instead."""
     if detect_harness(env) != ClaudeCodeReader.harness:
         return None
     try:
@@ -1052,7 +1223,10 @@ def orchestrator_wrote_since(
     these windows, which ties the bytes on disk to that command.
 
     Claude Code reads this session's transcript; OpenCode reads its session
-    database (`_opencode_wrote_since`, gh#638). Any other harness is `None`.
+    database (gh#638) — scoped to the run session when the super-fr plugin
+    exported it, else every top-level session active since (spec
+    2026-10-02-opencode-observe-2 §A, `fr.run.observed.opencode_unscoped`). Both
+    go through `fr.run.observed`. Any other harness is `None`.
 
     BE HONEST ABOUT THE LIMIT (review r1-1): this proves the orchestrator
     produced the log, in this session, during delivery. It cannot prove the
@@ -1060,13 +1234,20 @@ def orchestrator_wrote_since(
     not the drift this gate closes (relaying someone else's green), and
     closing it needs a per-repo test-runner declaration fr does not have.
     """
+    from fr.run.observed import observed_session, opencode_unscoped
+
     start = parse_timestamp(since)
-    if start is not None and detect_harness(env) == OpenCodeReader.harness:
-        return _opencode_wrote_since(env, log, start)
-    session = _this_session(env)
-    if start is None or session is None:
+    if start is None:
         return None
-    return wrote_since(session, log, since, main_thread=True)
+    opencode = detect_harness(env) == OpenCodeReader.harness
+    view = observed_session(env)
+    if view is not None:
+        return view.wrote_windows(log, start)
+    if opencode and current_session(env):
+        # A session id the database does not hold: the wrong database
+        # (gh#740, review p1-r2) — never widened to every top-level session.
+        return None
+    return opencode_unscoped(env).wrote_windows(log, start) if opencode else None
 
 
 def wrote_since(
@@ -1256,102 +1437,6 @@ def _ms_to_dt(value: object) -> _dt.datetime | None:
     if not isinstance(value, int | float) or isinstance(value, bool):
         return None
     return _dt.datetime.fromtimestamp(value / 1000, tz=_dt.UTC)
-
-
-def _opencode_wrote_since(
-    env: Mapping[str, str], log: Path, start: _dt.datetime
-) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
-    """`orchestrator_wrote_since` over OpenCode's database (gh#638): the
-    `(start, end)` of every `bash` tool part that WROTE `log`, started at or
-    after `start`, completed with exit 0 — in a TOP-LEVEL session, the
-    orchestrator's (a `task` subagent is a child session, `parent_id` set).
-    `None` when the database cannot be read.
-
-    Before this, OpenCode had no reader, so the gate degraded to "a fresh,
-    non-empty file" and accepted a log the agent composed with its edit tool.
-
-    No OpenCode session id reaches fr's environment, so this cannot pin THE
-    session the way the Claude Code reader does: any top-level session active
-    since the unit opened counts. Weaker than one session, still proof that an
-    orchestrator's own shell command produced the bytes — which is the drift
-    this gate closes. Exit 0 stands in for Claude Code's `is_error`, which a
-    non-zero exit sets.
-
-    A READABLE database is not necessarily the right one (gh#740: OpenCode ran
-    under `XDG_DATA_HOME`, fr read `~/.local/share`). The orchestrator calling
-    this is itself mid-`bash`, a part of its session, so a database that
-    recorded no part at all since the unit opened cannot hold it: that is
-    `None` (unobserved), never `[]`, which refuses as "nobody wrote it".
-    Activity is read from `part`, not `session.time_updated`, which nothing
-    shows OpenCode bumps per part.
-    """
-    import sqlite3
-    from contextlib import closing
-
-    from fr.usage.readers.opencode import open_ro
-
-    since_ms = int(start.timestamp() * 1000)
-    try:
-        with closing(open_ro(OpenCodeReader().database(env))) as con:
-            (active,) = con.execute(
-                "SELECT EXISTS (SELECT 1 FROM part WHERE time_updated >= ?)", (since_ms,)
-            ).fetchone()
-            rows = con.execute(
-                "SELECT p.data FROM part p JOIN session s ON s.id = p.session_id "
-                "WHERE s.parent_id IS NULL AND p.time_updated >= ?",
-                (since_ms,),
-            ).fetchall()
-    except sqlite3.Error:
-        return None
-    if not active:
-        return None
-    calls: list[_BashCall] = []
-    for (raw,) in rows:
-        try:
-            part = json.loads(raw) if isinstance(raw, str | bytes) else None
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(part, Mapping) or part.get("tool") != "bash":
-            continue
-        state = part.get("state")
-        state = state if isinstance(state, Mapping) else {}
-        tool_input = state.get("input")
-        command = tool_input.get("command") if isinstance(tool_input, Mapping) else None
-        meta = state.get("metadata")
-        meta = meta if isinstance(meta, Mapping) else {}
-        output = state.get("output")
-        output = output if isinstance(output, str) else meta.get("output")
-        times = state.get("time")
-        times = times if isinstance(times, Mapping) else {}
-        began, ended = _ms_to_dt(times.get("start")), _ms_to_dt(times.get("end"))
-        if (
-            state.get("status") == "completed"
-            and isinstance(command, str)
-            and began is not None
-            and ended is not None
-            and began >= start
-        ):
-            exit_code = meta.get("exit")
-            calls.append(
-                _BashCall(
-                    began,
-                    ended,
-                    command,
-                    exit_code if type(exit_code) is int else None,
-                    output if isinstance(output, str) else "",
-                )
-            )
-    calls.sort(key=lambda c: (c.began, c.ended))
-    windows: list[tuple[_dt.datetime, _dt.datetime]] = []
-    for call in calls:
-        if call.exit_code != 0 or not _writes(call.command, log):
-            continue
-        windows.append((call.began, call.ended))
-        if _detaches(call.command):
-            seen = _seen_exit(call, calls, log)
-            if seen is not None:
-                windows.append((call.began, seen))
-    return windows
 
 
 @dataclass(frozen=True)

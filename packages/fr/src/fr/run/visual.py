@@ -432,10 +432,13 @@ def _unobservable(env: Mapping[str, str]) -> str:
 
 
 def _same_agent(observed: str | None, expected: str) -> bool:
-    """`observed` is `expected`, plugin-qualified or bare, on either side."""
+    """`observed` is `expected`, plugin-qualified or bare and with or without
+    an OpenCode tier suffix, on either side (`fr.run.observed.agent_name`)."""
+    from fr.run.observed import agent_name
+
     if observed is None:
         return False
-    return observed.split(":", 1)[-1] == expected.split(":", 1)[-1]
+    return agent_name(observed) == agent_name(expected)
 
 
 _Witness = tuple[Path | Literal[False, "unclaimed"], str, str | None]
@@ -454,9 +457,11 @@ def _witness_file(
     file `False` for an agent id this session never dispatched, `"unclaimed"`
     for a dispatched holder unit nobody claimed — or, when it cannot be read,
     the reason (a `str`)."""
-    from fr.run.telemetry import _this_session, attribute_dispatches, witness_transcript
+    from fr.run.observed import ClaudeCodeSession, observed_session
+    from fr.run.telemetry import attribute_dispatches, witness_transcript
 
-    session = _this_session(env)
+    view = observed_session(env)
+    session = view.transcript if isinstance(view, ClaudeCodeSession) else None
     if session is None:
         return _unobservable(env)
     if role == "reviewer":

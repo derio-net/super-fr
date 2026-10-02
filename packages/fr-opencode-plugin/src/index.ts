@@ -22,14 +22,20 @@
 // once), so it has no marker; parity.yaml's `dispatch-holder-identity` row
 // describes it.
 //
+// `shell.env` carries the run-session export (spec 2026-10-02-opencode-observe-2
+// §B) — see ./session.ts. It ports no hook script (Claude Code exports its own
+// session key natively), so it has no marker; parity.yaml's
+// `run-session-identity` row describes it.
+//
 // EXPORT DISCIPLINE: OpenCode calls every export of a plugin module as a
-// plugin. Helpers live in ./marker, ./idle and ./claim; this file exports
-// plugins only.
+// plugin. Helpers live in ./marker, ./idle, ./claim and ./session; this file
+// exports plugins only.
 import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { createClaimHandler, sharedClaimed } from "./claim";
 import { createIdleHandler, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
+import { createShellEnvHandler } from "./session";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
 // path-carrying tools fail closed. Bash is separately declared as ungated in
@@ -135,6 +141,7 @@ export async function FrIsolationRequired(ctx: {
       directory: ctx.worktree || ctx.directory,
       actedOn: sharedActedOn(),
     }),
+    "shell.env": createShellEnvHandler(),
     "tool.execute.before": async (input: { tool: string; sessionID?: string }, output: unknown) => {
       // Before the gate, and whatever the tool: a child's first call of ANY
       // kind is the earliest moment it can be named. Never throws.

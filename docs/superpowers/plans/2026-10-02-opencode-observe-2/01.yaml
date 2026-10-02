@@ -1,0 +1,163 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Session protocol, both backends, the OpenCode run session, and positive-evidence
+    attribution (walking skeleton)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - session-observer-protocol
+  - opencode-run-session
+  - run-cost-positive-attribution
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/observed.py
+  - packages/fr/src/fr/run/telemetry.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/journal/operator.py
+  - packages/fr/src/fr/isolation/sessions.py
+  - packages/fr/src/fr/usage/capture.py
+  - packages/fr/src/fr/run/cost.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/archive.py
+  - packages/fr-opencode-plugin/src/session.ts
+  - packages/fr-opencode-plugin/src/index.ts
+  - packages/fr-opencode-plugin/test/*
+  - tests/fixtures/usage/opencode/*
+  - tests/fixtures/usage/NOTE.md
+  - tests/fixtures/transcripts/*
+  - tests/conftest.py
+  - tests/unit/opencode_fixture.py
+  - tests/unit/transcript_sessions.py
+  - tests/unit/test_run_observed*.py
+  - tests/unit/test_run_cost_cmd.py
+  - tests/unit/test_run_cli.py
+  - tests/unit/test_usage*.py
+  - tests/unit/test_run_tests_log*.py
+  - tests/unit/test_archive*.py
+  - .changes/feat-batch-opencode-observe-2.yaml
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: Smoke — the OpenCode run tree added to the fixture, a trivial protocol test,
+    CI green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: port the run tree from the salvage branch (`git show de7e8afb` on `origin/feat/batch-opencode-observe`: tests/fixtures/usage/opencode/build.py, tests/unit/opencode_fixture.py, tests/conftest.py hunk) — but ADD it beside the rows `main`'s build.py already has (spec §H), never replacing that file: new session ids (`ses_run`, `ses_rev`, `ses_gen1`, `ses_gen2`, `ses_exec`, `ses_other`) no existing assertion reads. In the run tree, `ses_gen1` returns a ```review-findings block (`p2a-r1 | in | x` / `p2a-r2 | out | y`), `ses_gen2` returns prose with no block, and `ses_rev` returns a plain YAML record (no input-coverage block — #851 removed it). Write tests/unit/test_run_observed_opencode.py::test_fixture_opens asserting `fr.run.observed.observed_session({"FR_HARNESS": "opencode", "FR_OPENCODE_DB": <fixture>, "FR_OPENCODE_SESSION_ID": "ses_run"})` is not None and `.session == "ses_run"`. `uv run pytest tests/unit/test_run_observed_opencode.py -q --no-cov` fails (no module).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: rebuild the fixture (`uv run --no-project python tests/fixtures/usage/opencode/build.py`), update tests/fixtures/usage/NOTE.md (run-tree rows, "shapes follow a live OpenCode 1.18.33 capture of 2026-09-29, all identities fictional", new sha256). Create packages/fr/src/fr/run/observed.py with `ObservedSession`, `ChildDispatch`, `agent_name()`, `observed_session(env, session=None)` returning a stub `OpenCodeSession`. Add `.changes/feat-batch-opencode-observe-2.yaml` (`bump: minor`, `summary: fr observes OpenCode sessions — the run session, each dispatched child and what it returned — so operator answers, reviewer ids and findings, screenshot reads and cost are verified on OpenCode; cost attribution needs positive evidence; Hermes edit gate declared partial.`). Green, and the existing consumers stay green unchanged: `uv run pytest tests/unit/test_usage_readers.py tests/unit/test_run_tests_log_opencode.py tests/unit/test_run_opencode_reader.py -q --no-cov`. Commit and push; CI green on this slice.
+- number: 2
+  title: Claude Code backend behind the protocol
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: port tests/unit/test_run_observed_claude_code.py, tests/unit/transcript_sessions.py and the transcript fixtures (claude-code-agent-launch-ack.jsonl, claude-code-subagent-handback.jsonl, the claude-code-session.NOTE.md hunk) from salvage commits ce2ed100 and 6549e2a1: the backend equals today's telemetry functions on the existing fixtures; `ChildDispatch.returned` is the parent's `tool_result` text paired by toolUseId, never the subagent handback stub, and a backgrounded dispatch returns the child's SubagentHandback, never the launch ack. Fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: port `ClaudeCodeSession` (ce2ed100, 6549e2a1) into observed.py, delegating to the existing telemetry functions (no behaviour change), parsing the transcript once. `current_session(env)` becomes per-harness (`claude-code` → `CLAUDE_CODE_SESSION_ID`, `opencode` → `FR_OPENCODE_SESSION_ID`, keyed by `detect_harness`); `SESSION_ID_ENV` stays the Claude Code constant for importers. Re-apply the telemetry.py hunks onto current main as fresh edits (do not cherry-pick). Green; `uv run pytest tests/ -q --no-cov -n auto -k "telemetry or transcript or session"` green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: `_this_session` becomes a private helper of the Claude Code backend; no gate imports it once Task 4 lands.
+- number: 3
+  title: OpenCode backend
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: port the OpenCode-backend tests from salvage 15bf72ad and 430ad284 into test_run_observed_opencode.py: one answered round across the `todowrite`, declined/pending excluded, question/header texts carried; `dispatches` with agent_type, `returned` = child's final text, `None` while running, the disagreeing-parent part skipped; `child("ses_nope") is False`; a session the db does not hold is unobserved (`None`), never `[]`; `first_read` per session; `first_shell_executing` in ses_run only; `wrote_windows` scoped to ses_run (ses_other refused) and `opencode_unscoped(env)` (no session id) returns both; a child id walks `parent_id` to ses_run; missing db → `None`; `agent_name("fr-phase-executor-hard") == agent_name("super-fr:fr-phase-executor") == "fr-phase-executor"`. Fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: port `OpenCodeSession` (15bf72ad, 430ad284) over `fr.usage.readers.opencode.open_ro`, `_opencode_wrote_since`'s logic into `wrote_windows` scoped by session, the shared round rule (one function the Claude Code reader uses too), `todowrite` round-neutral. Green; tests/unit/test_run_tests_log_opencode.py still green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: one place parses a part's `state` (status/input/metadata/time); the bash, read, question and task readers all go through it.
+- number: 4
+  title: Run session recorded on OpenCode; gates routed through the protocol; the
+    plugin export
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: port salvage b4c7d31a / 4deac77a / 78cbbccc / 0ddebddc tests into tests/unit/test_run_observed_resolve_opencode.py and test_run_cli.py: with `FR_HARNESS=opencode FR_OPENCODE_SESSION_ID=ses_gen1` (a child id) `advance` records `ses_run` on the attempt; an OpenCode process carrying a stale `CLAUDE_CODE_SESSION_ID` records only its own key (gh#537); a child's own `fr` command on that attempt is NOT "dispatched from another session" (spec §B, s7); the ambient binding (`isolation/sessions.py`) picks up the OpenCode session; the OpenCode unobservable wording names the missing session export. Also the phase `tests=` witness (spec §A, `_phase_log_windows` `run_cmd.py:2230`): a log written in the holder's child is witnessed, one written only by a sibling session is not, Hermes keeps the unobserved message. Fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: re-apply onto current main as fresh edits: `run_session(env)` walking `parent_id` (identity on Claude Code); `_open_dispatch`'s gh#537 guard (`run_cmd.py:2973`) records through `run_session` on any harness owning its key; `telemetry.dispatched_from_this_session` uses `run_session`; `_gate_provenance`, `_verify_reviewer`, `_verify_tests_log`/`_wrote_before`, `_phase_log_windows`, `journal/operator.py` call `observed_session`; `isolation/sessions.py` ambient binding via `run_session`. Green.
+  - id: P1.T4.S3
+    text: |-
+      RED→GREEN (plugin): port salvage de35d98e — packages/fr-opencode-plugin/src/session.ts (`shell.env`: sets `output.env.FR_OPENCODE_SESSION_ID` when `input.sessionID` is a non-empty string, swallows any exception, NO parity marker comment), wired in index.ts, test/session.test.ts. `cd packages/fr-opencode-plugin && bun test` green.
+- number: 5
+  title: Positive-evidence attribution (#848) and real OpenCode cost
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_run_cost_cmd.py (+ an archive capture test): `fr run cost <run> --recompute` with `CLAUDE_CODE_SESSION_ID` set to an unrelated fixture transcript, on a run whose attempts record no session, prints `unavailable: no session found` and none of that session's figures; the same run with an attempt session reads exactly that one; `fr archive`'s capture adds no ambient session; a step resolve's capture still adds its own session; `fr run cost` on the OpenCode fixture run (attempt session `ses_run`) prints real figures (port the salvage 4deac77a cost test). Fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN (spec §C): keyword-only `ambient: bool` with NO default on `usage.capture.candidates`, `build_capture`, `capture`, `live_usage`; the calling session (via `run_session`) is added only when `ambient=True`. Pass `True` at `_capture_usage`/`_capture_on_new_host` (`run_cmd.py:429-457`), the deliver capture (`:5194`) and `record/pr_body.py`'s `live_usage`; pass `False` in `run/cost.py:recompute_entries` and `archive.py:561`. `recompute_entries` appends the `NO_SESSION_FOUND` placeholder when there are no candidates; `fr run cost` prints each unavailable session's reason under its count line (`run_cmd.py:4175-4178`). Green; mypy clean on packages/fr/src.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: one helper builds the evidence-only candidate list; the ambient append is the single conditional on top of it.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-10-02T19:49:54+00:00'
+      note: null
+  completion:
+    at: '2026-10-02T19:49:54+00:00'
+    note: null
+    observed_prs: []
