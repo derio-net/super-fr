@@ -34,8 +34,10 @@ def verify_operator_claim(
     (`fr.run.telemetry.operator_answered_since`) with the same three outcomes:
     observed and answered → `None` (record); observed and not → raise
     `OperatorClaimRefusedError` (nothing written); not observable → the
-    advisory line to print, and the claim is recorded as stated. OpenCode and
-    Hermes have no question tool fr can read, so there it is always advisory.
+    advisory line to print, and the claim is recorded as stated. OpenCode is read
+    from its `question` parts (`fr.run.observed`) when the plugin exported the
+    session; Hermes has no question tool fr can read, so there it is always
+    advisory.
     """
     from fr.harness.detect import detect_harness
     from fr.harness.model import HarnessError
