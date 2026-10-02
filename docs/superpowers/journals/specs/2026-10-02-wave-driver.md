@@ -194,3 +194,6 @@ Informational; no change needed.
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-wave-driver-p6 created=2026-10-02T19:00:22+00:00 -->
 ### phase-split-2026-10-02-wave-driver-p6 · decision · ask: the architecture page is its own ask (R11, R12) and reuses the snapshots and tabs
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-02-wave-driver-p2 created=2026-10-02T19:00:22+00:00 -->
+### tier-2026-10-02-wave-driver-p2 · decision · hard: the driver changes the merge and dispatch path every batch relies on, and adds an unattended loop that merges PRs
