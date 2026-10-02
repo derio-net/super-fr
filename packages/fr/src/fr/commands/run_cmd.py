@@ -1804,10 +1804,24 @@ def _verified_evidence(
         verified["tests"] = _reuse_tests_witness(key, repo_root, state)
     elif "tests" in offered:
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
+    # Every DERIVED witness is evaluated, and every refusal printed, before the
+    # resolve is refused (gh#768): one environmental blocker (no fetchable
+    # remote) used to exit first and hide each witness declared after it.
+    refused: list[str] = []
+
+    def derive(name: str, witness: Callable[[], str]) -> None:
+        try:
+            verified[name] = witness()
+        except typer.Exit:
+            refused.append(name)
+
     if state_value == "done" and "proportionality" in step.evidence:
-        verified["proportionality"] = _proportionality_witness(key, repo_root, state)
+        derive("proportionality", lambda: _proportionality_witness(key, repo_root, state))
     if state_value == "done" and "single-phase" in step.evidence:
-        verified["single-phase"] = _single_phase_witness(key, repo_root, state, emitted or {})
+        derive(
+            "single-phase",
+            lambda: _single_phase_witness(key, repo_root, state, emitted or {}),
+        )
     derives = state_value == "done" and "findings" in step.evidence
     review_journal: tuple[str, list[JournalEntry]] | None = None
     if "review" in offered or derives:
@@ -1824,23 +1838,34 @@ def _verified_evidence(
             key, offered["review"], slug=slug, entries=entries, target=target, since=since
         )
     if state_value == "done" and "visual" in step.evidence:
-        verified["visual"] = _visual_witness(
-            key,
-            repo_root,
-            state,
-            step,
-            phase=phase,
-            entries=visual,
-            holder=holder or (attempt.agent if attempt is not None else None),
-            reviewer=offered.get("reviewer"),
-            since=since or (state.steps[step.id].at if step.id in state.steps else None),
-            dispatched_as=attempt.agent_type if attempt is not None else None,
+        derive(
+            "visual",
+            lambda: _visual_witness(
+                key,
+                repo_root,
+                state,
+                step,
+                phase=phase,
+                entries=visual,
+                holder=holder or (attempt.agent if attempt is not None else None),
+                reviewer=offered.get("reviewer"),
+                since=since or (state.steps[step.id].at if step.id in state.steps else None),
+                dispatched_as=attempt.agent_type if attempt is not None else None,
+            ),
         )
-    if not derives:
-        return verified
-    assert review_journal is not None and target is not None
-    slug, entries = review_journal
-    return {**verified, "findings": _closed_findings_witness(key, slug, entries, target)}
+    if derives:
+        assert review_journal is not None and target is not None
+        slug, entries = review_journal
+        derive("findings", lambda: _closed_findings_witness(key, slug, entries, target))
+    if len(refused) > 1:
+        err_console.print(
+            f"{key}: refused — {len(refused)} derived witnesses failed: {', '.join(refused)}",
+            markup=False,
+            soft_wrap=True,
+        )
+    if refused:
+        raise typer.Exit(2)
+    return verified
 
 
 def _visual_witness(
@@ -1965,20 +1990,68 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
-    report = run_report(repo_root, plan, None)
-    if report.merge_base is None:
-        hint = (
-            " (`fr run resolve` takes no --base: fetch the remote so its default branch resolves)"
-            if "--base" in report.text
-            else ""
-        )
+    base, label = _proportionality_base(repo_root)
+    if base is None:
         err_console.print(
-            f"{key}: cannot derive proportionality evidence — {report.text.strip()}{hint}",
+            f"{key}: cannot derive proportionality evidence — no base: {label}. Fetch the "
+            "remote so its default branch resolves, or create the local default branch.",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if label is not None:
+        err_console.print(
+            f"{key}: proportionality: no remote default branch; using base {label}",
+            markup=False,
+            soft_wrap=True,
+        )
+    report = run_report(repo_root, plan, base)
+    if report.merge_base is None:
+        err_console.print(
+            f"{key}: cannot derive proportionality evidence — {report.text.strip()}",
             markup=False,
             soft_wrap=True,
         )
         raise typer.Exit(2)
     return f"{report.merge_base}:{hashlib.sha256(report.text.encode()).hexdigest()}"
+
+
+def _proportionality_base(repo_root: Path) -> tuple[str | None, str | None]:
+    """The base `deliver`'s proportionality witness diffs against (gh#768).
+
+    `fr run resolve` takes no `--base`, so a repo whose remote default branch
+    does not resolve could never resolve `deliver`. In order: the remote
+    default branch (`(ref, None)` — the ordinary case, nothing printed); the
+    commit `fr isolation up` cut this branch from; the local default branch.
+    `(ref, label)` names a fallback; `(None, why)` means none is left.
+    """
+    from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref
+    from fr.isolation.types import load_state
+
+    try:
+        found = remote_default_ref(repo_root)
+        if found is not None and not isinstance(found, GitRefusal):
+            return found, None
+        head = git_answer(repo_root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        try:
+            recorded = load_state(repo_root, head)
+        except (OSError, ValueError):
+            recorded = None
+        if recorded is not None and recorded.base_sha:
+            ok = git_answer(repo_root, "cat-file", "-e", f"{recorded.base_sha}^{{commit}}")
+            if ok.returncode == 0:
+                return recorded.base_sha, f"{recorded.base_sha[:12]} (isolation start commit)"
+        for name in ("main", "master"):
+            if name == head:
+                continue
+            ok = git_answer(repo_root, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}")
+            if ok.returncode == 0:
+                return name, f"{name} (local default branch)"
+    except GitUnavailableError as e:
+        return None, f"git could not answer ({e}); retry"
+    return None, (
+        "no remote default branch, no isolation start commit, and no local default branch"
+    )
 
 
 def _derived_refusal(key: str, lines: list[str]) -> NoReturn:
