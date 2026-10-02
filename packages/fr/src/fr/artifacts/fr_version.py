@@ -35,12 +35,12 @@ import re
 from pathlib import Path
 
 import yaml
-from packaging.specifiers import InvalidSpecifier, Specifier, SpecifierSet
+from packaging.specifiers import InvalidSpecifier, Specifier
 from packaging.version import InvalidVersion, Version
 
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, Repair
-from fr.version_floor import ceiling_for
+from fr.version_floor import admits, ceiling_for
 
 FR_VERSION_KEY = "fr_version"
 REPAIR_NAME = "widen-fr-version-ceiling"
@@ -109,19 +109,19 @@ def widen_ceiling(constraint: str, installed: Version) -> str | None:
     pieces = [p.strip() for p in constraint.split(",") if p.strip()]
     try:
         specifiers = [Specifier(p) for p in pieces]
-        if installed in SpecifierSet(constraint):
+        if admits(constraint, installed):
             return None
     except InvalidSpecifier as e:
         raise MalformedConstraintError(f"invalid {FR_VERSION_KEY} {constraint!r}: {e}") from e
 
-    excluding = [s for s in specifiers if installed not in SpecifierSet(str(s))]
+    excluding = [s for s in specifiers if not admits(str(s), installed)]
     if excluding and all(s.operator in _LOWER_BOUND_OPERATORS for s in excluding):
         return None  # a floor problem; see the docstring
 
     new_ceiling = f"<{ceiling_for(str(installed))}"
     widened = [new_ceiling if s.operator in _UPPER_BOUND_OPERATORS else str(s) for s in specifiers]
     candidate = ",".join(widened)
-    if candidate != constraint and installed in SpecifierSet(candidate):
+    if candidate != constraint and admits(candidate, installed):
         return candidate
     raise UnwidenableConstraintError(
         f"{FR_VERSION_KEY} {constraint!r} excludes the installed fr {installed}, but not "
