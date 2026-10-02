@@ -2682,14 +2682,15 @@ rows:
       - super-fr:tests/unit/test_run_evidence.py#L210
       - super-fr:tests/unit/test_run_evidence.py#L221
       int:
-      - super-fr:tests/integration/test_fr_goal_shape.py#L542
+      - super-fr:tests/integration/test_fr_goal_shape.py#test_grouped_goal_walks_implement_review_per_phase_to_deliver
     status: ci
     notes: 'Phase 5 landed the gate: fr run resolve --state done on a step declaring
       evidence: refuses without --evidence review=<journal-entry-id> (exit 2, naming
       the flag) and stores the verified id in UnitRecord.evidence; --state failed needs
       none. Exercised on the SHIPPED fr-goal shape by the integration walk, where the
       bare resolve that used to pass is now refused. Mutation-verified: disabling the
-      missing-evidence refusal fails 3 tests.'
+      missing-evidence refusal fails 3 tests. gh#531: line anchors re-pointed to the
+      tests they were recorded for (they had slid onto other tests as lines moved).'
   - id: run-idle-detected
     capability: Run cursor
     acceptance: fr run check --idle distinguishes an advanceable-and-idle run from every
@@ -2982,7 +2983,7 @@ rows:
       - super-fr:tests/integration/test_run_idle_guard.py#L438
       - super-fr:tests/integration/test_run_idle_guard.py#L464
       - super-fr:tests/integration/test_run_idle_guard.py#L477
-      - super-fr:tests/integration/test_run_idle_guard.py#L598
+      - super-fr:tests/integration/test_run_idle_guard.py#test_the_script_can_only_ever_exit_zero
     status: ci
     notes: 'The worst outcome of this spec is an operator who cannot end a turn. The
       hook ALWAYS exits 0 (an EXIT trap, and deliberately no set -e: fr exits 2 on every
@@ -2992,7 +2993,9 @@ rows:
       exit 3 with no/garbage/non-object output, a complete answer that says not idle,
       idle JSON under exit 0, a missing position or next command, an unusable binding,
       an unusable payload, a subagent''s stop. Every stub case asserts the stub was
-      reached, so none passes by never looking. Mutation-verified, 12 mutants.'
+      reached, so none passes by never looking. Mutation-verified, 12 mutants. gh#531:
+      line anchors re-pointed to the tests they were recorded for (they had slid onto
+      other tests as lines moved).'
   - id: run-idle-guard-allows-waiting
     capability: Harness parity
     acceptance: Ending a turn while a dispatched executor is still working is allowed
@@ -3003,7 +3006,7 @@ rows:
       - super-fr:tests/unit/test_run_idle.py#L159
       int:
       - super-fr:tests/integration/test_run_idle_guard.py#L293
-      - super-fr:tests/integration/test_run_idle_guard.py#L579
+      - super-fr:tests/integration/test_run_idle_guard.py#test_in_flight_background_work_means_the_session_will_be_woken
     status: ci
     notes: 'The subtle legitimate stop: on Claude Code a background executor''s return
       arrives as a notification, so a turn that ends while a unit is HELD is correct.
@@ -3012,7 +3015,9 @@ rows:
       was found on the 2.1.278 binary and is honoured too: a non-empty background_tasks
       or session_crons in the Stop payload means the session is paused and will be woken,
       so the guard does not act. That field''s POPULATED shape was read from the binary''s
-      schema, not captured — stated in tests/fixtures/hooks/NOTE.md.'
+      schema, not captured — stated in tests/fixtures/hooks/NOTE.md. gh#531: line anchors
+      re-pointed to the tests they were recorded for (they had slid onto other tests
+      as lines moved).'
   - id: run-cost-attributed-by-agent-id
     capability: Run cursor
     acceptance: A claimed attempt's cost is selected by its agent id, so overlapping
@@ -3120,10 +3125,10 @@ rows:
       - super-fr:tests/unit/test_run_idle.py#L361
       - super-fr:tests/unit/test_run_idle.py#L380
       int:
-      - super-fr:tests/integration/test_run_idle_guard.py#L485
-      - super-fr:tests/integration/test_run_idle_guard.py#L499
-      - super-fr:tests/integration/test_run_idle_guard.py#L510
-      - super-fr:tests/integration/test_run_idle_guard.py#L548
+      - super-fr:tests/integration/test_run_idle_guard.py#test_fails_open_when_it_cannot_remember_having_acted
+      - super-fr:tests/integration/test_run_idle_guard.py#test_it_acts_at_most_once_per_cursor_position
+      - super-fr:tests/integration/test_run_idle_guard.py#test_it_acts_again_once_the_cursor_has_moved
+      - super-fr:tests/integration/test_run_idle_guard.py#test_stop_hook_active_is_an_independent_brake
     status: ci
     notes: 'The loop breaker. fr emits an opaque position (run, cursor, step state,
       gate, each unit''s state and attempt count — no timestamp, so a failing advance
@@ -3134,7 +3139,9 @@ rows:
       must be literally false (the CAPTURED continuation payload is let through with
       no memory at all; a build that drops the field silences the guard rather than
       un-braking it), and Claude Code''s own CLAUDE_CODE_STOP_HOOK_BLOCK_CAP (default
-      8, read from the binary). fr isolation detach deletes the memory with the binding.'
+      8, read from the binary). fr isolation detach deletes the memory with the binding.
+      gh#531: line anchors re-pointed to the tests they were recorded for (they had
+      slid onto other tests as lines moved).'
   - id: journal-review-entry-per-phase
     capability: journal
     acceptance: 'A completed phase leaves a machine-readable trace that it was code-reviewed:
