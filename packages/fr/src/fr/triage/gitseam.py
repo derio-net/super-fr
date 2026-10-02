@@ -22,6 +22,7 @@ import re
 import shlex
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from fr.triage.errors import TriageError
 
@@ -30,33 +31,35 @@ class GitError(TriageError):
     """A git command failed; the message carries git's own words."""
 
 
-def _run(argv: list[str], cwd: Path) -> str:
+def _run(argv: list[str], cwd: Path, *, text: bool = True, ok: tuple[int, ...] = (0,)) -> Any:
+    """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
+    `text=False`; a return code outside *ok* raises `GitError` with the command's own words."""
     try:
-        result = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, check=False)
+        result = subprocess.run(argv, cwd=cwd, capture_output=True, text=text, check=False)
     except OSError as exc:
         raise GitError(f"cannot run {argv[0]}: {exc}") from exc
-    if result.returncode != 0:
-        words = (result.stderr or result.stdout).strip() or f"exit {result.returncode}"
-        raise GitError(f"`{shlex.join(argv)}` failed in {cwd}: {words}")
+    if result.returncode not in ok:
+        err, out = result.stderr, result.stdout
+        words = (err.decode("utf-8", "replace") if isinstance(err, bytes) else err).strip()
+        if not words:
+            words = (out.decode("utf-8", "replace") if isinstance(out, bytes) else out).strip()
+        raise GitError(
+            f"`{shlex.join(argv)}` failed in {cwd}: {words or f'exit {result.returncode}'}"
+        )
     return result.stdout
 
 
 def git_bytes(args: list[str], cwd: Path, *, ok: tuple[int, ...] = (0,)) -> bytes:
     """Run `git <args>` and return stdout as raw bytes (for `-z` output whose paths and
     contents are not necessarily UTF-8); a return code outside *ok* raises `GitError`."""
-    try:
-        result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=False)
-    except OSError as exc:
-        raise GitError(f"cannot run git: {exc}") from exc
-    if result.returncode not in ok:
-        words = result.stderr.decode("utf-8", "replace").strip() or f"exit {result.returncode}"
-        raise GitError(f"`git {shlex.join(args)}` failed in {cwd}: {words}")
-    return result.stdout
+    out: bytes = _run(["git", *args], cwd, text=False, ok=ok)
+    return out
 
 
 def git(args: list[str], cwd: Path) -> str:
     """Run `git <args>` in *cwd* and return its stdout; raise `GitError` on failure."""
-    return _run(["git", *args], cwd)
+    out: str = _run(["git", *args], cwd)
+    return out
 
 
 def git_ok(args: list[str], cwd: Path) -> bool:
@@ -248,7 +251,8 @@ class Checkout:
         An argument list, never a shell string: nothing here reaches a shell."""
         if not argv:
             raise GitError("an empty post_merge command was declared")
-        return _run(list(argv), self.path)
+        out: str = _run(list(argv), self.path)
+        return out
 
     # ------------------------------------------------------- scratch worktree
 
