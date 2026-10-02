@@ -310,12 +310,41 @@ def test_the_repair_converts_line_anchors_that_land_in_a_test(tmp_path: Path) ->
 def test_the_repair_leaves_what_it_cannot_convert(tmp_path: Path) -> None:
     root = make_repo(
         tmp_path,
-        row(id="r1", unit='"own:tests/test_c.py#L1", "sib:tests/test_x.py#L5"'),
+        row(id="r1", unit='"own:tests/test_c.py#L1", "sib:tests/test_x.py#L5", "own:tests/test_c.py#L4"'),
     )
-    (root / "tests" / "test_c.py").write_text("import os\n\ndef test_c(): pass\n")
+    (root / "tests" / "test_c.py").write_text(
+        "import os\n\ndef _helper():\n    return 1\n\ndef test_c(): pass\n"
+    )
     path = _matrix(root)
 
-    assert not _repair().applies(path), "a module-level line and a sibling repo stay as they are"
+    assert not _repair().applies(path), (
+        "a module-level line, a sibling repo, and a line inside a helper (an anchor that "
+        "slid off its test, not one that names a test) all stay as they are"
+    )
+
+
+@pytest.mark.parametrize(
+    ("node", "is_test"),
+    [
+        ("test_a", True),
+        ("TestGroup", True),
+        ("TestGroup::test_inner", True),
+        ("_helper", False),
+        ("TestGroup::_setup", False),
+        ("Helper::test_x", False),
+    ],
+)
+def test_is_test_node_follows_pytest_collection(node: str, is_test: bool) -> None:
+    from fr.acceptance.anchors import is_test_node
+
+    assert is_test_node(node) is is_test
+
+
+def test_check_does_not_suggest_a_helper_as_the_anchor(tmp_path: Path) -> None:
+    root = make_repo(tmp_path, row(unit='"own:tests/test_a.py#L2"'))
+    (root / "tests" / "test_a.py").write_text("def _helper():\n    return 1\n\ndef test_a(): pass\n")
+    errors = _check_errors(root)
+    assert any("sits in no test" in e for e in errors), errors
 
 
 def test_the_repair_regenerates_committed_reports(
