@@ -5025,6 +5025,19 @@ rows:
     notes: 'gh#531. Measured at fix time: 27 of 78 line anchors had slid onto another
       test or none; all re-pointed to the test git blame shows each was recorded for,
       the other 48 converted by the repair.'
+  - id: acceptance-add-flush-left-rows
+    capability: Acceptance matrix
+    acceptance: 'fr acceptance add and set-status edit a matrix whose rows are flush-left
+      under rows: (PyYAML default block style) instead of rolling back'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-02-acceptance-integrity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_add_appends_to_a_flush_left_matrix
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_insert_into_flush_left_rows_keeps_the_matrix_valid
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_replace_in_flush_left_rows_keeps_the_matrix_valid
+    status: ci
+    notes: 'gh#470: row blocks take the existing items indentation.'
   - id: lifecycle-acceptance-drop-level
     capability: Artifact lifecycles
     acceptance: An operator can remove a stale evidence ref from an acceptance row with
