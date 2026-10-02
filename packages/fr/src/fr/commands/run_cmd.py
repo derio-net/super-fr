@@ -1859,6 +1859,10 @@ def _verified_evidence(
         return verified
     assert review_journal is not None and target is not None
     slug, entries = review_journal
+    if target.phase is not None and "reviewer" in step.evidence:
+        # R7: only a step that names a dispatched reviewer has a return that
+        # could owe a review-findings block.
+        _check_returned_findings(key, entries, target.phase, since, offered.get("reviewer"))
     return {**verified, "findings": _closed_findings_witness(key, slug, entries, target)}
 
 
@@ -2125,6 +2129,104 @@ def _same_agent(observed: str | None, expected: str) -> bool:
     if observed is None:
         return False
     return agent_name(observed) == agent_name(expected)
+
+
+def _check_returned_findings(
+    key: str,
+    entries: list[JournalEntry],
+    phase: int,
+    since: str | None,
+    reviewer: str | None,
+) -> None:
+    """Every finding a phase reviewer RETURNED is a plan-journal finding
+    against `phase` with the reviewer's own scope tag — or exit 2 (spec
+    2026-10-02-opencode-observe-2 §E, R7).
+
+    A child dispatched since the review opened is a reviewer of this unit when
+    it is the one the record names (`reviewer`), or when its return carries a
+    ```review-findings fence; each owes a well-formed block (`none` when it
+    raised nothing). Any other child — a helper dispatched while receiving the
+    review — owes nothing. The journal may hold MORE findings than the blocks
+    (the orchestrator's own), never fewer. Where fr cannot read the session, or
+    the named reviewer's return, the check is noted `unobserved=reviewer-return`
+    and warned, never silently skipped."""
+    from fr.run.observed import observed_session
+    from fr.run.review_return import ReviewFindingsBlockError, parse_review_findings
+    from fr.run.telemetry import parse_timestamp
+
+    start = parse_timestamp(since) if since is not None else None
+    view = observed_session(os.environ) if start is not None else None
+    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    if dispatched is None:
+        _note_unobserved("reviewer-return")
+        err_console.print(
+            f"[yellow]{key}: could not read what the phase reviewers returned — "
+            f"{_why_unobservable('subagent returns')}; the record is taken as claimed "
+            "(evidence: unobserved=reviewer-return).[/yellow]",
+            soft_wrap=True,
+        )
+        return
+    problems: list[str] = []
+    returned: dict[str, tuple[str, str]] = {}  # id -> (scope, reviewer)
+    for d in dispatched:
+        named = reviewer is not None and d.agent_id == reviewer
+        if d.returned is None:
+            if named:
+                _note_unobserved("reviewer-return")
+                err_console.print(
+                    f"[yellow]{key}: could not read what reviewer {d.agent_id} returned — "
+                    "its return is not readable yet; the record is taken as claimed "
+                    "(evidence: unobserved=reviewer-return).[/yellow]",
+                    soft_wrap=True,
+                )
+            continue
+        try:
+            rows = parse_review_findings(d.returned)
+        except ReviewFindingsBlockError as e:
+            problems.append(f"{d.agent_id}: {e}")
+            continue
+        if rows is None:
+            if named:
+                problems.append(
+                    f"reviewer {d.agent_id} returned no review-findings block — its return "
+                    "must end with one (`none` when it raised nothing)"
+                )
+            continue
+        for fid, scope, _summary in rows:
+            if fid in returned:
+                problems.append(
+                    f"{fid} is returned by both {returned[fid][1]} and {d.agent_id} — "
+                    "give each reviewer its own letter (p<N>a-r<k>, p<N>b-r<k>)"
+                )
+                continue
+            returned[fid] = (scope, d.agent_id)
+    journaled = {
+        e.id: e for e in entries if e.kind == "finding" and e.resolves is None and e.phase == phase
+    }
+    missing = [fid for fid in returned if fid not in journaled]
+    if missing:
+        problems.append(
+            f"returned finding(s) not in the plan journal against phase {phase}: "
+            + ", ".join(f"{fid} (reviewer {returned[fid][1]})" for fid in missing)
+            + " — journal each under its id with the reviewer's tag "
+            "(`fr journal add --kind finding --id <id> --review-scope in|out ...`)"
+        )
+    for fid, (scope, by) in returned.items():
+        entry = journaled.get(fid)
+        if entry is not None and entry.review_scope != scope:
+            problems.append(
+                f"{fid} is journaled with review_scope {entry.review_scope} but {by} "
+                f"tagged it {scope} — keep the reviewer's tag; reclassify by resolving it "
+                "out-of-scope"
+            )
+    if problems:
+        _derived_refusal(
+            key,
+            [
+                "refused — the review record does not match what the phase reviewers returned:",
+                *(f"- {p}" for p in problems),
+            ],
+        )
 
 
 def _wrote_before(
@@ -3236,7 +3338,21 @@ def _build_member_brief(
         "for_each": group.for_each,
         "steps": [],
         "record": _record_brief(state, member, group, item),
+        **_review_findings_brief(member, item),
     }
+
+
+def _review_findings_brief(member: Step, item: str) -> dict[str, str]:
+    """`review_findings` for a phase review unit whose reviewer's return fr
+    checks at resolve (spec 2026-10-02-opencode-observe-2 §E, R7) — every
+    `review-phase` of the shipped shapes — else nothing. fr-goal §6 puts its
+    text into the reviewer's prompt verbatim."""
+    from fr.run.review_return import review_findings_rule
+
+    if not {"findings", "reviewer"} <= set(member.evidence):
+        return {}
+    phase = _item_phase(item)
+    return {} if phase is None else {"review_findings": review_findings_rule(phase)}
 
 
 def _resolve_hint(run_id: str, member_id: str, item: str | None, state: str = "done") -> str:
