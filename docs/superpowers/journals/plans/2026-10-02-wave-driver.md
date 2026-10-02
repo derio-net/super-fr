@@ -341,3 +341,23 @@ The spec's accepted design limit, recorded in design C; not caused by this chang
 ### p2-closeout-state-archived-unreachable-resolved · finding [out-of-scope] · resolves p2-closeout-state-archived-unreachable: batch list's close-out column can never read `archived` (phase 2)
 
 Raised by the executor as not caused by phase 2; the archived outcome became reachable through rg-6's fix (the close-out event now carries the archive PR number).
+
+<!-- fr:journal kind=decision scope=plan id=p3-group-scope-shape created=2026-10-02T20:44:23+00:00 phase=3 -->
+### p3-group-scope-shape · decision · A group is Scope(kind="group", target="A/B,C/D", repos=(...)); one repo after de-dup collapses to kind repo (phase 3)
+
+Scope gains an optional `repos` tuple and a `Scope.group` constructor (sorted, case-insensitive de-dup). The scope parser `_group_scope` lives beside `_scope` and is shared by every verb; a group that collapses to one repo is a plain repo scope. Facts.repos already is the group's repo list, so schema 4 only adds the `group` kind (a schema-3 file naming it is refused).
+
+<!-- fr:journal kind=decision scope=plan id=p3-group-needs-every-checkout created=2026-10-02T20:44:23+00:00 phase=3 -->
+### p3-group-needs-every-checkout · decision · drive over a group requires --checkout for EVERY repo of the group, not only those with batches (phase 3)
+
+The spec says it refuses "a group repo that has no mapping before anything runs"; the stricter reading is taken so a repo gaining a batch later never stops a running driver. A --checkout naming a repo outside the group is refused too.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-cap-already-shared created=2026-10-02T20:44:23+00:00 phase=3 -->
+### p3-cap-already-shared · discovery · phase 2's cap already counts every batch in judgements, so it is shared across a group unchanged (phase 3)
+
+Verified with a two-repo group (tests/unit/test_triage_scope_groups.py): one dispatch under --max-inflight 1, and a dispatched batch in one repo blocks the other's. Existing tests that asserted facts schema 3 are written now assert 4.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-02T20:44:23+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+red-only task: tests, no production code to clean

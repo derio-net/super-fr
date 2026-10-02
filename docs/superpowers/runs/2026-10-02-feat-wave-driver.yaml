@@ -110,7 +110,7 @@ steps:
           visual: none
           findings: p2-closeout-state-archived-unreachable,rg-1,rg-2,rg-3,rg-4,rg-5,rg-6,rg-7,rg-8,rg-9,rg-10,rg-11,rg-12,rg-13,rg-14,rg-15,rg-16
       phase/3/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-02T20:31:28+00:00'
           agent: a18045335f3a570db
@@ -118,6 +118,10 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: 12cefec0-8bfd-4945-9a41-9fef359abbef
+          returned: '2026-10-02T20:44:24+00:00'
+          outcome: done
+        evidence:
+          visual: none
   journal-check:
     state: pending
   deliver:
