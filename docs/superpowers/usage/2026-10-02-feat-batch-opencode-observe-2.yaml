@@ -1,0 +1,37 @@
+schema_version: 1
+run: 2026-10-02-feat-batch-opencode-observe-2
+captures:
+- host: h-e3ebbedf
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-02T19:06:37+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 09d1a452-b1b7-4a1d-9f98-bd936dcf38f5
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 72
+        cache_write: 149529
+        cache_read: 4674097
+        output: 34513
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 11
+      other:
+        usd: null
+        turns: 10
+      paperwork:
+        usd: null
+        turns: 15
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+      brainstorm:
+        usd: null
+        turns: 32
