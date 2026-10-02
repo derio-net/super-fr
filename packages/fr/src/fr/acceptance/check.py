@@ -13,6 +13,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from fr.acceptance.anchors import collected_node_at, is_python, line_of, node_line
 from fr.acceptance.model import (
     AcceptanceError,
     Matrix,
@@ -112,8 +113,10 @@ def _sibling_base(root: Path, sibling_root: str, repo: str) -> Path | None:
 
 
 def _resolve_ref(row_id: str, ref: str, base: Path, result: CheckResult) -> None:
-    _, path, _ = split_ref(ref)  # fragment stripped for existence (trap 3)
+    _, path, frag = split_ref(ref)  # fragment stripped for existence (trap 3)
     if (base / path).exists():
+        if frag and is_python(path):
+            _check_python_anchor(row_id, ref, base / path, result)
         return
     twin = archive_twin(path)
     if twin and (base / twin).exists():
@@ -123,6 +126,35 @@ def _resolve_ref(row_id: str, ref: str, base: Path, result: CheckResult) -> None
         )
         return
     result.errors.append(f"row {row_id}: ref does not resolve: {ref}")
+
+
+def _check_python_anchor(row_id: str, ref: str, file: Path, result: CheckResult) -> None:
+    """gh#531: a `.py` fragment is a test's name, and it must still name one.
+
+    A line anchor is reported with the name the line sits in today, so the fix
+    is a copy-paste (or `fr migrate artifacts --yes`, whose matrix repair makes
+    exactly that rewrite).
+    """
+    repo, path, frag = split_ref(ref)
+    try:
+        source = file.read_text()
+    except (OSError, UnicodeDecodeError) as e:
+        result.errors.append(f"row {row_id}: cannot read {ref} to resolve its anchor: {e}")
+        return
+    line = line_of(frag)
+    if line is not None:
+        name = collected_node_at(source, line)
+        fix = (
+            f"use {repo}:{path}#{name}"
+            if name
+            else f"line {line} sits in no test today; anchor on a test name or drop the anchor"
+        )
+        result.errors.append(f"row {row_id}: line anchor into Python rots silently: {ref} — {fix}")
+        return
+    if node_line(source, frag) is None:
+        result.errors.append(
+            f"row {row_id}: anchor {ref} names no def or class in {path} (renamed or deleted test?)"
+        )
 
 
 def _actions_glob_match(pattern: str, path: str) -> bool:
