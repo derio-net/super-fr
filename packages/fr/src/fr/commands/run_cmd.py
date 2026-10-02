@@ -5278,7 +5278,7 @@ def _resolve_body(
             repo_root,
             step_id,
             record,
-            claimed=answered_by,
+            claimed=cast("AnsweredBy | None", answered_by),  # closed-set checked above
             no_questions=no_questions,
             reason=reason,
             questions=questions,
@@ -6276,9 +6276,7 @@ def _agent_clearance(unobserved: bool) -> str:
     (R11): an observed one says no operator answered; an unobserved one says
     only that the agent claimed it and fr could not read the truth."""
     if unobserved:
-        return (
-            "cleared by the agent, as claimed — unobserved: fr could not read who answered"
-        )
+        return "cleared by the agent, as claimed — unobserved: fr could not read who answered"
     return "cleared by the agent (answered_by: agent) — no operator answered it"
 
 

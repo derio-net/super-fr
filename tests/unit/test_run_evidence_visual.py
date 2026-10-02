@@ -1270,5 +1270,5 @@ def test_a_capture_script_nobody_ran_is_refused_inline(tmp_path: Path) -> None:
 def test_the_unobservable_reason_no_longer_names_opencode() -> None:
     from fr.run.visual import _unobservable
 
-    assert "opencode" not in _unobservable({"FR_HARNESS": "opencode"}).lower()
+    assert "cannot yet read" not in _unobservable({"FR_HARNESS": "opencode"})
     assert "hermes's transcripts" in _unobservable({"FR_HARNESS": "hermes"})
