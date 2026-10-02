@@ -361,3 +361,78 @@ Verified with a two-repo group (tests/unit/test_triage_scope_groups.py): one dis
 ### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
 
 red-only task: tests, no production code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-10-02T20:49:38+00:00 phase=3 -->
+### review-p3 · review · phase 3 review: 7 findings (4 in scope, fixed; 3 out of scope) (phase 3)
+
+Independent review of 155eb479..HEAD against R15 and design H. The group scope, facts schema 4 (schema 3 still loads), the state-directory rule, the repeated-name refusal, per-repo collect with a failing repo skipped, and the shared cap were verified; 641 triage tests passed in the reviewer's run. In-scope findings were fixed in 76de055b.
+
+<!-- fr:journal kind=finding scope=plan id=rh-1 created=2026-10-02T20:49:38+00:00 phase=3 state=open review_scope=in -->
+### rh-1 · finding [open] (reviewer: in scope) · The drive refusal test cannot tell 'every group repo' from 'repos with batches' (phase 3)
+
+The stricter rule (every repo of a group needs a --checkout) was not pinned by a test.
+
+<!-- fr:journal kind=finding scope=plan id=rh-2 created=2026-10-02T20:49:38+00:00 phase=3 state=open review_scope=out -->
+### rh-2 · finding [open] (reviewer: out of scope) · Cap and refusal tests partly pass without new driver code (phase 3)
+
+The cap was already global; the tests are legitimate regression guards.
+
+<!-- fr:journal kind=finding scope=plan id=rh-3 created=2026-10-02T20:49:38+00:00 phase=3 state=open review_scope=in -->
+### rh-3 · finding [open] (reviewer: in scope) · Group strictness applies to a plain plan print and was undocumented (phase 3)
+
+Spec-conformant, but the skill should say it.
+
+<!-- fr:journal kind=finding scope=plan id=rh-4 created=2026-10-02T20:49:38+00:00 phase=3 state=open review_scope=in -->
+### rh-4 · finding [open] (reviewer: in scope) · Scope.group keeps whichever casing came last (phase 3)
+
+scope.target, repos and facts.repos depended on input casing and order.
+
+<!-- fr:journal kind=finding scope=plan id=rh-5 created=2026-10-02T20:49:38+00:00 phase=3 state=open review_scope=in -->
+### rh-5 · finding [open] (reviewer: in scope) · Unrelated SKILL.md rewrap churn (phase 3)
+
+The group change re-joined unrelated wrapped lines and enlarged the mirror diff.
+
+<!-- fr:journal kind=finding scope=plan id=rh-6 created=2026-10-02T20:49:38+00:00 phase=3 state=open review_scope=out -->
+### rh-6 · finding [open] (reviewer: out of scope) · Facts schema 4 is stamped for repo and org scopes too (phase 3)
+
+Spec-mandated; facts.json is a recollectable cache.
+
+<!-- fr:journal kind=finding scope=plan id=rh-7 created=2026-10-02T20:49:38+00:00 phase=3 state=open review_scope=out -->
+### rh-7 · finding [open] (reviewer: out of scope) · No check that facts.kind matches the requested scope (phase 3)
+
+Pre-existing for repo and org scopes.
+
+<!-- fr:journal kind=finding scope=plan id=rh-1-resolved created=2026-10-02T20:49:38+00:00 phase=3 state=fixed resolves=rh-1 -->
+### rh-1-resolved · finding [fixed] · resolves rh-1: The drive refusal test cannot tell 'every group repo' from 'repos with batches' (phase 3)
+
+Fixed in 76de055b with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rh-3-resolved created=2026-10-02T20:49:38+00:00 phase=3 state=fixed resolves=rh-3 -->
+### rh-3-resolved · finding [fixed] · resolves rh-3: Group strictness applies to a plain plan print and was undocumented (phase 3)
+
+Fixed in 76de055b with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rh-4-resolved created=2026-10-02T20:49:38+00:00 phase=3 state=fixed resolves=rh-4 -->
+### rh-4-resolved · finding [fixed] · resolves rh-4: Scope.group keeps whichever casing came last (phase 3)
+
+Fixed in 76de055b with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rh-5-resolved created=2026-10-02T20:49:38+00:00 phase=3 state=fixed resolves=rh-5 -->
+### rh-5-resolved · finding [fixed] · resolves rh-5: Unrelated SKILL.md rewrap churn (phase 3)
+
+Fixed in 76de055b with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rh-2-resolved created=2026-10-02T20:49:38+00:00 phase=3 state=open resolves=rh-2 out_of_scope=true -->
+### rh-2-resolved · finding [out-of-scope] · resolves rh-2: Cap and refusal tests partly pass without new driver code (phase 3)
+
+The cap was already global; the tests are legitimate regression guards.
+
+<!-- fr:journal kind=finding scope=plan id=rh-6-resolved created=2026-10-02T20:49:38+00:00 phase=3 state=open resolves=rh-6 out_of_scope=true -->
+### rh-6-resolved · finding [out-of-scope] · resolves rh-6: Facts schema 4 is stamped for repo and org scopes too (phase 3)
+
+Spec-mandated; facts.json is a recollectable cache.
+
+<!-- fr:journal kind=finding scope=plan id=rh-7-resolved created=2026-10-02T20:49:38+00:00 phase=3 state=open resolves=rh-7 out_of_scope=true -->
+### rh-7-resolved · finding [out-of-scope] · resolves rh-7: No check that facts.kind matches the requested scope (phase 3)
+
+Pre-existing for repo and org scopes.
