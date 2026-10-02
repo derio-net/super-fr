@@ -123,8 +123,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     **Batches** (2026-09-25 spec, `triage-batches`): `fr triage batch
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
-    fr-goal run with one PR. `judgements.yaml` is schema 2 (`batches:` with
-    engine-appended `events`; schema 1 still loads) and `facts.json` schema 3
+    fr-goal run with one PR. `judgements.yaml` carries `batches:` with
+    engine-appended `events` (fr reads schemas 1, 2 and 3 and writes 3, see
+    the waves paragraph below) and `facts.json` schema 3
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
     (stages, open-batch rule, the one writer, the §3.F merge order),

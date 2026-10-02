@@ -88,10 +88,10 @@ differing only by case conflict). `detail`, `note` and pattern `body` interpret 
 dependency is met, and a cancelled, abandoned or partial one blocks. `batch dispatch` runs a batch as `/fr-goal` or
 `/fr-debugging` (its `skill`) on the launch model, else the harness's orchestrator binding, and marks its issues
 taken; `batch merge` merges batch PRs in order; `batch cancel` withdraws one. **The driver:** `fr triage batch drive`
-runs the waved batches (or those named) to completion: each pass merges every green non-draft batch PR (readying one
+runs the batches named, else those with a wave, else all, to completion: each pass merges every green non-draft batch PR (readying one
 stays the operator's), closes out each merged batch through its runner after the repo's `post_merge` argument list,
-merges its archive PR, and dispatches by wave up to `--max-inflight`. `--once` exits 0 acted or done, 3 waiting, 2
-refused; `--checkout REPO=PATH` names each clone; a second driver on the state directory is refused.
+merges its archive PR, and dispatches by wave up to `--max-inflight`. `--once` exits 0 acted or done, 3 waiting
+(blocked batches included: they need the operator), 2 refused; `--checkout REPO=PATH` names each clone; a second driver on the state directory is refused.
 
 ## The shape of a judgement
 
@@ -106,8 +106,9 @@ refused; `--checkout REPO=PATH` names each clone; a second driver on the state d
    name the batch when issues share a subsystem. A shared root cause across three or more issues becomes a
    `patterns` entry.
 5. **Forge actions are unrun commands.** A close, a dedupe or a relabel is the exact `gh` command in `note` or your
-   report, for the operator to run. `batch dispatch|merge|cancel|drive` act only with `--yes` (without it they print
-   the plan); pass `--yes` only when the operator asked for that action in this session.
+   report, for the operator to run. Never act on the forge unasked. `batch dispatch|merge|cancel|drive` act only
+   with `--yes` (without it they print the plan; `drive` with no ids plans the batches with a wave, else all); pass
+   `--yes` only when the operator asked for that action in this session.
 
 ## Report back
 
