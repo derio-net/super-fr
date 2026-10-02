@@ -14,3 +14,8 @@ _deliver_pr_gate (run_cmd.py) reads the live PR body via the forge adapter and c
 ### 79a9a7870a68 · root-cause · deliver's PR gate checks sections but not closing-keyword grammar (#821)
 
 Root cause: _deliver_pr_gate validates only REQUIRED_SECTIONS. Nothing checks that each issue reference on a closing-keyword line has its own keyword, so 'Closes #a and #b' delivers and #b never closes. Operator decision (2026-10-02): this batch fixes #821 only; #822 is a separate closing-policy design (row→issue link is a matrix shape change) and is referenced, not closed.
+
+<!-- fr:journal kind=finding scope=debug id=f-821 created=2026-10-02T17:01:52+00:00 state=fixed -->
+### f-821 · finding [fixed] · deliver refuses a line sharing one closing keyword across several issues
+
+fr.record.pr_body.shared_closing_keywords + a refusal in _deliver_pr_gate after the section check, printing the one-per-line fix. Failing test first: tests/unit/test_deliver_closing_keywords.py (17 cases, committed d2cc9339 before the fix ac093bbd). Full suite: 7606 passed, 97 skipped.
