@@ -51,3 +51,4 @@ journal:
       Measuring needs a clone, which `fr triage` scope options do not name, so the command takes
       `--checkout` (default the current toplevel, via the existing Checkout.at) and `--now-ref`
       (default HEAD). Git processes start only in gitseam (new Checkout.short_rev and files_at).
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/12cefec0-8bfd-4945-9a41-9fef359abbef/scratchpad/p6-suite.log}
