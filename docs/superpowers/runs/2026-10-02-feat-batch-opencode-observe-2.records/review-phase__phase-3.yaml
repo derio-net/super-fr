@@ -1,0 +1,65 @@
+schema_version: 7
+run: 2026-10-02-feat-batch-opencode-observe-2
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - kind: finding
+    id: p3-r1
+    review_scope: in
+    title: "advance's gate degradation notice still tells OpenCode to ask in chat and STOP and says clearing defaults to answered_by: agent — both now false"
+    body: |
+      run_cmd.py _gate_degradation_notice (~992-1043, printed ~4576-4589; pinned by test_run_cli.py ~358-380): with OpenCode now partial it told the agent to ask in chat (resolve then refuses "no answered question", pushing it to --no-questions and a false agent clearance) and promised an answered_by: agent default R10 removed; the resolve hint omitted the now-required claim.
+  - kind: finding
+    id: p3-r2
+    review_scope: in
+    title: "fr run check never prints a claimed-unobserved operator gate; spec/plan R11 name check as well as gates"
+    body: |
+      run_cmd.py ~6233-6239 listed only agent-cleared gates; test_run_answered_by_no_default.py ~119-126 covered only gates for the claimed-operator case.
+  - kind: finding
+    id: p3-r3
+    review_scope: in
+    title: "out-of-scope-operator-guard OpenCode partial cell has no guard-level fixture test, and its unreadable-store advisory quotes a scope_note claiming verification"
+    body: |
+      parity.yaml ~242-250 cited only the round reader's test; journal/operator.py ~74-84 quoted the cell's scope_note ("…is verified…") right after "recorded as stated" when the store was unreadable.
+  - kind: finding
+    id: p3-r4
+    review_scope: in
+    title: "_resolve_body answered_by still typed str | None with a cast; spec §F says AnsweredBy | None"
+    body: |
+      run_cmd.py ~5144 / cast ~5281.
+  - kind: finding
+    id: p3-r5
+    review_scope: in
+    title: "stale _gate_provenance comment says OpenCode has no question reader"
+    body: |
+      run_cmd.py ~1327-1330.
+  - kind: finding
+    id: p3-r6
+    review_scope: in
+    title: "SKILL.md §6 review_findings insertion splits the in/out-scope definition sentence (mirrors too)"
+    body: |
+      plugins/super-fr/skills/fr-goal/SKILL.md ~97 and both generated mirrors.
+  - kind: finding
+    id: p3-r7
+    review_scope: in
+    title: "gate-provenance prose tripwire docstring/message still says --answered-by defaults to agent"
+    body: |
+      tests/unit/test_tripwire_gate_provenance_prose.py ~4-8, 43-45.
+  - kind: review
+    id: review-p3
+    title: "phase 3 independent code review: 7 findings (p3-r1 important, p3-r2..r7 low), all in scope"
+    body: |
+      Reviewer checked R9–R14, §F/§G/§H/§J. Most important check cleared: the ~25 tests now passing --answered-by agent hide no regression (all target a gated brainstorm with no readable session; ungated steps resolve without a claim via _clears_gate; an observed gate still derives provenance; --no-questions still means agent; nothing downstream breaks on answered_by None). R9, R12, R13/R14, SKILL/mirrors, explainer and acceptance rows confirmed correct apart from p3-r1..r7. Received: each verified in the code and fixed by a helper subagent in this workspace, red-first where behaviour changed (p3-r1, p3-r2, p3-r3); one orchestrator-found follow-through of p2-r3 rode along (5c26b162: the review_findings rule says "phase N or a later phase"). Full suite after the fixes: 7782 passed, 97 skipped.
+resolves:
+  - {id: p3-r1, state: fixed, body: "cd01ecdf: no notice where fr can read the session (Claude Code transcript, or OpenCode with an exported readable session); elsewhere the notice names why (shared why_unobservable) and that the resolve must carry answered_by operator|agent, no default; the advance hint adds --answered-by when unobservable. Tests: test_advance_on_opencode_without_a_session_says_the_claim_is_owed, test_advance_on_opencode_with_a_readable_session_prints_no_notice, test_advance_on_hermes_quotes_the_row_and_owes_a_claim."}
+  - {id: p3-r2, state: fixed, body: "c4c14b5c: fr run check prints claimed-unobserved operator gates with the shared _operator_answer sentence; test_a_claimed_operator_on_an_unobserved_gate_says_so covers check and gates."}
+  - {id: p3-r3, state: fixed, body: "96e7bf58, 77c88997: tests/unit/test_journal_operator_guard_opencode.py runs the guard on the OpenCode fixture (refused with no round since, accepted with one, unreadable store, no session export); the OpenCode advisory uses why_unobservable; the parity cell cites the new test."}
+  - {id: p3-r4, state: fixed, body: "b1cc88a7: _resolve_body takes AnsweredBy | None; the closed-set check moved to _answered_by_or_exit at the string entry points; cast removed; mypy clean."}
+  - {id: p3-r5, state: fixed, body: "b1cc88a7: _gate_provenance comment lists the real unobservable cases."}
+  - {id: p3-r6, state: fixed, body: "e48f14aa, c3255ff7: sentence moved after the out-of-scope definition; both mirrors regenerated; prose pin updated with an ordering assertion."}
+  - {id: p3-r7, state: fixed, body: "461f9555: tripwire docstring and message describe R10."}
+evidence:
+  review: review-p3
+  reviewer: aad2aa86bd8dd8bb6
+  model: claude-opus-5-5
