@@ -573,7 +573,7 @@ def _patterns(judgements: Judgements) -> str:
 
 def render(facts: Facts, judgements: Judgements) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes."""
-    show_repo = facts.kind == "org"
+    show_repo = facts.kind != "repo"
     result = classify(facts, judgements)  # the one classification, shared below
     patterns_by_key: dict[str, list[str]] = {}
     for p in judgements.patterns:

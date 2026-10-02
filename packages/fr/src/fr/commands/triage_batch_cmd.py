@@ -1283,6 +1283,15 @@ def drive_lock(target: Path) -> Iterator[None]:
             path.unlink(missing_ok=True)
 
 
+def _batch_slug(scope: Scope, repo_name: str) -> str:
+    """The OWNER/REPO a batch of *repo_name* lives in, among *scope*'s repos."""
+    if scope.kind == "org":
+        return f"{scope.target}/{repo_name}"
+    if scope.kind == "group":
+        return next((r for r in scope.repos if r.split("/", 1)[1].lower() == repo_name), repo_name)
+    return scope.target
+
+
 def _checkout_map(
     values: list[str] | None, scope: Scope, repos: set[str]
 ) -> dict[str, Path | None]:
@@ -1306,6 +1315,13 @@ def _checkout_map(
             )
         out.setdefault(scope.target.lower(), None)
         return out
+    if scope.kind == "group":
+        stray = sorted(set(out) - {r.lower() for r in scope.repos})
+        if stray:
+            _fail(f"--checkout names {', '.join(stray)}, which is not in this scope's group")
+        repos = set(
+            scope.repos
+        )  # a group needs a clone for EVERY repo, not only those with batches
     missing = sorted(r for r in repos if r.lower() not in out)
     if missing:
         _fail(f"give --checkout REPO=PATH for {', '.join(missing)}: no clone is known for it")
@@ -1897,9 +1913,7 @@ def batch_drive_command(
     except TriageError as exc:
         _fail(str(exc))
     chosen = _chosen(known, batch_ids) if known else []
-    names = {
-        f"{scope.target}/{b.repo_name}" if scope.kind == "org" else scope.target for b in chosen
-    }
+    names = {_batch_slug(scope, b.repo_name) for b in chosen}
     checkouts = _checkout_map(checkout, scope, names)
     driver = _Driver(
         scope, target, named=batch_ids, checkouts=checkouts, max_inflight=max_inflight, yes=yes

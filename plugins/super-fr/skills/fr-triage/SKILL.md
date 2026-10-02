@@ -18,6 +18,12 @@ result dies with the session, syncs are invisible, a refresh redoes it all. `fr 
 Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for
 `--org OWNER`, lowercased; `--dir D` overrides). Pass the same `--repo`/`--org`/`--dir` to every command.
 
+`--repo` also takes a comma-separated **group**, `--repo A/B,C/D` (owners may differ): one board, one state
+directory (the sorted `owner--repo` slugs joined by `+`, shortened with an eight-character hash past 80
+characters) and one `--max-inflight` cap shared across the repos. A group may not hold two repos with the same
+name (judgement keys are `<repo-name>#<n>`; refused, exit 2). Batches stay single-repo, and `batch drive` over a
+group needs a `--checkout OWNER/REPO=PATH` for every repo of the group before it runs anything.
+
 | File | Written by | Holds |
 |---|---|---|
 | `facts.json` | `fr triage collect` | what the forge says: open issues, labels, linked PRs (no stages) |

@@ -65,7 +65,9 @@ triage_app.add_typer(batch_app)
 
 
 # One option set for --repo/--org/--dir, shared by collect, check, render and batch.
-RepoOpt = Annotated[str | None, typer.Option("--repo", help="Triage one repo: OWNER/REPO.")]
+RepoOpt = Annotated[
+    str | None, typer.Option("--repo", help="Triage one repo OWNER/REPO, or a group: A/B,C/D.")
+]
 OrgOpt = Annotated[str | None, typer.Option("--org", help="Triage every repo of OWNER.")]
 DirOpt = Annotated[
     Path | None,
@@ -78,18 +80,43 @@ def make_forge() -> Forge:
     return GhForge()
 
 
+def _group_scope(parts: list[str]) -> Scope:
+    """A group scope over *parts*; two repos sharing a NAME are refused (exit 2) because
+    a judgement key is `<repo-name>#<n>` (wave-driver §H). Nothing is written yet."""
+    scope = Scope.group(parts)
+    names: dict[str, str] = {}
+    for r in scope.repos:
+        name = r.split("/", 1)[1].lower()
+        if name in names:
+            err_console.print(
+                f"[red]error:[/red] {escape(names[name])} and {escape(r)} share the repo name "
+                f"{escape(name)}; judgement keys are <repo-name>#<n>, so a group may not hold both",
+                soft_wrap=True,
+            )
+            raise typer.Exit(code=2)
+        names[name] = r
+    if len(scope.repos) == 1:
+        return Scope(kind="repo", target=scope.repos[0])
+    return scope
+
+
 def _scope(repo: str | None, org: str | None) -> Scope:
     if (repo is None) == (org is None):
         err_console.print("[red]error:[/red] give exactly one of --repo OWNER/REPO or --org OWNER")
         raise typer.Exit(code=2)
     if repo is not None:
-        if repo.count("/") != 1 or not all(repo.split("/")):
-            err_console.print(
-                f"[red]error:[/red] --repo must be OWNER/REPO, got {escape(repr(repo))}",
-                soft_wrap=True,
-            )
-            raise typer.Exit(code=2)
-        return Scope(kind="repo", target=repo)
+        parts = [p.strip() for p in repo.split(",")] if "," in repo else [repo]
+        for part in parts:
+            if part.count("/") != 1 or not all(part.split("/")):
+                err_console.print(
+                    f"[red]error:[/red] --repo must be OWNER/REPO or a comma-separated list "
+                    f"of them, got {escape(repr(repo))}",
+                    soft_wrap=True,
+                )
+                raise typer.Exit(code=2)
+        if len(parts) == 1:
+            return Scope(kind="repo", target=parts[0])
+        return _group_scope(parts)
     assert org is not None
     if not org or "/" in org:
         err_console.print(
@@ -198,9 +225,10 @@ def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, J
     target_dir = state_dir(scope, dir_override)
     facts_path = target_dir / "facts.json"
     if not facts_path.exists():
+        flag = "org" if scope.kind == "org" else "repo"
         err_console.print(
             f"[red]error:[/red] no facts at {escape(str(facts_path))}; run "
-            f"`fr triage collect --{scope.kind} {escape(scope.target)}` first",
+            f"`fr triage collect --{flag} {escape(scope.target)}` first",
             soft_wrap=True,
         )
         raise typer.Exit(code=2)

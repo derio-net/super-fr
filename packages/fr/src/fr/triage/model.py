@@ -11,8 +11,10 @@ state directory, so the command and the directory can never disagree.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -33,14 +35,18 @@ from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
-FACTS_SCHEMA: Literal[3] = 3
+# The version this fr WRITES for facts.json. 4 added the `group` scope kind (wave-driver
+# §H); 3 still loads, and the first collect upgrades it. Independent of JUDGEMENTS_SCHEMA.
+FACTS_SCHEMA: Literal[4] = 4
+FACTS_READS: tuple[int, ...] = (3, 4)
 # The version this fr WRITES: every engine write of `batches:` stamps 3 (spec
 # 2026-10-02-wave-driver §A: `wave`, `after`; 2 was 2026-09-25-triage-batches §3.A);
 # the loader reads every version in JUDGEMENTS_READS.
 JUDGEMENTS_SCHEMA: Literal[3] = 3
 JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3)
 
-ScopeKind = Literal["repo", "org"]
+ScopeKind = Literal["repo", "org", "group"]
+SCOPE_NAME_LIMIT = 80
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
 PrState = Literal["OPEN", "CLOSED", "MERGED"]
 IssueState = Literal["open", "closed"]
@@ -97,19 +103,35 @@ def _bad_keys(keys: list[object]) -> list[object]:
 
 @dataclass(frozen=True)
 class Scope:
-    """What is being triaged: one repo, or every non-archived repo of an owner."""
+    """What is being triaged: one repo, every non-archived repo of an owner, or a
+    group of repos (owners may differ; wave-driver §H)."""
 
     kind: ScopeKind
-    target: str  # "OWNER/REPO" for a repo, "OWNER" for an org
+    target: str  # "OWNER/REPO" (repo), "OWNER" (org), "A/B,C/D" sorted (group)
+    repos: tuple[str, ...] = ()  # a group's OWNER/REPO list; empty for repo and org
+
+    @classmethod
+    def group(cls, repos: Iterable[str]) -> Scope:
+        """A group scope over *repos*, sorted and de-duplicated case-insensitively."""
+        unique = sorted({r.lower(): r for r in repos}.values(), key=str.lower)
+        return cls(kind="group", target=",".join(unique), repos=tuple(unique))
 
     @property
     def name(self) -> str:
-        """Directory-safe scope name: `<owner>--<repo>` or `<owner>` (spec §3.B).
+        """Directory-safe scope name: `<owner>--<repo>`, `<owner>`, or a group's sorted
+        `owner--repo` slugs joined by `+` (spec §3.B, wave-driver §H).
 
         Lowercase, so `--repo Derio-Net/Super-FR` names the same state
-        directory as `--repo derio-net/super-fr` (review r-p2-case).
+        directory as `--repo derio-net/super-fr` (review r-p2-case). A group name
+        over 80 characters is cut and ends in an eight-character hash of the whole.
         """
-        return self.target.replace("/", "--").lower()
+        if self.kind != "group":
+            return self.target.replace("/", "--").lower()
+        full = "+".join(sorted(r.replace("/", "--").lower() for r in self.repos))
+        if len(full) <= SCOPE_NAME_LIMIT:
+            return full
+        digest = hashlib.sha256(full.encode("utf-8")).hexdigest()[:8]
+        return f"{full[: SCOPE_NAME_LIMIT - 9]}-{digest}"
 
     @property
     def owner(self) -> str:
@@ -286,7 +308,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3] = Field(3, alias="schema")
+    schema_: Literal[3, 4] = Field(4, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -301,6 +323,14 @@ class Facts(_Strict):
     batch_prs: list[PullRequest] = []
     # `.fr/triage.yaml` per OWNER/REPO; a repo without the file has no entry.
     config: dict[str, TriageConfig] = {}
+
+    @model_validator(mode="after")
+    def _group_needs_schema_4(self) -> Facts:
+        """The `group` kind exists only from schema 4 (wave-driver §H); an older
+        reader cannot hold it, so a schema-3 file naming it is refused."""
+        if self.kind == "group" and self.schema_ < 4:
+            raise ValueError("`kind: group` needs schema 4")
+        return self
 
     def config_for(self, repo: str) -> TriageConfig:
         """*repo*'s collected config, or the defaults when it declares none."""
@@ -589,7 +619,7 @@ def load_facts(path: Path) -> Facts:
     except (OSError, ValueError) as exc:
         raise TriageError(f"{path}: cannot read facts: {exc}") from exc
     try:
-        return Facts.model_validate(_check_schema(path, data, FACTS_SCHEMA, "re-run collect"))
+        return Facts.model_validate(_check_schema(path, data, FACTS_READS, "re-run collect"))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid facts: {exc}") from exc
 
