@@ -1,0 +1,11 @@
+schema_version: 7
+run: 2026-10-02-feat-batch-opencode-observe-2
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2]
+refactor:
+  P1.T1: "Smoke task: a fixture addition and a stub module; the stub is replaced wholesale by Task 3's backend, so there is nothing to clean in it."
+journal: []
+resolves: []
+evidence: {}
