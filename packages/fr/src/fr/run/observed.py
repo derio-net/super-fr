@@ -357,15 +357,15 @@ class OpenCodeSession:
         return bool(_query(self.db, "SELECT 1 FROM session WHERE id = ?", (self.session,)))
 
     def _parts(self) -> list[ToolPart] | None:
-        if not self._known():
-            return None
         rows = _query(
             self.db,
             "SELECT session_id, time_created, data FROM part WHERE session_id = ? "
             "ORDER BY time_created, id",
             (self.session,),
         )
-        if rows is None:
+        # Only an EMPTY answer needs the second question (review p1-r2): a
+        # session with parts is plainly a row of this database.
+        if rows is None or (not rows and not self._known()):
             return None
         parts = [tool_part(owner, raw, created) for owner, created, raw in rows]
         return [p for p in parts if p is not None]
@@ -397,15 +397,19 @@ class OpenCodeSession:
         )
 
     def _children(self) -> set[str] | None:
-        if not self._known():
-            return None
         rows = _query(self.db, "SELECT id FROM session WHERE parent_id = ?", (self.session,))
-        return None if rows is None else {row[0] for row in rows}
+        if rows is None or (not rows and not self._known()):
+            return None
+        return {row[0] for row in rows}
 
     def _final_text(self, session: str) -> str | None:
         rows = _query(
             self.db,
-            "SELECT data FROM part WHERE session_id = ? ORDER BY time_created DESC, id DESC",
+            # Only the child's text parts, newest first, decoded in SQL rather
+            # than every tool output it ever produced (review p1-r2).
+            "SELECT data FROM part WHERE session_id = ? AND "
+            "CASE WHEN json_valid(data) THEN json_extract(data, '$.type') END = 'text' "
+            "ORDER BY time_created DESC, id DESC",
             (session,),
         )
         for (raw,) in rows or ():

@@ -17,7 +17,7 @@
 export const SESSION_ENV_KEY = "FR_OPENCODE_SESSION_ID";
 
 export type ShellEnvInput = { cwd: string; sessionID?: string; callID?: string };
-export type ShellEnvOutput = { env: Record<string, string> };
+export type ShellEnvOutput = { env?: Record<string, string> };
 
 export function createShellEnvHandler(): (
   input: ShellEnvInput,
@@ -27,6 +27,9 @@ export function createShellEnvHandler(): (
     try {
       const session = input?.sessionID;
       if (typeof session !== "string" || session === "") return;
+      // A binary that hands over no env object would otherwise swallow a
+      // TypeError here and R1 would fail invisibly (review p1-r3).
+      output.env ??= {};
       output.env[SESSION_ENV_KEY] = session;
     } catch {
       // Attribution, not a gate: a failure here must never fail the command.

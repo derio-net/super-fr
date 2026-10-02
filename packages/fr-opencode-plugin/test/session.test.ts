@@ -26,6 +26,13 @@ describe("shell.env session export", () => {
     }
   });
 
+  test("creates the env object when the output carries none (review p1-r3)", async () => {
+    for (const output of [{} as { env?: Record<string, string> }, { env: undefined }]) {
+      await createShellEnvHandler()({ cwd: "/w", sessionID: "ses_run" }, output as never);
+      expect(output.env).toEqual({ FR_OPENCODE_SESSION_ID: "ses_run" });
+    }
+  });
+
   test("never throws", async () => {
     await createShellEnvHandler()({ cwd: "/w", sessionID: "ses_run" }, undefined as never);
     const frozen = { env: Object.freeze({}) as Record<string, string> };

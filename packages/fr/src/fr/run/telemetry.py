@@ -433,6 +433,12 @@ def current_session(env: Mapping[str, str]) -> str | None:
         harness = detect_harness(env)
     except HarnessError:
         return None
+    return _session_under(env, harness)
+
+
+def _session_under(env: Mapping[str, str], harness: str | None) -> str | None:
+    """`current_session` for an already-detected `harness` — detection may run
+    `ps`, so `run_session` does it once (review p1-r2)."""
     key = SESSION_ID_ENV if harness is None else SESSION_ID_ENVS.get(harness)
     return (env.get(key) or None) if key else None
 
@@ -445,13 +451,13 @@ def run_session(env: Mapping[str, str]) -> str | None:
     exports the CALLING session, a child's when a subagent runs the command,
     so there it is walked up `parent_id` to the top-level session in the
     database — the raw id when the database cannot say."""
-    session = current_session(env)
-    if session is None:
-        return None
     try:
         harness = detect_harness(env)
     except HarnessError:
-        return session
+        return None
+    session = _session_under(env, harness)
+    if session is None:
+        return None
     if harness != OpenCodeReader.harness:
         return session
     from fr.run.observed import opencode_root

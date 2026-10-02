@@ -290,3 +290,28 @@ def test_a_phase_log_on_hermes_keeps_the_unobserved_message(tmp_path: Path) -> N
     assert result.exit_code == 0, result.output
     assert "fr has no child-session reader for hermes" in _squash(result.stderr)
     assert "tests" in _code_evidence(repo)["unobserved"].split(",")
+
+
+def test_advance_records_no_session_when_no_harness_owns_one(tmp_path: Path, monkeypatch) -> None:
+    """Review p1-r1 (gh#537): with the harness undetectable (an OpenCode
+    started from a Claude Code shell whose pid cannot be placed), the inherited
+    `CLAUDE_CODE_SESSION_ID` names a session that never held the unit — main
+    recorded nothing there, and so must this, or it becomes positive evidence
+    for the run's cost (R3)."""
+    import fr.commands.run_cmd as run_cmd
+    import fr.run.telemetry as telemetry
+
+    monkeypatch.setattr(run_cmd, "detect_harness", lambda env: None)
+    monkeypatch.setattr(telemetry, "detect_harness", lambda env: None)
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    result = _invoke_as_harness(
+        repo, shipped, ["run", "advance", "r1"], {"CLAUDE_CODE_SESSION_ID": "stale-claude"}
+    )
+
+    assert result.exit_code == 0, result.output
+    attempt = units.last_attempt(load_run_state(repo, "r1"), "phase/1/code")
+    assert attempt is not None and attempt.session is None
