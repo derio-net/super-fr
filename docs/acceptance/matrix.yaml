@@ -5691,9 +5691,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R10
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_origins.py#test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch
+      - super-fr:tests/unit/test_triage_origins.py#test_render_median_hours_to_fix_counts_completed_closes_only
+    status: ci
+    notes: 'fr triage origins collect|check|render ship: fifteen-issue fixture, counts,
+      per-day buckets, median time to fix and leaderboards match a hand computation;
+      the page ends in a conclusion linking each cause to its batch'
   - id: architecture-page
     capability: triage-views
     acceptance: The architecture page's measured sections are generated from the triage
