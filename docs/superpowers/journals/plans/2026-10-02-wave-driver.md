@@ -574,3 +574,52 @@ Fixed in e174d1af with tests.
 ### ri-6-resolved · finding [out-of-scope] · resolves ri-6: The Closing order rows have no per-batch tier (phase 4)
 
 Design D omits tier from the wave table; the board matches the spec.
+
+<!-- fr:journal kind=decision scope=plan id=p5-closing-prs-from-pr-list created=2026-10-02T21:34:20+00:00 phase=5 -->
+### p5-closing-prs-from-pr-list · decision · Closing PRs come from the existing PR list, not a new Forge call (phase 5)
+
+`collect` reads `list_issues(state=all)` and `list_prs(state=all)` through the existing
+seam and takes the MERGED PRs whose `closingIssuesReferences` name the issue (a PR closed
+unmerged closed nothing). No Forge method was added. `gh.ISSUE_LIST_FIELDS` gained
+`state,closedAt,stateReason`, which the open-issue path ignores.
+
+<!-- fr:journal kind=decision scope=plan id=p5-closed-without-reason created=2026-10-02T21:34:20+00:00 phase=5 -->
+### p5-closed-without-reason · decision · A closed issue with no state reason is counted apart, not as completed (phase 5)
+
+Median time to fix uses `reason == completed` only. A close with no recorded reason is
+neither completed nor not planned, so the time-to-fix table shows it in its own
+"Closed, no reason" column rather than guessing. Open and not-planned are separate columns.
+
+<!-- fr:journal kind=decision scope=plan id=p5-regression-names-its-pr created=2026-10-02T21:34:20+00:00 phase=5 -->
+### p5-regression-names-its-pr · decision · A regression without a `pr:` is refused when origins.yaml is read (phase 5)
+
+The skill's rule (a regression needs the PR that broke it named) is a structural
+invariant of `Origin`, so a file that breaks it fails at `check`/`render` with the path,
+not on the page.
+
+<!-- fr:journal kind=decision scope=plan id=p5-conclusion-batch-links created=2026-10-02T21:34:20+00:00 phase=5 -->
+### p5-conclusion-batch-links · decision · The conclusion links a batch to the board's `batch-<id>` anchor; unknown ids stay visible (phase 5)
+
+Batches resolve against `judgements.yaml` in the same state directory; a link goes to
+`triage.html#batch-<id>` (the anchor phase 4 added). An id the file does not hold, or no
+judgements file at all, renders as an `unresolved` span with no link, never dropped.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-judgements-validate-batch-members created=2026-10-02T21:34:20+00:00 phase=5 -->
+### p5-judgements-validate-batch-members · discovery · A batch fixture needs its members judged (phase 5)
+
+`Judgements` rejects a batch whose ids are not in `issues:`; the tests judge `widgets#3`.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-10-02T21:34:20+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+red-only task: tests, no production code to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-10-02T21:34:20+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+nothing to extract: the board has no chart or table helpers (its tables are board-specific rows), so the page reuses what IS shared - FONTS, esc, plural, TOKENS_CSS, GUTTER_CSS - and the engine is one new module; ruff format, ruff check and mypy clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t3 created=2026-10-02T21:34:20+00:00 phase=5 -->
+### no-refactor-p5-t3 · discovery · no-refactor-because P5.T3 (phase 5)
+
+acceptance row, mirrors and tripwires only: no production code to clean
