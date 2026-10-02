@@ -19,3 +19,8 @@ Asked after the split finding. Answer: keep the one-PR contract, one failing tes
 ### b6486b64443f · repro · #800 reproduced: emptied docs/runs/ makes the scratch merge report a phantom path
 
 tests/unit/test_triage_gitseam.py::test_an_archive_that_empties_a_live_directory_is_not_a_rename — main moves the last file of docs/runs/ into docs/implemented/runs/; the PR adds docs/runs/new.yaml. `Worktree.merge('origin/main')` returns ['docs/implemented/runs/new.yaml'] (exists on neither side), with merge.directoryRenames=conflict (git's default).
+
+<!-- fr:journal kind=root-cause scope=debug id=ec7d0d7c107f created=2026-10-02T18:10:59+00:00 -->
+### ec7d0d7c107f · root-cause · #800: the scratch merge inherits git's directory-rename detection
+
+gitseam.Worktree.merge overrode rerere only. With merge.directoryRenames at git's default (conflict), an archive that empties docs/runs/ reads as a rename of the directory, so the PR's new cursor is relocated to implemented/runs/ and reported as a conflict on a path neither side has.
