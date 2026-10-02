@@ -34,3 +34,8 @@ acceptance_cmd.set_status_cmd and the record engine's report line format the tra
 ### 8416c0313aac · root-cause · #655: _check_drops never compares drops with additions
 
 The CLI refuses a ref named in both --level and --drop-level before building the record; the engine, reachable without the CLI, did not.
+
+<!-- fr:journal kind=finding scope=debug id=f-fixes created=2026-10-02T18:29:41+00:00 state=fixed -->
+### f-fixes · finding [fixed] · Fixed: all eight members, failing tests first
+
+tests/unit/test_acceptance_integrity.py (committed red in 59421ee7). Fixes: indentation derived from the existing items (#470); fr.acceptance.anchors + check/engine/report changes + Repair matrix-name-anchors, with Repair gaining companions/also_wrote so it regenerates the committed reports (#531); edit.describe_move (#769); refusal wording (#654); merge_levels test (#656); engine contradiction refusal (#655); rows re-pointed through the record engine (#663, #676, and the 27 rotted/4 dead anchors). run-records-observed-models moved ci → skipped: its served-model-over-alias half lost its only test in #628.
