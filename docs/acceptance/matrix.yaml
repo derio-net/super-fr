@@ -5578,9 +5578,12 @@ rows:
       written
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_waves.py
+    status: ci
+    notes: wave and after round-trip through judgements schema 3; unknown, self and
+      cycle refused with the file unchanged; list shows wave, dependencies and close-out
   - id: batch-drive-pass
     capability: triage-batch-drive
     acceptance: fr triage batch drive keeps at most N batches dispatched and unmerged,
