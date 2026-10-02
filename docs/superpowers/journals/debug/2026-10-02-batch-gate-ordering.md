@@ -16,3 +16,8 @@ The batch was grouped as one root cause (a step consuming a record before it exi
 ### d1-operator · decision · Operator: three fixes, one PR; #761 records the driver; #768 uses the isolation base ref; #699 clarify + close
 
 Asked after h1-verdict. #761: the cursor records who drives it; standalone brainstorm gates need >=1 answered question since the gate opened, no round cap; skill advances right after start. #768: proportionality base falls back to the isolation-recorded start ref, then the local default branch; every derived witness evaluated, refusals reported together. #699: brief + reviewer prose state the brainstorm record is not an input.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-768 created=2026-10-02T18:16:59+00:00 -->
+### rc-768 · root-cause · #768: the proportionality witness had no base but the remote default, and derived witnesses exited at the first refusal
+
+_proportionality_witness called run_report(base=None); with no remote default branch it refused, and `fr run resolve` has no --base. _verified_evidence ran derived witnesses (proportionality, single-phase, visual, findings) serially, each raising Exit(2), so later ones were never evaluated.
