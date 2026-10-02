@@ -44,3 +44,8 @@ gc trusts any MERGED PR that `gh pr view <name>` returns, even one that merged b
 ### fix-844 · finding [fixed] · #844 fixed: gc ignores a MERGED PR that merged before the workspace's created_at
 
 `_pr_from` now carries `mergedAt` (gh `--json state,url,mergedAt`, glab `merged_at`, tea's `merged` timestamp). In `_gc_one`, `_merged_before` drops such a PR, and the decision falls through to merged-by-content. A merge time that is missing or unparseable keeps the old by-name verdict: the forge reported nothing to compare, so the fix doesn't invent a new rule for that case. Pinned by test_isolation_reap_names.py (both directions, plus the gh argv).
+
+<!-- fr:journal kind=finding scope=debug id=fix-553 created=2026-10-02T17:00:16+00:00 state=fixed -->
+### fix-553 · finding [fixed] · #553 fixed: drift between HEAD and the marker's branch now fails closed in every gate and in the reap hazard
+
+`_fr_branch_drift` in fr-isolation-decision.sh invalidates a worktree-mode marker when HEAD is a different branch. The Claude Code, Hermes and OpenCode edit gates all deny, naming both branches and `fr isolation up --branch <checked-out>`. The Bash guard inherits the check through decide_cwd. `_reap_hazard` gains kind=drifted-checkout, so gc skips the workspace and a non-forced down refuses. A detached HEAD is not drift, so editing mid-rebase still works. External markers are left unchanged: the preparer writes their branch. Pinned by test_isolation_decision_core.py, test_hooks_isolation_required.py, test_hermes_isolation_hook_edits.py, marker.test.ts and the gc test.
