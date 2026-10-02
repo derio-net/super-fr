@@ -50,6 +50,44 @@ def test_load_matrix_contains_known_surface_ids() -> None:
     assert "operator-gate" in ids
 
 
+def _cell(surface_id: str, harness: str):
+    surface = next(s for s in load_matrix().surfaces if s.id == surface_id)
+    return surface.harnesses[harness]
+
+
+def test_the_hermes_edit_gate_is_partial_naming_the_ungated_tools() -> None:
+    """#561 (spec 2026-10-02-opencode-observe-2 R14): Hermes' `pre_tool_call`
+    hook gates `write_file|patch`; `terminal`/`execute_code` writes reach only
+    the git/gh-mutation guard, so the cell is not `enforced`."""
+    cell = _cell("fr-isolation-required", "hermes")
+    assert cell.state == "partial"
+    note = cell.scope_note or ""
+    assert "write_file" in note and "patch" in note
+    assert "terminal" in note and "execute_code" in note
+    assert "fr-isolation-guard.sh" in note
+
+
+def test_the_opencode_observation_rows_are_partial_not_enforced() -> None:
+    for row in (
+        "operator-gate",
+        "out-of-scope-operator-guard",
+        "spec-review-independence",
+        "visual-evidence",
+    ):
+        cell = _cell(row, "opencode")
+        assert cell.state == "partial", row
+        assert "opencode-observe-take10-rerun" in (cell.scope_note or ""), row
+
+
+def test_the_run_session_identity_row_is_an_interaction_row() -> None:
+    matrix = load_matrix()
+    surface = next(s for s in matrix.surfaces if s.id == "run-session-identity")
+    assert surface.kind == "interaction"
+    assert surface.harnesses["claude-code"].state == "enforced"
+    assert surface.harnesses["opencode"].state == "partial"
+    assert surface.harnesses["hermes"].state == "absent"
+
+
 # --- (c) partial/advisory require a scope_note ------------------------------
 
 _BASE_HARNESSES = {
