@@ -1,2 +1,0 @@
-bump: minor
-summary: "acceptance: anchor Python refs on test names, not lines (check fails a rotted or dead anchor; a repair converts existing line anchors); add/set-status edit flush-left matrices; set-status names what changed when the status did not move; the record engine refuses a ref both dropped and added"
