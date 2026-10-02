@@ -72,16 +72,16 @@ reviewed afresh in this run.
 R1. On OpenCode, the super-fr plugin exports the calling session's id into every shell command, and `advance` records the run's top-level session on the attempt it opens.
 R2. With that session recorded, `fr run cost`, the usage capture and the PR body's Cost table show an OpenCode run's real figures.
 R3. A session is attributed to a run only on positive evidence: a session recorded on one of the run's attempts, a session bound to the run's workspace, or the session issuing one of the run's own step resolves or advances. `fr run cost --recompute` and `fr archive`'s capture never add the session of whoever runs them, and with no evidence they report `unavailable: no session found`.
-R4. Every transcript gate reads the harness through one harness-neutral session protocol, with a Claude Code backend and an OpenCode backend; Hermes stays unobserved.
+R4. Every transcript gate — including the phase `tests=` witness — reads the harness through one harness-neutral session protocol, with a Claude Code backend and an OpenCode backend; Hermes stays unobserved.
 R5. fr maps each dispatch to its child session through opencode.db's parent/child records; at resolve, an attempt that names an agent type but no claimed holder gets the child's session id as its holder when exactly one child of that type was dispatched since the attempt opened, and stays unclaimed otherwise.
 R6. At `spec-review` and `review-phase`, a reviewer id that names no child session the run session dispatched since the unit opened is refused on OpenCode, as it already is on Claude Code, and a tier-suffixed phase executor named as reviewer is refused on both.
-R7. The review-phase reviewer ends its return with a fenced `findings` block of brief-prescribed ids; wherever fr can read the return, a review-phase `done` is refused when the block is missing or malformed, when an id repeats across reviewers, or when the plan journal lacks a returned finding for that phase with the reviewer's scope tag; where it cannot, the check is skipped visibly.
+R7. The review-phase reviewer ends its return with a fenced `review-findings` block of brief-prescribed ids; wherever fr can read the return, a review-phase `done` is refused when the block is missing or malformed, when an id repeats across reviewers, or when the plan journal lacks a returned finding for that phase with the reviewer's scope tag; where it cannot, the check is skipped visibly.
 R8. The PR body's findings sections list the review-phase findings and how each was resolved.
 R9. fr reads answered OpenCode `question` calls from opencode.db, grouped into rounds by the rule it applies to Claude Code, and the fr-goal skill and `parity.yaml` describe OpenCode's question tool.
 R10. When fr cannot observe who answered an operator gate and neither the record nor the flags give `answered_by`, resolve refuses and names both values, on every harness; nothing defaults to `agent`.
 R11. `fr run gates` and `fr run check` say a gate's provenance is claimed and unobserved, not "no operator answered it", when fr could not look.
 R12. On OpenCode the visual witness observes screenshot reads and capture-script runs in the session of whoever owes them (executor, reviewer or orchestrator), never in another session.
-R13. Each affected OpenCode `parity.yaml` cell moves to `partial`, backed by tests over a committed fictional opencode.db fixture whose shapes follow the live capture, plus a new run-session-identity row; a post-merge acceptance row re-runs take 10 run B's shape.
+R13. Each affected OpenCode `parity.yaml` cell is `partial` with a scope note naming what fr now reads, backed by tests over a committed fictional opencode.db fixture whose shapes follow the live capture, plus a new run-session-identity row; a post-merge acceptance row re-runs take 10 run B's shape.
 R14. `parity.yaml` declares the `fr-isolation-required` edit gate `partial` on Hermes, with a scope note naming the `terminal`/`execute_code` write gap.
 
 ## Design
@@ -132,9 +132,15 @@ no session id).
   method is `None` there.
 
 The gates in `commands/run_cmd.py` (`_gate_provenance` `:1193`,
-`_verify_reviewer` `:1993`, `_verify_tests_log` `:2112` and its write-window
-helper), `journal/operator.py` and `run/visual.py`'s witness call
-`observed_session` instead of `_this_session` / `orchestrator_wrote_since`.
+`_verify_reviewer` `:1993`, `_verify_tests_log` `:2112` and `_wrote_before`
+`:2097`, and the phase `tests=` witness `_phase_log_windows` `:2230`),
+`journal/operator.py` and `run/visual.py`'s witness call `observed_session`
+instead of `_this_session` / `orchestrator_wrote_since`.
+`_phase_log_windows` today hard-codes OpenCode and Hermes as having "no
+child-session reader" (`:2247-2248`); it becomes
+`observed_session(...).child(holder).wrote_windows(...)` (the run session's own
+windows when the unit ran inline), so on OpenCode a phase log is witnessed in
+the holder's child session and only Hermes keeps that message.
 The module-level telemetry functions stay importable.
 
 ### B. The run session on OpenCode (R1, R2)
@@ -148,9 +154,17 @@ The module-level telemetry functions stay importable.
   `FR_OPENCODE_SESSION_ID`); `current_session(env)` reads the key of the
   harness `detect_harness` names, so gh#537's guard generalises: an OpenCode
   started from a Claude Code shell never records the inherited Claude key.
+- **Recording.** `_open_dispatch`'s gh#537 guard (`run_cmd.py:2973`, today
+  `session=… if harness == ClaudeCodeReader.harness else None`) records the
+  session on any harness that owns its key, through `run_session`.
 - **Root session.** A command run from a child session sees the CHILD's id;
-  one helper, `run_session`, walks `parent_id` to the top-level session for
-  `advance`, capture, binding and window checks.
+  one helper, `run_session(env)`, walks `parent_id` to the top-level session
+  (identity on Claude Code). Every place that reads or compares the run's
+  session calls it: `advance`'s recording above, capture, the ambient binding,
+  window checks, and `telemetry.dispatched_from_this_session` (`:341-351`,
+  behind `_dispatched_from_another_session`, `run_cmd.py:3233`). Without the
+  last one, filling `attempt.session` on OpenCode would make a child's own
+  `fr` command read its unit as "dispatched from another session".
 - **Cost.** `usage.sources.sessions_of` already yields every attempt's
   `(harness, session)` and `usage.readers.opencode.read` sums a session with
   its children, so R2 follows from R1.
@@ -160,16 +174,27 @@ The module-level telemetry functions stay importable.
 
 ### C. Positive-evidence attribution (R3)
 
-`usage.capture.candidates(state, env, repo_root, *, ambient: bool)` gains a
-keyword-only `ambient`. The cursor's attempt sessions and the workspace
-bindings are always candidates, each with its own recorded harness; the
-calling process's `current_session` is added only when `ambient=True`. The
-step paths pass `True` — `fr run resolve`/`advance`'s capture
-(`run_cmd.py:433-446`) and `deliver`'s live render (`record/pr_body.py:230`,
-`live_usage`), where the caller is the run's orchestrator. The post-hoc paths
-pass `False` — `run/cost.py`'s `recompute_entries` and `fr archive`'s capture.
-A post-hoc path with no candidates yields the existing `NO_SESSION_FOUND`
-placeholder, the same reading as the committed file.
+A keyword-only `ambient: bool` with **no default** is threaded through every
+function on the path: `usage.capture.candidates`, `build_capture`, `capture`
+and `live_usage` (`usage/capture.py:103,168,219,236`). The cursor's attempt
+sessions and the workspace bindings are always candidates, each with its own
+recorded harness; the calling process's session (`run_session`) is added only
+when `ambient=True`. No default means the type checker names every caller, so
+no path can stay ambient by accident.
+
+- `ambient=True` — the run's own step resolves, where the caller is the
+  orchestrator: `_capture_usage` / `_capture_on_new_host` on resolve
+  (`run_cmd.py:429-457`), the `deliver` capture (`:5194`), and `deliver`'s
+  live render (`record/pr_body.py:230`). `advance` captures nothing.
+- `ambient=False` — the post-hoc paths: `run/cost.py`'s `recompute_entries`
+  (`:212`, the one direct `candidates` caller) and `fr archive`'s capture
+  (`archive.py:561`).
+
+With no candidates, `recompute_entries` appends the same `NO_SESSION_FOUND`
+placeholder `build_capture` writes (`usage/capture.py:207-208`), and `fr run
+cost` prints each unavailable session's reason under its count line (today it
+prints only `N read, M unavailable`, `run_cmd.py:4175-4178`), so `--recompute`
+reads `unavailable: no session found` exactly as the committed file does.
 `fr usage backfill` reads only sessions an archived file already names, and is
 unchanged.
 
@@ -198,7 +223,10 @@ row's `parent_id` disagree with this session is skipped.
   one child of that agent type (by `agent_name`) dispatched since the attempt
   opened; zero or several leave it unclaimed, and the existing unclaimed
   handling stands. The plugin's own claim (`--open-unit`) names the same child
-  id, so the two agree.
+  id, so the two agree. The fill runs FIRST in resolve, before any evidence
+  is derived — in particular before the visual witness's "unclaimed" refusal
+  (`run/visual.py:468-482`), which would otherwise refuse a unit the fill
+  names.
 
 ### E. What the reviewer returned (R7, R8)
 
@@ -206,11 +234,16 @@ Runs on every harness whose backend reads the return (Claude Code, OpenCode);
 where it cannot (`None`, Hermes) the check is skipped with
 `unobserved=reviewer-return` in the evidence and a yellow warning.
 
-- The review-phase dispatch brief (and fr-goal §6) tells the reviewer to end
-  its return with:
+- **Where the instruction lives.** `_build_brief` (`run_cmd.py:2737`) adds a
+  `review_findings` key to every `review-phase` brief, on both shipped shapes
+  (`fr-goal.yaml`, `fr-goal-light.yaml`) since they share the step id: the
+  exact text the reviewer must be given, with this phase's `N` filled in.
+  fr-goal §6 tells the orchestrator to put that key's text into the reviewer's
+  prompt verbatim. The manifests' review-phase comment documents it. It tells
+  the reviewer to end its return with:
 
   ````markdown
-  ```findings
+  ```review-findings
   p2-r1 | in | <one-line summary>
   p2-r2 | out | <one-line summary>
   ```
@@ -218,15 +251,23 @@ where it cannot (`None`, Hermes) the check is skipped with
 
   ids `p<N>-r<k>`, or the single line `none`. With several reviewers in one
   unit, fr-goal §6 gives each a distinct letter (`p<N>a-r<k>`, `p<N>b-r<k>`).
-- `fr.run.review_return` (ported) parses the blocks. Every child dispatched
-  since the unit opened that is not a phase executor (by `agent_name`) counts
-  as a reviewer of the unit, and each owes a block. The review-phase `done`
-  refuses a missing or malformed block, an id repeated across two returns, and
-  any returned id that is not a `kind=finding` plan-journal entry with
-  `phase=N` whose `review_scope` equals the block's tag; the refusal names
-  every missing id. The journal may hold more findings than the blocks, never
-  fewer. Reclassification stays as today (resolving `out-of-scope` keeps the
-  reviewer's tag and renders as reclassified).
+  The fence is named `review-findings` so it is never confused with the
+  step's DERIVED `findings` evidence (the closed-finding ids fr records).
+- **Who is a reviewer.** A child dispatched since the unit opened is a
+  reviewer of the unit when its id is named in the record's `reviewer`
+  evidence, or when its return contains a `review-findings` fence. Each named
+  reviewer owes a block. Any other child — an Explore or fixer helper the
+  orchestrator dispatches while receiving the review — owes nothing, so an
+  honest run is never refused for a helper. The residual gap is stated: a
+  reviewer the record does not name and that returns no block is invisible to
+  this check (R6 still refuses a named id that is no dispatch).
+- `fr.run.review_return` (ported) parses the blocks. The review-phase `done`
+  refuses a named reviewer with a missing or malformed block, an id repeated
+  across two returns, and any returned id that is not a `kind=finding`
+  plan-journal entry with `phase=N` whose `review_scope` equals the block's
+  tag; the refusal names every missing id. The journal may hold more findings
+  than the blocks, never fewer. Reclassification stays as today (resolving
+  `out-of-scope` keeps the reviewer's tag and renders as reclassified).
 - **PR body (R8).** `record/pr_body.py` already renders plan-journal findings
   with their resolution; R7 is what puts them in the journal. A test pins the
   rendered sections carrying review-phase findings.
@@ -240,14 +281,19 @@ where it cannot (`None`, Hermes) the check is skipped with
   with non-empty `metadata.answers`; a declined call is no answer. Question
   texts come from `input.questions[].{question, header}`, so the
   `a 2nd round may follow` check works unchanged.
-- **No default (R10).** `resolve_in_process` (`run_cmd.py:5259`, default at
-  `:5289`) and the flag form (`:4783`, `answered_by or "agent"`) stop
-  defaulting. On a gated step whose gate is unobserved and that carries no
-  `answered_by`, `_gate_provenance` exits 2: "could not verify who answered
-  this gate — pass `answered_by: operator` (the operator answered) or
-  `answered_by: agent` (cleared without asking)". An observed gate still
-  derives provenance; `--no-questions` still means `agent`. `AnsweredBy` keeps
-  its two values.
+- **No default (R10).** All three defaults go: `resolve_in_process`
+  (`run_cmd.py:5289`, `offered.pop("answered_by", "agent")`), the flag form
+  (`:4783`, `answered_by or "agent"`) and `_resolve_body`'s own parameter
+  (`:4904`, `answered_by: str = "agent"`), which becomes `AnsweredBy | None =
+  None`. Its closed-set check (`:4920-4927`) accepts `None` and still refuses
+  any third value, so an ungated step resolves exactly as today.
+  `_gate_provenance` (`:1193`) takes `claimed: AnsweredBy | None`; on a gated
+  step whose gate is unobserved and `claimed is None` it exits 2: "could not
+  verify who answered this gate — pass `answered_by: operator` (the operator
+  answered) or `answered_by: agent` (cleared without asking)". An observed
+  gate still derives provenance; `--no-questions` still means `agent`.
+  `AnsweredBy` keeps its two values; the `run/model.py:41` docstring that
+  states the old default is updated.
 - **Wording (R11).** `fr run gates` (`run_cmd.py:6065`) and `fr run check`
   (`:5995`) read the step's `unobserved` evidence: an `agent` clearance whose
   step records `unobserved` containing `operator-gate` prints "cleared by the
@@ -272,28 +318,48 @@ reviewer's check. `_unobservable` stops naming OpenCode.
 
 ### H. Parity, fixtures, prose (R13, R14)
 
-- **Fixture.** `tests/fixtures/usage/opencode/build.py` (ported) builds a run
-  tree: a top-level `ses_run` with answered, declined and pending `question`
-  calls, `read`/`bash` parts, `task` dispatches to a `fr-spec-reviewer-hard`
-  child and two `general` children (one returning a `findings` block, one
-  not), and the children's own parts. Every id, path and text is fictional
-  (`/work/example/…`); `NOTE.md` says so, gives the capture date, and its
-  pinned sha256 moves.
-- **Parity rows** (`packages/fr/src/fr/harness/parity.yaml`), OpenCode cell →
-  `partial` with a `scope_note` naming the fixture tests and the post-merge
-  row: `operator-gate`, `out-of-scope-operator-guard`,
-  `spec-review-independence`, `visual-evidence`, `dispatch-holder-identity`,
-  `usage-capture`. `deliver-tests-provenance` stays `enforced`, now pinned to
-  the run session. New row `run-session-identity`: claude-code `enforced`,
-  opencode `partial`, hermes `absent`. `fr.harness.observe` learns the plugin's
-  marker for it if OpenCode cells are derived from marker comments.
+- **Fixture.** `tests/fixtures/usage/opencode/build.py` already exists on
+  `main` with three consumers (`tests/unit/test_usage_readers.py`,
+  `test_run_tests_log_opencode.py`, `test_run_opencode_reader.py`), so #837's
+  builder is NOT copied over it: the run tree is ADDED beside the existing
+  rows, under new session ids that no existing assertion reads, so what
+  `usage.readers.opencode.read` sums for today's sessions is unchanged. The
+  run tree: a top-level `ses_run` with answered, declined and pending
+  `question` calls, `read`/`bash` parts, `task` dispatches to a
+  `fr-spec-reviewer-hard` child and two `general` children (one returning a
+  `review-findings` block, one not), and the children's own parts. Every id,
+  path and text is fictional (`/work/example/…`); `NOTE.md` says so, gives the
+  capture date, and its pinned sha256 moves.
+- **Parity rows** (`packages/fr/src/fr/harness/parity.yaml`). OpenCode cell
+  moves `→ partial`, with a `scope_note` naming the fixture tests and the
+  post-merge row: `operator-gate`, `out-of-scope-operator-guard`,
+  `spec-review-independence`, `visual-evidence`. Already `partial`, so only
+  the `scope_note` changes: `dispatch-holder-identity` (`:373-374`) and
+  `usage-capture` (`:434-435`). `deliver-tests-provenance` stays `enforced`,
+  now pinned to the run session. New row `run-session-identity`,
+  `kind: interaction`: claude-code `enforced`, opencode `partial`, hermes
+  `absent`. Interaction rows are not observed, and `fr.harness.observe`
+  accepts markers only for shipped hook scripts (`observe.py:107-135`), so
+  observe.py is unchanged and `session.ts` carries NO parity marker, as
+  `claim.ts` already does not.
 - **#561 (R14).** The `fr-isolation-required` Hermes cell becomes `partial`,
   `scope_note`: the `pre_tool_call` hook gates `write_file|patch`
   (`.hermes/config.snippet.yaml`); `terminal`/`execute_code` writes reach only
   `fr-isolation-guard.sh`, which sees git/gh mutations alone.
 - **Who flips OpenCode to `enforced`.** A follow-up issue filed at `deliver`,
-  linked from the PR body, whose one job is Test Plan 13's last step once the
+  linked from the PR body, whose one job is Test Plan 14's last step once the
   live row flips (d-parity-partial).
+
+### J. Published explainer and delivery
+
+- **Explainer.** `docs/explainers/01-fr-goal.md` describes OpenCode session
+  recording ("records a session only when that harness owns the session
+  variable it read", `:361-373`) and the question gate; this change alters
+  both, so the `.md` is updated and its `.html` regenerated in this PR
+  (`.claude/rules/explainers-currency.md`).
+- **#837.** Closed as superseded, with a comment linking this PR, when this
+  PR's draft opened (d-close-837); its branch and workspace stay until this
+  PR merges and go with the post-merge close-out.
 
 ### I. Artifact versioning
 
@@ -330,24 +396,33 @@ in a record. No `current_version` moves.
    shape. Refused: an invented reviewer id (spec-review and review-phase), an
    OpenCode `fr-phase-executor-<tier>` named as reviewer, a review-phase with
    three reviewers whose block ids are not in the journal, a duplicate id
-   across two returns, a return with no block, and a record with no
-   `answered_by` on an unobservable gate. The honest record of the same run
-   resolves.
+   across two returns, a named reviewer whose return has no block, and a
+   record with no `answered_by` on an unobservable gate. The honest record of
+   the same run resolves, including one where the orchestrator also
+   dispatched an unnamed helper child that returned no block.
 4. The R7 cases on Claude Code transcript fixtures: a missing findings block
    and a missing journal finding are refused; the honest one passes.
 5. Holder fill: exactly one matching child fills the unclaimed attempt; zero
-   or two leave it unchanged.
+   or two leave it unchanged; a unit owing `visual` whose single matching
+   child is unclaimed resolves (the fill runs before the visual derive).
+5a. Phase `tests=` witness on OpenCode: a log written in the holder's child
+   session is witnessed; one written only by a sibling session is not; Hermes
+   keeps the unobserved message.
 6. Visual witness on OpenCode: a PNG read by the orchestrator's session does
    not satisfy the reviewer's check; the same read in the reviewer's child does.
 7. `current_session` per harness, incl. an OpenCode process carrying a stale
    `CLAUDE_CODE_SESSION_ID`; `advance` records the OpenCode top-level session
-   (from a child's id too); `fr run cost` on the fixture run prints real
-   figures; the ambient binding picks up the OpenCode session.
+   (from a child's id too); a child's own `fr` command on that attempt is NOT
+   read as "dispatched from another session"; `fr run cost` on the fixture run
+   prints real figures; the ambient binding picks up the OpenCode session.
 8. Attribution (R3): `--recompute` from a process carrying an unrelated
    `CLAUDE_CODE_SESSION_ID` on a run whose attempts record none prints
    `unavailable: no session found`, never that session's figures; the same run
    with an attempt session reads exactly that one; `fr archive`'s capture
-   behaves the same; a step resolve still adds its own session.
+   behaves the same; a step resolve still adds its own session. The three
+   existing OpenCode-fixture consumers (`test_usage_readers.py`,
+   `test_run_tests_log_opencode.py`, `test_run_opencode_reader.py`) pass
+   unchanged as regression guards for the added run tree.
 9. `answered_by`: the record and flag forms both refuse an unobservable gate
    with no value; `fr run gates`/`check` wording for observed-agent,
    claimed-agent-unobserved and claimed-operator-unobserved.
