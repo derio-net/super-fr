@@ -1,12 +1,19 @@
 """`fr usage backfill` — usage files for runs archived before usage existed
 (spec `2026-09-25-lean-cost-aware-process-design.md` §5.B.5).
 
-Run once by the operator. It READS every archived run cursor
+Run by the operator. It READS every archived run cursor
 (`docs/superpowers/implemented/runs/*.yaml`, any version) and whatever
 transcripts are still on this host, and writes a NEW
 `implemented/usage/<run>.yaml` with one `at: backfill` capture. It never
-writes a run cursor — archived artifacts are frozen history — and it never
-touches a run that already has a usage file, so re-running is a no-op.
+writes a run cursor — archived artifacts are frozen history.
+
+An archived run that already has a usage file is left alone, with one
+exception (gh#756): a session this host captured with tokens but no dollars,
+because it was still open when the capture ran (Claude Code writes a
+session's cost only when it exits), is re-read, and replaced when the reading
+now carries dollars. `backfill` is appended to that capture's `at`. A reading
+that is unavailable or still unpriced changes nothing, so re-running is a
+no-op once every session is priced.
 
 Per run: when any session the cursor names is readable here, the capture is
 those sessions, read (exact dollars where the harness keeps them). When none
@@ -32,8 +39,10 @@ from fr.usage.file import (
     UsageFile,
     archived_usage_path,
     dump_usage,
+    load_usage,
     session_entry,
     units_by_agent,
+    upsert_capture,
     usage_path,
 )
 from fr.usage.model import unavailable
@@ -46,8 +55,10 @@ ARCHIVED_RUNS_REL = Path("docs") / "superpowers" / "implemented" / "runs"
 @dataclass
 class BackfillReport:
     written: list[Path] = field(default_factory=list)
+    refreshed: list[Path] = field(default_factory=list)
+    """Archived usage files whose unpriced sessions now carry dollars."""
     skipped: list[str] = field(default_factory=list)
-    """Runs that already had a usage file."""
+    """Runs that already had a usage file, left as they were."""
     failed: list[tuple[str, str]] = field(default_factory=list)
 
 
@@ -86,6 +97,44 @@ def _harness(raw: dict[str, Any]) -> str:
     return next((h for h, _ in sessions_of(raw)), "unknown")
 
 
+def _now() -> str:
+    return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
+
+
+def refreshed_file(
+    usage: UsageFile, raw: dict[str, Any], env: Mapping[str, str]
+) -> UsageFile | None:
+    """`usage` with this host's unpriced sessions re-read, or `None` when no
+    reading now carries dollars (gh#756). Only this host's capture: one host
+    never rewrites another's entry. Never trades a reading for an absence."""
+    from fr.usage.capture import this_host, unpriced_sessions
+
+    mine = usage.host(this_host(usage.run, env))
+    stale = set(unpriced_sessions(mine)) if mine is not None else set()
+    if mine is None or not stale:
+        return None
+    harness_of = {session: harness for harness, session in sessions_of(raw)}
+    windows, units = windows_from_cursor(raw), units_by_agent(raw)
+    sessions: list[SessionEntry] = []
+    for entry in mine.sessions:
+        if entry.session in stale:
+            harness = harness_of.get(entry.session, mine.harness)
+            try:
+                record = read_session(harness, entry.session, env)
+            except Exception:  # noqa: BLE001 — an unreadable session stays as recorded
+                record = None
+            if record is not None and record.unavailable is None and record.cost.usd is not None:
+                entry = session_entry(record, windows, units)
+        sessions.append(entry)
+    if tuple(sessions) == mine.sessions:
+        return None
+    at = mine.at if "backfill" in mine.at else (*mine.at, "backfill")
+    return upsert_capture(
+        usage,
+        mine.model_copy(update={"sessions": tuple(sessions), "at": at, "captured_at": _now()}),
+    )
+
+
 def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
     from fr.artifacts.atomic import write_text_atomic
     from fr.usage.capture import this_host
@@ -95,7 +144,25 @@ def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
     for cursor in sorted(runs.glob("*.yaml")) if runs.is_dir() else ():
         run_id = cursor.stem
         target = archived_usage_path(repo_root, run_id)
-        if target.exists() or usage_path(repo_root, run_id).exists():
+        if target.exists():
+            try:
+                raw = yaml.safe_load(cursor.read_text())
+                usage = load_usage(target)
+                fresh = (
+                    refreshed_file(usage, raw, env)
+                    if usage is not None and isinstance(raw, dict)
+                    else None
+                )
+            except Exception as e:  # noqa: BLE001 — one unreadable run is that run's failure
+                report.failed.append((run_id, f"{type(e).__name__}: {e}"))
+                continue
+            if fresh is None:
+                report.skipped.append(run_id)
+            else:
+                write_text_atomic(target, dump_usage(fresh))
+                report.refreshed.append(target)
+            continue
+        if usage_path(repo_root, run_id).exists():
             report.skipped.append(run_id)
             continue
         try:
@@ -106,7 +173,7 @@ def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
                 host=this_host(run_id, env),
                 harness=_harness(raw),
                 mode="host-worktree",
-                captured_at=_dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
+                captured_at=_now(),
                 at=("backfill",),
                 sessions=tuple(_entries(raw, env)),
             )
@@ -120,4 +187,4 @@ def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
     return report
 
 
-__all__ = ["ARCHIVED_RUNS_REL", "BackfillReport", "backfill"]
+__all__ = ["ARCHIVED_RUNS_REL", "BackfillReport", "backfill", "refreshed_file"]
