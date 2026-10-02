@@ -171,3 +171,173 @@ cleaned in the green commits: closeout_event and housekeeping_branch are shared 
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 the lock is one context manager and kill-safety needed no new code beyond the recorded post_merge/closeout events the pass already reads; nothing to fold
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-10-02T20:31:27+00:00 phase=2 -->
+### review-p2 · review · phase 2 review: 16 findings (15 in scope, fixed; 1 out of scope) (phase 2)
+
+Independent Opus review of ab3c4fea..HEAD against R2-R8, R13, R14 and design B and C. The operator boundary held for draft and readiness (nothing readies, approves or un-drafts a PR), but rg-1, rg-2 and rg-3 were reproduced with the suite's own fakes: a dependent dispatched behind a merge that did not land, a moved head merged unverified, and the cap and dependencies scoped to the selection. All 15 in-scope findings were fixed in 920419d0, 40c0c6e2 and 83885a18 with command-level tests; the whole suite passed (7757 passed, 97 skipped).
+
+<!-- fr:journal kind=finding scope=plan id=rg-1 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-1 · finding [open] (reviewer: in scope) · A dependent is dispatched in the same pass even when its dependency's merge did not land (phase 2)
+
+drive_pass marks planned merges merged before dispatch; _act only checks the cap; merge_ready can return updated/pending/failing/draft. Breaks R3 and R13's summary.
+
+<!-- fr:journal kind=finding scope=plan id=rg-2 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-2 · finding [open] (reviewer: in scope) · A head that moves between the snapshot and the merge is merged (phase 2)
+
+plan_queue re-reads pr_view and pins to the new head; action.head is unused; with no required checks nothing is verified on the new head. Breaks R4.
+
+<!-- fr:journal kind=finding scope=plan id=rg-3 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-3 · finding [open] (reviewer: in scope) · The in-flight cap and dependency resolution only see the selected batches (phase 2)
+
+Unselected dispatched batches do not count against --max-inflight; a merged dependency outside the selection blocks its dependent forever.
+
+<!-- fr:journal kind=finding scope=plan id=rg-4 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-4 · finding [open] (reviewer: in scope) · Zero registered checks reads as green (phase 2)
+
+After the driver's own update push, or a PR whose CI is not queued, a repo with no required checks merges with no CI; MergeStopError killed the loop.
+
+<!-- fr:journal kind=finding scope=plan id=rg-5 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-5 · finding [open] (reviewer: in scope) · ci none is read from the clone's working tree, not the default branch (phase 2)
+
+A feature branch declaring ci none would let the driver merge on non-draft alone.
+
+<!-- fr:journal kind=finding scope=plan id=rg-6 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-6 · finding [open] (reviewer: in scope) · An archive PR attributed only by its files is never seen as merged (phase 2)
+
+The batch counts as closing forever and --once never exits 0.
+
+<!-- fr:journal kind=finding scope=plan id=rg-7 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-7 · finding [open] (reviewer: in scope) · drive.lock takeover has a race and an empty-file window (phase 2)
+
+Unwritten lock read as stale; two starters can unlink the same lock; unlink without ownership check; spec sentence about collect was wrong.
+
+<!-- fr:journal kind=finding scope=plan id=rg-8 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-8 · finding [open] (reviewer: in scope) · Close-out model resolution ignores the repo's models.yaml in single-repo mode (phase 2)
+
+_launch used path_of (None by default) where dispatch_batch uses the checkout path.
+
+<!-- fr:journal kind=finding scope=plan id=rg-9 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-9 · finding [open] (reviewer: in scope) · The release-commit check is date-based (phase 2)
+
+Another merge's release satisfied it; unknown merged_at made the close-out due at once.
+
+<!-- fr:journal kind=finding scope=plan id=rg-10 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-10 · finding [open] (reviewer: in scope) · A close-out preflight refusal stops merges and dispatches when no close-out is due (phase 2)
+
+Every merged batch without a closeout event was probed on every pass.
+
+<!-- fr:journal kind=finding scope=plan id=rg-11 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-11 · finding [open] (reviewer: in scope) · Only-blocked work exits 0 and ends the loop (phase 2)
+
+Hides blocked work from a scheduler; R7 ambiguous.
+
+<!-- fr:journal kind=finding scope=plan id=rg-12 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-12 · finding [open] (reviewer: in scope) · Archive attribution by head is broader than the spec allows (phase 2)
+
+Any event.archive head was accepted without a file check.
+
+<!-- fr:journal kind=finding scope=plan id=rg-13 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-13 · finding [open] (reviewer: in scope) · The executor's declared departures need a spec correction (phase 2)
+
+post_merge starts in gitseam, the default selection, and the no --yes exit code were not in the spec.
+
+<!-- fr:journal kind=finding scope=plan id=rg-14 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-14 · finding [open] (reviewer: in scope) · fr-triage skill dropped 'Never act on the forge unasked'; AGENTS.md says schema 2 and 3 (phase 2)
+
+Docs the phase edited were inconsistent.
+
+<!-- fr:journal kind=finding scope=plan id=rg-15 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=in -->
+### rg-15 · finding [open] (reviewer: in scope) · The tests miss the command-level paths behind rg-1 to rg-3 (phase 2)
+
+World defaults hid the all-checks fallback; moved head, held merge, outside-selection dependency, lock races and file-attributed archive were untested.
+
+<!-- fr:journal kind=finding scope=plan id=rg-16 created=2026-10-02T20:31:27+00:00 phase=2 state=open review_scope=out -->
+### rg-16 · finding [open] (reviewer: out of scope) · A close-out tab that ended before a restart is not seen, so a second close-out could start (phase 2)
+
+The spec's own accepted design limit (design C), not an implementation error.
+
+<!-- fr:journal kind=finding scope=plan id=rg-1-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-1 -->
+### rg-1-resolved · finding [fixed] · resolves rg-1: A dependent is dispatched in the same pass even when its dependency's merge did not land (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-2-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-2 -->
+### rg-2-resolved · finding [fixed] · resolves rg-2: A head that moves between the snapshot and the merge is merged (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-3-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-3 -->
+### rg-3-resolved · finding [fixed] · resolves rg-3: The in-flight cap and dependency resolution only see the selected batches (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-4-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-4 -->
+### rg-4-resolved · finding [fixed] · resolves rg-4: Zero registered checks reads as green (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-5-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-5 -->
+### rg-5-resolved · finding [fixed] · resolves rg-5: ci none is read from the clone's working tree, not the default branch (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-6-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-6 -->
+### rg-6-resolved · finding [fixed] · resolves rg-6: An archive PR attributed only by its files is never seen as merged (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-7-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-7 -->
+### rg-7-resolved · finding [fixed] · resolves rg-7: drive.lock takeover has a race and an empty-file window (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-8-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-8 -->
+### rg-8-resolved · finding [fixed] · resolves rg-8: Close-out model resolution ignores the repo's models.yaml in single-repo mode (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-9-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-9 -->
+### rg-9-resolved · finding [fixed] · resolves rg-9: The release-commit check is date-based (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-10-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-10 -->
+### rg-10-resolved · finding [fixed] · resolves rg-10: A close-out preflight refusal stops merges and dispatches when no close-out is due (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-11-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-11 -->
+### rg-11-resolved · finding [fixed] · resolves rg-11: Only-blocked work exits 0 and ends the loop (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-12-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-12 -->
+### rg-12-resolved · finding [fixed] · resolves rg-12: Archive attribution by head is broader than the spec allows (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-13-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-13 -->
+### rg-13-resolved · finding [fixed] · resolves rg-13: The executor's declared departures need a spec correction (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-14-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-14 -->
+### rg-14-resolved · finding [fixed] · resolves rg-14: fr-triage skill dropped 'Never act on the forge unasked'; AGENTS.md says schema 2 and 3 (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-15-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=fixed resolves=rg-15 -->
+### rg-15-resolved · finding [fixed] · resolves rg-15: The tests miss the command-level paths behind rg-1 to rg-3 (phase 2)
+
+Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rg-16-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=open resolves=rg-16 out_of_scope=true -->
+### rg-16-resolved · finding [out-of-scope] · resolves rg-16: A close-out tab that ended before a restart is not seen, so a second close-out could start (phase 2)
+
+The spec's accepted design limit, recorded in design C; not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p2-closeout-state-archived-unreachable-resolved created=2026-10-02T20:31:27+00:00 phase=2 state=open resolves=p2-closeout-state-archived-unreachable out_of_scope=true -->
+### p2-closeout-state-archived-unreachable-resolved · finding [out-of-scope] · resolves p2-closeout-state-archived-unreachable: batch list's close-out column can never read `archived` (phase 2)
+
+Raised by the executor as not caused by phase 2; the archived outcome became reachable through rg-6's fix (the close-out event now carries the archive PR number).
