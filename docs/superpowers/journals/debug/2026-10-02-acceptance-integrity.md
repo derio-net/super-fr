@@ -14,3 +14,8 @@ Investigation of the 8 members finds at least five independent causes, each in a
 ### 829530044400 · ruled-out · One root cause for the batch
 
 Ruled out: the members share a surface (the acceptance edit helpers), not a cause. Operator chose to fix all in one PR, each with its own failing test, and chose name anchors (not a line-target tripwire) for #531.
+
+<!-- fr:journal kind=root-cause scope=debug id=fccfc573a40b created=2026-10-02T18:29:32+00:00 -->
+### fccfc573a40b · root-cause · #470: render_row_block hardcodes a two-space item indent
+
+edit.render_row_block prefixed every line with two spaces whatever the file used; under flush-left rows the new item nests into the previous row's mapping, so the engine's final parse refuses and rolls back.
