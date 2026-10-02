@@ -13,6 +13,7 @@ required section is missing.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -35,6 +36,7 @@ __all__ = [
     "missing_sections",
     "render_out_of_scope",
     "render_pr_body",
+    "shared_closing_keywords",
 ]
 
 PR_BODY_NAME = "pr-body.md"
@@ -57,6 +59,41 @@ def missing_sections(body: str) -> list[str]:
     """The required headings `body` does not carry (a heading is a line)."""
     lines = {line.strip() for line in body.splitlines()}
     return [h for h in REQUIRED_SECTIONS if h not in lines]
+
+
+# GitHub's closing keywords. Each closes the ONE reference directly after it.
+_KEYWORD = re.compile(r"\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b", re.IGNORECASE)
+_KEYWORD_BEFORE = re.compile(rf"{_KEYWORD.pattern}\s*:?\s*$", re.IGNORECASE)
+_ISSUE_REF = re.compile(r"https?://\S+?/issues/\d+\b|(?<![\w/])(?:[\w.-]+/[\w.-]+)?#\d+\b")
+_CODE_SPAN = re.compile(r"`[^`]*`")
+
+
+def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
+    """Every line of `body` that shares one closing keyword across several
+    issue references (gh#821), with the lines that would close each of them.
+
+    `Closes #a and #b` closes only `#a` on GitHub, so the rule is strict: on a
+    line carrying a closing keyword, every reference needs its own keyword
+    directly before it. Code (fenced or inline) is skipped, as GitHub skips it.
+    """
+    out: list[tuple[str, list[str]]] = []
+    fenced = False
+    for raw in body.splitlines():
+        if raw.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        line = _CODE_SPAN.sub("", raw)
+        keyword = _KEYWORD.search(line)
+        refs = list(_ISSUE_REF.finditer(line))
+        if keyword is None or not refs:
+            continue
+        starts = [0, *(m.end() for m in refs[:-1])]
+        if all(_KEYWORD_BEFORE.search(line[s : m.start()]) for s, m in zip(starts, refs)):
+            continue
+        out.append((raw.strip(), [f"{keyword.group(1)} {m.group(0)}" for m in refs]))
+    return out
 
 
 def _journals(repo_root: Path, state: RunState) -> list[tuple[str, list[JournalEntry]]]:

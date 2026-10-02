@@ -4785,7 +4785,12 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     from fr.artifacts.atomic import write_text_atomic
     from fr.hostclient import FORGE_ERRORS, client_for, pr_command
     from fr.record.model import records_dir
-    from fr.record.pr_body import PR_BODY_NAME, missing_sections, render_pr_body
+    from fr.record.pr_body import (
+        PR_BODY_NAME,
+        missing_sections,
+        render_pr_body,
+        shared_closing_keywords,
+    )
 
     body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
     body_path.parent.mkdir(parents=True, exist_ok=True)
@@ -4812,6 +4817,23 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         err_console.print(
             f"refused: the PR body lacks required section(s): {', '.join(missing)}. Update "
             f"it from fr's render — `{edit}` — and resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # gh#821: one keyword closes one reference, so `Closes #a and #b` would
+    # leave #b open after its fix merges. Checked on the body already read.
+    shared = shared_closing_keywords(live)
+    if shared:
+        fixes = "\n".join(
+            f"  {bad!r} — write instead:\n" + "\n".join(f"    {f}" for f in fixed)
+            for bad, fixed in shared
+        )
+        err_console.print(
+            "refused: the PR body shares one closing keyword across several issues, "
+            "and only the first would close on merge. Give each reference its own "
+            "keyword, one per line (move a non-closing mention to a line with no "
+            f"keyword), then resolve again:\n{fixes}",
             markup=False,
             soft_wrap=True,
         )
