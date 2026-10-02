@@ -181,7 +181,7 @@ class ReapHazard:
     """Work that a reap would destroy, and how to keep it (spec 2026-09-20
     isolation-reap-data-loss-guards §3.1)."""
 
-    kind: str  # "dirty-worktree" | "unlanded-content" | "unverifiable"
+    kind: str  # "drifted-checkout" | "dirty-worktree" | "unlanded-content" | "unverifiable"
     detail: str  # names the branch and what would be lost — see _hazard_detail
 
 
@@ -195,6 +195,23 @@ class ReapRefused(IsolationError):  # noqa: N818 — a refusal is a decision, no
     def __init__(self, hazard: ReapHazard) -> None:
         self.hazard = hazard
         super().__init__(hazard.detail)
+
+
+def _merged_before(pr: dict[str, Any], created_at: str) -> bool:
+    """True when `pr` provably merged before the workspace was created (gh#844).
+
+    `_pr_from` finds a PR by branch NAME, which a later workspace can re-use.
+    Only a merge time we can read AND compare proves the PR is an earlier one:
+    a missing or unparseable time keeps the old by-name verdict rather than
+    inventing a new one."""
+    try:
+        merged = datetime.fromisoformat(str(pr.get("mergedAt") or "").replace("Z", "+00:00"))
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if merged.tzinfo is None or created.tzinfo is None:
+        return False
+    return merged < created
 
 
 def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) -> str:
@@ -1047,11 +1064,21 @@ class LocalWorktreeDevcontainerTarget:
                     f"worktree can't see it — run `fr init scaffold --profile {name}` (which now "
                     "commits) or commit .devcontainer/ yourself, then retry `fr isolation up`."
                 )
-        self._devcontainer_up(worktree, name)
-
+        # Record BEFORE the side effect that can fail (gh#578): a failing
+        # postCreate used to leave a worktree and a container that neither
+        # `status` nor `down` could address. With the record saved first, a
+        # failed `up` is a listed workspace — retry `up`, or `down` it.
         state = carried_state(self.repo_root, branch, worktree, name, "devcontainer")
         save_state(state)
         self._write_isolation_marker(worktree, branch, created_at=state.created_at)
+        try:
+            self._devcontainer_up(worktree, name)
+        except IsolationError as err:
+            raise IsolationError(
+                f"{err}\nThe workspace for {branch} is recorded: fix the cause and re-run "
+                f"`fr isolation up --branch {branch}`, or remove it with "
+                f"`fr isolation down --branch {branch}`."
+            ) from err
         self._spawn_gc()
         return state
 
@@ -1571,6 +1598,25 @@ class LocalWorktreeDevcontainerTarget:
         """
         if not state.worktree.is_dir():
             return None
+        # DRIFTED CHECKOUT (gh#553): every later check speaks for
+        # `state.branch`, but the worktree may have another branch checked
+        # out (a `git checkout -b` inside the workspace). That branch's
+        # commits are checked by nothing below, so refuse rather than reap
+        # on the registered branch's verdict. A detached HEAD (mid-rebase,
+        # bisect) is not a different branch and falls through.
+        head = self.run(["git", "symbolic-ref", "--quiet", "--short", "HEAD"], cwd=state.worktree)
+        checked_out = (head.stdout or "").strip() if head.returncode == 0 else ""
+        if checked_out and checked_out != state.branch:
+            return ReapHazard(
+                kind="drifted-checkout",
+                detail=_hazard_detail(
+                    state.branch,
+                    f"has {checked_out} checked out, not the branch fr registered",
+                    [],
+                    f"Check out {state.branch} again, or register the workspace you are "
+                    f"using with `fr isolation up --branch {checked_out}`.",
+                ),
+            )
         status = self.run(["git", "status", "--porcelain"], cwd=state.worktree)
         if status.returncode != 0:
             return ReapHazard(
@@ -1929,6 +1975,12 @@ class LocalWorktreeDevcontainerTarget:
             return GcAction(wt, None, "no-state", "warned", "worktree present, no fr state")
         pr = self._pr_from(state.worktree, state.branch)
         pr_state = pr.get("state") if pr else None
+        if pr is not None and pr_state == "MERGED" and _merged_before(pr, state.created_at):
+            # gh#844: the lookup is by branch NAME, so a re-used name answers
+            # with an earlier PR that merged before this workspace existed —
+            # not this workspace's work. Fall through to the content check,
+            # which judges the branch itself.
+            pr_state = None
         if pr_state == "MERGED":
             return self._reap_or_classify(wt, state, "merged", dry_run)
         if pr_state == "OPEN":
@@ -2558,10 +2610,15 @@ class LocalWorktreeDevcontainerTarget:
         )
         exclude = _git_common_dir(self.repo_root) / "info" / "exclude"
         exclude.parent.mkdir(parents=True, exist_ok=True)
-        existing = exclude.read_text().splitlines() if exclude.is_file() else []
-        missing = [p for p in _FR_OWNED_EXCLUDES if p not in existing]
+        text = exclude.read_text() if exclude.is_file() else ""
+        missing = [p for p in _FR_OWNED_EXCLUDES if p not in text.splitlines()]
         if missing:
             with exclude.open("a") as fh:
+                # The file is shared and may be hand-edited: a last line with no
+                # trailing newline would otherwise absorb our first pattern
+                # (`*.log` + `.fr-isolation` → `*.log.fr-isolation`, gh#843).
+                if text and not text.endswith("\n"):
+                    fh.write("\n")
                 fh.writelines(f"{p}\n" for p in missing)
 
     def _remove_isolation_marker(self, worktree: Path) -> None:
@@ -2802,7 +2859,8 @@ class LocalWorktreeDevcontainerTarget:
           single-shot query, not a bug.
 
         Every path returns the SAME shape callers already depend on:
-        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str}` — each
+        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str, "mergedAt": str|None}`
+        (the merge time where the forge reports one — gc's #844 check) — each
         backend's native state vocabulary is coerced here so callers never
         see gh/glab/tea-specific casing or a separate merged boolean.
         """
@@ -2812,7 +2870,7 @@ class LocalWorktreeDevcontainerTarget:
         if backend == "gitea":
             return self._pr_from_gitea(cwd, branch)
         result = self.run(
-            ["gh", "pr", "view", branch, "--json", "state,url"],
+            ["gh", "pr", "view", branch, "--json", "state,url,mergedAt"],
             cwd=cwd,
         )
         if result.returncode != 0 or not (result.stdout or "").strip():
@@ -2840,7 +2898,7 @@ class LocalWorktreeDevcontainerTarget:
             state = "CLOSED"
         else:
             state = "OPEN"
-        return {"state": state, "url": raw.get("web_url", "")}
+        return {"state": state, "url": raw.get("web_url", ""), "mergedAt": raw.get("merged_at")}
 
     def _pr_from_gitea(self, cwd: Path, branch: str) -> dict[str, Any] | None:
         result = self.run(
@@ -2871,7 +2929,9 @@ class LocalWorktreeDevcontainerTarget:
             head = entry.get("head") or {}
             if not isinstance(head, dict) or head.get("label") != branch:
                 continue
-            merged = bool(entry.get("merged", False))
+            merged = entry.get("merged", False)
             state = "MERGED" if merged else ("CLOSED" if entry.get("state") == "closed" else "OPEN")
-            return {"state": state, "url": entry.get("url", "")}
+            # tea renders `merged` as the merge time when there is one.
+            merged_at = merged if isinstance(merged, str) else None
+            return {"state": state, "url": entry.get("url", ""), "mergedAt": merged_at}
         return None

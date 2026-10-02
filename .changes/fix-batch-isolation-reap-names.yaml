@@ -1,0 +1,2 @@
+bump: patch
+summary: "isolation: gc no longer reaps a fresh workspace on an earlier merged PR of the same branch name; the edit gates, gc and down refuse a workspace whose checkout drifted from its registered branch; a failed devcontainer up leaves an addressable state record; info/exclude appends no longer glue onto a last line without a newline"

@@ -18,13 +18,13 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from fr.isolation.local import (
     IsolationError,
     LocalWorktreeDevcontainerTarget,
     _git_common_dir,
 )
 from fr.isolation.types import list_states, load_state
+
 from tests.unit.test_isolation import FakeRunner, _gc_env, make_repo_with_origin
 
 
