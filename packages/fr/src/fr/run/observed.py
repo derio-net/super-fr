@@ -599,3 +599,30 @@ def observed_session(env: Mapping[str, str], session: str | None = None) -> Obse
         readable = _query(db, "SELECT 1 FROM session LIMIT 1", ()) is not None
         return None if readable and not view._known() else view
     return None
+
+
+def why_unobservable(harness: str | None, env: Mapping[str, str], what: str) -> str:
+    """Why fr could not observe `what` (`questions`, `subagent dispatches`,
+    `commands`) on `harness` — the one wording every gate and guard prints, so
+    a gate never borrows another gate's noun (#815) and an unobserved OpenCode
+    session is never described by a scope note that claims verification."""
+    if harness is None:
+        return "no harness detected"
+    if harness == "opencode":
+        # OpenCode HAS a reader (above); what is missing is the session to
+        # read, or the database that holds it (#837 review p1-r5).
+        if not env.get("FR_OPENCODE_SESSION_ID"):
+            return (
+                f"your harness (opencode) exported no session id to fr, so its {what} "
+                "cannot be read (FR_OPENCODE_SESSION_ID is unset: the super-fr OpenCode "
+                "plugin is missing or older than this release)"
+            )
+        return (
+            "the session your harness (opencode) exported (FR_OPENCODE_SESSION_ID) is not "
+            f"in the OpenCode database fr read, or that database could not be read, so its "
+            f"{what} cannot be read — check FR_OPENCODE_DB / XDG_DATA_HOME; the super-fr "
+            "OpenCode plugin exports the id"
+        )
+    if harness != "claude-code":
+        return f"fr has no transcript reader for {harness}'s {what}"
+    return "no readable transcript for this session"

@@ -242,30 +242,13 @@ def _why_unobservable(what: str) -> str:
     """Why a gate could not observe `what` — the thing it reads from the
     transcript (`questions`, `subagent dispatches`, `commands`), so a gate
     never borrows another gate's noun (#815)."""
+    from fr.run.observed import why_unobservable
+
     try:
         harness = detect_harness(os.environ)
     except HarnessError:
         harness = None
-    if harness is None:
-        return "no harness detected"
-    if harness == "opencode":
-        # OpenCode HAS a reader (`fr.run.observed`); what is missing is the
-        # session to read, or the database that holds it (#837 review p1-r5).
-        if not os.environ.get("FR_OPENCODE_SESSION_ID"):
-            return (
-                f"your harness (opencode) exported no session id to fr, so its {what} "
-                "cannot be read (FR_OPENCODE_SESSION_ID is unset: the super-fr OpenCode "
-                "plugin is missing or older than this release)"
-            )
-        return (
-            "the session your harness (opencode) exported (FR_OPENCODE_SESSION_ID) is not "
-            f"in the OpenCode database fr read, or that database could not be read, so its "
-            f"{what} cannot be read — check FR_OPENCODE_DB / XDG_DATA_HOME; the super-fr "
-            "OpenCode plugin exports the id"
-        )
-    if harness != "claude-code":
-        return f"fr has no transcript reader for {harness}'s {what}"
-    return "no readable transcript for this session"
+    return why_unobservable(harness, os.environ, what)
 
 
 TESTS_PROVENANCE_SURFACE = "deliver-tests-provenance"
@@ -991,7 +974,8 @@ def _complete_step(
 
 def _gate_degradation_notice() -> str | None:
     """The loud degradation notice for a blocked `gate: operator` step (spec
-    §3.D.1), or `None` when the detected harness genuinely enforces it.
+    §3.D.1), or `None` when fr can observe who answers it here (Claude Code
+    with a readable transcript, OpenCode with an exported, readable session).
 
     Reads `os.environ` through `detect_harness` (never a hardcoded harness
     name) and the shipped matrix's `operator-gate` row through `load_matrix`
@@ -1006,6 +990,7 @@ def _gate_degradation_notice() -> str | None:
     `fr.harness.HARNESSES` — a typo must not silently become an inference,
     so the caller surfaces it as a command error rather than guessing.
     """
+    from fr.run.observed import why_unobservable
     from fr.run.telemetry import operator_answered_since
 
     harness = detect_harness(os.environ)
@@ -1013,23 +998,27 @@ def _gate_degradation_notice() -> str | None:
     surface = next(s for s in matrix.surfaces if s.id == "operator-gate")
     if harness is not None:
         hstate = surface.harnesses[harness]
-        # `enforced` is a claim about a MECHANISM — `resolve` verifying an
-        # answered question in the session transcript — so it holds only where
-        # that transcript can be read. Before 2026-09-21 (debug journal C1) it
-        # was a claim about a TOOL existing, nothing checked it, and this early
+        # Observed is a claim about a MECHANISM — `resolve` reading answered
+        # questions in the session (Claude Code's transcript, OpenCode's
+        # `question` parts) — so the notice is silent exactly where that read
+        # works, whatever the row's state. Before 2026-09-21 (debug journal C1)
+        # it was a claim about a TOOL existing, nothing checked it, and an early
         # return spared the one harness that skipped its gate the only warning.
         epoch = "1970-01-01T00:00:00+00:00"
-        if hstate.state == "enforced" and operator_answered_since(os.environ, epoch) is not None:
+        if operator_answered_since(os.environ, epoch) is not None:
             return None
-        if hstate.state == "enforced":
+        if hstate.state in ("enforced", "partial"):
+            # fr HAS a reader here, so the row's scope_note (which describes
+            # the verification) would be false — say why the read failed.
             detail = (
-                f"your harness ({harness}) enforces this gate by reading the session "
-                "transcript, which is not readable here — so this gate is advisory now"
+                f"your harness ({harness}) is verified by reading the session, but "
+                f"{why_unobservable(harness, os.environ, 'questions')} — so this gate "
+                "is advisory now"
             )
         else:
             detail = f"your harness ({harness}) does not enforce this gate (state: {hstate.state})"
-        if hstate.scope_note:
-            detail += f" — {hstate.scope_note}"
+            if hstate.scope_note:
+                detail += f" — {hstate.scope_note}"
     else:
         detail = (
             "your harness could not be detected (set FR_HARNESS to one of "
@@ -1037,9 +1026,14 @@ def _gate_degradation_notice() -> str | None:
         )
     return (
         f"gate: {detail}.\n"
-        "      Put the questions to the operator in your reply and STOP. Clearing this "
-        "gate without\n"
-        "      asking is recorded as `answered_by: agent` and reported in the delivered PR."
+        "      Put the questions to the operator (with your harness's question tool where "
+        "it has one) and STOP until they answer.\n"
+        "      fr cannot verify who answered this gate, so its resolve must say: "
+        "`answered_by: operator` (the operator answered) or `answered_by: agent` "
+        "(cleared without asking) — `--answered-by` on the flag form, an "
+        "`answered_by` evidence key in a record. There is no default."
+        # No braces in this notice: it precedes the JSON brief, which a harness
+        # finds by its first `{`.
     )
 
 
@@ -4572,19 +4566,22 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         # copy-pastes, and the brief is JSON a harness parses off stdout —
         # rich's default folding would break a long token mid-string and
         # produce invalid JSON.
-        console.print(
-            f"{step.id}: blocked on operator gate — answer it, then "
-            f"`fr run resolve {state.run} --step {step.id} --state done`",
-            soft_wrap=True,
-        )
-        # spec §3.D.1: printed BEFORE the agent brief (below), not after — the
-        # brief is a single JSON line a harness parses off stdout, and this
-        # notice must not become the last line a naive `tail -1` reads.
         try:
             notice = _gate_degradation_notice()
         except HarnessError as e:
             err_console.print(f"[red]{e}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
+        # R10: where fr cannot observe who answers, the resolve must carry the
+        # claim — so the command the agent copies carries it too.
+        claim = "" if notice is None else " --answered-by <operator|agent>"
+        console.print(
+            f"{step.id}: blocked on operator gate — answer it, then "
+            f"`fr run resolve {state.run} --step {step.id} --state done{claim}`",
+            soft_wrap=True,
+        )
+        # spec §3.D.1: printed BEFORE the agent brief (below), not after — the
+        # brief is a single JSON line a harness parses off stdout, and this
+        # notice must not become the last line a naive `tail -1` reads.
         if notice is not None:
             console.print(notice, soft_wrap=True)
         # A gate stops the RUN, not the harness's view of the step: an `agent`

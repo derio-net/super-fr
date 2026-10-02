@@ -355,29 +355,72 @@ def test_advance_is_idempotent_while_still_blocked(tmp_path: Path) -> None:
 # --- Task 2 (Phase 5): fr run advance — the harness degradation notice ---
 
 
-def test_advance_prints_the_degradation_notice_on_opencode(tmp_path: Path) -> None:
-    """spec §3.D.1: a `gate: operator` step blocking on a harness where
-    `operator-gate` is not `enforced` prints a notice — and the notice text
-    comes from the matrix row's `scope_note`, not a hardcoded string
-    (otherwise the matrix is decoration)."""
-    from fr.harness import load_matrix
-
+def _advance_gated_as(tmp_path: Path, harness_env: dict[str, str | None]):
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "gated", _GATE_SHAPE)
     _invoke_as_harness(
         repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"], {}
     )
-    result = _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "opencode"})
+    return _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], harness_env)
+
+
+def _owes_a_claim(flat: str) -> bool:
+    """The R10 tail: fr says it cannot verify, and that the resolve must say
+    who answered — never that a silent resolve becomes `agent`."""
+    return (
+        "fr cannot verify who answered this gate" in flat
+        and "answered_by: operator" in flat
+        and "answered_by: agent" in flat
+        and "no default" in flat
+        and "--answered-by" in flat
+        and "is recorded as `answered_by: agent`" not in flat
+    )
+
+
+def test_advance_on_opencode_without_a_session_says_the_claim_is_owed(tmp_path: Path) -> None:
+    """p3-r1 (spec 2026-10-02 §F, R10): OpenCode with no exported session is
+    unobserved — the notice says WHY (the reason `_why_unobservable` gives, not
+    the row's scope_note, which claims verification) and that the resolve must
+    carry `answered_by`; the resolve hint names the flag too."""
+    result = _advance_gated_as(tmp_path, {"FR_HARNESS": "opencode"})
     assert result.exit_code == 0, result.output
-    matrix = load_matrix()
-    surface = next(s for s in matrix.surfaces if s.id == "operator-gate")
-    scope_note = surface.harnesses["opencode"].scope_note
+    flat = " ".join(result.output.split())
+    assert "opencode" in flat
+    assert "FR_OPENCODE_SESSION_ID is unset" in flat
+    assert _owes_a_claim(flat), flat
+    assert "--state done --answered-by" in flat
+
+
+def test_advance_on_opencode_with_a_readable_session_prints_no_notice(tmp_path: Path) -> None:
+    """p3-r1: where fr READS OpenCode's `question` parts, the gate is observed
+    — no degradation notice, no claim owed (resolve derives `answered_by`)."""
+    from tests.unit.opencode_fixture import DB, opencode_env
+
+    result = _advance_gated_as(tmp_path, opencode_env(DB))
+    assert result.exit_code == 0, result.output
+    flat = " ".join(result.output.split())
+    assert "gate: your harness" not in flat  # no degradation notice at all
+    assert "advisory" not in flat
+    assert "cannot verify" not in flat
+    assert "--answered-by" not in flat
+
+
+def test_advance_on_hermes_quotes_the_row_and_owes_a_claim(tmp_path: Path) -> None:
+    """spec §3.D.1: where the harness has no reader at all, the notice quotes
+    the matrix row's `scope_note` (not a hardcoded string) and still owes the
+    R10 claim."""
+    from fr.harness import load_matrix
+
+    result = _advance_gated_as(tmp_path, {"FR_HARNESS": "hermes"})
+    assert result.exit_code == 0, result.output
+    surface = next(s for s in load_matrix().surfaces if s.id == "operator-gate")
+    scope_note = surface.harnesses["hermes"].scope_note
     assert scope_note is not None
-    assert scope_note in result.output, result.output
-    assert "opencode" in result.output
-    assert "answered_by: agent" in result.output
-    assert "STOP" in result.output
+    flat = " ".join(result.output.split())
+    assert " ".join(scope_note.split()) in flat
+    assert "STOP" in flat
+    assert _owes_a_claim(flat), flat
 
 
 def test_advance_prints_no_notice_when_the_harness_enforces_the_gate(tmp_path: Path) -> None:
@@ -431,6 +474,7 @@ def test_advance_degrades_loudly_on_claude_code_when_it_cannot_verify(tmp_path: 
     assert "claude-code" in flat
     assert "advisory" in flat
     assert "STOP" in flat
+    assert _owes_a_claim(flat), flat
 
 
 def test_advance_prints_the_degradation_notice_when_the_harness_is_unrecognised(
@@ -447,8 +491,9 @@ def test_advance_prints_the_degradation_notice_when_the_harness_is_unrecognised(
     )
     result = _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {})
     assert result.exit_code == 0, result.output
-    assert "answered_by: agent" in result.output
-    assert "STOP" in result.output
+    flat = " ".join(result.output.split())
+    assert "STOP" in flat
+    assert _owes_a_claim(flat), flat
 
 
 def test_advance_rejects_an_unrecognised_fr_harness_value(tmp_path: Path) -> None:
