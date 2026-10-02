@@ -79,4 +79,4 @@ resolves:
   - id: rf-5
     state: fixed
     body: "fr-triage SKILL.md now teaches schema 3 (first-run line and the example), pinned by test_the_skill_teaches_schema_3_and_batches"
-evidence: {}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/12cefec0-8bfd-4945-9a41-9fef359abbef/scratchpad/p2-suite.log}
