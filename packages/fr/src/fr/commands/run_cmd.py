@@ -2158,13 +2158,7 @@ def _check_returned_findings(
     view = observed_session(os.environ) if start is not None else None
     dispatched = view.dispatches(start) if view is not None and start is not None else None
     if dispatched is None:
-        _note_unobserved("reviewer-return")
-        err_console.print(
-            f"[yellow]{key}: could not read what the phase reviewers returned — "
-            f"{_why_unobservable('subagent returns')}; the record is taken as claimed "
-            "(evidence: unobserved=reviewer-return).[/yellow]",
-            soft_wrap=True,
-        )
+        _return_unobserved(key, "the phase reviewers", _why_unobservable("subagent returns"))
         return
     problems: list[str] = []
     returned: dict[str, tuple[str, str]] = {}  # id -> (scope, reviewer)
@@ -2172,13 +2166,7 @@ def _check_returned_findings(
         named = reviewer is not None and d.agent_id == reviewer
         if d.returned is None:
             if named:
-                _note_unobserved("reviewer-return")
-                err_console.print(
-                    f"[yellow]{key}: could not read what reviewer {d.agent_id} returned — "
-                    "its return is not readable yet; the record is taken as claimed "
-                    "(evidence: unobserved=reviewer-return).[/yellow]",
-                    soft_wrap=True,
-                )
+                _return_unobserved(key, f"reviewer {d.agent_id}", "its return is not readable yet")
             continue
         try:
             rows = parse_review_findings(d.returned)
@@ -2220,13 +2208,37 @@ def _check_returned_findings(
                 "out-of-scope"
             )
     if problems:
-        _derived_refusal(
+        _return_refusal(
             key,
-            [
-                "refused — the review record does not match what the phase reviewers returned:",
-                *(f"- {p}" for p in problems),
-            ],
+            problems,
+            "Journal every returned finding under its id with the reviewer's tag, or "
+            "re-dispatch a reviewer whose return is malformed; never edit a return.",
         )
+
+
+def _return_unobserved(key: str, who: str, why: str) -> None:
+    """A reviewer-return check skipped: warned and noted, never silent (§E)."""
+    _note_unobserved("reviewer-return")
+    err_console.print(
+        f"[yellow]{key}: could not read what {who} returned — {why}; the record is "
+        "taken as claimed (evidence: unobserved=reviewer-return).[/yellow]",
+        soft_wrap=True,
+    )
+
+
+def _return_refusal(key: str, problems: list[str], remedy: str) -> NoReturn:
+    """THE refusal of the reviewer-return check (spec
+    2026-10-02-opencode-observe-2 §E): the unit (its step and phase), every
+    problem — each naming its reviewer and ids — on its own line, then what to
+    do; exit 2."""
+    _derived_refusal(
+        key,
+        [
+            "refused — the review record does not match what the phase reviewers returned:",
+            *(f"- {p}" for p in problems),
+            remedy,
+        ],
+    )
 
 
 def _wrote_before(
