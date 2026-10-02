@@ -24,3 +24,8 @@ tests/unit/test_isolation_reap_names.py and three new tests in test_isolation_de
 - #553: a worktree drifted to fix/other gets reaped on feat/registered's PR, and the edit gate still allows edits there.
 - #578: with fail_on=devcontainer, up raises and load_state returns None.
 - #843: an exclude file ending in '*.log' with no newline becomes '*.log.fr-isolation'.
+
+<!-- fr:journal kind=root-cause scope=debug id=ab8f5b8f215e created=2026-10-02T17:00:12+00:00 -->
+### ab8f5b8f215e · root-cause · #844/#553: fr treats a branch NAME as a workspace's identity and never checks the name still means this workspace
+
+gc trusts any MERGED PR that `gh pr view <name>` returns, even one that merged before the workspace existed. Nothing compares the marker's branch with HEAD, so a checkout to another branch keeps passing every gate, and gc/down reap on the registered branch's verdict.
