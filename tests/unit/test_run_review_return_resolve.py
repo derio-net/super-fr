@@ -25,7 +25,7 @@ from fr.run import units
 from fr.run.model import load_run_state
 from fr.run.telemetry import parse_timestamp
 
-from tests.unit.opencode_fixture import opencode_env, shifted, with_copied_child
+from tests.unit.opencode_fixture import opencode_env, shifted, with_copied_child, with_resumed_child
 from tests.unit.test_run_cli import _invoke_as_harness, _invoke_measurable, _squash
 from tests.unit.test_run_evidence_separate_context import _later
 from tests.unit.transcript_sessions import (
@@ -380,3 +380,30 @@ def test_every_shipped_review_phase_brief_carries_the_review_findings_rule() -> 
             state,  # type: ignore[arg-type]
             None,
         ), name
+
+
+def test_a_finding_filed_against_a_later_phase_counts(tmp_path: Path) -> None:
+    """Review p2-r3: the manifest's convention files a finding that belongs to
+    a later phase against THAT phase, where it gates that phase's review — so a
+    returned id journaled against phase N or later is accounted for; only an
+    EARLIER phase does not count (it could no longer gate anything)."""
+    repo, shipped, opened = _at_phase_two_review(tmp_path)
+    later = [{**e, "phase": 3} for e in _finding("p2a-r1", "in")]
+    _plan_journal(repo, *later, *_finding("p2a-r2", "out", state="refuted"))
+    db = _review_window(tmp_path, opened)
+
+    result = _phase_review(repo, shipped, opencode_env(db), "ses_gen1")
+
+    assert result.exit_code == 0, result.output
+
+
+def test_a_resumed_reviewer_is_one_reviewer(tmp_path: Path) -> None:
+    """Review p2-r1: sending the reviewer back (a second `task` call reusing
+    its session) is one child, not two — no "returned by both X and X"."""
+    repo, shipped, opened = _at_phase_two_review(tmp_path)
+    _plan_journal(repo, *_finding("p2a-r1", "in"), *_finding("p2a-r2", "out", state="refuted"))
+    db = with_resumed_child(_review_window(tmp_path, opened), "ses_gen1")
+
+    result = _phase_review(repo, shipped, opencode_env(db), "ses_gen1")
+
+    assert result.exit_code == 0, result.output

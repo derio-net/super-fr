@@ -94,3 +94,31 @@ def with_copied_child(db: Path, source: str, new: str) -> Path:
             )
         con.commit()
     return db
+
+
+def with_resumed_child(db: Path, source: str) -> Path:
+    """`db` with `source`'s dispatching `task` part repeated a second later — the
+    orchestrator sending the same child back (OpenCode resumes a task by
+    session). Edits the copy in place — pass a `shifted` copy, never `DB`."""
+    assert db != DB
+    with closing(sqlite3.connect(db)) as con:
+        for part_id, message_id, session, t_created, t_updated, raw in con.execute(
+            "SELECT id, message_id, session_id, time_created, time_updated, data FROM part"
+        ).fetchall():
+            data = json.loads(raw)
+            if not isinstance(data, dict) or data.get("tool") != "task":
+                continue
+            state = data.get("state", {})
+            if state.get("metadata", {}).get("sessionId") != source:
+                continue
+            data["callID"] = f"{data.get('callID', 'call')}-resume"
+            for key in ("start", "end"):
+                if isinstance(state.get("time", {}).get(key), int):
+                    state["time"][key] += 1000
+            con.execute(
+                "INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)",
+                (f"{part_id}_resume", message_id, session, t_created + 1000, t_updated + 1000,
+                 json.dumps(data)),
+            )  # fmt: skip
+        con.commit()
+    return db

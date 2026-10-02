@@ -176,7 +176,7 @@ steps:
         # DERIVED `findings` evidence above. Wherever fr can read the return,
         # `done` is refused while a named reviewer's block is missing or
         # malformed, an id repeats across reviewers, or a returned id is not a
-        # phase-N plan-journal finding with the reviewer's scope tag; where it
+        # plan-journal finding against phase N or later (where the convention above files it) with the reviewer's scope tag; where it
         # cannot, the check is skipped as `unobserved=reviewer-return`.
         evidence: [review, reviewer, findings, visual]
 

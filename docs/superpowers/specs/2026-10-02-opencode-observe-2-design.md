@@ -75,7 +75,7 @@ R3. A session is attributed to a run only on positive evidence: a session record
 R4. Every transcript gate — including the phase `tests=` witness — reads the harness through one harness-neutral session protocol, with a Claude Code backend and an OpenCode backend; Hermes stays unobserved.
 R5. fr maps each dispatch to its child session through opencode.db's parent/child records; at resolve, an attempt that names an agent type but no claimed holder gets the child's session id as its holder when exactly one child of that type was dispatched since the attempt opened, and stays unclaimed otherwise.
 R6. At `spec-review` and `review-phase`, a reviewer id that names no child session the run session dispatched since the unit opened is refused on OpenCode, as it already is on Claude Code, and a tier-suffixed phase executor named as reviewer is refused on both.
-R7. The review-phase reviewer ends its return with a fenced `review-findings` block of brief-prescribed ids; wherever fr can read the return, a review-phase `done` is refused when the block is missing or malformed, when an id repeats across reviewers, or when the plan journal lacks a returned finding for that phase with the reviewer's scope tag; where it cannot, the check is skipped visibly.
+R7. The review-phase reviewer ends its return with a fenced `review-findings` block of brief-prescribed ids; wherever fr can read the return, a review-phase `done` is refused when the block is missing or malformed, when an id repeats across reviewers, or when the plan journal lacks a returned finding, filed against that phase or a later one, with the reviewer's scope tag; where it cannot, the check is skipped visibly.
 R8. The PR body's findings sections list the review-phase findings and how each was resolved.
 R9. fr reads answered OpenCode `question` calls from opencode.db, grouped into rounds by the rule it applies to Claude Code, and the fr-goal skill and `parity.yaml` describe OpenCode's question tool.
 R10. When fr cannot observe who answered an operator gate and neither the record nor the flags give `answered_by`, resolve refuses and names both values, on every harness; nothing defaults to `agent`.
@@ -264,7 +264,7 @@ where it cannot (`None`, Hermes) the check is skipped with
 - `fr.run.review_return` (ported) parses the blocks. The review-phase `done`
   refuses a named reviewer with a missing or malformed block, an id repeated
   across two returns, and any returned id that is not a `kind=finding`
-  plan-journal entry with `phase=N` whose `review_scope` equals the block's
+  plan-journal entry with `phase >= N` (a later phase is where the manifest files a finding that belongs there) whose `review_scope` equals the block's
   tag; the refusal names every missing id. The journal may hold more findings
   than the blocks, never fewer. Reclassification stays as today (resolving
   `out-of-scope` keeps the reviewer's tag and renders as reclassified).

@@ -429,7 +429,10 @@ class OpenCodeSession:
         children = self._children()
         if parts is None or children is None:
             return None
-        found: list[ChildDispatch] = []
+        # One child per SESSION (review p2-r1): OpenCode resumes a task by
+        # reusing its session, so sending a reviewer back is a second `task`
+        # part for the same child. Keyed by child, the latest dispatch wins.
+        found: dict[str, ChildDispatch] = {}
         for part in parts:
             child = part.metadata.get("sessionId")
             if (
@@ -450,15 +453,14 @@ class OpenCodeSession:
                     match = _TASK_RESULT.search(part.output)
                     returned = match.group(1) if match else None
             agent_type = part.input.get("subagent_type")
-            found.append(
-                ChildDispatch(
-                    agent_id=child,
-                    agent_type=agent_type if isinstance(agent_type, str) else None,
-                    started=part.began,
-                    returned=returned,
-                )
+            found.pop(child, None)
+            found[child] = ChildDispatch(
+                agent_id=child,
+                agent_type=agent_type if isinstance(agent_type, str) else None,
+                started=part.began,
+                returned=returned,
             )
-        return found
+        return list(found.values())
 
     def child(self, agent_id: str) -> OpenCodeSession | Literal[False] | None:
         children = self._children()

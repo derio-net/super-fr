@@ -58,6 +58,10 @@ def parse_review_findings(text: str) -> list[tuple[str, str, str]] | None:
                 f"{FENCE} block id {parts[0]!r} is not the brief's p<N>-r<k> "
                 "(or p<N><letter>-r<k> with several reviewers)"
             )
+        if any(parts[0] == row[0] for row in rows):
+            raise ReviewFindingsBlockError(
+                f"{FENCE} block lists {parts[0]!r} more than once — one line per finding"
+            )
         rows.append((parts[0], parts[1], parts[2]))
     return rows
 

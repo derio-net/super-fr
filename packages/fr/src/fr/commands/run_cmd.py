@@ -2188,13 +2188,17 @@ def _check_returned_findings(
                 )
                 continue
             returned[fid] = (scope, d.agent_id)
+    # Phase N OR LATER (review p2-r3): the manifest files a finding that
+    # belongs to a later phase against THAT phase, where it gates that review.
     journaled = {
-        e.id: e for e in entries if e.kind == "finding" and e.resolves is None and e.phase == phase
+        e.id: e
+        for e in entries
+        if e.kind == "finding" and e.resolves is None and e.phase is not None and e.phase >= phase
     }
     missing = [fid for fid in returned if fid not in journaled]
     if missing:
         problems.append(
-            f"returned finding(s) not in the plan journal against phase {phase}: "
+            f"returned finding(s) not in the plan journal against phase {phase} or later: "
             + ", ".join(f"{fid} (reviewer {returned[fid][1]})" for fid in missing)
             + " — journal each under its id with the reviewer's tag "
             "(`fr journal add --kind finding --id <id> --review-scope in|out ...`)"
@@ -5366,6 +5370,7 @@ def _resolve_body(
         state_value=state_value,
         emitted=emitted_map,
         visual=visual,
+        holder=agent,  # the filled holder reaches the visual witness (review p2-r2)
     )
     verified = {**verified, **_take_unobserved()}
     if verified:

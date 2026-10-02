@@ -64,3 +64,11 @@ def test_the_rule_names_the_fence_and_this_phases_ids() -> None:
     # The rule's own example parses with the parser it prescribes for.
     example = rule[rule.index("```review-findings") :]
     assert parse_review_findings(example) == [("p3-r1", "in", "<one-line summary>")]
+
+
+def test_an_id_repeated_within_one_block_is_malformed() -> None:
+    """Review p2-r1: one reviewer listing an id twice is a malformed block, not
+    two reviewers returning the same id."""
+    text = "```review-findings\np2-r1 | in | a\np2-r1 | out | b\n```"
+    with pytest.raises(ReviewFindingsBlockError, match="p2-r1.*more than once"):
+        parse_review_findings(text)
