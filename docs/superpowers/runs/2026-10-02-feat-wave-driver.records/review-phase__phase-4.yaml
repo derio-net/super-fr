@@ -1,0 +1,64 @@
+schema_version: 7
+run: 2026-10-02-feat-wave-driver
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+- kind: review
+  id: review-p4
+  title: 'phase 4 review: 6 findings (5 in scope, fixed; 1 out of scope)'
+  body: 'Independent review of 1b2bcb48..HEAD against R9, R12, R16-R20 and design D and I, including the real sample board opened in a browser at 1100px and 400px: latest wave preselected, click and arrow/Home/End
+    keys move and activate tabs, dark theme readable, no horizontal scroll, all panes shown with JavaScript off. 692 triage tests passed. In-scope findings were fixed in e174d1af.'
+- kind: finding
+  id: ri-1
+  title: With scripts disabled every wave table shows but nothing says which wave each is
+  body: Panels had no heading or wave column; R16's no-JS path was met literally but unusable.
+  review_scope: in
+- kind: finding
+  id: ri-2
+  title: Snapshot acceptance counts are read from the cwd's matrix whatever the triaged scope
+  body: A render of another repo recorded this repo's rows; the cwd with no matrix silently dropped the group.
+  review_scope: in
+- kind: finding
+  id: ri-3
+  title: The inferred post_merge row also fires for old merged batches that never had a close-out
+  body: Hand-merged batches from before the driver existed would be listed forever.
+  review_scope: in
+- kind: finding
+  id: ri-4
+  title: Snapshot is stored before the page is rendered, and a prune failure aborts after the write
+  body: A failing render left a snapshot of a board that never existed.
+  review_scope: in
+- kind: finding
+  id: ri-5
+  title: Re-rendering without a new collect erases 'Since last report'
+  body: Every render stored a snapshot; an identical one made the next diff 'Nothing changed'.
+  review_scope: in
+- kind: finding
+  id: ri-6
+  title: The Closing order rows have no per-batch tier
+  body: 'Not a spec gap: design D''s column list omits tier, and Next up carries it.'
+  review_scope: out
+resolves:
+- id: ri-1
+  state: fixed
+  body: Fixed in e174d1af with tests.
+- id: ri-2
+  state: fixed
+  body: Fixed in e174d1af with tests.
+- id: ri-3
+  state: fixed
+  body: Fixed in e174d1af with tests.
+- id: ri-4
+  state: fixed
+  body: Fixed in e174d1af with tests.
+- id: ri-5
+  state: fixed
+  body: Fixed in e174d1af with tests.
+- id: ri-6
+  state: out-of-scope
+  body: Design D omits tier from the wave table; the board matches the spec.
+evidence:
+  review: review-p4
+  reviewer: a97529e8ea39eda8c
+  model: claude-sonnet-5-5
