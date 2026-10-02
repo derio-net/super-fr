@@ -9,7 +9,7 @@ R1. A triage batch can declare a `wave` (an integer) and `after` (batch ids that
 R2. `fr triage batch drive` runs a set of batches to completion. One pass merges what is ready, closes out what merged, and dispatches what may start. `--once` makes one pass and exits; without it the verb sleeps between passes until nothing is left. It acts only with `--yes`; without it, it prints what the pass would do.
 R3. A pass never lets more than `--max-inflight` batches be dispatched and unmerged (default 4). It dispatches in wave order, then merge order, then id, and skips a batch whose `after` batches are not all merged. A batch whose dependency was cancelled or abandoned is reported as blocked and is never dispatched.
 R4. A pass merges a batch's PR only when the PR is not a draft and every check is green at that moment. It never readies, approves or un-drafts a PR, never waits for checks, and reports a failing CI once per head commit. The ready-for-review transition stays the operator's.
-R5. After a batch merges, the driver starts its close-out session through the batch's runner: a work item whose brief is the `fr pickup` instruction for the batch (`--run <id>` for a goal batch, `--branch <name>` for a debug batch). A close-out is started at most once per batch, and the driver then merges the close-out's archive PR when it is not a draft and its checks are green.
+R5. After a batch merges, the driver starts its close-out session through the batch's runner: a work item whose brief is the `fr pickup` instruction for the batch (`--run <id>` for a goal batch, `--branch <name>` for a debug batch). A close-out is started at most once per batch, and the driver then merges the close-out's archive PR when it is not a draft and its checks are green. Before the close-out starts, the driver runs the repo's configured `post_merge` command once for the merge (R14).
 R6. The driver keeps no state of its own. What was dispatched, merged or closed out is read from `judgements.yaml` events and the forge, so a stopped driver resumes where it left off, and a second driver on the same state directory refuses to start.
 R7. `--once` exits 0 when it acted or everything is done, 3 when it did nothing and work remains (waiting on a draft PR, CI or a dependency), and 2 on a refusal. A loop or a harness's scheduler can drive it without parsing text.
 R8. The driver is harness-neutral: it reaches a runner only through the runner registry and the forge only through the forge client, as the other batch verbs do. fr names no harness tool.
@@ -18,6 +18,13 @@ R10. `fr triage origins collect|check|render` classifies the issues filed in a w
 R11. `fr triage architecture render` writes the architecture page. The measured sections are generated: the summary strip, the waves and batch order, subsystem cards (open issues placed on a subsystem, source lines then and now), the size table, and filings per day. Authored sections (diagrams, narrative) are fragments the agent writes into the state directory and the verb splices in, in the order of a manifest. The `fr-audit` skill's architecture-page section is rewritten around this verb.
 R12. Every page the engine writes carries a real `<title>`, defines its colours as tokens with light, dark and explicit-theme variants, and keeps a 16px side gutter at phone width. No page needs a hand patch after rendering. Publishing a page stays outside fr; the skills say how.
 R13. A pass reports one line per action, in the same words in `--once` and loop mode, and ends with a one-line summary (`in flight`, `merged`, `pending`, `closing`).
+R14. A repo can configure a `post_merge` command in `.fr/triage.yaml` (super-fr's is `./scripts/install.sh`). The driver runs it once per merged batch, after the release commit and before the close-out, so the harnesses on the same host run the merged fr, hooks and skills. A failing command holds that batch's close-out and is reported on every pass until it succeeds. A repo with no `post_merge` runs nothing.
+R15. Every `fr triage` verb accepts `--repo A/B,C/D`: a comma-separated list of repos, owners allowed to differ, treated as one group with one state directory, one board and one in-flight cap shared across its repos. A group in which two repos share a name is refused, because judgement keys are `<repo-name>#<n>`.
+R16. The board and the architecture page show the waves as a row of tabs with one wave visible at a time. The most recent wave (the highest wave number with a batch not yet merged, else the highest) is preselected. The tabs work from the keyboard and with a screen reader, and without JavaScript every wave is shown.
+R17. Each `render` stores a snapshot of what it showed (batch stages, issue states, PR states, acceptance counts, figures) under the state directory, and the board opens with **Since last report**: what changed between the previous snapshot and this one, grouped as merged or closed, filed, batch stage changes, acceptance rows moved, and figures that changed. The first render says there is no earlier snapshot.
+R18. The board shows **Needs you now**, computed and never typed by hand: draft PRs whose checks are green (to ready), batches waiting on an operator answer, failing CI on a batch PR, a stale dispatch, a blocked batch, a `post_merge` failure, and open issues in no batch or feature group. Every row names the PR, issue or batch and links to it.
+R19. The board shows **Next up**: the batches and features that would start next, in the order the driver would take them, each with its tier, size, dependencies and the reason it ranks there.
+R20. The three pages keep everything they show today and are reordered around two questions, what changed and what to do next. The board is ordered Since last report, Needs you now, Next up, Waves, Backlog by tier; the architecture page is ordered by state change (a snapshot timeline first, then the measured sections, then authored diagrams); the origins page ends in a conclusion that links each cause to the batch that addresses it.
 
 ## Design
 
@@ -34,7 +41,7 @@ The closing order of 2026-10-02 ran from `waves-watch.py`, a scratchpad script: 
 A new module `fr/triage/batch_drive.py` holds the pass as a pure function over a snapshot: batches, their derived stages and PR states, the runner's existing dispatches, and the configuration (`max_inflight`). It returns an ordered list of actions (`merge`, `closeout`, `archive`, `dispatch`, `blocked`, `warn`); the command executes them. The pass runs in this order, so a slot freed by a merge is used in the same pass:
 
 1. **Merge.** For each `pr-open` batch in merge order, take the PR from the forge client. Not a draft, every check `SUCCESS`, `SKIPPED` or `NEUTRAL`, and the head unchanged since the snapshot: merge it through the existing `merge_one` path (re-slotting its version as `batch merge` does) without the blocking wait. A failing check yields a `warn` action, recorded per head sha so it is reported once.
-2. **Close out.** For each batch that has merged and has no `closeout` event: once the base branch carries the release commit that follows the merge, or ten minutes have passed with none (a PR with no fragment releases nothing), fast-forward the checkout and dispatch the close-out work item. A `CloseoutEvent{kind: closeout, at, runner, handle}` is appended after the dispatch succeeds.
+2. **Close out.** For each batch that has merged and has no `closeout` event: once the base branch carries the release commit that follows the merge, or ten minutes have passed with none (a PR with no fragment releases nothing), fast-forward the checkout, run the repo's `post_merge` command once (a non-zero exit holds the close-out and yields a `warn`), and dispatch the close-out work item. A `CloseoutEvent{kind: closeout, at, runner, handle}` is appended after the dispatch succeeds.
 3. **Archive.** Merge the open archive PR of a closed-out batch (a `chore/archive-*` or `chore/closeout-*` head naming the batch) when it is not a draft and green; never otherwise.
 4. **Dispatch.** Count batches whose stage is `dispatched` or `pr-open`; while that count is below `max_inflight`, dispatch the next batch by (wave, merge order, id) whose `after` batches are all `merged`, through the existing `batch dispatch` code path (preflight, version reservation, brief, labels).
 
@@ -60,7 +67,15 @@ The runner protocol has no close-out, and `fr_herdr` assumes a work item named f
 
 New skill `plugins/super-fr/skills/fr-origins/SKILL.md`; edited `fr-triage`, `fr-audit`, `fr-goal` and `fr-debugging` (the close-out line mentions that a batch's driver starts it); `AGENTS.md` (the triage paragraph, the batch verbs); mirrors regenerated with `scripts/sync-opencode.py` and `scripts/sync-hermes.py`; `READ_ONLY_COMMANDS` and the import-direction allowlist unchanged (the verbs stay under `triage`). A change fragment `.changes/feat-wave-driver.yaml` with `bump: minor`.
 
-### H. Out of scope
+### H. Scope groups (R15)
+
+`--repo` takes a comma-separated list; the existing `--org` and `--dir` stay. The scope key (state directory name) of a group is its sorted `owner--repo` slugs joined by `+`, shortened with an eight-character hash when over 80 characters, and `--dir` overrides it. `collect` reads each repo in turn through `Forge`; a repo that fails is skipped and recorded as such, as in org scope. Batches stay single-repo; `drive` takes batches of any repo of the group and counts them against one `--max-inflight`. Two repos with the same name under different owners are refused with exit 2 before anything is written.
+
+### I. The three views and the reordering (R16–R20)
+
+`fr/triage/snapshot.py` writes `snapshots/<UTC timestamp>.json` on every `render` (batch id to stage, issue key to state and tier, PR number to state and checks, acceptance counts read from the matrix when the repo has one, and the page's measured figures), keeps the latest 30, and diffs the previous against the new. **Since last report** renders that diff; **Needs you now** is a pure function of the same facts the driver reads (so the two cannot disagree about what is waiting), listing each item's kind, reference and link; **Next up** is the driver's own dispatch ordering run in plan mode. Wave tabs are one shared component (a `tablist` with roving focus, panels shown by the `hidden` attribute, all panels shown when the script does not run) used by the board and the architecture page. The architecture page's snapshot timeline reuses the snapshots, so stepping through them shows the measured sections as they were; its authored diagrams keep their own evolution control. Nothing the three pages show today is removed: each page keeps its sections and gains the new ones at the top.
+
+### J. Out of scope
 
 A detached daemon; readying or approving a PR; a runner other than through the registry; GitLab and Gitea batch writes; changing `batch merge`'s own ordering; publishing a page (the Artifact tool stays the agent's); a general workflow scheduler.
 
@@ -78,13 +93,16 @@ Automated (CI, `uv run pytest`), with a fake runner and a fake forge client:
 8. **Board section (R9).** A judgements fixture renders the waves, features and parked tables; `check` reports an unplaced issue; a file with no `kind` renders as before.
 9. **Origins (R10).** A fixture of fifteen issues classifies into the six categories; the render's counts, per-day buckets and median time to fix match a hand computation; `check` lists an unclassified issue.
 10. **Architecture page (R11, R12).** A fixture repo with two refs yields correct line counts per subsystem; a fragment is inlined in manifest order; a malformed fragment is refused; every page has a `<title>` and the three theme blocks.
-11. **Mirrors and install.** Both mirror tripwires, the agent-mirror test and the install tests pass with the new skill.
+11. **post_merge (R14).** The command runs once per merged batch, after the release commit and before the close-out; a failing command holds the close-out and is reported each pass; a repo without one runs nothing.
+12. **Scope groups (R15).** `collect`, `check`, `render` and `drive` work over a two-repo group with different owners; the state directory name is stable; a group with a repeated repo name is refused with nothing written.
+13. **Views (R16–R20).** The first render has no snapshot and says so; a second render after a fixture change shows exactly the changed items; **Needs you now** lists a green draft PR, a stage-blocked batch and an unplaced issue and nothing for a healthy fixture; **Next up** matches the order a `drive` plan prints; the wave tabs preselect the most recent wave, switch by keyboard, and show every wave with scripts disabled; the sections each page showed before are all still present.
+14. **Mirrors and install.** Both mirror tripwires, the agent-mirror test and the install tests pass with the new skill.
 
 Post-merge, operator-driven:
 
-12. `fr triage batch drive --once` (no `--yes`) on this repo's judgements prints the plan the scratchpad script followed on 2026-10-02.
-13. A real wave of two small debug batches is driven from dispatch to archive without a hand step, with the PRs readied by the operator.
-14. The three pages render from the triage state and publish without a hand patch.
+15. `fr triage batch drive --once` (no `--yes`) on this repo's judgements prints the plan the scratchpad script followed on 2026-10-02.
+16. A real wave of two small debug batches is driven from dispatch to archive without a hand step, with the PRs readied by the operator.
+17. The three pages render from the triage state and publish without a hand patch.
 
 ## Implementation Plans
 
