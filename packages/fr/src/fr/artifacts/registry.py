@@ -388,7 +388,9 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # (spec `2026-09-25-lean-cost-aware-process-design` §5.B.4),
             # migration `fr.artifacts.run_usage_split`; the v5/v6 shape is
             # frozen as `fr.run.legacy.RunStateV6`.
-            current_version=7,
+            # 8: `RunState.driver` — who drives the run (gh#761), migration
+            # `fr.artifacts.run_driver`. Additive, so stamp-only.
+            current_version=8,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,
