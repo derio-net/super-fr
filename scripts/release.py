@@ -17,10 +17,15 @@ every push to `main` (and by hand through `workflow_dispatch`):
    `version_surfaces()` lines and those fragments: the commit is pushed with the
    `GITHUB_TOKEN`, so no CI ever runs on it. Commit `release: vX.Y.Z` as
    github-actions[bot], the summaries grouped by bump in the body.
-4. Push. A non-fast-forward fetches, resets and recomputes from scratch (up to
+4. Test the committed tree AT the new version (`_run_staged_tests`), before the
+   push. The diff check proves which lines changed, not how the code behaves
+   at the new number; 5.0.0 shipped refusing its own plans (gh#854) because
+   the first commit to run at 5.0.0 was the untested release commit. A red
+   suite refuses here, with `main` and the tags untouched.
+5. Push. A non-fast-forward fetches, resets and recomputes from scratch (up to
    3 attempts) — never a rebase, the newer main may carry more fragments. A
    refusal by branch protection fails at once: the bot needs a bypass actor.
-5. If the version has no `v` tag: check the `fr_version` floors changed since
+6. If the version has no `v` tag: check the `fr_version` floors changed since
    the previous tag (§3.E), create the annotated tag and the GitHub Release —
    notes are the release commit's body plus `--generate-notes` — and then, on
    a floor mismatch, open an issue and exit `EXIT_FLOOR`. Idempotent: a rerun
@@ -28,8 +33,8 @@ every push to `main` (and by hand through `workflow_dispatch`):
    version (`git log -1 -S<version> -- pyproject.toml`).
 
 `--dry-run` reads the working tree as it is (no fetch, no reset), prints what
-it would release, and writes nothing. Stdlib only; the bump, the lock check and
-`gh` are injectable (`Commands`) so tests never run real `uv` or `gh`.
+it would release, and writes nothing. Stdlib only; the bump, the lock check, the
+staged-tree tests and `gh` are injectable (`Commands`) so tests never run real `uv` or `gh`.
 """
 
 from __future__ import annotations
@@ -102,6 +107,40 @@ def _run_gh(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["gh", *args], capture_output=True, text=True)
 
 
+_FR_VERSION_PROBE = "import importlib.metadata as m; print(m.version('fr'))"
+_TAIL_LINES = 30
+
+
+def _run_staged_tests(
+    repo: Path, new: str, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+) -> str | None:
+    """The whole suite, in the locked env, with `fr` installed AT `new`: None when green.
+
+    `uv run --locked` re-syncs the editable members from the bumped
+    pyprojects, so the probe should report `new`. It is checked rather than
+    assumed: a green suite at the old number is the gh#854 failure again.
+    The full suite, not a curated "version-sensitive" subset: that list is
+    the kind of literal that goes stale, which is how 5.0.0 broke.
+    """
+    uv = ["uv", "run", "--locked"]
+    probe = run([*uv, "python", "-c", _FR_VERSION_PROBE], cwd=repo, capture_output=True, text=True)
+    installed = probe.stdout.strip()
+    if probe.returncode != 0 or installed != new:
+        return (
+            f"the test env runs fr {installed or '(unknown)'}, not {new}; "
+            f"refusing to test at the wrong number\n{probe.stderr.strip()}"
+        ).strip()
+    r = run(
+        [*uv, "pytest", "-q", "--no-cov", "-n", "auto", "-p", "no:cacheprovider"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode == 0:
+        return None
+    return "\n".join(f"{r.stdout}\n{r.stderr}".strip().splitlines()[-_TAIL_LINES:])
+
+
 @dataclass
 class Commands:
     """Everything release.py runs that is not git: swapped out by the tests."""
@@ -109,6 +148,7 @@ class Commands:
     bump: Callable[[Path, str], None] = _run_bump
     lock_check: Callable[[Path], str | None] = _run_lock_check
     gh: Callable[[list[str]], subprocess.CompletedProcess[str]] = _run_gh
+    test: Callable[[Path, str], str | None] = _run_staged_tests
 
 
 # -- git ---------------------------------------------------------------------
@@ -269,14 +309,28 @@ def push(repo: Path) -> str:
     raise ReleaseError(f"git push failed:\n{reply.strip()}")
 
 
+def check_staged_suite(repo: Path, new: str, cmds: Commands) -> None:
+    """Refuse the release when the suite is red at `new`; the commit is still local."""
+    print(f"testing the staged tree at {new} before the push")
+    failure = cmds.test(repo, new)
+    if failure is not None:
+        raise ReleaseError(
+            f"the suite is red at {new}; refusing to push, tag or publish "
+            f"(main and the tags are untouched):\n{failure}\n"
+            f"  fix: land a PR that makes the suite pass at {new}; the next push to main "
+            f"retries the release"
+        )
+
+
 def release_to_main(repo: Path, override: str | None, cmds: Commands) -> Plan:
-    """Steps 1-4: recompute from the tip until the release commit lands (or there is none)."""
+    """Steps 1-5: recompute from the tip until the release commit lands (or there is none)."""
     for _attempt in range(MAX_ATTEMPTS):
         sync_to_tip(repo)
         plan = compute(repo, override)
         if plan.new is None:
             return plan
         make_release_commit(repo, plan, cmds)
+        check_staged_suite(repo, plan.new, cmds)
         if push(repo) == "ok":
             print(f"pushed {RELEASE_PREFIX}{plan.new} ({len(plan.fragments)} fragment(s))")
             return plan
@@ -358,7 +412,7 @@ def file_floor_issue(version: str, bad: list[str], cmds: Commands) -> None:
 
 
 def finish(repo: Path, cmds: Commands) -> int:
-    """Step 5: tag the current version if it is untagged; the floor check rides along."""
+    """Step 6: tag the current version if it is untagged; the floor check rides along."""
     version = current_version(repo)
     if tag_exists(repo, version):
         print(f"v{version} is already tagged; nothing to do")

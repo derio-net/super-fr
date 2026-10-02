@@ -198,11 +198,29 @@ _fr_is_enabled() {
 # Then the mode branch:
 #   worktree — the toplevel must be a LINKED worktree (git-common-dir !=
 #     git-dir); this defeats a stale marker copied into the primary tree.
+#     Branch drift (gh#553) is deliberately NOT part of validity: the Bash
+#     guards read this too, and treating a drifted worktree as a base clone
+#     blocks the `git switch` that recovers it. fr_isolation_decide_edit
+#     checks drift on its own (see _fr_branch_drift).
 #   external — a preparer's claim over its own checkout: require live container
 #     evidence (/.dockerenv, /run/.containerenv, or $KUBERNETES_SERVICE_HOST),
 #     so a marker forged on a bare host never validates.
 # Any other mode — and any unreadable/unparseable marker, or a missing JSON
 # parser — fails CLOSED.
+# Return 0 (drifted) when the worktree-mode marker at the toplevel records a
+# `branch` and HEAD is a DIFFERENT branch; sets _fr_marker_branch and
+# _fr_head_branch for the caller's message. fr's state is keyed on the marker's
+# branch, so a `git checkout -b` inside the workspace silently decouples the
+# two (gh#553). A detached HEAD (mid-rebase, bisect) is not another branch, and
+# a marker with no `branch` has nothing to compare: neither is drift.
+_fr_branch_drift() {
+  _fr_marker_branch=$(fr_json_file_field "$1/.fr-isolation" branch) || return 1
+  case "$_fr_marker_branch" in __HOOK_PARSE_ERROR__ | "") return 1 ;; esac
+  fr_git_resolve || return 1
+  _fr_head_branch=$("$FR_GIT_BIN" -C "$1" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 1
+  [ -n "$_fr_head_branch" ] && [ "$_fr_head_branch" != "$_fr_marker_branch" ]
+}
+
 _fr_marker_valid() {
   _fr_rtop=$1
   _fr_marker="$_fr_rtop/.fr-isolation"
@@ -246,6 +264,24 @@ fr_isolation_decide_cwd() {
   _fr_is_enabled "$_fr_rtop" || return 0
   _fr_marker_valid "$_fr_rtop" && return 0
   return 1
+}
+
+# fr_isolation_drift_reason <abs-path>
+#   Prints one line naming both branches and the escape when <abs-path> sits
+#   in a worktree-mode workspace whose HEAD drifted from the marker's branch
+#   (gh#553); prints nothing otherwise. For the edit gates' deny message, so a
+#   drift refusal does not read as "not inside an fr-isolation workspace".
+fr_isolation_drift_reason() {
+  _fr_dir=$(dirname "$1")
+  while [ ! -d "$_fr_dir" ] && [ "$_fr_dir" != "/" ] && [ "$_fr_dir" != "." ]; do
+    _fr_dir=$(dirname "$_fr_dir")
+  done
+  _fr_rtop=$(_fr_toplevel_of "$_fr_dir") || return 0
+  [ -f "$_fr_rtop/.fr-isolation" ] || return 0
+  _fr_mode=$(fr_json_file_field "$_fr_rtop/.fr-isolation" mode) || return 0
+  case "$_fr_mode" in worktree | "") ;; *) return 0 ;; esac
+  _fr_branch_drift "$_fr_rtop" || return 0
+  printf '%s\n' "this workspace was registered for $_fr_marker_branch but has $_fr_head_branch checked out, so fr's state no longer describes it. Switch back with \`git switch $_fr_marker_branch\`; to keep working on $_fr_head_branch, then give it its own workspace with \`fr isolation up --branch $_fr_head_branch\`."
 }
 
 # fr_isolation_marker_valid <dir>
@@ -388,6 +424,15 @@ fr_isolation_decide_edit() {
     _fr_dir=$(dirname "$_fr_dir")
   done
   [ -d "$_fr_dir" ] || return 0
+
+  # A valid worktree whose HEAD drifted off the marker's branch (gh#553): fr's
+  # state describes another branch, so edits stop here. Only the EDIT gate
+  # refuses — the shell stays open so `git switch <registered>` can recover.
+  # (A command substitution: its subshell keeps drift_reason's globals from
+  # clobbering this function's _fr_dir/_fr_rtop.)
+  if [ -n "$(fr_isolation_drift_reason "$_fr_file")" ]; then
+    return 1
+  fi
 
   # Allowed context (worktree / non-fr / FR_BASE_OK) → allow the edit.
   if fr_isolation_decide_cwd "$_fr_dir"; then
