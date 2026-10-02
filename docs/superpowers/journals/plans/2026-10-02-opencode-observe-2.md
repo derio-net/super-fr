@@ -94,3 +94,51 @@ dc098745: _parts/_children ask _known only on an empty answer (one connection in
 ### p1-r3-resolved · finding [fixed] · resolves p1-r3: session.ts assigns output.env[...] without ensuring env exists; a missing env object fails R1 invisibly (phase 1)
 
 dc098745: output.env ??= {} before assigning; bun test 'creates the env object when the output carries none' (red first).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-t1-green-on-arrival created=2026-10-02T20:29:56+00:00 phase=2 -->
+### p2-t1-green-on-arrival · discovery · P2.T1's RED tests passed on arrival — phase 1 had already ported the agent_name normaliser (phase 2) (phase 2)
+
+Phase 1's port of salvage 2aa091c5 already routed `_same_agent` (run_cmd),
+`run/visual.py`'s `_same_agent` and the phase-executor refusal through
+`observed.agent_name`, and `_verify_reviewer` already asks
+`observed_session(...).dispatches` for the named id. The invented-id
+spec-review test and the tiered-executor test existed; T1.S1 added the
+invented id at the PHASE review and the `general` child named as spec
+reviewer (salvage 33fed900). Both passed without a code change — the
+GREEN step is the phase-1 code, verified, not new code.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-review-findings-brief-is-a-member-brief created=2026-10-02T20:29:56+00:00 phase=2 -->
+### p2-review-findings-brief-is-a-member-brief · discovery · The review_findings key lives in _build_member_brief, not _build_brief (phase 2) (phase 2)
+
+Spec §E names `_build_brief` (run_cmd.py:2737), but `review-phase` is a
+member of the grouped `implement` step, so its brief is built by
+`_build_member_brief`; `_build_brief` only briefs flat steps and the
+group. The key is emitted there (`_review_findings_brief`) for any
+member whose evidence holds both `findings` and `reviewer` — the shipped
+`review-phase` of fr-goal and fr-goal-light — and pinned by
+`test_every_shipped_review_phase_brief_carries_the_review_findings_rule`
+over both shipped manifests. The check at resolve fires on the same
+condition (`findings` derived, `reviewer` declared, a phase), so the
+brief and the gate cannot disagree about which units owe a block.
+
+<!-- fr:journal kind=decision scope=plan id=p2-reviewer-return-scope created=2026-10-02T20:29:56+00:00 phase=2 -->
+### p2-reviewer-return-scope · decision · Who owes a review-findings block — the named reviewer, or a child whose return carries the fence (phase 2) (phase 2)
+
+Per spec §E (not the salvage's "every non-executor child"): a child
+dispatched since the review unit opened is a reviewer when it is the id
+in `reviewer` evidence or when its return carries a `review-findings`
+fence. A named reviewer with no block, or any fenced block that is
+malformed, refuses; an unnamed child with no fence (a helper) is
+skipped. An unreadable session, or a named reviewer whose return is not
+readable yet, is `unobserved=reviewer-return` with a yellow warning.
+The input-coverage half of the salvage (9689ee7a) was not ported.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-02T20:29:56+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+T1's GREEN had already landed with phase 1 (salvage 2aa091c5 ported there: agent_name at all three sites, _verify_reviewer through the protocol); this task only added the two missing refusal tests, so there was no new code to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-02T20:29:56+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+One helper (_observed_holder) and one line at each of the two resolve paths; the helper reuses agent_name and observed_session, so nothing was duplicated to consolidate.
