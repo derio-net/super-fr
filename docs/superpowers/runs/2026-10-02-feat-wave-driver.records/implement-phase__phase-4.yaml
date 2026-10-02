@@ -1,0 +1,71 @@
+schema_version: 7
+run: 2026-10-02-feat-wave-driver
+step: implement-phase
+item: phase/4
+outcome: done
+ticks: [P4.T1.S1, P4.T2.S1, P4.T3.S1, P4.T3.S2, P4.T4.S1]
+refactor:
+  P4.T1: "red-only task: tests, no production code to clean"
+  P4.T2: "red-only task: tests, no production code to clean"
+  P4.T4: "documentation, acceptance row and mirrors only: no production code to clean"
+journal:
+  - kind: decision
+    id: p4-operator-answer-not-derivable
+    title: R18's "batch waiting on an operator answer" is not produced; spec amended (phase 4)
+    body: |
+      No deterministic signal exists. The facts carry no run cursor, and the driver's Snapshot
+      (batches, stages, PRs, runner dispatches) has nothing about an operator gate; the only place
+      such a gate shows is the batch branch's run cursor, which collect does not read and the Forge
+      seam does not expose. Inventing one (a label, a stage guess) would make Needs you now disagree
+      with the driver. The other five kinds and unplaced are implemented; a test pins that no
+      `operator-answer` row exists. R18 and Test Plan 13 in the spec now say what is missing and why,
+      and that the row joins when a deterministic signal exists.
+  - kind: decision
+    id: p4-post-merge-signal
+    title: The post_merge row is read from facts, not from a recorded failure (phase 4)
+    body: |
+      A failed post_merge leaves no durable record (only a per-pass warn). The deterministic signal in
+      the facts is: batch merged (stage merged or partial) more than ten minutes before the collect, its
+      repo's `.fr/triage.yaml` declares `post_merge`, and neither a `post_merge` nor a `closeout` event
+      exists. "Now" is `facts.collected_at`, never a clock. The row reads "has not succeeded (it failed,
+      or no driver is running)". Stated in R18 of the spec.
+  - kind: decision
+    id: p4-views-share-the-drivers-inputs
+    title: Needs you now and Next up run drive_pass over a Snapshot built from facts alone (phase 4)
+    body: |
+      `views.drive_snapshot` builds the driver's Snapshot from facts.json (each open batch PR as the facts
+      show it, `checks_verdict` for the verdict, release commit unknown so the ten-minute rule applies) and
+      the board reads `blocked`, `warn` and `dispatch` off `drive_pass`'s own actions. A test pins that the
+      blocked and failing-CI rows equal the driver's actions on the same facts. Only the draft-and-green,
+      stale-dispatch, post_merge and unplaced rows are computed in views, from the same facts.
+  - kind: decision
+    id: p4-preselect-ignores-cancelled
+    title: A cancelled batch does not hold a wave open for preselection (phase 4)
+    body: |
+      R16 says the highest wave with a batch "not yet merged". A cancelled batch never merges and needs
+      nothing, so counting it would preselect a wave with no live work; abandoned and partial batches DO
+      count (they need the operator). Recorded as a reading of R16, not a change to it.
+  - kind: decision
+    id: p4-one-script-element
+    title: The tab script is concatenated into the viewer's single script element (phase 4)
+    body: |
+      The existing render tests pin exactly one script element. `TABS_SCRIPT` is a constant appended to
+      `SCRIPT`, so no facts text reaches it and that guard still holds. The tab markup is complete with
+      scripts off (no panel carries `hidden`, the tab row itself is `hidden`); the script hides all but the
+      selected panel and reveals the row. Key handling was also checked once against a stub DOM in node.
+  - kind: discovery
+    id: p4-renderer-already-had-title
+    title: The board already emitted a title; the real gaps were the explicit-theme tokens and the 10px gutter (phase 4)
+    body: |
+      Of the three hand patches R12 names, the renderer already wrote a `<title>`; it lacked the
+      `:root[data-theme]` variants and used a 10px side gutter at 480px. Tokens now come from
+      `components.TOKENS_CSS`, generated from one light and one dark dict so the three variants cannot
+      drift; the gutter is `components.GUTTER_CSS` (16px). Both are shared with the later architecture page.
+  - kind: discovery
+    id: p4-batch-card-attribute-order
+    title: An existing test pins the batch card's attribute order (phase 4)
+    body: |
+      `<article class="batch" data-batch="..."` is matched literally by test_triage_batch_board, so the
+      new `id="batch-<id>"` anchor (the target of Needs-you rows) is appended after `data-batch`.
+resolves: []
+evidence: {}
