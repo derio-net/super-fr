@@ -182,3 +182,6 @@ Informational; no change needed.
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-wave-driver-p2 created=2026-10-02T19:00:19+00:00 -->
 ### phase-split-2026-10-02-wave-driver-p2 · decision · ask: the driver is its own ask (R2-R8, R13, R14) after the schema ask of phase 1
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-wave-driver-p3 created=2026-10-02T19:00:19+00:00 -->
+### phase-split-2026-10-02-wave-driver-p3 · decision · ask: repo groups are their own ask (R15); they change collect and Facts, so they land before any view
