@@ -272,6 +272,10 @@ class TriageConfig(_Strict):
     defaults: ConfigDefaults = ConfigDefaults()
     version: VersionBlock | None = None
     stale_dispatch_days: int = Field(default=3, ge=0)
+    # The command the wave driver runs once per merged batch, from the repo's
+    # fast-forwarded checkout (wave-driver R14). An argument list, never a shell
+    # string: a string is refused, and nothing is ever handed to a shell.
+    post_merge: list[str] = []
 
 
 class Facts(_Strict):
@@ -375,9 +379,25 @@ class CloseoutEvent(_Strict):
     at: AwareDatetime
     runner: str
     handle: str  # opaque to triage; never posted to the forge
+    run: str | None = None  # the run id the brief named (`fr pickup --run`), if any
+    archive: str | None = None  # the housekeeping branch the close-out will push
 
 
-BatchEvent = Annotated[DispatchEvent | CancelEvent | CloseoutEvent, Field(discriminator="kind")]
+class PostMergeEvent(_Strict):
+    """The repo's `post_merge` command succeeded for this batch's merge (wave-driver
+    R14). Needs judgements schema 3. Written by the engine only."""
+
+    kind: Literal["post_merge"]
+    at: AwareDatetime
+
+
+SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
+"""The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
+
+
+BatchEvent = Annotated[
+    DispatchEvent | CancelEvent | CloseoutEvent | PostMergeEvent, Field(discriminator="kind")
+]
 
 
 class Batch(_Strict):
@@ -443,7 +463,7 @@ class Batch(_Strict):
     @field_validator("events")
     @classmethod
     def _events_are_time_ordered(
-        cls, v: list[DispatchEvent | CancelEvent | CloseoutEvent]
+        cls, v: list[DispatchEvent | CancelEvent | CloseoutEvent | PostMergeEvent]
     ) -> list[Any]:
         for earlier, later in zip(v, v[1:], strict=False):
             if later.at < earlier.at:
@@ -529,9 +549,13 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`wave` and `after` need schema 3, but this file is stamped schema {self.schema_}"
             )
-        if self.schema_ < 3 and any(e.kind == "closeout" for b in self.batches for e in b.events):
+        late = sorted(
+            {e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_3_EVENTS}
+        )
+        if self.schema_ < 3 and late:
             raise ValueError(
-                f"`closeout` events need schema 3, but this file is stamped schema {self.schema_}"
+                f"`{'`, `'.join(late)}` events need schema 3, but this file is stamped "
+                f"schema {self.schema_}"
             )
         return self
 
