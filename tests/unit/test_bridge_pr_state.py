@@ -7,7 +7,7 @@ so the unit tests stub the observation source. Phase 5's
 
 from __future__ import annotations
 
-from tests.unit.fakes import FakeMcpClient
+from tests.unit.fakes import FakeMcpClient, forge_of
 
 
 def _prime_card(
@@ -171,7 +171,7 @@ def test_tick_invokes_gh_issue_closer_when_pr_merged(monkeypatch):
 
     The caller injects a `close_gh_issue` callable so unit tests can
     observe without shelling out to gh. The callable's 3rd arg is the
-    HostBackend resolved from the PR url's own hostname (see
+    client resolved from the PR url (gh#490; see
     docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     §6) — "github" here since the fixture PR url is on github.com.
     """
@@ -179,8 +179,8 @@ def test_tick_invokes_gh_issue_closer_when_pr_merged(monkeypatch):
 
     closed: list[tuple[str, str, str]] = []
 
-    def fake_close(repo: str, issue_number: str, backend: str) -> None:
-        closed.append((repo, issue_number, backend))
+    def fake_close(repo: str, issue_number: str, backend: object) -> None:
+        closed.append((repo, issue_number, forge_of(backend)))
 
     mcp = FakeMcpClient()
     _prime_card(
@@ -224,7 +224,7 @@ def test_tick_resolves_gitlab_backend_from_pr_url(monkeypatch):
     tick(
         mcp,
         pr_observations={"card-1": "merged"},
-        close_gh_issue=lambda r, n, b: closed.append((r, n, b)),
+        close_gh_issue=lambda r, n, b: closed.append((r, n, forge_of(b))),
     )
 
     assert closed == [("group/proj", "100", "gitlab")]
@@ -256,7 +256,7 @@ def test_tick_resolves_gitlab_backend_from_a_self_hosted_pr_url(monkeypatch):
     tick(
         mcp,
         pr_observations={"card-1": "merged"},
-        close_gh_issue=lambda r, n, b: closed.append((r, n, b)),
+        close_gh_issue=lambda r, n, b: closed.append((r, n, forge_of(b))),
     )
 
     assert closed == [("group/proj", "100", "gitlab")]
@@ -288,7 +288,7 @@ def test_done_cascade_failure_does_not_abort_the_sweep():
 
     seen: list[str] = []
 
-    def boom_then_ok(repo: str, n: str, backend: str) -> None:
+    def boom_then_ok(repo: str, n: str, backend: object) -> None:
         seen.append(n)
         if n == "100":
             raise RuntimeError("gh exploded")
@@ -326,7 +326,7 @@ def test_close_skipped_when_title_repo_disagrees_with_pr_url_repo():
     count = tick(
         mcp,
         pr_observations={"card-1": "merged"},
-        close_gh_issue=lambda repo, n, backend: closed.append((repo, n, backend)),
+        close_gh_issue=lambda repo, n, backend: closed.append((repo, n, forge_of(backend))),
     )
 
     assert count == 1  # card still transitions to Done
@@ -381,7 +381,9 @@ def test_default_close_gh_issue_routes_through_edit_issue_state(monkeypatch):
         def edit_issue_state(self, repo: str, number: int, *, state: str) -> None:
             calls.append((repo, number, state))
 
-    monkeypatch.setattr(ps.hostclient, "client_for_backend", lambda backend: _FakeClient())
+    monkeypatch.setattr(
+        ps.hostclient, "client_for_backend", lambda backend, *, host=None: _FakeClient()
+    )
 
     mcp = FakeMcpClient()
     _prime_card(

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.unit.fakes import FakeMcpClient
+from tests.unit.fakes import FakeMcpClient, forge_of
 
 
 def _prime(
@@ -33,7 +33,7 @@ def test_closes_done_card_issue_from_title():
 
     closed: list[tuple[str, str, str]] = []
     out = reconcile_done_issues(
-        mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, b))
+        mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, forge_of(b)))
     )
 
     assert closed == [("derio-net/runs-fr", "5", "github")]
@@ -48,7 +48,9 @@ def test_seen_set_bounds_reclose():
 
     closed: list[tuple[str, str, str]] = []
     out = reconcile_done_issues(
-        mcp, seen={"derio-net/runs-fr#5"}, close_gh_issue=lambda r, n, b: closed.append((r, n, b))
+        mcp,
+        seen={"derio-net/runs-fr#5"},
+        close_gh_issue=lambda r, n, b: closed.append((r, n, forge_of(b))),
     )
 
     assert closed == []  # already handled — no gh call
@@ -63,7 +65,7 @@ def test_title_without_repo_is_skipped():
 
     closed: list[tuple[str, str, str]] = []
     out = reconcile_done_issues(
-        mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, b))
+        mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, forge_of(b)))
     )
 
     assert closed == []
@@ -77,7 +79,9 @@ def test_non_done_card_is_ignored():
     _prime(mcp, "c1", status="In review", title="gh#5: [derio-net/runs-fr]")
 
     closed: list[tuple[str, str, str]] = []
-    reconcile_done_issues(mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, b)))
+    reconcile_done_issues(
+        mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, forge_of(b)))
+    )
 
     assert closed == []
 
@@ -105,7 +109,10 @@ def test_caps_closes_per_tick():
 
     closed: list[tuple[str, str, str]] = []
     out = reconcile_done_issues(
-        mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, b)), max_closes=2
+        mcp,
+        seen=set(),
+        close_gh_issue=lambda r, n, b: closed.append((r, n, forge_of(b))),
+        max_closes=2,
     )
 
     assert len(closed) == 2  # capped
@@ -156,7 +163,7 @@ def test_e2e_idempotent_across_two_ticks():
     )
 
     closed: list[tuple[str, str, str]] = []
-    closer = lambda r, n, b: closed.append((r, n, b))  # noqa: E731
+    closer = lambda r, n, b: closed.append((r, n, forge_of(b)))  # noqa: E731
 
     seen = reconcile_done_issues(mcp, seen=set(), close_gh_issue=closer)
     assert closed == [("derio-net/runs-fr", "7", "github")]
