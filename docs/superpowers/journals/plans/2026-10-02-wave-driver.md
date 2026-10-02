@@ -509,3 +509,68 @@ red-only task: tests, no production code to clean
 ### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
 
 documentation, acceptance row and mirrors only: no production code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p4 created=2026-10-02T21:20:42+00:00 phase=4 -->
+### review-p4 · review · phase 4 review: 6 findings (5 in scope, fixed; 1 out of scope) (phase 4)
+
+Independent review of 1b2bcb48..HEAD against R9, R12, R16-R20 and design D and I, including the real sample board opened in a browser at 1100px and 400px: latest wave preselected, click and arrow/Home/End keys move and activate tabs, dark theme readable, no horizontal scroll, all panes shown with JavaScript off. 692 triage tests passed. In-scope findings were fixed in e174d1af.
+
+<!-- fr:journal kind=finding scope=plan id=ri-1 created=2026-10-02T21:20:42+00:00 phase=4 state=open review_scope=in -->
+### ri-1 · finding [open] (reviewer: in scope) · With scripts disabled every wave table shows but nothing says which wave each is (phase 4)
+
+Panels had no heading or wave column; R16's no-JS path was met literally but unusable.
+
+<!-- fr:journal kind=finding scope=plan id=ri-2 created=2026-10-02T21:20:42+00:00 phase=4 state=open review_scope=in -->
+### ri-2 · finding [open] (reviewer: in scope) · Snapshot acceptance counts are read from the cwd's matrix whatever the triaged scope (phase 4)
+
+A render of another repo recorded this repo's rows; the cwd with no matrix silently dropped the group.
+
+<!-- fr:journal kind=finding scope=plan id=ri-3 created=2026-10-02T21:20:42+00:00 phase=4 state=open review_scope=in -->
+### ri-3 · finding [open] (reviewer: in scope) · The inferred post_merge row also fires for old merged batches that never had a close-out (phase 4)
+
+Hand-merged batches from before the driver existed would be listed forever.
+
+<!-- fr:journal kind=finding scope=plan id=ri-4 created=2026-10-02T21:20:42+00:00 phase=4 state=open review_scope=in -->
+### ri-4 · finding [open] (reviewer: in scope) · Snapshot is stored before the page is rendered, and a prune failure aborts after the write (phase 4)
+
+A failing render left a snapshot of a board that never existed.
+
+<!-- fr:journal kind=finding scope=plan id=ri-5 created=2026-10-02T21:20:42+00:00 phase=4 state=open review_scope=in -->
+### ri-5 · finding [open] (reviewer: in scope) · Re-rendering without a new collect erases 'Since last report' (phase 4)
+
+Every render stored a snapshot; an identical one made the next diff 'Nothing changed'.
+
+<!-- fr:journal kind=finding scope=plan id=ri-6 created=2026-10-02T21:20:42+00:00 phase=4 state=open review_scope=out -->
+### ri-6 · finding [open] (reviewer: out of scope) · The Closing order rows have no per-batch tier (phase 4)
+
+Not a spec gap: design D's column list omits tier, and Next up carries it.
+
+<!-- fr:journal kind=finding scope=plan id=ri-1-resolved created=2026-10-02T21:20:42+00:00 phase=4 state=fixed resolves=ri-1 -->
+### ri-1-resolved · finding [fixed] · resolves ri-1: With scripts disabled every wave table shows but nothing says which wave each is (phase 4)
+
+Fixed in e174d1af with tests.
+
+<!-- fr:journal kind=finding scope=plan id=ri-2-resolved created=2026-10-02T21:20:42+00:00 phase=4 state=fixed resolves=ri-2 -->
+### ri-2-resolved · finding [fixed] · resolves ri-2: Snapshot acceptance counts are read from the cwd's matrix whatever the triaged scope (phase 4)
+
+Fixed in e174d1af with tests.
+
+<!-- fr:journal kind=finding scope=plan id=ri-3-resolved created=2026-10-02T21:20:42+00:00 phase=4 state=fixed resolves=ri-3 -->
+### ri-3-resolved · finding [fixed] · resolves ri-3: The inferred post_merge row also fires for old merged batches that never had a close-out (phase 4)
+
+Fixed in e174d1af with tests.
+
+<!-- fr:journal kind=finding scope=plan id=ri-4-resolved created=2026-10-02T21:20:42+00:00 phase=4 state=fixed resolves=ri-4 -->
+### ri-4-resolved · finding [fixed] · resolves ri-4: Snapshot is stored before the page is rendered, and a prune failure aborts after the write (phase 4)
+
+Fixed in e174d1af with tests.
+
+<!-- fr:journal kind=finding scope=plan id=ri-5-resolved created=2026-10-02T21:20:42+00:00 phase=4 state=fixed resolves=ri-5 -->
+### ri-5-resolved · finding [fixed] · resolves ri-5: Re-rendering without a new collect erases 'Since last report' (phase 4)
+
+Fixed in e174d1af with tests.
+
+<!-- fr:journal kind=finding scope=plan id=ri-6-resolved created=2026-10-02T21:20:42+00:00 phase=4 state=open resolves=ri-6 out_of_scope=true -->
+### ri-6-resolved · finding [out-of-scope] · resolves ri-6: The Closing order rows have no per-batch tier (phase 4)
+
+Design D omits tier from the wave table; the board matches the spec.
