@@ -188,3 +188,6 @@ Informational; no change needed.
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-wave-driver-p4 created=2026-10-02T19:00:20+00:00 -->
 ### phase-split-2026-10-02-wave-driver-p4 · decision · ask: the decision views are their own ask (R9, R16-R20) and reuse the driver's pure functions
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-wave-driver-p5 created=2026-10-02T19:00:21+00:00 -->
+### phase-split-2026-10-02-wave-driver-p5 · decision · ask: defect origins is its own ask (R10): a new engine, verbs and skill
