@@ -9,3 +9,8 @@ Run 2026-09-26-fix-624-set-status-drop-level (archived cursor). phase/1..3/imple
 ### rc-637 · root-cause · _open_dispatch records the tier binding as a dispatched attempt's model, and nothing replaces it with what ran
 
 run_cmd.py _open_dispatch: model=_resolved_model(repo_root, harness, tier) when agent_type is not None. That's a prediction made at advance, before anything runs; the dispatch went out without a model argument, so the harness ran the executors on the orchestrator's model. _close_on_resolve / _claimed_identity only overwrite model with an agent-REPORTED --model; no path observes the subagent transcript, though attribute_dispatches already pairs agent id → transcript. Contrast: orchestrator-run attempts already record the OBSERVED orchestrator_model (debug journal C3).
+
+<!-- fr:journal kind=repro scope=debug id=repro-756 created=2026-10-02T16:45:27+00:00 -->
+### repro-756 · repro · #756: the closeout capture ran BEFORE the delivering session exited, not after
+
+The issue premise ('moved unchanged') is wrong: the archived usage file gained at=closeout, a second session (the closeout's) and fresh tokens for adff62ba (output 33439→34479), so capture ran and re-read the transcript. It found no cost-state. Timeline (UTC, 2026-09-26) from the closeout session transcript 12cefec0 and adff62ba's mtime: 10:54:39 adff62ba's last message; 10:57:25 grep shows 0 cost-state; 11:02:52–59 fr journal resolve ×2 + fr archive (captured_at 11:02:59); 11:02:59 adff62ba.jsonl last write = cost-state ×2 + exit trailer (session exited); 11:03:27 fr usage report reads $4.27 exact. Claude Code writes cost-state only at session exit, so the read raced the exit by under a second.
