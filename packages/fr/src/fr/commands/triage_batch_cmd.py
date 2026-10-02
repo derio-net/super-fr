@@ -63,7 +63,10 @@ from fr.triage.batch import (
     batch_item_id,
     batch_repo,
     batch_workflow,
+    check_dependencies,
     check_open_membership,
+    closeout_state,
+    dependency_state,
     derive_batch_stage,
     last_dispatch,
     mixed_themes,
@@ -102,6 +105,7 @@ from fr.triage.model import (
     Facts,
     Judgements,
     Launch,
+    load_facts,
     load_judgements,
     state_dir,
 )
@@ -176,6 +180,15 @@ RationaleOpt = Annotated[str | None, typer.Option("--rationale", help="Why these
 OrderOpt = Annotated[
     int | None, typer.Option("--order", help="Hard constraint on merge order (lower first).")
 ]
+WaveOpt = Annotated[
+    int | None, typer.Option("--wave", help="Wave number; the driver dispatches lower waves first.")
+]
+AfterOpt = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--after", help="A batch id that must be merged first; repeat (on edit: replaces the set)."
+    ),
+]
 BumpOpt = Annotated[str | None, typer.Option("--bump", help="patch | minor | major.")]
 SkillOpt = Annotated[
     str | None,
@@ -190,6 +203,10 @@ ModelOpt = Annotated[
         help="Session model (the run's orchestrator); subagents use their `fr models` tiers.",
     ),
 ]
+
+
+LIVE_WAVE_EDIT = frozenset({"proposed", "dispatched", "pr-open"})
+"""The stages where `--wave` and `--after` may still change: the driver reads them live."""
 
 
 def _launch(runner: str | None, harness: str | None, model: str | None) -> dict[str, str]:
@@ -208,6 +225,7 @@ def _save(
     batches changed since (review r2p-f7).
     """
     check_open_membership(batches, facts)
+    check_dependencies(batches)
     save_batches(target / "judgements.yaml", batches, read=read, dry_run=dry_run)
 
 
@@ -219,6 +237,18 @@ def _write(
         _save(target, batches, facts, read=read, dry_run=dry_run)
     except TriageError as exc:
         _fail(str(exc))
+
+
+def _wave_columns(batch: Batch, batches: list[Batch], facts: Facts | None) -> str:
+    """The `batch list` wave, dependency and close-out columns (wave-driver §A)."""
+    deps = ",".join(
+        f"{d}({dependency_state(d, batches, facts)})" if facts is not None else d
+        for d in batch.after
+    )
+    closeout = closeout_state(batch, facts) if facts is not None else "none"
+    wave = "-" if batch.wave is None else str(batch.wave)
+    after = f"  after {deps}" if deps else ""
+    return f"  wave {wave}{after}  close-out {closeout}"
 
 
 def _warn_mixed_themes(batch: Batch, judgements: Judgements) -> None:
@@ -246,9 +276,14 @@ def batch_list_command(
     if not batches:
         console.print("no batches")
         return
+    facts = (
+        load_facts(path.with_name("facts.json")) if path.with_name("facts.json").exists() else None
+    )
     for b in batches:
         console.print(
-            f"{b.id}  {plural(len(b.ids), 'issue')}  {b.title}", markup=False, soft_wrap=True
+            f"{b.id}  {plural(len(b.ids), 'issue')}  {b.title}{_wave_columns(b, batches, facts)}",
+            markup=False,
+            soft_wrap=True,
         )
 
 
@@ -259,6 +294,8 @@ def batch_create_command(
     issue: IssueOpt = None,
     rationale: RationaleOpt = None,
     order: OrderOpt = None,
+    wave: WaveOpt = None,
+    after: AfterOpt = None,
     bump: BumpOpt = None,
     skill: SkillOpt = None,
     runner: RunnerOpt = None,
@@ -275,6 +312,8 @@ def batch_create_command(
     doc: dict[str, object] = {"id": batch_id, "title": title, "ids": list(issue)}
     doc |= {"rationale": rationale} if rationale is not None else {}
     doc |= {"order": order} if order is not None else {}
+    doc |= {"wave": wave} if wave is not None else {}
+    doc |= {"after": list(after)} if after else {}
     doc |= {"bump": bump} if bump is not None else {}
     doc |= {"skill": skill} if skill is not None else {}
     doc |= {"launch": _launch(runner, harness, model)}
@@ -301,6 +340,8 @@ def batch_edit_command(
     ] = None,
     rationale: RationaleOpt = None,
     order: OrderOpt = None,
+    wave: WaveOpt = None,
+    after: AfterOpt = None,
     bump: BumpOpt = None,
     skill: SkillOpt = None,
     runner: RunnerOpt = None,
@@ -310,7 +351,8 @@ def batch_edit_command(
     org: OrgOpt = None,
     dir_override: DirOpt = None,
 ) -> None:
-    """Change a proposed batch; past `proposed`, only --order may change."""
+    """Change a proposed batch; past `proposed`, only --order (and, until it merges,
+    --wave and --after) may change."""
     target, facts, judgements = _load_state(_scope(repo, org), dir_override)
     batch = _find(judgements.batches, batch_id)
     changes: dict[str, object] = {}
@@ -329,13 +371,22 @@ def batch_edit_command(
         ids = [k for k in batch.ids if k not in drop]
         ids += list(add_issue or [])  # a key already present is refused by the model
         changes["ids"] = ids
-    if not changes and order is None:
+    if not changes and order is None and wave is None and after is None:
         _fail("nothing to change: give at least one option")
     stage = derive_batch_stage(batch, facts)
     if changes and stage != "proposed":
-        _fail(f"batch {batch.id!r} is {stage}; past proposed only --order may change")
+        _fail(
+            f"batch {batch.id!r} is {stage}; past proposed only --order, --wave and --after "
+            "may change"
+        )
+    if (wave is not None or after is not None) and stage not in LIVE_WAVE_EDIT:
+        _fail(f"batch {batch.id!r} is {stage}; --wave and --after change only until it merges")
     if order is not None:
         changes["order"] = order
+    if wave is not None:
+        changes["wave"] = wave
+    if after is not None:
+        changes["after"] = list(after)
     try:
         doc = batch.model_dump(by_alias=True, exclude_defaults=True) | changes
         new = Batch.model_validate(doc)
@@ -795,6 +846,39 @@ def batch_dispatch_command(
     """Hand a batch to a runner as one fr-goal run, and mark its issues taken."""
     target, facts, judgements = _load_state(_scope(repo, org), dir_override)
     batch = _find(judgements.batches, batch_id)
+    dispatch_batch(
+        target,
+        facts,
+        judgements,
+        batch,
+        to=to,
+        checkout_path=checkout_path,
+        repair=repair,
+        handle=handle,
+        reserved_version=reserved_version,
+        yes=yes,
+    )
+
+
+def dispatch_batch(
+    target: Path,
+    facts: Facts,
+    judgements: Judgements,
+    batch: Batch,
+    *,
+    to: str | None = None,
+    checkout_path: Path | None = None,
+    repair: bool = False,
+    handle: str | None = None,
+    reserved_version: str | None = None,
+    yes: bool = False,
+) -> None:
+    """The body of `batch dispatch`, callable: one batch, one runner, one dispatch.
+
+    `batch dispatch` and the wave driver share it, so a driver dispatch runs the same
+    preflight, version reservation, brief, event write and forge labels. A refusal is
+    `typer.Exit` with the verb's own exit code, exactly as at the command line.
+    """
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")

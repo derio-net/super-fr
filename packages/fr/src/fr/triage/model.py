@@ -34,10 +34,11 @@ from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
 FACTS_SCHEMA: Literal[3] = 3
-# The version this fr WRITES: every engine write of `batches:` stamps 2 (spec
-# 2026-09-25-triage-batches §3.A); the loader reads every version in JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[2] = 2
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2)
+# The version this fr WRITES: every engine write of `batches:` stamps 3 (spec
+# 2026-10-02-wave-driver §A: `wave`, `after`; 2 was 2026-09-25-triage-batches §3.A);
+# the loader reads every version in JUDGEMENTS_READS.
+JUDGEMENTS_SCHEMA: Literal[3] = 3
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3)
 
 ScopeKind = Literal["repo", "org"]
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
@@ -385,6 +386,7 @@ class Batch(_Strict):
     rationale: str = ""
     order: int | None = None
     wave: int | None = None
+    after: list[str] = []  # ids of batches that must be merged first (schema 3)
     bump: Bump = "patch"
     skill: BatchSkill = "goal"
     launch: Launch = Launch()
@@ -415,6 +417,19 @@ class Batch(_Strict):
             raise ValueError(f"a batch's members must be in one repo, got {repos}")
         return keys
 
+    @field_validator("after")
+    @classmethod
+    def _after_are_slugs(cls, v: list[str]) -> list[str]:
+        """Lowercased like `id`, a slug each, listed once."""
+        out = [x.lower() if isinstance(x, str) else x for x in v]
+        bad = [x for x in out if not isinstance(x, str) or not BATCH_ID_RE.match(x)]
+        if bad:
+            raise ValueError(f"`after` names batch ids (slugs), got {bad!r}")
+        twice = sorted({x for x in out if out.count(x) > 1})
+        if twice:
+            raise ValueError(f"`after` lists {', '.join(twice)} more than once")
+        return out
+
     @field_validator("events")
     @classmethod
     def _events_are_time_ordered(cls, v: list[DispatchEvent | CancelEvent]) -> list[Any]:
@@ -435,7 +450,7 @@ class Batch(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -490,12 +505,17 @@ class Judgements(_Strict):
 
     @model_validator(mode="after")
     def _batches_need_schema_2(self) -> Judgements:
-        """Batches exist only under schema 2 (spec §3.A). A schema-1 stamp over a
-        `batches:` list is a writer that forgot to restamp, and a schema-1 reader
-        cannot hold it, so it is refused rather than loaded."""
-        if self.batches and self.schema_ != 2:
+        """Batches exist only under schema 2 or 3 (spec §3.A); `wave` and `after`
+        only under 3 (wave-driver §A). A stamp below what a file carries is a writer
+        that forgot to restamp, and an older reader cannot hold it, so it is refused
+        rather than loaded."""
+        if self.batches and self.schema_ < 2:
             raise ValueError(
-                f"`batches:` needs schema 2, but this file is stamped schema {self.schema_}"
+                f"`batches:` needs schema 2 or 3, but this file is stamped schema {self.schema_}"
+            )
+        if self.schema_ < 3 and any(b.wave is not None or b.after for b in self.batches):
+            raise ValueError(
+                f"`wave` and `after` need schema 3, but this file is stamped schema {self.schema_}"
             )
         return self
 
