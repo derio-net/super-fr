@@ -1,0 +1,37 @@
+schema_version: 7
+run: 2026-10-02-feat-batch-opencode-observe-2
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-r1
+    review_scope: in
+    title: "_open_dispatch dropped main's harness guard: an undetected harness records the stale CLAUDE_CODE_SESSION_ID (gh#537 regression; becomes R3 evidence)"
+    body: |
+      run_cmd.py:3011 recorded run_session(os.environ) unconditionally; with detect_harness → None (mixed CLAUDECODE+OPENCODE env, pid not placeable) current_session (telemetry.py:436) falls back to Claude Code's key, so the inherited stale session was recorded and then counted as positive evidence by candidates(ambient=False). Spec §B: record only on a harness that OWNS its key. Untested because every test set FR_HARNESS.
+  - kind: finding
+    id: p1-r2
+    review_scope: in
+    title: "OpenCode backend reopens sqlite per query and loads unfiltered parts; run_session runs detect_harness twice"
+    body: |
+      observed.py _parts/_children opened a second connection for _known on every call; _final_text decoded every part of each child to find its last text part; run_session detected the harness twice (each may run ps). Not quadratic, but megabytes of JSON per gate on a long session.
+  - kind: finding
+    id: p1-r3
+    review_scope: in
+    title: "session.ts assigns output.env[...] without ensuring env exists; a missing env object fails R1 invisibly"
+    body: |
+      packages/fr-opencode-plugin/src/session.ts:30 — a binary handing over no env object raised a swallowed TypeError and the session was never exported.
+  - kind: review
+    id: review-p1
+    title: "phase 1 independent code review: 3 findings (p1-r1 important, p1-r2/p1-r3 low), all in scope"
+    body: |
+      Reviewer checked the seven focus areas (three-valued contract, run_session root walk and call sites, §C ambient threading with no caller left ambient, gates routed through the protocol with no Claude Code behaviour change, fixture added beside main's rows, plugin never throws / no parity marker, tests non-tautological) and found them correct apart from p1-r1, p1-r2, p1-r3. Received: each verified against the code; p1-r1 reproduced by a failing test first.
+resolves:
+  - {id: p1-r1, state: fixed, body: "dc098745: _open_dispatch records run_session only when the detected harness is in SESSION_ID_ENVS (None otherwise, as main); test_advance_records_no_session_when_no_harness_owns_one (red first)."}
+  - {id: p1-r2, state: fixed, body: "dc098745: _parts/_children ask _known only on an empty answer (one connection in the common case); _final_text filters text parts in SQL (json_valid/json_extract); run_session detects the harness once via _session_under."}
+  - {id: p1-r3, state: fixed, body: "dc098745: output.env ??= {} before assigning; bun test 'creates the env object when the output carries none' (red first)."}
+evidence:
+  review: review-p1
+  reviewer: ac867d52c2508b7f7
+  model: claude-opus-5-5
