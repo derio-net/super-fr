@@ -71,3 +71,8 @@ Clean probes: no shell variable clobbering; `_merged_before` handles timezones; 
 ### fix-553-review · finding [fixed] · #553 drift no longer locks the shell; the remedy order works
 
 Correction to fix-553: the Bash guard does NOT inherit the drift check. That was the review's finding 1, and the check is now edit-only.
+
+<!-- fr:journal kind=review scope=debug id=2c489821fc0e created=2026-10-02T17:19:17+00:00 -->
+### 2c489821fc0e · review · Delivered: draft PR #859, full suite green on e43dc5ca
+
+7602 passed, 97 skipped; mypy, ruff and bun test (93) clean. Review findings: 2 raised, 2 fixed (entry ba856cfe61cb).
