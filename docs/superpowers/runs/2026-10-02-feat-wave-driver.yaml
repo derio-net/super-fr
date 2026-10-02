@@ -69,12 +69,19 @@ steps:
         evidence:
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-02T19:14:09+00:00'
           harness: claude-code
           model: claude-sonnet-5-5
           session: 12cefec0-8bfd-4945-9a41-9fef359abbef
+          returned: '2026-10-02T19:18:11+00:00'
+          outcome: done
+        evidence:
+          review: review-p1
+          reviewer: a7df61f841a081730
+          visual: none
+          findings: rf-1,rf-2,rf-3,rf-4,rf-5
   journal-check:
     state: pending
   deliver:
