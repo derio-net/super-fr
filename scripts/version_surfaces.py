@@ -36,7 +36,13 @@ UV_LOCK = "uv.lock"
 # JSON indent each manifest is written with (preserves the committed layout).
 _JSON_INDENT = {OPENCODE_PACKAGE_JSON: 2}
 _TOML_VERSION_RE = re.compile(r'^(version\s*=\s*")([^"]+)(")', re.M)
-_PROJECT_HEADER_RE = re.compile(r"^\[project\][ \t]*(#.*)?$", re.M)
+# The spellings TOML allows for `[project].version` (gh#681): the table header,
+# with optional inner whitespace and a trailing comment, or a dotted key in the
+# root table (`project.version = "..."`, before any header). A quoted
+# `["project"]` header is not matched and refuses with `no [project] table`;
+# whatever matches is still checked by a full re-parse after the rewrite.
+_PROJECT_HEADER_RE = re.compile(r"^\[[ \t]*project[ \t]*\][ \t]*(#.*)?$", re.M)
+_DOTTED_VERSION_RE = re.compile(r'^(project[ \t]*\.[ \t]*version\s*=\s*")([^"]+)(")', re.M)
 # The next real table header; a bare `[` line (an array continuation) is not one.
 _TABLE_HEADER_RE = re.compile(r"^\[\[?[A-Za-z0-9_\"'.\- ]+\]\]?[ \t]*(#.*)?$", re.M)
 _LOCK_BLOCK_RE = re.compile(r"^\[\[package\]\]\n", re.M)
@@ -146,12 +152,19 @@ def _write_lock_versions(repo: Path, new: str) -> None:
 def _set_project_version(text: str, new: str, path: Path) -> str:
     """`text` with `[project].version` set to `new`, touching no other table."""
     header = _PROJECT_HEADER_RE.search(text)
-    if not header:
-        raise ValueError(f"no [project] table in {path}")
-    start = header.end()
-    boundary = _TABLE_HEADER_RE.search(text, start)
+    if header:
+        start = header.end()
+        boundary = _TABLE_HEADER_RE.search(text, start)
+        version_re = _TOML_VERSION_RE
+    else:
+        # No header: only the root table (everything before the first header)
+        # may carry `project.version` as a dotted key.
+        start, boundary = 0, _TABLE_HEADER_RE.search(text)
+        version_re = _DOTTED_VERSION_RE
+        if not version_re.search(text, 0, boundary.start() if boundary else len(text)):
+            raise ValueError(f"no [project] table in {path}")
     end = boundary.start() if boundary else len(text)
-    body, count = _TOML_VERSION_RE.subn(rf"\g<1>{new}\g<3>", text[start:end], count=1)
+    body, count = version_re.subn(rf"\g<1>{new}\g<3>", text[start:end], count=1)
     if not count:
         raise ValueError(f"no double-quoted [project].version to rewrite in {path}")
     out = text[:start] + body + text[end:]

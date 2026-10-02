@@ -1262,7 +1262,11 @@ def _gate_provenance(
     observed = None if rounds is None else bool(rounds)
     if observed is True and not no_questions:
         assert rounds is not None
-        refusal = question_rounds_refusal(rounds, questions)
+        # gh#761: standalone fr-brainstorming asks one question per turn, so
+        # every question is a round to the transcript; the cap is fr-goal's.
+        refusal = (
+            None if state.driver == "standalone" else question_rounds_refusal(rounds, questions)
+        )
         if refusal is not None:
             err_console.print(f"{step_id}: {refusal}", style="red", markup=False, soft_wrap=True)
             raise typer.Exit(2)
@@ -1804,10 +1808,24 @@ def _verified_evidence(
         verified["tests"] = _reuse_tests_witness(key, repo_root, state)
     elif "tests" in offered:
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
+    # Every DERIVED witness is evaluated, and every refusal printed, before the
+    # resolve is refused (gh#768): one environmental blocker (no fetchable
+    # remote) used to exit first and hide each witness declared after it.
+    refused: list[str] = []
+
+    def derive(name: str, witness: Callable[[], str]) -> None:
+        try:
+            verified[name] = witness()
+        except typer.Exit:
+            refused.append(name)
+
     if state_value == "done" and "proportionality" in step.evidence:
-        verified["proportionality"] = _proportionality_witness(key, repo_root, state)
+        derive("proportionality", lambda: _proportionality_witness(key, repo_root, state))
     if state_value == "done" and "single-phase" in step.evidence:
-        verified["single-phase"] = _single_phase_witness(key, repo_root, state, emitted or {})
+        derive(
+            "single-phase",
+            lambda: _single_phase_witness(key, repo_root, state, emitted or {}),
+        )
     derives = state_value == "done" and "findings" in step.evidence
     review_journal: tuple[str, list[JournalEntry]] | None = None
     if "review" in offered or derives:
@@ -1824,23 +1842,34 @@ def _verified_evidence(
             key, offered["review"], slug=slug, entries=entries, target=target, since=since
         )
     if state_value == "done" and "visual" in step.evidence:
-        verified["visual"] = _visual_witness(
-            key,
-            repo_root,
-            state,
-            step,
-            phase=phase,
-            entries=visual,
-            holder=holder or (attempt.agent if attempt is not None else None),
-            reviewer=offered.get("reviewer"),
-            since=since or (state.steps[step.id].at if step.id in state.steps else None),
-            dispatched_as=attempt.agent_type if attempt is not None else None,
+        derive(
+            "visual",
+            lambda: _visual_witness(
+                key,
+                repo_root,
+                state,
+                step,
+                phase=phase,
+                entries=visual,
+                holder=holder or (attempt.agent if attempt is not None else None),
+                reviewer=offered.get("reviewer"),
+                since=since or (state.steps[step.id].at if step.id in state.steps else None),
+                dispatched_as=attempt.agent_type if attempt is not None else None,
+            ),
         )
-    if not derives:
-        return verified
-    assert review_journal is not None and target is not None
-    slug, entries = review_journal
-    return {**verified, "findings": _closed_findings_witness(key, slug, entries, target)}
+    if derives:
+        assert review_journal is not None and target is not None
+        slug, entries = review_journal
+        derive("findings", lambda: _closed_findings_witness(key, slug, entries, target))
+    if len(refused) > 1:
+        err_console.print(
+            f"{key}: refused — {len(refused)} derived witnesses failed: {', '.join(refused)}",
+            markup=False,
+            soft_wrap=True,
+        )
+    if refused:
+        raise typer.Exit(2)
+    return verified
 
 
 def _visual_witness(
@@ -1965,20 +1994,68 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
-    report = run_report(repo_root, plan, None)
-    if report.merge_base is None:
-        hint = (
-            " (`fr run resolve` takes no --base: fetch the remote so its default branch resolves)"
-            if "--base" in report.text
-            else ""
-        )
+    base, label = _proportionality_base(repo_root)
+    if base is None:
         err_console.print(
-            f"{key}: cannot derive proportionality evidence — {report.text.strip()}{hint}",
+            f"{key}: cannot derive proportionality evidence — no base: {label}. Fetch the "
+            "remote so its default branch resolves, or create the local default branch.",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if label is not None:
+        err_console.print(
+            f"{key}: proportionality: no remote default branch; using base {label}",
+            markup=False,
+            soft_wrap=True,
+        )
+    report = run_report(repo_root, plan, base)
+    if report.merge_base is None:
+        err_console.print(
+            f"{key}: cannot derive proportionality evidence — {report.text.strip()}",
             markup=False,
             soft_wrap=True,
         )
         raise typer.Exit(2)
     return f"{report.merge_base}:{hashlib.sha256(report.text.encode()).hexdigest()}"
+
+
+def _proportionality_base(repo_root: Path) -> tuple[str | None, str | None]:
+    """The base `deliver`'s proportionality witness diffs against (gh#768).
+
+    `fr run resolve` takes no `--base`, so a repo whose remote default branch
+    does not resolve could never resolve `deliver`. In order: the remote
+    default branch (`(ref, None)` — the ordinary case, nothing printed); the
+    commit `fr isolation up` cut this branch from; the local default branch.
+    `(ref, label)` names a fallback; `(None, why)` means none is left.
+    """
+    from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref
+    from fr.isolation.types import load_state
+
+    try:
+        found = remote_default_ref(repo_root)
+        if found is not None and not isinstance(found, GitRefusal):
+            return found, None
+        head = git_answer(repo_root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        try:
+            recorded = load_state(repo_root, head)
+        except (OSError, ValueError):
+            recorded = None
+        if recorded is not None and recorded.base_sha:
+            ok = git_answer(repo_root, "cat-file", "-e", f"{recorded.base_sha}^{{commit}}")
+            if ok.returncode == 0:
+                return recorded.base_sha, f"{recorded.base_sha[:12]} (isolation start commit)"
+        for name in ("main", "master"):
+            if name == head:
+                continue
+            ok = git_answer(repo_root, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}")
+            if ok.returncode == 0:
+                return name, f"{name} (local default branch)"
+    except GitUnavailableError as e:
+        return None, f"git could not answer ({e}); retry"
+    return None, (
+        "no remote default branch, no isolation start commit, and no local default branch"
+    )
 
 
 def _derived_refusal(key: str, lines: list[str]) -> NoReturn:
@@ -3094,8 +3171,51 @@ def _close_on_resolve(
                 "model": model if model is not None else open_record.model,
             }
         )
+    open_record = _observed_model(open_record, key)
     record = units.with_last_attempt_replaced(record, key, open_record)
     return _with_step(state, owner_id, _close_dispatch(record, key, outcome))
+
+
+def _observed_model(attempt: UnitAttempt, key: str) -> UnitAttempt:
+    """`attempt` carrying the model its subagent's transcript says RAN (gh#637).
+
+    `advance` wrote the tier binding for a dispatched attempt — what SHOULD
+    run. Resolve is the first point that knows the agent id, so the transcript
+    can now say what DID: a dispatch sent without a model argument runs on
+    the orchestrator's model, and the binding then named a model that never
+    ran (run 2026-09-26-fix-624: haiku/sonnet recorded, opus throughout).
+    Observed beats bound and beats reported, as `orchestrator_model` already
+    does for the orchestrator's own units; a difference is said aloud, never
+    blocked. Unobservable leaves the attempt as it was — an absence is not
+    a mismatch."""
+    from fr.run.telemetry import subagent_model
+
+    if attempt.agent is None or attempt.agent_type is None:
+        return attempt
+    observed = subagent_model(os.environ, attempt.session, attempt.agent)
+    if observed is None or observed == attempt.model:
+        return attempt
+    if attempt.model is not None and _model_family(observed) != _model_family(attempt.model):
+        err_console.print(
+            f"[yellow]{key}: agent {attempt.agent} ran on {observed}, but the cursor "
+            f"recorded {attempt.model}. fr records what ran. If the tier's binding was "
+            "meant, pass that model in the dispatch.[/yellow]",
+            soft_wrap=True,
+        )
+    return attempt.model_copy(update={"model": observed})
+
+
+_MODEL_DATE = re.compile(r"-\d{8}$")
+
+
+def _model_family(model: str) -> str:
+    """`model` without a context-window suffix or a trailing snapshot date, so
+    a binding's `claude-haiku-4-5` and a transcript's
+    `claude-haiku-4-5-20251001` compare equal: the dispatch honoured the
+    binding, and a warning would be noise (review of gh#637)."""
+    from fr.usage.readers.claude_code import normalize_model
+
+    return _MODEL_DATE.sub("", normalize_model(model))
 
 
 def _build_member_brief(
@@ -3631,6 +3751,12 @@ def start_cmd(
     harness: str = typer.Option(
         "unknown", "--harness", help="claude | hermes | opencode | unknown (with --session)."
     ),
+    driver: str | None = typer.Option(
+        None,
+        "--driver",
+        help="`standalone` when standalone fr-brainstorming starts the run: its operator "
+        "gate is not held to fr-goal's two-round cap (gh#761). Omit under /fr-goal.",
+    ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
 
@@ -3642,6 +3768,13 @@ def start_cmd(
     The shape is resolved BEFORE isolation is ensured, so a typo'd shape name
     fails without provisioning a worktree or starting a container.
     """
+    if driver not in (None, "standalone"):
+        err_console.print(
+            f"[red]--driver {driver!r}: the only driver is `standalone` (omit it when "
+            "/fr-goal drives the run)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     repo_root = resolve_repo_root()
     try:
         manifest = resolve_workflow(workflow, repo_root)
@@ -3759,6 +3892,7 @@ def start_cmd(
         started=_now(),
         cursor=manifest.steps[0].id,
         steps=steps,
+        driver="standalone" if driver == "standalone" else None,
     )
     _save_run_state(workspace, state)
     console.print(f"started run {rid} ({state.workflow}) — cursor: {state.cursor}")
@@ -4785,7 +4919,12 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     from fr.artifacts.atomic import write_text_atomic
     from fr.hostclient import FORGE_ERRORS, client_for, pr_command
     from fr.record.model import records_dir
-    from fr.record.pr_body import PR_BODY_NAME, missing_sections, render_pr_body
+    from fr.record.pr_body import (
+        PR_BODY_NAME,
+        missing_sections,
+        render_pr_body,
+        shared_closing_keywords,
+    )
 
     body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
     body_path.parent.mkdir(parents=True, exist_ok=True)
@@ -4812,6 +4951,23 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         err_console.print(
             f"refused: the PR body lacks required section(s): {', '.join(missing)}. Update "
             f"it from fr's render — `{edit}` — and resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # gh#821: one keyword closes one reference, so `Closes #a and #b` would
+    # leave #b open after its fix merges. Checked on the body already read.
+    shared = shared_closing_keywords(live)
+    if shared:
+        fixes = "\n".join(
+            f"  {bad!r} — write instead:\n" + "\n".join(f"    {f}" for f in fixed)
+            for bad, fixed in shared
+        )
+        err_console.print(
+            "refused: the PR body shares one closing keyword across several issues, "
+            "and only the first would close on merge. Give each reference its own "
+            "keyword, one per line (move a non-closing mention to a line with no "
+            f"keyword), then resolve again:\n{fixes}",
             markup=False,
             soft_wrap=True,
         )

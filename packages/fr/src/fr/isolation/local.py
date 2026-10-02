@@ -1043,7 +1043,7 @@ class LocalWorktreeDevcontainerTarget:
     ) -> IsolationState:
         worktree = self._worktree_up_core(branch, path)
         name = resolve_profile(self.repo_root, profile)
-        self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
+        base_sha = self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
 
         config = worktree / ".devcontainer" / name / "devcontainer.json"
         # super-fr#299 part 2: the worktree is cut from the committed tree. If
@@ -1068,7 +1068,9 @@ class LocalWorktreeDevcontainerTarget:
         # postCreate used to leave a worktree and a container that neither
         # `status` nor `down` could address. With the record saved first, a
         # failed `up` is a listed workspace — retry `up`, or `down` it.
-        state = carried_state(self.repo_root, branch, worktree, name, "devcontainer")
+        state = carried_state(
+            self.repo_root, branch, worktree, name, "devcontainer", base_sha=base_sha
+        )
         save_state(state)
         self._write_isolation_marker(worktree, branch, created_at=state.created_at)
         try:
@@ -2424,10 +2426,12 @@ class LocalWorktreeDevcontainerTarget:
 
     def _git_worktree_add(
         self, worktree: Path, branch: str, base: str | None = None, no_fetch: bool = False
-    ) -> None:
+    ) -> str | None:
+        """Provision `worktree` on `branch`; the commit a NEW branch was cut
+        from, or None when the branch or worktree already existed (gh#768)."""
         if worktree.exists():
             self._ensure_validator_wrapper_in_worktree(worktree)
-            return  # already provisioned — up() is idempotent on the worktree
+            return None  # already provisioned — up() is idempotent on the worktree
         # Classify <B> against origin/<B> (#438, spec §3.E). The probe runs
         # for the local rows too, best-effort: an unknown origin never blocks
         # a reuse, and a local branch is never fetched into or rebased (#322
@@ -2446,6 +2450,7 @@ class LocalWorktreeDevcontainerTarget:
         for line in decision.lines:
             print(line, file=sys.stderr)
         track = False
+        start_sha: str | None = None
         if decision.action == "local":
             checkout = branch
             argv = ["git", "worktree", "add", str(worktree), branch]
@@ -2464,7 +2469,7 @@ class LocalWorktreeDevcontainerTarget:
                 branch, base, no_fetch, origin_reachable=remote.state != "unknown"
             )
             checkout = start_point or "HEAD"
-            sha = self._rev(checkout)
+            sha = start_sha = self._rev(checkout)
             print(f"{log_line} ({_short(sha)})" if sha else log_line, file=sys.stderr)
             argv = ["git", "worktree", "add", str(worktree), "-b", branch]
             if start_point is not None:
@@ -2494,6 +2499,7 @@ class LocalWorktreeDevcontainerTarget:
                 f"at {_preserve.preserved_dir(self.repo_root, branch)}",
                 file=sys.stderr,
             )
+        return start_sha
 
     def _set_upstream(self, branch: str) -> None:
         """branch.<B>.{remote,merge} — what --track would have written. A

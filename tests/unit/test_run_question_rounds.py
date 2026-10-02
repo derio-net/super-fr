@@ -587,3 +587,66 @@ def test_the_verdict_table(
         # Review p2-r1: every round-count refusal is about a gate the operator
         # answered, so none may suggest clearing it "without asking".
         assert "--no-questions" not in got
+
+
+# --- gh#761: a STANDALONE brainstorm is interactive, one question per turn ---
+
+
+def _blocked_standalone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
+    """`_blocked`, but the run was started by standalone fr-brainstorming
+    (`--driver standalone`), which advances before its first question."""
+    from tests.integration.test_fr_goal_shape import _workspace
+
+    root = _workspace(tmp_path, "feat/x")
+    start = ["run", "start", "fr-goal", "--branch", "feat/x", "--run-id", RUN]
+    assert fr(root, [*start, "--driver", "standalone"]).exit_code == 0
+    assert load_run_state(root, RUN).driver == "standalone"
+    assert "blocked on operator gate" in fr(root, ["run", "advance", RUN]).output
+    spec = root / SPEC
+    spec.parent.mkdir(parents=True, exist_ok=True)
+    spec.write_text("# x design\n")
+    seed_requirements(root, SPEC)
+    blocked_at = parse_timestamp(load_run_state(root, RUN).steps["brainstorm"].at)
+    assert blocked_at is not None
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "projects"))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", SESSION)
+    return root, blocked_at.strftime("%Y-%m-%dT%H:%M:%S.999Z")
+
+
+@pytest.mark.parametrize("path", PATHS)
+def test_a_standalone_brainstorm_is_not_held_to_the_round_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    """Five questions asked one per turn, exploration between them, are five
+    rounds to the transcript. fr-goal's cap would refuse them; a standalone
+    run needs only that the operator answered."""
+    root, at = _blocked_standalone(tmp_path, monkeypatch)
+    _transcript(tmp_path, at, [None] * 5)
+
+    out = _resolve_brainstorm(root, path, None)()
+
+    assert out.exit_code == 0, out.output
+    record = load_run_state(root, RUN).steps["brainstorm"]
+    assert record.answered_by == "operator"
+
+
+@pytest.mark.parametrize("path", PATHS)
+def test_a_standalone_brainstorm_still_needs_an_answered_question(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    root, at = _blocked_standalone(tmp_path, monkeypatch)
+    _transcript(tmp_path, at, [])
+
+    _unmoved(root, _resolve_brainstorm(root, path, None), "no answered question")
+
+
+def test_an_unknown_driver_is_refused(tmp_path: Path) -> None:
+    from tests.integration.test_fr_goal_shape import _workspace
+
+    root = _workspace(tmp_path, "feat/x")
+    start = ["run", "start", "fr-goal", "--branch", "feat/x", "--run-id", RUN]
+    out = fr(root, [*start, "--driver", "nobody"])
+
+    assert out.exit_code == 2, out.output
+    assert "standalone" in " ".join(out.output.split())
