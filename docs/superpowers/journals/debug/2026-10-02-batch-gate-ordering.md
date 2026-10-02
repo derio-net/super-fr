@@ -36,3 +36,8 @@ Step records are transient (#628, the day of #694): brainstorm's is applied to t
 ### fix-699 · finding [fixed] · #699 fixed: reviewer and fr-goal §2 say no step record is an input
 
 fr-spec-reviewer.md Inputs and fr-goal SKILL.md spec-review paragraph (plus OpenCode/Hermes mirrors). Pinned by tests/unit/test_spec_reviewer_inputs.py.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-761 created=2026-10-02T18:23:36+00:00 -->
+### rc-761 · root-cause · #761: standalone brainstorm asks before the gate opens, and the round cap assumed fr-goal's batched rounds
+
+fr-brainstorming §0 started the cursor but never said to advance; the operator gate opens (record.at) only on advance and _gate_provenance counts answered rounds since then. question_rounds_refusal applied to every run on the fr-goal manifest, and the transcript counts every interactive question separated by exploration as its own round, so fixing the ordering alone would turn invisible answers into a 'never a round 3' refusal.
