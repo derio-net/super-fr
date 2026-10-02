@@ -15,12 +15,12 @@ import pytest
 from fr.run.model import load_run_state
 
 from tests.unit.test_run_cli import (
+    _RESOLVE_BRAINSTORM,
     _clear_cli_gate,
     _gated_agent_blocked,
     _invoke,
     _invoke_measurable,
     _repo,
-    _RESOLVE_BRAINSTORM,
     _write_shape,
 )
 

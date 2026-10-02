@@ -493,8 +493,8 @@ def test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed(
     seed_requirements(root, "docs/spec.md")
     _fr(root, ["run", "start", "fr-goal", "--branch", "feat/gate", "--run-id", "g1"])
     _fr(root, ["run", "advance", "g1"])
-    _fr(root, ["run", "resolve", "g1", "--step", "brainstorm", "--state", "done", "--answered-by", "agent",
-               "--emitted", "spec=docs/spec.md"])  # fmt: skip
+    _fr(root, ["run", "resolve", "g1", "--step", "brainstorm", "--state", "done",
+               "--answered-by", "agent", "--emitted", "spec=docs/spec.md"])  # fmt: skip
     _fr(root, ["run", "advance", "g1"])
     _fr(root, ["run", "resolve", "g1", "--step", "spec-review", "--state", "done",
                *spec_review_evidence(root, "docs/spec.md")])  # fmt: skip
