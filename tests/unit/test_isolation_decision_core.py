@@ -152,3 +152,40 @@ def test_worktree_mode_unchanged_by_external_branch(tmp_path: Path) -> None:
     wt = linked_worktree(repo)
     write_marker(wt, wt, mode="worktree")
     assert decide(wt / "src.py", env={"KUBERNETES_SERVICE_HOST": ""}) == 0
+
+
+# ---------- super-fr#553: the marker's branch is checked against HEAD ----------
+
+
+def test_worktree_marker_blocks_when_checkout_drifted_to_another_branch(tmp_path: Path) -> None:
+    # The marker records `feat/x`; a `git checkout -b` moved the worktree to
+    # another branch, so fr's state no longer describes what is being edited.
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)  # on feat/x
+    write_marker(wt, wt)
+    _git(wt, "checkout", "-q", "-b", "chore/elsewhere")
+    assert decide(wt / "src.py") == 1
+
+
+def test_worktree_marker_allows_detached_head(tmp_path: Path) -> None:
+    # A rebase or bisect detaches HEAD without moving to another branch; the
+    # gate must not block conflict resolution mid-rebase.
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt)
+    _git(wt, "checkout", "-q", "--detach")
+    assert decide(wt / "src.py") == 0
+
+
+def test_drift_reason_names_both_branches(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt)
+    _git(wt, "checkout", "-q", "-b", "chore/elsewhere")
+    out = subprocess.run(
+        ["bash", "-c", f'. "{LIB}"; fr_isolation_drift_reason "{wt / "src.py"}"'],
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "feat/x" in out and "chore/elsewhere" in out
+    assert "fr isolation up --branch chore/elsewhere" in out
