@@ -5678,9 +5678,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R7
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_review_return_resolve.py
+      - super-fr:tests/unit/test_run_review_return.py
+    status: ci
+    notes: 'R7/R8: review-findings returns checked against the plan journal on OpenCode
+      and Claude Code; PR body renders them (phase 2); first live use: this run''s own
+      phase 2/3 reviews'
   - id: opencode-operator-answers
     capability: operator gate
     acceptance: On OpenCode, fr reads answered question-tool rounds from opencode.db
