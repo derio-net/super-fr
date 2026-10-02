@@ -270,3 +270,6 @@ New §J records d-close-837: #837 closed with a link when the draft opened; bran
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-10-02-opencode-observe-2-p1 created=2026-10-02T19:18:04+00:00 -->
 ### tier-2026-10-02-opencode-observe-2-p1 · decision · hard: changes the session seam and capture attribution every transcript gate and every capture relies on
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-02-opencode-observe-2-p2 created=2026-10-02T19:18:05+00:00 -->
+### tier-2026-10-02-opencode-observe-2-p2 · decision · hard: changes the review-phase resolve gate (reviewer verification, holder-fill ordering, findings refusal)
