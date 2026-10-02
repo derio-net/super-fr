@@ -164,3 +164,37 @@ def test_e2e_idempotent_across_two_ticks():
     # Second tick — seen carries over → no re-close.
     reconcile_done_issues(mcp, seen=seen, close_gh_issue=closer)
     assert closed == [("derio-net/runs-fr", "7", "github")]  # still just the one
+
+
+def test_reconcile_closes_on_the_self_hosted_host_of_the_cards_pr(monkeypatch):
+    """gh#490: a Done card whose PR is a self-hosted GitLab MR is closed on
+    that host — the title carries no host, the PR URL does."""
+    import fr_vk.pr_state as ps
+    from fr_vk.pr_state import reconcile_done_issues
+
+    built: list[tuple[str, str | None]] = []
+
+    class _FakeClient:
+        def edit_issue_state(self, repo: str, number: int, *, state: str) -> None:
+            pass
+
+    def _client_for_backend(backend, *, host=None):  # noqa: ANN001, ANN202
+        built.append((backend, host))
+        return _FakeClient()
+
+    monkeypatch.setattr(ps.hostclient, "client_for_backend", _client_for_backend)
+    mcp = FakeMcpClient()
+    _prime(
+        mcp,
+        "c1",
+        status="Done",
+        title="gh#5: [group/proj]",
+        url="https://gitlab.corp.example/group/proj/-/merge_requests/9",
+    )
+    _prime(mcp, "c2", status="Done", title="gh#6: [derio-net/runs-fr]", url=None)
+
+    reconcile_done_issues(mcp, seen=set())
+
+    assert sorted(built, key=str) == sorted(
+        [("gitlab", "gitlab.corp.example"), ("github", None)], key=str
+    )

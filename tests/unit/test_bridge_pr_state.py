@@ -396,3 +396,65 @@ def test_default_close_gh_issue_routes_through_edit_issue_state(monkeypatch):
     tick(mcp, pr_observations={"card-1": "merged"})
 
     assert calls == [("derio-net/superpowers-for-vk", 100, "CLOSED")]
+
+
+def _recording_clients(monkeypatch):
+    """Record every (backend, host) the default closer builds a client for,
+    and every close that client makes."""
+    import fr_vk.pr_state as ps
+
+    built: list[tuple[str, str | None]] = []
+    closes: list[tuple[str, int, str]] = []
+
+    class _FakeClient:
+        def edit_issue_state(self, repo: str, number: int, *, state: str) -> None:
+            closes.append((repo, number, state))
+
+    def _client_for_backend(backend, *, host=None):  # noqa: ANN001, ANN202
+        built.append((backend, host))
+        return _FakeClient()
+
+    monkeypatch.setattr(ps.hostclient, "client_for_backend", _client_for_backend)
+    return built, closes
+
+
+def test_the_default_close_targets_the_self_hosted_host(monkeypatch):
+    """gh#490: on a self-hosted GitLab, the belt-and-braces Issue close must
+    reach the MR URL's own host — not glab's gitlab.com default."""
+    from fr_vk.pr_state import tick
+
+    built, closes = _recording_clients(monkeypatch)
+    mcp = FakeMcpClient()
+    _prime_card(
+        mcp,
+        "card-1",
+        simple_id="5",
+        status="In review",
+        title="gh#100: [group/proj]",
+        latest_pr_url="https://gitlab.corp.example/group/proj/-/merge_requests/7",
+    )
+
+    tick(mcp, pr_observations={"card-1": "merged"})
+
+    assert built == [("gitlab", "gitlab.corp.example")]
+    assert closes == [("group/proj", 100, "CLOSED")]
+
+
+def test_the_default_close_passes_no_host_for_a_saas_url(monkeypatch):
+    from fr_vk.pr_state import tick
+
+    built, closes = _recording_clients(monkeypatch)
+    mcp = FakeMcpClient()
+    _prime_card(
+        mcp,
+        "card-1",
+        simple_id="5",
+        status="In review",
+        title="gh#100: [derio-net/superpowers-for-vk]",
+        latest_pr_url="https://github.com/derio-net/superpowers-for-vk/pull/200",
+    )
+
+    tick(mcp, pr_observations={"card-1": "merged"})
+
+    assert built == [("github", None)]
+    assert closes == [("derio-net/superpowers-for-vk", 100, "CLOSED")]
