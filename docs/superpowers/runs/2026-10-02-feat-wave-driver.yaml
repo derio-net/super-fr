@@ -50,7 +50,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-10-02T21:41:26+00:00'
+    at: '2026-10-02T22:06:46+00:00'
     members:
     - implement-phase
     - review-phase
@@ -203,6 +203,13 @@ steps:
           outcome: done
         evidence:
           visual: none
+      phase/6/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-10-02T22:06:46+00:00'
+          harness: claude-code
+          model: claude-sonnet-5-5
+          session: 12cefec0-8bfd-4945-9a41-9fef359abbef
   journal-check:
     state: pending
   deliver:
