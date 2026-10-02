@@ -1229,8 +1229,10 @@ def _gate_provenance(
     - observed, none answered → REFUSED (exit 2), unless the bypass is explicit
       and on the record: `--no-questions --reason "…"` → `agent`, the reason
       written to the spec journal this resolve emits (when it emits one);
-    - not observable (another harness, no transcript) → the claim stands, as
-      before, and on Claude Code it says out loud that it could not verify.
+    - not observable (Hermes, no harness, an unreadable Claude Code transcript,
+      OpenCode without a session export or with an unreadable store) → a
+      stated claim is recorded as claimed, unverified, and says so out loud;
+      no claim is REFUSED (R10 — there is no default).
 
     `questions` is the declared round count (spec 2026-09-26 §3.C): observed
     answered rounds are checked against it by `question_rounds_refusal`, and a
@@ -1318,10 +1320,11 @@ def _gate_provenance(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    # Wherever the gate cannot observe — no harness, no readable transcript,
-    # or a harness fr has no question reader for (OpenCode, Hermes) — it says
-    # so on the record (§5.B.7, p2-r28); `advance` already told the last two
-    # that the gate is not enforced there, which is no reason to be quiet now.
+    # Wherever the gate cannot observe — no harness, an unreadable Claude Code
+    # transcript, OpenCode without a session export (FR_OPENCODE_SESSION_ID)
+    # or with an unreadable store, or Hermes, which has no question reader —
+    # it says so on the record (§5.B.7, p2-r28); `advance` already printed the
+    # degradation notice there, which is no reason to be quiet now.
     _note_unobserved("operator-gate")
     _record_round_two(repo_root, step_id, questions, spec_for_reason)
     # p2-r2: only `rounds: 2` writes anything (`_record_round_two`); `rounds: 1`
@@ -5017,7 +5020,7 @@ def resolve_cmd(
         no_questions=no_questions,
         reason=reason,
         questions=questions,
-        answered_by=answered_by,
+        answered_by=_answered_by_or_exit(answered_by),
         agent=agent,
         harness=harness,
         model=model,
@@ -5127,6 +5130,21 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         _note_record_write(repo_root, body_path)
 
 
+def _answered_by_or_exit(value: str | None) -> AnsweredBy | None:
+    """Narrow an `answered_by` string where it ENTERS fr — the flag, or a
+    record's evidence key — to the closed set (spec §F). Refused rather than
+    coerced: a typo recorded as a third provenance would be read by nobody and
+    would quietly weaken the one claim this field exists to make."""
+    if value is None:
+        return None
+    if value == "operator":
+        return "operator"
+    if value == "agent":
+        return "agent"
+    err_console.print(f"[red]--answered-by must be 'operator' or 'agent', got {value!r}[/red]")
+    raise typer.Exit(2)
+
+
 def _resolve_body(
     *,
     run_id: str,
@@ -5138,7 +5156,7 @@ def _resolve_body(
     no_questions: bool = False,
     reason: str | None = None,
     questions: QuestionRounds | None = None,
-    answered_by: str | None = None,
+    answered_by: AnsweredBy | None = None,
     agent: str | None = None,
     harness: str | None = None,
     model: str | None = None,
@@ -5153,14 +5171,6 @@ def _resolve_body(
     shape (`_rebind_shape`), riding this resolve's one commit."""
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
-        raise typer.Exit(2)
-    if answered_by is not None and answered_by not in ("operator", "agent"):
-        # Refused rather than coerced: a typo recorded as a third provenance
-        # would be read by nobody and would quietly weaken the one claim this
-        # field exists to make.
-        err_console.print(
-            f"[red]--answered-by must be 'operator' or 'agent', got {answered_by!r}[/red]"
-        )
         raise typer.Exit(2)
     if harness is not None and harness not in HARNESSES:
         err_console.print(f"[red]--harness must be one of {list(HARNESSES)}, got {harness!r}[/red]")
@@ -5275,7 +5285,7 @@ def _resolve_body(
             repo_root,
             step_id,
             record,
-            claimed=cast("AnsweredBy | None", answered_by),  # closed-set checked above
+            claimed=answered_by,
             no_questions=no_questions,
             reason=reason,
             questions=questions,
@@ -5549,7 +5559,7 @@ def resolve_in_process(
                 no_questions=no_questions,
                 reason=reason,
                 questions=questions,
-                answered_by=answered_by,
+                answered_by=_answered_by_or_exit(answered_by),
                 agent=agent,
                 harness=harness,
                 model=model,
