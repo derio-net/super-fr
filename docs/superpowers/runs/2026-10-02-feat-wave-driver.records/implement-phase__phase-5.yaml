@@ -1,0 +1,47 @@
+schema_version: 7
+run: 2026-10-02-feat-wave-driver
+step: implement-phase
+item: phase/5
+outcome: done
+ticks: [P5.T1.S1, P5.T2.S1, P5.T2.S2, P5.T3.S1]
+refactor:
+  P5.T1: "red-only task: tests, no production code to clean"
+  P5.T2: "nothing to extract: the board has no chart or table helpers (its tables are board-specific rows), so the page reuses what IS shared - FONTS, esc, plural, TOKENS_CSS, GUTTER_CSS - and the engine is one new module; ruff format, ruff check and mypy clean"
+  P5.T3: "acceptance row, mirrors and tripwires only: no production code to clean"
+journal:
+  - kind: decision
+    id: p5-closing-prs-from-pr-list
+    title: Closing PRs come from the existing PR list, not a new Forge call
+    body: |
+      `collect` reads `list_issues(state=all)` and `list_prs(state=all)` through the existing
+      seam and takes the MERGED PRs whose `closingIssuesReferences` name the issue (a PR closed
+      unmerged closed nothing). No Forge method was added. `gh.ISSUE_LIST_FIELDS` gained
+      `state,closedAt,stateReason`, which the open-issue path ignores.
+  - kind: decision
+    id: p5-closed-without-reason
+    title: A closed issue with no state reason is counted apart, not as completed
+    body: |
+      Median time to fix uses `reason == completed` only. A close with no recorded reason is
+      neither completed nor not planned, so the time-to-fix table shows it in its own
+      "Closed, no reason" column rather than guessing. Open and not-planned are separate columns.
+  - kind: decision
+    id: p5-regression-names-its-pr
+    title: A regression without a `pr:` is refused when origins.yaml is read
+    body: |
+      The skill's rule (a regression needs the PR that broke it named) is a structural
+      invariant of `Origin`, so a file that breaks it fails at `check`/`render` with the path,
+      not on the page.
+  - kind: decision
+    id: p5-conclusion-batch-links
+    title: The conclusion links a batch to the board's `batch-<id>` anchor; unknown ids stay visible
+    body: |
+      Batches resolve against `judgements.yaml` in the same state directory; a link goes to
+      `triage.html#batch-<id>` (the anchor phase 4 added). An id the file does not hold, or no
+      judgements file at all, renders as an `unresolved` span with no link, never dropped.
+  - kind: discovery
+    id: p5-judgements-validate-batch-members
+    title: A batch fixture needs its members judged
+    body: |
+      `Judgements` rejects a batch whose ids are not in `issues:`; the tests judge `widgets#3`.
+resolves: []
+evidence: {}

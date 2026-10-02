@@ -286,7 +286,7 @@ def list_repos(
     return [r for r in repos if not r.get("isArchived", False)]
 
 
-ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body"
+ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body,state,closedAt,stateReason"
 PR_LIST_FIELDS = (
     "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences"
 )

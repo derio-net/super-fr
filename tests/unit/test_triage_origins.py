@@ -37,7 +37,8 @@ CAUSES = """causes:
 JUDGEMENTS = """schema: 3
 tiers:
   - {n: 1, title: Now, description: first}
-issues: {}
+issues:
+  'widgets#3': {tier: 1}
 batches:
   - id: finish-widgets
     title: Finish the widgets
@@ -46,9 +47,7 @@ batches:
 """
 
 
-def _run(
-    monkeypatch: pytest.MonkeyPatch, verb: str, d: Path, *args: str, forge: Any = None
-) -> Any:
+def _run(monkeypatch: pytest.MonkeyPatch, verb: str, d: Path, *args: str, forge: Any = None) -> Any:
     import fr.commands.triage_cmd as triage_cmd
 
     monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge or OriginsForge())
@@ -334,3 +333,16 @@ def test_origins_classification_vocabulary_is_closed() -> None:
     assert CATEGORIES == ("latent", "regression", "new-feature", "leftover", "gap", "duplicate")
     assert SOURCES == ("pipeline", "recording", "hand")
     assert yaml.safe_load(classification_yaml())["schema"] == 1
+
+
+def test_a_regression_without_its_pr_is_refused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    (tmp_path / "origins.yaml").write_text(
+        "schema: 1\nissues:\n  widgets#2: {category: regression, source: pipeline,"
+        " severity: low, reason: x}\n",
+        encoding="utf-8",
+    )
+    r = _run(monkeypatch, "check", tmp_path)
+    assert r.exit_code == 2 and "must name the PR" in r.output.replace("\n", " ")
