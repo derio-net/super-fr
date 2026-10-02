@@ -10,3 +10,8 @@ All four sites are confirmed live on 599ba629 (packages/fr/src/fr/isolation/loca
 - #843 has its own cause, a file-append defect: `_write_isolation_marker` appends to a shared `info/exclude` (:2564) and assumes the file ends in a newline.
 
 The batch rule says to stop and ask before fixing anything when there is more than one root cause. Paused for the operator.
+
+<!-- fr:journal kind=decision scope=debug id=dcaa57ca57da created=2026-10-02T16:42:20+00:00 -->
+### dcaa57ca57da · decision · Operator: fix all four in one PR, one failing test per cause
+
+#844: a MERGED PR counts as this workspace's only if it merged after the state's created_at; otherwise fall back to merged-by-content. #553: fail closed on drift between HEAD's branch and the marker's branch, and gc refuses to reap a drifted workspace. #578: save state before devcontainer up. #843: write a newline before appending to info/exclude.
