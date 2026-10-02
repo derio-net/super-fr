@@ -5611,9 +5611,14 @@ rows:
       is green, and never readies, approves or un-drafts a PR
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+    status: ci
+    notes: Draft, pending, failing and moved-head PRs are never merged; required checks
+      else all checks, ci none on non-draft alone; failing CI warned once per head;
+      the fake forge client exposes no ready/approve call and none is made.
   - id: batch-closeout-after-merge
     capability: triage-batch-drive
     acceptance: After a batch merges, the driver runs the repo's post_merge command,
