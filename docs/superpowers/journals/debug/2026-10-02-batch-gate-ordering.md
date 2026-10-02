@@ -21,3 +21,8 @@ Asked after h1-verdict. #761: the cursor records who drives it; standalone brain
 ### rc-768 · root-cause · #768: the proportionality witness had no base but the remote default, and derived witnesses exited at the first refusal
 
 _proportionality_witness called run_report(base=None); with no remote default branch it refused, and `fr run resolve` has no --base. _verified_evidence ran derived witnesses (proportionality, single-phase, visual, findings) serially, each raising Exit(2), so later ones were never evaluated.
+
+<!-- fr:journal kind=finding scope=debug id=fix-768 created=2026-10-02T18:17:00+00:00 state=fixed -->
+### fix-768 · finding [fixed] · #768 fixed: base fallback chain + all derived refusals together
+
+IsolationState.base_sha records the commit a cold-start up cut the branch from (carried across resume). _proportionality_base: remote default -> isolation start commit -> local main/master (never the current branch), printing which base was used. _verified_evidence evaluates every derived witness and refuses once with all failures. Tests: test_run_evidence.py::test_deliver_without_a_remote_*, ::test_every_derived_witness_is_evaluated_and_every_refusal_reported, ::test_deliver_with_no_determinable_base_is_refused_naming_it; test_isolation_hostworktree.py::test_cold_start_up_records_the_start_commit.
