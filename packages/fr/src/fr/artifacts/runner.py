@@ -656,9 +656,7 @@ def _apply_to_one(
             failed.append(FailedAction(name, path, r.summary, f"{type(e).__name__}: {e}"))
             continue
         applied.append(
-            PlannedAction(
-                kind=name, path=path, summary=r.summary, repair=r.name, also_wrote=wrote
-            )
+            PlannedAction(kind=name, path=path, summary=r.summary, repair=r.name, also_wrote=wrote)
         )
 
     return applied, failed

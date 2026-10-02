@@ -124,7 +124,7 @@ def test_add_appends_to_a_flush_left_matrix(
 
 # --- gh#531: name anchors, not line anchors, into Python --------------------
 
-SOURCE = '''\
+SOURCE = """\
 import pytest
 
 
@@ -148,7 +148,7 @@ class TestGroup:
 
     async def test_async(self):
         assert True
-'''
+"""
 
 
 def test_node_line_resolves_functions_classes_and_methods() -> None:
@@ -302,15 +302,23 @@ def test_the_repair_converts_line_anchors_that_land_in_a_test(tmp_path: Path) ->
     _repair().fn(path)
 
     rows = {r.id: r for r in load_matrix(path).rows}
-    assert rows["r1"].levels["unit"] == ("own:tests/test_a.py#test_a", "own:tests/test_b.py#test_b10")
-    assert rows["r2"].levels["unit"] == ("own:tests/test_b.py#test_b1",), "#L1 is not a prefix of #L10"
+    assert rows["r1"].levels["unit"] == (
+        "own:tests/test_a.py#test_a",
+        "own:tests/test_b.py#test_b10",
+    )
+    assert rows["r2"].levels["unit"] == ("own:tests/test_b.py#test_b1",), (
+        "#L1 is not a prefix of #L10"
+    )
     assert not _repair().applies(path), "applying the repair makes its predicate false"
 
 
 def test_the_repair_leaves_what_it_cannot_convert(tmp_path: Path) -> None:
     root = make_repo(
         tmp_path,
-        row(id="r1", unit='"own:tests/test_c.py#L1", "sib:tests/test_x.py#L5", "own:tests/test_c.py#L4"'),
+        row(
+            id="r1",
+            unit='"own:tests/test_c.py#L1", "sib:tests/test_x.py#L5", "own:tests/test_c.py#L4"',
+        ),
     )
     (root / "tests" / "test_c.py").write_text(
         "import os\n\ndef _helper():\n    return 1\n\ndef test_c(): pass\n"
@@ -342,7 +350,9 @@ def test_is_test_node_follows_pytest_collection(node: str, is_test: bool) -> Non
 
 def test_check_does_not_suggest_a_helper_as_the_anchor(tmp_path: Path) -> None:
     root = make_repo(tmp_path, row(unit='"own:tests/test_a.py#L2"'))
-    (root / "tests" / "test_a.py").write_text("def _helper():\n    return 1\n\ndef test_a(): pass\n")
+    (root / "tests" / "test_a.py").write_text(
+        "def _helper():\n    return 1\n\ndef test_a(): pass\n"
+    )
     errors = _check_errors(root)
     assert any("sits in no test" in e for e in errors), errors
 
@@ -355,7 +365,11 @@ def test_the_repair_regenerates_committed_reports(
 
     wrote = list(_repair().fn(_matrix(root)) or ())
 
-    assert {p.name for p in wrote} == {"report_local.html", "report_linked.html", "report_linked.md"}
+    assert {p.name for p in wrote} == {
+        "report_local.html",
+        "report_linked.html",
+        "report_linked.md",
+    }
     assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
     assert "test_a.py#test_a" in (root / "docs/acceptance/report_linked.md").read_text()
 

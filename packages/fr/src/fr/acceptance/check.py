@@ -13,7 +13,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fr.acceptance.anchors import is_python, line_of, node_line, collected_node_at
+from fr.acceptance.anchors import collected_node_at, is_python, line_of, node_line
 from fr.acceptance.model import (
     AcceptanceError,
     Matrix,
@@ -153,8 +153,7 @@ def _check_python_anchor(row_id: str, ref: str, file: Path, result: CheckResult)
         return
     if node_line(source, frag) is None:
         result.errors.append(
-            f"row {row_id}: anchor {ref} names no def or class in {path} "
-            "(renamed or deleted test?)"
+            f"row {row_id}: anchor {ref} names no def or class in {path} (renamed or deleted test?)"
         )
 
 

@@ -189,7 +189,12 @@ def replace_row(text: str, row_id: str, row: Row) -> str:
     while end - 1 > start and not lines[end - 1].strip():
         end -= 1
         tail.insert(0, lines[end])
-    return "".join(lines[:start]) + render_row_block(row, indent) + "".join(tail) + "".join(lines[end:])
+    return (
+        "".join(lines[:start])
+        + render_row_block(row, indent)
+        + "".join(tail)
+        + "".join(lines[end:])
+    )
 
 
 def _refuse_unknown_levels(keys: Iterable[str]) -> None:

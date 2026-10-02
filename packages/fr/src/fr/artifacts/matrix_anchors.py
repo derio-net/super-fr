@@ -47,7 +47,7 @@ def conversions(path: Path) -> dict[str, str]:
     mapped to its name-anchored replacement. Empty when there is nothing to do
     — including a matrix that does not parse, which is not this repair's to
     report (`fr validate artifacts` does)."""
-    from fr.acceptance.anchors import is_python, line_of, collected_node_at
+    from fr.acceptance.anchors import collected_node_at, is_python, line_of
     from fr.acceptance.check import resolve_identity
     from fr.acceptance.model import AcceptanceError, parse_matrix, split_ref
 
@@ -98,7 +98,7 @@ def _fn(path: Path) -> Iterable[Path]:
     text = path.read_text()
     for old, new in conversions(path).items():
         # `#L1` must not match inside `#L10` or `#L1-L5`.
-        text = re.sub(re.escape(old) + r"(?![\w-])", lambda _m, n=new: n, text)
+        text = re.sub(re.escape(old) + r"(?![\w-])", new.replace("\\", "\\\\"), text)
     matrix = parse_matrix(text)  # refuse to write a matrix that no longer reads
     write_text_atomic(path, text)
     reports = _report_paths(path)

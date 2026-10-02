@@ -605,7 +605,10 @@ def _check_drops(
         # is reachable without the CLI, so it refuses it too. Dropped then
         # re-added nets to the row's prior state while reading as two edits.
         both = sorted(
-            f"{lv}={ref}" for lv, refs in levels.items() for ref in refs if ref in item.levels.get(lv, ())
+            f"{lv}={ref}"
+            for lv, refs in levels.items()
+            for ref in refs
+            if ref in item.levels.get(lv, ())
         )
         if both:
             raise RecordRefusedError(
@@ -631,6 +634,7 @@ def _acceptance_writes(
         return {}, []
     from typing import get_args
 
+    from fr.acceptance.anchors import line_anchor_error
     from fr.acceptance.edit import (
         describe_move,
         drop_levels,
@@ -638,7 +642,6 @@ def _acceptance_writes(
         merge_levels,
         replace_row,
     )
-    from fr.acceptance.anchors import line_anchor_error
     from fr.acceptance.model import (
         AcceptanceError,
         Row,
