@@ -261,3 +261,6 @@ New §J records d-close-837: #837 closed with a link when the draft opened; bran
 ### s13-resolved · finding [fixed] · resolves s13: The spec does not say where the review-phase brief's findings-block instruction lives, and the block's name collides with the existing `findings` evidence
 
 §E: _build_brief adds a review_findings key to every review-phase brief (both shapes); fr-goal §6 passes it verbatim; fence renamed `review-findings`, distinct from the derived `findings` evidence; R7 updated.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-opencode-observe-2-p2 created=2026-10-02T19:18:02+00:00 -->
+### phase-split-2026-10-02-opencode-observe-2-p2 · decision · ask: #816 — reviewer identity and the returned review-findings check is its own reviewable ask
