@@ -89,6 +89,37 @@ def test_an_invented_reviewer_id_is_refused_on_opencode(tmp_path: Path) -> None:
     assert "names no subagent this session dispatched" in _squash(result.output)
 
 
+def test_an_invented_reviewer_id_is_refused_at_the_phase_review_on_opencode(
+    tmp_path: Path,
+) -> None:
+    """#816 at the phase review: R6 routes both review steps through
+    `_verify_reviewer`, so the invented id is refused here too."""
+    repo, shipped, opened = _at_the_review(tmp_path)
+    db = _shifted_to(tmp_path, opened)
+
+    result = _resolve(
+        repo, shipped, db, PEER_REVIEW, "review=rev-p1", "reviewer=opencode-gpt-6-luna"
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "names no subagent this session dispatched" in _squash(result.output)
+    assert _review_evidence(repo) == {}
+
+
+def test_a_general_child_is_the_wrong_spec_reviewer_on_opencode(tmp_path: Path) -> None:
+    """ses_gen1 is a `general` dispatch: observed, but not the step's reviewer."""
+    repo, shipped, opened = _at_the_spec_review(tmp_path, shape=_AGENT_SPEC_SHAPE)
+    db = _shifted_to(tmp_path, opened)
+    _spec_journal(repo, _REVIEW)
+
+    result = _resolve(repo, shipped, db, SPEC_REVIEW, "review=sr-1", "reviewer=ses_gen1")
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "'general' dispatch" in out
+    assert "this step's reviewer is" in out
+
+
 def test_a_tiered_opencode_phase_executor_is_never_a_reviewer(tmp_path: Path) -> None:
     repo, shipped, opened = _at_the_review(tmp_path)
     db = _shifted_to(tmp_path, opened)
