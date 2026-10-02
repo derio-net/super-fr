@@ -66,3 +66,8 @@ Pinned by test_up_does_not_glue_patterns_onto_an_exclude_line_without_trailing_n
 1. The drift check lived in `_fr_marker_valid`, which the Bash guards share, so a drifted worktree read as a base clone. The Hermes terminal guard then blocked `git checkout <registered>`, the recovery the deny recommends. Fixed: drift is now checked only in `fr_isolation_decide_edit`, and the shell stays open. Pinned by test_drifted_worktree_is_still_an_allowed_shell_context and test_switching_back_to_the_marker_branch_restores_edits.
 2. The second remedy, `fr isolation up --branch <head>`, fails while <head> is checked out in the drifted worktree: git refuses to add a second worktree for the same branch. Fixed: the message now says `git switch <registered>` first, then `up --branch <head>`, in the shell lib, the TS port and the reap hazard.
 Clean probes: no shell variable clobbering; `_merged_before` handles timezones; created_at carries over correctly; a half-built #578 workspace is warned about, never reaped; down works with no container; dry-run and live runs agree.
+
+<!-- fr:journal kind=finding scope=debug id=fix-553-review created=2026-10-02T17:08:14+00:00 state=fixed -->
+### fix-553-review · finding [fixed] · #553 drift no longer locks the shell; the remedy order works
+
+Correction to fix-553: the Bash guard does NOT inherit the drift check. That was the review's finding 1, and the check is now edit-only.
