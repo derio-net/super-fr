@@ -44,3 +44,8 @@ triage_batch_cmd.batch_cancel_command calls _tracking_gate (new --checkout optio
 ### 688b5932ef3a · finding [fixed] · #804 settled: the plan repo's tracking governs a cross-repo plan
 
 No defect: a decision. apply_cmd._apply_one already calls require_tracker on the plan's repo root; the operator chose that as the rule (decision 2f7b0b916b2d). Stated in a comment at the call and pinned by test_tracking_none.py::test_a_cross_repo_plan_is_gated_by_the_plan_repos_tracking (spies require_tracker: called once, with the plan repo root, never the target). undispatch follows the same rule. The spec (2026-09-28-fr-profiles-services-design.md) is archived under implemented/ and frozen, so the rule is recorded here and in the code, not there.
+
+<!-- fr:journal kind=root-cause scope=debug id=6bea8e7c05bd created=2026-10-02T18:16:27+00:00 -->
+### 6bea8e7c05bd · root-cause · #490: the closer seam carries a backend string, so the host never reaches the client
+
+pr_state's injectable closer is Callable[[repo, issue, backend], None]; _close_linked_gh_issue (:157) resolves only backend_for_url(pr_url) and _default_close_gh_issue (:112) calls client_for_backend(backend) with no host — glab defaults to gitlab.com. reconcile_done_issues has the same defect and a second one: it takes the backend from the card title's tag even when the card has a PR URL naming the real forge. pr_observe (:59-61) already resolves (backend, host) from a URL correctly — the pattern to share. Bridge audit: no fr_dispatch dependence on the seam; production callers (bridge_cli.py:542,559) never inject a closer. Failing tests: test_bridge_pr_state.py::test_the_default_close_targets_the_self_hosted_host, test_done_reconcile.py::test_reconcile_closes_on_the_self_hosted_host_of_the_cards_pr.
