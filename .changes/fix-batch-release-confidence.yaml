@@ -1,0 +1,2 @@
+bump: patch
+summary: "Release tests the staged tree at the new version before it pushes; `fr plan create --fr-version` refuses a constraint excluding the installed fr before writing anything; a dev/pre-release install is admitted by a spec spanning it; version_surfaces accepts the [project] spellings TOML allows"

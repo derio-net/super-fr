@@ -7,4 +7,5 @@
 default_seconds: 240
 workflows:
   fr-spec-status.yml: { exclude: true } # reusable (workflow_call); timed inside its caller
+  release.yml: { budget_seconds: 900 } # runs the whole suite on the staged tree (gh#854)
   # a numeric override looks like:  some.yml: {budget_seconds: 360}

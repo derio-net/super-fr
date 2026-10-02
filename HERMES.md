@@ -67,7 +67,7 @@ uv run ruff check packages/ tests/ scripts/
 uv run ruff format packages/ tests/ scripts/
 uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src
 uv run --no-project python scripts/bump-version.py --check   # version-sync: read-only
-python scripts/check-change-fragment.py origin/main           # the change-fragment job
+uv run --no-project python scripts/check-change-fragment.py origin/main  # the change-fragment job
 ```
 
 The suite is subprocess-heavy (real `git`/`install.sh` runs), so it is slow
