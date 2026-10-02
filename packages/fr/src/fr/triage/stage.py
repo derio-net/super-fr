@@ -32,6 +32,10 @@ STAGES: tuple[Stage, ...] = (
 )
 
 
+IN_FLIGHT: frozenset[Stage] = frozenset({"pr-draft", "pr-ready", "in-progress"})
+"""The issue stages that count as work in flight (the board's figure and snapshots)."""
+
+
 def pr_stage(pr: PullRequest) -> Stage | None:
     """The stage one PR would give an open issue; a closed, unmerged PR gives none."""
     if pr.state == "MERGED":

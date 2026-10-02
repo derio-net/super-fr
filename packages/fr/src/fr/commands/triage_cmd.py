@@ -45,6 +45,13 @@ from fr.triage.model import (
     state_dir,
 )
 from fr.triage.render import plural, render
+from fr.triage.snapshot import (
+    acceptance_rows,
+    diff_snapshots,
+    latest_snapshot,
+    store_snapshot,
+    take_snapshot,
+)
 
 console = Console()
 err_console = Console(stderr=True)
@@ -253,7 +260,7 @@ def check_command(
     dir_override: DirOpt = None,
     as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
-    """Report unranked issues and PRs, settled, orphaned, unreachable and stale dispatches.
+    """Report unranked issues and PRs, settled, orphaned, unreachable, stale and unplaced.
 
     Always exits 0.
     """
@@ -292,6 +299,12 @@ def check_command(
             f"  {escape(st.key)}  {st.days}d since {escape(st.marker_at)}  {escape(st.title)}",
             soft_wrap=True,
         )
+    console.print(
+        f"[bold]unplaced[/bold] ({len(result.unplaced)}) — open, in no open batch, "
+        "feature group or parked"
+    )
+    for i in result.unplaced:
+        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
 
 
 @triage_app.command("render")
@@ -301,10 +314,22 @@ def render_command(
     dir_override: DirOpt = None,
     open_: bool = typer.Option(False, "--open", help="Open the board in a browser."),
 ) -> None:
-    """Write triage.html from facts.json and judgements.yaml."""
+    """Write triage.html from facts.json and judgements.yaml.
+
+    Also stores a snapshot of what the board shows under `snapshots/` in the state
+    directory (the latest 30 are kept); the board's "Since last report" is the diff
+    against the previous readable one.
+    """
     target_dir, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    snap = take_snapshot(
+        facts,
+        judgements,
+        acceptance=acceptance_rows(Path.cwd() / "docs" / "acceptance" / "matrix.yaml"),
+    )
+    since = diff_snapshots(latest_snapshot(target_dir), snap)
+    store_snapshot(target_dir, snap, datetime.now(UTC))
     out = target_dir / "triage.html"
-    out.write_text(render(facts, judgements), encoding="utf-8")
+    out.write_text(render(facts, judgements, since), encoding="utf-8")
     console.print(
         f"wrote {out} ({plural(len(facts.issues), 'issue')})", markup=False, soft_wrap=True
     )

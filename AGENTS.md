@@ -138,6 +138,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
     that globs every `batch*` module. `triage_batch_cmd.py` is `fr`'s second
     `find_spec`-guarded soft point into `fr_dispatch`
     (`test_import_direction.py` `_SOFT_POINTS`).
+    **The board's decision views** (2026-10-02 spec `wave-driver`, I): `views.py` is pure (`needs_you`, `next_up`,
+    `preselected_wave` over a driver `Snapshot` built from facts alone, so the board and `drive_pass` read the same
+    inputs), `snapshot.py` stores/diffs the per-render snapshots (`render.py` reads no clock; the command passes it),
+    `components.py` holds the colour tokens, the phone gutter and the one `tabs()` component. `Judgement.kind` and
+    `Judgements.features` load on any schema; `check` has an `unplaced` set.
     **Waves and the driver** (2026-10-02 spec, `wave-driver`): judgements
     schema 3 adds `wave`/`after` per batch and the `post_merge`/`closeout`
     events; `fr triage batch drive` runs the waves to completion.

@@ -53,6 +53,7 @@ IssueState = Literal["open", "closed"]
 TruncatedList = Literal["repos", "issues", "prs"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
+Kind = Literal["defect", "feature", "parked"]
 
 # The hidden first line of the comment a batch dispatch posts on each member
 # (spec 2026-09-25-triage-batches §3.E). `collect` dates a dispatch by it, so the
@@ -366,6 +367,27 @@ class Judgement(_Strict):
     note: str = ""
     delivery: Delivery | None = None
     delivery_note: str = ""
+    # What the issue is, for the board's closing order (wave-driver R9). Optional on
+    # every schema: a file that never says loads exactly as before.
+    kind: Kind | None = None
+
+
+class Feature(_Strict):
+    """A ranked group of issues delivered as one feature (wave-driver R9)."""
+
+    rank: int
+    title: str
+    ids: list[str] = []
+    why: str = ""
+    start: str = ""  # how to start it, e.g. `/fr-goal ...`; shown, never run
+
+    @field_validator("ids")
+    @classmethod
+    def _ids_are_keys(cls, v: list[str]) -> list[str]:
+        bad = _bad_keys(list(v))
+        if bad:
+            raise ValueError(f"feature ids must be '<repo-name>#<number>', got {bad!r}")
+        return [normalize_key(k) for k in v]
 
 
 class Pattern(_Strict):
@@ -522,6 +544,7 @@ class Judgements(_Strict):
     issues: dict[str, Judgement] = {}
     patterns: list[Pattern] = []
     batches: list[Batch] = []
+    features: list[Feature] = []  # ranked groups (wave-driver R9); any schema
 
     @field_validator("issues", mode="before")
     @classmethod
