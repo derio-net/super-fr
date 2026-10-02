@@ -755,3 +755,88 @@ nothing beyond sharing the page shell: the page already builds on components.TOK
 ### no-refactor-p6-t3 · discovery · no-refactor-because P6.T3 (phase 6)
 
 acceptance row, gates and mirrors only: no production code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p6 created=2026-10-02T22:15:36+00:00 phase=6 -->
+### review-p6 · review · phase 6 review: 8 findings (7 in scope, fixed; 1 out of scope) (phase 6)
+
+Independent review of 0b92b045..HEAD against R11, R12, R16, R17, R20 and design F and I, with the real sample page opened in a browser at 1100px and 400px (snapshot timeline and wave tabs by click and keyboard, SVG fragment in dark theme, chart, the missing-file note, no horizontal scroll). The measurement crash on a binary file was reproduced in a temporary git repo. All in-scope findings were fixed in 5d79e76e with tests (938 focused tests passed).
+
+<!-- fr:journal kind=finding scope=plan id=rk-1 created=2026-10-02T22:15:36+00:00 phase=6 state=open review_scope=in -->
+### rk-1 · finding [open] (reviewer: in scope) · A binary file in a subsystem crashes the render with an uncaught UnicodeDecodeError (phase 6)
+
+gitseam show() decodes text; architecture.py caught only GitError.
+
+<!-- fr:journal kind=finding scope=plan id=rk-2 created=2026-10-02T22:15:36+00:00 phase=6 state=open review_scope=in -->
+### rk-2 · finding [open] (reviewer: in scope) · Per-file cat-file plus git show is slow and wrong at the edges (phase 6)
+
+Two processes per file per ref; quoted non-ASCII paths counted as 0 lines; symlinks and gitlinks counted; splitlines differs from wc -l.
+
+<!-- fr:journal kind=finding scope=plan id=rk-3 created=2026-10-02T22:15:36+00:00 phase=6 state=open review_scope=in -->
+### rk-3 · finding [open] (reviewer: in scope) · The fragment check does not stop script execution or page breakage despite what the docs say (phase 6)
+
+Event handlers, javascript: URLs, style, iframe, meta refresh were allowed; page-level title banned also in svg.
+
+<!-- fr:journal kind=finding scope=plan id=rk-4 created=2026-10-02T22:15:36+00:00 phase=6 state=open review_scope=in -->
+### rk-4 · finding [open] (reviewer: in scope) · The well-formedness check disagrees with the browser on unclosed or self-closing tags (phase 6)
+
+The contract was not stated in the skill.
+
+<!-- fr:journal kind=finding scope=plan id=rk-5 created=2026-10-02T22:15:36+00:00 phase=6 state=open review_scope=in -->
+### rk-5 · finding [open] (reviewer: in scope) · A manifest listing only fragments silently drops every generated section (phase 6)
+
+Contradicts R20's 'keeps everything'.
+
+<!-- fr:journal kind=finding scope=plan id=rk-6 created=2026-10-02T22:15:36+00:00 phase=6 state=open review_scope=in -->
+### rk-6 · finding [open] (reviewer: in scope) · Timeline stamps are UTC but unlabelled; size table says 'Source lines' (phase 6)
+
+The counting rule was not stated.
+
+<!-- fr:journal kind=finding scope=plan id=rk-7 created=2026-10-02T22:15:36+00:00 phase=6 state=open review_scope=in -->
+### rk-7 · finding [open] (reviewer: in scope) · Tests lack the binary, non-ASCII, symlink, submodule, corrupt-facts and fragment-injection cases (phase 6)
+
+Coverage gaps for the new measurement and guard.
+
+<!-- fr:journal kind=finding scope=plan id=rk-8 created=2026-10-02T22:15:36+00:00 phase=6 state=open review_scope=out -->
+### rk-8 · finding [open] (reviewer: out of scope) · Checkout.show() is text-only by contract (phase 6)
+
+Pre-existing; only the new call site exposed it.
+
+<!-- fr:journal kind=finding scope=plan id=rk-1-resolved created=2026-10-02T22:15:36+00:00 phase=6 state=fixed resolves=rk-1 -->
+### rk-1-resolved · finding [fixed] · resolves rk-1: A binary file in a subsystem crashes the render with an uncaught UnicodeDecodeError (phase 6)
+
+Fixed in 5d79e76e with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rk-2-resolved created=2026-10-02T22:15:36+00:00 phase=6 state=fixed resolves=rk-2 -->
+### rk-2-resolved · finding [fixed] · resolves rk-2: Per-file cat-file plus git show is slow and wrong at the edges (phase 6)
+
+Fixed in 5d79e76e with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rk-3-resolved created=2026-10-02T22:15:36+00:00 phase=6 state=fixed resolves=rk-3 -->
+### rk-3-resolved · finding [fixed] · resolves rk-3: The fragment check does not stop script execution or page breakage despite what the docs say (phase 6)
+
+Fixed in 5d79e76e with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rk-4-resolved created=2026-10-02T22:15:36+00:00 phase=6 state=fixed resolves=rk-4 -->
+### rk-4-resolved · finding [fixed] · resolves rk-4: The well-formedness check disagrees with the browser on unclosed or self-closing tags (phase 6)
+
+Fixed in 5d79e76e with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rk-5-resolved created=2026-10-02T22:15:36+00:00 phase=6 state=fixed resolves=rk-5 -->
+### rk-5-resolved · finding [fixed] · resolves rk-5: A manifest listing only fragments silently drops every generated section (phase 6)
+
+Fixed in 5d79e76e with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rk-6-resolved created=2026-10-02T22:15:36+00:00 phase=6 state=fixed resolves=rk-6 -->
+### rk-6-resolved · finding [fixed] · resolves rk-6: Timeline stamps are UTC but unlabelled; size table says 'Source lines' (phase 6)
+
+Fixed in 5d79e76e with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rk-7-resolved created=2026-10-02T22:15:36+00:00 phase=6 state=fixed resolves=rk-7 -->
+### rk-7-resolved · finding [fixed] · resolves rk-7: Tests lack the binary, non-ASCII, symlink, submodule, corrupt-facts and fragment-injection cases (phase 6)
+
+Fixed in 5d79e76e with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rk-8-resolved created=2026-10-02T22:15:36+00:00 phase=6 state=open resolves=rk-8 out_of_scope=true -->
+### rk-8-resolved · finding [out-of-scope] · resolves rk-8: Checkout.show() is text-only by contract (phase 6)
+
+gitseam show() is text-only by contract; the new measurement no longer uses it.

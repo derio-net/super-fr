@@ -3,7 +3,7 @@ run: 2026-10-02-feat-wave-driver
 workflow: fr-goal@1
 branch: feat/wave-driver
 started: '2026-10-02T17:33:31+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -49,8 +49,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-02T22:06:46+00:00'
+    state: done
+    at: '2026-10-02T22:15:37+00:00'
     members:
     - implement-phase
     - review-phase
@@ -204,12 +204,19 @@ steps:
         evidence:
           visual: none
       phase/6/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-02T22:06:46+00:00'
           harness: claude-code
           model: claude-sonnet-5-5
           session: 12cefec0-8bfd-4945-9a41-9fef359abbef
+          returned: '2026-10-02T22:15:37+00:00'
+          outcome: done
+        evidence:
+          review: review-p6
+          reviewer: a5032d9503da11d81
+          visual: none
+          findings: rk-1,rk-2,rk-3,rk-4,rk-5,rk-6,rk-7,rk-8
   journal-check:
     state: pending
   deliver:
