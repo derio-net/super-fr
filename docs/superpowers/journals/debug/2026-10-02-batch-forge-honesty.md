@@ -24,3 +24,8 @@ tests/unit/test_triage_gitseam.py::test_an_archive_that_empties_a_live_directory
 ### ec7d0d7c107f · root-cause · #800: the scratch merge inherits git's directory-rename detection
 
 gitseam.Worktree.merge overrode rerere only. With merge.directoryRenames at git's default (conflict), an archive that empties docs/runs/ reads as a rename of the directory, so the PR's new cursor is relocated to implemented/runs/ and reported as a conflict on a path neither side has.
+
+<!-- fr:journal kind=finding scope=debug id=6f8d6bfbd307 created=2026-10-02T18:11:00+00:00 state=fixed -->
+### 6f8d6bfbd307 · finding [fixed] · #800 fixed: -c merge.directoryRenames=false on the scratch merge
+
+gitseam.py Worktree.merge; pinned by test_an_archive_that_empties_a_live_directory_is_not_a_rename (real repo, failed first). It is the only git merge fr runs (grep: no other merge/rebase call site in packages/*/src). The base clone's local merge.directoryRenames=false workaround can be dropped once this ships.
