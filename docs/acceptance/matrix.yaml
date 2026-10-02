@@ -5647,9 +5647,13 @@ rows:
       distinction
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_opencode.py
+      - super-fr:tests/unit/test_run_observed_claude_code.py
+    status: ci
+    notes: 'R4: both backends behind one protocol, three-valued contract pinned on fixtures
+      (phase 1)'
   - id: review-phase-findings-block
     capability: review-phase
     acceptance: A review-phase resolve is refused when a reviewer's returned findings
