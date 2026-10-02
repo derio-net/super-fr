@@ -19,3 +19,8 @@ Ruled out: the members share a surface (the acceptance edit helpers), not a caus
 ### fccfc573a40b · root-cause · #470: render_row_block hardcodes a two-space item indent
 
 edit.render_row_block prefixed every line with two spaces whatever the file used; under flush-left rows the new item nests into the previous row's mapping, so the engine's final parse refuses and rolls back.
+
+<!-- fr:journal kind=root-cause scope=debug id=9bad1c05c48c created=2026-10-02T18:29:34+00:00 -->
+### 9bad1c05c48c · root-cause · #531: nothing interprets a .py fragment
+
+split_ref carries the fragment through; check strips it for existence only; reports render it raw. A line anchor's rot is therefore invisible. Measured live: 27 of 78 #L anchors had slid (several onto helpers), 3 name anchors named tests #628 deleted, and one ref had fused two refs with a comma — all passing check.
