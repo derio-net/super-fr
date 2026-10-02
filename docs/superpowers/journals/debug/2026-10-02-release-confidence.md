@@ -40,3 +40,8 @@ A separate root cause from the batch (the batch rules say stop rather than widen
 ### 81954be9d9fc · review · Independent review: no defects at medium or above; three low notes
 
 An independent read-only reviewer covered the editable re-sync, the dirty-tree/race path, the release-job context, every SpecifierSet call site, the create pre-flight and the regex edge cases, and found no defects. Low notes: (1) each lost push race reruns the whole suite (correct, slower; up to 3x on a raced release); (2) the src tripwire catches only the two spellings that existed; (3) the dotted-key regex's \s* can span newlines, but the tomllib re-parse backstops it. It asked for two things to be checked by running them. Untracked files after the suite: none (git status empty after both simulations). HEAD on main: covered by ci.yml on main pushes.
+
+<!-- fr:journal kind=finding scope=debug id=release-sim-verification created=2026-10-02T17:19:04+00:00 state=fixed -->
+### release-sim-verification · finding [fixed] · Verified: the real gate run on simulated releases
+
+Scratch clone, bump + consumed fragment, committed, then the real release._run_staged_tests: 5.1.0 is GREEN (uv re-synced every member 6.0.0 to 5.1.0; probe matched). 6.0.0 is RED, 2 of 7609, refused before push (deferred to #861). Targeted suites, ruff, mypy: green.
