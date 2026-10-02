@@ -29,3 +29,8 @@ split_ref carries the fragment through; check strips it for existence only; repo
 ### 4cf7889208cc · root-cause · #769: set-status's subject is always '{old} → {new}'
 
 acceptance_cmd.set_status_cmd and the record engine's report line format the transition unconditionally, so a levels-only move logs 'skipped → skipped'.
+
+<!-- fr:journal kind=root-cause scope=debug id=8416c0313aac created=2026-10-02T18:29:39+00:00 -->
+### 8416c0313aac · root-cause · #655: _check_drops never compares drops with additions
+
+The CLI refuses a ref named in both --level and --drop-level before building the record; the engine, reachable without the CLI, did not.
