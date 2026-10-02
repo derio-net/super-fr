@@ -35,9 +35,11 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
         no_fetch: bool = False,
     ) -> IsolationState:
         worktree = self._worktree_up_core(branch, path)
-        self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
+        base_sha = self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
 
-        state = carried_state(self.repo_root, branch, worktree, "host", "worktree")
+        state = carried_state(
+            self.repo_root, branch, worktree, "host", "worktree", base_sha=base_sha
+        )
         save_state(state)
         self._write_isolation_marker(
             worktree, branch, created_at=state.created_at, target="worktree"

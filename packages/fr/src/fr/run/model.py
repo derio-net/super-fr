@@ -358,6 +358,12 @@ class RunState(BaseModel):
     started: str  # ISO 8601; kept as a string for round-trip stability
     cursor: str  # the step id currently active (running/blocked) or next-up
     steps: dict[str, StepRecord]
+    driver: Literal["standalone"] | None = None
+    """Who drives the run (gh#761): absent when the pipeline (`/fr-goal`)
+    does; `standalone` when standalone fr-brainstorming started the cursor.
+    A standalone brainstorm asks one question per turn by design, so its
+    operator gate needs an answered question but is not held to fr-goal's
+    two-round cap. Run version 8 (`fr.artifacts.run_driver`)."""
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

@@ -43,10 +43,15 @@ fr isolation up --branch <feature-branch> [--profile <name>]
   read/edit files in the worktree, run every command through
   `fr isolation exec -- ...`.
 - **Standalone invocation only:** also start the run cursor now —
-  `fr run start fr-goal --branch <feature-branch>`, or `fr run adopt
-  <plan-dir|spec>` when work already exists on disk — so `implement`'s
-  `needs: [spec, plan]` later refuses to advance past a plan that was never
-  written (#436 instance 1). **Under fr-goal, skip this entirely** — that
+  `fr run start fr-goal --branch <feature-branch> --driver standalone`, or
+  `fr run adopt <plan-dir|spec>` when work already exists on disk — so
+  `implement`'s `needs: [spec, plan]` later refuses to advance past a plan
+  that was never written (#436 instance 1). Then, **before the first
+  question**, run `fr run advance <run-id>`: the `brainstorm` gate opens only
+  then, and `resolve` counts only answers given after it (#761). Never ask
+  while the gate is closed. `--driver standalone` lifts fr-goal's two-round
+  cap (you ask one question per turn); one answered question is still owed.
+  **Under fr-goal, skip this entirely** — that
   pipeline already started the run, and a second `fr run start` exits 2. It
   also exits 2 (naming the run) if this branch already has one: resume with
   `fr run advance <id>`. Refused over stale artifacts? Run
