@@ -5655,9 +5655,12 @@ rows:
       of repos, owners allowed to differ, as one board
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R15
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_scope_groups.py#test_drive_plans_both_repos_of_a_group_against_one_shared_cap
+    status: ci
+    notes: 'R15 shipped: --repo A/B,C/D is one group scope (facts schema 4, shared cap,
+      per-repo checkouts); covered by the group scope tests'
   - id: board-decision-views
     capability: triage-views
     acceptance: The triage board opens with what changed since the last report, what
