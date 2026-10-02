@@ -5668,9 +5668,13 @@ rows:
       describe the tool
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_gate_opencode.py
+      - super-fr:tests/unit/test_fr_goal_opencode_prose.py
+    status: ci
+    notes: 'R9: fixture-backed resolve tests read answered question rounds from the
+      OpenCode run session; skill and parity.yaml updated in phase 3'
   - id: answered-by-no-default
     capability: operator gate
     acceptance: An operator gate fr cannot observe, resolved without answered_by, is
