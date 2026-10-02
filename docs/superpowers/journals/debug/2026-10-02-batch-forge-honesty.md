@@ -39,3 +39,8 @@ require_tracker is called from apply_cmd._apply_one and triage_batch_cmd._tracki
 ### 470478ca7664 · finding [fixed] · #803 fixed: cancel and undispatch call the tracking gate before any forge call
 
 triage_batch_cmd.batch_cancel_command calls _tracking_gate (new --checkout option, as dispatch) when the batch reached the forge; undispatch_cmd calls require_tracker on the plan's repo root, exit 2 with --yes, warning otherwise. Pinned by test_tracking_none.py::test_cancel_yes_refuses_* / test_cancel_dry_run_warns_* / test_cancel_yes_still_acts_* / test_undispatch_*. Behaviour change: cancel --yes on a dispatched batch now needs a clone of the batch's repo (cwd or --checkout), the same requirement dispatch --yes already has.
+
+<!-- fr:journal kind=finding scope=debug id=688b5932ef3a created=2026-10-02T18:14:23+00:00 state=fixed -->
+### 688b5932ef3a · finding [fixed] · #804 settled: the plan repo's tracking governs a cross-repo plan
+
+No defect: a decision. apply_cmd._apply_one already calls require_tracker on the plan's repo root; the operator chose that as the rule (decision 2f7b0b916b2d). Stated in a comment at the call and pinned by test_tracking_none.py::test_a_cross_repo_plan_is_gated_by_the_plan_repos_tracking (spies require_tracker: called once, with the plan repo root, never the target). undispatch follows the same rule. The spec (2026-09-28-fr-profiles-services-design.md) is archived under implemented/ and frozen, so the rule is recorded here and in the code, not there.
