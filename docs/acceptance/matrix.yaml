@@ -5605,9 +5605,15 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_advance_from_a_child_session_records_the_run_session
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_an_opencode_runs_own_session_fills_the_cost_table
+      - super-fr:packages/fr-opencode-plugin/test/session.test.ts
+    status: ci
+    notes: 'R1/R2: advance records the root OpenCode session (from a child''s id too),
+      plugin shell.env export, real cost on the fixture run (phase 1); live run owed
+      by opencode-observe-take10-rerun'
   - id: opencode-child-dispatch
     capability: fr-goal on OpenCode
     acceptance: On OpenCode, fr maps each dispatch to its child session, fills an unclaimed
