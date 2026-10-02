@@ -49,3 +49,8 @@ gc trusts any MERGED PR that `gh pr view <name>` returns, even one that merged b
 ### fix-553 · finding [fixed] · #553 fixed: drift between HEAD and the marker's branch now fails closed in every gate and in the reap hazard
 
 `_fr_branch_drift` in fr-isolation-decision.sh invalidates a worktree-mode marker when HEAD is a different branch. The Claude Code, Hermes and OpenCode edit gates all deny, naming both branches and `fr isolation up --branch <checked-out>`. The Bash guard inherits the check through decide_cwd. `_reap_hazard` gains kind=drifted-checkout, so gc skips the workspace and a non-forced down refuses. A detached HEAD is not drift, so editing mid-rebase still works. External markers are left unchanged: the preparer writes their branch. Pinned by test_isolation_decision_core.py, test_hooks_isolation_required.py, test_hermes_isolation_hook_edits.py, marker.test.ts and the gc test.
+
+<!-- fr:journal kind=finding scope=debug id=fix-578 created=2026-10-02T17:00:18+00:00 state=fixed -->
+### fix-578 · finding [fixed] · #578 fixed: up saves the state record and marker before devcontainer up
+
+A failed devcontainer up now leaves a workspace that status lists, and the error names both the retry and `fr isolation down --branch <b>`. Pinned by test_failed_devcontainer_up_leaves_a_state_record_that_down_can_address.
