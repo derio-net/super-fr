@@ -230,3 +230,78 @@ data, prose and a regenerated page only
 The unmodified 01-fr-goal.md re-rendered from / with --isolated matched the
 committed .html byte for byte, so the edited .md's render was committed; no
 regeneration is owed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-02T22:05:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · advance's gate degradation notice still tells OpenCode to ask in chat and STOP and says clearing defaults to answered_by: agent — both now false (phase 3)
+
+run_cmd.py _gate_degradation_notice (~992-1043, printed ~4576-4589; pinned by test_run_cli.py ~358-380): with OpenCode now partial it told the agent to ask in chat (resolve then refuses "no answered question", pushing it to --no-questions and a false agent clearance) and promised an answered_by: agent default R10 removed; the resolve hint omitted the now-required claim.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-02T22:05:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · fr run check never prints a claimed-unobserved operator gate; spec/plan R11 name check as well as gates (phase 3)
+
+run_cmd.py ~6233-6239 listed only agent-cleared gates; test_run_answered_by_no_default.py ~119-126 covered only gates for the claimed-operator case.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-02T22:05:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · out-of-scope-operator-guard OpenCode partial cell has no guard-level fixture test, and its unreadable-store advisory quotes a scope_note claiming verification (phase 3)
+
+parity.yaml ~242-250 cited only the round reader's test; journal/operator.py ~74-84 quoted the cell's scope_note ("…is verified…") right after "recorded as stated" when the store was unreadable.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-02T22:05:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · _resolve_body answered_by still typed str | None with a cast; spec §F says AnsweredBy | None (phase 3)
+
+run_cmd.py ~5144 / cast ~5281.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-02T22:05:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · stale _gate_provenance comment says OpenCode has no question reader (phase 3)
+
+run_cmd.py ~1327-1330.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-02T22:05:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · SKILL.md §6 review_findings insertion splits the in/out-scope definition sentence (mirrors too) (phase 3)
+
+plugins/super-fr/skills/fr-goal/SKILL.md ~97 and both generated mirrors.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-02T22:05:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · gate-provenance prose tripwire docstring/message still says --answered-by defaults to agent (phase 3)
+
+tests/unit/test_tripwire_gate_provenance_prose.py ~4-8, 43-45.
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-10-02T22:05:47+00:00 phase=3 -->
+### review-p3 · review · phase 3 independent code review: 7 findings (p3-r1 important, p3-r2..r7 low), all in scope (phase 3)
+
+Reviewer checked R9–R14, §F/§G/§H/§J. Most important check cleared: the ~25 tests now passing --answered-by agent hide no regression (all target a gated brainstorm with no readable session; ungated steps resolve without a claim via _clears_gate; an observed gate still derives provenance; --no-questions still means agent; nothing downstream breaks on answered_by None). R9, R12, R13/R14, SKILL/mirrors, explainer and acceptance rows confirmed correct apart from p3-r1..r7. Received: each verified in the code and fixed by a helper subagent in this workspace, red-first where behaviour changed (p3-r1, p3-r2, p3-r3); one orchestrator-found follow-through of p2-r3 rode along (5c26b162: the review_findings rule says "phase N or a later phase"). Full suite after the fixes: 7782 passed, 97 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-02T22:05:47+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: advance's gate degradation notice still tells OpenCode to ask in chat and STOP and says clearing defaults to answered_by: agent — both now false (phase 3)
+
+cd01ecdf: no notice where fr can read the session (Claude Code transcript, or OpenCode with an exported readable session); elsewhere the notice names why (shared why_unobservable) and that the resolve must carry answered_by operator|agent, no default; the advance hint adds --answered-by when unobservable. Tests: test_advance_on_opencode_without_a_session_says_the_claim_is_owed, test_advance_on_opencode_with_a_readable_session_prints_no_notice, test_advance_on_hermes_quotes_the_row_and_owes_a_claim.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-02T22:05:47+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: fr run check never prints a claimed-unobserved operator gate; spec/plan R11 name check as well as gates (phase 3)
+
+c4c14b5c: fr run check prints claimed-unobserved operator gates with the shared _operator_answer sentence; test_a_claimed_operator_on_an_unobserved_gate_says_so covers check and gates.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-02T22:05:47+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: out-of-scope-operator-guard OpenCode partial cell has no guard-level fixture test, and its unreadable-store advisory quotes a scope_note claiming verification (phase 3)
+
+96e7bf58, 77c88997: tests/unit/test_journal_operator_guard_opencode.py runs the guard on the OpenCode fixture (refused with no round since, accepted with one, unreadable store, no session export); the OpenCode advisory uses why_unobservable; the parity cell cites the new test.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-02T22:05:47+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: _resolve_body answered_by still typed str | None with a cast; spec §F says AnsweredBy | None (phase 3)
+
+b1cc88a7: _resolve_body takes AnsweredBy | None; the closed-set check moved to _answered_by_or_exit at the string entry points; cast removed; mypy clean.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-02T22:05:47+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: stale _gate_provenance comment says OpenCode has no question reader (phase 3)
+
+b1cc88a7: _gate_provenance comment lists the real unobservable cases.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-02T22:05:47+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: SKILL.md §6 review_findings insertion splits the in/out-scope definition sentence (mirrors too) (phase 3)
+
+e48f14aa, c3255ff7: sentence moved after the out-of-scope definition; both mirrors regenerated; prose pin updated with an ordering assertion.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-02T22:05:47+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: gate-provenance prose tripwire docstring/message still says --answered-by defaults to agent (phase 3)
+
+461f9555: tripwire docstring and message describe R10.
