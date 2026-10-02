@@ -29,5 +29,9 @@ def test_the_spec_reviewer_clause_says_fr_verifies_the_id_on_opencode_too() -> N
 
 def test_review_phase_puts_review_findings_in_each_prompt_with_distinct_letters() -> None:
     text = _text()
-    assert "put the brief's `review_findings` text verbatim into each reviewer's prompt" in text
+    assert "Put the brief's `review_findings` text verbatim into each reviewer's prompt" in text
     assert "give each its own letter" in text
+    # p3-r6: it follows the scope definitions, never splits them.
+    assert text.index("**out of scope** — true, but not caused by this change.") < text.index(
+        "Put the brief's `review_findings` text verbatim"
+    )
