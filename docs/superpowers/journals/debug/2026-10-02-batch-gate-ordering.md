@@ -31,3 +31,8 @@ IsolationState.base_sha records the commit a cold-start up cut the branch from (
 ### rc-699 · root-cause · #699: the reviewer treated a transient step record as an input
 
 Step records are transient (#628, the day of #694): brainstorm's is applied to the spec journal and deleted by the resolve that applies it, and spec-review cannot open before that (needs: [spec]). Its decisions are the spec journal's decision entries. Nothing told the reviewer that no record is an input, so it filed the absence as finding s5. The dispatch brief the reviewer actually sees is the orchestrator's prompt, written from fr-goal §2, so the contract lives there and in the agent's Inputs section.
+
+<!-- fr:journal kind=finding scope=debug id=fix-699 created=2026-10-02T18:18:19+00:00 state=fixed -->
+### fix-699 · finding [fixed] · #699 fixed: reviewer and fr-goal §2 say no step record is an input
+
+fr-spec-reviewer.md Inputs and fr-goal SKILL.md spec-review paragraph (plus OpenCode/Hermes mirrors). Pinned by tests/unit/test_spec_reviewer_inputs.py.
