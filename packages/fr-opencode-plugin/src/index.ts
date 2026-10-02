@@ -172,6 +172,15 @@ export async function FrIsolationRequired(ctx: {
         if (resolution.hasValidMarker) continue; // valid isolation workspace — allow
         if (matchesAllowlist(resolution.toplevel, file)) continue;
 
+        if (resolution.drift) {
+          const { marker, head } = resolution.drift;
+          throw new Error(
+            `fr-isolation: edit to \`${target}\` blocked — this workspace was registered for ` +
+              `${marker} but has ${head} checked out, so fr's state no longer describes it. ` +
+              `Switch back with \`git switch ${marker}\`; to keep working on ${head}, then give ` +
+              `it its own workspace with \`fr isolation up --branch ${head}\` (#553).`
+          );
+        }
         throw new Error(
           `fr-isolation: edit to \`${target}\` blocked — not inside an fr-isolation ` +
             "workspace. Enter isolation (`fr isolation up` / fr-goal) and edit in the " +

@@ -248,3 +248,20 @@ def test_relative_file_path_allows(tmp_path: Path) -> None:
     # A relative path can't be keyed to the right repo — allow (explicit), don't
     # misfire against the session cwd.
     assert allowed(run_hook({"tool_name": "Edit", "tool_input": {"file_path": "a.py"}}))
+
+
+# ---------- super-fr#553: a drifted checkout is denied, by name ----------
+
+
+def test_drifted_checkout_denies_naming_both_branches(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)  # on feat/x
+    write_marker(wt, wt)
+    _git(wt, "checkout", "-q", "-b", "chore/elsewhere")
+
+    result = run_hook(payload(wt / "a.py"))
+
+    assert decision(result) == "deny"
+    reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "feat/x" in reason and "chore/elsewhere" in reason
+    assert "fr isolation up --branch chore/elsewhere" in reason

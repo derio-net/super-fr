@@ -16,6 +16,16 @@ export interface MarkerResolution {
   frEnabled: boolean;
   /** True if a valid isolation marker allows edits at this toplevel. */
   hasValidMarker: boolean;
+  /**
+   * Set when a worktree-mode marker records a branch and HEAD is a different
+   * branch (gh#553) — the marker is then invalid, and the deny names both.
+   */
+  drift?: BranchDrift;
+}
+
+export interface BranchDrift {
+  marker: string;
+  head: string;
 }
 
 function realpath(path: string): string {
@@ -96,6 +106,36 @@ function hasContainerEvidence(): boolean {
   );
 }
 
+/**
+ * The marker's `branch` vs. the branch HEAD has checked out (gh#553). fr's
+ * state is keyed on the marker's branch, so a `git checkout -b` inside the
+ * workspace silently decouples the two. A detached HEAD (mid-rebase, bisect)
+ * is not another branch, and a marker with no `branch` has nothing to compare:
+ * neither is drift. Mirrors the shell hook's `_fr_branch_drift`.
+ */
+function branchDrift(toplevel: string, markerBranch: string | undefined): BranchDrift | undefined {
+  if (!markerBranch) return undefined;
+  let head: string;
+  try {
+    head = execFileSync("git", ["-C", toplevel, "symbolic-ref", "--quiet", "--short", "HEAD"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return undefined;
+  }
+  return head && head !== markerBranch ? { marker: markerBranch, head } : undefined;
+}
+
+function readMarker(toplevel: string): { toplevel?: string; mode?: string; branch?: string } | null {
+  try {
+    return JSON.parse(readFileSync(`${toplevel}/.fr-isolation`, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
 function hasValidIsolationMarker(toplevel: string): boolean {
   const markerPath = `${toplevel}/.fr-isolation`;
   if (!existsSync(markerPath)) return false;
@@ -112,8 +152,8 @@ function hasValidIsolationMarker(toplevel: string): boolean {
     switch (mode) {
       case "worktree":
         // The toplevel must be a LINKED worktree (defeats a stale marker copied
-        // into the primary tree).
-        return gitDirsDiffer(toplevel);
+        // into the primary tree), on the branch the marker records.
+        return gitDirsDiffer(toplevel) && !branchDrift(toplevel, (marker as { branch?: string }).branch);
       case "external":
         return hasContainerEvidence();
       default:
@@ -168,7 +208,12 @@ export function resolveMarker(file: string): MarkerResolution {
   const frEnabled = isFrEnabled(toplevel);
   if (!frEnabled) return { toplevel, frEnabled: false, hasValidMarker: false };
 
-  return { toplevel, frEnabled: true, hasValidMarker: hasValidIsolationMarker(toplevel) };
+  const hasValidMarker = hasValidIsolationMarker(toplevel);
+  if (hasValidMarker) return { toplevel, frEnabled: true, hasValidMarker };
+  const marker = existsSync(`${toplevel}/.fr-isolation`) ? readMarker(toplevel) : null;
+  const drift =
+    marker && (marker.mode ?? "worktree") === "worktree" ? branchDrift(toplevel, marker.branch) : undefined;
+  return { toplevel, frEnabled: true, hasValidMarker, drift };
 }
 
 export { matchesAllowlist };
