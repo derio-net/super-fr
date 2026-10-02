@@ -26,3 +26,8 @@ _proportionality_witness called run_report(base=None); with no remote default br
 ### fix-768 · finding [fixed] · #768 fixed: base fallback chain + all derived refusals together
 
 IsolationState.base_sha records the commit a cold-start up cut the branch from (carried across resume). _proportionality_base: remote default -> isolation start commit -> local main/master (never the current branch), printing which base was used. _verified_evidence evaluates every derived witness and refuses once with all failures. Tests: test_run_evidence.py::test_deliver_without_a_remote_*, ::test_every_derived_witness_is_evaluated_and_every_refusal_reported, ::test_deliver_with_no_determinable_base_is_refused_naming_it; test_isolation_hostworktree.py::test_cold_start_up_records_the_start_commit.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-699 created=2026-10-02T18:18:18+00:00 -->
+### rc-699 · root-cause · #699: the reviewer treated a transient step record as an input
+
+Step records are transient (#628, the day of #694): brainstorm's is applied to the spec journal and deleted by the resolve that applies it, and spec-review cannot open before that (needs: [spec]). Its decisions are the spec journal's decision entries. Nothing told the reviewer that no record is an input, so it filed the absence as finding s5. The dispatch brief the reviewer actually sees is the orchestrator's prompt, written from fr-goal §2, so the contract lives there and in the agent's Inputs section.
