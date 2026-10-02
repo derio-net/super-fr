@@ -436,3 +436,76 @@ Spec-mandated; facts.json is a recollectable cache.
 ### rh-7-resolved · finding [out-of-scope] · resolves rh-7: No check that facts.kind matches the requested scope (phase 3)
 
 Pre-existing for repo and org scopes.
+
+<!-- fr:journal kind=decision scope=plan id=p4-operator-answer-not-derivable created=2026-10-02T21:13:37+00:00 phase=4 -->
+### p4-operator-answer-not-derivable · decision · R18's "batch waiting on an operator answer" is not produced; spec amended (phase 4) (phase 4)
+
+No deterministic signal exists. The facts carry no run cursor, and the driver's Snapshot
+(batches, stages, PRs, runner dispatches) has nothing about an operator gate; the only place
+such a gate shows is the batch branch's run cursor, which collect does not read and the Forge
+seam does not expose. Inventing one (a label, a stage guess) would make Needs you now disagree
+with the driver. The other five kinds and unplaced are implemented; a test pins that no
+`operator-answer` row exists. R18 and Test Plan 13 in the spec now say what is missing and why,
+and that the row joins when a deterministic signal exists.
+
+<!-- fr:journal kind=decision scope=plan id=p4-post-merge-signal created=2026-10-02T21:13:37+00:00 phase=4 -->
+### p4-post-merge-signal · decision · The post_merge row is read from facts, not from a recorded failure (phase 4) (phase 4)
+
+A failed post_merge leaves no durable record (only a per-pass warn). The deterministic signal in
+the facts is: batch merged (stage merged or partial) more than ten minutes before the collect, its
+repo's `.fr/triage.yaml` declares `post_merge`, and neither a `post_merge` nor a `closeout` event
+exists. "Now" is `facts.collected_at`, never a clock. The row reads "has not succeeded (it failed,
+or no driver is running)". Stated in R18 of the spec.
+
+<!-- fr:journal kind=decision scope=plan id=p4-views-share-the-drivers-inputs created=2026-10-02T21:13:37+00:00 phase=4 -->
+### p4-views-share-the-drivers-inputs · decision · Needs you now and Next up run drive_pass over a Snapshot built from facts alone (phase 4) (phase 4)
+
+`views.drive_snapshot` builds the driver's Snapshot from facts.json (each open batch PR as the facts
+show it, `checks_verdict` for the verdict, release commit unknown so the ten-minute rule applies) and
+the board reads `blocked`, `warn` and `dispatch` off `drive_pass`'s own actions. A test pins that the
+blocked and failing-CI rows equal the driver's actions on the same facts. Only the draft-and-green,
+stale-dispatch, post_merge and unplaced rows are computed in views, from the same facts.
+
+<!-- fr:journal kind=decision scope=plan id=p4-preselect-ignores-cancelled created=2026-10-02T21:13:37+00:00 phase=4 -->
+### p4-preselect-ignores-cancelled · decision · A cancelled batch does not hold a wave open for preselection (phase 4) (phase 4)
+
+R16 says the highest wave with a batch "not yet merged". A cancelled batch never merges and needs
+nothing, so counting it would preselect a wave with no live work; abandoned and partial batches DO
+count (they need the operator). Recorded as a reading of R16, not a change to it.
+
+<!-- fr:journal kind=decision scope=plan id=p4-one-script-element created=2026-10-02T21:13:37+00:00 phase=4 -->
+### p4-one-script-element · decision · The tab script is concatenated into the viewer's single script element (phase 4) (phase 4)
+
+The existing render tests pin exactly one script element. `TABS_SCRIPT` is a constant appended to
+`SCRIPT`, so no facts text reaches it and that guard still holds. The tab markup is complete with
+scripts off (no panel carries `hidden`, the tab row itself is `hidden`); the script hides all but the
+selected panel and reveals the row. Key handling was also checked once against a stub DOM in node.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-renderer-already-had-title created=2026-10-02T21:13:37+00:00 phase=4 -->
+### p4-renderer-already-had-title · discovery · The board already emitted a title; the real gaps were the explicit-theme tokens and the 10px gutter (phase 4) (phase 4)
+
+Of the three hand patches R12 names, the renderer already wrote a `<title>`; it lacked the
+`:root[data-theme]` variants and used a 10px side gutter at 480px. Tokens now come from
+`components.TOKENS_CSS`, generated from one light and one dark dict so the three variants cannot
+drift; the gutter is `components.GUTTER_CSS` (16px). Both are shared with the later architecture page.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-batch-card-attribute-order created=2026-10-02T21:13:37+00:00 phase=4 -->
+### p4-batch-card-attribute-order · discovery · An existing test pins the batch card's attribute order (phase 4) (phase 4)
+
+`<article class="batch" data-batch="..."` is matched literally by test_triage_batch_board, so the
+new `id="batch-<id>"` anchor (the target of Needs-you rows) is appended after `data-batch`.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-10-02T21:13:37+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+red-only task: tests, no production code to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-10-02T21:13:37+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+red-only task: tests, no production code to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t4 created=2026-10-02T21:13:37+00:00 phase=4 -->
+### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
+
+documentation, acceptance row and mirrors only: no production code to clean
