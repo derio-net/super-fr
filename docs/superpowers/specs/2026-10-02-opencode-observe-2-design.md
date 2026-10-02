@@ -234,7 +234,7 @@ Runs on every harness whose backend reads the return (Claude Code, OpenCode);
 where it cannot (`None`, Hermes) the check is skipped with
 `unobserved=reviewer-return` in the evidence and a yellow warning.
 
-- **Where the instruction lives.** `_build_brief` (`run_cmd.py:2737`) adds a
+- **Where the instruction lives.** `_build_member_brief` (`run_cmd.py:3299`; review-phase is a group member, so its brief is built there, not in `_build_brief`) adds a
   `review_findings` key to every `review-phase` brief, on both shipped shapes
   (`fr-goal.yaml`, `fr-goal-light.yaml`) since they share the step id: the
   exact text the reviewer must be given, with this phase's `N` filled in.
