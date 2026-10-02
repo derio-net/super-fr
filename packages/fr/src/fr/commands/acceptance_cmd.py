@@ -373,7 +373,7 @@ def set_status_cmd(
     level: list[str] = typer.Option(
         [],
         "--level",
-        help="'<level>=<repo>:<path>[#Lline]' evidence to ADD (repeatable) — the other "
+        help="'<level>=<repo>:<path>[#test_name]' evidence to ADD (repeatable) — the other "
         "half of the documented transition.",
     ),
     drop_level: list[str] = typer.Option(
@@ -498,7 +498,7 @@ def add_cmd(
         [], "--origin", help="'<repo>:<path>[#anchor]' ref (repeatable)."
     ),
     level: list[str] = typer.Option(
-        [], "--level", help="'<level>=<repo>:<path>[#Lline]' test ref (repeatable)."
+        [], "--level", help="'<level>=<repo>:<path>[#test_name]' test ref (repeatable)."
     ),
     status: str = typer.Option(
         ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
