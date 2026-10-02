@@ -1613,8 +1613,9 @@ class LocalWorktreeDevcontainerTarget:
                     state.branch,
                     f"has {checked_out} checked out, not the branch fr registered",
                     [],
-                    f"Check out {state.branch} again, or register the workspace you are "
-                    f"using with `fr isolation up --branch {checked_out}`.",
+                    f"Switch back with `git switch {state.branch}`; to keep working on "
+                    f"{checked_out}, then give it its own workspace with "
+                    f"`fr isolation up --branch {checked_out}`.",
                 ),
             )
         status = self.run(["git", "status", "--porcelain"], cwd=state.worktree)

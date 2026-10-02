@@ -188,4 +188,30 @@ def test_drift_reason_names_both_branches(tmp_path: Path) -> None:
         text=True,
     ).stdout
     assert "feat/x" in out and "chore/elsewhere" in out
-    assert "fr isolation up --branch chore/elsewhere" in out
+    assert "git switch feat/x" in out and "fr isolation up --branch chore/elsewhere" in out
+
+
+def test_drifted_worktree_is_still_an_allowed_shell_context(tmp_path: Path) -> None:
+    # Review finding: the Bash guards ask decide_cwd, and treating a drifted
+    # worktree as a base clone blocked `git switch <registered>`, the very
+    # recovery the deny names. Drift is refused by the EDIT decision only.
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt)
+    _git(wt, "checkout", "-q", "-b", "chore/elsewhere")
+    rc = subprocess.run(
+        ["bash", "-c", f'. "{LIB}"; fr_isolation_decide_cwd "{wt}"'],
+        capture_output=True,
+        text=True,
+    ).returncode
+    assert rc == 0
+    assert decide(wt / "src.py") == 1  # ...while edits stay refused
+
+
+def test_switching_back_to_the_marker_branch_restores_edits(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt)
+    _git(wt, "checkout", "-q", "-b", "chore/elsewhere")
+    _git(wt, "switch", "-q", "feat/x")
+    assert decide(wt / "src.py") == 0

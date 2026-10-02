@@ -7,7 +7,8 @@ repo toplevel, checked by the marker's `mode`:
 
 - `worktree` (devcontainer or host-worktree mode) → toplevel must be a real
   linked worktree, with HEAD still on the marker's `branch` (a detached HEAD
-  is fine; another branch checked out is drift and is denied).
+  is fine; another branch checked out is drift: edits are denied, the shell
+  stays open for `git switch <registered>`, and gc will not reap it).
 - `external` (preparer-adopted container) → toplevel match **plus** container
   evidence (`/.dockerenv`, `/run/.containerenv`, or `$KUBERNETES_SERVICE_HOST`),
   so a marker forged on a bare host or copied to the base clone never validates.

@@ -177,8 +177,8 @@ export async function FrIsolationRequired(ctx: {
           throw new Error(
             `fr-isolation: edit to \`${target}\` blocked — this workspace was registered for ` +
               `${marker} but has ${head} checked out, so fr's state no longer describes it. ` +
-              `Check out ${marker} again, or register this branch with ` +
-              `\`fr isolation up --branch ${head}\` and work there (#553).`
+              `Switch back with \`git switch ${marker}\`; to keep working on ${head}, then give ` +
+              `it its own workspace with \`fr isolation up --branch ${head}\` (#553).`
           );
         }
         throw new Error(
