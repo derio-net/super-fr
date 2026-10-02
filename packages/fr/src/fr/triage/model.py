@@ -112,8 +112,9 @@ class Scope:
 
     @classmethod
     def group(cls, repos: Iterable[str]) -> Scope:
-        """A group scope over *repos*, sorted and de-duplicated case-insensitively."""
-        unique = sorted({r.lower(): r for r in repos}.values(), key=str.lower)
+        """A group scope over *repos*: lowercased, sorted and de-duplicated, so input
+        casing and order never change `target`, `repos` or `name`."""
+        unique = sorted({r.lower() for r in repos})
         return cls(kind="group", target=",".join(unique), repos=tuple(unique))
 
     @property

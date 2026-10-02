@@ -320,6 +320,51 @@ def test_drive_refuses_a_group_repo_with_no_checkout_before_anything_runs(
     assert (tmp_path / "judgements.yaml").read_text(encoding="utf-8") == before
 
 
+def test_drive_needs_a_checkout_for_every_repo_of_the_group_even_one_with_no_batch(
+    tmp_path: Path, _no_forge: None
+) -> None:
+    _group_state(tmp_path, _batch("ba", "alpha#1"))  # beta has no batch at all
+    before = (tmp_path / "judgements.yaml").read_text(encoding="utf-8")
+    code, out = _drive(tmp_path, *_clones(tmp_path, ALPHA))
+    assert code == 2
+    assert BETA in out and "--checkout" in out
+    assert "dispatch ba" not in out
+    assert (tmp_path / "judgements.yaml").read_text(encoding="utf-8") == before
+
+
+def test_drive_over_a_group_with_no_batches_still_refuses_an_unmapped_repo(
+    tmp_path: Path, _no_forge: None
+) -> None:
+    _group_state(tmp_path)
+    code, out = _drive(tmp_path, *_clones(tmp_path, ALPHA))
+    assert code == 2
+    assert BETA in out and "--checkout" in out
+
+
+def test_drive_over_a_group_with_no_batches_runs_when_every_repo_is_mapped(
+    tmp_path: Path, _no_forge: None
+) -> None:
+    _group_state(tmp_path)
+    code, out = _drive(tmp_path, *_clones(tmp_path, ALPHA, BETA))
+    assert code in (0, 3), out
+
+
+def test_group_casing_and_order_do_not_change_name_target_or_repos() -> None:
+    spellings = [
+        ["Org/Repo", "org/repo", "Other/Two"],
+        ["org/repo", "Org/Repo", "other/two"],
+        ["OTHER/TWO", "ORG/REPO"],
+    ]
+    scopes = [Scope.group(s) for s in spellings]
+    for sc in scopes[1:]:
+        assert (sc.name, sc.target, sc.repos) == (
+            scopes[0].name,
+            scopes[0].target,
+            scopes[0].repos,
+        )
+    assert scopes[0].repos == ("org/repo", "other/two")
+
+
 def test_drive_refuses_a_checkout_for_a_repo_outside_the_group(
     tmp_path: Path, _no_forge: None
 ) -> None:
