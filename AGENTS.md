@@ -147,8 +147,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     turns), `render.py` (table / one HTML page, `—` for every missing figure).
     CLI: `fr usage collect|report|backfill` (`commands/usage_cmd.py`); the
     cache lives under `$HOME/.cache/fr/usage/`, so `usage` is in
-    `READ_ONLY_COMMANDS` (`backfill` only CREATES archive files). Driver skill:
-    `fr-audit`. Dollars always come from the harness; fr invents no list price.
+    `READ_ONLY_COMMANDS` (`backfill` only writes archive files: it creates
+    missing ones and prices sessions an archived one captured while they were
+    still open, gh#756). Driver skill: `fr-audit`. Dollars always come from the harness; fr invents no list price.
     §5.B persists it: `file.py` is the `usage` artifact kind
     (`docs/superpowers/usage/<run-id>.yaml`, one capture per host, host label
     `h-<sha256(run+hostname)[:8]>`, an ALLOWLIST projection — never a

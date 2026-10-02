@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr run resolve records the model a dispatched subagent actually ran on (warning when it differs from the tier binding); fr archive names sessions it could not price yet, keeps the recorded isolation mode, and fr usage backfill prices them once they exit"

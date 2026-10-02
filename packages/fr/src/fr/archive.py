@@ -558,12 +558,41 @@ def _archive_usage(repo_root: Path, cursor: Path, run_id: str) -> None:
     except (OSError, RunStateError):
         state = None
     if state is not None:
-        capture(repo_root, state, "closeout", os.environ)
+        written = capture(repo_root, state, "closeout", os.environ)
+        if written is not None:
+            _note_unpriced(written, state, os.environ)
     if not src.exists():
         return
     rel = src.relative_to(repo_root)
     subprocess.run(["git", "-C", str(repo_root), "add", "--", str(rel)], check=False)
     _git_mv(repo_root, rel, dst.relative_to(repo_root))
+
+
+def _note_unpriced(path: Path, state: RunState, env: Mapping[str, str]) -> None:
+    """Name the sessions the closeout capture read no dollars for (gh#756).
+
+    #682's closeout ran a second before the delivering session exited, and
+    Claude Code writes a session's dollars only at exit: the archived file kept
+    `usd: null` and nothing said so. Says it; never fails the archive."""
+    import sys
+
+    from fr.usage.capture import this_host, unpriced_sessions
+    from fr.usage.file import load_usage
+
+    try:
+        usage = load_usage(path)
+        mine = usage.host(this_host(state.run, env)) if usage is not None else None
+        sessions = unpriced_sessions(mine) if mine is not None else []
+    except Exception:  # noqa: BLE001 — a note is not worth failing an archive
+        return
+    if sessions:
+        print(
+            f"fr archive: no dollars yet for session(s) {', '.join(sessions)} of run "
+            f"{state.run}: a harness may write a session's cost only when it exits "
+            "(Claude Code does). Once they have ended, run `fr usage backfill` here and "
+            "commit the refreshed implemented/usage file.",
+            file=sys.stderr,
+        )
 
 
 def archive_journal(repo_root: Path, scope: str, slug: str) -> None:
