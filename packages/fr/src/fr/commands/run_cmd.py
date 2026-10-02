@@ -4226,6 +4226,49 @@ def cost_cmd(
             console.print(f"  {who}unavailable: {entry.unavailable}", soft_wrap=True, markup=False)
 
 
+def _observed_holder(state: RunState, key: str) -> str | None:
+    """The child session that holds `key`, observed — or `None` (spec
+    2026-10-02-opencode-observe-2 §D, R5).
+
+    Only for an OPEN attempt dispatched to an agent type with nobody claiming
+    it: when the session protocol shows exactly ONE child of that agent type
+    (compared through `agent_name`) dispatched since the attempt opened, that
+    child is the holder. Zero or several, or a session fr cannot read, leave
+    the unit unclaimed — the existing "unclaimed" handling stands."""
+    from fr.run.observed import agent_name, observed_session
+    from fr.run.telemetry import parse_timestamp
+
+    attempt = units.last_attempt(state, key)
+    if (
+        attempt is None
+        or attempt.returned is not None
+        or attempt.synthesized
+        or attempt.agent is not None
+        or attempt.agent_type is None
+    ):
+        return None
+    start = parse_timestamp(attempt.dispatched)
+    view = observed_session(os.environ) if start is not None else None
+    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    if not dispatched:
+        return None
+    wanted = agent_name(attempt.agent_type)
+    matching = [
+        d.agent_id
+        for d in dispatched
+        if d.agent_type is not None and agent_name(d.agent_type) == wanted
+    ]
+    if len(matching) != 1:
+        return None
+    err_console.print(
+        f"{key}: holder {matching[0]} observed — the one {attempt.agent_type} "
+        "dispatch since the unit opened; recorded as its claim.",
+        soft_wrap=True,
+        markup=False,
+    )
+    return matching[0]
+
+
 @run_app.command("advance")
 @_commits_run_writes("advance")
 def advance_cmd(
@@ -4594,6 +4637,10 @@ def _resolve_member(
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    # R5 (spec 2026-10-02-opencode-observe-2 §D): the holder is filled FIRST,
+    # before any evidence is derived — the visual witness refuses an unclaimed
+    # unit — and written through the claim path `_close_on_resolve` takes.
+    agent = agent if agent is not None else _observed_holder(state, key)
     # The evidence gate runs BEFORE any write (§4.E). A refusal must leave
     # the unit exactly as it found it — a half-resolved review is a worse
     # state than an unresolved one, and is indistinguishable from the skipped
@@ -5177,6 +5224,8 @@ def _resolve_body(
         raise typer.Exit(2)
 
     flat_key = _unit_key(repo_root, state, step, None, None)
+    # R5: the observed holder, before any evidence is derived.
+    agent = agent if agent is not None else _observed_holder(state, flat_key)
     # A flat `step/<id>` unit names no phase, so `review` evidence cannot be
     # verified for it and `_verified_evidence` refuses rather than records.
     verified = _verified_evidence(

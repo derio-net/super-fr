@@ -61,3 +61,36 @@ def opencode_env(db: Path, session: str | None = "ses_run") -> dict[str, str | N
         "FR_OPENCODE_SESSION_ID": session,
         "CLAUDE_CODE_SESSION_ID": None,
     }
+
+
+def with_copied_child(db: Path, source: str, new: str) -> Path:
+    """`db` with a second child session `new`, dispatched exactly as `source`
+    was (its `session` row and its dispatching `task` part, re-keyed). Edits
+    the copy in place — pass a `shifted` copy, never `DB`."""
+    assert db != DB
+    with closing(sqlite3.connect(db)) as con:
+        (parent, directory, title, created) = con.execute(
+            "SELECT parent_id, directory, title, time_created FROM session WHERE id = ?",
+            (source,),
+        ).fetchone()
+        con.execute(
+            "INSERT INTO session VALUES (?, ?, ?, ?, ?)",
+            (new, parent, directory, f"{title} (copy)", created),
+        )
+        for part_id, message_id, session, t_created, t_updated, raw in con.execute(
+            "SELECT id, message_id, session_id, time_created, time_updated, data FROM part"
+        ).fetchall():
+            data = json.loads(raw)
+            if not isinstance(data, dict) or data.get("tool") != "task":
+                continue
+            meta = data.get("state", {}).get("metadata", {})
+            if meta.get("sessionId") != source:
+                continue
+            meta["sessionId"] = new
+            data["callID"] = f"{data.get('callID', 'call')}-copy"
+            con.execute(
+                "INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)",
+                (f"{part_id}_copy", message_id, session, t_created, t_updated, json.dumps(data)),
+            )
+        con.commit()
+    return db
