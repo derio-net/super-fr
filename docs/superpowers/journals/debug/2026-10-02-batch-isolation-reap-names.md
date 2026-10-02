@@ -54,3 +54,8 @@ gc trusts any MERGED PR that `gh pr view <name>` returns, even one that merged b
 ### fix-578 · finding [fixed] · #578 fixed: up saves the state record and marker before devcontainer up
 
 A failed devcontainer up now leaves a workspace that status lists, and the error names both the retry and `fr isolation down --branch <b>`. Pinned by test_failed_devcontainer_up_leaves_a_state_record_that_down_can_address.
+
+<!-- fr:journal kind=finding scope=debug id=fix-843 created=2026-10-02T17:00:19+00:00 state=fixed -->
+### fix-843 · finding [fixed] · #843 fixed: a newline is written first when info/exclude does not end in one
+
+Pinned by test_up_does_not_glue_patterns_onto_an_exclude_line_without_trailing_newline.
