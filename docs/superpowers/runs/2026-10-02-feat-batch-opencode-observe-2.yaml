@@ -148,8 +148,10 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: running
-    at: '2026-10-02T22:05:48+00:00'
+    state: done
+    at: '2026-10-02T22:13:02+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/873
     units:
       step/deliver:
         attempts:
@@ -157,3 +159,9 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 09d1a452-b1b7-4a1d-9f98-bd936dcf38f5
+          returned: '2026-10-02T22:13:01+00:00'
+          outcome: done
+        evidence:
+          tests: full-suite.log@34189584d531
+          proportionality: aed4bf9a8494d7c8647bb853d8faee68b38ff898:c4adbd63a6b61bf3aba3fba5fe31d73a8e44594721f93dde5c0cf5c001d54344
+          visual: none
