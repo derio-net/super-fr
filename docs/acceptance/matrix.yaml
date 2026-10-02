@@ -5643,9 +5643,14 @@ rows:
       rather than show a foreign session's figures
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_recompute_never_adds_the_callers_session
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_the_archive_capture_adds_no_ambient_session
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_advance_records_no_session_when_no_harness_owns_one
+    status: ci
+    notes: 'R3/#848: recompute and archive never add the caller''s session; no evidence
+      reads unavailable (phase 1)'
   - id: session-observer-protocol
     capability: transcript gates
     acceptance: Every transcript gate reads the harness through one session protocol
