@@ -34,3 +34,8 @@ gitseam.py Worktree.merge; pinned by test_an_archive_that_empties_a_live_directo
 ### 4295173f790f · root-cause · #803: the tracking gate is per verb, and only apply/dispatch call it
 
 require_tracker is called from apply_cmd._apply_one and triage_batch_cmd._tracking_gate (dispatch only, :801). batch cancel (:380-406, edit_issue_labels + comment_issue) and fr undispatch (comment_issue + edit_issue_state) never call it. batch merge was named by the issue but writes nothing to an issue: batch_merge.py's only forge writes are pr_merge (the forge, not the tracker) — ruled out, left ungated. Failing tests: test_tracking_none.py::test_cancel_* / test_undispatch_*.
+
+<!-- fr:journal kind=finding scope=debug id=470478ca7664 created=2026-10-02T18:13:49+00:00 state=fixed -->
+### 470478ca7664 · finding [fixed] · #803 fixed: cancel and undispatch call the tracking gate before any forge call
+
+triage_batch_cmd.batch_cancel_command calls _tracking_gate (new --checkout option, as dispatch) when the batch reached the forge; undispatch_cmd calls require_tracker on the plan's repo root, exit 2 with --yes, warning otherwise. Pinned by test_tracking_none.py::test_cancel_yes_refuses_* / test_cancel_dry_run_warns_* / test_cancel_yes_still_acts_* / test_undispatch_*. Behaviour change: cancel --yes on a dispatched batch now needs a clone of the batch's repo (cwd or --checkout), the same requirement dispatch --yes already has.
