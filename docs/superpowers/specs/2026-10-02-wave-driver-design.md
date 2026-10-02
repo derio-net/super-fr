@@ -112,3 +112,4 @@ Post-merge, operator-driven:
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-10-02-wave-driver | `derio-net/super-fr` | `2026-10-02-wave-driver` | — |
