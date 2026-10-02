@@ -1,0 +1,24 @@
+schema_version: 7
+run: 2026-10-02-feat-wave-driver
+workflow: fr-goal@1
+branch: feat/wave-driver
+started: '2026-10-02T17:33:31+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
