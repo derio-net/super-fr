@@ -3,7 +3,7 @@ run: 2026-10-02-feat-wave-driver
 workflow: fr-goal@1
 branch: feat/wave-driver
 started: '2026-10-02T17:33:31+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -43,7 +43,11 @@ steps:
           returned: '2026-10-02T19:00:40+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-10-02T19:00:42+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
