@@ -179,14 +179,15 @@ def _row_span(text: str, row_id: str) -> tuple[int, int]:
 def replace_row(text: str, row_id: str, row: Row) -> str:
     """`text` with `row_id`'s block replaced by `row`'s, every other byte kept.
 
-    Trailing blank lines inside the old block are preserved, so the file's
-    spacing survives a flip.
+    The blank and comment lines that end the old block introduce the NEXT row
+    (a block's span runs to the next item), so they are kept — the file's
+    spacing and its section comments survive a flip.
     """
     lines = text.splitlines(keepends=True)
     start, end = _row_span(text, row_id)
     indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
     tail: list[str] = []
-    while end - 1 > start and not lines[end - 1].strip():
+    while end - 1 > start and _is_between_rows(lines[end - 1], len(indent)):
         end -= 1
         tail.insert(0, lines[end])
     return (

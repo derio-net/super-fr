@@ -33,6 +33,7 @@ from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import MIGRATIONS, Repair
 
 REPAIR_NAME = "matrix-name-anchors"
+_LINE_ANCHOR_HINT = re.compile(r"\.py#L\d")
 
 __all__ = ["MATRIX_NAME_ANCHORS_REPAIR", "REPAIR_NAME", "conversions"]
 
@@ -53,7 +54,13 @@ def conversions(path: Path) -> dict[str, str]:
 
     root = _root(path)
     try:
-        matrix = parse_matrix(path.read_text())
+        text = path.read_text()
+    except OSError:
+        return {}
+    if not _LINE_ANCHOR_HINT.search(text):
+        return {}  # the gate asks before every command: skip the parse and git
+    try:
+        matrix = parse_matrix(text)
         own = resolve_identity(matrix, root)[1]
     except (AcceptanceError, OSError, ValueError):
         return {}
@@ -97,17 +104,20 @@ def _fn(path: Path) -> Iterable[Path]:
 
     text = path.read_text()
     for old, new in conversions(path).items():
-        # `#L1` must not match inside `#L10` or `#L1-L5`.
-        text = re.sub(re.escape(old) + r"(?![\w-])", new.replace("\\", "\\\\"), text)
+        # Whole refs only: `#L1` must not match inside `#L10` or `#L1-L5`, and
+        # own repo `fr` must not match inside a sibling's `super-fr:…`.
+        pattern = r"(?<![\w.-])" + re.escape(old) + r"(?![\w-])"
+        text = re.sub(pattern, new.replace("\\", "\\\\"), text)
     matrix = parse_matrix(text)  # refuse to write a matrix that no longer reads
-    write_text_atomic(path, text)
-    reports = _report_paths(path)
-    if not any(p.exists() for p in reports):
-        return ()
     root = _root(path)
+    # Everything is rendered before a byte moves: a render that fails leaves
+    # the matrix untouched, so the repair still applies and retries next run.
+    reports: dict[Path, str] = {}
+    if any(p.exists() for p in _report_paths(path)):
+        reports = {root / rel: html for rel, html in render_committed_set(matrix, root).items()}
+    write_text_atomic(path, text)
     wrote: list[Path] = []
-    for rel, rendered in render_committed_set(matrix, root).items():
-        target = root / rel
+    for target, rendered in reports.items():
         if not target.exists() or target.read_text() != rendered:
             write_text_atomic(target, rendered)
             wrote.append(target)

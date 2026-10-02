@@ -477,3 +477,57 @@ def test_the_engine_refuses_a_ref_both_dropped_and_added(tmp_path: Path) -> None
         apply_record(root, None, record, target=target)
     assert _matrix(root).read_bytes() == before
     assert yaml.safe_load(before)  # still the original, valid matrix
+
+
+# --- review of this batch ----------------------------------------------------
+
+
+def test_replace_keeps_a_section_comment_between_flush_left_rows() -> None:
+    from fr.acceptance.edit import replace_row
+
+    text = FLUSH + "\n# --- section B ---\n" + FLUSH.split("rows:\n", 1)[1].replace("r1", "r2")
+    moved = _new("r1").model_copy(update={"status": "skipped"})
+
+    out = replace_row(text, "r1", moved)
+
+    assert "\n\n# --- section B ---\n- id: r2\n" in out
+    assert [r.status for r in parse_matrix(out).rows] == ["skipped", "not-implemented"]
+
+
+def test_the_repair_never_rewrites_inside_a_longer_repo_name(tmp_path: Path) -> None:
+    header = "org: derio-net\nrepo: fr\nrows:\n"
+    root = make_repo(
+        tmp_path,
+        row(id="r1", origin='"fr:docs/superpowers/specs/s.md"', unit='"fr:tests/test_a.py#L1"')
+        + row(
+            id="r2", origin='"fr:docs/superpowers/specs/s.md"', unit='"super-fr:tests/test_a.py#L1"'
+        ),
+        name="fr",
+        header=header,
+    )
+
+    _repair().fn(_matrix(root))
+
+    rows = {r.id: r for r in load_matrix(_matrix(root)).rows}
+    assert rows["r1"].levels["unit"] == ("fr:tests/test_a.py#test_a",)
+    assert rows["r2"].levels["unit"] == ("super-fr:tests/test_a.py#L1",), (
+        "a sibling's ref is not ours"
+    )
+
+
+def test_the_repair_writes_nothing_when_the_reports_cannot_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.acceptance.report as report
+
+    root = make_repo(tmp_path, row(id="r1", unit='"own:tests/test_a.py#L1"'))
+    assert _invoke(root, monkeypatch, "report", "--deterministic").exit_code == 0
+    before = _matrix(root).read_bytes()
+
+    def boom(*_a: object, **_k: object) -> dict[str, str]:
+        raise RuntimeError("render failed")
+
+    monkeypatch.setattr(report, "render_committed_set", boom)
+    with pytest.raises(RuntimeError):
+        _repair().fn(_matrix(root))
+    assert _matrix(root).read_bytes() == before, "the repair retries next run, not half-done"
