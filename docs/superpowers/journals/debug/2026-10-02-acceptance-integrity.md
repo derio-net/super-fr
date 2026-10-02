@@ -39,3 +39,8 @@ The CLI refuses a ref named in both --level and --drop-level before building the
 ### f-fixes · finding [fixed] · Fixed: all eight members, failing tests first
 
 tests/unit/test_acceptance_integrity.py (committed red in 59421ee7). Fixes: indentation derived from the existing items (#470); fr.acceptance.anchors + check/engine/report changes + Repair matrix-name-anchors, with Repair gaining companions/also_wrote so it regenerates the committed reports (#531); edit.describe_move (#769); refusal wording (#654); merge_levels test (#656); engine contradiction refusal (#655); rows re-pointed through the record engine (#663, #676, and the 27 rotted/4 dead anchors). run-records-observed-models moved ci → skipped: its served-model-over-alias half lost its only test in #628.
+
+<!-- fr:journal kind=review scope=debug id=8b8d13e0b3a6 created=2026-10-02T18:47:11+00:00 -->
+### 8b8d13e0b3a6 · review · Independent review of the branch: 5 findings, 4 fixed
+
+A separate read-only reviewer context raised: (1) replace_row dropped a column-0 section comment between rows, a regression from #470's scan change — fixed + test; (2) the repair's regex had no left boundary (own repo 'fr' inside 'super-fr:') — fixed + test; (3) the repair wrote the matrix before rendering reports, so a failed render left it half-done and never retried — fixed + test; (5) the gate runs the predicate per command — a textual .py#L pre-check skips parse and git. Not fixed: (4) is_test_node follows pytest's default names, so a unittest-style 'FooTests' class is never a conversion target. Its anchors are left for a human and check names them, so there is no mis-conversion; it is a known limit, deliberately conservative.
