@@ -41,3 +41,8 @@ fr-spec-reviewer.md Inputs and fr-goal SKILL.md spec-review paragraph (plus Open
 ### rc-761 · root-cause · #761: standalone brainstorm asks before the gate opens, and the round cap assumed fr-goal's batched rounds
 
 fr-brainstorming §0 started the cursor but never said to advance; the operator gate opens (record.at) only on advance and _gate_provenance counts answered rounds since then. question_rounds_refusal applied to every run on the fr-goal manifest, and the transcript counts every interactive question separated by exploration as its own round, so fixing the ordering alone would turn invisible answers into a 'never a round 3' refusal.
+
+<!-- fr:journal kind=finding scope=debug id=fix-761 created=2026-10-02T18:23:39+00:00 state=fixed -->
+### fix-761 · finding [fixed] · #761 fixed: RunState.driver=standalone skips the round cap; skill advances before the first question
+
+fr run start --driver standalone records RunState.driver (run kind 7->8, stamp-only migration fr.artifacts.run_driver). _gate_provenance skips question_rounds_refusal for standalone runs but still refuses zero answered questions. fr-brainstorming §0: start with --driver standalone, then fr run advance before the first question. Tests: test_run_question_rounds.py::test_a_standalone_brainstorm_*, ::test_an_unknown_driver_is_refused; test_migration_run_driver.py; test_fr_brainstorming_gate_order.py; chain tests updated to 8.
