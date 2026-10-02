@@ -5007,6 +5007,24 @@ rows:
     status: ci
     notes: 'gh#775: enforced in the step-record engine (add, set-status --level, brainstorm
       record); pinned per-PR by test_acceptance_init_commit.py'
+  - id: acceptance-python-refs-name-their-test
+    capability: Acceptance matrix
+    acceptance: 'An evidence ref into a Python file names its test, never a line: check
+      fails a line anchor (naming the test it sits in) and a name that no longer resolves,
+      authoring refuses a new line anchor, and a repair converts existing ones'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-02-acceptance-integrity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_refuses_a_name_anchor_that_names_no_test
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_refuses_a_line_anchor_into_python_and_suggests_the_name
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_refuses_a_new_line_anchor_into_python
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_line_anchors_that_land_in_a_test
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_leaves_what_it_cannot_convert
+    status: ci
+    notes: 'gh#531. Measured at fix time: 27 of 78 line anchors had slid onto another
+      test or none; all re-pointed to the test git blame shows each was recorded for,
+      the other 48 converted by the repair.'
   - id: lifecycle-acceptance-drop-level
     capability: Artifact lifecycles
     acceptance: An operator can remove a stale evidence ref from an acceptance row with
