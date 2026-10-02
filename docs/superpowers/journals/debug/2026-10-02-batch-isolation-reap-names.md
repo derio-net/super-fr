@@ -29,3 +29,8 @@ tests/unit/test_isolation_reap_names.py and three new tests in test_isolation_de
 ### ab8f5b8f215e · root-cause · #844/#553: fr treats a branch NAME as a workspace's identity and never checks the name still means this workspace
 
 gc trusts any MERGED PR that `gh pr view <name>` returns, even one that merged before the workspace existed. Nothing compares the marker's branch with HEAD, so a checkout to another branch keeps passing every gate, and gc/down reap on the registered branch's verdict.
+
+<!-- fr:journal kind=root-cause scope=debug id=328225b68c5e created=2026-10-02T17:00:13+00:00 -->
+### 328225b68c5e · root-cause · #578: up performs side effects before recording them
+
+`LocalWorktreeDevcontainerTarget.up` ran `_devcontainer_up` before `save_state`, so a raise between them stranded the worktree and container with no record.
