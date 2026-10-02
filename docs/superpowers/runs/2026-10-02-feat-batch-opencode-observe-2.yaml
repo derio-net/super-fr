@@ -3,7 +3,7 @@ run: 2026-10-02-feat-batch-opencode-observe-2
 workflow: fr-goal@1
 branch: feat/batch-opencode-observe-2
 started: '2026-10-02T18:54:52+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md
   spec-review:
-    state: running
-    at: '2026-10-02T19:06:38+00:00'
+    state: done
+    at: '2026-10-02T19:15:52+00:00'
     units:
       step/spec-review:
         attempts:
@@ -22,6 +22,12 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 09d1a452-b1b7-4a1d-9f98-bd936dcf38f5
+          returned: '2026-10-02T19:15:52+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: aa757024dd89e3547
+          findings: s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13
   plan:
     state: pending
   plan-review:
