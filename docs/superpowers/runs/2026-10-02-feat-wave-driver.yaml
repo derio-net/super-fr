@@ -218,6 +218,10 @@ steps:
           visual: none
           findings: rk-1,rk-2,rk-3,rk-4,rk-5,rk-6,rk-7,rk-8
   journal-check:
-    state: pending
+    state: failed
+    at: '2026-10-02T22:15:37+00:00'
+    exit: 1
+    stdout: "8 out-of-scope finding(s): p2-closeout-state-archived-unreachable, rg-16,\
+      \ rh-2, \nrh-6, rh-7, ri-6, rj-7, rk-8\n"
   deliver:
     state: pending
