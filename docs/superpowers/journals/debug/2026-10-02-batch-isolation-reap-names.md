@@ -39,3 +39,8 @@ gc trusts any MERGED PR that `gh pr view <name>` returns, even one that merged b
 ### 4afd4f1b079f · root-cause · #843: the append to the shared info/exclude assumed a trailing newline
 
 `_write_isolation_marker` appended `.fr-isolation` directly, so a hand-edited last line with no newline (`*.log`) became `*.log.fr-isolation`.
+
+<!-- fr:journal kind=finding scope=debug id=fix-844 created=2026-10-02T17:00:15+00:00 state=fixed -->
+### fix-844 · finding [fixed] · #844 fixed: gc ignores a MERGED PR that merged before the workspace's created_at
+
+`_pr_from` now carries `mergedAt` (gh `--json state,url,mergedAt`, glab `merged_at`, tea's `merged` timestamp). In `_gc_one`, `_merged_before` drops such a PR, and the decision falls through to merged-by-content. A merge time that is missing or unparseable keeps the old by-name verdict: the forge reported nothing to compare, so the fix doesn't invent a new rule for that case. Pinned by test_isolation_reap_names.py (both directions, plus the gh argv).
