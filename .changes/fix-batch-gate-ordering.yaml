@@ -1,2 +1,0 @@
-bump: patch
-summary: "Gate ordering: standalone fr-brainstorming opens its operator gate before the first question and is not held to fr-goal's two-round cap; spec review's brief no longer implies the brainstorm record is an input; deliver resolves without a fetchable remote (isolation start commit, then local default branch) and reports every derived-witness refusal at once."
