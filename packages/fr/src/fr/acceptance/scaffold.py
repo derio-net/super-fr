@@ -28,7 +28,9 @@ MATRIX_TEMPLATE = """\
 #   capability: grouping (tables render in first-seen order)
 #   acceptance: the business-level statement
 #   origin:     list of "repo:path[#anchor]" refs (spec §, design doc)
-#   levels:     unit/api/int/ui → list of "repo:path[#Lline]" test refs
+#   levels:     unit/api/int/ui → list of "repo:path[#test_name]" test refs
+#               (a .py fragment names a test, pytest-style: #TestX::test_y —
+#               never a #L<n> line, which rots as code moves; gh#531)
 #               ([] = level does not verify this row)
 #   status:     ci | scheduled | skipped | not-implemented | failing
 #     ci               automated on every PR — cannot drift silently

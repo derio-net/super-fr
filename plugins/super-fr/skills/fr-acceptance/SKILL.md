@@ -104,8 +104,9 @@ presented in the PR body ("rows added since brainstorm", generated via
 
 ## Refs, requirement origins and post-merge rows
 
-Refs are `<repo>:<path>[#Lline|#anchor]` — own repo by its own name, sibling
-repos verified only where a checkout exists (`--sibling-root`, default `..`).
+Refs are `<repo>:<path>[#anchor]` — own repo by its own name, sibling
+repos verified only where a checkout exists (`--sibling-root`, default `..`);
+a `.py` fragment names the test (`#TestX::test_y`), never a rotting `#L<n>`.
 Archived specs auto-resolve (`specs/` ↔ `implemented/specs/`) — `check` warns,
 never errors, on a moved ref. `fr acceptance report` renders the HTML;
 `fr acceptance status` is the terminal nag; `fr acceptance digest` feeds the
