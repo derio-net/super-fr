@@ -49,6 +49,8 @@ from fr.triage.snapshot import (
     acceptance_rows,
     diff_snapshots,
     latest_snapshot,
+    matrix_for_scope,
+    previous_snapshot,
     store_snapshot,
     take_snapshot,
 )
@@ -313,23 +315,43 @@ def render_command(
     org: OrgOpt = None,
     dir_override: DirOpt = None,
     open_: bool = typer.Option(False, "--open", help="Open the board in a browser."),
+    matrix: Annotated[
+        Path | None,
+        typer.Option("--matrix", help="Acceptance matrix to track (default: this checkout's)."),
+    ] = None,
 ) -> None:
     """Write triage.html from facts.json and judgements.yaml.
 
     Also stores a snapshot of what the board shows under `snapshots/` in the state
-    directory (the latest 30 are kept); the board's "Since last report" is the diff
-    against the previous readable one.
+    directory (the latest 30 are kept; one identical to the latest is not stored); the
+    board's "Since last report" is the diff against the last DIFFERENT readable one.
+    The acceptance matrix is read only for a single repo whose checkout you are in, or
+    from --matrix.
     """
-    target_dir, facts, judgements = _load_state(_scope(repo, org), dir_override)
-    snap = take_snapshot(
-        facts,
-        judgements,
-        acceptance=acceptance_rows(Path.cwd() / "docs" / "acceptance" / "matrix.yaml"),
-    )
-    since = diff_snapshots(latest_snapshot(target_dir), snap)
-    store_snapshot(target_dir, snap, datetime.now(UTC))
+    scope = _scope(repo, org)
+    target_dir, facts, judgements = _load_state(scope, dir_override)
+    if matrix is not None:
+        if not matrix.is_file():
+            err_console.print(
+                f"[red]error:[/red] no matrix at {escape(str(matrix))}", soft_wrap=True
+            )
+            raise typer.Exit(code=2)
+        matrix_path: Path | None = matrix
+    else:
+        matrix_path = matrix_for_scope(scope.target if scope.kind == "repo" else None, Path.cwd())
+    snap = take_snapshot(facts, judgements, acceptance=acceptance_rows(matrix_path))
+    since = diff_snapshots(previous_snapshot(target_dir, snap), snap)
     out = target_dir / "triage.html"
     out.write_text(render(facts, judgements, since), encoding="utf-8")
+    # Stored only once the page exists, and only when the board differs from the latest
+    # snapshot: a re-render with nothing new must not erase "Since last report".
+    if snap != latest_snapshot(target_dir):
+        store_snapshot(
+            target_dir,
+            snap,
+            datetime.now(UTC),
+            warn=lambda m: err_console.print(f"warning: {escape(m)}", soft_wrap=True),
+        )
     console.print(
         f"wrote {out} ({plural(len(facts.issues), 'issue')})", markup=False, soft_wrap=True
     )

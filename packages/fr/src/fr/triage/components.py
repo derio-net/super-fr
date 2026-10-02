@@ -72,6 +72,11 @@ TABS_CSS = """
 .tabs [role="tab"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .tabs [role="tabpanel"] { padding: 4px 0 8px; }
 .tabs [role="tabpanel"] > h3 { margin: 12px 0 6px; font-size: 1rem; }
+/* The heading names the panel with no script; once the tab row is the label it stays
+   in the DOM for assistive tech but is visually hidden, so it does not repeat the tab. */
+.tabs.js [role="tabpanel"] > h3.panel-label { position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  border: 0; }
 """
 
 # Roving focus per the ARIA tabs pattern: arrows move and select, Home/End jump.
@@ -84,6 +89,7 @@ TABS_SCRIPT = """
     var panels = tabs.map(function (t) {
       return document.getElementById(t.getAttribute("aria-controls"));
     });
+    root.classList.add("js");
     function select(i, focus) {
       tabs.forEach(function (t, j) {
         t.setAttribute("aria-selected", j === i ? "true" : "false");
@@ -132,7 +138,7 @@ def tabs(group: str, label: str, panels: Sequence[tuple[str, str, str]], selecte
         )
         panel_html.append(
             f'<div role="tabpanel" id="{_esc(panel_id)}" aria-labelledby="{_esc(tab_id)}" '
-            f'tabindex="0">{body}</div>'
+            f'tabindex="0"><h3 class="panel-label">{_esc(text)}</h3>{body}</div>'
         )
     return (
         f'<div class="tabs" data-tabs>'

@@ -21,7 +21,7 @@ Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo
 |---|---|---|
 | `facts.json` | `fr triage collect` | what the forge says: open issues, labels, linked PRs (no stages) |
 | `judgements.yaml` | **you**, plus the `batch` verbs for `batches:` | tiers, per-issue rankings and `kind`, patterns, `features`, batches |
-| `triage.html`, `snapshots/` | `fr triage render` | the board, built from both; one snapshot per render (latest 30) |
+| `triage.html`, `snapshots/` | `fr triage render` | the board, built from both; a snapshot per render (latest 30), none if identical to the latest: a re-render keeps the diff against the last different one |
 
 Stages (`backlog`, `blocked`, `in-progress`, `pr-draft`, `pr-ready`, `merged`, `closed`) are derived by `check` and `render`, never stored. Never set one, and never write facts yourself.
 

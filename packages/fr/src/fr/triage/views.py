@@ -183,8 +183,11 @@ def needs_you(facts: Facts, judgements: Judgements) -> list[Need]:
 
     for b in judgements.batches:
         repo = snap.repos.get(b.id)
+        # Only a batch with a `wave` is one the driver handles by default; an older
+        # batch merged by hand would otherwise carry this row forever.
         if (
-            snap.stages.get(b.id) not in LANDED
+            b.wave is None
+            or snap.stages.get(b.id) not in LANDED
             or repo is None
             or closeout_event(b) is not None
             or any(e.kind == "post_merge" for e in b.events)

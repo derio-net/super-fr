@@ -631,6 +631,8 @@ def _since_section(since: SnapshotDiff | None) -> str:
             ("Figures changed", [f"{n}: {a} -> {b}" for n, a, b in since.figures_changed]),
         ]
         body = "".join(f"<h3>{t}</h3>{_bullets(items)}" for t, items in groups if items)
+    if since is not None and since.acceptance_note:
+        body += f'<p class="quiet">{esc(since.acceptance_note)}</p>'
     return f"{head}{body}</section>"
 
 

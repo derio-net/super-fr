@@ -178,6 +178,27 @@ def test_removing_the_driver_signal_removes_the_row() -> None:
     assert not [r for r in needs_you(f2, jd) if r.kind == "failing-ci"]
 
 
+def _merged_by_hand(**kw: object) -> tuple[Facts, Judgements]:
+    merged = pr(10, "feat/batch-old", state="MERGED", merged_at="2026-09-01T09:00:00Z")
+    f = facts(
+        [issue(1, state="closed", prs=[merged])],
+        config={"example-org/widgets": {"post_merge": ["make", "deploy"]}},
+    )
+    return f, judgements({"widgets#1": j(1)}, [batch("old", [1], events=[dispatch("old")], **kw)])
+
+
+def test_an_unwaved_old_merged_batch_has_no_post_merge_row() -> None:
+    f, jd = _merged_by_hand()
+    assert not [r for r in needs_you(f, jd) if r.kind == "post-merge"]
+
+
+def test_a_waved_merged_batch_gets_the_row_and_says_when_it_applies() -> None:
+    f, jd = _merged_by_hand(wave=1)
+    rows = [r for r in needs_you(f, jd) if r.kind == "post-merge"]
+    assert [r.ref for r in rows] == ["old"]
+    assert "it failed, or no driver is running" in rows[0].text
+
+
 def test_there_is_no_operator_answer_row_because_no_deterministic_signal_exists() -> None:
     """R18's 'waiting on an operator answer' is not in the facts or the driver's
     snapshot (decision p4-operator-answer-not-derivable); a row of that kind must
@@ -341,6 +362,27 @@ def test_with_scripts_disabled_every_wave_is_shown() -> None:
     assert tablist is not None and " hidden" in tablist.group(0), (
         "the tab row is inert without a script, so it is hidden until one runs"
     )
+    labels = re.findall(
+        r'<div[^>]*role="tabpanel"[^>]*>\s*<h3 class="panel-label">([^<]+)</h3>', sect
+    )
+    tab_texts = re.findall(r'role="tab"[^>]*>([^<]+)</button>', sect)
+    assert labels == tab_texts and len(labels) == len(panels), "every pane names its wave"
+    assert all(t.startswith("Wave ") or t == "No wave" for t in labels)
+
+
+def test_with_scripts_enabled_the_label_is_visually_hidden_but_stays_in_the_dom() -> None:
+    page = render(*busy())
+    script = next(
+        s for s in re.findall(r"<script\b[^>]*>(.*?)</script>", page, flags=re.S) if "tablist" in s
+    )
+    assert 'classList.add("js")' in script, "the script marks the component as live"
+    css = re.search(r"<style>(.*?)</style>", page, flags=re.S)
+    assert css is not None
+    rule = re.search(r"\.tabs\.js [^{]*panel-label\s*\{([^}]*)\}", css.group(1))
+    assert rule is not None and "clip" in rule.group(1)
+    assert "display: none" not in rule.group(1), "assistive tech still reads it"
+    sect = _section(page, "waves")
+    assert sect.count('class="panel-label"') == len(re.findall(r'role="tabpanel"', sect))
 
 
 def test_the_tab_script_hides_panels_with_the_hidden_attribute_and_handles_the_keys() -> None:

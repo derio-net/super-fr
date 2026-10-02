@@ -23,15 +23,15 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from fr.triage.batch import derive_batch_stage
 from fr.triage.check import classify
-from fr.triage.errors import TriageError
 from fr.triage.stage import IN_FLIGHT
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Callable, Iterable, Iterator, Mapping
 
     from fr.triage.model import Facts, Judgements, PullRequest
 
 KEEP = 30
+ACCEPTANCE_UNTRACKED = "acceptance rows: not tracked for this scope"
 SNAPSHOT_DIR = "snapshots"
 _STAMP = "%Y%m%dT%H%M%S%fZ"
 
@@ -72,6 +72,7 @@ class SnapshotDiff:
     stage_changes: list[str]
     acceptance_moved: list[str]
     figures_changed: list[tuple[str, int, int]]
+    acceptance_note: str | None = None  # set when the new board tracks no acceptance rows
 
     @property
     def empty(self) -> bool:
@@ -158,9 +159,12 @@ def acceptance_rows(matrix: Path | None) -> dict[str, str] | None:
 # --------------------------------------------------------------------- storing
 
 
-def store_snapshot(state_dir: Path, snap: Snapshot, now: datetime) -> Path:
+def store_snapshot(
+    state_dir: Path, snap: Snapshot, now: datetime, *, warn: Callable[[str], None] | None = None
+) -> Path:
     """Write *snap* under `<state_dir>/snapshots/` named for *now* (UTC), then drop all
-    but the latest `KEEP`. Retention counts file names, readable or not."""
+    but the latest `KEEP`. Retention counts file names, readable or not. Pruning is
+    best-effort: a file that cannot be removed is reported through *warn*, never raised."""
     target = state_dir / SNAPSHOT_DIR
     target.mkdir(parents=True, exist_ok=True)
     path = target / f"{now.astimezone(UTC).strftime(_STAMP)}.json"
@@ -169,21 +173,57 @@ def store_snapshot(state_dir: Path, snap: Snapshot, now: datetime) -> Path:
         try:
             old.unlink()
         except OSError as exc:
-            raise TriageError(f"cannot prune old snapshot {old}: {exc}") from exc
+            if warn is not None:
+                warn(f"cannot prune old snapshot {old}: {exc}")
     return path
+
+
+def _readable(state_dir: Path) -> Iterator[Snapshot]:
+    target = state_dir / SNAPSHOT_DIR
+    if not target.is_dir():
+        return
+    for path in sorted(target.glob("*.json"), reverse=True):
+        try:
+            yield Snapshot.model_validate_json(path.read_text(encoding="utf-8"))
+        except (ValidationError, OSError, UnicodeDecodeError):
+            continue
 
 
 def latest_snapshot(state_dir: Path) -> Snapshot | None:
     """The newest READABLE snapshot, or None. A corrupt one is skipped as absent."""
-    target = state_dir / SNAPSHOT_DIR
-    if not target.is_dir():
+    return next(_readable(state_dir), None)
+
+
+def previous_snapshot(state_dir: Path, new: Snapshot) -> Snapshot | None:
+    """What *new* is diffed against: the newest readable snapshot that DIFFERS from it,
+    so a re-render with nothing new keeps showing the last real change. When every
+    readable one is identical, the latest (an empty diff); None when there is none."""
+    latest: Snapshot | None = None
+    for snap in _readable(state_dir):
+        if snap != new:
+            return snap
+        latest = latest or snap
+    return latest
+
+
+def matrix_for_scope(scope_repo: str | None, cwd: Path) -> Path | None:
+    """The acceptance matrix to read for a scope: the checkout containing *cwd*'s
+    `docs/acceptance/matrix.yaml`, but only when the scope is the single repo
+    *scope_repo* (OWNER/REPO) and that checkout's `origin` names it. A matrix is one
+    repo's; reading it for any other scope would record unrelated rows."""
+    if scope_repo is None:
         return None
-    for path in sorted(target.glob("*.json"), reverse=True):
-        try:
-            return Snapshot.model_validate_json(path.read_text(encoding="utf-8"))
-        except (ValidationError, OSError, UnicodeDecodeError):
-            continue
-    return None
+    from fr.triage.gitseam import GitError, git, repo_of_url
+
+    try:
+        top = Path(git(["rev-parse", "--show-toplevel"], cwd).strip())
+        origin = repo_of_url(git(["remote", "get-url", "origin"], top).strip())
+    except GitError:
+        return None
+    if origin is None or origin.lower() != scope_repo.lower():
+        return None
+    matrix = top / "docs" / "acceptance" / "matrix.yaml"
+    return matrix if matrix.is_file() else None
 
 
 # ---------------------------------------------------------------------- diffing
@@ -228,4 +268,5 @@ def diff_snapshots(previous: Snapshot | None, new: Snapshot) -> SnapshotDiff | N
         for name, value in new.figures.items()
         if previous.figures.get(name, 0) != value
     ]
-    return SnapshotDiff(done, filed, stages, moved, changed)
+    note = ACCEPTANCE_UNTRACKED if new.acceptance is None else None
+    return SnapshotDiff(done, filed, stages, moved, changed, note)
