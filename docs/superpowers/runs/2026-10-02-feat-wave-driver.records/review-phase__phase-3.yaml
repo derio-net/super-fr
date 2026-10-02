@@ -1,0 +1,72 @@
+schema_version: 7
+run: 2026-10-02-feat-wave-driver
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: review
+  id: review-p3
+  title: 'phase 3 review: 7 findings (4 in scope, fixed; 3 out of scope)'
+  body: Independent review of 155eb479..HEAD against R15 and design H. The group scope, facts schema 4 (schema 3 still loads), the state-directory rule, the repeated-name refusal, per-repo collect with
+    a failing repo skipped, and the shared cap were verified; 641 triage tests passed in the reviewer's run. In-scope findings were fixed in 76de055b.
+- kind: finding
+  id: rh-1
+  title: The drive refusal test cannot tell 'every group repo' from 'repos with batches'
+  body: The stricter rule (every repo of a group needs a --checkout) was not pinned by a test.
+  review_scope: in
+- kind: finding
+  id: rh-2
+  title: Cap and refusal tests partly pass without new driver code
+  body: The cap was already global; the tests are legitimate regression guards.
+  review_scope: out
+- kind: finding
+  id: rh-3
+  title: Group strictness applies to a plain plan print and was undocumented
+  body: Spec-conformant, but the skill should say it.
+  review_scope: in
+- kind: finding
+  id: rh-4
+  title: Scope.group keeps whichever casing came last
+  body: scope.target, repos and facts.repos depended on input casing and order.
+  review_scope: in
+- kind: finding
+  id: rh-5
+  title: Unrelated SKILL.md rewrap churn
+  body: The group change re-joined unrelated wrapped lines and enlarged the mirror diff.
+  review_scope: in
+- kind: finding
+  id: rh-6
+  title: Facts schema 4 is stamped for repo and org scopes too
+  body: Spec-mandated; facts.json is a recollectable cache.
+  review_scope: out
+- kind: finding
+  id: rh-7
+  title: No check that facts.kind matches the requested scope
+  body: Pre-existing for repo and org scopes.
+  review_scope: out
+resolves:
+- id: rh-1
+  state: fixed
+  body: Fixed in 76de055b with tests.
+- id: rh-3
+  state: fixed
+  body: Fixed in 76de055b with tests.
+- id: rh-4
+  state: fixed
+  body: Fixed in 76de055b with tests.
+- id: rh-5
+  state: fixed
+  body: Fixed in 76de055b with tests.
+- id: rh-2
+  state: out-of-scope
+  body: The cap was already global; the tests are legitimate regression guards.
+- id: rh-6
+  state: out-of-scope
+  body: Spec-mandated; facts.json is a recollectable cache.
+- id: rh-7
+  state: out-of-scope
+  body: Pre-existing for repo and org scopes.
+evidence:
+  review: review-p3
+  reviewer: a56ed763652174b78
+  model: claude-sonnet-5-5
