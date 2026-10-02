@@ -17,3 +17,11 @@ One class, three sites: the release checks the diff, not the code running at the
 ### f31ec21494d1 · ruled-out · A curated version-sensitive test subset for the release job
 
 The issue offered 'the suite, or a fast subset'. Rejected: a hand-picked subset is a literal list that goes stale as the code moves, the exact class of the <5.0.0 ceiling. The full suite costs ~10 min per release (4 CI shards x 2-3 min); release.yml gets budget_seconds: 900 in .github/ci-budget.yaml instead.
+
+<!-- fr:journal kind=finding scope=debug id=release-confidence-fix created=2026-10-02T16:46:34+00:00 state=fixed -->
+### release-confidence-fix · finding [fixed] · Staged-tree suite before push; create pre-flight; one pre-release-aware membership test; [project] spellings
+
+- #854: release.py Commands.test = _run_staged_tests: probes importlib.metadata.version('fr') == new under uv run --locked, then the whole suite; check_staged_suite raises before push() (commit still local, main/tags untouched). Pinned by test_release_script.py (red path, ordering, no-release no-op, race retest, default runner) and test_release_workflow.py (header, budget).
+- #855.1: plan_ops._preflight_fr_version_error refuses before any write; pinned by test_an_explicit_constraint_excluding_the_installed_fr_writes_nothing (tree + git status unchanged).
+- #855.2: fr.version_floor.admits (prereleases=True) at all five parser/widen_ceiling sites; pinned under an emulated packaging-25 default plus a src tripwire against bare membership tests.
+- #681: _PROJECT_HEADER_RE allows inner whitespace; _DOTTED_VERSION_RE rewrites root-table project.version; usage lines read 'uv run --no-project python'.
