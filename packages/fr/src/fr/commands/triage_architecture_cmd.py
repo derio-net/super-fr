@@ -78,7 +78,7 @@ def render_command(
     """Write architecture.html: the snapshot timeline, the measured sections, then the
     authored fragments `architecture/manifest.yaml` names, in that order.
 
-    Line counts are measured with `git ls-tree` and `git show` at each subsystem's
+    Line counts are measured with `git ls-tree` and `git grep` at each subsystem's
     `then_ref` and at --now-ref; every measurement names its commit, and a figure that
     cannot be measured is an em dash.
     """
@@ -108,6 +108,11 @@ def render_command(
     notes = [
         f"manifest entry {name} has no file in {ARCHITECTURE_DIR}/" for name in resolved.missing
     ]
+    if resolved.appended:
+        notes.append(
+            f"the manifest does not name {', '.join(resolved.appended)}; they are shown after "
+            "the sections it names, in the default order, before the fragments"
+        )
     for note in notes:
         _warn(note)
     out = target / PAGE_FILE

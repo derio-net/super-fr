@@ -134,6 +134,79 @@ def test_subsystems_yaml_is_optional_and_a_bad_one_is_refused(tmp_path: Path) ->
         load_subsystems(bad)
 
 
+@pytest.fixture
+def edgy(tmp_path: Path) -> Checkout:
+    """A repo with every edge the measurement must classify, committed once."""
+    repo = tmp_path / "edgy"
+    repo.mkdir()
+    _git(repo, "init", "--quiet", "--initial-branch=main")
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(repo, "config", k, v)
+    _write(repo, {"src/plain.py": 3})
+    (repo / "src" / "blob.bin").write_bytes(b"\x00\x01\x02\xff" * 64 + b"\nmore\n")
+    (repo / "src" / "caf\u00e9.py").write_text("one\ntwo\n", encoding="utf-8")
+    (repo / "src" / "ff.txt").write_text("a\x0cb\nc\u2028d\ne\n", encoding="utf-8")
+    (repo / "src" / "empty.py").write_text("", encoding="utf-8")
+    (repo / "src" / "link.py").symlink_to("plain.py")
+    _git(repo, "add", ".")
+    # a gitlink entry, as a submodule leaves in the tree (no .gitmodules needed)
+    _git(
+        repo, "update-index", "--add", "--cacheinfo",
+        "160000,1234567890123456789012345678901234567890,src/vendored",
+    )  # fmt: skip
+    _git(repo, "commit", "--quiet", "-m", "edge")
+    return Checkout(repo)
+
+
+def _src(checkout: Checkout) -> Measure | None:
+    subs = Subsystems.model_validate(
+        {"subsystems": [{"name": "src", "path": ["src/**"], "then_ref": "HEAD"}]}
+    )
+    return measure_subsystems(checkout, subs, now_ref="HEAD")["src"].now
+
+
+def test_binaries_symlinks_and_submodules_are_not_counted(edgy: Checkout) -> None:
+    m = _src(edgy)
+    assert m is not None
+    # plain.py 3 + café.py 2 + ff.txt 3 (form feed and U+2028 are not line breaks) + empty 0
+    assert (m.files, m.lines) == (4, 8)
+
+
+def test_a_non_ascii_path_is_counted_not_quoted_away(edgy: Checkout) -> None:
+    subs = Subsystems.model_validate(
+        {"subsystems": [{"name": "cafe", "path": ["src/caf*"], "then_ref": "HEAD"}]}
+    )
+    now = measure_subsystems(edgy, subs, now_ref="HEAD")["cafe"].now
+    assert now is not None and (now.files, now.lines) == (1, 2)
+
+
+def test_measurement_spawns_a_constant_number_of_processes(
+    edgy: Checkout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.triage.gitseam as seam
+
+    calls: list[list[str]] = []
+    real = subprocess.run
+
+    def spy(argv: list[str], *a: Any, **k: Any) -> Any:
+        calls.append(list(argv))
+        return real(argv, *a, **k)
+
+    monkeypatch.setattr(seam.subprocess, "run", spy)
+    _src(edgy)
+    assert len(calls) <= 5, calls  # not per file
+
+
+def test_the_binary_decode_failure_is_a_dash_never_a_crash(
+    edgy: Checkout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(self: Checkout, ref: str) -> Any:
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr(Checkout, "text_line_counts", boom)
+    assert _src(edgy) is None
+
+
 # ---------------------------------------------------------------- the page itself
 
 
@@ -418,7 +491,8 @@ def test_manifest_resolves_generated_names_and_fragment_files_in_order(tmp_path:
         second__html="<p>two</p>",
     )
     resolved = resolve_manifest(d)
-    assert resolved.order == ["waves", "overview.html", "size-table", "second.html"]
+    named = ["waves", "overview.html", "size-table", "second.html"]
+    assert resolved.order == [*named, *(g for g in GENERATED if g not in named)]
     assert resolved.fragments == {"overview.html": "<p>one</p>", "second.html": "<p>two</p>"}
     assert resolved.missing == []
 
@@ -459,6 +533,90 @@ def test_well_formed_fragments_with_void_and_self_closing_tags_pass(tmp_path: Pa
         ),
     )
     assert "f.html" in resolve_manifest(d).fragments
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "<style>p{color:red}</style>",
+        '<link rel="stylesheet" href="x.css">',
+        '<iframe src="https://example.com"></iframe>',
+        '<object data="x.swf"></object>',
+        '<embed src="x.swf">',
+        '<meta http-equiv="refresh" content="0">',
+        '<base href="https://example.com/">',
+        '<form action="/x"><p>x</p></form>',
+        "<head><p>x</p></head>",
+        "<body><p>x</p></body>",
+        "<title>Page</title>",
+        '<p onclick="go()">x</p>',
+        '<svg><g onload="go()"></g></svg>',
+        '<a href="javascript:alert(1)">x</a>',
+        '<a href="  JaVa\tScript:alert(1)">x</a>',
+        '<img src="data:text/html;base64,AAAA" alt="">',
+        '<svg><a xlink:href="javascript:alert(1)"><text>x</text></a></svg>',
+    ],
+)
+def test_forbidden_constructs_are_each_refused(tmp_path: Path, text: str) -> None:
+    d = _arch(tmp_path, "sections:\n  - f.html\n", f__html=text)
+    with pytest.raises(TriageError, match=r"f\.html"):
+        resolve_manifest(d)
+
+
+def test_a_title_inside_an_svg_is_an_accessible_name_and_allowed(tmp_path: Path) -> None:
+    d = _arch(
+        tmp_path,
+        "sections:\n  - f.html\n",
+        f__html='<svg viewBox="0 0 4 4"><title>Flow of work</title><rect/></svg>',
+    )
+    assert "f.html" in resolve_manifest(d).fragments
+
+
+def test_ordinary_links_and_https_urls_are_allowed(tmp_path: Path) -> None:
+    d = _arch(
+        tmp_path,
+        "sections:\n  - f.html\n",
+        f__html=(
+            '<p><a href="https://example.com/x">x</a> '
+            '<img src="data:image/png;base64,AA" alt=""></p>'
+        ),
+    )
+    assert "f.html" in resolve_manifest(d).fragments
+
+
+def test_a_self_closing_non_void_html_tag_is_refused_with_line_and_tag(tmp_path: Path) -> None:
+    d = _arch(tmp_path, "sections:\n  - f.html\n", f__html="<p>a</p>\n<div/>\n")
+    with pytest.raises(TriageError, match=r"<div/>.*line 2|line 2.*<div/>"):
+        resolve_manifest(d)
+
+
+def test_self_closing_is_fine_on_svg_shapes(tmp_path: Path) -> None:
+    d = _arch(tmp_path, "sections:\n  - f.html\n", f__html="<svg><g/><circle/></svg><br/>")
+    assert "f.html" in resolve_manifest(d).fragments
+
+
+def test_a_manifest_naming_only_fragments_keeps_every_generated_section(tmp_path: Path) -> None:
+    d = _arch(tmp_path, "sections:\n  - one.html\n", one__html="<p>1</p>")
+    resolved = resolve_manifest(d)
+    assert resolved.order == ["one.html", *GENERATED]
+    assert resolved.appended == list(GENERATED)
+    page = _page(fragments=[("one.html", "<p>1</p>")])
+    assert _pos(page, 'id="summary"') < _pos(page, 'data-fragment="one.html"')  # groups fixed
+
+
+def test_appended_sections_are_reported_on_the_page_by_the_command(
+    tmp_path: Path, checkout: Checkout
+) -> None:
+    state = _state(tmp_path)
+    arch = state / "architecture"
+    arch.mkdir()
+    (arch / "manifest.yaml").write_text("sections:\n  - one.html\n", encoding="utf-8")
+    (arch / "one.html").write_text("<p>1</p>", encoding="utf-8")
+    result = _run(state, checkout)
+    assert result.exit_code == 0, result.output
+    page = (state / "architecture.html").read_text(encoding="utf-8")
+    assert 'id="summary"' in page and 'id="operator-actions"' in page
+    assert "does not name" in page and "summary" in page
 
 
 def test_a_fragment_path_may_not_leave_the_architecture_directory(tmp_path: Path) -> None:
@@ -570,3 +728,30 @@ def test_render_outside_a_git_checkout_dashes_the_measurements(tmp_path: Path) -
     page = (state / "architecture.html").read_text(encoding="utf-8")
     table = page[_pos(page, 'id="size-table"') :]
     assert DASH in table
+
+
+@pytest.mark.parametrize("body", ["{not json", '{"schema": 1}', "\xff\xfe"])
+def test_a_corrupt_origins_facts_file_is_exit_2_naming_it(
+    tmp_path: Path, checkout: Checkout, body: str
+) -> None:
+    state = _state(tmp_path)
+    (state / "origins-facts.json").write_bytes(body.encode("latin-1"))
+    result = _run(state, checkout)
+    assert result.exit_code == 2
+    assert "origins-facts.json" in result.output
+    assert not (state / "architecture.html").exists()
+
+
+def test_the_page_states_the_counting_rule_and_labels_utc(
+    tmp_path: Path, checkout: Checkout
+) -> None:
+    state = _state(tmp_path)
+    (state / "subsystems.yaml").write_text(yaml.safe_dump(SUBSYSTEMS), encoding="utf-8")
+    f, jd = busy()
+    store_snapshot(state, take_snapshot(f, jd, acceptance=None), datetime(2026, 9, 25, tzinfo=UTC))
+    assert _run(state, checkout).exit_code == 0
+    page = (state / "architecture.html").read_text(encoding="utf-8")
+    assert "binary files, symlinks and submodules are not counted" in page
+    assert "a moved file moves its lines between subsystems" in page
+    assert "<th>Source lines" not in page and "Source lines" not in page
+    assert "UTC" in page[_pos(page, 'id="snapshot-timeline"') : _pos(page, 'id="summary"')]

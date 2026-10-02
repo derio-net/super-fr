@@ -17,6 +17,7 @@ operation goes through the `GhClient` adapter (§3.J), and
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
 import shlex
 import subprocess
@@ -37,6 +38,19 @@ def _run(argv: list[str], cwd: Path) -> str:
     if result.returncode != 0:
         words = (result.stderr or result.stdout).strip() or f"exit {result.returncode}"
         raise GitError(f"`{shlex.join(argv)}` failed in {cwd}: {words}")
+    return result.stdout
+
+
+def git_bytes(args: list[str], cwd: Path, *, ok: tuple[int, ...] = (0,)) -> bytes:
+    """Run `git <args>` and return stdout as raw bytes (for `-z` output whose paths and
+    contents are not necessarily UTF-8); a return code outside *ok* raises `GitError`."""
+    try:
+        result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=False)
+    except OSError as exc:
+        raise GitError(f"cannot run git: {exc}") from exc
+    if result.returncode not in ok:
+        words = result.stderr.decode("utf-8", "replace").strip() or f"exit {result.returncode}"
+        raise GitError(f"`git {shlex.join(args)}` failed in {cwd}: {words}")
     return result.stdout
 
 
@@ -86,6 +100,7 @@ class Checkout:
 
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._line_counts: dict[str, dict[str, int]] = {}
 
     @classmethod
     def at(cls, path: Path | None) -> Checkout:
@@ -147,9 +162,32 @@ class Checkout:
         except GitError:
             return None
 
-    def files_at(self, ref: str) -> list[str]:
-        """Every file path in the tree at *ref* (`git ls-tree -r --name-only`)."""
-        return git(["ls-tree", "-r", "--name-only", ref], self.path).splitlines()
+    def text_line_counts(self, ref: str) -> dict[str, int]:
+        """Path -> line count of every regular text file in the tree at *ref*.
+
+        Two processes per ref, cached: `git ls-tree -r -l -z` (modes and sizes, paths
+        unquoted) and `git grep -I -c '' -z` (one exact newline-based count per text
+        file). Symlinks (mode 120000) and submodules (160000) are left out, binary files
+        are skipped by `-I`, and an empty regular file counts 0 lines (its size is 0)."""
+        cached = self._line_counts.get(ref)
+        if cached is not None:
+            return cached
+        listing = git_bytes(["ls-tree", "-r", "-l", "-z", ref], self.path)
+        regular: dict[str, int] = {}  # path -> size
+        for entry in listing.split(b"\0"):
+            meta, _, raw = entry.partition(b"\t")
+            fields = meta.split()
+            if len(fields) == 4 and fields[0] in (b"100644", b"100755"):
+                regular[os.fsdecode(raw)] = int(fields[3]) if fields[3].isdigit() else -1
+        counted = git_bytes(["grep", "-I", "-c", "-z", "", ref], self.path, ok=(0, 1))
+        counts = {name: 0 for name, size in regular.items() if size == 0}
+        prefix = f"{ref}:"
+        for match in re.finditer(rb"([^\0]*)\0(\d+)\n", counted):
+            path = os.fsdecode(match[1]).removeprefix(prefix)
+            if path in regular:
+                counts[path] = int(match[2])
+        self._line_counts[ref] = counts
+        return counts
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return git_ok(["merge-base", "--is-ancestor", ancestor, descendant], self.path)

@@ -7,15 +7,23 @@ state directory: `facts.json`, `judgements.yaml`, `origins-facts.json` and `orig
 (both optional), `subsystems.yaml` (optional), `architecture/manifest.yaml` (optional)
 and the fragments it names, and the snapshots.
 
-Everything measured comes from a read: line counts from `git ls-tree` and `git show`
-at two refs (through `fr.triage.gitseam`, the one module that starts processes), each
+Everything measured comes from a read: line counts from `git ls-tree` and `git grep` at
+two refs (through `fr.triage.gitseam`, the one module that starts processes), each
 measurement naming its commit; the operator actions are `views.needs_you`, the very
 function the board uses. A figure that was not measured is an em dash, never a zero.
+Lines are counted as `git grep -c ''` counts them (every `\\n`-terminated line, plus a
+last unterminated one) over regular text files the subsystem's globs match; binary files,
+symlinks and submodules are not counted.
 
-Authored fragments are HTML files; each is parsed and refused when malformed, then
-inlined in manifest order inside the shared theme shell. The page's text is escaped
-here; a fragment is the agent's own markup, so it may not carry a script or a document
-element (`<html>`, `<head>`, `<body>`, `<title>`).
+Authored fragments are HTML files, inlined in manifest order inside the shared theme
+shell. What `validate_fragment` checks, and all it checks: the fragment is well-formed
+(every tag closed in order; a self-closing tag only on a void element or inside `<svg>`)
+and it carries none of: `<script>`, `<style>`, `<link>`, `<iframe>`, `<object>`,
+`<embed>`, `<meta>`, `<base>`, `<form>`, `<html>`, `<head>`, `<body>`, a page-level
+`<title>` (a `<title>` inside `<svg>` is allowed), an event-handler attribute (`on*`),
+or a `javascript:` / `data:text/html` URL in `href`, `src` or `xlink:href`. It is not a
+sanitiser: a fragment must not carry untrusted text, and whoever writes one must
+HTML-escape anything that came from an issue title or any other outside source.
 """
 
 from __future__ import annotations
@@ -23,7 +31,7 @@ from __future__ import annotations
 import fnmatch
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -115,16 +123,15 @@ def _measure(checkout: Checkout, ref: str, globs: Sequence[str]) -> Measure | No
     if commit is None:
         return None
     try:
-        names = [n for n in checkout.files_at(ref) if _matches(n, globs)]
-        lines = 0
-        for name in names:
-            text = checkout.show(ref, name)
-            lines += len((text or "").splitlines())
-    except GitError:
-        return None
-    if not names:
+        counts = checkout.text_line_counts(ref)
+    except (GitError, UnicodeError):
+        return None  # a figure git could not give us exactly is a dash, never a guess
+    matched = [n for n in counts if _matches(n, globs)]
+    if not matched:
         return None  # nothing measured at that ref: a dash, not a zero
-    return Measure(ref=ref, commit=commit, files=len(names), lines=lines)
+    return Measure(
+        ref=ref, commit=commit, files=len(matched), lines=sum(counts[n] for n in matched)
+    )
 
 
 def measure_subsystems(
@@ -145,7 +152,16 @@ def measure_subsystems(
 _VOID = frozenset(
     "area base br col embed hr img input link meta param source track wbr".split()
 )  # fmt: skip
-_FORBIDDEN = frozenset({"html", "head", "body", "title", "script"})
+_FORBIDDEN = frozenset(
+    "script style link iframe object embed meta base form html head body".split()
+)  # fmt: skip
+_URL_ATTRS = frozenset({"href", "src", "xlink:href"})
+_BAD_URL = ("javascript:", "vbscript:", "data:text/html")
+
+
+def _bad_url(value: str) -> bool:
+    squeezed = "".join(c for c in value if c.isprintable() and not c.isspace()).lower()
+    return squeezed.startswith(_BAD_URL)
 
 
 class _Checker(HTMLParser):
@@ -158,15 +174,29 @@ class _Checker(HTMLParser):
         if self.error is None:
             self.error = f"{message} (line {self.getpos()[0]})"
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def _in_svg(self) -> bool:
+        return any(t == "svg" for t, _ in self.stack)
+
+    def _inspect(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in _FORBIDDEN:
             self._fail(f"<{tag}> is not allowed in a fragment")
-        elif tag not in _VOID:
+        elif tag == "title" and not self._in_svg():
+            self._fail("<title> is only allowed inside <svg> in a fragment")
+        for name, value in attrs:
+            if name.startswith("on"):
+                self._fail(f"the event-handler attribute {name} is not allowed on <{tag}>")
+            elif name in _URL_ATTRS and value is not None and _bad_url(value):
+                self._fail(f"a script or html URL in {name} on <{tag}> is not allowed")
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._inspect(tag, attrs)
+        if tag not in _VOID:
             self.stack.append((tag, self.getpos()[0]))
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in _FORBIDDEN:
-            self._fail(f"<{tag}> is not allowed in a fragment")
+        self._inspect(tag, attrs)
+        if tag not in _VOID and tag != "svg" and not self._in_svg():
+            self._fail(f"<{tag}/> is self-closing, which HTML ignores for a non-void tag")
 
     def handle_endtag(self, tag: str) -> None:
         if tag in _VOID:
@@ -200,11 +230,14 @@ class Resolved:
     order: list[str]
     fragments: dict[str, str] = field(default_factory=dict)
     missing: list[str] = field(default_factory=list)
+    appended: list[str] = field(default_factory=list)  # generated sections the manifest omits
 
 
 def resolve_manifest(arch_dir: Path) -> Resolved:
     """`architecture/manifest.yaml` and the fragments it names. No manifest means every
-    generated section in the default order and no fragments."""
+    generated section in the default order and no fragments. A generated section the
+    manifest does not name is appended in the default order (it renders before the
+    fragments, R20), never dropped; `appended` names them so the page can say so."""
     path = arch_dir / MANIFEST_FILE
     if not path.exists():
         return Resolved(order=list(GENERATED))
@@ -240,7 +273,10 @@ def resolve_manifest(arch_dir: Path) -> Resolved:
             raise TriageError(f"fragment {entry} cannot be read: {exc}") from exc
         validate_fragment(entry, text)
         fragments[entry] = text
-    return Resolved(order=order, fragments=fragments, missing=missing)
+    appended = [name for name in GENERATED if name not in order]
+    return Resolved(
+        order=[*order, *appended], fragments=fragments, missing=missing, appended=appended
+    )
 
 
 # ------------------------------------------------------------------------- page
@@ -306,7 +342,7 @@ article.subsystem ul { margin: 6px 0 0; padding-left: 18px; font-size: .85rem; }
 
 
 def _stamp(when: datetime) -> str:
-    return when.strftime("%Y-%m-%d %H:%M")
+    return when.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def _delta(a: int | None, b: int | None) -> str:
@@ -531,8 +567,10 @@ def _size_table(subsystems: Subsystems, measured: Mapping[str, Measured]) -> str
     )
     body = "".join(rows) or f'<tr><td colspan="7">{DASH} no subsystems.yaml</td></tr>'
     return (
-        '<section id="size-table"><h2>Size</h2><p class="src">Source lines per subsystem, '
-        "counted with <code>git ls-tree</code> and <code>git show</code> at the commits named; "
+        '<section id="size-table"><h2>Size</h2><p class="src">Lines: every line of every text file '
+        "matched by the subsystem's globs; binary files, symlinks and submodules are not "
+        "counted; a moved file moves its lines between subsystems. Counted with "
+        "<code>git ls-tree</code> and <code>git grep</code> at the commits named; "
         f"{DASH} is a figure that could not be measured.</p>"
         f'<div class="scroll"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
         "</div></section>"
