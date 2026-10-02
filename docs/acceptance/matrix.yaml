@@ -5708,6 +5708,9 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R13
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_harness_matrix.py
+    status: ci
+    notes: 'R13/R14: OpenCode observation rows partial, run-session-identity row, Hermes
+      edit gate partial; parity --check passes'
