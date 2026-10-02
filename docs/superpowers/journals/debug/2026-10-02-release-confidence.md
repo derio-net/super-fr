@@ -25,3 +25,8 @@ The issue offered 'the suite, or a fast subset'. Rejected: a hand-picked subset 
 - #855.1: plan_ops._preflight_fr_version_error refuses before any write; pinned by test_an_explicit_constraint_excluding_the_installed_fr_writes_nothing (tree + git status unchanged).
 - #855.2: fr.version_floor.admits (prereleases=True) at all five parser/widen_ceiling sites; pinned under an emulated packaging-25 default plus a src tripwire against bare membership tests.
 - #681: _PROJECT_HEADER_RE allows inner whitespace; _DOTTED_VERSION_RE rewrites root-table project.version; usage lines read 'uv run --no-project python'.
+
+<!-- fr:journal kind=finding scope=debug id=major-release-stale-own-plans created=2026-10-02T17:06:20+00:00 state=open -->
+### major-release-stale-own-plans · finding [open] · Simulated 6.0.0 release: the new gate refuses it (2 red); the repo's own live plans go stale at a major
+
+Ran the real _run_staged_tests on a scratch clone bumped to 6.0.0: probe reported 6.0.0, 7607 passed, 2 failed in test_install_opencode_agents.py. Both pass at the clone's pre-bump commit. Cause: live plans carry <6.0.0, the migration gate refuses install.sh's 'fr models apply' (cwd = repo), '|| true' hides it. A separate root cause from this batch, so not fixed here; filed as super-fr#861. The tree stayed clean after the full suite (git status empty), which settles the review's retry/untracked-files question.
