@@ -59,3 +59,10 @@ A failed devcontainer up now leaves a workspace that status lists, and the error
 ### fix-843 · finding [fixed] · #843 fixed: a newline is written first when info/exclude does not end in one
 
 Pinned by test_up_does_not_glue_patterns_onto_an_exclude_line_without_trailing_newline.
+
+<!-- fr:journal kind=review scope=debug id=ba856cfe61cb created=2026-10-02T17:08:07+00:00 -->
+### ba856cfe61cb · review · Independent adversarial review: 2 findings on #553 recovery, both fixed; #844/#578/#843 clean
+
+1. The drift check lived in `_fr_marker_valid`, which the Bash guards share, so a drifted worktree read as a base clone. The Hermes terminal guard then blocked `git checkout <registered>`, the recovery the deny recommends. Fixed: drift is now checked only in `fr_isolation_decide_edit`, and the shell stays open. Pinned by test_drifted_worktree_is_still_an_allowed_shell_context and test_switching_back_to_the_marker_branch_restores_edits.
+2. The second remedy, `fr isolation up --branch <head>`, fails while <head> is checked out in the drifted worktree: git refuses to add a second worktree for the same branch. Fixed: the message now says `git switch <registered>` first, then `up --branch <head>`, in the shell lib, the TS port and the reap hazard.
+Clean probes: no shell variable clobbering; `_merged_before` handles timezones; created_at carries over correctly; a half-built #578 workspace is warned about, never reaped; down works with no container; dry-run and live runs agree.
