@@ -5683,9 +5683,12 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R10
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_answered_by_no_default.py
+    status: ci
+    notes: 'R10/R11: no default at the record form, the flag form and the in-process
+      body; gates/check wording distinguishes observed from claimed'
   - id: opencode-visual-reads
     capability: visual evidence
     acceptance: On OpenCode, the visual witness observes screenshot reads and capture-script
