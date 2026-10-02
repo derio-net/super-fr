@@ -623,3 +623,78 @@ nothing to extract: the board has no chart or table helpers (its tables are boar
 ### no-refactor-p5-t3 · discovery · no-refactor-because P5.T3 (phase 5)
 
 acceptance row, mirrors and tripwires only: no production code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p5 created=2026-10-02T21:41:25+00:00 phase=5 -->
+### review-p5 · review · phase 5 review: 7 findings (6 in scope, fixed; 1 out of scope) (phase 5)
+
+Independent review of e8860c9e..HEAD against R10, R12, R20 and design E, with the real sample page opened in a browser at 1100px and 400px (filter, dark theme, conclusion links, no horizontal scroll). 841 triage tests passed in the reviewer's run. The chart legibility and table wrapping defects were observed in the browser. All in-scope findings were fixed in 92ec0f54 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rj-1 created=2026-10-02T21:41:25+00:00 phase=5 state=open review_scope=in -->
+### rj-1 · finding [open] (reviewer: in scope) · The filings-per-day chart scales to the container: giant with overlapping labels on a short window (phase 5)
+
+Observed in the browser: 5 days stretched to 1008px, date labels overlapping; the opposite at 30+ days on a phone.
+
+<!-- fr:journal kind=finding scope=plan id=rj-2 created=2026-10-02T21:41:25+00:00 phase=5 state=open review_scope=in -->
+### rj-2 · finding [open] (reviewer: in scope) · The issue table breaks words mid-word at phone width (phase 5)
+
+overflow-wrap:anywhere on every cell; the scroll wrapper never engaged.
+
+<!-- fr:journal kind=finding scope=plan id=rj-3 created=2026-10-02T21:41:25+00:00 phase=5 state=open review_scope=in -->
+### rj-3 · finding [open] (reviewer: in scope) · Org-scope truncation of the repo list is dropped silently (phase 5)
+
+collect_origins discarded the Truncation list from scope_repos.
+
+<!-- fr:journal kind=finding scope=plan id=rj-4 created=2026-10-02T21:41:25+00:00 phase=5 state=open review_scope=in -->
+### rj-4 · finding [open] (reviewer: in scope) · No test covers group or org scope, a skipped repo's warning, or the limit warnings (phase 5)
+
+New branches of collect_origins had no failing test if removed.
+
+<!-- fr:journal kind=finding scope=plan id=rj-5 created=2026-10-02T21:41:25+00:00 phase=5 state=open review_scope=in -->
+### rj-5 · finding [open] (reviewer: in scope) · Widening ISSUE_LIST_FIELDS affects every issue-list verb (phase 5)
+
+The shared constant now asked for stateReason for triage collect too.
+
+<!-- fr:journal kind=finding scope=plan id=rj-6 created=2026-10-02T21:41:25+00:00 phase=5 state=open review_scope=in -->
+### rj-6 · finding [open] (reviewer: in scope) · Skill text slightly overstates what the engine does (phase 5)
+
+Missing: a bad origins.yaml fails every verb that reads it; the duplicate check is prose-only.
+
+<!-- fr:journal kind=finding scope=plan id=rj-7 created=2026-10-02T21:41:25+00:00 phase=5 state=open review_scope=out -->
+### rj-7 · finding [open] (reviewer: out of scope) · Closing-PR and issue lists rely on newest-first 1000-row pages (phase 5)
+
+Matches how the existing collector treats limits; the limit warning covers truncation.
+
+<!-- fr:journal kind=finding scope=plan id=rj-1-resolved created=2026-10-02T21:41:25+00:00 phase=5 state=fixed resolves=rj-1 -->
+### rj-1-resolved · finding [fixed] · resolves rj-1: The filings-per-day chart scales to the container: giant with overlapping labels on a short window (phase 5)
+
+Fixed in 92ec0f54 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rj-2-resolved created=2026-10-02T21:41:25+00:00 phase=5 state=fixed resolves=rj-2 -->
+### rj-2-resolved · finding [fixed] · resolves rj-2: The issue table breaks words mid-word at phone width (phase 5)
+
+Fixed in 92ec0f54 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rj-3-resolved created=2026-10-02T21:41:25+00:00 phase=5 state=fixed resolves=rj-3 -->
+### rj-3-resolved · finding [fixed] · resolves rj-3: Org-scope truncation of the repo list is dropped silently (phase 5)
+
+Fixed in 92ec0f54 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rj-4-resolved created=2026-10-02T21:41:25+00:00 phase=5 state=fixed resolves=rj-4 -->
+### rj-4-resolved · finding [fixed] · resolves rj-4: No test covers group or org scope, a skipped repo's warning, or the limit warnings (phase 5)
+
+Fixed in 92ec0f54 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rj-5-resolved created=2026-10-02T21:41:25+00:00 phase=5 state=fixed resolves=rj-5 -->
+### rj-5-resolved · finding [fixed] · resolves rj-5: Widening ISSUE_LIST_FIELDS affects every issue-list verb (phase 5)
+
+Fixed in 92ec0f54 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rj-6-resolved created=2026-10-02T21:41:25+00:00 phase=5 state=fixed resolves=rj-6 -->
+### rj-6-resolved · finding [fixed] · resolves rj-6: Skill text slightly overstates what the engine does (phase 5)
+
+Fixed in 92ec0f54 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=rj-7-resolved created=2026-10-02T21:41:25+00:00 phase=5 state=open resolves=rj-7 out_of_scope=true -->
+### rj-7-resolved · finding [out-of-scope] · resolves rj-7: Closing-PR and issue lists rely on newest-first 1000-row pages (phase 5)
+
+Matches the existing collector's limit handling; not caused by this change.
