@@ -549,9 +549,7 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`wave` and `after` need schema 3, but this file is stamped schema {self.schema_}"
             )
-        late = sorted(
-            {e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_3_EVENTS}
-        )
+        late = sorted({e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_3_EVENTS})
         if self.schema_ < 3 and late:
             raise ValueError(
                 f"`{'`, `'.join(late)}` events need schema 3, but this file is stamped "

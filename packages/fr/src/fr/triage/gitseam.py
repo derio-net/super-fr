@@ -6,9 +6,10 @@ merge's scratch worktree. Every `git` process they start is started HERE, and
 only here, so the §3.J tripwire can ban `subprocess` from every batch module
 while this one module keeps it (review r2p-f11).
 
-What this module may run is closed: `git`, plus the two commands a repo
-declares in its own `.fr/triage.yaml` `version` block (`set` and `relock`),
-run with a scratch worktree as cwd. It never runs a forge CLI: every forge
+What this module may run is closed: `git`, plus the commands a repo
+declares in its own `.fr/triage.yaml` (`version.set`, `version.relock`, run in a
+scratch worktree, and `post_merge`, run by the wave driver in the clone itself).
+It never runs a forge CLI: every forge
 operation goes through the `GhClient` adapter (§3.J), and
 `tests/unit/test_forge_adapter_batch_ops.py` pins that this file names none.
 """
@@ -19,6 +20,7 @@ import fnmatch
 import re
 import shlex
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from fr.triage.errors import TriageError
@@ -136,6 +138,39 @@ class Checkout:
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return git_ok(["merge-base", "--is-ancestor", ancestor, descendant], self.path)
+
+    # ------------------------------------------------------ the wave driver
+
+    def fast_forward(self) -> None:
+        """Fetch, then fast-forward the checked-out default branch to origin's
+        (wave-driver §B). A clone on any other branch is refused by name: the
+        driver never switches an operator's branch for them."""
+        self.fetch()
+        default = self.default_branch()
+        current = git(["rev-parse", "--abbrev-ref", "HEAD"], self.path).strip()
+        if current != default:
+            raise GitError(
+                f"{self.path} is on {current}, not {default}; the driver fast-forwards "
+                f"the default branch only — check out {default} there"
+            )
+        git(["merge", "--ff-only", "--quiet", f"origin/{default}"], self.path)
+
+    def released_since(self, when: datetime) -> bool:
+        """Whether `origin/<default>` carries a `release: ...` commit made at or after
+        *when* — the release commit that follows a merge (wave-driver §B step 2)."""
+        default = self.default_branch()
+        out = git(
+            ["log", f"origin/{default}", f"--since={when.isoformat()}", "--format=%s"], self.path
+        )
+        return any(line.startswith("release: ") for line in out.splitlines())
+
+    def run_command(self, argv: list[str]) -> str:
+        """Run the repo's declared `post_merge` argument list in this clone (R14).
+
+        An argument list, never a shell string: nothing here reaches a shell."""
+        if not argv:
+            raise GitError("an empty post_merge command was declared")
+        return _run(list(argv), self.path)
 
     # ------------------------------------------------------- scratch worktree
 

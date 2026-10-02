@@ -209,7 +209,8 @@ def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
     return any(f == run_file or f.endswith(f"/{event.run}.yaml") for f in pr.files)
 
 
-def _closeout(batch: Batch) -> CloseoutEvent | None:
+def closeout_event(batch: Batch) -> CloseoutEvent | None:
+    """The batch's close-out event, if it has one."""
     for e in reversed(batch.events):
         if isinstance(e, CloseoutEvent):
             return e
@@ -257,7 +258,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in merging:
             continue
-        event = _closeout(batch)
+        event = closeout_event(batch)
         if event is not None:
             continue
         closing += 1
@@ -278,7 +279,7 @@ def drive_pass(snap: Snapshot) -> Pass:
 
     # 3. Archive.
     for batch in snap.batches:
-        event = _closeout(batch)
+        event = closeout_event(batch)
         if event is None or stages.get(batch.id) not in LANDED:
             continue
         mine = [
@@ -299,7 +300,8 @@ def drive_pass(snap: Snapshot) -> Pass:
             )  # fmt: skip
 
     # 4. Dispatch.
-    in_flight = sum(1 for s in stages.values() if s in IN_FLIGHT) - len(merging)
+    driven = {b.id for b in snap.batches}
+    in_flight = sum(1 for b in driven if stages.get(b) in IN_FLIGHT) - len(merging)
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
@@ -327,7 +329,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             Action("dispatch", batch.id, f"wave {batch.wave if batch.wave is not None else '-'}")
         )
 
-    merged = sum(1 for s in stages.values() if s in LANDED)
+    merged = sum(1 for b in driven if stages.get(b) in LANDED)
     closing += len(merging)
     return Pass(
         actions=tuple(actions),

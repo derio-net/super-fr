@@ -30,11 +30,11 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr.triage.batch import last_dispatch
 from fr.triage.check import classify
 from fr.triage.collect import PR_LIMIT, Forge, GhForge, collect_facts
 from fr.triage.errors import TriageError
 from fr.triage.model import (
-    DispatchEvent,
     Facts,
     Judgements,
     PullRequest,
@@ -129,39 +129,50 @@ def collect_command(
 ) -> None:
     """Read the forge and write facts.json for the scope."""
     scope = _scope(repo, org)
-    target_dir = state_dir(scope, dir_override)
-    judgements = target_dir / "judgements.yaml"
     try:
-        loaded = load_judgements(judgements) if judgements.exists() else None
-        judged = list(loaded.issues) if loaded else []
-        # The branch and time of each batch whose last event is a dispatch (spec
-        # 2026-09-25-triage-batches §3.A): collect looks each one up by head,
-        # unless the previous facts already show it terminal (review r2p-f3).
-        branches = [
-            (b.repo_name, event.branch, event.at)
-            for b in (loaded.batches if loaded else [])
-            if b.events and isinstance(event := b.events[-1], DispatchEvent)
-        ]
-        facts = collect_facts(
-            make_forge(),
-            scope,
-            now=datetime.now(UTC),
-            judged=judged,
-            batch_branches=branches,
-            known_batch_prs=_previous_batch_prs(target_dir / "facts.json"),
-            pr_limit=pr_limit,
-        )
+        facts, out = collect_into(scope, state_dir(scope, dir_override), pr_limit=pr_limit)
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
+    _report(facts)
+    n_open = sum(1 for i in facts.issues if i.state == "open")
+    console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
+
+
+def collect_into(scope: Scope, target_dir: Path, *, pr_limit: int = PR_LIMIT) -> tuple[Facts, Path]:
+    """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
+
+    `collect` and the wave driver's every pass share it (wave-driver §B), so a
+    driver pass reads the forge exactly as `fr triage collect` does. Raises
+    `TriageError` on a refusal; writes nothing then.
+    """
+    judgements = target_dir / "judgements.yaml"
+    loaded = load_judgements(judgements) if judgements.exists() else None
+    judged = list(loaded.issues) if loaded else []
+    # The branch and time of each batch's last dispatch, unless it was cancelled
+    # since (spec 2026-09-25-triage-batches §3.A): collect looks each one up by
+    # head, unless the previous facts already show it terminal (review r2p-f3).
+    # Close-out and post_merge events may follow the dispatch (wave-driver §B).
+    branches = [
+        (b.repo_name, event.branch, event.at)
+        for b in (loaded.batches if loaded else [])
+        if b.events and b.events[-1].kind != "cancel" and (event := last_dispatch(b)) is not None
+    ]
+    facts = collect_facts(
+        make_forge(),
+        scope,
+        now=datetime.now(UTC),
+        judged=judged,
+        batch_branches=branches,
+        known_batch_prs=_previous_batch_prs(target_dir / "facts.json"),
+        pr_limit=pr_limit,
+    )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
     out.write_text(
         json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    _report(facts)
-    n_open = sum(1 for i in facts.issues if i.state == "open")
-    console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
+    return facts, out
 
 
 def _previous_batch_prs(path: Path) -> list[PullRequest]:

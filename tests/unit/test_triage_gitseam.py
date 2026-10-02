@@ -139,3 +139,57 @@ def test_merge_base_and_show_read_the_pr_side(tmp_path: Path) -> None:
     assert wt.show("HEAD", "a.txt") == "pr\n"
     assert wt.show(seed, "a.txt") == "a\n"
     assert wt.show(seed, "absent.txt") is None
+
+
+# ------------------------------------------------- the wave driver (§B, R14)
+
+
+def _pushed_elsewhere(tmp_path: Path, checkout: Checkout, message: str) -> None:
+    """A second clone pushes a commit to main, as a merge or a release would."""
+    other = tmp_path / "other"
+    _git(tmp_path, "clone", "--quiet", str(tmp_path / "origin.git"), str(other))
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(other, "config", k, v)
+    (other / "b.txt").write_text(message + "\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "--quiet", "-m", message)
+    _git(other, "push", "--quiet", "origin", "main")
+
+
+def test_fast_forward_brings_the_default_branch_up_to_origin(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _pushed_elsewhere(tmp_path, checkout, "merged batch")
+    checkout.fast_forward()
+    assert (checkout.path / "b.txt").read_text() == "merged batch\n"
+
+
+def test_fast_forward_refuses_a_checkout_on_another_branch(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _git(checkout.path, "checkout", "--quiet", "-b", "work")
+    with pytest.raises(GitError, match="work"):
+        checkout.fast_forward()
+
+
+def test_released_since_reads_a_release_commit_after_the_merge(tmp_path: Path) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    before = datetime.now(UTC) - timedelta(minutes=5)
+    assert not checkout.released_since(before)
+    _pushed_elsewhere(tmp_path, checkout, "release: v9.9.9")
+    checkout.fetch()
+    assert checkout.released_since(before)
+    assert not checkout.released_since(datetime.now(UTC) + timedelta(hours=1))
+
+
+def test_run_command_runs_an_argument_list_in_the_checkout(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    checkout.run_command(["git", "tag", "post-merge-ran"])
+    assert "post-merge-ran" in _git(checkout.path, "tag")
+    with pytest.raises(GitError, match="exit|failed"):
+        checkout.run_command(["git", "no-such-subcommand"])
+    with pytest.raises(GitError, match="empty"):
+        checkout.run_command([])
