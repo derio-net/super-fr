@@ -3118,14 +3118,27 @@ def _observed_model(attempt: UnitAttempt, key: str) -> UnitAttempt:
     observed = subagent_model(os.environ, attempt.session, attempt.agent)
     if observed is None or observed == attempt.model:
         return attempt
-    if attempt.model is not None:
+    if attempt.model is not None and _model_family(observed) != _model_family(attempt.model):
         err_console.print(
             f"[yellow]{key}: agent {attempt.agent} ran on {observed}, but the cursor "
-            f"recorded {attempt.model} (the tier's binding). fr records what ran. Pass "
-            "the bound model in the dispatch if the binding was meant.[/yellow]",
+            f"recorded {attempt.model}. fr records what ran. If the tier's binding was "
+            "meant, pass that model in the dispatch.[/yellow]",
             soft_wrap=True,
         )
     return attempt.model_copy(update={"model": observed})
+
+
+_MODEL_DATE = re.compile(r"-\d{8}$")
+
+
+def _model_family(model: str) -> str:
+    """`model` without a context-window suffix or a trailing snapshot date, so
+    a binding's `claude-haiku-4-5` and a transcript's
+    `claude-haiku-4-5-20251001` compare equal: the dispatch honoured the
+    binding, and a warning would be noise (review of gh#637)."""
+    from fr.usage.readers.claude_code import normalize_model
+
+    return _MODEL_DATE.sub("", normalize_model(model))
 
 
 def _build_member_brief(

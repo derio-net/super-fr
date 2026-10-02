@@ -110,37 +110,31 @@ def test_an_agent_claimed_earlier_is_observed_at_resolve(
     assert _code_attempt(repo).model == "claude-sonnet-5"
 
 
-def test_a_matching_binding_is_kept_silently(
+def test_a_dated_id_of_the_bound_model_is_a_match_not_a_mismatch(
     dispatched: tuple[Path, Path, Path, Path],
 ) -> None:
+    """Claude Code transcripts name some models with their date
+    (`claude-haiku-4-5-20251001`), while a binding may name the undated id
+    (the shipped `mechanical: claude-haiku-4-5`). The dispatch honoured the
+    binding: no warning — and the precise id is what gets recorded."""
     repo, shipped, root, session = dispatched
-    _write_repo_models(repo, "claude-code:\n  hard: claude-sonnet-5\n")
-    add_dispatch(
+    transcript = add_dispatch(
         session, timestamp=_SAME_INSTANT, agent_id="a1f1", tool_use_id="toolu_a", usage=_USAGE_FIRST
     )
-    # The binding changed after advance; the attempt still holds opus-5, so
-    # re-open the prediction to match what will be observed.
+    transcript.write_text(
+        transcript.read_text().replace("claude-sonnet-5", "claude-opus-5-20260101")
+    )
+
     result = _invoke_measurable(
         repo,
         shipped,
-        [
-            "run",
-            "resolve",
-            "r1",
-            *UNIT,
-            "--state",
-            "done",
-            "--agent",
-            "a1f1",
-            "--model",
-            "claude-sonnet-5",
-        ],
+        ["run", "resolve", "r1", *UNIT, "--state", "done", "--agent", "a1f1"],
         root,
         "sess-1",
     )
 
     assert result.exit_code == 0, result.output
-    assert _code_attempt(repo).model == "claude-sonnet-5"
+    assert _code_attempt(repo).model == "claude-opus-5-20260101"
     assert "ran on" not in _squash(result.output)
 
 
