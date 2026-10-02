@@ -314,3 +314,12 @@ def test_ci_change_fragment_job_runs_under_uv_managed_python() -> None:
     assert setup is not None, "change-fragment job has no astral-sh/setup-uv step"
     assert run is not None, "change-fragment job does not invoke the script via uv run"
     assert setup < run
+
+
+def test_the_usage_lines_run_the_gate_the_way_ci_does() -> None:
+    """gh#681: CI runs the gate under `uv run --no-project python`; a usage line
+    that invokes the script directly runs it on whatever `python3` is on PATH."""
+    text = SCRIPT.read_text()
+    usage = [ln for ln in text.splitlines() if "check-change-fragment.py <base-ref>" in ln]
+    assert usage, "the docstring and the argv error both carry a usage line"
+    assert all("uv run --no-project python scripts/check-change-fragment.py" in u for u in usage)
