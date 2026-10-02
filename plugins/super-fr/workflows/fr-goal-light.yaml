@@ -93,7 +93,8 @@ steps:
         # fr-goal.yaml: the brief carries the text the reviewer must end its
         # return with — a fenced `review-findings` block of `p<N>-r<k>` ids —
         # and `done` is refused while a returned id is missing from the plan
-        # journal for this phase or carries another scope there.
+        # journal for this phase or a later phase, or carries another scope
+        # there.
         evidence: [review, reviewer, findings, visual]
 
   - id: journal-check

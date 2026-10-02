@@ -78,6 +78,7 @@ def review_findings_rule(phase: int) -> str:
         "single line `none` when you raised nothing. `in` = this change is wrong, "
         "incomplete or worse than it needs to be; `out` = true, but not caused by this "
         "change. fr refuses the review-phase resolve while any returned id is missing "
-        f"from the plan journal for phase {phase} or carries another scope there:\n"
+        f"from the plan journal for phase {phase} or a later phase, or carries another "
+        "scope there:\n"
         f"```{FENCE}\np{phase}-r1 | in | <one-line summary>\n```"
     )

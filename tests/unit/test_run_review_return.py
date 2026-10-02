@@ -61,6 +61,8 @@ def test_the_rule_names_the_fence_and_this_phases_ids() -> None:
     assert "```review-findings" in rule
     assert "p3-r<k>" in rule and "p3a-r<k>" in rule
     assert "none" in rule
+    # p2-r3: the check accepts a finding journaled against this phase OR LATER.
+    assert "for phase 3 or a later phase" in " ".join(rule.split())
     # The rule's own example parses with the parser it prescribes for.
     example = rule[rule.index("```review-findings") :]
     assert parse_review_findings(example) == [("p3-r1", "in", "<one-line summary>")]
