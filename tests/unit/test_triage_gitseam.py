@@ -124,8 +124,42 @@ def test_the_scratch_merge_disables_rerere(tmp_path: Path, monkeypatch: pytest.M
     gitseam.Worktree(tmp_path).merge("origin/main")
 
     merge = next(a for a in seen if "merge" in a)
-    assert merge[:5] == ["git", "-c", "rerere.enabled=false", "merge", "--no-ff"]
+    assert merge[0] == "git"
+    assert merge[1:3] == ["-c", "rerere.enabled=false"]
     assert merge[-1] == "origin/main"
+
+
+def test_an_archive_that_empties_a_live_directory_is_not_a_rename(tmp_path: Path) -> None:
+    """gh#800: a close-out archive moves the LAST file out of `runs/` into
+    `implemented/runs/`; git's directory-rename detection then calls the live
+    directory renamed and moves the PR's new cursor after it — a conflict on
+    paths that exist on neither side. fr's artifact directories are never
+    renamed as a whole, so the scratch merge must not infer it, whatever the
+    operator's own `merge.directoryRenames` says."""
+    checkout = _repo(tmp_path)
+    clone = checkout.path
+    _git(clone, "config", "merge.directoryRenames", "conflict")  # git's own default
+    live = clone / "docs" / "runs"
+    live.mkdir(parents=True)
+    (live / "old.yaml").write_text("old\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "a live cursor")
+    _git(clone, "push", "--quiet", "origin", "main")
+    # The PR adds a new cursor to the live directory ...
+    wt = checkout.add_worktree(tmp_path / "scratch", "HEAD")
+    (wt.path / "docs" / "runs" / "new.yaml").write_text("new\n")
+    _git(wt.path, "add", ".")
+    _git(wt.path, "commit", "--quiet", "-m", "pr cursor")
+    # ... while main archives the last one, emptying it.
+    (clone / "docs" / "implemented").mkdir(parents=True)
+    _git(clone, "mv", "docs/runs", "docs/implemented/runs")
+    _git(clone, "commit", "--quiet", "-m", "close-out")
+    _git(clone, "push", "--quiet", "origin", "main")
+    _git(wt.path, "fetch", "--quiet", "origin")
+
+    assert wt.merge("origin/main") == []
+    assert (wt.path / "docs" / "runs" / "new.yaml").read_text() == "new\n"
+    assert not (wt.path / "docs" / "implemented" / "runs" / "new.yaml").exists()
 
 
 def test_merge_base_and_show_read_the_pr_side(tmp_path: Path) -> None:

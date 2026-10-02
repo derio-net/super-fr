@@ -262,6 +262,9 @@ def _apply_one(
     """
     tracking_problem: str | None = None
     try:
+        # The PLAN repo's declaration governs, for a cross-repo plan too
+        # (gh#804): fr has no checkout of `target_repo` to read one from, and
+        # the plan repo is the one that declared where its work is tracked.
         require_tracker(resolve_repo_root(plan_dir.resolve()))
     except ServicesError as e:
         tracking_problem = str(e)

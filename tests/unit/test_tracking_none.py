@@ -133,6 +133,33 @@ def test_apply_dry_run_default_tracking_has_no_tracking_warning(tmp_path: Path) 
     assert "tracking: {type: none}" not in text
 
 
+def test_a_cross_repo_plan_is_gated_by_the_plan_repos_tracking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gh#804 (operator decision, 2026-10-02): for a plan whose `target_repo`
+    is another repo, the PLAN repo's `tracking` governs `fr apply --yes`. fr
+    has no checkout of the target to read a declaration from, and the plan
+    repo is the one that declared where its work is tracked."""
+    plan_dir = apply_fixtures._ticked_plan_repo(tmp_path)
+    meta = (plan_dir / "_meta.yaml").read_text()
+    assert "target_repo: derio-net/superpowers-for-vk" in meta  # not this repo
+    _profiles(tmp_path, NONE)
+    seen: list[Path] = []
+    real = apply_cmd.require_tracker
+
+    def _spy(root: Path) -> None:
+        seen.append(root)
+        real(root)
+
+    monkeypatch.setattr(apply_cmd, "require_tracker", _spy)
+    gh = FakeGhClient()
+    rc, text, _ = apply_cmd._apply_one(plan_dir, gh, yes=True, force=True)
+    assert seen == [tmp_path.resolve()]
+    assert rc == 2
+    assert "tracking: {type: none}" in text
+    assert gh.calls == []
+
+
 # --- fr triage batch dispatch --------------------------------------------
 
 
@@ -197,6 +224,106 @@ def test_triage_collect_is_unaffected_by_tracking_none(
     )
     assert result.exit_code == 0, result.output
     assert (state / "facts.json").exists()
+
+
+# --- the other tracker writers: batch cancel, fr undispatch (gh#803) ------
+#
+# R6 named only apply and dispatch; every verb that writes a label, comment or
+# state to the tracker is gated the same way. `batch merge` is not here: it
+# merges PRs (the forge) and writes nothing to an issue.
+
+
+def _cancel_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, profiles: str | None):
+    from tests.unit import test_triage_batch_verbs as verbs
+
+    gh = FakeGhClient()
+    gh.add_issue(verbs.REPO, 577, labels={"fr:in-progress"})
+    monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: gh)
+    clone = tmp_path / "clone"
+    _git_repo(clone)
+    if profiles is not None:
+        _profiles(clone, profiles)
+    monkeypatch.setattr(
+        triage_batch_cmd, "make_checkout", lambda path: dispatch_fixtures.FakeCheckout(clone)
+    )
+    state = tmp_path / "state"
+    state.mkdir()
+    verbs._with(
+        state,
+        {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "events": [verbs._DISPATCH]},
+    )
+    return gh, state
+
+
+def test_cancel_yes_refuses_under_tracking_none_before_any_forge_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit import test_triage_batch_verbs as verbs
+
+    gh, state = _cancel_env(tmp_path, monkeypatch, NONE)
+    before = (state / "judgements.yaml").read_text("utf-8")
+    code, out = verbs._run(state, "cancel", "lifecycle", "--yes")
+    assert code == 2, out
+    assert "tracking: {type: none}" in out
+    assert gh.calls == []
+    assert (state / "judgements.yaml").read_text("utf-8") == before
+
+
+def test_cancel_dry_run_warns_under_tracking_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit import test_triage_batch_verbs as verbs
+
+    gh, state = _cancel_env(tmp_path, monkeypatch, NONE)
+    code, out = verbs._run(state, "cancel", "lifecycle")
+    assert code == 0, out
+    assert "tracking: {type: none}" in out
+
+
+def test_cancel_yes_still_acts_under_the_default_tracker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit import test_triage_batch_verbs as verbs
+
+    gh, state = _cancel_env(tmp_path, monkeypatch, None)
+    code, out = verbs._run(state, "cancel", "lifecycle", "--yes")
+    assert code == 0, out
+    assert "fr:in-progress" not in gh.issues[(verbs.REPO, 577)].labels
+
+
+def _undispatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *extra: str):
+    from tests.unit import test_undispatch_cmd as undispatch_fixtures
+
+    plan_dir = undispatch_fixtures._dispatched_plan_repo(tmp_path)
+    _profiles(tmp_path, NONE)
+    gh = FakeGhClient()
+    gh.add_issue(undispatch_fixtures.REPO, 7, state="OPEN")
+    result = undispatch_fixtures._invoke(
+        monkeypatch,
+        tmp_path,
+        gh,
+        ["undispatch", str(plan_dir.relative_to(tmp_path)), *extra],
+    )
+    return result, gh, plan_dir
+
+
+def test_undispatch_yes_refuses_under_tracking_none_before_any_forge_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, gh, plan_dir = _undispatch(tmp_path, monkeypatch, "--yes")
+    assert result.exit_code == 2, result.output
+    assert "tracking: {type: none}" in result.output
+    assert gh.calls == []
+    assert "tracking_issue: https" in (plan_dir / "01.yaml").read_text()
+
+
+def test_undispatch_dry_run_warns_under_tracking_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, gh, _ = _undispatch(tmp_path, monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert "tracking: {type: none}" in result.output
+    assert gh.attempted_mutations == 0
 
 
 # --- review fixes ---------------------------------------------------------
