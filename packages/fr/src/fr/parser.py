@@ -30,6 +30,7 @@ from packaging.version import InvalidVersion, Version
 from fr import refs
 from fr._urls import is_cross_repo_spec
 from fr.types import PhaseDoc, PlanMeta
+from fr.version_floor import admits
 
 
 class PlanSchemaError(Exception):
@@ -109,7 +110,7 @@ def _installed_has_outgrown(spec: SpecifierSet, installed: Version) -> bool:
     (`>=99.0.0`): the plan needs a newer fr, and installing one is the fix.
     """
     for s in spec:
-        if installed in SpecifierSet(str(s)):
+        if admits(str(s), installed):
             continue
         try:
             bound = Version(s.version.removesuffix(".*"))
@@ -147,7 +148,7 @@ def _enforce_fr_version(plan_dir: Path, declared: object) -> None:
         raise PlanSchemaError(
             f"installed fr version {INSTALLED_FR_VERSION!r} is not a valid PEP 440 version: {e}"
         ) from e
-    if installed not in spec:
+    if not admits(spec, installed):
         if _installed_has_outgrown(spec, installed):
             # The plan is behind this fr, not ahead of it. Installing a version
             # the constraint admits would be a DOWNGRADE, so never say to; the

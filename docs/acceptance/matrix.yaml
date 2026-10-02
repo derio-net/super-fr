@@ -7,7 +7,9 @@
 #   capability: grouping (tables render in first-seen order)
 #   acceptance: the business-level statement
 #   origin:     list of "repo:path[#anchor]" refs (spec §, design doc)
-#   levels:     unit/api/int/ui → list of "repo:path[#Lline]" test refs
+#   levels:     unit/api/int/ui → list of "repo:path[#test_name]" test refs
+#               (a .py fragment names a test, pytest-style: #TestX::test_y —
+#               never a #L<n> line, which rots as code moves; gh#531)
 #               ([] = level does not verify this row)
 #   status:     ci | scheduled | skipped | not-implemented | failing
 #     ci               automated on every PR — cannot drift silently
@@ -2444,16 +2446,18 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
-      - super-fr:tests/unit/test_run_cli.py#test_resolve_records_measured_tokens_for_the_unit_it_closes
-      - super-fr:tests/unit/test_run_cli.py#test_status_never_renders_a_measurement_and_an_estimate_the_same_way
-      - super-fr:tests/unit/test_run_cli.py#test_status_says_out_loud_when_nothing_could_be_measured
       - super-fr:tests/unit/test_migration_run_telemetry.py
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_an_unobserved_figure_prints_a_dash
     status: ci
     notes: 'Phase 5 (2026-09-20-bounded-executor-handoff): the Claude Code V2 reader/attributor
       (test_run_telemetry.py, 26 tests incl. isSidechain-filter and sessionId/cwd guards),
       the end-to-end advance-then-resolve path, the loud-degradation half of the acceptance
       sentence (measured vs. estimate rendering never conflated, absence said out loud),
-      and the run-cursor migration/validator all run in CI.'
+      and the run-cursor migration/validator all run in CI. gh#531: three name anchors
+      named tests #628 deleted when it moved every cost figure out of the cursor into
+      the usage file (`fr run cost`); dropped, and the loud-degradation half re-pointed
+      at test_run_cost_cmd (an unobserved figure prints a dash, never a zero). The acceptance
+      text still says `fr run status` and predates #628; no verb rewrites it (#522).'
   - id: run-dispatch-holder-recorded
     capability: Run cursor
     acceptance: fr run status names the agent holding a phase and since when, and shows
@@ -2676,18 +2680,19 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence.py#L196
-      - super-fr:tests/unit/test_run_evidence.py#L210
-      - super-fr:tests/unit/test_run_evidence.py#L221
+      - super-fr:tests/unit/test_run_evidence.py#test_resolve_done_refuses_without_evidence_and_names_the_flag
+      - super-fr:tests/unit/test_run_evidence.py#test_a_real_review_is_accepted_and_stored_on_the_unit
+      - super-fr:tests/unit/test_run_evidence.py#test_failed_needs_no_evidence
       int:
-      - super-fr:tests/integration/test_fr_goal_shape.py#L542
+      - super-fr:tests/integration/test_fr_goal_shape.py#test_grouped_goal_walks_implement_review_per_phase_to_deliver
     status: ci
     notes: 'Phase 5 landed the gate: fr run resolve --state done on a step declaring
       evidence: refuses without --evidence review=<journal-entry-id> (exit 2, naming
       the flag) and stores the verified id in UnitRecord.evidence; --state failed needs
       none. Exercised on the SHIPPED fr-goal shape by the integration walk, where the
       bare resolve that used to pass is now refused. Mutation-verified: disabling the
-      missing-evidence refusal fails 3 tests.'
+      missing-evidence refusal fails 3 tests. gh#531: line anchors re-pointed to the
+      tests they were recorded for (they had slid onto other tests as lines moved).'
   - id: run-idle-detected
     capability: Run cursor
     acceptance: fr run check --idle distinguishes an advanceable-and-idle run from every
@@ -2696,14 +2701,14 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_idle.py#L81
-      - super-fr:tests/unit/test_run_idle.py#L90
-      - super-fr:tests/unit/test_run_idle.py#L125
-      - super-fr:tests/unit/test_run_idle.py#L139
-      - super-fr:tests/unit/test_run_idle.py#L159
-      - super-fr:tests/unit/test_run_idle.py#L173
-      - super-fr:tests/unit/test_run_idle.py#L195
-      - super-fr:tests/unit/test_run_idle.py#L205
+      - super-fr:tests/unit/test_run_idle.py#test_a_run_nobody_has_started_on_is_idle_and_names_the_next_command
+      - super-fr:tests/unit/test_run_idle.py#test_the_gh518_shape_a_unit_returned_and_the_next_one_was_never_dispatched
+      - super-fr:tests/unit/test_run_idle.py#test_stop_1_a_pending_operator_gate_is_not_idle
+      - super-fr:tests/unit/test_run_idle.py#test_stop_2_an_outstanding_manual_phase_is_not_idle
+      - super-fr:tests/unit/test_run_idle.py#test_stop_3_a_held_unit_is_not_idle
+      - super-fr:tests/unit/test_run_idle.py#test_stop_4_a_failed_step_is_not_idle
+      - super-fr:tests/unit/test_run_idle.py#test_stop_5_a_finished_run_is_not_idle
+      - super-fr:tests/unit/test_run_idle.py#test_stop_6_no_run_at_all_is_not_idle
     status: ci
     notes: 'gh#518''s artifact half. fr run check --idle exits 3 exactly when the run
       is advanceable with nobody working on it (fr.run.liveness.is_idle, pure; it mirrors
@@ -2724,9 +2729,9 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       int:
-      - super-fr:tests/integration/test_run_idle_guard.py#L231
-      - super-fr:tests/integration/test_run_idle_guard.py#L242
-      - super-fr:tests/integration/test_run_idle_guard.py#L257
+      - super-fr:tests/integration/test_run_idle_guard.py#test_an_idle_stop_is_blocked_and_the_reason_names_the_next_command
+      - super-fr:tests/integration/test_run_idle_guard.py#test_the_gh518_stop_is_blocked
+      - super-fr:tests/integration/test_run_idle_guard.py#test_it_runs_the_predicate_in_the_bound_worktree_and_nowhere_else
     status: ci
     notes: 'plugins/super-fr/hooks/fr-run-idle-guard.sh, registered under Stop. Integration:
       the hook, as a subprocess, runs the REAL fr from the checkout against a real linked
@@ -2901,9 +2906,9 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence.py#L236
-      - super-fr:tests/unit/test_run_evidence.py#L251
-      - super-fr:tests/unit/test_run_evidence.py#L262
+      - super-fr:tests/unit/test_run_evidence.py#test_a_finding_entry_is_not_evidence_of_a_review
+      - super-fr:tests/unit/test_run_evidence.py#test_another_phases_review_is_not_evidence
+      - super-fr:tests/unit/test_run_evidence.py#test_an_id_no_journal_entry_carries_is_refused_naming_the_journal
     status: ci
     notes: 'Verified by gh#517''s own predicate, fr.journal.model.reviews_phase, which
       reviewed_phases is now the fold of — one rule, two gates. A kind=finding entry
@@ -2918,15 +2923,16 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence.py#L377
-      - super-fr:tests/unit/test_run_evidence.py#L391
-      - super-fr:tests/unit/test_run_evidence.py#L421
+      - super-fr:tests/unit/test_run_evidence.py#test_a_pre_gate_review_is_reported_as_debt_and_check_still_exits_zero
+      - super-fr:tests/unit/test_run_evidence.py#test_the_check_exit_code_is_unchanged_by_unevidenced_units
+      - super-fr:tests/unit/test_run_evidence.py#test_a_migrated_real_cursor_reports_its_pre_gate_reviews_as_debt
     status: ci
     notes: 'fr run check reports ''done, unevidenced (predates the evidence gate)''
       and its exit code is asserted literally both ways (0 on a healthy cursor, still
       1 on a failed one). Proven end to end on the REAL captured v4 cursor of this feature''s
       own run, migrated to v5 against the shipped fr-goal shape: both its pre-gate review-phase
-      units are named, nothing invents evidence, exit 0.'
+      units are named, nothing invents evidence, exit 0. gh#531: line anchors re-pointed
+      to the tests they were recorded for (they had slid onto other tests as lines moved).'
   - id: workflow-without-evidence-unchanged
     capability: Workflow shapes
     acceptance: A repo-authored workflow that declares no evidence resolves its steps
@@ -2935,10 +2941,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence.py#L153
-      - super-fr:tests/unit/test_run_evidence.py#L168
-      - super-fr:tests/unit/test_run_evidence.py#L182
-      - super-fr:tests/unit/test_run_evidence.py#L337
+      - super-fr:tests/unit/test_run_evidence.py#test_step_evidence_parses_and_defaults_to_empty
+      - super-fr:tests/unit/test_run_evidence.py#test_a_shape_declaring_no_evidence_resolves_exactly_as_before
+      - super-fr:tests/unit/test_run_evidence.py#test_evidence_offered_to_a_step_that_declares_none_is_refused
+      - super-fr:tests/unit/test_run_evidence.py#test_adding_evidence_to_a_member_does_not_strand_an_in_flight_cursor
     status: ci
     notes: 'Step.evidence defaults to () and the gate is opt-in per step: the same shape
       with and without the declaration differs only in that field, and the bare resolve
@@ -2953,9 +2959,9 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_idle.py#L421
-      - super-fr:tests/unit/test_run_idle.py#L433
-      - super-fr:tests/unit/test_run_idle.py#L461
+      - super-fr:tests/unit/test_run_idle.py#test_an_attempt_held_past_the_threshold_is_reported_with_its_age
+      - super-fr:tests/unit/test_run_idle.py#test_a_stalled_attempt_never_changes_the_exit_code
+      - super-fr:tests/unit/test_run_idle.py#test_the_threshold_is_the_operators_to_move
     status: ci
     notes: 'gh#503''s 11.5-hour executor made visible from fr: an open attempt older
       than --stalled-after (default 120 minutes) is reported with its age by plain fr
@@ -2972,14 +2978,14 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       int:
-      - super-fr:tests/integration/test_run_idle_guard.py#L332
-      - super-fr:tests/integration/test_run_idle_guard.py#L373
-      - super-fr:tests/integration/test_run_idle_guard.py#L388
-      - super-fr:tests/integration/test_run_idle_guard.py#L428
-      - super-fr:tests/integration/test_run_idle_guard.py#L438
-      - super-fr:tests/integration/test_run_idle_guard.py#L464
-      - super-fr:tests/integration/test_run_idle_guard.py#L477
-      - super-fr:tests/integration/test_run_idle_guard.py#L598
+      - super-fr:tests/integration/test_run_idle_guard.py#test_silent_when_no_run_is_bound_to_the_session
+      - super-fr:tests/integration/test_run_idle_guard.py#test_fails_open_when_fr_is_not_installed
+      - super-fr:tests/integration/test_run_idle_guard.py#test_fails_open_when_jq_is_not_installed
+      - super-fr:tests/integration/test_run_idle_guard.py#test_fails_open_on_anything_but_a_clean_parsed_idle
+      - super-fr:tests/integration/test_run_idle_guard.py#test_fails_open_when_fr_hangs_and_does_not_hang_with_it
+      - super-fr:tests/integration/test_run_idle_guard.py#test_fails_open_on_a_binding_it_cannot_use
+      - super-fr:tests/integration/test_run_idle_guard.py#test_fails_open_on_a_payload_it_cannot_use
+      - super-fr:tests/integration/test_run_idle_guard.py#test_the_script_can_only_ever_exit_zero
     status: ci
     notes: 'The worst outcome of this spec is an operator who cannot end a turn. The
       hook ALWAYS exits 0 (an EXIT trap, and deliberately no set -e: fr exits 2 on every
@@ -2989,7 +2995,9 @@ rows:
       exit 3 with no/garbage/non-object output, a complete answer that says not idle,
       idle JSON under exit 0, a missing position or next command, an unusable binding,
       an unusable payload, a subagent''s stop. Every stub case asserts the stub was
-      reached, so none passes by never looking. Mutation-verified, 12 mutants.'
+      reached, so none passes by never looking. Mutation-verified, 12 mutants. gh#531:
+      line anchors re-pointed to the tests they were recorded for (they had slid onto
+      other tests as lines moved).'
   - id: run-idle-guard-allows-waiting
     capability: Harness parity
     acceptance: Ending a turn while a dispatched executor is still working is allowed
@@ -2997,10 +3005,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_idle.py#L159
+      - super-fr:tests/unit/test_run_idle.py#test_stop_3_a_held_unit_is_not_idle
       int:
-      - super-fr:tests/integration/test_run_idle_guard.py#L293
-      - super-fr:tests/integration/test_run_idle_guard.py#L579
+      - super-fr:tests/integration/test_run_idle_guard.py#test_silent_while_a_dispatched_executor_is_still_working
+      - super-fr:tests/integration/test_run_idle_guard.py#test_in_flight_background_work_means_the_session_will_be_woken
     status: ci
     notes: 'The subtle legitimate stop: on Claude Code a background executor''s return
       arrives as a notification, so a turn that ends while a unit is HELD is correct.
@@ -3009,7 +3017,9 @@ rows:
       was found on the 2.1.278 binary and is honoured too: a non-empty background_tasks
       or session_crons in the Stop payload means the session is paused and will be woken,
       so the guard does not act. That field''s POPULATED shape was read from the binary''s
-      schema, not captured — stated in tests/fixtures/hooks/NOTE.md.'
+      schema, not captured — stated in tests/fixtures/hooks/NOTE.md. gh#531: line anchors
+      re-pointed to the tests they were recorded for (they had slid onto other tests
+      as lines moved).'
   - id: run-cost-attributed-by-agent-id
     capability: Run cursor
     acceptance: A claimed attempt's cost is selected by its agent id, so overlapping
@@ -3114,13 +3124,13 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_idle.py#L361
-      - super-fr:tests/unit/test_run_idle.py#L380
+      - super-fr:tests/unit/test_run_idle.py#test_the_position_moves_when_the_cursor_does_and_only_then
+      - super-fr:tests/unit/test_run_idle.py#test_a_failing_advance_does_not_move_the_position
       int:
-      - super-fr:tests/integration/test_run_idle_guard.py#L485
-      - super-fr:tests/integration/test_run_idle_guard.py#L499
-      - super-fr:tests/integration/test_run_idle_guard.py#L510
-      - super-fr:tests/integration/test_run_idle_guard.py#L548
+      - super-fr:tests/integration/test_run_idle_guard.py#test_fails_open_when_it_cannot_remember_having_acted
+      - super-fr:tests/integration/test_run_idle_guard.py#test_it_acts_at_most_once_per_cursor_position
+      - super-fr:tests/integration/test_run_idle_guard.py#test_it_acts_again_once_the_cursor_has_moved
+      - super-fr:tests/integration/test_run_idle_guard.py#test_stop_hook_active_is_an_independent_brake
     status: ci
     notes: 'The loop breaker. fr emits an opaque position (run, cursor, step state,
       gate, each unit''s state and attempt count — no timestamp, so a failing advance
@@ -3131,7 +3141,9 @@ rows:
       must be literally false (the CAPTURED continuation payload is let through with
       no memory at all; a build that drops the field silences the guard rather than
       un-braking it), and Claude Code''s own CLAUDE_CODE_STOP_HOOK_BLOCK_CAP (default
-      8, read from the binary). fr isolation detach deletes the memory with the binding.'
+      8, read from the binary). fr isolation detach deletes the memory with the binding.
+      gh#531: line anchors re-pointed to the tests they were recorded for (they had
+      slid onto other tests as lines moved).'
   - id: journal-review-entry-per-phase
     capability: journal
     acceptance: 'A completed phase leaves a machine-readable trace that it was code-reviewed:
@@ -3193,12 +3205,12 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence_findings.py#L96
-      - super-fr:tests/unit/test_run_evidence_findings.py#L169
-      - super-fr:tests/unit/test_run_evidence_findings.py#L212
-      - super-fr:tests/unit/test_run_evidence_findings.py#L267
+      - super-fr:tests/unit/test_run_evidence_findings.py#test_an_open_finding_for_this_phase_refuses_done
+      - super-fr:tests/unit/test_run_evidence_findings.py#test_a_finding_re_opened_by_a_later_record_is_open
+      - super-fr:tests/unit/test_run_evidence_findings.py#test_offering_findings_is_refused_because_fr_derives_it
+      - super-fr:tests/unit/test_run_evidence_findings.py#test_growing_the_obligation_does_not_strand_the_cursor
       int:
-      - super-fr:tests/integration/test_fr_goal_shape.py#L613
+      - super-fr:tests/integration/test_fr_goal_shape.py#test_grouped_goal_walks_implement_review_per_phase_to_deliver
     status: ci
     notes: 'Added by the PR #508 operator review (spec 4.E.1). The findings obligation
       is DERIVED from the plan journal at resolve time and never offered; five mutations
@@ -3283,8 +3295,8 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_resolve_requires_advance.py#L51
-      - super-fr:tests/unit/test_run_resolve_requires_advance.py#L70
+      - super-fr:tests/unit/test_run_resolve_requires_advance.py#test_a_unit_that_was_never_advanced_cannot_be_resolved
+      - super-fr:tests/unit/test_run_resolve_requires_advance.py#test_once_advanced_it_resolves_and_the_attempt_is_there
     status: ci
     notes: 'C3, found live on PR #508''s post-merge Test Plan: review-phase resolved
       done with no advance, leaving a done unit with no attempt. The member-resolve
@@ -3300,8 +3312,8 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_orchestrator_model.py#L70
-      - super-fr:tests/unit/test_run_orchestrator_model.py#L87
+      - super-fr:tests/unit/test_run_orchestrator_model.py#test_an_orchestrator_run_unit_records_no_model
+      - super-fr:tests/unit/test_run_orchestrator_model.py#test_a_model_the_orchestrator_reports_is_kept
     status: ci
     notes: 'C2 of the #508 defects. Refined 2026-09-21 (debug journal 2026-09-21-fr-goal-first-run-contracts,
       C3): the orchestrator''s model is no longer invisible - its session transcript
@@ -3316,13 +3328,14 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
       unit:
-      - super-fr:tests/unit/test_hooks_guard.py#L281
-      - super-fr:tests/unit/test_hooks_guard.py#L323
+      - super-fr:tests/unit/test_hooks_guard.py#TestRunStartEntersIsolation::test_fr_run_start_allowed
+      - super-fr:tests/unit/test_hooks_guard.py#TestRunStartEntersIsolation::test_every_other_run_verb_is_still_gated
     status: ci
     notes: 'C4. Only bit in a repo that already had some linked worktree; with none
       the #341 self-heal retires the sentinel first, which is why it hid. That self-heal
       retiring a FRESH pipeline''s sentinel is a separate open defect, recorded in the
-      debug journal.'
+      debug journal. gh#531: line anchors re-pointed to the tests they were recorded
+      for (they had slid onto other tests as lines moved).'
   - id: scaffold-uv-env-outside-bind-mount
     capability: Isolation
     acceptance: A scaffolded uv profile gives the container its own per-project uv environment,
@@ -3331,8 +3344,8 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
       unit:
-      - super-fr:tests/unit/test_init_scaffold.py#L522
-      - super-fr:tests/unit/test_init_scaffold.py#L559
+      - super-fr:tests/unit/test_init_scaffold.py#test_a_uv_profile_keeps_uvs_environment_out_of_the_bind_mount
+      - super-fr:tests/unit/test_init_scaffold.py#test_this_repos_own_uv_profiles_carry_it
     status: ci
     notes: 'C5. CI verifies the profile that is EMITTED (key present, relative, not
       the host''s name) - not the behaviour. The behaviour was proven live twice, which
@@ -3340,7 +3353,8 @@ rows:
       alternations, zero deletions. Relative, not absolute, after review: one absolute
       path is shared by every project in a container, and a probe showed project a importing
       a package only b declared. Existing containers must be recreated; profiles already
-      scaffolded in consumer repos are not rewritten.'
+      scaffolded in consumer repos are not rewritten. gh#531: line anchors re-pointed
+      to the tests they were recorded for (they had slid onto other tests as lines moved).'
   - id: run-gate-verified-from-transcript
     capability: Run cursor
     acceptance: On Claude Code an operator gate clears only with an answered question
@@ -3350,10 +3364,10 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_cli.py#L3348
-      - super-fr:tests/unit/test_run_cli.py#L3368
-      - super-fr:tests/unit/test_run_cli.py#L3406
-      - super-fr:tests/unit/test_run_cli.py#L416
+      - super-fr:tests/unit/test_run_cli.py#test_advance_degrades_loudly_on_claude_code_when_it_cannot_verify
+      - super-fr:tests/unit/test_run_cli.py#test_a_gate_cleared_with_no_question_in_the_transcript_is_refused
+      - super-fr:tests/unit/test_run_cli.py#test_a_gate_whose_question_was_answered_records_the_operator
+      - super-fr:tests/unit/test_run_cli.py#test_no_questions_needs_a_reason_and_records_it_on_the_spec_journal
     status: ci
     notes: 'C1. The first fr-goal run after #508 cleared its brainstorm gate unasked
       on Claude Code while parity.yaml called the gate enforced - which also suppressed
@@ -3363,7 +3377,9 @@ rows:
       answer. Refusal walked 2026-09-24 on a scratch fr-goal run (fr 4.19.2, host-worktree,
       CLI-level; not mid-way through a model-driven run): resolve before any answer
       since the gate blocked is refused (''no answered question in this session''s transcript
-      since the gate blocked at <ts>'') and the step stays blocked.'
+      since the gate blocked at <ts>'') and the step stays blocked. gh#531: line anchors
+      re-pointed to the tests they were recorded for (they had slid onto other tests
+      as lines moved).'
   - id: run-review-by-a-separate-context
     capability: Run cursor
     acceptance: A phase review names the separate reviewer that performed it; the phase's
@@ -3372,14 +3388,16 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence_separate_context.py#L137
-      - super-fr:tests/unit/test_run_evidence_separate_context.py#L176
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#test_the_implementer_cannot_review_its_own_phase
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#test_a_reviewer_nobody_dispatched_is_refused
     status: ci
     notes: 'C6. The review evidence gate proved an entry existed; on the first post-#508
       run the orchestrator typed it about work nobody reviewed. Unobservable harnesses
       record the id as claimed and say so. LIVE, Run C (#592, a real Claude Code fr-goal
       run on #526, 2026-09-23): each of the three review-phase units names reviewer=<id>,
-      and that id is the unit''s own dispatched and claimed holder; none is an implementer.'
+      and that id is the unit''s own dispatched and claimed holder; none is an implementer.
+      gh#531: line anchors re-pointed to the tests they were recorded for (they had
+      slid onto other tests as lines moved).'
   - id: run-deliver-needs-an-orchestrator-test-run
     capability: Run cursor
     acceptance: Delivery names the log of a full test run the orchestrator itself performed
@@ -3388,13 +3406,15 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence_separate_context.py#L253
-      - super-fr:tests/unit/test_run_evidence_separate_context.py#L269
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#test_a_suite_the_orchestrator_ran_is_accepted_with_its_hash
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#test_a_log_no_command_of_the_orchestrator_produced_is_refused
     status: ci
     notes: 'C5. deliver resolved in 28s on a PR url and the executor''s word (''verified
       locally''). The log is hashed onto the cursor. LIVE, Run C (#592, a real Claude
       Code fr-goal run on #526, 2026-09-23): deliver resolved with tests=<log>@<hash>,
-      a full suite the orchestrator itself ran during delivery (4980 passed).'
+      a full suite the orchestrator itself ran during delivery (4980 passed). gh#531:
+      line anchors re-pointed to the tests they were recorded for (they had slid onto
+      other tests as lines moved).'
   - id: plan-skeleton-is-not-the-whole-plan
     capability: fr-goal-methodology
     acceptance: A plan whose only agentic phase carries the walking-skeleton marker
@@ -3404,11 +3424,12 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_v2_plan_ops.py#L1639
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_a_sole_marked_agentic_phase_raises_no_skeleton_error
     status: ci
     notes: 'Inverted 2026-09-26 (gh#673): the C2 rule (sole-skeleton is an error) is
       retired; a one-agentic-phase plan now passes self-review. Kept as the pin for
-      the sole-marked-phase case.'
+      the sole-marked-phase case. gh#531: line anchors re-pointed to the tests they
+      were recorded for (they had slid onto other tests as lines moved).'
   - id: isolation-session-bound-without-flags
     capability: isolation-traceability
     acceptance: Starting a run or entering isolation binds the calling session to the
@@ -3417,15 +3438,17 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_cli.py#L5614
-      - super-fr:tests/unit/test_isolation_sessions_cmd.py#L205
+      - super-fr:tests/unit/test_isolation_sessions_cmd.py#test_up_without_session_binds_the_ambient_one
+      - super-fr:tests/unit/test_run_cli.py#test_run_start_binds_the_ambient_session_when_none_is_given
     status: ci
     notes: 'C4. The bind hook matched only a leading bare ''fr'', and this repo mandates
       ''uv run fr'', so fr-goal workspaces read sessions=none and the Stop idle guard
       was inert. LIVE 2026-09-24, scratch fr-goal run (fr 4.19.2, host-worktree, CLI-level;
       not mid-way through a model-driven run): fr run start bound the calling session
       with no flag (isolation status sessions=<uuid>). Run C (#592, a real Claude Code
-      fr-goal run on #526, 2026-09-23)''s orchestrator session is bound in ~/.cache/fr/sessions.'
+      fr-goal run on #526, 2026-09-23)''s orchestrator session is bound in ~/.cache/fr/sessions.
+      gh#531: line anchors re-pointed to the tests they were recorded for (they had
+      slid onto other tests as lines moved).'
   - id: run-records-observed-models
     capability: Run cursor
     acceptance: The run records the model it observed serving each unit - the served
@@ -3435,16 +3458,19 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_cli.py#L2531
-      - super-fr:tests/unit/test_run_cli.py#L2582
-      - super-fr:tests/unit/test_run_cli.py#L2611
-    status: ci
+      - super-fr:tests/unit/test_run_cli.py#test_advance_records_the_observed_model_of_an_orchestrator_run_step
+      - super-fr:tests/unit/test_run_cli.py#test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model
+    status: skipped
     notes: 'C3. The cursor stored ''opus'' (the claim) while the transcript fr already
       read said claude-opus-5; the whole fr-goal run''s orchestrator was claude-sonnet-5
       and nothing recorded it. Record + warn, never block. LIVE, Run C (#592, a real
       Claude Code fr-goal run on #526, 2026-09-23): every attempt records the served
       model id (claude-opus-5-5 for the orchestrator and executors, claude-sonnet-5
-      for reviewers), not an alias.'
+      for reviewers), not an alias. gh#531: line anchors re-pointed to the tests they
+      were recorded for (they had slid onto other tests as lines moved). gh#531: the
+      served-model-over-alias half lost its only test in #628 (test_resolve_records_the_served_model_not_the_claimed_alias,
+      deleted) — that half is proven live (Run C) only, so ci → skipped until a test
+      pins it again.'
   - id: run-deliver-tests-log-opencode
     capability: Run cursor
     acceptance: 'On OpenCode, deliver''s tests=<log> is verified against the session
@@ -3538,7 +3564,7 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_tripwire_agent_skill_capability.py#L49
+      - super-fr:tests/unit/test_tripwire_agent_skill_capability.py#test_an_agent_told_to_use_a_skill_is_granted_the_skill_tool
     status: ci
     notes: C7. fr-phase-executor was told to implement via superpowers:test-driven-development
       / fr-execute with no Skill tool; its 79-record transcript shows zero skill loads.
@@ -3663,9 +3689,10 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_hooks_guard.py#L199,unit=super-fr:tests/unit/test_sentinel_workspace_stamp.py
       - super-fr:tests/unit/test_sentinel_lifecycle.py
       - super-fr:tests/unit/test_sentinel_liveness.py
+      - super-fr:tests/unit/test_hooks_guard.py#TestSentinelThreeStates
+      - super-fr:tests/unit/test_sentinel_workspace_stamp.py
     status: ci
     notes: 'Liveness closed: the guard refreshes an active session''s sentinel so the
       48h GC only expires abandoned ones, and every sentinel writer shares one mkdir
@@ -3674,7 +3701,9 @@ rows:
       session''s own commands): fresh sentinel denied and never healed; bind recorded
       the workspace cache-relative, no lock left; two workspaces formed a set and down
       of one kept the guard armed; a gc-style reap of the last healed on the next base-clone
-      command. OpenCode: no Bash guard by design (parity: fr-pipeline-sentinel absent).'
+      command. OpenCode: no Bash guard by design (parity: fr-pipeline-sentinel absent).
+      gh#531: split a ref that had fused two refs with a comma, and anchored the hooks-guard
+      ref on TestSentinelThreeStates (it sat on a helper).'
   - id: guard-denial-truthful
     capability: Isolation state
     acceptance: 'Guard denial messages convey the true state: cd target gone says the
@@ -3684,11 +3713,12 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md#2.C
     levels:
       unit:
-      - super-fr:tests/unit/test_hooks_guard.py#L362
+      - super-fr:tests/unit/test_hooks_guard.py#TestDenialsSayTheTrueThing
     status: ci
     notes: 'Tests pass in TestDenialsSayTheTrueThing: cd <nonexistent path> says ''no
       longer exists'' with recovery options; standard denial points at status/up first,
-      only warns about down --all effects.'
+      only warns about down --all effects. gh#531: line anchors re-pointed to the tests
+      they were recorded for (they had slid onto other tests as lines moved).'
   - id: verify-merge-after-gc
     capability: Isolation state
     acceptance: 'After gc has reaped a workspace, fr isolation verify-merge --branch
@@ -3699,13 +3729,14 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
-      - super-fr:tests/unit/test_isolation_cmd.py#L777
+      - super-fr:tests/unit/test_isolation_cmd.py#test_verify_merge_reaped_verified
     status: ci
     notes: 'With --branch and no workspace, verify-merge fetches the branch and requires
       every surviving ref (origin/<b> and the local branch) to have landed on origin/<default>;
       an unresolvable ref exits 2. LIVE 2026-09-22 on Claude Code (4.13.2 fallback,
       #534 close-out) and OpenCode (4.14.3): reported verified with ''workspace already
-      reaped''.'
+      reaped''. gh#531: line anchors re-pointed to the tests they were recorded for
+      (they had slid onto other tests as lines moved).'
   - id: journal-deferred-finding
     capability: Journal
     acceptance: A valid finding that belongs to another change is closed as deferred
@@ -4255,12 +4286,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-26-one-phase-plans-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_v2_plan_ops.py#L1649
-      - super-fr:tests/unit/test_v2_plan_ops.py#L603
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_a_sole_unmarked_agentic_phase_passes_with_no_override
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_self_review_minimal_plan_has_no_issues
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_self_review_errors_when_first_agentic_phase_is_not_a_skeleton
     status: ci
     notes: 'gh#673: skeleton gate applies only with 2+ agentic phases. The 2+ side (unmarked-first
       error, override, misplaced marker) stays pinned by the existing goal-phase-one-skeleton-smoke
-      row''s tests.'
+      row''s tests. gh#531: line anchors re-pointed to the tests they were recorded
+      for (they had slid onto other tests as lines moved). gh#676: the 2+-agentic-phases
+      half is now cited here too (an unmarked first phase still errors).'
   - id: fr-goal-question-batch-sized-to-feature
     capability: fr-goal-methodology
     acceptance: fr-goal's brainstorm asks one question per operator-owned decision with
@@ -4973,6 +5007,51 @@ rows:
     status: ci
     notes: 'gh#775: enforced in the step-record engine (add, set-status --level, brainstorm
       record); pinned per-PR by test_acceptance_init_commit.py'
+  - id: acceptance-python-refs-name-their-test
+    capability: Acceptance matrix
+    acceptance: 'An evidence ref into a Python file names its test, never a line: check
+      fails a line anchor (naming the test it sits in) and a name that no longer resolves,
+      authoring refuses a new line anchor, and a repair converts existing ones'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-02-acceptance-integrity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_refuses_a_name_anchor_that_names_no_test
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_refuses_a_line_anchor_into_python_and_suggests_the_name
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_refuses_a_new_line_anchor_into_python
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_line_anchors_that_land_in_a_test
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_leaves_what_it_cannot_convert
+    status: ci
+    notes: 'gh#531. Measured at fix time: 27 of 78 line anchors had slid onto another
+      test or none; all re-pointed to the test git blame shows each was recorded for,
+      the other 48 converted by the repair.'
+  - id: acceptance-add-flush-left-rows
+    capability: Acceptance matrix
+    acceptance: 'fr acceptance add and set-status edit a matrix whose rows are flush-left
+      under rows: (PyYAML default block style) instead of rolling back'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-02-acceptance-integrity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_add_appends_to_a_flush_left_matrix
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_insert_into_flush_left_rows_keeps_the_matrix_valid
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_replace_in_flush_left_rows_keeps_the_matrix_valid
+    status: ci
+    notes: 'gh#470: row blocks take the existing items indentation.'
+  - id: acceptance-set-status-names-the-change
+    capability: Acceptance matrix
+    acceptance: A set-status that keeps the status names what changed (level refs added
+      or removed, notes, verify) instead of logging X → X, and a ref both dropped and
+      added is refused by the CLI and the record engine alike
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-02-acceptance-integrity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_with_an_unchanged_status_names_the_added_level
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_describe_move_names_each_kind_of_change
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_engine_refuses_a_ref_both_dropped_and_added
+    status: ci
+    notes: gh#769, gh#655.
   - id: lifecycle-acceptance-drop-level
     capability: Artifact lifecycles
     acceptance: An operator can remove a stale evidence ref from an acceptance row with
@@ -5007,12 +5086,13 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-26-plan-table-header-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_v2_plan_ops.py
-      - super-fr:tests/unit/test_v2_migrate.py
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_create_appends_missing_section_with_header_and_row
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_create_rerun_adds_missing_section_once
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_validate_spec_section_is_read_only_on_missing_section
     status: ci
-    notes: gh#603; pinned by test_create_appends_missing_section_with_header_and_row,
-      test_create_rerun_adds_missing_section_once, test_validate_spec_section_is_read_only_on_missing_section;
-      migrate output unchanged (test_v2_migrate).
+    notes: 'gh#603; pinned by the three tests cited, by name. gh#663: test_v2_migrate
+      is no longer cited — this PR changed nothing there, so it was regression coverage,
+      not evidence for this row.'
   - id: plan-create-table-errors-name-header
     capability: Plan scaffolding
     acceptance: Every Implementation Plans table error from fr plan create names the
@@ -5065,6 +5145,32 @@ rows:
       session '''' / unavailable: no session found in the cursor commit; fr run cost
       showed 0 read, 1 unavailable. Replacing the placeholder with real sessions stays
       owed until #537.'
+  - id: usage-dispatched-model-observed
+    capability: usage capture honesty
+    acceptance: A dispatched unit's recorded model is the one its subagent transcript
+      names, not the tier binding, and a mismatch is reported
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-02-batch-usage-accuracy.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_executor_model.py
+    status: ci
+    notes: 'gh#637: resolve replaces advance''s tier-binding prediction with the observed
+      model (Claude Code transcripts); unobservable leaves it as recorded.'
+  - id: usage-priced-after-session-exit
+    capability: usage capture honesty
+    acceptance: A session still open when the closeout captured it is named at closeout,
+      and fr usage backfill prices the archived file once the session has exited
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-02-batch-usage-accuracy.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_refresh_after_exit.py
+    status: ci
+    notes: 'gh#756: Claude Code writes cost-state only at session exit; #682''s closeout
+      raced it by a second. Refresh only replaces an unpriced entry with a priced reading,
+      on this host''s capture, appending at: backfill; the recorded isolation mode survives
+      a reaped workspace.'
   - id: ci-under-time-budget
     capability: CI
     acceptance: A CI run of ci.yml completes in under 4 minutes of wall clock (excluding

@@ -9,8 +9,10 @@ table or one self-contained HTML page.
 Read-only with respect to registered artifacts: a run cursor is READ (for its
 sessions and step windows), never written — which is why `usage` is in
 `fr.artifacts.trigger.READ_ONLY_COMMANDS`. The one repo write is `backfill`'s,
-and it only CREATES files under `implemented/usage/`, the frozen archive no
-locator reaches.
+and it only touches files under `implemented/usage/`, the archive no locator
+reaches: it creates missing ones, and prices sessions an archived one captured
+while they were still open (gh#756) — the same shape, one more `backfill`
+capture event.
 
 Exit codes: 0 success (an unreadable session is recorded as `unavailable` and
 reported, not failed); 2 usage error (no session or run named, an unknown run,
@@ -204,8 +206,9 @@ def _has_cursor(repo: Path, run: str) -> bool:
 @usage_app.command("backfill")
 def backfill_cmd(repo: RepoOpt = None) -> None:
     """Write `implemented/usage/<run>.yaml` for every archived run that has none
-    (spec §5.B.5): reads archived cursors and this host's transcripts, writes
-    new files only — never a run cursor. Re-running is a no-op."""
+    (spec §5.B.5), and price an archived file's sessions that were still open
+    when it was captured (gh#756): reads archived cursors and this host's
+    transcripts, never writes a run cursor. Re-running is a no-op."""
     from fr.usage.backfill import backfill
 
     _require_host(repo)
@@ -214,8 +217,8 @@ def backfill_cmd(repo: RepoOpt = None) -> None:
     for run_id, error in report.failed:
         typer.echo(f"fr usage: {run_id}: not backfilled — {error}", err=True)
     typer.echo(
-        f"fr usage: {len(report.written)} backfilled, {len(report.skipped)} already had "
-        f"usage, {len(report.failed)} failed"
+        f"fr usage: {len(report.written)} backfilled, {len(report.refreshed)} refreshed, "
+        f"{len(report.skipped)} already had usage, {len(report.failed)} failed"
     )
-    for path in report.written:
+    for path in (*report.written, *report.refreshed):
         typer.echo(f"  {path.relative_to(root)}")

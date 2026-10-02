@@ -110,6 +110,8 @@ class World:
         self.gh_calls: list[list[str]] = []
         self.bump_calls: list[str] = []
         self.lock_ok = True
+        self.test_calls: list[tuple[str, str]] = []  # (version tested, origin's version then)
+        self.test_failure: str | None = None
         self.before_push: Callable[[int], None] = lambda n: None
 
     # -- other people's pushes -------------------------------------------
@@ -161,7 +163,12 @@ class World:
             self.gh_calls.append(list(args))
             return subprocess.CompletedProcess(["gh", *args], 0, "", "")
 
-        return release.Commands(bump=bump, lock_check=lock_check, gh=gh)
+        def test(repo: Path, new: str) -> str | None:
+            self.test_calls.append((new, self.origin_version()))
+            assert {s.value for s in vs.version_surfaces(repo)} == {new}
+            return self.test_failure
+
+        return release.Commands(bump=bump, lock_check=lock_check, gh=gh, test=test)
 
     def run(self, *argv: str) -> int:
         return release.main(list(argv), repo=self.clone, commands=self.commands())
@@ -506,3 +513,96 @@ def test_a_historical_floor_never_trips_the_release_check(world: World) -> None:
     world.fragment("fix-a", "patch", "fix the thing")
     assert world.run() == 0
     assert _issue_calls(world) == []
+
+
+# -- the staged tree is tested at the new version before it is pushed (#854) --
+
+
+def test_the_staged_tree_is_tested_at_the_new_version_before_the_push(world: World) -> None:
+    world.fragment("feat-x", "major", "a breaking change")
+
+    assert world.run() == 0
+
+    # Tested once, at 5.0.0, while origin still said 4.23.0: before the push.
+    assert world.test_calls == [("5.0.0", BASE)]
+    assert world.origin_version() == "5.0.0"
+
+
+def test_a_red_staged_tree_pushes_nothing_tags_nothing_publishes_nothing(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-x", "major", "a breaking change")
+    world.test_failure = "415 failed, 3101 passed"
+    before = world.origin_log("%H")
+
+    assert world.run() == release.EXIT_REFUSED
+
+    err = capsys.readouterr().err
+    assert "5.0.0" in err and "415 failed" in err
+    assert world.origin_log("%H") == before
+    assert world.origin_tags() == [f"v{BASE}"]
+    assert _release_calls(world) == []
+
+
+def test_no_release_commit_means_no_test_run(world: World) -> None:
+    assert world.run() == 0
+    assert world.test_calls == []
+
+
+def test_a_lost_race_retests_the_recomputed_tree(world: World) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+
+    def race(n: int) -> None:
+        if n == 1:
+            world.fragment("feat-b", "minor", "add the feature")
+
+    world.before_push = race
+    assert world.run() == 0
+    assert [v for v, _ in world.test_calls] == ["4.23.1", "4.24.0"]
+
+
+# -- the default test command ---------------------------------------------------
+
+
+class _FakeRun:
+    """Stands in for subprocess.run: `fr` reports `installed`, pytest exits `rc`."""
+
+    def __init__(self, installed: str, rc: int = 0, tail: str = "3516 passed") -> None:
+        self.installed, self.rc, self.tail = installed, rc, tail
+        self.calls: list[list[str]] = []
+
+    def __call__(self, cmd: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+        self.calls.append(list(cmd))
+        if "pytest" in cmd:
+            return subprocess.CompletedProcess(cmd, self.rc, f"...\n{self.tail}\n", "")
+        return subprocess.CompletedProcess(cmd, 0, f"{self.installed}\n", "")
+
+
+def test_the_default_test_command_runs_the_suite_against_the_locked_env(tmp_path: Path) -> None:
+    run = _FakeRun("5.0.0")
+
+    assert release._run_staged_tests(tmp_path, "5.0.0", run=run) is None
+
+    pytest_call = next(c for c in run.calls if "pytest" in c)
+    assert pytest_call[:3] == ["uv", "run", "--locked"]
+    # The version probe runs first: never a green suite at the wrong number.
+    assert "pytest" not in run.calls[0]
+
+
+def test_the_default_test_command_refuses_an_env_still_at_the_old_version(
+    tmp_path: Path,
+) -> None:
+    run = _FakeRun("4.40.1")
+
+    failure = release._run_staged_tests(tmp_path, "5.0.0", run=run)
+
+    assert failure is not None and "4.40.1" in failure and "5.0.0" in failure
+    assert not any("pytest" in c for c in run.calls)
+
+
+def test_the_default_test_command_reports_the_pytest_tail_when_red(tmp_path: Path) -> None:
+    run = _FakeRun("5.0.0", rc=1, tail="415 failed, 3101 passed")
+
+    failure = release._run_staged_tests(tmp_path, "5.0.0", run=run)
+
+    assert failure is not None and "415 failed" in failure

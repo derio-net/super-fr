@@ -257,3 +257,25 @@ def test_a_misread_table_boundary_refuses_rather_than_rewriting_wrongly(tmp_path
     with pytest.raises(ValueError, match="pyproject.toml"):
         vs.write_version(repo, "1.3.0")
     assert (repo / "packages" / "a" / "pyproject.toml").read_bytes() == before
+
+
+# --- [project] spelling variants (gh#681) ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        '[ project ]\nname = "a"\nversion = "1.2.3"\n',
+        '[project]\t# p\nname = "a"\nversion = "1.2.3"\n',
+        _TOOL_FIRST.replace("[tool.y]", "") + 'project.name = "a"\nproject.version = "1.2.3"\n',
+        'project.name = "a"\nproject . version = "1.2.3"\n\n[tool.x]\nversion = "0.0.1"\n',
+    ],
+    ids=["spaced-header", "tab-comment-header", "dotted-key", "spaced-dotted-key"],
+)
+def test_write_version_accepts_the_spellings_toml_allows(tmp_path: Path, member: str) -> None:
+    """TOML admits these for `[project].version`; the old matcher refused each
+    with `no [project] table`."""
+    repo = _member_repo(tmp_path, member)
+    path = repo / "packages" / "a" / "pyproject.toml"
+    vs.write_version(repo, "1.3.0")
+    assert _project_version(path) == "1.3.0"

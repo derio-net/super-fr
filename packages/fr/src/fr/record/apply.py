@@ -601,6 +601,20 @@ def _check_drops(
                 f"acceptance {row_id}: a drop on a row the record creates — a new row "
                 "has nothing to drop"
             )
+        # gh#655: the CLI refuses this before it builds the record; the engine
+        # is reachable without the CLI, so it refuses it too. Dropped then
+        # re-added nets to the row's prior state while reading as two edits.
+        both = sorted(
+            f"{lv}={ref}"
+            for lv, refs in levels.items()
+            for ref in refs
+            if ref in item.levels.get(lv, ())
+        )
+        if both:
+            raise RecordRefusedError(
+                f"acceptance {row_id}: {', '.join(both)} named in both the drops and the "
+                "additions — a contradiction, so nothing changed"
+            )
 
 
 def _no_ci_reason(repo_root: Path) -> str | None:
@@ -620,7 +634,14 @@ def _acceptance_writes(
         return {}, []
     from typing import get_args
 
-    from fr.acceptance.edit import drop_levels, insert_row, merge_levels, replace_row
+    from fr.acceptance.anchors import line_anchor_error
+    from fr.acceptance.edit import (
+        describe_move,
+        drop_levels,
+        insert_row,
+        merge_levels,
+        replace_row,
+    )
     from fr.acceptance.model import (
         AcceptanceError,
         Row,
@@ -706,10 +727,15 @@ def _acceptance_writes(
                 split_ref(ref)
             # Only the refs this write adds: refused where written, not where
             # loaded, so a row that already carries one still moves (gh#775).
-            for refs in item.levels.values():
-                for ref in refs:
-                    if (why := pipeline_ref_error(ref)) is not None:
-                        raise RecordRefusedError(f"acceptance {item.id}: {why}")
+            added = [ref for refs in item.levels.values() for ref in refs]
+            for ref in added:
+                if (why := pipeline_ref_error(ref)) is not None:
+                    raise RecordRefusedError(f"acceptance {item.id}: {why}")
+            # gh#531: likewise only what this write adds — a row still carrying a
+            # line anchor moves; `check` and the matrix repair handle the rest.
+            for ref in [*added, *(item.origin if creates else ())]:
+                if (why := line_anchor_error(ref)) is not None:
+                    raise RecordRefusedError(f"acceptance {item.id}: {why}")
         except AcceptanceError as e:
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
         except ValueError as e:
@@ -739,7 +765,7 @@ def _acceptance_writes(
             counts["row added"] = counts.get("row added", 0) + 1
         else:
             text = replace_row(text, item.id, row)
-            lines.append(f"{row.id}: {existing.status} → {row.status}")
+            lines.append(f"{row.id}: {describe_move(existing, row)}")
             counts["row moved"] = counts.get("row moved", 0) + 1
     try:
         final = parse_matrix(text)

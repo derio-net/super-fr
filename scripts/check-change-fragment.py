@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The `change-fragment` PR gate (spec 2026-09-26-version-bump-churn §3.B, §3.E).
 
-    scripts/check-change-fragment.py <base-ref>
+    uv run --no-project python scripts/check-change-fragment.py <base-ref>
 
 Three rules over the diff `<base>...HEAD` (so against the merge base, never
 the base tip — a release on main after the branch point is not this PR's
@@ -238,7 +238,10 @@ def check(repo: Path, base_ref: str) -> list[str]:
 def main(argv: list[str] | None = None, repo: Path | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if len(args) != 1:
-        print("usage: scripts/check-change-fragment.py <base-ref>", file=sys.stderr)
+        print(
+            "usage: uv run --no-project python scripts/check-change-fragment.py <base-ref>",
+            file=sys.stderr,
+        )
         return 2
     errors = check(repo or REPO, args[0])
     if not errors:

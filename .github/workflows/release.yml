@@ -8,10 +8,15 @@ name: Release
 # and a rerun reads its notes from the release commit's body.
 #
 # No CI runs on the release commit. It is pushed with the GITHUB_TOKEN, and a
-# push made with the GITHUB_TOKEN triggers no workflow. That is safe only
-# because release.py verifies the staged diff first: nothing but
+# push made with the GITHUB_TOKEN triggers no workflow. So release.py checks it
+# twice before the push. The staged diff may carry nothing but
 # version_surfaces() lines and the consumed fragments, and a stale uv.lock is
-# refused rather than re-resolved.
+# refused rather than re-resolved: that proves WHICH lines changed. Then it
+# tests the staged tree: the whole suite, with fr installed at the new number,
+# which proves how the code BEHAVES there. 5.0.0 passed the first check and
+# shipped refusing its own plans (gh#854). A red suite pushes, tags and
+# publishes nothing. The suite makes this job long; .github/ci-budget.yaml
+# gives it its own budget.
 #
 # Pushing to main works today because main's ruleset forbids only force-push
 # and deletion. If a required-PR or required-checks rule is ever added, the

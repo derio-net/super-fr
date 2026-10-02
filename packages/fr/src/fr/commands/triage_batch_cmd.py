@@ -447,6 +447,7 @@ def batch_cancel_command(
     batch_id: Annotated[str, typer.Argument(help="The batch to withdraw.")],
     reason: Annotated[str, typer.Option("--reason", help="Why; posted on each member.")] = "",
     yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
+    checkout_path: CheckoutOpt = None,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
@@ -462,6 +463,11 @@ def batch_cancel_command(
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
     item = batch_item_id(owner_repo, batch.id)
     touches_forge = stage != "proposed"  # a proposed batch never reached the forge
+    if touches_forge:
+        # gh#803: withdrawing writes labels and comments to the tracker, so it
+        # is gated as dispatch is — a proposed batch writes nothing and needs
+        # no clone.
+        _tracking_gate(checkout_path, owner_repo, yes=yes)
     console.print(f"cancel batch {batch.id} ({stage})", markup=False)
     if touches_forge:
         for key in batch.ids:
@@ -567,8 +573,9 @@ def _open_checkout(path: Path | None, owner_repo: str) -> Checkout:
 
 
 def _tracking_gate(checkout_path: Path | None, owner_repo: str, *, yes: bool) -> None:
-    """R6: dispatch marks issues taken, so a repo with `tracking: {type: none}`
-    refuses `--yes` (exit 2) before the first forge call; a dry run only warns.
+    """R6: dispatch marks issues taken and cancel withdraws them (gh#803), so a
+    repo with `tracking: {type: none}` refuses `--yes` (exit 2) before the first
+    forge call; a dry run only warns. `merge` is not gated: it writes no issue.
     Strict: a malformed tracking block refuses too. With `--yes` the clone must
     open AND be the batch's repo (`_open_checkout`), on `--repair` as well, so
     the declaration read is the target repo's and never another clone's."""

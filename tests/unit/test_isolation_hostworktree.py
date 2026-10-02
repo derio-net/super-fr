@@ -85,6 +85,27 @@ def test_up_creates_worktree_marker_state_no_container(
     _no_container_calls(runner)
 
 
+def test_cold_start_up_records_the_start_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gh#768: the commit a NEW branch was cut from is recorded on the state,
+    so `deliver` can name a base when the remote default branch does not
+    resolve. It survives a resume `up`, which creates nothing."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)
+    start = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    target = HostWorktreeTarget(repo, runner=RecordingRunner())
+
+    first = target.up(profile=None, branch="feat/x")
+    second = target.up(profile=None, branch="feat/x")
+
+    assert first.base_sha == start
+    assert second.base_sha == start
+    assert load_state(repo, "feat/x").base_sha == start
+
+
 def test_up_no_devcontainer_profile_does_not_raise(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

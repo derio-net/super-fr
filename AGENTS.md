@@ -168,8 +168,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     turns), `render.py` (table / one HTML page, `—` for every missing figure).
     CLI: `fr usage collect|report|backfill` (`commands/usage_cmd.py`); the
     cache lives under `$HOME/.cache/fr/usage/`, so `usage` is in
-    `READ_ONLY_COMMANDS` (`backfill` only CREATES archive files). Driver skill:
-    `fr-audit`. Dollars always come from the harness; fr invents no list price.
+    `READ_ONLY_COMMANDS` (`backfill` only writes archive files: it creates
+    missing ones and prices sessions an archived one captured while they were
+    still open, gh#756). Driver skill: `fr-audit`. Dollars always come from the harness; fr invents no list price.
     §5.B persists it: `file.py` is the `usage` artifact kind
     (`docs/superpowers/usage/<run-id>.yaml`, one capture per host, host label
     `h-<sha256(run+hostname)[:8]>`, an ALLOWLIST projection — never a
@@ -390,7 +391,7 @@ version-bearing surface** (the list is `scripts/version_surfaces.py`: member
 `pyproject.toml`s, per-plugin `plugin.json`, root `marketplace.json`,
 `packages/fr-opencode-plugin/package.json`, and the workspace members'
 `uv.lock` entries). The `change-fragment` CI job
-(`scripts/check-change-fragment.py <base-ref>`) fails a PR that changes one,
+(`uv run --no-project python scripts/check-change-fragment.py <base-ref>`) fails a PR that changes one,
 fails a PR on a fragment-required path with no added fragment, and prints the
 fix either way. `bump-version.py --check` (the `version-sync` job) is
 read-only and fine to run anywhere. A hand-written `fr_version` floor
@@ -399,9 +400,15 @@ name the predicted one: the base version plus this PR's highest fragment bump.
 
 On every push to `main`, `.github/workflows/release.yml` runs
 `scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`,
-`git rm`s the consumed fragments, pushes one `release: vX.Y.Z` commit to `main`
-(the only commits that land there without a PR), then tags it and publishes a
-GitHub Release whose notes are the fragment summaries. To release a specific
+`git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
+whole suite on that staged tree with `fr` installed at the new number**, and only
+then pushes it to `main` (the only commits that land there without a PR), tags
+it and publishes a GitHub Release whose notes are the fragment summaries. No CI
+runs on the release commit itself (it is pushed with the `GITHUB_TOKEN`), so that
+pre-push run is the only test the new number gets: a red suite pushes, tags and
+publishes nothing (gh#854 — 5.0.0 shipped refusing its own plans before it
+existed). It is why the Release job has its own budget in
+`.github/ci-budget.yaml`. To release a specific
 number, run the workflow by hand (`workflow_dispatch`) with an explicit
 `version`. `main`'s ruleset forbids only force-push and deletion today; **if a
 required-PR or required-checks rule is ever added, the release bot needs a

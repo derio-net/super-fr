@@ -30,6 +30,19 @@ def ceiling_for(version: str) -> str:
     return f"{Version(version).major + 1}.0.0"
 
 
+def admits(constraint: str | SpecifierSet, version: str | Version) -> bool:
+    """Does `constraint` admit `version`, pre-releases included?
+
+    The ONE membership test for an `fr_version`. A bare `in` against a
+    `SpecifierSet` leaves pre-release handling to the library default, which
+    moved: before packaging 26 a dev install (`5.0.1.dev0`) fell outside a range
+    spanning it, and the parser then told it to upgrade (gh#855). fr declares `packaging>=24`, so
+    either default can be installed; asking explicitly makes the answer one.
+    """
+    spec = constraint if isinstance(constraint, SpecifierSet) else SpecifierSet(constraint)
+    return spec.contains(version, prereleases=True)
+
+
 CEILING_VERSION = ceiling_for(importlib.metadata.version("fr"))
 """The ceiling a NEW plan carries, derived from the installed fr at import.
 

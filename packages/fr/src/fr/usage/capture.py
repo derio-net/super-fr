@@ -68,9 +68,14 @@ def this_host(run_id: str, env: Mapping[str, str]) -> str:
     return host_label(run_id, hostname(env))
 
 
-def isolation_mode(repo_root: Path, state: RunState) -> Mode:
-    """The run's isolation mode, from its workspace record — `host-worktree`
-    when there is none (fr then runs where the harness runs)."""
+def isolation_mode(repo_root: Path, state: RunState, previous: Mode | None = None) -> Mode:
+    """The run's isolation mode, from its workspace record — else `previous`,
+    the mode this host's earlier capture recorded, else `host-worktree` (fr
+    then runs where the harness runs).
+
+    `previous` matters at closeout (gh#756): `fr isolation gc` may already
+    have reaped the merged workspace, and without it a devcontainer run's
+    closeout relabelled its capture `host-worktree`."""
     try:
         from fr.isolation.types import load_state, recorded_mode
 
@@ -78,7 +83,9 @@ def isolation_mode(repo_root: Path, state: RunState) -> Mode:
     except Exception:  # noqa: BLE001 — observability degrades, never raises
         workspace = None
     if workspace is None:
-        return "external" if _external_marker(repo_root) else "host-worktree"
+        if _external_marker(repo_root):
+            return "external"
+        return previous or "host-worktree"
     mode = recorded_mode(workspace)
     return "host-worktree" if mode == "worktree" else mode
 
@@ -135,6 +142,20 @@ def _merge(previous: Capture | None, entries: list[SessionEntry]) -> list[Sessio
     return entries
 
 
+def unpriced_sessions(capture: Capture) -> list[str]:
+    """Sessions `capture` read tokens for but no dollars (gh#756).
+
+    A harness may write a session's cost only when the session exits (Claude
+    Code's `cost-state`), so a capture taken while it is still open records
+    `usd: null`. The closeout names these, and `fr usage backfill` prices
+    them once the dollars exist."""
+    return [
+        s.session
+        for s in capture.sessions
+        if s.unavailable is None and s.models and all(m.usd is None for m in s.models.values())
+    ]
+
+
 def needs_capture(repo_root: Path, state: RunState, env: Mapping[str, str]) -> bool:
     """True when this host has no capture of the run yet (spec §5.B.3 row 3)."""
     try:
@@ -188,7 +209,7 @@ def build_capture(
     return Capture(
         host=label,
         harness=harness_now,
-        mode=isolation_mode(repo_root, state),
+        mode=isolation_mode(repo_root, state, previous.mode if previous is not None else None),
         captured_at=_dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
         at=events,
         sessions=tuple(merged),
@@ -251,4 +272,5 @@ __all__ = [
     "isolation_mode",
     "live_usage",
     "needs_capture",
+    "unpriced_sessions",
 ]

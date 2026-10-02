@@ -60,6 +60,11 @@ class IsolationState(BaseModel):
     # Sessions bound to this workspace (spec 2026-09-04 §5.A). Default keeps
     # pre-feature state files loadable; frozen models still `model_copy(update=)`.
     sessions: list[SessionBinding] = Field(default_factory=list)
+    # The commit a cold-start `up` cut this NEW branch from (gh#768) — what
+    # `deliver`'s proportionality witness falls back to when the remote
+    # default branch does not resolve. None for a branch `up` found already
+    # existing, and on a record an older fr wrote.
+    base_sha: str | None = None
 
     model_config = {"frozen": True}
 
@@ -152,7 +157,12 @@ def load_state(repo_root: Path, branch: str) -> IsolationState | None:
 
 
 def carried_state(
-    repo_root: Path, branch: str, worktree: Path, profile: str, target: IsolationMode
+    repo_root: Path,
+    branch: str,
+    worktree: Path,
+    profile: str,
+    target: IsolationMode,
+    base_sha: str | None = None,
 ) -> IsolationState:
     """The record `up` saves, for every target (spec 2026-09-23 §3.C).
 
@@ -162,7 +172,9 @@ def carried_state(
     THIS worktree carries: one pointing at another path is a different
     workspace. An unreadable record (corrupt, empty, truncated) never breaks
     `up`: it is replaced by a fresh one, with a warning. `target` is the mode
-    of the target saving it (gh#569) — always the caller's, never carried."""
+    of the target saving it (gh#569) — always the caller's, never carried.
+    `base_sha` is the commit this call cut a new branch from; a resume creates
+    nothing, so it carries the prior record's instead (gh#768)."""
     prior: IsolationState | None = None
     try:
         prior = load_state(repo_root, branch)
@@ -182,6 +194,7 @@ def carried_state(
         target=target,
         created_at=prior.created_at if prior else datetime.now(UTC).isoformat(),
         sessions=list(prior.sessions) if prior else [],
+        base_sha=base_sha or (prior.base_sha if prior else None),
     )
 
 

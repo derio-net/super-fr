@@ -70,5 +70,18 @@ def test_header_states_the_no_ci_property_and_the_bypass_actor() -> None:
     assert "bypass actor" in header
 
 
+def test_header_no_longer_claims_the_staged_diff_check_is_enough() -> None:
+    """#854: the diff check proves which lines changed, not how the code behaves
+    at the new number — 5.0.0 shipped refusing its own plans under that claim."""
+    header = WORKFLOW.read_text().split("\non:", 1)[0]
+    assert "safe only because release.py verifies the staged diff" not in " ".join(header.split())
+    assert "tests the staged tree" in " ".join(header.replace("#", " ").split())
+
+
+def test_the_release_job_has_a_budget_for_the_full_suite() -> None:
+    budget = yaml.safe_load((REPO / ".github" / "ci-budget.yaml").read_text())
+    assert budget["workflows"]["release.yml"]["budget_seconds"] >= 900
+
+
 def test_auto_tag_workflow_is_gone() -> None:
     assert not (REPO / ".github" / "workflows" / "auto-tag.yml").exists()

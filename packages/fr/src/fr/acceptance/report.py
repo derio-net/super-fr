@@ -21,6 +21,7 @@ import html
 import os
 from pathlib import Path
 
+from fr.acceptance.anchors import is_python, line_of, node_line
 from fr.acceptance.model import LEVELS, Matrix, Row, archive_twin, split_ref
 
 STATUS_LABEL = {
@@ -81,6 +82,19 @@ class LinkBuilder:
                 return twin
         return path
 
+    def _anchor(self, repo: str, path: str, frag: str) -> str:
+        """A test's name anchor as the line it sits on in this checkout
+        (gh#531) — github.com cannot jump to a name. Only when probing: the
+        committed reports must not change because a test file did, so they
+        keep the name, which the forge ignores harmlessly."""
+        if not (self.probe and is_python(path)) or line_of(frag) is not None:
+            return frag
+        try:
+            line = node_line((self._base(repo) / path).read_text(), frag)
+        except (OSError, UnicodeDecodeError):
+            return frag
+        return f"L{line}" if line is not None else frag
+
     def url(self, ref: str) -> str:
         repo, path, frag = split_ref(ref)
         path = self._actual_path(repo, path)
@@ -89,7 +103,7 @@ class LinkBuilder:
             # master-defaulted sibling gets stale links). Recorded in the
             # plan's _prose.md; a per-repo override can come with demand.
             branch = self.ref if repo == self.own_repo else "main"
-            anchor = f"#{frag}" if frag else ""
+            anchor = f"#{self._anchor(repo, path, frag)}" if frag else ""
             return f"https://github.com/{self.org}/{repo}/blob/{branch}/{path}{anchor}"
         base = self._base(repo)
         try:

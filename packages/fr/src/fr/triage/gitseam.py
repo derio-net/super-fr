@@ -295,8 +295,23 @@ class Worktree:
         `rerere` is off for this merge whatever the operator's config says: a
         replayed resolution would make a non-version conflict look clean, and
         only merge decides what may be resolved (review r3-f12).
+
+        Directory-rename detection is off too (gh#800): fr's artifact
+        directories are never renamed as a whole, but a close-out that moves
+        the LAST file out of `runs/` or `journals/plans/` looks like one to
+        git, which then moves the PR's new file after it and reports a
+        conflict on a path that exists on neither side.
         """
-        argv = ["-c", "rerere.enabled=false", "merge", "--no-ff", "--no-commit", ref]
+        argv = [
+            "-c",
+            "rerere.enabled=false",
+            "-c",
+            "merge.directoryRenames=false",
+            "merge",
+            "--no-ff",
+            "--no-commit",
+            ref,
+        ]
         clean = git_ok(argv, self.path)
         conflicted = git(["diff", "--name-only", "--diff-filter=U"], self.path).split()
         if not clean and not conflicted:

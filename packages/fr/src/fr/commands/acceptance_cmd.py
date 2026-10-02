@@ -373,7 +373,7 @@ def set_status_cmd(
     level: list[str] = typer.Option(
         [],
         "--level",
-        help="'<level>=<repo>:<path>[#Lline]' evidence to ADD (repeatable) — the other "
+        help="'<level>=<repo>:<path>[#test_name]' evidence to ADD (repeatable) — the other "
         "half of the documented transition.",
     ),
     drop_level: list[str] = typer.Option(
@@ -414,7 +414,7 @@ def set_status_cmd(
     """
     from typing import get_args
 
-    from fr.acceptance.edit import drop_levels, merge_levels
+    from fr.acceptance.edit import describe_move, drop_levels, merge_levels
     from fr.acceptance.model import Status
 
     root = resolve_repo_root()
@@ -483,10 +483,10 @@ def set_status_cmd(
             levels={k: tuple(v) for k, v in additions.items()},
             verify=verify,  # type: ignore[arg-type]  # None preserves; apply.py falls back to existing
         ),
-        f"chore(fr): acceptance — {row_id} {target.status} → {new_row.status}",
+        f"chore(fr): acceptance — {row_id} {describe_move(target, new_row)}",
         {row_id: {k: tuple(v) for k, v in drops.items()}} if drops else None,
     )
-    typer.echo(f"{row_id}: {target.status} → {new_row.status}")
+    typer.echo(f"{row_id}: {describe_move(target, new_row)}")
 
 
 @acceptance_app.command("add")
@@ -498,7 +498,7 @@ def add_cmd(
         [], "--origin", help="'<repo>:<path>[#anchor]' ref (repeatable)."
     ),
     level: list[str] = typer.Option(
-        [], "--level", help="'<level>=<repo>:<path>[#Lline]' test ref (repeatable)."
+        [], "--level", help="'<level>=<repo>:<path>[#test_name]' test ref (repeatable)."
     ),
     status: str = typer.Option(
         ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
