@@ -1,0 +1,11 @@
+# Journal: 2026-10-02-batch-forge-honesty
+
+<!-- fr:journal kind=ruled-out scope=debug id=e4fc50219a6f created=2026-10-02T18:05:55+00:00 -->
+### e4fc50219a6f · ruled-out · The four members do not share one root cause
+
+Batch premise: one root cause. Investigation of the code each issue names finds four independent defects in four modules:
+- #803: tracking gate (`_tracking_gate`, triage_batch_cmd.py:473) is called only by dispatch (:801); cancel (:380-406), merge and `fr undispatch` (undispatch_cmd.py) write labels/comments ungated. Cause: #794 placed the gate per-verb, not at the forge-write seam.
+- #490: fr_vk/pr_state.py closer seam is `Callable[[str, str, str], None]` (repo, issue, backend); the host derived from pr_url in `_close_linked_gh_issue` (:121) never reaches `_default_close_gh_issue` (:76). Cause: a backend string travels where a resolved client is needed.
+- #804: apply_cmd.py:265 reads require_tracker(plan repo). Not a defect yet: the spec does not say whose setting governs; needs an operator decision.
+- #800: gitseam.py:186 merge passes `-c rerere.enabled=false` but not `merge.directoryRenames=false`; git infers a directory rename when an archive empties runs/ or journals/plans/. Cause: git default config, unrelated to forge writes.
+Shared theme (forge/tracker honesty) only for #803/#804; #490 and #800 are separate. Per the batch's debugging rules, stopping to ask before fixing any.
