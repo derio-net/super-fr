@@ -104,7 +104,7 @@ def candidates(state: RunState, env: Mapping[str, str], repo_root: Path) -> list
     """`(harness, session)` pairs, first-seen order: every session the cursor
     records, every session bound to the run's workspace, and this process's."""
     from fr.harness.detect import detect_harness
-    from fr.run.telemetry import current_session
+    from fr.run.telemetry import run_session
 
     found: list[tuple[str, str]] = list(sessions_of(state.model_dump(mode="json")))
     try:
@@ -117,7 +117,7 @@ def candidates(state: RunState, env: Mapping[str, str], repo_root: Path) -> list
         found.append(
             (_BINDING_TO_HARNESS.get(binding.harness, binding.harness), binding.session_id)
         )
-    current = current_session(env)
+    current = run_session(env)
     if current:
         try:
             harness = detect_harness(env) or "claude-code"
