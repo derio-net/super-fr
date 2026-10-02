@@ -840,3 +840,8 @@ Fixed in 5d79e76e with tests.
 ### rk-8-resolved · finding [out-of-scope] · resolves rk-8: Checkout.show() is text-only by contract (phase 6)
 
 gitseam show() is text-only by contract; the new measurement no longer uses it.
+
+<!-- fr:journal kind=finding scope=plan id=rf-4-resolved-3 created=2026-10-02T22:15:53+00:00 state=open resolves=rf-4 out_of_scope=true -->
+### rf-4-resolved-3 · finding [out-of-scope] · resolves rf-4: merge_ready uses required checks only, not the R4 'else all checks / ci none' rule
+
+merge_ready's check rule (required checks else all, ci none) was addressed later by phase 2's driver pass; the state is restored because only the operator may move an out-of-scope finding to fixed
