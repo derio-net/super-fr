@@ -19,3 +19,8 @@ Root cause: _deliver_pr_gate validates only REQUIRED_SECTIONS. Nothing checks th
 ### f-821 · finding [fixed] · deliver refuses a line sharing one closing keyword across several issues
 
 fr.record.pr_body.shared_closing_keywords + a refusal in _deliver_pr_gate after the section check, printing the one-per-line fix. Failing test first: tests/unit/test_deliver_closing_keywords.py (17 cases, committed d2cc9339 before the fix ac093bbd). Full suite: 7606 passed, 97 skipped.
+
+<!-- fr:journal kind=review scope=debug id=r1 created=2026-10-02T17:18:01+00:00 -->
+### r1 · review · Independent review: 5 in-scope findings, all fixed
+
+Reviewer (separate context) raised: (1) SERIOUS: fr's own rendered finding lines (title with a keyword word, state 'fixed', '→ #N') tripped the gate, so deliver would refuse its own render. Fixed: scan only above fr's render marker (shared constant _RENDER_MARKER). (2) markdown link [#5](…/issues/5) read as two refs. Fixed: a link collapses to one ref. (3) **Closes** #5 refused. Fixed: '*' stripped. (4) fence toggle broke on one-line ```x```, nested/longer fences, quote/list fences. Fixed: CommonMark-style char+length match. (5) the suggested fix reused the first keyword. Fixed: nearest preceding keyword. Each has a test that was red on the prior implementation (10 failed). Out of scope (by the strict rule, as #821 specifies): prose like 'fix colour #123' is refused; a keyword and ref split across lines is not detected. Full suite after: 7617 passed, 97 skipped.
