@@ -65,7 +65,16 @@ def missing_sections(body: str) -> list[str]:
 _KEYWORD = re.compile(r"\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b", re.IGNORECASE)
 _KEYWORD_BEFORE = re.compile(rf"{_KEYWORD.pattern}\s*:?\s*$", re.IGNORECASE)
 _ISSUE_REF = re.compile(r"https?://\S+?/issues/\d+\b|(?<![\w/])(?:[\w.-]+/[\w.-]+)?#\d+\b")
-_CODE_SPAN = re.compile(r"`[^`]*`")
+_CODE_SPAN = re.compile(r"(`+).+?\1")
+_LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]*)[^)]*\)")
+# A fence may sit inside a blockquote or a list item (CommonMark).
+_FENCE = re.compile(r"^\s*(?:>\s*)*(?:(?:[-*+]|\d+[.)])\s+)?(`{3,}|~{3,})(.*)$")
+_RENDER_MARKER = "<!-- rendered by fr for run "
+
+
+def _one_ref_per_link(match: re.Match[str]) -> str:
+    text, url = match.group(1), match.group(2)
+    return text if _ISSUE_REF.search(text) else url
 
 
 def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
@@ -74,25 +83,35 @@ def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
 
     `Closes #a and #b` closes only `#a` on GitHub, so the rule is strict: on a
     line carrying a closing keyword, every reference needs its own keyword
-    directly before it. Code (fenced or inline) is skipped, as GitHub skips it.
+    directly before it. Code (fenced or inline) is skipped, as GitHub skips it,
+    and so is fr's own render below its marker: a finding line carries a
+    free-text title, a state word (`fixed`) and `→ #N`, none of which closes.
     """
     out: list[tuple[str, list[str]]] = []
-    fenced = False
-    for raw in body.splitlines():
-        if raw.lstrip().startswith(("```", "~~~")):
-            fenced = not fenced
+    fence: str | None = None  # the open fence's run, e.g. "````"
+    for raw in body.split(_RENDER_MARKER, 1)[0].splitlines():
+        m = _FENCE.match(raw)
+        if fence is None and m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+            fence = m.group(1)
             continue
-        if fenced:
+        if fence is not None:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+                if not m.group(2).strip():
+                    fence = None
             continue
-        line = _CODE_SPAN.sub("", raw)
-        keyword = _KEYWORD.search(line)
+        line = _LINK.sub(_one_ref_per_link, _CODE_SPAN.sub("", raw)).replace("*", "")
+        keywords = list(_KEYWORD.finditer(line))
         refs = list(_ISSUE_REF.finditer(line))
-        if keyword is None or not refs:
+        if not keywords or not refs:
             continue
-        starts = [0, *(m.end() for m in refs[:-1])]
-        if all(_KEYWORD_BEFORE.search(line[s : m.start()]) for s, m in zip(starts, refs)):
+        starts = [0, *(r.end() for r in refs[:-1])]
+        if all(_KEYWORD_BEFORE.search(line[s : r.start()]) for s, r in zip(starts, refs)):
             continue
-        out.append((raw.strip(), [f"{keyword.group(1)} {m.group(0)}" for m in refs]))
+        fixed = []
+        for r in refs:
+            before = [k for k in keywords if k.end() <= r.start()]
+            fixed.append(f"{(before[-1] if before else keywords[0]).group(1)} {r.group(0)}")
+        out.append((raw.strip(), fixed))
     return out
 
 
@@ -246,7 +265,7 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
     The agent may add a summary above it; it may not drop a section."""
     inside, outside = _findings(repo_root, state)
     parts = [
-        f"<!-- rendered by fr for run {state.run}; edit above this line only -->",
+        f"{_RENDER_MARKER}{state.run}; edit above this line only -->",
         "## Findings",
         "\n".join(inside) if inside else "None.",
         "## Out-of-scope findings",

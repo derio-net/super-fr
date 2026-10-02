@@ -81,3 +81,70 @@ def test_deliver_refuses_a_shared_keyword_and_prints_the_corrected_lines(
 
     assert out.exit_code == 0, out.output
     assert load_run_state(root, RUN).steps["deliver"].state == "done"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Closes [#5](https://github.com/o/r/issues/5)\n",  # one link, one issue
+        "Closes [the bug](https://github.com/o/r/issues/5)\n",
+        "**Closes** #5\n",
+        "Closes: **#5**\n",
+        "```x``` and then\nCloses #1\n",  # a one-line span, not a fence
+        "> ```\n> Closes #1 and #2\n> ```\n",
+        "- ```\n  Closes #1 and #2\n  ```\n",
+        "````\n```\nCloses #1 and #2\n````\n",  # an inner shorter fence does not close
+    ],
+)
+def test_markdown_around_a_compliant_reference_passes(body: str) -> None:
+    from fr.record.pr_body import shared_closing_keywords
+
+    assert shared_closing_keywords(body) == []
+
+
+def test_a_one_line_span_does_not_hide_the_rest_of_the_body() -> None:
+    from fr.record.pr_body import shared_closing_keywords
+
+    assert shared_closing_keywords("```x```\nCloses #1 and #2\n") != []
+
+
+def test_the_fix_uses_the_keyword_nearest_each_reference() -> None:
+    from fr.record.pr_body import shared_closing_keywords
+
+    [(_, fixed)] = shared_closing_keywords("Fixes #5, and this resolves #6 and #7\n")
+
+    assert fixed == ["Fixes #5", "resolves #6", "resolves #7"]
+
+
+def test_frs_own_render_never_trips_the_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review r1: a finding line carries a free-text title, a state word that is
+    a keyword (`fixed`) and `→ #N` — fr's own render must still deliver."""
+    import fr.record.pr_body as pr_body
+    from fr.journal.model import JournalEntry
+
+    def entry(eid: str, title: str) -> JournalEntry:
+        return JournalEntry.model_validate(
+            {
+                "kind": "finding",
+                "scope": "plan",
+                "id": eid,
+                "created": "2026-10-02",
+                "title": title,
+                "state": "open",
+            }
+        )
+
+    lines = (
+        [pr_body._finding_line("spec", entry("f3", "Crash in #45 handler"), "fixed", None)],
+        [pr_body._finding_line("plan", entry("f2", "Fix flaky retry"), "deferred", "#123")],
+    )
+    monkeypatch.setattr(pr_body, "_findings", lambda _root, _state: lines)
+    root = _at_deliver(tmp_path)
+
+    body = pr_body.render_pr_body(root, load_run_state(root, RUN))
+
+    assert "#123" in body and "#45" in body
+    assert pr_body.shared_closing_keywords(body) == []
+    assert pr_body.shared_closing_keywords(f"Closes #1 and #2\n\n{body}") != []
