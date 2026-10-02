@@ -46,3 +46,8 @@ fr-brainstorming §0 started the cursor but never said to advance; the operator 
 ### fix-761 · finding [fixed] · #761 fixed: RunState.driver=standalone skips the round cap; skill advances before the first question
 
 fr run start --driver standalone records RunState.driver (run kind 7->8, stamp-only migration fr.artifacts.run_driver). _gate_provenance skips question_rounds_refusal for standalone runs but still refuses zero answered questions. fr-brainstorming §0: start with --driver standalone, then fr run advance before the first question. Tests: test_run_question_rounds.py::test_a_standalone_brainstorm_*, ::test_an_unknown_driver_is_refused; test_migration_run_driver.py; test_fr_brainstorming_gate_order.py; chain tests updated to 8.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-10-02T18:36:32+00:00 -->
+### review-1 · review · Independent review: no findings
+
+Dispatched a separate read-only code reviewer over the diff (all three fixes). No high-confidence findings. Checked: derive() only ever catches Exit(2) refusals and preserves the exit code; review/findings preconditions still exit first; load_state keyed on git common dir works from a linked worktree; base_sha set on cold start only and carried on resume; 7->8 migration registered, imported, refuses unreadable v7; exclude_none keeps driver off pipeline cursors. Low-confidence note, not acted on: a re-adopted worktree path under the same branch with a surviving state file carries a stale base_sha (unlikely path; the fallback is only used when no remote resolves). Mirrors and #699 prose covered separately by the sync and skill tripwires.
