@@ -1,0 +1,72 @@
+schema_version: 7
+run: 2026-10-02-feat-wave-driver
+step: review-phase
+item: phase/5
+outcome: done
+journal:
+- kind: review
+  id: review-p5
+  title: 'phase 5 review: 7 findings (6 in scope, fixed; 1 out of scope)'
+  body: Independent review of e8860c9e..HEAD against R10, R12, R20 and design E, with the real sample page opened in a browser at 1100px and 400px (filter, dark theme, conclusion links, no horizontal scroll).
+    841 triage tests passed in the reviewer's run. The chart legibility and table wrapping defects were observed in the browser. All in-scope findings were fixed in 92ec0f54 with tests.
+- kind: finding
+  id: rj-1
+  title: 'The filings-per-day chart scales to the container: giant with overlapping labels on a short window'
+  body: 'Observed in the browser: 5 days stretched to 1008px, date labels overlapping; the opposite at 30+ days on a phone.'
+  review_scope: in
+- kind: finding
+  id: rj-2
+  title: The issue table breaks words mid-word at phone width
+  body: overflow-wrap:anywhere on every cell; the scroll wrapper never engaged.
+  review_scope: in
+- kind: finding
+  id: rj-3
+  title: Org-scope truncation of the repo list is dropped silently
+  body: collect_origins discarded the Truncation list from scope_repos.
+  review_scope: in
+- kind: finding
+  id: rj-4
+  title: No test covers group or org scope, a skipped repo's warning, or the limit warnings
+  body: New branches of collect_origins had no failing test if removed.
+  review_scope: in
+- kind: finding
+  id: rj-5
+  title: Widening ISSUE_LIST_FIELDS affects every issue-list verb
+  body: The shared constant now asked for stateReason for triage collect too.
+  review_scope: in
+- kind: finding
+  id: rj-6
+  title: Skill text slightly overstates what the engine does
+  body: 'Missing: a bad origins.yaml fails every verb that reads it; the duplicate check is prose-only.'
+  review_scope: in
+- kind: finding
+  id: rj-7
+  title: Closing-PR and issue lists rely on newest-first 1000-row pages
+  body: Matches how the existing collector treats limits; the limit warning covers truncation.
+  review_scope: out
+resolves:
+- id: rj-1
+  state: fixed
+  body: Fixed in 92ec0f54 with tests.
+- id: rj-2
+  state: fixed
+  body: Fixed in 92ec0f54 with tests.
+- id: rj-3
+  state: fixed
+  body: Fixed in 92ec0f54 with tests.
+- id: rj-4
+  state: fixed
+  body: Fixed in 92ec0f54 with tests.
+- id: rj-5
+  state: fixed
+  body: Fixed in 92ec0f54 with tests.
+- id: rj-6
+  state: fixed
+  body: Fixed in 92ec0f54 with tests.
+- id: rj-7
+  state: out-of-scope
+  body: Matches the existing collector's limit handling; not caused by this change.
+evidence:
+  review: review-p5
+  reviewer: aaba0f1099fbbea05
+  model: claude-sonnet-5-5
