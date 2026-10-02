@@ -1,2 +1,0 @@
-bump: patch
-summary: "Under tracking: none, triage batch cancel --yes and fr undispatch --yes now refuse before any tracker write (cancel gains --checkout); the VK bridge's Issue close reaches a self-hosted GitLab's own host; batch merge no longer reports false conflicts when an archive empties runs/ or journals/plans/."
