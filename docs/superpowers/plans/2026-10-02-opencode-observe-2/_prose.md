@@ -6,7 +6,7 @@ Spec: `docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md`.
 `origin/feat/batch-opencode-observe` (closed draft PR #837). Steps name the
 salvage commit to port from. New modules and tests come over close to verbatim
 (`git show <sha> -- <path>`). Hunks in `commands/run_cmd.py`, `run/telemetry.py`
-and other files `main` has moved are **re-applied by hand onto current main**,
+and other files `main` has moved are **re-applied onto current main as fresh edits**,
 never cherry-picked: `main` moved ~1,100 lines under `run_cmd.py` since #837's
 base. Salvage commit `9689ee7a` (the input-coverage comparison) and every
 coverage mention are dropped: #851 removed that block. #837's fixture builder is
