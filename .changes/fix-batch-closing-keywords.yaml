@@ -1,2 +1,0 @@
-bump: patch
-summary: "deliver refuses a PR body that shares one closing keyword across several issues (`Closes #a and #b` closes only #a) and prints the one-per-line fix (#821)"
