@@ -267,3 +267,6 @@ New §J records d-close-837: #837 closed with a link when the draft opened; bran
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-02-opencode-observe-2-p3 created=2026-10-02T19:18:03+00:00 -->
 ### phase-split-2026-10-02-opencode-observe-2-p3 · decision · ask: #809/#797/#561 — operator answers, visual reads, parity and prose
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-02-opencode-observe-2-p1 created=2026-10-02T19:18:04+00:00 -->
+### tier-2026-10-02-opencode-observe-2-p1 · decision · hard: changes the session seam and capture attribution every transcript gate and every capture relies on
