@@ -50,7 +50,7 @@ def test_done_without_a_declared_emit_is_refused_naming_it(tmp_path: Path) -> No
     no `--emitted spec=` used to record `done` and `emitted: None`."""
     repo, shipped = _agent_blocked(tmp_path, _GATED_AGENT_SHAPE)
 
-    result = _invoke(repo, shipped, _DONE)
+    result = _invoke(repo, shipped, [*_DONE, "--answered-by", "agent"])
 
     assert result.exit_code == 2, result.output
     flat = " ".join(result.output.split())
@@ -79,7 +79,7 @@ def test_a_cleared_cli_gate_persists_unobserved_on_the_cursor(tmp_path: Path) ->
     )
     _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], env)
 
-    result = _invoke_as_harness(repo, shipped, _DONE, env)
+    result = _invoke_as_harness(repo, shipped, [*_DONE, "--answered-by", "agent"], env)
 
     assert result.exit_code == 0, result.output
     assert "unobserved=operator-gate" in " ".join(result.output.split())

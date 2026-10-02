@@ -1214,7 +1214,7 @@ def _gate_provenance(
     step_id: str,
     record: StepRecord,
     *,
-    claimed: str,
+    claimed: AnsweredBy | None,
     no_questions: bool,
     reason: str | None,
     questions: QuestionRounds | None = None,
@@ -1312,6 +1312,18 @@ def _gate_provenance(
             soft_wrap=True,
         )
         return "agent"
+    if claimed is None:
+        # R10 (spec 2026-10-02 §F): there is no default. An unobserved gate with
+        # no claim is a question fr cannot answer for the caller, so it asks.
+        err_console.print(
+            f"[red]{step_id}: could not verify who answered this gate "
+            f"({_why_unobservable('questions')}) — pass `answered_by: operator` "
+            "(the operator answered) or `answered_by: agent` (cleared without asking): "
+            "`--answered-by operator|agent` on the flag form, "
+            "`evidence: {answered_by: …}` in a record.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     # Wherever the gate cannot observe — no harness, no readable transcript,
     # or a harness fr has no question reader for (OpenCode, Hermes) — it says
     # so on the record (§5.B.7, p2-r28); `advance` already told the last two
@@ -1334,7 +1346,7 @@ def _gate_provenance(
         f"(evidence: unobserved=operator-gate).{declared}[/yellow]",
         soft_wrap=True,
     )
-    return claimed  # type: ignore[return-value]  # validated by the caller
+    return claimed
 
 
 def _record_round_two(
@@ -4887,7 +4899,8 @@ def resolve_cmd(
         None,
         "--answered-by",
         help="operator | agent — who answered this step's operator gate. "
-        "Defaults to `agent`, the weaker claim; recorded only when a gate "
+        "Required when the gate's answer cannot be observed (there is no "
+        "default); an observed gate derives it. Recorded only when a gate "
         "is cleared, and reported by `fr run check` and in the PR body.",
     ),
     agent: str | None = typer.Option(
@@ -5007,7 +5020,7 @@ def resolve_cmd(
         no_questions=no_questions,
         reason=reason,
         questions=questions,
-        answered_by=answered_by or "agent",
+        answered_by=answered_by,
         agent=agent,
         harness=harness,
         model=model,
@@ -5128,7 +5141,7 @@ def _resolve_body(
     no_questions: bool = False,
     reason: str | None = None,
     questions: QuestionRounds | None = None,
-    answered_by: str = "agent",
+    answered_by: str | None = None,
     agent: str | None = None,
     harness: str | None = None,
     model: str | None = None,
@@ -5144,7 +5157,7 @@ def _resolve_body(
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
         raise typer.Exit(2)
-    if answered_by not in ("operator", "agent"):
+    if answered_by is not None and answered_by not in ("operator", "agent"):
         # Refused rather than coerced: a typo recorded as a third provenance
         # would be read by nobody and would quietly weaken the one claim this
         # field exists to make.
@@ -5516,7 +5529,7 @@ def resolve_in_process(
     import sys
 
     offered = dict(evidence)
-    answered_by = offered.pop("answered_by", "agent")
+    answered_by = offered.pop("answered_by", None)
     agent = offered.pop("agent", None)
     harness = offered.pop("harness", None)
     model = offered.pop("model", None)
@@ -6221,8 +6234,7 @@ def check_cmd(
         # soft_wrap: this line is read for the step id it names, and rich
         # would fold a long id across a line break at a narrow width.
         console.print(
-            f"{gate.step}: operator gate cleared by the agent (answered_by: agent) — "
-            "no operator answered it",
+            f"{gate.step}: operator gate {_agent_clearance(gate.unobserved)}",
             soft_wrap=True,
         )
     open_dispatches = _open_dispatches(state)
@@ -6259,6 +6271,17 @@ def check_cmd(
         raise typer.Exit(1)
 
 
+def _agent_clearance(unobserved: bool) -> str:
+    """One sentence for an `agent` clearance, shared by `check` and `gates`
+    (R11): an observed one says no operator answered; an unobserved one says
+    only that the agent claimed it and fr could not read the truth."""
+    if unobserved:
+        return (
+            "cleared by the agent, as claimed — unobserved: fr could not read who answered"
+        )
+    return "cleared by the agent (answered_by: agent) — no operator answered it"
+
+
 @run_app.command("gates")
 def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """Every `gate: operator` step this run's manifest declares, and who
@@ -6291,12 +6314,15 @@ def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             # most needs to notice must not be the tersest line on the page —
             # "cleared by agent" alone reads as bookkeeping, not as a warning.
             console.print(
-                f"{status.step}: operator gate cleared by the agent "
-                "(answered_by: agent) — no operator answered it",
+                f"{status.step}: operator gate {_agent_clearance(status.unobserved)}",
                 soft_wrap=True,
             )
         elif status.outcome == "recorded":
-            console.print(f"{status.step}: operator gate answered by the operator", soft_wrap=True)
+            console.print(
+                f"{status.step}: operator gate answered by the operator"
+                + (", as claimed — unobserved" if status.unobserved else ""),
+                soft_wrap=True,
+            )
         else:
             console.print(
                 f"{status.step}: cleared, but provenance not recorded "

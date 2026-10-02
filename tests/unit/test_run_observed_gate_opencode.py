@@ -31,9 +31,7 @@ def _blocked(tmp_path: Path) -> tuple[Path, Path, Path]:
 
 
 def _resolve(repo: Path, shipped: Path, db: Path, *extra: str):
-    return _invoke_as_harness(
-        repo, shipped, [*_RESOLVE_BRAINSTORM, *extra], opencode_env(db)
-    )
+    return _invoke_as_harness(repo, shipped, [*_RESOLVE_BRAINSTORM, *extra], opencode_env(db))
 
 
 def test_one_answered_round_since_the_block_is_the_operator(tmp_path: Path) -> None:

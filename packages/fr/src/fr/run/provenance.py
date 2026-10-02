@@ -37,7 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from fr.run.model import AnsweredBy, RunState
+from fr.run.model import AnsweredBy, RunState, StepRecord
 from fr.workflow.model import Step, WorkflowManifest
 
 
@@ -55,10 +55,23 @@ class ClearedGate:
     step: str
     answered_by: AnsweredBy
     at: str | None = None
+    unobserved: bool = False
+    """The step's evidence says fr could not read who answered (`unobserved`
+    names `operator-gate`): `answered_by` is a claim, not an observation."""
 
     @property
     def by_agent(self) -> bool:
         return self.answered_by == "agent"
+
+
+def gate_unobserved(record: StepRecord) -> bool:
+    """Did the resolve that cleared this step's gate note `operator-gate` as
+    unobserved? Read off the step's units' evidence (R11)."""
+    for unit in (record.units or {}).values():
+        found = (unit.evidence or {}).get("unobserved", "")
+        if "operator-gate" in found.split(","):
+            return True
+    return False
 
 
 def cleared_gates(state: RunState) -> tuple[ClearedGate, ...]:
@@ -68,7 +81,12 @@ def cleared_gates(state: RunState) -> tuple[ClearedGate, ...]:
     manifest, so this reads down the run the way the operator reads it.
     """
     return tuple(
-        ClearedGate(step=step_id, answered_by=record.answered_by, at=record.at)
+        ClearedGate(
+            step=step_id,
+            answered_by=record.answered_by,
+            at=record.at,
+            unobserved=gate_unobserved(record),
+        )
         for step_id, record in state.steps.items()
         if record.answered_by is not None
     )
@@ -103,6 +121,7 @@ class GateStatus:
     outcome: GateOutcome
     answered_by: AnsweredBy | None = None
     at: str | None = None
+    unobserved: bool = False
 
 
 def _gated_steps(steps: tuple[Step, ...]) -> tuple[Step, ...]:
@@ -143,7 +162,11 @@ def gates(state: RunState, manifest: WorkflowManifest) -> tuple[GateStatus, ...]
         if record.answered_by is not None:
             statuses.append(
                 GateStatus(
-                    step=step.id, outcome="recorded", answered_by=record.answered_by, at=record.at
+                    step=step.id,
+                    outcome="recorded",
+                    answered_by=record.answered_by,
+                    at=record.at,
+                    unobserved=gate_unobserved(record),
                 )
             )
             continue

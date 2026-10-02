@@ -33,7 +33,7 @@ def test_the_flag_form_refuses_an_unobservable_gate_with_no_answered_by(tmp_path
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
 
-    result = _clear_cli_gate(repo, shipped)
+    result = _clear_cli_gate(repo, shipped, claimed=False)
 
     assert result.exit_code == 2, result.output
     out = _squash(result.output)

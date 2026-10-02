@@ -196,6 +196,8 @@ def test_squash_merged_delivery_leaves_no_hazard_fr_caused(
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             f"spec={spec_rel}",
         ],

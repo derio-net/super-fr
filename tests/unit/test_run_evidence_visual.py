@@ -1152,3 +1152,123 @@ def test_a_row_named_by_two_entries_is_refused(tmp_path: Path) -> None:
     )
 
     assert any("ui-row" in p and "more than one `visual` entry" in p for p in result.problems)
+
+
+# --- OpenCode: the witness reads OpenCode's own parts (spec 2026-10-02 §G, R12) ---
+
+
+def _opencode_visual(
+    tmp_path: Path, *, role: str, reviewer: str | None = None, holder: str | None = None,
+    orchestrator_reads: bool = True, reviewer_reads: bool = True, script_runs: bool = True,
+    with_script: bool = True,
+):  # fmt: skip
+    """`derive_visual` over a copy of the OpenCode run-tree fixture whose read
+    and shell parts name THIS test's shot and capture script. Returns what the
+    witness derives (or raises `VisualRefusedError`)."""
+    import json
+    import sqlite3
+    from contextlib import closing
+
+    from fr.run.telemetry import parse_timestamp
+    from fr.run.visual import derive_visual
+
+    from tests.unit.opencode_fixture import opencode_env, shifted
+
+    shot = tmp_path / "scratch" / "a.png"
+    shot.parent.mkdir(parents=True, exist_ok=True)
+    shot.write_bytes(b"\x89PNG one")
+    script = tmp_path / "scratch" / "shots.cjs"
+    script.write_text("// capture\n")
+    written = _dt.datetime.fromtimestamp(shot.stat().st_mtime, tz=_dt.UTC)
+    since = (written - _dt.timedelta(seconds=30)).isoformat()
+    opened = parse_timestamp(since)
+    assert opened is not None
+    db = shifted(tmp_path, opened)
+    with closing(sqlite3.connect(db)) as con:
+        for part_id, session, raw in con.execute(
+            "SELECT id, session_id, data FROM part"
+        ).fetchall():
+            data = json.loads(raw)
+            tool_input = data.get("state", {}).get("input", {})
+            if data.get("tool") == "read" and str(tool_input.get("filePath", "")).endswith("a.png"):
+                keep = orchestrator_reads if session == "ses_run" else reviewer_reads
+                if keep:
+                    tool_input["filePath"] = str(shot)
+                else:
+                    con.execute("DELETE FROM part WHERE id = ?", (part_id,))
+                    continue
+            elif data.get("tool") == "bash" and session == "ses_run":
+                if tool_input.get("command") == "node shots.cjs":
+                    if script_runs:
+                        tool_input["command"] = f"node {script}"
+                    else:
+                        con.execute("DELETE FROM part WHERE id = ?", (part_id,))
+                        continue
+            else:
+                continue
+            con.execute("UPDATE part SET data = ? WHERE id = ?", (json.dumps(data), part_id))
+        con.commit()
+    repo = tmp_path / "repo"
+    repo.mkdir(exist_ok=True)
+    return derive_visual(
+        [_row()],
+        [
+            _entry(
+                "ui-row",
+                (shot, ("accepted", "20 cap")),
+                script=str(script) if with_script else None,
+            )
+        ],
+        role=role,  # type: ignore[arg-type]
+        since=since,
+        holder=holder,
+        reviewer=reviewer,
+        repo_root=repo,
+        records_dir=repo / "docs/superpowers/runs/r1.records",
+        env={k: v for k, v in opencode_env(db).items() if v is not None},
+    )
+
+
+def test_a_png_read_only_in_the_orchestrators_session_does_not_satisfy_the_reviewer(
+    tmp_path: Path,
+) -> None:
+    from fr.run.visual import VisualRefusedError
+
+    with pytest.raises(VisualRefusedError) as refused:
+        _opencode_visual(
+            tmp_path, role="reviewer", reviewer="ses_gen1", reviewer_reads=False, with_script=False
+        )
+
+    assert "was not opened in the transcript of the reviewer ses_gen1" in " ".join(
+        refused.value.lines
+    )
+
+
+def test_the_same_read_in_the_reviewers_child_satisfies_it(tmp_path: Path) -> None:
+    derived = _opencode_visual(
+        tmp_path, role="reviewer", reviewer="ses_gen1", orchestrator_reads=False, with_script=False
+    )  # fmt: skip
+
+    assert derived.unobserved is False
+
+
+def test_a_capture_script_run_in_the_run_session_satisfies_an_inline_unit(tmp_path: Path) -> None:
+    derived = _opencode_visual(tmp_path, role="orchestrator")
+
+    assert derived.unobserved is False
+
+
+def test_a_capture_script_nobody_ran_is_refused_inline(tmp_path: Path) -> None:
+    from fr.run.visual import VisualRefusedError
+
+    with pytest.raises(VisualRefusedError) as refused:
+        _opencode_visual(tmp_path, role="orchestrator", script_runs=False)
+
+    assert "executed the capture script" in " ".join(refused.value.lines)
+
+
+def test_the_unobservable_reason_no_longer_names_opencode() -> None:
+    from fr.run.visual import _unobservable
+
+    assert "opencode" not in _unobservable({"FR_HARNESS": "opencode"}).lower()
+    assert "hermes's transcripts" in _unobservable({"FR_HARNESS": "hermes"})

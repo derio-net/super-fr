@@ -155,7 +155,18 @@ def test_capture_records_each_dispatch_brief_under_the_unit_that_claimed_it(
     resolved = _invoke(
         repo,
         shipped,
-        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done", *EMITS["brainstorm"]],
+        [
+            "run",
+            "resolve",
+            RUN,
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--answered-by",
+            "agent",
+            *EMITS["brainstorm"],
+        ],
     )
     assert resolved.exit_code == 0, resolved.output
     (unit,) = [

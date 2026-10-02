@@ -566,6 +566,8 @@ def test_resolve_done_completes_the_step_and_advances_the_cursor(tmp_path: Path)
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             "spec=docs/superpowers/specs/2026-08-14-x-design.md",
         ],
@@ -769,6 +771,8 @@ def test_resolve_clears_a_blocked_agent_step_and_advances_the_cursor(tmp_path: P
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             "spec=s.md",
         ],
@@ -818,7 +822,19 @@ def test_resolving_a_blocked_cli_step_clears_the_gate_but_does_not_execute_it(
     _invoke(repo, shipped, ["run", "advance", "r1"])
 
     result = _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done"]
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--answered-by",
+            "agent",
+        ],
     )
 
     assert result.exit_code == 0, result.output
@@ -872,7 +888,11 @@ def test_a_cleared_gate_stays_cleared_across_a_retry(tmp_path: Path) -> None:
     )
     _invoke(repo, shipped, ["run", "start", "gated-fail", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
-    _invoke(repo, shipped, ["run", "resolve", "r1", "--step", "boom", "--state", "done"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "boom", "--state", "done", "--answered-by", "agent"],
+    )
     _invoke(repo, shipped, ["run", "advance", "r1"])  # executes, fails
     assert load_run_state(repo, "r1").steps["boom"].state == "failed"
 
@@ -2822,15 +2842,28 @@ def test_serial_resolves_still_flow(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _clear_cli_gate(repo: Path, shipped: Path, *extra: str):
-    """Start the `gated` shape, block on its gate, and clear it."""
+def _clear_cli_gate(repo: Path, shipped: Path, *extra: str, claimed: bool = True):
+    """Start the `gated` shape, block on its gate, and clear it. There is no
+    default `answered_by` (R10), so the clearing says `agent` unless `extra`
+    names a claim itself — or `claimed=False` says none."""
+    if claimed and "--answered-by" not in extra:
+        extra = ("--answered-by", "agent", *extra)
     _write_shape(shipped, "gated", _GATE_SHAPE)
     _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
     return _invoke(
         repo,
         shipped,
-        ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done", *extra],
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            *extra,
+        ],
     )
 
 
@@ -2897,6 +2930,8 @@ def test_a_gated_agent_step_records_provenance_too(tmp_path: Path) -> None:
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             "spec=s.md",
         ],
@@ -2927,6 +2962,8 @@ def test_a_gated_agent_step_can_record_an_operator(tmp_path: Path) -> None:
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             "spec=s.md",
             "--answered-by",
@@ -3062,7 +3099,12 @@ def test_an_unobservable_gate_degrades_loudly_instead_of_refusing(tmp_path: Path
     root.mkdir()
     repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-missing")
 
-    result = _invoke_measurable(repo, shipped, _RESOLVE_BRAINSTORM, root, "s-missing")
+    bare = _invoke_measurable(repo, shipped, _RESOLVE_BRAINSTORM, root, "s-missing")
+    assert bare.exit_code == 2, bare.output  # R10: no claim, nothing to record
+
+    result = _invoke_measurable(
+        repo, shipped, [*_RESOLVE_BRAINSTORM, "--answered-by", "agent"], root, "s-missing"
+    )
 
     assert result.exit_code == 0, result.output
     assert "could not verify" in " ".join(result.stderr.split())
@@ -3222,7 +3264,7 @@ def test_check_reports_an_agent_cleared_gate_and_still_exits_zero(tmp_path: Path
 
     assert result.exit_code == 0, result.output
     assert "brainstorm" in result.output
-    assert "answered_by: agent" in result.output
+    assert "cleared by the agent, as claimed" in result.output
 
 
 def test_check_says_nothing_about_a_gate_the_operator_answered(tmp_path: Path) -> None:
@@ -3251,13 +3293,17 @@ def test_check_still_exits_nonzero_on_a_failed_step_that_had_an_agent_cleared_ga
     )
     _invoke(repo, shipped, ["run", "start", "gated-fail", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
-    _invoke(repo, shipped, ["run", "resolve", "r1", "--step", "boom", "--state", "done"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "boom", "--state", "done", "--answered-by", "agent"],
+    )
     _invoke(repo, shipped, ["run", "advance", "r1"])  # executes, fails
 
     result = _invoke(repo, shipped, ["run", "check", "r1"])
 
     assert result.exit_code == 1, result.output
-    assert "answered_by: agent" in result.output
+    assert "cleared by the agent, as claimed" in result.output
 
 
 # --- `fr run gates` (Phase 5, review r4-i2): the PR-body "Operator gates" ---
@@ -3299,8 +3345,8 @@ def test_gates_reports_an_agent_cleared_gate_with_the_same_wording_as_check(tmp_
     assert result.exit_code == 0, result.output
     # r5-m3: this test's NAME already claimed parity with `check`; until the
     # fix it asserted a terser line that differed. Now it is true.
-    assert "operator gate cleared by the agent (answered_by: agent)" in result.output
-    assert "no operator answered it" in result.output
+    assert "operator gate cleared by the agent, as claimed" in result.output
+    assert "unobserved: fr could not read who answered" in result.output
 
 
 def test_gates_never_renders_blank_on_a_pre_provenance_cursor(tmp_path: Path) -> None:
@@ -4401,6 +4447,8 @@ def test_resolve_closes_a_flat_agent_steps_record(tmp_path: Path) -> None:
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             "spec=s.md",
         ],
@@ -4557,6 +4605,8 @@ def test_resolve_a_gated_step_with_no_dispatch_record_still_works(tmp_path: Path
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             "spec=s.md",
         ],
@@ -5097,6 +5147,8 @@ def _fr_goal_at_implement(repo: Path, shipped: Path):
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             f"spec={spec_rel}",
         ]
@@ -6323,6 +6375,8 @@ def _resolved_to_deliver(repo: Path, shipped: Path) -> None:
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             "spec=docs/superpowers/specs/2026-09-30-fixture-design.md",
         ],
@@ -6534,7 +6588,17 @@ def test_a_gate_on_a_harness_with_no_question_reader_records_unobserved(
     start = ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"]
     _invoke_as_harness(repo, shipped, start, env)
     _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], env)
-    resolve = ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done"]
+    resolve = [
+        "run",
+        "resolve",
+        "r1",
+        "--step",
+        "brainstorm",
+        "--state",
+        "done",
+        "--answered-by",
+        "agent",
+    ]
     result = _invoke_as_harness(repo, shipped, [*resolve, "--emitted", "spec=s.md"], env)
 
     assert result.exit_code == 0, result.output

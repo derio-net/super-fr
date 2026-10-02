@@ -451,7 +451,17 @@ def _at_the_spec_review(
     start = ["run", "start", "specshape", "--branch", "b", "--run-id", "r1"]
     assert _run(repo, shipped, start, root, session).exit_code == 0
     assert _run(repo, shipped, ["run", "advance", "r1"], root, session).exit_code == 0
-    brainstorm = ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done"]
+    brainstorm = [
+        "run",
+        "resolve",
+        "r1",
+        "--step",
+        "brainstorm",
+        "--state",
+        "done",
+        "--answered-by",
+        "agent",
+    ]
     result = _run(repo, shipped, [*brainstorm, "--emitted", f"spec={_SPEC_REL}"], root, session)
     assert result.exit_code == 0, result.output
     assert _run(repo, shipped, ["run", "advance", "r1"], root, session).exit_code == 0

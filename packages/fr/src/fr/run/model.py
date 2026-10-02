@@ -36,11 +36,10 @@ inside one run's cursor, not a tracker projection."""
 AnsweredBy = Literal["operator", "agent"]
 """Who cleared an operator gate (spec `2026-09-18-harness-parity-matrix` §3.D.2).
 
-Two values, not three, and neither is provable: this records a *claim*. No
-mechanism here can show that a human answered (that spec's §2 non-goals say so
-outright), which is why `fr run resolve --answered-by` defaults to `agent` —
-the weaker claim is what an unmodified caller records, so nothing is silently
-upgraded to "a human answered"."""
+Two values, not three. Where fr can read the session it DERIVES the answer;
+where it cannot, this records a *claim* and the caller must make one:
+`fr run resolve` has no default (spec 2026-10-02-opencode-observe-2 §F, R10),
+so nothing is silently recorded as "a human answered" — or as "nobody did"."""
 
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 IMPLEMENTED_RUNS_REL = Path("docs") / "superpowers" / "implemented" / "runs"

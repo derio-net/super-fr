@@ -104,6 +104,7 @@ def _resolve_step(
     outcome: str = "done",
     spec: str | None = SPEC,
     run_id: str = RUN,
+    claim: str | None = None,
 ):
     """Resolve `step` as `outcome` declaring `questions` via `path`. The record
     is written first, so a snapshot taken after this call's record write is
@@ -114,19 +115,25 @@ def _resolve_step(
             data["emitted"] = {"spec": spec}
         if questions is not None:
             data["questions"] = questions
+        if claim is not None:
+            data["evidence"] = {"answered_by": claim}
         rec = root / "docs" / "superpowers" / "runs" / f"{run_id}.records" / f"{step}.yaml"
         rec.parent.mkdir(parents=True, exist_ok=True)
         rec.write_text(yaml.safe_dump(data, sort_keys=False))
         return lambda: fr(root, ["run", "resolve", run_id, "--step", step, "--record", str(rec)])
     argv = ["run", "resolve", run_id, "--step", step, "--state", outcome]
+    if claim is not None:
+        argv += ["--answered-by", claim]
     if spec is not None:
         argv += ["--emitted", f"spec={spec}"]
     return lambda: fr(root, [*argv, *_flags(questions)])
 
 
-def _resolve_brainstorm(root: Path, path: str, questions: dict[str, Any] | None):
+def _resolve_brainstorm(
+    root: Path, path: str, questions: dict[str, Any] | None, *, claim: str | None = None
+):
     """Resolve the brainstorm gate `done`, emitting the spec."""
-    return _resolve_step(root, path, questions)
+    return _resolve_step(root, path, questions, claim=claim)
 
 
 def _unmoved(root: Path, run, *needles: str) -> str:
@@ -351,7 +358,7 @@ def test_an_unobservable_gate_records_the_declaration_as_claimed(
 ) -> None:
     root, _ = _blocked(tmp_path, monkeypatch)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s-missing")
-    run = _resolve_brainstorm(root, path, ROUND_TWO)
+    run = _resolve_brainstorm(root, path, ROUND_TWO, claim="agent")
 
     out = run()
 
@@ -371,7 +378,7 @@ def test_an_unobservable_one_round_declaration_is_accepted_not_recorded(
     root, _ = _blocked(tmp_path, monkeypatch)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s-missing")
 
-    out = _resolve_brainstorm(root, path, {"rounds": 1})()
+    out = _resolve_brainstorm(root, path, {"rounds": 1}, claim="agent")()
 
     assert out.exit_code == 0, out.output
     flat = " ".join(out.output.split())
@@ -500,7 +507,17 @@ def test_an_invalid_flag_declaration_is_refused(
 ) -> None:
     root, at = _blocked(tmp_path, monkeypatch)
     _transcript(tmp_path, at, [None])
-    argv = ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done"]
+    argv = [
+        "run",
+        "resolve",
+        RUN,
+        "--step",
+        "brainstorm",
+        "--state",
+        "done",
+        "--answered-by",
+        "agent",
+    ]
     argv += ["--emitted", f"spec={SPEC}", *flags]
 
     _refused(root, lambda: fr(root, argv), needle)
