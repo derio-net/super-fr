@@ -34,3 +34,8 @@ gc trusts any MERGED PR that `gh pr view <name>` returns, even one that merged b
 ### 328225b68c5e · root-cause · #578: up performs side effects before recording them
 
 `LocalWorktreeDevcontainerTarget.up` ran `_devcontainer_up` before `save_state`, so a raise between them stranded the worktree and container with no record.
+
+<!-- fr:journal kind=root-cause scope=debug id=4afd4f1b079f created=2026-10-02T17:00:14+00:00 -->
+### 4afd4f1b079f · root-cause · #843: the append to the shared info/exclude assumed a trailing newline
+
+`_write_isolation_marker` appended `.fr-isolation` directly, so a hand-edited last line with no newline (`*.log`) became `*.log.fr-isolation`.
