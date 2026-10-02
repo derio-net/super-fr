@@ -5695,9 +5695,11 @@ rows:
       runs in the owing session only
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_visual.py
+    status: ci
+    notes: 'R12: witness reads OpenCode read/bash parts of the owing session (fixture)'
   - id: parity-observe-declarations
     capability: harness parity
     acceptance: parity.yaml declares the OpenCode observation cells partial with a run-session-identity
