@@ -1,0 +1,148 @@
+schema_version: 7
+run: 2026-10-02-feat-wave-driver
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+- kind: review
+  id: review-p2
+  title: 'phase 2 review: 16 findings (15 in scope, fixed; 1 out of scope)'
+  body: 'Independent Opus review of ab3c4fea..HEAD against R2-R8, R13, R14 and design B and C. The operator boundary held for draft and readiness (nothing readies, approves or un-drafts a PR), but rg-1,
+    rg-2 and rg-3 were reproduced with the suite''s own fakes: a dependent dispatched behind a merge that did not land, a moved head merged unverified, and the cap and dependencies scoped to the selection.
+    All 15 in-scope findings were fixed in 920419d0, 40c0c6e2 and 83885a18 with command-level tests; the whole suite passed (7757 passed, 97 skipped).'
+- kind: finding
+  id: rg-1
+  title: A dependent is dispatched in the same pass even when its dependency's merge did not land
+  body: drive_pass marks planned merges merged before dispatch; _act only checks the cap; merge_ready can return updated/pending/failing/draft. Breaks R3 and R13's summary.
+  review_scope: in
+- kind: finding
+  id: rg-2
+  title: A head that moves between the snapshot and the merge is merged
+  body: plan_queue re-reads pr_view and pins to the new head; action.head is unused; with no required checks nothing is verified on the new head. Breaks R4.
+  review_scope: in
+- kind: finding
+  id: rg-3
+  title: The in-flight cap and dependency resolution only see the selected batches
+  body: Unselected dispatched batches do not count against --max-inflight; a merged dependency outside the selection blocks its dependent forever.
+  review_scope: in
+- kind: finding
+  id: rg-4
+  title: Zero registered checks reads as green
+  body: After the driver's own update push, or a PR whose CI is not queued, a repo with no required checks merges with no CI; MergeStopError killed the loop.
+  review_scope: in
+- kind: finding
+  id: rg-5
+  title: ci none is read from the clone's working tree, not the default branch
+  body: A feature branch declaring ci none would let the driver merge on non-draft alone.
+  review_scope: in
+- kind: finding
+  id: rg-6
+  title: An archive PR attributed only by its files is never seen as merged
+  body: The batch counts as closing forever and --once never exits 0.
+  review_scope: in
+- kind: finding
+  id: rg-7
+  title: drive.lock takeover has a race and an empty-file window
+  body: Unwritten lock read as stale; two starters can unlink the same lock; unlink without ownership check; spec sentence about collect was wrong.
+  review_scope: in
+- kind: finding
+  id: rg-8
+  title: Close-out model resolution ignores the repo's models.yaml in single-repo mode
+  body: _launch used path_of (None by default) where dispatch_batch uses the checkout path.
+  review_scope: in
+- kind: finding
+  id: rg-9
+  title: The release-commit check is date-based
+  body: Another merge's release satisfied it; unknown merged_at made the close-out due at once.
+  review_scope: in
+- kind: finding
+  id: rg-10
+  title: A close-out preflight refusal stops merges and dispatches when no close-out is due
+  body: Every merged batch without a closeout event was probed on every pass.
+  review_scope: in
+- kind: finding
+  id: rg-11
+  title: Only-blocked work exits 0 and ends the loop
+  body: Hides blocked work from a scheduler; R7 ambiguous.
+  review_scope: in
+- kind: finding
+  id: rg-12
+  title: Archive attribution by head is broader than the spec allows
+  body: Any event.archive head was accepted without a file check.
+  review_scope: in
+- kind: finding
+  id: rg-13
+  title: The executor's declared departures need a spec correction
+  body: post_merge starts in gitseam, the default selection, and the no --yes exit code were not in the spec.
+  review_scope: in
+- kind: finding
+  id: rg-14
+  title: fr-triage skill dropped 'Never act on the forge unasked'; AGENTS.md says schema 2 and 3
+  body: Docs the phase edited were inconsistent.
+  review_scope: in
+- kind: finding
+  id: rg-15
+  title: The tests miss the command-level paths behind rg-1 to rg-3
+  body: World defaults hid the all-checks fallback; moved head, held merge, outside-selection dependency, lock races and file-attributed archive were untested.
+  review_scope: in
+- kind: finding
+  id: rg-16
+  title: A close-out tab that ended before a restart is not seen, so a second close-out could start
+  body: The spec's own accepted design limit (design C), not an implementation error.
+  review_scope: out
+resolves:
+- id: rg-1
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-2
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-3
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-4
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-5
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-6
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-7
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-8
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-9
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-10
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-11
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-12
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-13
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-14
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-15
+  state: fixed
+  body: Fixed in 920419d0 / 40c0c6e2 / 83885a18 with tests.
+- id: rg-16
+  state: out-of-scope
+  body: The spec's accepted design limit, recorded in design C; not caused by this change.
+- id: p2-closeout-state-archived-unreachable
+  state: out-of-scope
+  body: Raised by the executor as not caused by phase 2; the archived outcome became reachable through rg-6's fix (the close-out event now carries the archive PR number).
+evidence:
+  review: review-p2
+  reviewer: abf4367678a8975bf
+  model: claude-sonnet-5-5
