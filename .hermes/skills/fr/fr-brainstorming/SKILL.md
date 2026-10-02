@@ -47,12 +47,10 @@ fr isolation up --branch <feature-branch> [--profile <name>]
   `fr run adopt <plan-dir|spec>` when work already exists on disk — so
   `implement`'s `needs: [spec, plan]` later refuses to advance past a plan
   that was never written (#436 instance 1). Then, **before the first
-  question**, run `fr run advance <run-id>`: `brainstorm` is an operator
-  gate, it opens only on that advance, and `resolve` counts only the answers
-  given after it opened (#761) — every answer before it is invisible. Never
-  ask while the gate is closed. `--driver standalone` exempts this run from
-  fr-goal's two-round cap, because a standalone brainstorm asks one question
-  per turn; the gate still needs at least one answered question.
+  question**, run `fr run advance <run-id>`: the `brainstorm` gate opens only
+  then, and `resolve` counts only answers given after it (#761). Never ask
+  while the gate is closed. `--driver standalone` lifts fr-goal's two-round
+  cap (you ask one question per turn); one answered question is still owed.
   **Under fr-goal, skip this entirely** — that
   pipeline already started the run, and a second `fr run start` exits 2. It
   also exits 2 (naming the run) if this branch already has one: resume with
