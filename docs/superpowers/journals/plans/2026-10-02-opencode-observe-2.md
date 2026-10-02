@@ -142,3 +142,38 @@ T1's GREEN had already landed with phase 1 (salvage 2aa091c5 ported there: agent
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 One helper (_observed_holder) and one line at each of the two resolve paths; the helper reuses agent_name and observed_session, so nothing was duplicated to consolidate.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-02T20:35:57+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · OpenCode resumed child (two task parts, one session) trips the duplicate-id refusal and the holder fill's ≥2 match (phase 2)
+
+observed.py:433-460 emitted one ChildDispatch per task part; a reviewer sent back (OpenCode resumes a task by its session) appeared twice with the same agent_id and return, so run_cmd.py:2165-2190 refused every id as "returned by both ses_x and ses_x" and _observed_holder (:4384-4389) counted two matches. A single id repeated within one block gave the same misleading message.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-02T20:35:57+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · flat resolve path fills the holder but does not pass it as holder= to _verified_evidence (phase 2)
+
+run_cmd.py:5356-5369: the visual witness still saw attempt.agent None, so a flat agent step owing visual was refused as unclaimed — what §D says the fill prevents. No shipped flat step carries both agent and visual; a repo-override manifest hits it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-02T20:35:57+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · phase==N journal requirement conflicts with the manifest's 'file a later-phase finding against THAT phase' convention (phase 2)
+
+run_cmd.py:2191-2201 required phase == N while fr-goal.yaml:151-152 says a finding that belongs to a later phase is filed against that phase and gates its review — an orchestrator following the convention was refused at phase N. Spec-level: R7 literally said "for that phase".
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-10-02T20:35:57+00:00 phase=2 -->
+### review-p2 · review · phase 2 independent code review: 3 findings (p2-r1 medium, p2-r2/p2-r3 low), all in scope (phase 2)
+
+Reviewer checked R5–R8, §D, §E: reviewer identity on both steps and harnesses, holder fill ordering in both resolve paths, the review-findings check (fence name, reviewer set, every refusal, unobserved path, no input-coverage), edge cases (none, letters, extra findings, reclassified), the PR-body render, brief key on both shapes, manifest pairs, cost. Found p2-r1, p2-r2, p2-r3. Received: each verified in the code; p2-r1 and p2-r3 reproduced by failing tests first; p2-r3 resolved by aligning code AND spec (R7, §E) with the manifest convention — phase N or later counts, an earlier phase still does not.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-02T20:35:57+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: OpenCode resumed child (two task parts, one session) trips the duplicate-id refusal and the holder fill's ≥2 match (phase 2)
+
+6370168e: OpenCodeSession.dispatches keys by child session (latest dispatch wins), so the review check and the holder fill see one child; parse_review_findings refuses an id listed twice in one block as malformed. Tests: test_a_resumed_reviewer_is_one_reviewer (with_resumed_child fixture helper), test_an_id_repeated_within_one_block_is_malformed — both red first.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-02T20:35:57+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: flat resolve path fills the holder but does not pass it as holder= to _verified_evidence (phase 2)
+
+6370168e: the flat path passes holder=agent to _verified_evidence, as the member path does. No dedicated test: no shipped flat step carries agent+visual; the member-path test pins the same derive.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-02T20:35:57+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: phase==N journal requirement conflicts with the manifest's 'file a later-phase finding against THAT phase' convention (phase 2)
+
+6370168e: returned ids count when journaled against phase N or later (an earlier phase still refused, test_a_finding_against_another_phase_does_not_count unchanged); spec R7/§E and the fr-goal.yaml comment pair say so. Test: test_a_finding_filed_against_a_later_phase_counts (red first).
