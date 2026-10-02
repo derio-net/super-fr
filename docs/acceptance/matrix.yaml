@@ -5622,9 +5622,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_an_invented_reviewer_id_is_refused_at_the_phase_review_on_opencode
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_a_tiered_opencode_phase_executor_is_never_a_reviewer
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_the_one_observed_executor_child_becomes_the_holder
+    status: ci
+    notes: 'R5/R6: holder fill from the one observed child, invented and executor reviewer
+      ids refused on OpenCode (phase 2)'
   - id: opencode-observe-take10-rerun
     capability: fr-goal on OpenCode
     acceptance: Re-running take 10 run B's shape on OpenCode with this release, the
