@@ -24,3 +24,8 @@ edit.render_row_block prefixed every line with two spaces whatever the file used
 ### 9bad1c05c48c · root-cause · #531: nothing interprets a .py fragment
 
 split_ref carries the fragment through; check strips it for existence only; reports render it raw. A line anchor's rot is therefore invisible. Measured live: 27 of 78 #L anchors had slid (several onto helpers), 3 name anchors named tests #628 deleted, and one ref had fused two refs with a comma — all passing check.
+
+<!-- fr:journal kind=root-cause scope=debug id=4cf7889208cc created=2026-10-02T18:29:37+00:00 -->
+### 4cf7889208cc · root-cause · #769: set-status's subject is always '{old} → {new}'
+
+acceptance_cmd.set_status_cmd and the record engine's report line format the transition unconditionally, so a levels-only move logs 'skipped → skipped'.
