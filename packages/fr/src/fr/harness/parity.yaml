@@ -243,7 +243,10 @@ surfaces:
         state: partial
         scope_note: >-
           `--answered-by operator` is verified against the `question` parts in
-          the run session's opencode.db where fr can read them (fixture tests:
+          the run session's opencode.db where fr can read them (fixture tests
+          of the guard itself: tests/unit/test_journal_operator_guard_opencode.py
+          — refused with no answered round since the out-of-scope record,
+          accepted with one; the round reader:
           tests/unit/test_run_observed_opencode.py); until the post-merge row
           `opencode-observe-take10-rerun` runs live it stays `partial`, and an
           unreadable store records the claim as stated

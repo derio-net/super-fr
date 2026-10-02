@@ -71,13 +71,22 @@ def verify_operator_claim(
             f"{finding_id}: could not verify `answered_by: operator` — the session "
             "transcript is not readable here; recorded unverified."
         )
-    from fr.harness import load_matrix
+    if harness == "opencode":
+        # fr HAS a reader here, and the row's scope_note describes the
+        # verification — quoting it now would claim a check that did not run
+        # (p3-r3). Say what could not be read, as every gate does.
+        from fr.run.observed import why_unobservable
 
-    # The reason is the parity row's own `scope_note`, never a second
-    # hand-typed copy of it (the same rule the brainstorm gate follows).
-    row = next(s for s in load_matrix().surfaces if s.id == "out-of-scope-operator-guard")
-    cell = row.harnesses.get(harness) if harness is not None else None
-    why = (cell.scope_note if cell else None) or "fr cannot read an operator answer here"
+        why = why_unobservable(harness, env, "questions")
+    else:
+        from fr.harness import load_matrix
+
+        # No reader: the reason is the parity row's own `scope_note`, never a
+        # second hand-typed copy of it (the same rule the brainstorm gate
+        # follows).
+        row = next(s for s in load_matrix().surfaces if s.id == "out-of-scope-operator-guard")
+        cell = row.harnesses.get(harness) if harness is not None else None
+        why = (cell.scope_note if cell else None) or "fr cannot read an operator answer here"
     return (
         f"{finding_id}: `answered_by: operator` recorded as stated — advisory on "
         f"{harness or 'an unrecognised harness'}: {why}"
