@@ -5706,6 +5706,10 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R11
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_architecture.py#test_line_counts_per_subsystem_at_then_and_now_name_their_commits
+    status: ci
+    notes: 'fr triage architecture render now builds the page: measured sections from
+      git ls-tree/show at two refs, authored fragments in manifest order, snapshot timeline,
+      wave tabs; covered by unit tests over a real two-ref fixture repo'
