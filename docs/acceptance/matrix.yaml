@@ -5596,9 +5596,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R6
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R7
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+    status: ci
+    notes: Pure pass (cap, wave/merge/id order, unmet and unsatisfiable dependencies,
+      a merge freeing a slot) and the command (plan without --yes, one line per action,
+      exit codes 0/3/2/1, drive.lock, kill-safety) are unit-tested with a fake runner
+      and forge client.
   - id: batch-drive-operator-boundary
     capability: triage-batch-drive
     acceptance: The driver merges a batch PR only when it is not a draft and every check
