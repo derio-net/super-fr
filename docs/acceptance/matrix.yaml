@@ -5038,6 +5038,20 @@ rows:
       - super-fr:tests/unit/test_acceptance_integrity.py#test_replace_in_flush_left_rows_keeps_the_matrix_valid
     status: ci
     notes: 'gh#470: row blocks take the existing items indentation.'
+  - id: acceptance-set-status-names-the-change
+    capability: Acceptance matrix
+    acceptance: A set-status that keeps the status names what changed (level refs added
+      or removed, notes, verify) instead of logging X → X, and a ref both dropped and
+      added is refused by the CLI and the record engine alike
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-02-acceptance-integrity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_with_an_unchanged_status_names_the_added_level
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_describe_move_names_each_kind_of_change
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_engine_refuses_a_ref_both_dropped_and_added
+    status: ci
+    notes: gh#769, gh#655.
   - id: lifecycle-acceptance-drop-level
     capability: Artifact lifecycles
     acceptance: An operator can remove a stale evidence ref from an acceptance row with
