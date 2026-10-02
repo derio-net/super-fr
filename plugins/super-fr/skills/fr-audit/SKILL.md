@@ -98,7 +98,7 @@ authored. You supply three inputs, all in the state directory:
   and shown on the page; with no manifest every generated section shows and no fragment.
 
 **Measured versus projected is the rule.** The verb's sections are measurements. Everything
-you author is design: for each step the spec changes, state the turns it removes or adds and
+you author is the future state, design: for each step the spec changes, state the turns it removes or adds and
 why, derive it from the measured figures, and label every such figure a projection (put the
 label in the fragment itself). A projection presented as a measurement is the defect this skill
 exists to prevent. When the change ships, render again and put the measured figure beside the
