@@ -292,6 +292,35 @@ def test_report_adhoc_writes_uncommitted_report_html(
     assert not (root / LINKED_HTML).exists()  # ad-hoc, not the set
 
 
+def test_report_out_under_site_dir_is_sha_pinned_and_stamped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Pages workflow renders `--out _site/acceptance/index.html`: pinned to a
+    commit SHA, git-stamped, and exit 0 even with a failing row (report, not gate)."""
+    sha = "0123456789abcdef0123456789abcdef01234567"
+    root = make_repo(tmp_path, row(id="a") + row(id="f", status="failing"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    res = runner.invoke(
+        app,
+        [
+            "acceptance",
+            "report",
+            "--link-mode",
+            "github",
+            "--ref",
+            sha,
+            "--out",
+            "_site/acceptance/index.html",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    out = root / "_site" / "acceptance" / "index.html"
+    assert out.exists()
+    html = out.read_text()
+    assert f"blob/{sha}/" in html
+    assert f"(ref {sha})" in html
+
+
 def test_deterministic_write_deletes_stale_github_html(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
