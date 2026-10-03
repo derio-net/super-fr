@@ -850,3 +850,53 @@ merge_ready's check rule (required checks else all, ci none) was addressed later
 ### rf-5-resolved-3 · finding [out-of-scope] · resolves rf-5: fr-triage SKILL.md still says to create judgements.yaml with schema: 2
 
 the fr-triage skill's schema wording was updated later in phase 2; the state is restored because only the operator may move an out-of-scope finding to fixed
+
+<!-- fr:journal kind=finding scope=plan id=p2-closeout-state-archived-unreachable-resolved-2 created=2026-10-03T18:39:43+00:00 state=open resolves=p2-closeout-state-archived-unreachable tracked_by=#882 -->
+### p2-closeout-state-archived-unreachable-resolved-2 · finding [deferred → #882] · resolves p2-closeout-state-archived-unreachable: batch list's close-out column can never read `archived`
+
+Filed at closeout as #882.
+
+<!-- fr:journal kind=finding scope=plan id=rf-4-resolved-4 created=2026-10-03T18:39:45+00:00 state=open resolves=rf-4 tracked_by=#880 -->
+### rf-4-resolved-4 · finding [deferred → #880] · resolves rf-4: merge_ready uses required checks only, not the R4 'else all checks / ci none' rule
+
+Filed at closeout as #880.
+
+<!-- fr:journal kind=finding scope=plan id=rf-5-resolved-4 created=2026-10-03T18:39:46+00:00 state=open resolves=rf-5 tracked_by=#881 -->
+### rf-5-resolved-4 · finding [deferred → #881] · resolves rf-5: fr-triage SKILL.md still says to create judgements.yaml with schema: 2
+
+Filed at closeout as #881.
+
+<!-- fr:journal kind=finding scope=plan id=rg-16-resolved-2 created=2026-10-03T18:39:47+00:00 state=open resolves=rg-16 tracked_by=#883 -->
+### rg-16-resolved-2 · finding [deferred → #883] · resolves rg-16: A close-out tab that ended before a restart is not seen, so a second close-out could start
+
+Filed at closeout as #883.
+
+<!-- fr:journal kind=finding scope=plan id=rh-2-resolved-2 created=2026-10-03T18:39:47+00:00 state=open resolves=rh-2 tracked_by=#884 -->
+### rh-2-resolved-2 · finding [deferred → #884] · resolves rh-2: Cap and refusal tests partly pass without new driver code
+
+Filed at closeout as #884.
+
+<!-- fr:journal kind=finding scope=plan id=rh-6-resolved-2 created=2026-10-03T18:39:48+00:00 state=open resolves=rh-6 tracked_by=#885 -->
+### rh-6-resolved-2 · finding [deferred → #885] · resolves rh-6: Facts schema 4 is stamped for repo and org scopes too
+
+Filed at closeout as #885.
+
+<!-- fr:journal kind=finding scope=plan id=rh-7-resolved-2 created=2026-10-03T18:39:49+00:00 state=open resolves=rh-7 tracked_by=#886 -->
+### rh-7-resolved-2 · finding [deferred → #886] · resolves rh-7: No check that facts.kind matches the requested scope
+
+Filed at closeout as #886.
+
+<!-- fr:journal kind=finding scope=plan id=ri-6-resolved-2 created=2026-10-03T18:39:50+00:00 state=open resolves=ri-6 tracked_by=#887 -->
+### ri-6-resolved-2 · finding [deferred → #887] · resolves ri-6: The Closing order rows have no per-batch tier
+
+Filed at closeout as #887.
+
+<!-- fr:journal kind=finding scope=plan id=rj-7-resolved-2 created=2026-10-03T18:39:51+00:00 state=open resolves=rj-7 tracked_by=#888 -->
+### rj-7-resolved-2 · finding [deferred → #888] · resolves rj-7: Closing-PR and issue lists rely on newest-first 1000-row pages
+
+Filed at closeout as #888.
+
+<!-- fr:journal kind=finding scope=plan id=rk-8-resolved-2 created=2026-10-03T18:39:51+00:00 state=open resolves=rk-8 tracked_by=#889 -->
+### rk-8-resolved-2 · finding [deferred → #889] · resolves rk-8: Checkout.show() is text-only by contract
+
+Filed at closeout as #889.
