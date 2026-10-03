@@ -32,3 +32,8 @@ A concurrent base edit makes the squash blob a combination of both edits, so blo
 ### fix-715 · finding [fixed] · #715 fixed: `_carries_patch` recognises the landing by its patch
 
 A first-parent commit whose patch adds every non-blank line the branch added is the landing. Guards: `..._concurrent_edit_then_revert_is_missing` and `..._concurrent_edit_orphan_line_is_missing`. Every existing revert, three-way and side-branch test still passes. Remaining limit: if the concurrent edit touched the branch's own lines, the conflict resolution adds different lines, so it still reads as missing. That is the safe direction.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-700 created=2026-10-03T20:09:08+00:00 -->
+### rc-700 · root-cause · #700: two git seams with different ownership rules
+
+`_run_git` ran bare `git`, while `git_answer`/`git_argv` added `-c safe.directory=<enclosing repo>`. Red evidence: `fr.git.repo_root` exited 128 with dubious ownership in a foreign-owned linked worktree. The walk-up also ignored `GIT_CEILING_DIRECTORIES`, so it could name an ancestor repo that git's own discovery would never open. That same gap made the outside-any-repo test depend on `TMPDIR`.
