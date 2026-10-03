@@ -5219,7 +5219,12 @@ rows:
       revert reads missing (the same log call reads each commit''s patch; the branch''s
       patch inverted un-lands). Known limit: a revert of a branch that only ADDED files
       stays indistinguishable from a later deletion or a consumed fragment. Still unit-only
-      in tests/unit/test_isolation.py.'
+      in tests/unit/test_isolation.py. super-fr#757: a fast-forward landing later reverted
+      reads missing when fr recorded the branch''s start at up (IsolationState.base_sha
+      passed by verify-merge, gc and archive); with no surviving record it is indistinguishable,
+      as before. super-fr#715: a squash whose blob combined a concurrent base edit,
+      then rewritten, reads landed (the landing is recognised by its patch adding every
+      line the branch added).'
   - id: installed-fr-carries-every-runner
     capability: fr install (host install.sh + devcontainer POST_CREATE)
     acceptance: An installed fr loads every runner the workspace declares (fr.runners
