@@ -22,3 +22,8 @@ After an --ff-only landing the branch tip is on the base's first-parent line, so
 ### h-715 · hypothesis · #715: the squash's patch carries the branch's lines when its blob cannot
 
 A concurrent base edit makes the squash blob a combination of both edits, so blob equality can never match it. The squash commit's own first-parent patch, though, adds every non-blank line the branch added. Treating such a commit as the landing gives the same soundness as blob equality. The existing revert logic (held blobs, inverse patch) runs unchanged after it. Repro test committed red.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-715 created=2026-10-03T20:01:04+00:00 -->
+### rc-715 · root-cause · #715: the landing was recognised by its blob alone
+
+`_branch_blob_was_on_base` matched only `new == blob`. A squash over a concurrent base edit never writes the branch's blob, so with the lines later rewritten nothing matched. Confirmed: `test_branch_changes_present_concurrent_edit_then_rewrite_counts_as_landed` was red on the parent commit.
