@@ -5404,9 +5404,12 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py#test_index_links_to_acceptance_report
+      - super-fr:tests/unit/test_pages_workflow.py#test_readme_has_acceptance_badge
+    status: ci
+    notes: Index link and README badge pinned by unit tests.
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
