@@ -29,3 +29,8 @@ Independent review (Opus, read-only): on a repo with no waved batch an unnamed d
 ### review · review · Independent adversarial review: 1 medium (fixed), 4 low (filed or accepted)
 
 Reviewer: Opus, read-only, separate context. Medium — wave guard drops close-outs of driver-dispatched wave-less batches: fixed (ro-wave-guard). Low: (2) the board keeps a 'post_merge not done' row for a waved batch closed out by hand (the board has no git, so no archived signal) — out of scope, to file; (3) an archived batch gets no event and is re-probed each pass (cost/cosmetic) — out of scope, to file; (4) the summary's closing count included wave-less merges that would never close out — resolved by removing the guard; (5) under a rebase merge added_paths sees only the last commit — conservative (a missed artifact keeps the close-out owed), no realistic false-archived flow found; accepted. Verified sound: squash and merge commits, missing/shallow merge commit, half-archived goal batches, error handling (GitError is a TriageError), plan-mode reader, tests fail without the fix.
+
+<!-- fr:journal kind=discovery scope=debug id=count-correction created=2026-10-03T19:58:45+00:00 -->
+### count-correction · discovery · Correction: 76 batches were selected, not 74
+
+The root-cause entry says all 74 batches are selected; that figure was estimated, not counted. load_judgements on this repo's state file gives 76 batches, 50 of them merged. Nothing else in the entry depends on it.
