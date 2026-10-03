@@ -855,3 +855,8 @@ the fr-triage skill's schema wording was updated later in phase 2; the state is 
 ### p2-closeout-state-archived-unreachable-resolved-2 · finding [deferred → #882] · resolves p2-closeout-state-archived-unreachable: batch list's close-out column can never read `archived`
 
 Filed at closeout as #882.
+
+<!-- fr:journal kind=finding scope=plan id=rf-4-resolved-4 created=2026-10-03T18:39:45+00:00 state=open resolves=rf-4 tracked_by=#880 -->
+### rf-4-resolved-4 · finding [deferred → #880] · resolves rf-4: merge_ready uses required checks only, not the R4 'else all checks / ci none' rule
+
+Filed at closeout as #880.
