@@ -14,3 +14,8 @@ uv run pytest -n auto --durations=40 --cov-fail-under=0 from the worktree, openc
 ### 1ce114ed4371 · root-cause · Three causes: fixed 120s child timeouts (#629/#640), unfiltered marketplace rsync (#630), hand-written sibling ban (#643)
 
 Operator confirmed fixing all three in one PR after the stop-and-ask. #629/#640: the budget doesn't scale with xdist contention (inferred from the issues' evidence; not reproduced in a local 864s -n auto + coverage run). #630: the rsync at install.sh:477 excluded only .git/__pycache__/.venv. #643: _sibling_offenders hardcoded {fr_dispatch, fr_vk}.
+
+<!-- fr:journal kind=finding scope=debug id=f-643 created=2026-10-03T19:56:02+00:00 state=fixed -->
+### f-643 · finding [fixed] · Sibling ban derived from packages/*/src/*/__init__.py
+
+tests/unit/test_import_direction.py: _SIBLINGS read from disk; test_every_sibling_package_is_an_offender plants an import of every sibling (failed before: fr_cncd and fr_herdr went unflagged). The standalone fr_herdr test is folded in. _SOFT_POINTS unchanged.
