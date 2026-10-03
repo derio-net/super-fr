@@ -19,3 +19,8 @@ Operator confirmed fixing all three in one PR after the stop-and-ask. #629/#640:
 ### f-643 · finding [fixed] · Sibling ban derived from packages/*/src/*/__init__.py
 
 tests/unit/test_import_direction.py: _SIBLINGS read from disk; test_every_sibling_package_is_an_offender plants an import of every sibling (failed before: fr_cncd and fr_herdr went unflagged). The standalone fr_herdr test is folded in. _SOFT_POINTS unchanged.
+
+<!-- fr:journal kind=finding scope=debug id=f-630 created=2026-10-03T19:56:06+00:00 state=fixed -->
+### f-630 · finding [fixed] · rsync excludes .coverage* and .venv-container
+
+TestMarketplaceRsyncSkipsLocalState installs from a copy of the tracked tree with stray .coverage, .coverage.<host>.<pid>.<x> and .venv-container planted; committed failing first (900c0d17), all three shipped. The fix is scripts/install.sh; patch fragment .changes/fix-batch-ci-health.yaml.
