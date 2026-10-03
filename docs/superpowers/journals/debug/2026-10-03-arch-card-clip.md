@@ -19,3 +19,8 @@ Confirmed: with the one injected rule, the same page measures `main` at 400px an
 ### b93774c4d649 · finding [fixed] · overflow-wrap: anywhere on article.subsystem; pinned by test_a_long_unbreakable_token_wraps_inside_its_subsystem_card
 
 Source: one declaration added to `article.subsystem` in `packages/fr/src/fr/triage/architecture.py`'s `CSS`. Test first: `tests/unit/test_triage_architecture.py::test_a_long_unbreakable_token_wraps_inside_its_subsystem_card` (parses the rule's declarations, as the board's `.num` test does) failed on `overflow-wrap` before the fix and passes after. Live: the same long-title render at 400px in headless Chrome went from `main` 989px / `Other` card scrollWidth 972 in 366 to `main` 400px with every card 366/366. Full suite: 8088 passed, 105 skipped.
+
+<!-- fr:journal kind=review scope=debug id=3178da55fbd5 created=2026-10-03T21:15:19+00:00 -->
+### 3178da55fbd5 · review · Self-review of a one-declaration CSS fix; no findings
+
+Diff reviewed: one CSS declaration, a test, and a patch fragment. Checked that `anywhere` (not `break-word`) is the right value: the card is a grid item, and only `anywhere` lowers the min-content contribution that grid sizing uses, which is also why the board page uses it. The scoped tables on this page stay in their `.scroll` wrapper, untouched. No independent reviewer was dispatched for a change this size. No findings raised.
