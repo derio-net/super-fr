@@ -29,3 +29,8 @@ TestMarketplaceRsyncSkipsLocalState installs from a copy of the tracked tree wit
 ### f-629-640 · finding [fixed] · subprocess_timeout() scales the 120s budget by PYTEST_XDIST_WORKER_COUNT
 
 tests/conftest.py helper, pinned by tests/unit/test_subprocess_budget.py (ImportError before the helper existed). Applied to both live OpenCode calls, the inherited-COLUMNS child pytest and its vk repo-cache twin. Serial runs keep 120s exactly.
+
+<!-- fr:journal kind=review scope=debug id=d1b2c4c53c5b created=2026-10-03T19:56:57+00:00 -->
+### d1b2c4c53c5b · review · Independent review: no high-confidence findings
+
+A separate reviewer read the diff and checked the rsync excludes for over-match (no tracked .coverage* files; .venv-container is only a venv path), the tracked-tree install copy (VK_INSTALL_SKIP_PREFLIGHT skips the .git check), subprocess_timeout's os.environ default, and the soft-point exemption under the derived sibling set. One minor note, accepted: the unanchored .coverage* would also exclude a future tracked file with that prefix, and none exists.
