@@ -3647,6 +3647,55 @@ def test_branch_changes_present_revert_after_other_prs_touched_the_file_is_missi
     assert res.missing == ["report.md"]
 
 
+def _concurrent_squash_feature(repo: Path) -> None:
+    """The base edits report.md while `feature` is open and the branch never
+    syncs, so the squash's blob combines both edits: never the branch's own."""
+    _commit(repo, "report.md", "a\nb\nc\nd\ne\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "a\nfoo\nbar\nb\nc\nd\ne\n", "feature adds lines")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "report.md", "a\nb\nc\nd\nE\n", "another PR lands concurrently")
+    _squash_merge(repo, "feature", "squash feature")
+
+
+def test_branch_changes_present_concurrent_edit_then_rewrite_counts_as_landed(
+    tmp_path: Path,
+) -> None:
+    """#715: after the squash, a later commit rewrites the branch's lines. Its
+    blob never matches and its lines are gone, but the squash's own patch
+    added every one of them: that is the landing."""
+    repo = make_repo(tmp_path)
+    _concurrent_squash_feature(repo)
+    _commit(repo, "report.md", "a\nFOO2\nBAR2\nb\nc\nd\nE\n", "later merge rewrites the lines")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_concurrent_edit_then_revert_is_missing(tmp_path: Path) -> None:
+    """The same landing, reverted rather than rewritten, stays missing."""
+    repo = make_repo(tmp_path)
+    _concurrent_squash_feature(repo)
+    _revert_head(repo)
+    _commit(repo, "report.md", "a\nb\nc\nd\nE\nlater\n", "a later PR edits the report")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+def test_branch_changes_present_concurrent_edit_orphan_line_is_missing(tmp_path: Path) -> None:
+    """A line pushed to the branch after the squash was never in any base
+    commit's patch: the landing must add EVERY line the branch added."""
+    repo = make_repo(tmp_path)
+    _concurrent_squash_feature(repo)
+    _commit(repo, "report.md", "a\nFOO2\nBAR2\nb\nc\nd\nE\n", "later merge rewrites the lines")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "report.md", "a\nfoo\nbar\nb\nc\nd\ne\norphan\n", "pushed after the merge")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
 def test_branch_changes_present_revert_of_the_revert_counts_as_landed(tmp_path: Path) -> None:
     """Re-landed (the revert reverted), then its lines rewritten: landed again."""
     repo = make_repo(tmp_path)
