@@ -42,3 +42,13 @@ A first-parent commit whose patch adds every non-blank line the branch added is 
 ### fix-700 · finding [fixed] · #700 fixed: one seam, ceiling-aware, no opt-out
 
 Decision: no opt-out parameter. All ~50 call sites pass the repo fr was invoked on or created, so none reads an untrusted tree. The contract is in `safe_directory_args`'s docstring, and any future caller that reads a foreign tree must stay off this seam. Tests: `test_the_plain_wrappers_answer_in_a_foreign_owned_worktree`, `test_run_git_places_the_override_before_the_subcommand`, `test_safe_directory_never_names_a_repo_beyond_a_ceiling`, and the now-hermetic `test_safe_directory_outside_any_repo_is_empty`. Full suite: 7686 passed, 97 skipped.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-10-03T20:12:27+00:00 -->
+### review-1 · review · Independent adversarial review: no false 'landed' found
+
+An independent reviewer read the post-change code and found no input where any fix turns unlanded work into 'present'.
+Low-severity notes and how each was handled:
+1. Coincidental add. An unrelated base commit that adds every line the branch added counts as the landing, and only after containment has already failed. This is the same semantics and the same limit as the blob-equality rule it extends, so it is accepted and stated in the PR.
+2. Claimed partial-revert regression on a multi-commit fast-forward. Refuted by experiment: a revert back to c1's blob still reads missing, because c2's own blob landing puts c1's blob into `held` through its old side.
+3. Resurrection after a revert by a coincidental add. Same family as 1; accepted.
+4. `_run_git(cwd=None)` in a deleted cwd raises FileNotFoundError, not CalledProcessError. Also, entries after an empty one in GIT_CEILING_DIRECTORIES are resolved, where git leaves them unresolved; at worst that fails loud. Both are minor and left as is.
