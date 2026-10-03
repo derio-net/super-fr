@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr triage architecture render: a long unbreakable token in a subsystem card (an issue title, the subsystem name or its paths) now wraps instead of being clipped on a narrow screen."
