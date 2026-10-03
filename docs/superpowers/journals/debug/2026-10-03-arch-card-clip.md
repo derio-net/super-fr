@@ -9,3 +9,8 @@ Rendered the architecture page (test fixture `_page()`) with three issue titles 
 ### 6fe99424f609 · hypothesis · Nothing in a subsystem card gives an unbreakable token a break opportunity
 
 `article.subsystem` has `min-width: 0`, so the grid track holds at 366px, but neither the card nor its `li`/`h3`/`.src` declares `overflow-wrap`. An unbreakable token's min-content width therefore spills out. Only `code`, `header.mast h1` and `.cards li` carry `overflow-wrap: anywhere` on this page, while the board page sets it on every text-bearing row. Test: inject `article.subsystem { overflow-wrap: anywhere; }` into the rendered page and re-measure.
+
+<!-- fr:journal kind=root-cause scope=debug id=1cbacb9ddc74 created=2026-10-03T21:02:53+00:00 -->
+### 1cbacb9ddc74 · root-cause · article.subsystem lacks overflow-wrap: anywhere, so long tokens in its li/h3/.src cannot wrap
+
+Confirmed: with the one injected rule, the same page measures `main` at 400px and every card at 366/366 (scrollWidth = clientWidth). It is one cause: the card is the only container of unwrappable free text on the page without the rule (the table already scrolls inside `.scroll`, and `.cards li` already wraps). The rule goes on the card rather than on `li` alone because the subsystem name (`h3`) and the path list (`.src`) are free text too and would clip the same way.
