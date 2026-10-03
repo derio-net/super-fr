@@ -5368,6 +5368,48 @@ rows:
     notes: 'Implemented in phase 1 of plan 2026-09-28-ui-visual-evidence: Visual model
       and validation, fr acceptance add --visual-*, set-status preserving it, record
       AcceptanceItem.visual; unit tests run in CI.'
+  - id: pages-acceptance-report-published
+    capability: acceptance-matrix
+    acceptance: A push to main touching explainers, acceptance or the acceptance renderer
+      redeploys the Pages site (visible under Deployments) with the acceptance report
+      at /acceptance/, freshly rendered with github links pinned to the deployed commit,
+      published even when rows are failing
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py
+      - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
+    status: skipped
+    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+    verify: post-merge
+  - id: pages-explainers-preserved
+    capability: acceptance-matrix
+    acceptance: Publishing the acceptance report keeps every explainer page at its current
+      URL, because one workflow deploys both in a single Pages artifact
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py
+    status: skipped
+    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+    verify: post-merge
+  - id: pages-acceptance-report-discoverable
+    capability: acceptance-matrix
+    acceptance: The explainers landing page links to the published acceptance report
+      and the README carries a badge pointing at it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py#test_index_links_to_acceptance_report
+      - super-fr:tests/unit/test_pages_workflow.py#test_readme_has_acceptance_badge
+    status: ci
+    notes: Index link and README badge pinned by unit tests.
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
