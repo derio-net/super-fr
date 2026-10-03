@@ -850,3 +850,8 @@ merge_ready's check rule (required checks else all, ci none) was addressed later
 ### rf-5-resolved-3 · finding [out-of-scope] · resolves rf-5: fr-triage SKILL.md still says to create judgements.yaml with schema: 2
 
 the fr-triage skill's schema wording was updated later in phase 2; the state is restored because only the operator may move an out-of-scope finding to fixed
+
+<!-- fr:journal kind=finding scope=plan id=p2-closeout-state-archived-unreachable-resolved-2 created=2026-10-03T18:39:43+00:00 state=open resolves=p2-closeout-state-archived-unreachable tracked_by=#882 -->
+### p2-closeout-state-archived-unreachable-resolved-2 · finding [deferred → #882] · resolves p2-closeout-state-archived-unreachable: batch list's close-out column can never read `archived`
+
+Filed at closeout as #882.
