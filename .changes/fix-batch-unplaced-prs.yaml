@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr triage: a judged pull request is no longer collected as an open issue, so open PRs stop showing as unplaced issues on the board and architecture page; judged PRs now closed or merged are reported as settled PRs (gh#902)"
