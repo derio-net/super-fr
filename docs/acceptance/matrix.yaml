@@ -5391,9 +5391,11 @@ rows:
       URL, because one workflow deploys both in a single Pages artifact
     origin:
     - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py
+    status: skipped
+    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
     verify: post-merge
   - id: pages-acceptance-report-discoverable
     capability: acceptance-matrix
