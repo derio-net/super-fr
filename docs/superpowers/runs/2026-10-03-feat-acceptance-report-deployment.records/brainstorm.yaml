@@ -9,11 +9,11 @@ journal:
     id: operator-brief
     title: Operator brief (verbatim)
     body: "I want to publish the acceptance coverage report in main (the linked variable), that is generated in ci, as a page in Github's Deployments. Is it built directly in main?"
-  - {kind: decision, id: q1-which-render, title: Publish a fresh CI render at main's SHA, body: "Render in the deploy job with --link-mode github --ref <sha> (git-stamped, SHA-pinned links), not the committed report_linked.html."}
-  - {kind: decision, id: q2-site-layout, title: One deploy workflow serves explainers plus /acceptance/, body: "pages.yml assembles explainers and the report into one Pages artifact; Pages is one site per repo and each deploy replaces it."}
-  - {kind: decision, id: q3-trigger, title: Redeploy on main pushes touching explainers, acceptance or the renderer, body: "Paths docs/explainers/**, docs/acceptance/**, packages/fr/src/fr/acceptance/**, plus workflow_dispatch."}
-  - {kind: decision, id: q4-red-matrix, title: Publish even when the matrix has failing rows, body: "No acceptance-check gate before deploy; a red report is the one people most need to see."}
-  - {kind: decision, id: q5-verify-link, title: Operator verifies post-merge; link from explainers index and README badge, body: "Operator chose the recommended option and added: also a link/badge in the README."}
+  - {kind: decision, id: q1-which-render, title: "Publish a fresh CI render at main's SHA", body: "Render in the deploy job with --link-mode github --ref <sha> (git-stamped, SHA-pinned links), not the committed report_linked.html."}
+  - {kind: decision, id: q2-site-layout, title: "One deploy workflow serves explainers plus /acceptance/", body: "pages.yml assembles explainers and the report into one Pages artifact; Pages is one site per repo and each deploy replaces it."}
+  - {kind: decision, id: q3-trigger, title: "Redeploy on main pushes touching explainers, acceptance or the renderer", body: "Paths docs/explainers/**, docs/acceptance/**, packages/fr/src/fr/acceptance/**, plus workflow_dispatch."}
+  - {kind: decision, id: q4-red-matrix, title: "Publish even when the matrix has failing rows", body: "No acceptance-check gate before deploy; a red report is the one people most need to see."}
+  - {kind: decision, id: q5-verify-link, title: "Operator verifies post-merge; link from explainers index and README badge", body: "Operator chose the recommended option and added: also a link/badge in the README."}
 resolves: []
 acceptance:
   - id: pages-acceptance-report-published
