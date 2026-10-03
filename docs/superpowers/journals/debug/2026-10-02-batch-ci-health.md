@@ -24,3 +24,8 @@ tests/unit/test_import_direction.py: _SIBLINGS read from disk; test_every_siblin
 ### f-630 · finding [fixed] · rsync excludes .coverage* and .venv-container
 
 TestMarketplaceRsyncSkipsLocalState installs from a copy of the tracked tree with stray .coverage, .coverage.<host>.<pid>.<x> and .venv-container planted; committed failing first (900c0d17), all three shipped. The fix is scripts/install.sh; patch fragment .changes/fix-batch-ci-health.yaml.
+
+<!-- fr:journal kind=finding scope=debug id=f-629-640 created=2026-10-03T19:56:10+00:00 state=fixed -->
+### f-629-640 · finding [fixed] · subprocess_timeout() scales the 120s budget by PYTEST_XDIST_WORKER_COUNT
+
+tests/conftest.py helper, pinned by tests/unit/test_subprocess_budget.py (ImportError before the helper existed). Applied to both live OpenCode calls, the inherited-COLUMNS child pytest and its vk repo-cache twin. Serial runs keep 120s exactly.
