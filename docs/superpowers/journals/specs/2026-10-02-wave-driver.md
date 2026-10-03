@@ -202,3 +202,8 @@ Informational; no change needed.
 ### sr-13-resolved-2 · finding [deferred → #878] · resolves sr-13: The herdr runner dispatches only inside a herdr session; the loop inherits this
 
 Filed at closeout as #878.
+
+<!-- fr:journal kind=finding scope=spec id=sr-14-resolved-2 created=2026-10-03T18:39:53+00:00 state=open resolves=sr-14 tracked_by=#879 -->
+### sr-14-resolved-2 · finding [deferred → #879] · resolves sr-14: Verified-correct claims: soft point, single-repo --repo today, no schema clash
+
+Filed at closeout as #879.
