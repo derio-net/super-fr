@@ -870,3 +870,8 @@ Filed at closeout as #881.
 ### rg-16-resolved-2 · finding [deferred → #883] · resolves rg-16: A close-out tab that ended before a restart is not seen, so a second close-out could start
 
 Filed at closeout as #883.
+
+<!-- fr:journal kind=finding scope=plan id=rh-2-resolved-2 created=2026-10-03T18:39:47+00:00 state=open resolves=rh-2 tracked_by=#884 -->
+### rh-2-resolved-2 · finding [deferred → #884] · resolves rh-2: Cap and refusal tests partly pass without new driver code
+
+Filed at closeout as #884.
