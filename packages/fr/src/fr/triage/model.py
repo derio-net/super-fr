@@ -11,8 +11,10 @@ state directory, so the command and the directory can never disagree.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -33,19 +35,25 @@ from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
-FACTS_SCHEMA: Literal[3] = 3
-# The version this fr WRITES: every engine write of `batches:` stamps 2 (spec
-# 2026-09-25-triage-batches §3.A); the loader reads every version in JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[2] = 2
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2)
+# The version this fr WRITES for facts.json. 4 added the `group` scope kind (wave-driver
+# §H); 3 still loads, and the first collect upgrades it. Independent of JUDGEMENTS_SCHEMA.
+FACTS_SCHEMA: Literal[4] = 4
+FACTS_READS: tuple[int, ...] = (3, 4)
+# The version this fr WRITES: every engine write of `batches:` stamps 3 (spec
+# 2026-10-02-wave-driver §A: `wave`, `after`; 2 was 2026-09-25-triage-batches §3.A);
+# the loader reads every version in JUDGEMENTS_READS.
+JUDGEMENTS_SCHEMA: Literal[3] = 3
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3)
 
-ScopeKind = Literal["repo", "org"]
+ScopeKind = Literal["repo", "org", "group"]
+SCOPE_NAME_LIMIT = 80
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
 PrState = Literal["OPEN", "CLOSED", "MERGED"]
 IssueState = Literal["open", "closed"]
 TruncatedList = Literal["repos", "issues", "prs"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
+Kind = Literal["defect", "feature", "parked"]
 
 # The hidden first line of the comment a batch dispatch posts on each member
 # (spec 2026-09-25-triage-batches §3.E). `collect` dates a dispatch by it, so the
@@ -96,19 +104,36 @@ def _bad_keys(keys: list[object]) -> list[object]:
 
 @dataclass(frozen=True)
 class Scope:
-    """What is being triaged: one repo, or every non-archived repo of an owner."""
+    """What is being triaged: one repo, every non-archived repo of an owner, or a
+    group of repos (owners may differ; wave-driver §H)."""
 
     kind: ScopeKind
-    target: str  # "OWNER/REPO" for a repo, "OWNER" for an org
+    target: str  # "OWNER/REPO" (repo), "OWNER" (org), "A/B,C/D" sorted (group)
+    repos: tuple[str, ...] = ()  # a group's OWNER/REPO list; empty for repo and org
+
+    @classmethod
+    def group(cls, repos: Iterable[str]) -> Scope:
+        """A group scope over *repos*: lowercased, sorted and de-duplicated, so input
+        casing and order never change `target`, `repos` or `name`."""
+        unique = sorted({r.lower() for r in repos})
+        return cls(kind="group", target=",".join(unique), repos=tuple(unique))
 
     @property
     def name(self) -> str:
-        """Directory-safe scope name: `<owner>--<repo>` or `<owner>` (spec §3.B).
+        """Directory-safe scope name: `<owner>--<repo>`, `<owner>`, or a group's sorted
+        `owner--repo` slugs joined by `+` (spec §3.B, wave-driver §H).
 
         Lowercase, so `--repo Derio-Net/Super-FR` names the same state
-        directory as `--repo derio-net/super-fr` (review r-p2-case).
+        directory as `--repo derio-net/super-fr` (review r-p2-case). A group name
+        over 80 characters is cut and ends in an eight-character hash of the whole.
         """
-        return self.target.replace("/", "--").lower()
+        if self.kind != "group":
+            return self.target.replace("/", "--").lower()
+        full = "+".join(sorted(r.replace("/", "--").lower() for r in self.repos))
+        if len(full) <= SCOPE_NAME_LIMIT:
+            return full
+        digest = hashlib.sha256(full.encode("utf-8")).hexdigest()[:8]
+        return f"{full[: SCOPE_NAME_LIMIT - 9]}-{digest}"
 
     @property
     def owner(self) -> str:
@@ -271,6 +296,10 @@ class TriageConfig(_Strict):
     defaults: ConfigDefaults = ConfigDefaults()
     version: VersionBlock | None = None
     stale_dispatch_days: int = Field(default=3, ge=0)
+    # The command the wave driver runs once per merged batch, from the repo's
+    # fast-forwarded checkout (wave-driver R14). An argument list, never a shell
+    # string: a string is refused, and nothing is ever handed to a shell.
+    post_merge: list[str] = []
 
 
 class Facts(_Strict):
@@ -281,7 +310,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3] = Field(3, alias="schema")
+    schema_: Literal[3, 4] = Field(4, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -296,6 +325,14 @@ class Facts(_Strict):
     batch_prs: list[PullRequest] = []
     # `.fr/triage.yaml` per OWNER/REPO; a repo without the file has no entry.
     config: dict[str, TriageConfig] = {}
+
+    @model_validator(mode="after")
+    def _group_needs_schema_4(self) -> Facts:
+        """The `group` kind exists only from schema 4 (wave-driver §H); an older
+        reader cannot hold it, so a schema-3 file naming it is refused."""
+        if self.kind == "group" and self.schema_ < 4:
+            raise ValueError("`kind: group` needs schema 4")
+        return self
 
     def config_for(self, repo: str) -> TriageConfig:
         """*repo*'s collected config, or the defaults when it declares none."""
@@ -330,6 +367,27 @@ class Judgement(_Strict):
     note: str = ""
     delivery: Delivery | None = None
     delivery_note: str = ""
+    # What the issue is, for the board's closing order (wave-driver R9). Optional on
+    # every schema: a file that never says loads exactly as before.
+    kind: Kind | None = None
+
+
+class Feature(_Strict):
+    """A ranked group of issues delivered as one feature (wave-driver R9)."""
+
+    rank: int
+    title: str
+    ids: list[str] = []
+    why: str = ""
+    start: str = ""  # how to start it, e.g. `/fr-goal ...`; shown, never run
+
+    @field_validator("ids")
+    @classmethod
+    def _ids_are_keys(cls, v: list[str]) -> list[str]:
+        bad = _bad_keys(list(v))
+        if bad:
+            raise ValueError(f"feature ids must be '<repo-name>#<number>', got {bad!r}")
+        return [normalize_key(k) for k in v]
 
 
 class Pattern(_Strict):
@@ -366,7 +424,36 @@ class CancelEvent(_Strict):
     reason: str = ""
 
 
-BatchEvent = Annotated[DispatchEvent | CancelEvent, Field(discriminator="kind")]
+class CloseoutEvent(_Strict):
+    """A batch's close-out was started (wave-driver §A). Needs judgements schema 3.
+    Written by the engine only."""
+
+    kind: Literal["closeout"]
+    at: AwareDatetime
+    runner: str
+    handle: str  # opaque to triage; never posted to the forge
+    run: str | None = None  # the run id the brief named (`fr pickup --run`), if any
+    archive: str | None = None  # the housekeeping branch the close-out will push
+    # The archive PR the driver merged (review rg-6): a later event repeats the
+    # close-out with this set, so the batch reads as finished without the PR in view.
+    archived: int | None = None
+
+
+class PostMergeEvent(_Strict):
+    """The repo's `post_merge` command succeeded for this batch's merge (wave-driver
+    R14). Needs judgements schema 3. Written by the engine only."""
+
+    kind: Literal["post_merge"]
+    at: AwareDatetime
+
+
+SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
+"""The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
+
+
+BatchEvent = Annotated[
+    DispatchEvent | CancelEvent | CloseoutEvent | PostMergeEvent, Field(discriminator="kind")
+]
 
 
 class Batch(_Strict):
@@ -384,6 +471,8 @@ class Batch(_Strict):
     ids: list[str] = Field(min_length=1)
     rationale: str = ""
     order: int | None = None
+    wave: int | None = None
+    after: list[str] = []  # ids of batches that must be merged first (schema 3)
     bump: Bump = "patch"
     skill: BatchSkill = "goal"
     launch: Launch = Launch()
@@ -414,9 +503,24 @@ class Batch(_Strict):
             raise ValueError(f"a batch's members must be in one repo, got {repos}")
         return keys
 
+    @field_validator("after")
+    @classmethod
+    def _after_are_slugs(cls, v: list[str]) -> list[str]:
+        """Lowercased like `id`, a slug each, listed once."""
+        out = [x.lower() if isinstance(x, str) else x for x in v]
+        bad = [x for x in out if not isinstance(x, str) or not BATCH_ID_RE.match(x)]
+        if bad:
+            raise ValueError(f"`after` names batch ids (slugs), got {bad!r}")
+        twice = sorted({x for x in out if out.count(x) > 1})
+        if twice:
+            raise ValueError(f"`after` lists {', '.join(twice)} more than once")
+        return out
+
     @field_validator("events")
     @classmethod
-    def _events_are_time_ordered(cls, v: list[DispatchEvent | CancelEvent]) -> list[Any]:
+    def _events_are_time_ordered(
+        cls, v: list[DispatchEvent | CancelEvent | CloseoutEvent | PostMergeEvent]
+    ) -> list[Any]:
         for earlier, later in zip(v, v[1:], strict=False):
             if later.at < earlier.at:
                 raise ValueError(
@@ -434,12 +538,13 @@ class Batch(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
     patterns: list[Pattern] = []
     batches: list[Batch] = []
+    features: list[Feature] = []  # ranked groups (wave-driver R9); any schema
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -489,12 +594,23 @@ class Judgements(_Strict):
 
     @model_validator(mode="after")
     def _batches_need_schema_2(self) -> Judgements:
-        """Batches exist only under schema 2 (spec §3.A). A schema-1 stamp over a
-        `batches:` list is a writer that forgot to restamp, and a schema-1 reader
-        cannot hold it, so it is refused rather than loaded."""
-        if self.batches and self.schema_ != 2:
+        """Batches exist only under schema 2 or 3 (spec §3.A); `wave` and `after`
+        only under 3 (wave-driver §A). A stamp below what a file carries is a writer
+        that forgot to restamp, and an older reader cannot hold it, so it is refused
+        rather than loaded."""
+        if self.batches and self.schema_ < 2:
             raise ValueError(
-                f"`batches:` needs schema 2, but this file is stamped schema {self.schema_}"
+                f"`batches:` needs schema 2 or 3, but this file is stamped schema {self.schema_}"
+            )
+        if self.schema_ < 3 and any(b.wave is not None or b.after for b in self.batches):
+            raise ValueError(
+                f"`wave` and `after` need schema 3, but this file is stamped schema {self.schema_}"
+            )
+        late = sorted({e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_3_EVENTS})
+        if self.schema_ < 3 and late:
+            raise ValueError(
+                f"`{'`, `'.join(late)}` events need schema 3, but this file is stamped "
+                f"schema {self.schema_}"
             )
         return self
 
@@ -527,7 +643,7 @@ def load_facts(path: Path) -> Facts:
     except (OSError, ValueError) as exc:
         raise TriageError(f"{path}: cannot read facts: {exc}") from exc
     try:
-        return Facts.model_validate(_check_schema(path, data, FACTS_SCHEMA, "re-run collect"))
+        return Facts.model_validate(_check_schema(path, data, FACTS_READS, "re-run collect"))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid facts: {exc}") from exc
 

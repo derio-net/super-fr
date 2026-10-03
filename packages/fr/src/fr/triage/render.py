@@ -26,19 +26,31 @@ from typing import TYPE_CHECKING
 from fr.triage.batch import batch_pr as find_batch_pr
 from fr.triage.batch import derive_batch_stage, last_dispatch, planned_merge_order
 from fr.triage.check import CheckResult, classify
+from fr.triage.components import GUTTER_CSS, TABS_CSS, TABS_SCRIPT, TOKENS_CSS, tabs
 from fr.triage.model import issue_key
+from fr.triage.stage import IN_FLIGHT
+from fr.triage.views import (
+    CX_RANK,
+    NEED_LABELS,
+    UNWAVED,
+    kind_counts,
+    needs_you,
+    next_up,
+    preselected_wave,
+    size_of,
+    waves,
+)
 
 if TYPE_CHECKING:
     from fr.triage.batch import MergeStep
     from fr.triage.model import Batch, Facts, Issue, Judgement, Judgements, PullRequest
+    from fr.triage.snapshot import SnapshotDiff
 
 _CODE = re.compile(r"`([^`\n]+)`")
 # One pass over code OR bold, so two matches can never overlap and a code span is
 # never rescanned for bold (review r-p3-inline-nesting).
 _INLINE = re.compile(r"`([^`\n]+)`|\*\*([^*\n]+)\*\*")
 
-CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
-IN_FLIGHT = frozenset({"pr-draft", "pr-ready", "in-progress"})
 DONE = frozenset({"closed", "merged"})
 UNTOUCHED = frozenset({"backlog", "blocked"})
 EXCERPT = 600  # characters of an unranked issue's body shown on the page
@@ -52,24 +64,9 @@ FONTS = (
     '&amp;display=swap">'
 )
 
-CSS = """
-:root {
-  --ground: #F4F5F2; --surface: #FFFFFF; --ink: #1B2021; --muted: #5E6A66;
-  --line: #DCE0D9; --accent: #2F6F5E; --live: #6B4FA0;
-  --sev-1: #B03A2E; --sev-2: #C2761B; --sev-3: #4A6FA5; --sev-4: #7B8783;
-  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
-    "Liberation Mono", monospace;
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #14181A; --surface: #1C2124; --ink: #E7EBE8; --muted: #9AA6A1;
-    --line: #2C3337; --accent: #65B79B; --live: #A58BD6;
-    --sev-1: #E4796A; --sev-2: #DFA357; --sev-3: #8AACDC; --sev-4: #8F9A96;
-  }
-}
+CSS = (
+    TOKENS_CSS
+    + """
 * { box-sizing: border-box; }
 html, body { margin: 0; overflow-x: hidden; }
 body { background: var(--ground); color: var(--ink); font: 15px/1.5 var(--sans); }
@@ -168,12 +165,36 @@ details.row > summary::-webkit-details-marker { display: none; }
 .badge.pending { color: var(--sev-2); border-color: var(--sev-2); }
 .badge.merge { font-family: var(--mono); }
 footer { margin-top: 40px; color: var(--muted); font-size: .8rem; }
+.decide { margin-top: 28px; }
+.decide h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.decide h3 { margin: 14px 0 4px; font-size: .95rem; color: var(--muted); }
+.decide ul { margin: 4px 0; padding-left: 20px; }
+.decide li { margin: 3px 0; overflow-wrap: anywhere; }
+.decide .quiet { color: var(--muted); font-size: .9rem; margin: 4px 0; }
+.decide ul.cards { padding: 0; list-style: none; }
+.need { padding: 6px 10px; background: var(--surface);
+  border: 1px solid var(--line); border-left: 4px solid var(--sev-1); border-radius: 6px; }
+.need .kind { font-size: .75rem; font-family: var(--mono); color: var(--sev-1);
+  margin-right: 8px; }
+.next { padding: 6px 10px; background: var(--surface);
+  border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px; }
+.next[data-waiting="1"] { border-left-color: var(--sev-4); }
+.next .why { color: var(--muted); font-size: .88rem; display: block; }
+.tablewrap { overflow-x: auto; }
+table.grid { border-collapse: collapse; width: 100%; font-size: .88rem; }
+table.grid th, table.grid td { text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--line); padding: 4px 8px; overflow-wrap: anywhere; }
+table.grid th { color: var(--muted); font-weight: 500; }
+"""
+    + TABS_CSS
+    + GUTTER_CSS
+    + """
 @media (max-width: 480px) {
-  main { padding: 0 10px 32px; }
   .tier-desc, .empty { margin-left: 0; }
   .title { flex-basis: 100%; }
 }
 """
+)
 
 # The viewer's script: shows, hides and reorders rows by their data-*
 # attributes. A constant — no facts text ever reaches a <script> element.
@@ -523,7 +544,7 @@ def _batch_card(batch: Batch, facts: Facts) -> str:
         )
         lines.append(f'<p>{link} <span class="mono">{esc(pr.state.lower())}</span></p>')
     return (
-        f'<article class="batch" data-batch="{esc(batch.id)}">'
+        f'<article class="batch" data-batch="{esc(batch.id)}" id="batch-{esc(batch.id)}">'
         f'<h3><span class="mono">{esc(batch.id)}</span> {esc(batch.title)} '
         f'<span class="pill bstage-{stage}">{stage}</span></h3>{"".join(lines)}</article>'
     )
@@ -571,9 +592,164 @@ def _patterns(judgements: Judgements) -> str:
     return f'<section class="patterns"><h2>Patterns</h2>{items}</section>'
 
 
-def render(facts: Facts, judgements: Judgements) -> str:
-    """The board for *facts* and *judgements*: same inputs, same bytes."""
-    show_repo = facts.kind == "org"
+# ------------------------------------------------------- the decision views (R17-R20)
+
+
+def _href(href: str | None) -> str | None:
+    """A link target fit for an href: an https URL, or an anchor on this page."""
+    if href is None:
+        return None
+    return esc(href) if href.startswith("#batch-") else _safe_url(href)
+
+
+def _link(text: str, href: str | None) -> str:
+    target = _href(href)
+    if target is None:
+        return esc(text)
+    return f'<a href="{target}" rel="noopener noreferrer">{esc(text)}</a>'
+
+
+def _bullets(items: Sequence[str]) -> str:
+    return "<ul>" + "".join(f"<li>{esc(i)}</li>" for i in items) + "</ul>"
+
+
+def _since_section(since: SnapshotDiff | None) -> str:
+    head = '<section class="decide" id="since-last-report"><h2>Since last report</h2>'
+    if since is None:
+        body = (
+            '<p class="quiet">No earlier snapshot: this is the first report, so there is '
+            "nothing to compare with yet.</p>"
+        )
+    elif since.empty:
+        body = '<p class="quiet">Nothing changed since the last report.</p>'
+    else:
+        groups = [
+            ("Merged or closed", since.merged_or_closed),
+            ("Filed", since.filed),
+            ("Batch stage changes", since.stage_changes),
+            ("Acceptance rows moved", since.acceptance_moved),
+            ("Figures changed", [f"{n}: {a} -> {b}" for n, a, b in since.figures_changed]),
+        ]
+        body = "".join(f"<h3>{t}</h3>{_bullets(items)}" for t, items in groups if items)
+    if since is not None and since.acceptance_note:
+        body += f'<p class="quiet">{esc(since.acceptance_note)}</p>'
+    return f"{head}{body}</section>"
+
+
+def _needs_section(facts: Facts, judgements: Judgements) -> str:
+    rows = needs_you(facts, judgements)
+    head = '<section class="decide" id="needs-you-now"><h2>Needs you now</h2>'
+    if not rows:
+        return f'{head}<p class="quiet">Nothing needs you now.</p></section>'
+    items = "".join(
+        f'<li class="need" data-need="{esc(r.kind)}" data-ref="{esc(r.ref)}">'
+        f'<span class="kind">{esc(NEED_LABELS[r.kind])}</span>{_link(r.text, r.href)}</li>'
+        for r in rows
+    )
+    return f'{head}<ul class="cards">{items}</ul></section>'
+
+
+def _next_section(facts: Facts, judgements: Judgements) -> str:
+    rows = next_up(facts, judgements)
+    head = '<section class="decide" id="next-up"><h2>Next up</h2>'
+    if not rows:
+        return f'{head}<p class="quiet">Nothing is waiting to start.</p></section>'
+    items = []
+    for r in rows:
+        tier = f"tier {r.tier}" if r.tier is not None else "no tier"
+        deps = f"after {', '.join(r.deps)}" if r.deps else "no dependencies"
+        mark = '<span class="pill bstage-proposed">held</span> ' if r.waiting else ""
+        items.append(
+            f'<li class="next" data-next="{esc(r.kind)}" data-ref="{esc(r.ref)}" '
+            f'data-waiting="{"1" if r.waiting else "0"}">{mark}'
+            f"<strong>{esc(r.ref if r.kind == 'batch' else r.title)}</strong> "
+            f'<span class="tag">{tier}</span><span class="tag">size {esc(r.size)}</span>'
+            f'<span class="tag">{esc(deps)}</span>'
+            f'<span class="why">{inline(r.reason)}</span></li>'
+        )
+    return f'{head}<ul class="cards">{"".join(items)}</ul></section>'
+
+
+def _wave_table(batches: Sequence[Batch], facts: Facts, judgements: Judgements) -> str:
+    rows = []
+    for b in batches:
+        stage = derive_batch_stage(b, facts)
+        rows.append(
+            f'<tr data-batch="{esc(b.id)}"><td><a href="#batch-{esc(b.id)}">{esc(b.id)}</a></td>'
+            f'<td>{esc(b.skill)}</td><td class="mono">{esc(", ".join(b.ids))}</td>'
+            f"<td>{inline(b.rationale)}</td><td>{esc(size_of(b.ids, judgements.issues))}</td>"
+            f"<td>{esc(', '.join(b.after) or '-')}</td>"
+            f'<td><span class="pill bstage-{stage}">{stage}</span></td></tr>'
+        )
+    cols = ("Batch", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
+    head = "".join(f"<th>{c}</th>" for c in cols)
+    return (
+        f'<div class="tablewrap"><table class="grid"><thead><tr>{head}</tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+    )
+
+
+def _features_table(judgements: Judgements, facts: Facts) -> str:
+    if not judgements.features:
+        return ""
+    open_keys = {i.key for i in facts.issues if i.state == "open"}
+    rows = "".join(
+        f'<tr data-feature="{esc(f.title)}"><td>{f.rank}</td><td>{esc(f.title)}</td>'
+        f'<td class="mono">{esc(", ".join(f.ids))}</td><td>{inline(f.why)}</td>'
+        f"<td>{inline(f.start)}</td>"
+        f"<td>{sum(1 for k in f.ids if k in open_keys)} open</td></tr>"
+        for f in sorted(judgements.features, key=lambda f: (f.rank, f.title))
+    )
+    head = "".join(f"<th>{c}</th>" for c in ("Rank", "Feature", "Issues", "Why", "Start", "State"))
+    return (
+        f'<h3>Ranked features</h3><div class="tablewrap"><table class="grid"><thead><tr>'
+        f"{head}</tr></thead><tbody>{rows}</tbody></table></div>"
+    )
+
+
+def _parked(facts: Facts, judgements: Judgements) -> str:
+    parked = [
+        i for i in facts.issues
+        if i.state == "open" and (j := judgements.issues.get(i.key)) and j.kind == "parked"
+    ]  # fmt: skip
+    if not parked:
+        return ""
+    items = "".join(f"<li>{_link(i.key, i.url)} {esc(i.title)}</li>" for i in parked)
+    return f"<h3>Parked</h3><ul>{items}</ul>"
+
+
+def _waves_section(facts: Facts, judgements: Judgements) -> str:
+    counts = kind_counts(facts, judgements)
+    chips = "".join(
+        f'<span class="count" data-kind="{k}"><b>{n}</b> {k}</span>' for k, n in counts.items()
+    )
+    head = (
+        '<section class="decide waves" id="waves"><h2>Waves</h2>'
+        f'<div id="closing-order"><h3>Closing order</h3><div class="counts">{chips}</div></div>'
+    )
+    grouped = waves(judgements)
+    if grouped:
+        picked = preselected_wave(facts, judgements)
+        keys = list(grouped)
+        selected = keys.index(str(picked)) if picked is not None else len(keys) - 1
+        panels = [
+            (key, "No wave" if key == UNWAVED else f"Wave {key}",
+             _wave_table(batches, facts, judgements))
+            for key, batches in grouped.items()
+        ]  # fmt: skip
+        body = tabs("wave", "Waves", panels, selected)
+    else:
+        body = '<p class="quiet">No waves: no batch carries a <code>wave</code> yet.</p>'
+    return f"{head}{body}{_features_table(judgements, facts)}{_parked(facts, judgements)}</section>"
+
+
+def render(facts: Facts, judgements: Judgements, since: SnapshotDiff | None = None) -> str:
+    """The board for *facts* and *judgements*: same inputs, same bytes.
+
+    *since* is the diff against the previous snapshot (`fr.triage.snapshot`); None means
+    there is none, and the page says so.
+    """
+    show_repo = facts.kind != "repo"
     result = classify(facts, judgements)  # the one classification, shared below
     patterns_by_key: dict[str, list[str]] = {}
     for p in judgements.patterns:
@@ -603,6 +779,7 @@ def render(facts: Facts, judgements: Judgements) -> str:
     sections = [
         _prs_section(facts.prs, judgements, 1, facts.collected_at),
         *([batches] if (batches := _batches(judgements, facts)) else []),
+        '<h2 class="backlog" id="backlog-by-tier">Backlog by tier</h2>',
         _section(
             "unranked",
             "?",
@@ -628,11 +805,12 @@ def render(facts: Facts, judgements: Judgements) -> str:
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Backlog triage · {esc(facts.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
-        f"{_masthead(facts, judgements, result)}\n{FILTER_BAR}\n"
-        + "\n".join(sections)
-        + f"\n{_patterns(judgements)}\n"
+        f"{_masthead(facts, judgements, result)}\n"
+        f"{_since_section(since)}\n{_needs_section(facts, judgements)}\n"
+        f"{_next_section(facts, judgements)}\n{_waves_section(facts, judgements)}\n"
+        f"{FILTER_BAR}\n" + "\n".join(sections) + f"\n{_patterns(judgements)}\n"
         "<footer>Rendered by <code>fr triage render</code> from facts.json and "
         "judgements.yaml. Stages are derived from the forge; re-run "
         "<code>fr triage collect</code> to refresh.</footer>\n"
-        f"</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n"
+        f"</main>\n<script>{SCRIPT}{TABS_SCRIPT}</script>\n</body>\n</html>\n"
     )

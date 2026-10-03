@@ -30,11 +30,11 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr.triage.batch import last_dispatch
 from fr.triage.check import classify
 from fr.triage.collect import PR_LIMIT, Forge, GhForge, collect_facts
 from fr.triage.errors import TriageError
 from fr.triage.model import (
-    DispatchEvent,
     Facts,
     Judgements,
     PullRequest,
@@ -45,6 +45,15 @@ from fr.triage.model import (
     state_dir,
 )
 from fr.triage.render import plural, render
+from fr.triage.snapshot import (
+    acceptance_rows,
+    diff_snapshots,
+    latest_snapshot,
+    matrix_for_scope,
+    previous_snapshot,
+    store_snapshot,
+    take_snapshot,
+)
 
 console = Console()
 err_console = Console(stderr=True)
@@ -65,7 +74,9 @@ triage_app.add_typer(batch_app)
 
 
 # One option set for --repo/--org/--dir, shared by collect, check, render and batch.
-RepoOpt = Annotated[str | None, typer.Option("--repo", help="Triage one repo: OWNER/REPO.")]
+RepoOpt = Annotated[
+    str | None, typer.Option("--repo", help="Triage one repo OWNER/REPO, or a group: A/B,C/D.")
+]
 OrgOpt = Annotated[str | None, typer.Option("--org", help="Triage every repo of OWNER.")]
 DirOpt = Annotated[
     Path | None,
@@ -78,18 +89,43 @@ def make_forge() -> Forge:
     return GhForge()
 
 
+def _group_scope(parts: list[str]) -> Scope:
+    """A group scope over *parts*; two repos sharing a NAME are refused (exit 2) because
+    a judgement key is `<repo-name>#<n>` (wave-driver §H). Nothing is written yet."""
+    scope = Scope.group(parts)
+    names: dict[str, str] = {}
+    for r in scope.repos:
+        name = r.split("/", 1)[1].lower()
+        if name in names:
+            err_console.print(
+                f"[red]error:[/red] {escape(names[name])} and {escape(r)} share the repo name "
+                f"{escape(name)}; judgement keys are <repo-name>#<n>, so a group may not hold both",
+                soft_wrap=True,
+            )
+            raise typer.Exit(code=2)
+        names[name] = r
+    if len(scope.repos) == 1:
+        return Scope(kind="repo", target=scope.repos[0])
+    return scope
+
+
 def _scope(repo: str | None, org: str | None) -> Scope:
     if (repo is None) == (org is None):
         err_console.print("[red]error:[/red] give exactly one of --repo OWNER/REPO or --org OWNER")
         raise typer.Exit(code=2)
     if repo is not None:
-        if repo.count("/") != 1 or not all(repo.split("/")):
-            err_console.print(
-                f"[red]error:[/red] --repo must be OWNER/REPO, got {escape(repr(repo))}",
-                soft_wrap=True,
-            )
-            raise typer.Exit(code=2)
-        return Scope(kind="repo", target=repo)
+        parts = [p.strip() for p in repo.split(",")] if "," in repo else [repo]
+        for part in parts:
+            if part.count("/") != 1 or not all(part.split("/")):
+                err_console.print(
+                    f"[red]error:[/red] --repo must be OWNER/REPO or a comma-separated list "
+                    f"of them, got {escape(repr(repo))}",
+                    soft_wrap=True,
+                )
+                raise typer.Exit(code=2)
+        if len(parts) == 1:
+            return Scope(kind="repo", target=parts[0])
+        return _group_scope(parts)
     assert org is not None
     if not org or "/" in org:
         err_console.print(
@@ -129,39 +165,50 @@ def collect_command(
 ) -> None:
     """Read the forge and write facts.json for the scope."""
     scope = _scope(repo, org)
-    target_dir = state_dir(scope, dir_override)
-    judgements = target_dir / "judgements.yaml"
     try:
-        loaded = load_judgements(judgements) if judgements.exists() else None
-        judged = list(loaded.issues) if loaded else []
-        # The branch and time of each batch whose last event is a dispatch (spec
-        # 2026-09-25-triage-batches §3.A): collect looks each one up by head,
-        # unless the previous facts already show it terminal (review r2p-f3).
-        branches = [
-            (b.repo_name, event.branch, event.at)
-            for b in (loaded.batches if loaded else [])
-            if b.events and isinstance(event := b.events[-1], DispatchEvent)
-        ]
-        facts = collect_facts(
-            make_forge(),
-            scope,
-            now=datetime.now(UTC),
-            judged=judged,
-            batch_branches=branches,
-            known_batch_prs=_previous_batch_prs(target_dir / "facts.json"),
-            pr_limit=pr_limit,
-        )
+        facts, out = collect_into(scope, state_dir(scope, dir_override), pr_limit=pr_limit)
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
+    _report(facts)
+    n_open = sum(1 for i in facts.issues if i.state == "open")
+    console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
+
+
+def collect_into(scope: Scope, target_dir: Path, *, pr_limit: int = PR_LIMIT) -> tuple[Facts, Path]:
+    """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
+
+    `collect` and the wave driver's every pass share it (wave-driver §B), so a
+    driver pass reads the forge exactly as `fr triage collect` does. Raises
+    `TriageError` on a refusal; writes nothing then.
+    """
+    judgements = target_dir / "judgements.yaml"
+    loaded = load_judgements(judgements) if judgements.exists() else None
+    judged = list(loaded.issues) if loaded else []
+    # The branch and time of each batch's last dispatch, unless it was cancelled
+    # since (spec 2026-09-25-triage-batches §3.A): collect looks each one up by
+    # head, unless the previous facts already show it terminal (review r2p-f3).
+    # Close-out and post_merge events may follow the dispatch (wave-driver §B).
+    branches = [
+        (b.repo_name, event.branch, event.at)
+        for b in (loaded.batches if loaded else [])
+        if b.events and b.events[-1].kind != "cancel" and (event := last_dispatch(b)) is not None
+    ]
+    facts = collect_facts(
+        make_forge(),
+        scope,
+        now=datetime.now(UTC),
+        judged=judged,
+        batch_branches=branches,
+        known_batch_prs=_previous_batch_prs(target_dir / "facts.json"),
+        pr_limit=pr_limit,
+    )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
     out.write_text(
         json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    _report(facts)
-    n_open = sum(1 for i in facts.issues if i.state == "open")
-    console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
+    return facts, out
 
 
 def _previous_batch_prs(path: Path) -> list[PullRequest]:
@@ -187,9 +234,10 @@ def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, J
     target_dir = state_dir(scope, dir_override)
     facts_path = target_dir / "facts.json"
     if not facts_path.exists():
+        flag = "org" if scope.kind == "org" else "repo"
         err_console.print(
             f"[red]error:[/red] no facts at {escape(str(facts_path))}; run "
-            f"`fr triage collect --{scope.kind} {escape(scope.target)}` first",
+            f"`fr triage collect --{flag} {escape(scope.target)}` first",
             soft_wrap=True,
         )
         raise typer.Exit(code=2)
@@ -214,7 +262,7 @@ def check_command(
     dir_override: DirOpt = None,
     as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
-    """Report unranked issues and PRs, settled, orphaned, unreachable and stale dispatches.
+    """Report unranked issues and PRs, settled, orphaned, unreachable, stale and unplaced.
 
     Always exits 0.
     """
@@ -253,6 +301,12 @@ def check_command(
             f"  {escape(st.key)}  {st.days}d since {escape(st.marker_at)}  {escape(st.title)}",
             soft_wrap=True,
         )
+    console.print(
+        f"[bold]unplaced[/bold] ({len(result.unplaced)}) — open, in no open batch, "
+        "feature group or parked"
+    )
+    for i in result.unplaced:
+        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
 
 
 @triage_app.command("render")
@@ -261,11 +315,43 @@ def render_command(
     org: OrgOpt = None,
     dir_override: DirOpt = None,
     open_: bool = typer.Option(False, "--open", help="Open the board in a browser."),
+    matrix: Annotated[
+        Path | None,
+        typer.Option("--matrix", help="Acceptance matrix to track (default: this checkout's)."),
+    ] = None,
 ) -> None:
-    """Write triage.html from facts.json and judgements.yaml."""
-    target_dir, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    """Write triage.html from facts.json and judgements.yaml.
+
+    Also stores a snapshot of what the board shows under `snapshots/` in the state
+    directory (the latest 30 are kept; one identical to the latest is not stored); the
+    board's "Since last report" is the diff against the last DIFFERENT readable one.
+    The acceptance matrix is read only for a single repo whose checkout you are in, or
+    from --matrix.
+    """
+    scope = _scope(repo, org)
+    target_dir, facts, judgements = _load_state(scope, dir_override)
+    if matrix is not None:
+        if not matrix.is_file():
+            err_console.print(
+                f"[red]error:[/red] no matrix at {escape(str(matrix))}", soft_wrap=True
+            )
+            raise typer.Exit(code=2)
+        matrix_path: Path | None = matrix
+    else:
+        matrix_path = matrix_for_scope(scope.target if scope.kind == "repo" else None, Path.cwd())
+    snap = take_snapshot(facts, judgements, acceptance=acceptance_rows(matrix_path))
+    since = diff_snapshots(previous_snapshot(target_dir, snap), snap)
     out = target_dir / "triage.html"
-    out.write_text(render(facts, judgements), encoding="utf-8")
+    out.write_text(render(facts, judgements, since), encoding="utf-8")
+    # Stored only once the page exists, and only when the board differs from the latest
+    # snapshot: a re-render with nothing new must not erase "Since last report".
+    if snap != latest_snapshot(target_dir):
+        store_snapshot(
+            target_dir,
+            snap,
+            datetime.now(UTC),
+            warn=lambda m: err_console.print(f"warning: {escape(m)}", soft_wrap=True),
+        )
     console.print(
         f"wrote {out} ({plural(len(facts.issues), 'issue')})", markup=False, soft_wrap=True
     )
@@ -278,4 +364,6 @@ def render_command(
 # helpers above and registers its commands on `batch_app`, so it is imported
 # LAST: whichever of the two modules loads first, every name the other needs
 # already exists.
+import fr.commands.triage_architecture_cmd  # noqa: E402, F401
 import fr.commands.triage_batch_cmd  # noqa: E402, F401
+import fr.commands.triage_origins_cmd  # noqa: E402, F401

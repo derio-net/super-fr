@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from fr.ghclient import MERGE_METHODS, GhClient
 from fr.hostclient import FORGE_ERRORS
@@ -210,30 +210,87 @@ def merge_one(ctx: MergeContext, slot: Slot, previous: str | None) -> None:
         if view.get("state") == "MERGED":
             ctx.say(f"{batch.id}: already merged (PR #{pr.number})")
             return
-        if view.get("state") != "OPEN":
-            raise MergeStopError(f"PR #{pr.number} (batch {batch.id}) is {view.get('state')}")
-        if view.get("draft"):
-            raise MergeStopError(f"PR #{pr.number} (batch {batch.id}) is a draft; mark it ready")
-        head = str(view.get("head_oid"))
-        if head != expected:
-            raise MergeStopError(
-                f"PR #{pr.number} (batch {batch.id}): head moved since the plan was printed "
-                f"({expected[:12]} -> {head[:12]}); re-run to re-plan"
-            )
+        head = _open_head(ctx, slot, view, expected)
         _checks(ctx, pr.number, after_push=False)
-        ctx.checkout.fetch()
-        behind = not ctx.checkout.is_ancestor(ctx.main, head)
-        head_version = ctx.version_at(head)
-        wrong_slot = slot.slot is not None and head_version != slot.slot
-        if not behind and not wrong_slot:
-            _merge(ctx, slot, head, head_version)  # step 2
+        new = _land(ctx, slot, head, previous)
+        if new is None:
             return
-        expected = _update(ctx, slot, head, behind, previous)  # step 3
+        expected = new
         _checks(ctx, pr.number, after_push=True)
     raise MergeStopError(
         f"PR #{pr.number} (batch {batch.id}): still behind or off its slot after "
         f"{MAX_UPDATES} updates; main keeps moving — re-run later"
     )
+
+
+def _open_head(ctx: MergeContext, slot: Slot, view: dict[str, Any], expected: str) -> str:
+    """The head of an OPEN, non-draft PR whose head is still *expected*, else a stop."""
+    pr, batch = slot.step.pr, slot.step.batch
+    if view.get("state") != "OPEN":
+        raise MergeStopError(f"PR #{pr.number} (batch {batch.id}) is {view.get('state')}")
+    if view.get("draft"):
+        raise MergeStopError(f"PR #{pr.number} (batch {batch.id}) is a draft; mark it ready")
+    head = str(view.get("head_oid"))
+    if head != expected:
+        raise MergeStopError(
+            f"PR #{pr.number} (batch {batch.id}): head moved since the plan was printed "
+            f"({expected[:12]} -> {head[:12]}); re-run to re-plan"
+        )
+    return head
+
+
+def _land(ctx: MergeContext, slot: Slot, head: str, previous: str | None) -> str | None:
+    """Steps 2-3: merge a PR that is current and on its slot (returns None), else push
+    the update that brings it there (returns the new head)."""
+    ctx.checkout.fetch()
+    behind = not ctx.checkout.is_ancestor(ctx.main, head)
+    head_version = ctx.version_at(head)
+    wrong_slot = slot.slot is not None and head_version != slot.slot
+    if not behind and not wrong_slot:
+        _merge(ctx, slot, head, head_version)  # step 2
+        return None
+    return _update(ctx, slot, head, behind, previous)  # step 3
+
+
+MergeReadiness = Literal["merged", "updated", "already-merged", "draft", "failing", "pending"]
+
+
+@dataclass(frozen=True)
+class MergeAttempt:
+    """What one non-blocking `merge_ready` call did, and for `failing`/`pending`
+    which checks, so the caller can report them once."""
+
+    outcome: MergeReadiness
+    head: str = ""
+    checks: tuple[str, ...] = ()
+
+
+def merge_ready(ctx: MergeContext, slot: Slot, previous: str | None) -> MergeAttempt:
+    """`merge_one` without the wait (wave-driver §B): merge the PR only if it is not a
+    draft and every required check has already passed, else say why not.
+
+    A PR behind its base or off its version slot gets the same update `merge_one`
+    gives it and is left for a later call: it never waits for the new head's checks.
+    A closed PR, a moved head or a forge refusal is a `MergeStopError`, as there.
+    """
+    pr, batch = slot.step.pr, slot.step.batch
+    view = ctx.client.pr_view(ctx.repo, pr.number)
+    if view.get("state") == "MERGED":
+        return MergeAttempt("already-merged")
+    if view.get("state") == "OPEN" and view.get("draft"):
+        return MergeAttempt("draft", head=str(view.get("head_oid")))
+    head = _open_head(ctx, slot, view, slot.head)
+    checks = ctx.client.pr_required_checks(ctx.repo, pr.number)
+    failing = sorted(str(c.get("name")) for c in checks if c.get("bucket") in FAILING_BUCKETS)
+    if failing:
+        return MergeAttempt("failing", head=head, checks=tuple(failing))
+    pending = sorted(str(c.get("name")) for c in checks if c.get("bucket") == "pending")
+    if pending:
+        return MergeAttempt("pending", head=head, checks=tuple(pending))
+    new = _land(ctx, slot, head, previous)
+    if new is not None:
+        ctx.say(f"{batch.id}: updated; checks run again")
+    return MergeAttempt("merged" if new is None else "updated", head=new or head)
 
 
 def _merge(ctx: MergeContext, slot: Slot, head: str, head_version: str | None) -> None:

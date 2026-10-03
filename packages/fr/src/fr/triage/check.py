@@ -13,6 +13,9 @@ Pure: facts and judgements in, sets out. The command only formats them.
   or its key names a collected repo but was added after the last collect. Never
   orphaned: pruning a judgement over a transient failure, or over stale facts,
   would destroy the ranking (reviews r-p2-check-sets, phase-4 C1/C2);
+- **unplaced** — an open issue (judged or not) in no open batch, in no feature
+  group and not parked (wave-driver R9). The still-open members of a cancelled,
+  merged, partial or abandoned batch are unplaced: that batch is no longer open;
 - **stale dispatch** — an open issue labelled `fr:in-progress` whose fr-batch
   marker comment is older than the repo's `stale_dispatch_days` (default 3)
   with no open or merged linked PR — a closed-unmerged one is not progress
@@ -32,6 +35,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fr.labels import FR_IN_PROGRESS
+from fr.triage.batch import is_open
 from fr.triage.model import Facts, Issue, Judgements, PullRequest, issue_key, normalize_key
 
 SETTLED_STAGES = frozenset({"closed", "merged"})
@@ -67,6 +71,7 @@ class CheckResult:
     orphaned: list[str]
     unreachable: list[Unreachable]
     stale: list[Stale] = field(default_factory=list)
+    unplaced: list[Issue] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -87,6 +92,7 @@ class CheckResult:
             "settled": [row(i) for i in self.settled],
             "orphaned": list(self.orphaned),
             "unreachable": [{"key": u.key, "reason": u.reason} for u in self.unreachable],
+            "unplaced": [row(i) for i in self.unplaced],
             "stale_dispatch": [
                 {
                     "key": s.key,
@@ -163,6 +169,18 @@ def stale_dispatches(facts: Facts) -> list[Stale]:
     return out
 
 
+def unplaced_issues(facts: Facts, judgements: Judgements) -> list[Issue]:
+    """The unplaced set: see the module docstring."""
+    placed: set[str] = set()
+    for batch in judgements.batches:
+        if is_open(batch, facts):
+            placed.update(batch.ids)
+    for feature in judgements.features:
+        placed.update(feature.ids)
+    placed.update(k for k, j in judgements.issues.items() if j.kind == "parked")
+    return [i for i in facts.issues if i.state == "open" and i.key not in placed]
+
+
 def classify(facts: Facts, judgements: Judgements) -> CheckResult:
     """Sort issues into their sets and report open PRs without a judgement."""
     judged = {normalize_key(k) for k in judgements.issues}
@@ -187,4 +205,5 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
         orphaned=orphaned,
         unreachable=unreachable,
         stale=stale_dispatches(facts),
+        unplaced=unplaced_issues(facts, judgements),
     )

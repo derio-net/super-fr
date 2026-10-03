@@ -114,7 +114,7 @@ def test_org_scope_reports_a_skipped_repo_verbatim_and_still_writes(
     assert "[no access] [/red]" in result.output
     facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
     assert facts["skipped"] == [{"repo": "example-org/beta", "reason": "[no access] [/red]"}]
-    assert facts["schema"] == 3
+    assert facts["schema"] == 4
 
 
 def test_pr_limit_widens_the_window_and_a_full_list_warns(
@@ -165,7 +165,7 @@ def test_collect_views_the_judged_issues_that_are_no_longer_open(
 def test_a_bad_judgements_file_exits_2_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "judgements.yaml").write_text("schema: 3\n", encoding="utf-8")
+    (tmp_path / "judgements.yaml").write_text("schema: 4\n", encoding="utf-8")
 
     result = _run(monkeypatch, _Forge(), "--repo", "derio-net/super-fr", "--dir", str(tmp_path))
 

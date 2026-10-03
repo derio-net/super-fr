@@ -126,7 +126,7 @@ def _raw(tmp_path: Path) -> dict[str, Any]:
 # ------------------------------------------------------------------ create
 
 
-def test_create_writes_the_batch_at_schema_2(tmp_path: Path) -> None:
+def test_create_writes_the_batch_at_schema_3(tmp_path: Path) -> None:
     _state(tmp_path)
     code, out = _run(
         tmp_path,
@@ -150,7 +150,7 @@ def test_create_writes_the_batch_at_schema_2(tmp_path: Path) -> None:
         ["super-fr#577", "super-fr#575"],
         "minor",
     )
-    assert _raw(tmp_path)["schema"] == 2
+    assert _raw(tmp_path)["schema"] == 3
 
 
 def test_create_stores_only_the_launch_values_given(tmp_path: Path) -> None:

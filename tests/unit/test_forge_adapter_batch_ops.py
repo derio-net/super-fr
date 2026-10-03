@@ -84,6 +84,14 @@ def test_list_prs_by_head_lists_every_state_for_the_branch(
     assert call[call.index("--state") + 1] == "all"
     fields = call[call.index("--json") + 1].split(",")
     assert {"number", "state", "headRefName", "closingIssuesReferences"} <= set(fields)
+    assert {"headRefOid", "files"} <= set(fields)  # the driver attributes merged archives
+
+
+def test_pr_view_reads_the_merge_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The wave driver's release probe needs the commit the merge made (rg-9)."""
+    raw = {"state": "MERGED", "isDraft": False, "mergeCommit": {"oid": "c0ffee"}}
+    _fake(monkeypatch, {("pr", "view"): json.dumps(raw)})
+    assert RealGhClient().pr_view(REPO, 12)["merge_commit"] == "c0ffee"
 
 
 def test_pr_view_shapes_state_draft_head_oid_and_mergeable(
@@ -108,6 +116,7 @@ def test_pr_view_shapes_state_draft_head_oid_and_mergeable(
         "head_ref": "feat/batch-x",
         "mergeable": "MERGEABLE",
         "merge_state": "BEHIND",
+        "merge_commit": "",
     }
 
 
