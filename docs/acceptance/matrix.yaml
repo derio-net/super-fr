@@ -4230,7 +4230,17 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R8
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: 'R8 benchmark re-run owed on 5.0.0. Result on 4.40.0, 2026-09-29 (PR #820
+      post-merge Test Plan item 6; super-fr-3 feature-C brief, OpenCode 1.18.33, self-hosted
+      GitLab without CI, fr-goal-light@1): gpt-6-sol $5.13 / 42.5 min vs plain $2.13
+      / 12.8 min = 2.41x cost, 3.32x time: FAIL; gpt-6-luna (high) $1.26 / 112.0 min
+      vs plain $0.15 / 15.0 min = 8.4x cost, 7.5x time: FAIL; deliver evidence verified
+      on both (fresh tests=, not reuse). Re-classified from failing (not recorded as
+      failing on main): that build no longer exists. 5.0.0 (#851) removed the input
+      layer that cost the luna run 12 spec-plan-review dispatches in the partition loop
+      (#808), so the 4.40.0 figures do not describe the shipped light path. Re-run it
+      on 5.0.0 alongside spec-contract-dry-run (spec 2026-09-29-spec-is-the-contract,
+      Test Plan item 7). Per harness and model (#822); details on #780.'
     verify: post-merge
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
