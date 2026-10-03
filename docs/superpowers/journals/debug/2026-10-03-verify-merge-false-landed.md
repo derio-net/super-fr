@@ -27,3 +27,8 @@ A concurrent base edit makes the squash blob a combination of both edits, so blo
 ### rc-715 · root-cause · #715: the landing was recognised by its blob alone
 
 `_branch_blob_was_on_base` matched only `new == blob`. A squash over a concurrent base edit never writes the branch's blob, so with the lines later rewritten nothing matched. Confirmed: `test_branch_changes_present_concurrent_edit_then_rewrite_counts_as_landed` was red on the parent commit.
+
+<!-- fr:journal kind=finding scope=debug id=fix-715 created=2026-10-03T20:01:05+00:00 state=fixed -->
+### fix-715 · finding [fixed] · #715 fixed: `_carries_patch` recognises the landing by its patch
+
+A first-parent commit whose patch adds every non-blank line the branch added is the landing. Guards: `..._concurrent_edit_then_revert_is_missing` and `..._concurrent_edit_orphan_line_is_missing`. Every existing revert, three-way and side-branch test still passes. Remaining limit: if the concurrent edit touched the branch's own lines, the conflict resolution adds different lines, so it still reads as missing. That is the safe direction.
