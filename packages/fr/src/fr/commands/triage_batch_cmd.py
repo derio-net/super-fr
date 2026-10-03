@@ -115,6 +115,7 @@ from fr.triage.batch_drive import (
     drive_pass,
     find_run,
     housekeeping_branch,
+    is_archived,
     settle,
     summary_line,
 )
@@ -1460,6 +1461,7 @@ class _Driver:
         live: dict[str, LivePr] = {}
         merged_at: dict[str, datetime] = {}
         released: set[str] = set()
+        archived: set[str] = set()
         archives: dict[str, tuple[LivePr, ...]] = {}
         due: list[Batch] = []
         try:
@@ -1488,14 +1490,17 @@ class _Driver:
                 if event is None:
                     repo = repos[b.id]
                     pr = batch_pr(b, facts)
-                    when = _parse_at(pr.merged_at if pr else None)
-                    merged_at[b.id] = when or self._first_seen.setdefault(b.id, now)
                     merge = (
                         str(self.client(facts, repo).pr_view(repo, pr.number).get("merge_commit")
                             or "")
                         if pr is not None
                         else ""
                     )  # fmt: skip
+                    if self._archived(repo, merge):
+                        archived.add(b.id)
+                        continue
+                    when = _parse_at(pr.merged_at if pr else None)
+                    merged_at[b.id] = when or self._first_seen.setdefault(b.id, now)
                     if self._released(repo, merge):
                         released.add(b.id)
                     if closeout_due(released=b.id in released, merged_at=merged_at[b.id], now=now):
@@ -1525,6 +1530,7 @@ class _Driver:
             existing=self._existing(facts, due, repos) if self.yes else frozenset(),
             warned=frozenset(self.warned),
             selected=frozenset(ids),
+            archived=frozenset(archived),
         )
 
     def _reader(self, repo: str) -> Checkout:
@@ -1548,6 +1554,22 @@ class _Driver:
             except TriageError:
                 self._ci[repo] = False
         return self._ci[repo]
+
+    def _archived(self, repo: str, merge_commit: str) -> bool:
+        """Whether the batch merged by *merge_commit* was closed out already: the run
+        artifacts it added are all gone from `origin/<default>` (`is_archived`), as
+        `fr archive` leaves them, whether a driver or a hand ran the close-out."""
+        try:
+            checkout = self._reader(repo)
+            checkout.fetch()
+            tip = f"origin/{checkout.default_branch()}"
+            return is_archived(
+                checkout.added_paths(merge_commit), lambda p: checkout.exists_at(tip, p)
+            )
+        except TriageError as exc:
+            if self.yes:
+                _fail(str(exc))
+            return False
 
     def _released(self, repo: str, merge_commit: str) -> bool:
         try:

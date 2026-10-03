@@ -167,6 +167,8 @@ class DriveCheckout:
         self.forwarded = 0
         self.files: dict[tuple[str, str], str] = {}
         self.release_probes: list[str] = []
+        self.added: dict[str, tuple[str, ...]] = {}  # merge commit -> paths it added
+        self.live: set[str] = set()  # paths still on origin/main
 
     def origin_repo(self) -> str | None:
         return REPO
@@ -200,6 +202,12 @@ class DriveCheckout:
     def released_after(self, merge_commit: str) -> bool:
         self.release_probes.append(merge_commit)
         return self.released
+
+    def added_paths(self, merge_commit: str) -> tuple[str, ...]:
+        return self.added.get(merge_commit, ())
+
+    def exists_at(self, ref: str, path: str) -> bool:
+        return path in self.live
 
     def snapshot_paths(self, ref: str, paths: tuple[str, ...], dest: Path) -> None:
         """origin/<default>'s copy of *paths*: what `ci none` is read from."""
@@ -594,6 +602,49 @@ def test_post_merge_then_one_closeout_through_the_runner(
     # a second pass starts nothing
     code, _ = _drive(tmp_path, "--once", "--yes")
     assert len(runner.dispatched) == 1 and checkout.commands == [["./scripts/install.sh"]]
+
+
+def test_batches_closed_out_by_hand_are_not_closed_out_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Debug 2026-10-03: every batch merged before 5.2.0 has no close-out event, and
+    an unnamed drive on a repo with no waves (so every batch is selected) planned a
+    close-out for each — 50 on this repo. One whose run is archived is done; one
+    whose run is still live is owed, wave or no wave."""
+    world.issues.update({1: "closed", 2: "closed"})
+    for n, bid in ((101, "done"), (102, "owed")):
+        world.pr(n, f"feat/batch-{bid}", [n - 100], state="MERGED",
+                 merged_at=(NOW - timedelta(days=3)).isoformat(), merge_commit=f"m{n}")  # fmt: skip
+        checkout.added[f"m{n}"] = (f"docs/superpowers/journals/debug/{bid}.md",)
+    checkout.live.add("docs/superpowers/journals/debug/owed.md")
+    no_wave = [
+        _batch(bid, n, events=_dispatch_event(bid)).replace("    wave: 1\n", "")
+        for n, bid in ((1, "done"), (2, "owed"))
+    ]
+    _state(tmp_path, world, *no_wave)
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-owed"]
+    assert "m101" not in checkout.release_probes  # an archived batch probes no release
+
+
+def test_a_named_batch_already_archived_by_hand_is_not_closed_out(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    journal = "docs/superpowers/journals/debug/2026-10-01-b1.md"
+    _merged(world, tmp_path)
+    world.prs[101]["merge_commit"] = "m101"
+    checkout.added["m101"] = (journal, "packages/x.py")
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes", "b1")
+    assert code == 0, out
+    assert _lines(out, "closeout") == [] and runner.dispatched == []
+    assert "closing 0" in out
+    checkout.live.add(journal)  # not archived yet: the close-out is owed
+    code, out = _drive(tmp_path, "--once", "--yes", "b1")
+    assert code == 0, out
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
 
 
 def test_a_debug_batch_is_closed_out_with_branch(

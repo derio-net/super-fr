@@ -14,7 +14,7 @@ testable. `tests/unit/test_triage_batch_drive.py` pins that.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -40,6 +40,11 @@ LANDED: frozenset[BatchStage] = frozenset({"merged", "partial"})
 ARCHIVE_PREFIXES = ("chore/archive-", "chore/closeout-")
 RUNS_DIR = "docs/superpowers/runs"
 JOURNAL_DIRS = ("docs/superpowers/journals/", "docs/superpowers/implemented/journals/")
+RUN_ARTIFACT_DIRS = tuple(
+    f"docs/superpowers/{d}/" for d in ("plans", "specs", "journals", "runs", "usage")
+)
+"""Where a run's live artifacts sit until its close-out archives them under
+`docs/superpowers/implemented/` (`fr archive --branch`)."""
 
 ChecksVerdict = Literal["green", "pending", "failing"]
 ActionKind = Literal["merge", "closeout", "archive", "dispatch", "blocked", "warn"]
@@ -81,6 +86,11 @@ class Snapshot:
     # resolution always read every batch: a batch outside the selection still holds
     # a slot, and a dependency outside it is still merged or not (review rg-3).
     selected: frozenset[str] | None = None
+    # Landed batches whose merge added run artifacts that are all archived now: closed
+    # out already, by hand or by an earlier driver (`is_archived`). A batch merged
+    # before the driver existed carries no close-out event, so without this every one
+    # of them read as owed (debug 2026-10-03: 50 on this repo).
+    archived: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -256,6 +266,15 @@ def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
     return False
 
 
+def is_archived(added: Iterable[str], live: Callable[[str], bool]) -> bool:
+    """Whether a merged batch's close-out has already happened: its merge commit
+    *added* at least one run artifact (`RUN_ARTIFACT_DIRS`), and none of those is
+    *live* on the default branch any more. No added artifact is no evidence, so
+    the close-out stays owed."""
+    mine = [p for p in added if p.startswith(RUN_ARTIFACT_DIRS)]
+    return bool(mine) and not any(live(p) for p in mine)
+
+
 def closeout_event(batch: Batch) -> CloseoutEvent | None:
     """The batch's close-out event, if it has one."""
     for e in reversed(batch.events):
@@ -308,6 +327,8 @@ def drive_pass(snap: Snapshot) -> Pass:
     for batch in chosen:
         if stages.get(batch.id) not in LANDED or batch.id in merging:
             continue
+        if batch.id in snap.archived:
+            continue  # closed out already: its run's artifacts are archived
         event = closeout_event(batch)
         if event is not None:
             continue

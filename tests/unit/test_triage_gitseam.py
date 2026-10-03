@@ -276,3 +276,28 @@ def test_run_command_runs_an_argument_list_in_the_checkout(tmp_path: Path) -> No
         checkout.run_command(["git", "no-such-subcommand"])
     with pytest.raises(GitError, match="empty"):
         checkout.run_command([])
+
+
+def test_added_paths_lists_what_a_merge_commit_added_and_exists_at_reads_origin(
+    tmp_path: Path,
+) -> None:
+    """The driver's "already archived" evidence (debug 2026-10-03): the paths a
+    batch's merge commit added, and whether each is still on origin/<default>."""
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _pushed_elsewhere(tmp_path, checkout, "feat: the batch (#7)")  # adds b.txt
+    merge = _head(tmp_path)
+    other = tmp_path / "other"
+    _git(other, "rm", "--quiet", "b.txt")
+    _git(other, "commit", "--quiet", "-m", "chore: archive")
+    _git(other, "push", "--quiet", "origin", "main")
+    checkout.fetch()
+    assert checkout.added_paths(merge) == ("b.txt",)
+    assert not checkout.exists_at("origin/main", "b.txt")
+    assert checkout.exists_at("origin/main", "a.txt")
+
+
+def test_an_unknown_merge_commit_added_nothing(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    assert checkout.added_paths("") == ()
+    assert checkout.added_paths("0" * 40) == ()

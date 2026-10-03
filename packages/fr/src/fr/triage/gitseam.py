@@ -229,6 +229,24 @@ class Checkout:
                 return True
         return False
 
+    def added_paths(self, merge_commit: str) -> tuple[str, ...]:
+        """The paths *merge_commit* added against its first parent: what a batch's
+        merge brought in, read for the driver's "already archived" check. An unknown
+        or root commit added nothing knowable, so it returns ()."""
+        if not merge_commit or not git_ok(
+            ["cat-file", "-e", f"{merge_commit}^1^{{commit}}"], self.path
+        ):
+            return ()
+        out = git(
+            ["diff", "--name-only", "--no-renames", "--diff-filter=A", "-z",
+             f"{merge_commit}^1", merge_commit],
+            self.path,
+        )  # fmt: skip
+        return tuple(p for p in out.split("\0") if p)
+
+    def exists_at(self, ref: str, path: str) -> bool:
+        return git_ok(["cat-file", "-e", f"{ref}:{path}"], self.path)
+
     def snapshot_paths(self, ref: str, paths: tuple[str, ...], dest: Path) -> None:
         """Write *paths* (files or directories) as they are at *ref* into *dest*, a
         fresh git repo with this clone's origin, so a reader that resolves a repo's

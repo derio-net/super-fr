@@ -27,6 +27,7 @@ from fr.triage.batch_drive import (
     drive_pass,
     find_run,
     housekeeping_branch,
+    is_archived,
     summary_line,
 )
 from fr.triage.model import Batch, PullRequest
@@ -303,6 +304,47 @@ def test_post_merge_is_owed_only_until_its_event_exists() -> None:
     b = _merged("x", 1, events=[event])
     (action,) = drive_pass(_snap([b], {"x": "merged"}, released=frozenset({"x"}))).actions
     assert action.post_merge is False
+
+
+def test_an_archived_batch_is_not_closed_out() -> None:
+    """Closed out by hand before the driver existed: no close-out event, but its
+    run's artifacts are archived on the default branch (debug 2026-10-03: 50 such
+    batches on this repo were each planned a close-out)."""
+    b = _merged("old", 1, wave=None)
+    snap = _snap([b], {"old": "merged"}, released=frozenset({"old"}),
+                 archived=frozenset({"old"}))  # fmt: skip
+    got = drive_pass(snap)
+    assert got.actions == ()
+    assert got.summary.closing == 0 and got.summary.done
+
+
+def test_a_merged_batch_without_a_wave_is_still_closed_out() -> None:
+    """Having no wave is no reason to skip a close-out: an unnamed drive on a repo
+    with no waves dispatches wave-less batches, and each must close out (and run
+    its post_merge) once it merges."""
+    loose = _merged("loose", 1, wave=None)
+    snap = _snap([loose], {"loose": "merged"}, released=frozenset({"loose"}))
+    assert _kinds(drive_pass(snap).actions) == [("closeout", "loose")]
+
+
+@pytest.mark.parametrize(
+    ("added", "live", "archived"),
+    [
+        (["docs/superpowers/journals/debug/d.md"], set(), True),
+        (["docs/superpowers/journals/debug/d.md"], {"docs/superpowers/journals/debug/d.md"}, False),
+        (["docs/superpowers/plans/p/_meta.yaml", "docs/superpowers/runs/r.yaml"],
+         {"docs/superpowers/runs/r.yaml"}, False),
+        (["docs/superpowers/plans/p/_meta.yaml", "docs/superpowers/specs/s.md",
+          "docs/superpowers/usage/r.yaml", "packages/x.py"], {"packages/x.py"}, True),
+        # no evidence: the PR added no run artifact (or the merge is unknown)
+        ([], set(), False),
+        (["packages/x.py", "docs/superpowers/implemented/specs/s.md"], set(), False),
+    ],
+)  # fmt: skip
+def test_is_archived_needs_an_added_run_artifact_and_none_still_live(
+    added: list[str], live: set[str], archived: bool
+) -> None:
+    assert is_archived(added, live.__contains__) is archived
 
 
 def test_closeout_comes_before_dispatch_in_a_pass() -> None:

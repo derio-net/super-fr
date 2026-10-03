@@ -1,0 +1,2 @@
+bump: patch
+summary: "`fr triage batch drive` no longer plans a close-out for every batch merged before the driver existed: a batch whose run is already archived on the default branch is left alone"
