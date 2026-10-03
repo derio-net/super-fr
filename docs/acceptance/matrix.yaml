@@ -5181,8 +5181,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_container_git_ownership.py
     status: ci
-    notes: safe.directory override on git_answer, update-index restore and record/apply
+    notes: 'safe.directory override on git_answer, update-index restore and record/apply
       git calls; proven in a foreign-owned linked worktree from root and subdirectory
+      super-fr#700: _run_git (repo_root/add/commit/status) shares the git_argv seam,
+      proven in the same foreign-owned worktree; the walk-up honours GIT_CEILING_DIRECTORIES
+      so fr never trusts a repository git would not open.'
   - id: scaffold-trusts-workspace
     capability: isolation-git-ownership
     acceptance: A scaffolded devcontainer profile trusts its own workspace path for
