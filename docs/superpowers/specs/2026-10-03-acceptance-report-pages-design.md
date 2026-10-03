@@ -64,9 +64,18 @@ The job steps, in order:
 4. Assemble: `mkdir -p _site && cp -R docs/explainers/. _site/` (R3).
 5. Render (R2): `fr acceptance report --link-mode github --ref "$GITHUB_SHA"
    --out _site/acceptance/index.html`. The `--out` path skips
-   `--deterministic`, so the page carries the git stamp. `report` only renders
-   and never gates on statuses, so a `failing` row does not stop it (R4). No
+   `--deterministic`, so the page carries the git stamp. `report` never gates
+   on row statuses: a `failing` row renders and the command exits 0 (R4). No
    `fr acceptance check` step goes before the deploy.
+
+   `report` is not exempt from fr's CLI-entry migration gate. In CI, stale
+   registered artifacts make it refuse before rendering, and the deploy then
+   fails. That is accepted on purpose and is the same behaviour
+   `acceptance-report.yml`'s steps have today. Stale artifacts on `main` are
+   already a red `validate-artifacts` job, and a report rendered over
+   unmigrated artifacts would describe a matrix the shipped `fr` cannot read.
+   The step does **not** set `FR_SKIP_MIGRATION`. R4 covers row statuses, not
+   artifact staleness.
 6. `actions/configure-pages`, then `actions/upload-pages-artifact` with
    `path: _site`, then `actions/deploy-pages`.
 
@@ -81,9 +90,12 @@ closed set of source-less pages) does not see it.
 ### B. Discoverability (R5, R6)
 
 - `docs/explainers/index.html` is hand-authored (explainers-currency rule,
-  Known gap 1). It gets one link, added in place: a third `<span>` in the
-  closing `.foot` row, next to the existing `isolation, covered in full →`
-  link, pointing at `./acceptance/`. No other lines change.
+  Known gap 1). It gets one link, added in place in the closing `.foot` row
+  (`index.html:577-581`). That row already holds three spans, so the new one
+  is the fourth: one new line straight after the `isolation, covered in full →`
+  span (line 580), using the same markup,
+  `<span><a href="./acceptance/">acceptance coverage &rarr;</a></span>`.
+  No other lines change.
 - `README.md` gets a fourth badge in its badge row:
   `[![Acceptance](https://img.shields.io/badge/acceptance-report-blue)](https://derio-net.github.io/super-fr/acceptance/)`.
   This is a static badge, because a dynamic count would need a JSON endpoint
@@ -111,10 +123,30 @@ parses `pages.yml` and pins:
   (R4).
 
 It also pins the README badge URL (R6) and the `./acceptance/` link in
-`index.html` (R5). A render test runs `fr acceptance report --link-mode github
---ref <sha> --out <tmp>/acceptance/index.html` against a fixture matrix that
-has a `failing` row. It checks for exit 0, a written file, and
-`blob/<sha>/` links (R2, R4).
+`index.html` (R5).
+
+A render test goes in `tests/unit/test_acceptance_report.py`, using its
+existing `make_repo` + `VK_REPO_ROOT` harness. It runs `fr acceptance report
+--link-mode github --ref <sha> --out _site/acceptance/index.html`, with the
+repo-relative `--out` CI uses, against a fixture matrix that has a `failing`
+row. It checks for exit 0, the file written at `_site/acceptance/index.html`,
+`blob/<sha>/` links, and the `(ref <sha>)` git stamp. The stamp proves that
+`--out` took the non-deterministic branch (R2, R4).
+
+### E. Acceptance rows
+
+The brainstorm added three rows, which cite this spec's requirements. That
+keeps `fr acceptance check`'s staleness guard happy about the Test Plan below.
+This means the PR touches `docs/acceptance/matrix.yaml` and the three
+committed reports, which is also why its merge triggers the first deploy:
+
+- `pages-acceptance-report-published` (R1, R2, R4), `verify: post-merge`;
+- `pages-explainers-preserved` (R3), `verify: post-merge`;
+- `pages-acceptance-report-discoverable` (R5, R6).
+
+Implementation adds the §D tests as each row's `unit` level, and moves rows
+with `fr acceptance set-status`. The live deploy, Test Plan steps 1-5, stays
+owed after merge.
 
 No change fragment is needed: the PR touches only `.github/**`, `docs/**`,
 `README.md` and `tests/**`.
@@ -124,7 +156,7 @@ No change fragment is needed: the PR touches only `.github/**`, `docs/**`,
 Post-merge, operator-driven:
 
 1. After the merge commit lands, confirm that a `Deploy explainers to Pages`
-   run starts (the PR touches `docs/acceptance/**`, or run it with
+   run starts (the PR touches `docs/acceptance/**` through its matrix rows, or run it with
    `workflow_dispatch`) and succeeds.
 2. Repository → Deployments → `github-pages`: the new deployment is there.
 3. Open `https://derio-net.github.io/super-fr/acceptance/`. The report loads,
