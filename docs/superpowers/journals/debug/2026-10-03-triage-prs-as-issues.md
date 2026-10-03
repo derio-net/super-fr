@@ -14,3 +14,8 @@ super-fr#902. After `fr triage collect --repo derio-net/super-fr`, open PRs #314
 ### 47d208bf686b · finding [fixed] · collect keeps judged PRs out of issues; check reports them as found or settled
 
 Fix: `collect_facts` builds a key→PR map from both PR lists and never views a judged key it names; a viewed record with a /pull/ URL is Unviewed (PR past the limit, --pr-limit hint); closed/merged judged PRs no other list carries go to the new defaulted `Facts.judged_prs`. `classify` treats a judged key naming any known PR as found, and returns non-open judged PRs as `settled_prs` (CLI, JSON, masthead and snapshot settled counts). Tests first: test_triage_collect.py (3 gh#902 tests) and test_triage_check.py (2). Live: collect+check+render on derio-net/super-fr in a scratch dir: 0 PRs unplaced, 14 judged PRs settled, 0 unreachable/orphaned.
+
+<!-- fr:journal kind=review scope=debug id=5d78844f005c created=2026-10-03T21:25:40+00:00 -->
+### 5d78844f005c · review · Self-review of the fix
+
+Considered and resolved: (1) the first fix sent closed/merged judged PRs to unreachable, a regression from their former (accidental) settled reporting; changed to settled_prs. (2) Facts gains an optional defaulted field; facts.json is a cache, not a registered artifact kind, and old files still load. No findings outstanding.
