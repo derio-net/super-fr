@@ -12,3 +12,8 @@ Batch verify-merge-false-landed. Investigation found three independent root caus
 ### rc-757 · root-cause · #757: content alone cannot show where a fast-forwarded branch began
 
 After an --ff-only landing the branch tip is on the base's first-parent line, so `_landing_fork` returns the tip itself. That makes the branch's diff empty, so every change reads as present, and a later revert reads as present too. Nothing in git separates this case from an empty branch. fr already records the evidence at `up`: `IsolationState.base_sha`.
+
+<!-- fr:journal kind=finding scope=debug id=fix-757 created=2026-10-03T19:57:15+00:00 state=fixed -->
+### fix-757 · finding [fixed] · #757 fixed: recorded start used as the fork point
+
+`_fork_point(start=)` returns `start` when the walk ends at the tip and `start` is a strict ancestor of it. A `start` that is not an ancestor is ignored, and a failed ancestry check raises. verify_merge, verify_merge_reaped (via `recorded_start`), the gc reap hazard, `_merged_by_content` and `fr archive` all pass it. Tests: `test_branch_changes_present_reverted_fast_forward_with_recorded_start_is_missing`, `..._stays_present`, `test_verify_merge_reverted_fast_forward_uses_the_recorded_base_sha`. The tests were committed red before the fix. Limit: a branch with no surviving record (gc deleted the state, or the branch was not created by `up`) keeps the old behavior.
