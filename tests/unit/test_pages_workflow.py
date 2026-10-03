@@ -62,10 +62,22 @@ def test_report_is_never_gated_on_acceptance_check() -> None:
     assert not any("fr acceptance check" in str(s.get("if", "")) for s in _steps())
 
 
-def test_render_step_does_not_skip_migration() -> None:
-    for s in _steps():
-        if "fr acceptance report" in s.get("run", ""):
-            assert "FR_SKIP_MIGRATION" not in (s.get("env") or {})
+def test_render_does_not_skip_migration() -> None:
+    # Any env level (workflow, job, step) would reach the render, so pin the whole file.
+    assert "FR_SKIP_MIGRATION" not in WORKFLOW.read_text()
+
+
+def test_fr_is_installed_like_acceptance_report_installs_it() -> None:
+    def setup_uv(steps: list[dict]) -> list[str]:
+        return [s["uses"] for s in steps if "astral-sh/setup-uv" in s.get("uses", "")]
+
+    acceptance = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "acceptance-report.yml").read_text()
+    )
+    want = setup_uv(acceptance["jobs"]["matrix"]["steps"])
+    assert len(want) == 1
+    assert setup_uv(_steps()) == want
+    assert "uv tool install ./packages/fr" in [r.strip() for r in _runs()]
 
 
 def test_workflow_name_unchanged() -> None:
