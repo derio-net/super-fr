@@ -471,6 +471,25 @@ def test_no_horizontal_page_scroll_rules_are_present() -> None:
     assert ".scroll { overflow-x: auto; }" in page
 
 
+def test_a_long_unbreakable_token_wraps_inside_its_subsystem_card() -> None:
+    """gh#901: at 400px an issue title carrying a long test name overflowed its card.
+
+    `min-width: 0` keeps the card in its grid track, but the text inside it still
+    needs a break opportunity, or `html { overflow-x: hidden }` clips it. The rule
+    sits on the card so the title, the subsystem name and the path list all wrap.
+    """
+    from fr.triage.architecture import CSS
+
+    m = re.search(r"^article\.subsystem \{([^}]*)\}", CSS, flags=re.M)
+    assert m is not None
+    decls = {
+        k.strip(): v.strip()
+        for k, v in (d.split(":", 1) for d in m.group(1).split(";") if d.strip())
+    }
+    assert decls.get("min-width") == "0"
+    assert decls.get("overflow-wrap") == "anywhere"
+
+
 # ---------------------------------------------------------------------- manifest
 
 

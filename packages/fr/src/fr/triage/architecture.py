@@ -324,7 +324,7 @@ svg.chart text { font-family: var(--mono); font-size: 10px; }
 .grid-cards { display: grid; gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 article.subsystem { background: var(--surface); border: 1px solid var(--line);
-  border-radius: 8px; padding: 10px 14px; min-width: 0; }
+  border-radius: 8px; padding: 10px 14px; min-width: 0; overflow-wrap: anywhere; }
 article.subsystem h3 { margin: 0 0 4px; font-size: 1rem; }
 article.subsystem ul { margin: 6px 0 0; padding-left: 18px; font-size: .85rem; }
 .bar-row { display: grid; grid-template-columns: 7.5em 1fr 4em; gap: 8px; align-items: center;
