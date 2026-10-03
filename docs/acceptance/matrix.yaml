@@ -5378,9 +5378,12 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py
+      - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
+    status: skipped
+    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
     verify: post-merge
   - id: pages-explainers-preserved
     capability: acceptance-matrix
