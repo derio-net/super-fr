@@ -865,3 +865,8 @@ Filed at closeout as #880.
 ### rf-5-resolved-4 · finding [deferred → #881] · resolves rf-5: fr-triage SKILL.md still says to create judgements.yaml with schema: 2
 
 Filed at closeout as #881.
+
+<!-- fr:journal kind=finding scope=plan id=rg-16-resolved-2 created=2026-10-03T18:39:47+00:00 state=open resolves=rg-16 tracked_by=#883 -->
+### rg-16-resolved-2 · finding [deferred → #883] · resolves rg-16: A close-out tab that ended before a restart is not seen, so a second close-out could start
+
+Filed at closeout as #883.
