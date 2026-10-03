@@ -286,6 +286,65 @@ def test_a_judged_issue_no_longer_open_is_viewed_and_appears_closed() -> None:
     assert [p.number for p in closed.prs] == [508, 517]
 
 
+# ------------------------------------------- gh#902: a judged PR is not an issue
+
+
+def _pull_view(number: int) -> dict[str, Any]:
+    """What `gh issue view N` returns when N is a PR: it resolves PRs too.
+
+    Captured live 2026-10-03: `gh issue view 852 --repo derio-net/super-fr --json
+    number,url,state,title` answered with `url` .../pull/852 and `state` OPEN.
+    """
+    return {
+        "number": number,
+        "title": f"pr #{number}",
+        "body": "",
+        "labels": [],
+        "state": "OPEN",
+        "url": f"https://github.com/derio-net/super-fr/pull/{number}",
+        "closedAt": None,
+    }
+
+
+def test_a_judged_pr_collect_already_listed_is_never_viewed_as_an_issue() -> None:
+    """gh#902: judged open PRs #314/#474/#476 landed in `issues` and read as unplaced."""
+    forge = _super_fr_forge()
+
+    facts = collect_facts(
+        forge, SUPER_FR, now=NOW, judged=["super-fr#314", "super-fr#474", "super-fr#476"]
+    )
+
+    assert forge.called("view_issue") == []
+    assert [i.key for i in facts.issues if "/pull/" in i.url] == []
+    assert {314, 474, 476} <= {p.number for p in facts.prs}
+    assert facts.unviewed == []
+
+
+def test_a_judged_merged_unlinked_pr_is_carried_as_a_judged_pr_not_an_issue() -> None:
+    forge = _super_fr_forge()
+
+    facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#527", "super-fr#476"])
+
+    assert forge.called("view_issue") == []
+    assert all(i.key != "super-fr#527" for i in facts.issues)
+    assert facts.unviewed == []
+    # Only the PR no other list carries: #476 is already in `prs`, open and unlinked.
+    assert [(p.number, p.state) for p in facts.judged_prs] == [(527, "MERGED")]
+
+
+def test_a_judged_key_the_forge_answers_with_a_pr_never_becomes_an_issue() -> None:
+    """A PR past the PR list's limit is only met through `view_issue`."""
+    forge = _super_fr_forge()
+    forge.closed = {("derio-net/super-fr", 852): _pull_view(852)}
+
+    facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#852"])
+
+    assert forge.called("view_issue") == [{"repo": "derio-net/super-fr", "number": 852}]
+    assert all(i.key != "super-fr#852" for i in facts.issues)
+    assert [u.key for u in facts.unviewed] == ["super-fr#852"]
+    assert "pull request" in facts.unviewed[0].reason
+
+
 def test_no_view_for_open_keys_or_keys_outside_the_scope() -> None:
     forge = _super_fr_forge()
 

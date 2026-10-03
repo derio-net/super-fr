@@ -95,7 +95,7 @@ def figures(facts: Facts, judgements: Judgements) -> dict[str, int]:
         "open": sum(1 for i in facts.issues if i.state == "open"),
         "unranked": len(result.unranked),
         "in flight": sum(1 for i in facts.issues if i.stage in IN_FLIGHT),
-        "settled": len(result.settled),
+        "settled": len(result.settled) + len(result.settled_prs),
         "repos": len(facts.collected),
         "unplaced": len(result.unplaced),
         "batches": len(judgements.batches),

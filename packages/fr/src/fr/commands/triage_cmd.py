@@ -283,6 +283,14 @@ def check_command(
     console.print(f"[bold]settled[/bold] ({len(result.settled)}) — judged, now closed or merged")
     for i in result.settled:
         console.print(f"  {escape(i.key)}  {i.stage}  {escape(i.title)}", soft_wrap=True)
+    console.print(
+        f"[bold]settled PRs[/bold] ({len(result.settled_prs)}) — judged, now closed or merged"
+    )
+    for pr in result.settled_prs:
+        console.print(
+            f"  {escape(issue_key(pr.repo, pr.number))}  {pr.state.lower()}  {escape(pr.title)}",
+            soft_wrap=True,
+        )
     console.print(f"[bold]orphaned[/bold] ({len(result.orphaned)}) — judged, found nowhere")
     for key in result.orphaned:
         console.print(f"  {escape(key)}", soft_wrap=True)
