@@ -308,6 +308,12 @@ def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: Iss
     )
 
 
+PR_PAST_LIMIT = (
+    "a pull request, not an issue, and past the PR list's limit: "
+    "re-run `fr triage collect` with a higher --pr-limit"
+)
+
+
 def _judged_elsewhere(
     judged: Iterable[str], open_keys: set[str], repos: list[str]
 ) -> list[tuple[str, int]]:
@@ -360,6 +366,9 @@ def collect_facts(
     raw_issues: list[tuple[str, dict[str, Any]]] = []
     parsed_prs: list[tuple[PullRequest, list[IssueRef]]] = []
     open_prs: list[tuple[PullRequest, list[IssueRef]]] = []
+    # Every PR either list returned, by judgement key: a judged PR is not an
+    # issue, and must never reach `view_issue`, which answers for PRs too (gh#902).
+    listed_prs: dict[str, PullRequest] = {}
     config: dict[str, TriageConfig] = {}
     markers: dict[tuple[str, int], str] = {}
     for repo in repos:
@@ -386,6 +395,8 @@ def collect_facts(
         if len(prs) == pr_limit:
             warnings.append(Truncation(source="prs", target=repo, limit=pr_limit))
         raw_issues.extend((repo, i) for i in issues)
+        for pr, _ in [*parse_prs(repo, prs), *parse_prs(repo, current)]:
+            listed_prs.setdefault(issue_key(pr.repo, pr.number), pr)
         parsed_prs.extend(_issue_anchored(parse_prs(repo, prs), scope))
         parsed_open = _issue_anchored(parse_prs(repo, current), scope)
         open_prs.extend(
@@ -416,13 +427,21 @@ def collect_facts(
     ]
     open_keys = {i.key for i in out}
     unviewed: list[Unviewed] = []
+    judged_prs: list[PullRequest] = []
     for repo, number in _judged_elsewhere(judged, open_keys, collected):
+        if (listed := listed_prs.get(issue_key(repo, number))) is not None:
+            judged_prs.append(listed)
+            continue
         try:
             raw = forge.view_issue(repo=repo, number=number)
         except ForgeError as exc:
             # Deleted, rate-limited, 5xx or no access — indistinguishable here, so
             # recorded, never dropped: `check` must not call it orphaned (r-p2-unviewed).
             unviewed.append(Unviewed(key=issue_key(repo, number), reason=str(exc)))
+            continue
+        if "/pull/" in str(raw.get("url", "")):
+            # A PR past the PR list's limit: `gh issue view` resolves it anyway.
+            unviewed.append(Unviewed(key=issue_key(repo, number), reason=PR_PAST_LIMIT))
             continue
         state: IssueState = "open" if str(raw.get("state", "")).upper() == "OPEN" else "closed"
         out.append(_issue(repo, {"number": number, **raw}, linked(repo, number), state=state))
@@ -439,6 +458,8 @@ def collect_facts(
         seen=[*linked_prs_all(out), *unlinked],
         known=list(known_batch_prs),
     )
+    in_facts = {(p.repo, p.number) for p in [*linked_prs_all(out), *unlinked, *batch_prs]}
+    judged_prs = [p for p in judged_prs if (p.repo, p.number) not in in_facts]
     return Facts(
         schema=FACTS_SCHEMA,
         scope=scope.name,
@@ -451,6 +472,7 @@ def collect_facts(
         unviewed=unviewed,
         warnings=warnings,
         batch_prs=batch_prs,
+        judged_prs=judged_prs,
         config=config,
     )
 

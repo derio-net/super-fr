@@ -495,7 +495,7 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
         ("open", open_n),
         ("unranked", len(result.unranked)),
         ("in flight", in_flight),
-        ("settled", len(result.settled)),
+        ("settled", len(result.settled) + len(result.settled_prs)),
         (noun(len(facts.collected), "repo"), len(facts.collected)),
     ]
     notes = [_capitalise(w.describe(esc(w.target))) + "." for w in facts.warnings]

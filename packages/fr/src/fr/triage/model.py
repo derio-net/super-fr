@@ -323,6 +323,10 @@ class Facts(_Strict):
     # PRs found by head branch for batches at `dispatched` (spec §3.A): a merged
     # PR that lost every Closes line is linked to no member, so only this finds it.
     batch_prs: list[PullRequest] = []
+    # PRs a judgement names that no other list here carries: closed or merged and
+    # linked to no collected issue (gh#902). A judgement may rank a PR; it is never
+    # an issue, so it is kept here rather than in `issues`.
+    judged_prs: list[PullRequest] = []
     # `.fr/triage.yaml` per OWNER/REPO; a repo without the file has no entry.
     config: dict[str, TriageConfig] = {}
 
