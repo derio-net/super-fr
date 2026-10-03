@@ -162,6 +162,17 @@ def test_a_key_in_a_collected_repo_absent_from_the_facts_is_unreachable_not_orph
     assert "fr triage collect" in result.unreachable[0].reason
 
 
+def test_a_judged_pr_collect_found_is_neither_orphaned_unreachable_nor_unplaced() -> None:
+    """gh#902: a PR judgement names a PR, so it is found among the facts' PRs."""
+    linked = _issue(1, prs=[_merged_pr(9).model_dump(mode="json")])
+    facts = _facts([linked], prs=[_pr(476)])
+    result = classify(facts, _judgements("super-fr#1", "super-fr#476", "super-fr#9"))
+
+    assert result.orphaned == [] and result.unreachable == []
+    assert result.unranked_prs == []
+    assert all("/pull/" not in i.url for i in result.unplaced)
+
+
 def test_keys_compare_through_the_one_normaliser() -> None:
     """A judgement keyed in another case still matches its issue (r-p2-case)."""
     facts = _facts([_issue(1, repo="Derio-Net/Super-FR")], unviewed=[])
