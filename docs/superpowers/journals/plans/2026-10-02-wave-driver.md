@@ -890,3 +890,8 @@ Filed at closeout as #886.
 ### ri-6-resolved-2 · finding [deferred → #887] · resolves ri-6: The Closing order rows have no per-batch tier
 
 Filed at closeout as #887.
+
+<!-- fr:journal kind=finding scope=plan id=rj-7-resolved-2 created=2026-10-03T18:39:51+00:00 state=open resolves=rj-7 tracked_by=#888 -->
+### rj-7-resolved-2 · finding [deferred → #888] · resolves rj-7: Closing-PR and issue lists rely on newest-first 1000-row pages
+
+Filed at closeout as #888.
