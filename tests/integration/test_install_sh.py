@@ -631,11 +631,15 @@ class TestMarketplaceRsyncSkipsLocalState:
     def test_local_state_never_reaches_the_marketplace(
         self, fake_home: Path, tmp_path: Path
     ) -> None:
-        tracked = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
-            capture_output=True,
-            check=True,
-        ).stdout.decode().split("\0")
+        tracked = (
+            subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
+                capture_output=True,
+                check=True,
+            )
+            .stdout.decode()
+            .split("\0")
+        )
         checkout = tmp_path / "checkout"
         for rel in filter(None, tracked):
             src = REPO_ROOT / rel
