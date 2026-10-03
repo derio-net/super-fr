@@ -377,6 +377,16 @@ def _is_inverse_patch(
     )
 
 
+def _carries_patch(commit: _LogCommit, branch_added: list[str]) -> bool:
+    """Does `commit`'s patch add every non-blank line the branch added? That
+    is the branch landing even when the commit's blob is not the branch's: a
+    squash over a CONCURRENT base edit to the same file writes a blob that
+    combines both, but its own patch against its first parent is still the
+    branch's (#715). A branch that added no non-blank line has no patch to
+    recognise, so only its blob can land it."""
+    return bool(branch_added) and not (Counter(branch_added) - Counter(commit.added))
+
+
 def _branch_blob_was_on_base(
     run: Runner,
     repo_root: Path,
@@ -429,6 +439,15 @@ def _branch_blob_was_on_base(
     removes exactly the branch's lines reads as a revert: a safe refusal. A
     three-way re-land (a revert of such a revert) is not recognised by its
     patch, so it stays missing — the safe direction.
+
+    The landing itself is recognised by its patch as well as its blob (#715):
+    when the base edited the same file concurrently, the squash's blob combines
+    both edits and is never the branch's, so a later rewrite of the branch's
+    lines would hide the landing from both checks. A first-parent commit whose
+    patch adds every non-blank line the branch added is that landing
+    (`_carries_patch`); a line pushed to the branch after the merge is in no
+    such patch, so the #320 orphan stays missing. The revert checks above then
+    run from it unchanged.
     Only the base's first-parent line is read, so content that reached the
     base solely through a side branch's own commits reads as missing (safe).
     """
@@ -487,7 +506,13 @@ def _branch_blob_was_on_base(
             if len(fields) < 4:
                 continue
             old, new = fields[2], fields[3]
-            if new == blob:
+            if not landed and new != blob and new.strip("0"):
+                if branch_patch is None:
+                    branch_patch = _branch_patch_lines(run, repo_root, merge_base, branch, path)
+                carries = _carries_patch(commit, branch_patch[0])
+            else:
+                carries = False
+            if new == blob or carries:
                 landed = True
                 seen: tuple[str, ...] = (old,)
             elif landed:
