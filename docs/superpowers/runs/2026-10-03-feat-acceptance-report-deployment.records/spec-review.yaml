@@ -1,0 +1,35 @@
+schema_version: 7
+run: 2026-10-03-feat-acceptance-report-deployment
+step: spec-review
+outcome: done
+journal:
+  - kind: finding
+    id: s1
+    review_scope: in
+    title: "Spec's Test Plan names no acceptance-matrix rows"
+    body: "Rows existed (added at brainstorm, citing #R1-#R6) but the spec did not name them, or say that the PR touches docs/acceptance/**. Reviewer evidence: check.py:242-266."
+  - kind: finding
+    id: s2
+    review_scope: in
+    title: "index.html foot row already has three spans; the new link is the fourth"
+    body: "Evidence docs/explainers/index.html:577-581."
+  - kind: finding
+    id: s3
+    review_scope: in
+    title: "The CLI-entry migration gate can refuse the render in CI, which R4's 'never gates' leaves out"
+    body: "trigger.py:390-405; report is not in READ_ONLY_COMMANDS."
+  - kind: finding
+    id: s4
+    review_scope: in
+    title: "The render test checks neither the git stamp nor the repo-relative --out CI uses"
+    body: "acceptance_cmd.py:198-205; report.py:482-491; test_acceptance_report.py:280-292."
+  - kind: review
+    id: spec-review-1
+    title: "independent spec review: 4 findings"
+    body: "fr-spec-reviewer raised s1-s4, all in scope; decisions q1-q5 all honoured; every named file was verified with a file:line."
+resolves:
+  - {id: s1, state: fixed, body: "Added §E naming the three rows, their requirement ids, the matrix/report touch, and the post-merge debt; Test Plan step 1 now says the trigger comes from the matrix rows."}
+  - {id: s2, state: fixed, body: "§B now says fourth span, placed on the line after 580 with the same markup."}
+  - {id: s3, state: fixed, body: "§A step 5 states the gate refusal is accepted (same as acceptance-report.yml today, already caught by validate-artifacts); FR_SKIP_MIGRATION is not set; R4 is scoped to row statuses."}
+  - {id: s4, state: fixed, body: "§D render test now lives in test_acceptance_report.py, uses the repo-relative --out _site/acceptance/index.html, and asserts the (ref <sha>) stamp."}
+evidence: {review: spec-review-1, reviewer: afecb656c373efcf9}
