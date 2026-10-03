@@ -860,3 +860,8 @@ Filed at closeout as #882.
 ### rf-4-resolved-4 · finding [deferred → #880] · resolves rf-4: merge_ready uses required checks only, not the R4 'else all checks / ci none' rule
 
 Filed at closeout as #880.
+
+<!-- fr:journal kind=finding scope=plan id=rf-5-resolved-4 created=2026-10-03T18:39:46+00:00 state=open resolves=rf-5 tracked_by=#881 -->
+### rf-5-resolved-4 · finding [deferred → #881] · resolves rf-5: fr-triage SKILL.md still says to create judgements.yaml with schema: 2
+
+Filed at closeout as #881.
