@@ -112,9 +112,55 @@ def test_safe_directory_resolves_symlinks(tmp_path: Path) -> None:
     assert safe_directory_args(link) == ["-c", f"safe.directory={real.resolve()}"]
 
 
-def test_safe_directory_outside_any_repo_is_empty(tmp_path: Path) -> None:
-    # tmp_path lives under the system tmp dir, which is not inside a repo
+def test_safe_directory_outside_any_repo_is_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Hermetic (#700): a ceiling at tmp_path's parent stops the walk-up there, so
+    # the answer does not depend on whether the system tmp dir sits in a repo.
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent.resolve()))
     assert safe_directory_args(tmp_path) == []
+
+
+def test_safe_directory_never_names_a_repo_beyond_a_ceiling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#700: the walk-up stops where git's own discovery stops, so fr never
+    trusts an enclosing repository git would not open from `root`. The ceiling
+    directory itself is still a repository when it is `root`."""
+    outer = tmp_path / "outer"
+    (outer / ".git").mkdir(parents=True)
+    (outer / "inner" / "deep").mkdir(parents=True)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", f"/nonexistent::{outer}")
+    assert safe_directory_args(outer / "inner" / "deep") == []
+    assert safe_directory_args(outer) == ["-c", f"safe.directory={outer.resolve()}"]
+
+
+@needs_ownership_hook
+def test_the_plain_wrappers_answer_in_a_foreign_owned_worktree(linked_worktree: Path) -> None:
+    """#700: `_run_git` (repo_root/add/commit/status) is the same seam as
+    `git_answer`, so it survives the ownership check too."""
+    assert fr_git.repo_root(linked_worktree / "sub" / "deep") == linked_worktree
+    (linked_worktree / "new.txt").write_text("x\n")
+    fr_git.add(["new.txt"], cwd=linked_worktree)
+    assert "A  new.txt" in fr_git.status(cwd=linked_worktree)
+
+
+def test_run_git_places_the_override_before_the_subcommand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".git").mkdir()
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(fr_git.subprocess, "run", fake_run)
+    monkeypatch.chdir(tmp_path)
+    fr_git.status(cwd=tmp_path)
+    fr_git.status()  # no cwd: the process's own directory is the root
+    want = ["git", "-c", f"safe.directory={tmp_path.resolve()}", "status", "--porcelain"]
+    assert seen == [want, want]
 
 
 def test_git_answer_places_the_override_before_the_subcommand(
