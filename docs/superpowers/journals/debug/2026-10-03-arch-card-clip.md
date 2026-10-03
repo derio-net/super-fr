@@ -4,3 +4,8 @@
 ### 6002fa93f6f6 · repro · Subsystem card content overflows its card at 400px on a long unbreakable title
 
 Rendered the architecture page (test fixture `_page()`) with three issue titles carrying a 120-char unbreakable test-name token, then measured it in headless Chrome at a 400x800 viewport. The `Other` card is 366px wide with a 972px scrollWidth, and `main` is 989px wide in a 400px viewport. `html { overflow-x: hidden }` stops the page scrolling, so the title is clipped instead. This matches #901 (454px of content in a 366px card).
+
+<!-- fr:journal kind=hypothesis scope=debug id=6fe99424f609 created=2026-10-03T21:02:52+00:00 -->
+### 6fe99424f609 · hypothesis · Nothing in a subsystem card gives an unbreakable token a break opportunity
+
+`article.subsystem` has `min-width: 0`, so the grid track holds at 366px, but neither the card nor its `li`/`h3`/`.src` declares `overflow-wrap`. An unbreakable token's min-content width therefore spills out. Only `code`, `header.mast h1` and `.cards li` carry `overflow-wrap: anywhere` on this page, while the board page sets it on every text-bearing row. Test: inject `article.subsystem { overflow-wrap: anywhere; }` into the rendered page and re-measure.
