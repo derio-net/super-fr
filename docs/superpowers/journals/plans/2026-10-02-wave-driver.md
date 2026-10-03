@@ -875,3 +875,8 @@ Filed at closeout as #883.
 ### rh-2-resolved-2 · finding [deferred → #884] · resolves rh-2: Cap and refusal tests partly pass without new driver code
 
 Filed at closeout as #884.
+
+<!-- fr:journal kind=finding scope=plan id=rh-6-resolved-2 created=2026-10-03T18:39:48+00:00 state=open resolves=rh-6 tracked_by=#885 -->
+### rh-6-resolved-2 · finding [deferred → #885] · resolves rh-6: Facts schema 4 is stamped for repo and org scopes too
+
+Filed at closeout as #885.
