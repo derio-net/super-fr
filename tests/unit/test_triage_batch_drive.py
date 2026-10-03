@@ -306,30 +306,25 @@ def test_post_merge_is_owed_only_until_its_event_exists() -> None:
     assert action.post_merge is False
 
 
-def test_a_merged_batch_without_a_wave_is_not_closed_out_by_default() -> None:
-    """A batch merged before the driver existed has no wave and no close-out event;
-    a drive that did not name it must not close it out (debug 2026-10-03: 50 of them
-    on this repo)."""
-    loose = _merged("old", 1, wave=None)
-    got = drive_pass(_snap([loose], {"old": "merged"}, released=frozenset({"old"})))
-    assert got.actions == ()
-    assert got.summary.closing == 0 and got.summary.done
-
-
-def test_a_named_batch_without_a_wave_is_closed_out() -> None:
-    loose = _merged("old", 1, wave=None)
-    snap = _snap([loose], {"old": "merged"}, released=frozenset({"old"}), named=True)
-    assert _kinds(drive_pass(snap).actions) == [("closeout", "old")]
-
-
-def test_an_archived_batch_is_not_closed_out_even_when_named() -> None:
-    """Closed out by hand: its run's artifacts are archived on the default branch."""
-    b = _merged("x", 1)
-    snap = _snap([b], {"x": "merged"}, released=frozenset({"x"}),
-                 archived=frozenset({"x"}), named=True)  # fmt: skip
+def test_an_archived_batch_is_not_closed_out() -> None:
+    """Closed out by hand before the driver existed: no close-out event, but its
+    run's artifacts are archived on the default branch (debug 2026-10-03: 50 such
+    batches on this repo were each planned a close-out)."""
+    b = _merged("old", 1, wave=None)
+    snap = _snap([b], {"old": "merged"}, released=frozenset({"old"}),
+                 archived=frozenset({"old"}))  # fmt: skip
     got = drive_pass(snap)
     assert got.actions == ()
     assert got.summary.closing == 0 and got.summary.done
+
+
+def test_a_merged_batch_without_a_wave_is_still_closed_out() -> None:
+    """Having no wave is no reason to skip a close-out: an unnamed drive on a repo
+    with no waves dispatches wave-less batches, and each must close out (and run
+    its post_merge) once it merges."""
+    loose = _merged("loose", 1, wave=None)
+    snap = _snap([loose], {"loose": "merged"}, released=frozenset({"loose"}))
+    assert _kinds(drive_pass(snap).actions) == [("closeout", "loose")]
 
 
 @pytest.mark.parametrize(

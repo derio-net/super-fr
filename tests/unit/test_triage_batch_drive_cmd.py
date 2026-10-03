@@ -604,27 +604,29 @@ def test_post_merge_then_one_closeout_through_the_runner(
     assert len(runner.dispatched) == 1 and checkout.commands == [["./scripts/install.sh"]]
 
 
-def test_a_merged_batch_with_no_wave_is_not_closed_out_unless_named(
+def test_batches_closed_out_by_hand_are_not_closed_out_again(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
-    """Debug 2026-10-03: every batch merged before 5.2.0 has no wave and no close-out
-    event, and an unnamed drive planned a close-out for each (50 on this repo). It
-    must not, and must not spend a forge read or a release probe finding out."""
-    world.issues.update({1: "closed", 2: "open"})
-    world.pr(101, "feat/batch-old", [1], state="MERGED",
-             merged_at=(NOW - timedelta(days=3)).isoformat())  # fmt: skip
-    # No batch has a wave, so the default selection is every batch: the shape of
-    # every repo whose batches predate waves.
-    old = _batch("old", 1, events=_dispatch_event("old")).replace("    wave: 1\n", "")
-    new = _batch("b2", 2).replace("    wave: 1\n", "")
-    _state(tmp_path, world, old, new)
+    """Debug 2026-10-03: every batch merged before 5.2.0 has no close-out event, and
+    an unnamed drive on a repo with no waves (so every batch is selected) planned a
+    close-out for each — 50 on this repo. One whose run is archived is done; one
+    whose run is still live is owed, wave or no wave."""
+    world.issues.update({1: "closed", 2: "closed"})
+    for n, bid in ((101, "done"), (102, "owed")):
+        world.pr(n, f"feat/batch-{bid}", [n - 100], state="MERGED",
+                 merged_at=(NOW - timedelta(days=3)).isoformat(), merge_commit=f"m{n}")  # fmt: skip
+        checkout.added[f"m{n}"] = (f"docs/superpowers/journals/debug/{bid}.md",)
+    checkout.live.add("docs/superpowers/journals/debug/owed.md")
+    no_wave = [
+        _batch(bid, n, events=_dispatch_event(bid)).replace("    wave: 1\n", "")
+        for n, bid in ((1, "done"), (2, "owed"))
+    ]
+    _state(tmp_path, world, *no_wave)
     checkout.released = True
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert _lines(out, "closeout") == []
-    assert "closing 0" in out
-    assert "pr_view 101" not in world.calls and checkout.release_probes == []
-    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-owed"]
+    assert "m101" not in checkout.release_probes  # an archived batch probes no release
 
 
 def test_a_named_batch_already_archived_by_hand_is_not_closed_out(

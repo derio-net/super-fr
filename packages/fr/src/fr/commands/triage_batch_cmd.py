@@ -1486,8 +1486,6 @@ class _Driver:
             for b in chosen:
                 if stages[b.id] not in ("merged", "partial") or b.id not in repos:
                     continue
-                if b.wave is None and not self.named:
-                    continue  # the pass will not close it out: spend no read on it
                 event = closeout_event(b)
                 if event is None:
                     repo = repos[b.id]
@@ -1532,7 +1530,6 @@ class _Driver:
             existing=self._existing(facts, due, repos) if self.yes else frozenset(),
             warned=frozenset(self.warned),
             selected=frozenset(ids),
-            named=bool(self.named),
             archived=frozenset(archived),
         )
 

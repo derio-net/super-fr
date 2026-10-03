@@ -86,12 +86,10 @@ class Snapshot:
     # resolution always read every batch: a batch outside the selection still holds
     # a slot, and a dependency outside it is still merged or not (review rg-3).
     selected: frozenset[str] | None = None
-    # Whether the operator named the batches. Unnamed, only a batch with a wave is
-    # closed out: one merged before the driver existed has neither a wave nor a
-    # close-out event, and was closed out by hand or never will be (debug 2026-10-03).
-    named: bool = False
     # Landed batches whose merge added run artifacts that are all archived now: closed
-    # out already, by hand or by an earlier driver (`is_archived`).
+    # out already, by hand or by an earlier driver (`is_archived`). A batch merged
+    # before the driver existed carries no close-out event, so without this every one
+    # of them read as owed (debug 2026-10-03: 50 on this repo).
     archived: frozenset[str] = frozenset()
 
 
@@ -329,8 +327,6 @@ def drive_pass(snap: Snapshot) -> Pass:
     for batch in chosen:
         if stages.get(batch.id) not in LANDED or batch.id in merging:
             continue
-        if batch.wave is None and not snap.named:
-            continue  # merged before waves: not this drive's to close out
         if batch.id in snap.archived:
             continue  # closed out already: its run's artifacts are archived
         event = closeout_event(batch)
