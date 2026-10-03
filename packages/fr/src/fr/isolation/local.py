@@ -33,6 +33,7 @@ from fr.isolation.types import (
     delete_state,
     harden_secret_file,
     list_states,
+    load_state,
     recorded_mode,
     repo_cache_name,
     resolve_profile,
@@ -583,7 +584,14 @@ def _diff_names(run: Runner, repo_root: Path, args: list[str]) -> list[str]:
     return [p for p in res.stdout.split("\0") if p]
 
 
-def _fork_point(run: Runner, repo_root: Path, merge_base: str, branch: str, base_ref: str) -> str:
+def _fork_point(
+    run: Runner,
+    repo_root: Path,
+    merge_base: str,
+    branch: str,
+    base_ref: str,
+    start: str | None = None,
+) -> str:
     """Where the branch's own changes start, for `merge_base..branch`.
 
     `git merge-base` answers that directly — except when the branch is an
@@ -606,12 +614,37 @@ def _fork_point(run: Runner, repo_root: Path, merge_base: str, branch: str, base
     only the earlier, since-reverted landing touched is still judged (#753
     review f2). `upper` moves to a strict ancestor every step, so it ends.
 
+    A fast-forward landing leaves no merge to mark where the branch began, so
+    content alone cannot tell it from an empty branch, and a later revert of it
+    would still read landed (#757). `start` is that missing evidence: the
+    commit fr cut the branch from at `up` (`IsolationState.base_sha`). When the
+    walk ends at the tip and `start` is a strict ancestor of it, `start` is the
+    fork. A `start` that is not an ancestor (a branch name reused after a
+    reset) is no evidence about this branch and is ignored.
+
     A failed git call raises rather than returning `merge_base`, which here
     would read as ALL CHANGES PRESENT (the #705 shape).
     """
     tip = run(["git", "rev-parse", "--verify", "--quiet", f"{branch}^{{commit}}"], cwd=repo_root)
     if tip.returncode != 0 or tip.stdout.strip() != merge_base:
         return merge_base
+    fork = _landing_fork(run, repo_root, merge_base, branch, base_ref)
+    if fork != merge_base or not start or start == merge_base:
+        return fork
+    ancestor = run(["git", "merge-base", "--is-ancestor", start, merge_base], cwd=repo_root)
+    if ancestor.returncode == 0:
+        return start
+    if ancestor.returncode == 1:
+        return fork
+    raise IsolationError(
+        f"git merge-base --is-ancestor {start[:12]} {merge_base[:12]} failed "
+        f"(exit {ancestor.returncode}): {(ancestor.stderr or '').strip()}"
+    )
+
+
+def _landing_fork(run: Runner, repo_root: Path, merge_base: str, branch: str, base_ref: str) -> str:
+    """`_fork_point`'s walk for an ancestor branch: back through each landing
+    merge to where the branch left the base before its first landing."""
     fork, upper = merge_base, base_ref
     while True:
         line = run(
@@ -646,7 +679,7 @@ def _fork_point(run: Runner, repo_root: Path, merge_base: str, branch: str, base
 
 
 def _branch_fork_and_changes(
-    run: Runner, repo_root: Path, branch: str, base_ref: str
+    run: Runner, repo_root: Path, branch: str, base_ref: str, start: str | None = None
 ) -> tuple[str, list[str]]:
     """(fork point, changed names) — the one merge-base/fork computation path
     shared by `branch_changed_paths` and `branch_changes_present`, so the two
@@ -657,21 +690,23 @@ def _branch_fork_and_changes(
             f"no merge-base for {base_ref} and {branch} — unrelated histories? "
             f"If {base_ref!r} is the wrong base, pass --default-branch <branch>."
         )
-    merge_base = _fork_point(run, repo_root, mb.stdout.strip(), branch, base_ref)
+    merge_base = _fork_point(run, repo_root, mb.stdout.strip(), branch, base_ref, start)
     changed = _diff_names(run, repo_root, [merge_base, branch])
     return merge_base, changed
 
 
-def branch_changed_paths(run: Runner, repo_root: Path, branch: str, base_ref: str) -> list[str]:
+def branch_changed_paths(
+    run: Runner, repo_root: Path, branch: str, base_ref: str, start: str | None = None
+) -> list[str]:
     """The paths `branch` added, modified or deleted since its fork from
     `base_ref` — the same `changed` list `branch_changes_present` diffs
     (§A, 2026-09-28-closeout-always spec). The first half of that function,
     lifted out for close-out's "what did the branch touch"."""
-    return _branch_fork_and_changes(run, repo_root, branch, base_ref)[1]
+    return _branch_fork_and_changes(run, repo_root, branch, base_ref, start)[1]
 
 
 def branch_changes_present(
-    run: Runner, repo_root: Path, branch: str, base_ref: str
+    run: Runner, repo_root: Path, branch: str, base_ref: str, start: str | None = None
 ) -> MergeVerification:
     """Are the branch's changes present on `base_ref` (e.g. origin/main)?
 
@@ -693,10 +728,14 @@ def branch_changes_present(
        blob having appeared on the base after the merge also counts as landed
        (a later merge rewrote those lines).
 
+    `start` is the commit the branch was cut from, when fr recorded one
+    (`IsolationState.base_sha`) — the only evidence of where a fast-forwarded
+    branch began (`_fork_point`, #757).
+
     Conservative: anything it cannot positively confirm reads as missing (a safe
     "STOP and check", never a false "verified").
     """
-    merge_base, changed = _branch_fork_and_changes(run, repo_root, branch, base_ref)
+    merge_base, changed = _branch_fork_and_changes(run, repo_root, branch, base_ref, start)
     if not changed:
         return MergeVerification(changed=[], missing=[], changes_present=True)
     differing = _diff_names(run, repo_root, [branch, base_ref, "--", *changed])
@@ -706,6 +745,18 @@ def branch_changes_present(
         if not _branch_change_present_in_file(run, repo_root, merge_base, branch, base_ref, path)
     ]
     return MergeVerification(changed=changed, missing=missing, changes_present=not missing)
+
+
+def recorded_start(repo_root: Path, branch: str) -> str | None:
+    """The commit fr cut `branch` from at `up` (`IsolationState.base_sha`), or
+    None: no record (gc reaped it, or `up` did not create the branch) or an
+    unreadable one. `branch_changes_present`'s `start` for callers that hold a
+    branch name rather than a state — absence only drops the #757 evidence."""
+    try:
+        state = load_state(_main_worktree_root(repo_root), branch)
+    except Exception:
+        return None
+    return state.base_sha if state else None
 
 
 def _realpath(p: Path) -> Path:
@@ -1490,6 +1541,7 @@ class LocalWorktreeDevcontainerTarget:
             pr=self._pr(state),
             refs=refs,
             branch_fetched=branch_fetched,
+            start=state.base_sha,
         )
 
     def verify_merge_reaped(
@@ -1518,6 +1570,7 @@ class LocalWorktreeDevcontainerTarget:
             pr=pr,
             refs=refs,
             branch_fetched=branch_fetched,
+            start=recorded_start(self.repo_root, branch),
         )
         res["reaped"] = True
         return res
@@ -1542,11 +1595,14 @@ class LocalWorktreeDevcontainerTarget:
         refs: list[str] | None = None,
         *,
         branch_fetched: bool,
+        start: str | None = None,
     ) -> dict[str, Any]:
         base_ref = f"{remote}/{default_branch}"
         fetch = self._run_network(["git", "fetch", remote, default_branch], cwd=cwd)
         fetched = fetch.returncode == 0
-        results = [branch_changes_present(self.run, cwd, r, base_ref) for r in refs or [branch]]
+        results = [
+            branch_changes_present(self.run, cwd, r, base_ref, start) for r in refs or [branch]
+        ]
         missing = sorted({m for r in results for m in r.missing})
         changes_present = all(r.changes_present for r in results)
         pr_state = pr.get("state") if pr else None
@@ -1699,7 +1755,7 @@ class LocalWorktreeDevcontainerTarget:
         # `except Exception: return False`.
         try:
             result = branch_changes_present(
-                self.run, state.worktree, state.branch, f"origin/{default}"
+                self.run, state.worktree, state.branch, f"origin/{default}", state.base_sha
             )
         except Exception as e:
             return ReapHazard(
@@ -2176,7 +2232,7 @@ class LocalWorktreeDevcontainerTarget:
             status = self.run(["git", "status", "--porcelain"], cwd=wt)
             if status.returncode != 0 or (status.stdout or "").strip():
                 return False
-            result = branch_changes_present(self.run, wt, state.branch, base)
+            result = branch_changes_present(self.run, wt, state.branch, base, state.base_sha)
             return bool(result.changed) and result.changes_present
         except Exception:
             return False
