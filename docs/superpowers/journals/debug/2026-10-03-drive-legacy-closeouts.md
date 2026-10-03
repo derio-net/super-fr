@@ -34,3 +34,8 @@ Reviewer: Opus, read-only, separate context. Medium — wave guard drops close-o
 ### count-correction · discovery · Correction: 76 batches were selected, not 74
 
 The root-cause entry says all 74 batches are selected; that figure was estimated, not counted. load_judgements on this repo's state file gives 76 batches, 50 of them merged. Nothing else in the entry depends on it.
+
+<!-- fr:journal kind=discovery scope=debug id=closeout-filed created=2026-10-03T20:22:56+00:00 -->
+### closeout-filed · discovery · Filed at close-out: #899, #900 (review lows), #901, #902 (Test Plan 17 defects)
+
+The review entry's out-of-scope lows: board stale post_merge row for a hand-closed waved batch -> #899; archived batches re-probed every pass -> #900. Wave-driver Test Plan item 17 render defects, found alongside this fix: architecture cards clip at 400px -> #901; open PRs counted as unplaced issues -> #902. The review's rebase-merge item stays accepted (conservative); the summary-count item was resolved by dropping the wave guard.
