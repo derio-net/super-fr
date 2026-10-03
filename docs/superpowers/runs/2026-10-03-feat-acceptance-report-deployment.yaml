@@ -3,7 +3,7 @@ run: 2026-10-03-feat-acceptance-report-deployment
 workflow: fr-goal@1
 branch: feat/acceptance-report-deployment
 started: '2026-10-03T17:52:31+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -83,6 +83,10 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-03T18:13:28+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-r3
   deliver:
     state: pending
