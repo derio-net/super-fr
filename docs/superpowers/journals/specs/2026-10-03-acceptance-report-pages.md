@@ -74,3 +74,8 @@ Added §E naming the three rows, their requirement ids, the matrix/report touch,
 ### s4-resolved · finding [fixed] · resolves s4: The render test checks neither the git stamp nor the repo-relative --out CI uses
 
 §D render test now lives in test_acceptance_report.py, uses the repo-relative --out _site/acceptance/index.html, and asserts the (ref <sha>) stamp.
+
+<!-- fr:journal kind=discovery scope=spec id=spec-review-fix-ordering created=2026-10-03T18:02:27+00:00 -->
+### spec-review-fix-ordering · discovery · Spec-review fixes landed one commit after the resolve that marked them fixed
+
+The edit script failed on a text mismatch, but the chained commit+resolve ran anyway. s1-s4 were marked fixed at 072ff773 and actually applied in the following commit. The spec content is now as the resolutions describe.
