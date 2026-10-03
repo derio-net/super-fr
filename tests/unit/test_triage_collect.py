@@ -320,16 +320,16 @@ def test_a_judged_pr_collect_already_listed_is_never_viewed_as_an_issue() -> Non
     assert facts.unviewed == []
 
 
-def test_a_judged_closed_unlinked_pr_is_unviewed_with_its_reason_not_an_issue() -> None:
+def test_a_judged_merged_unlinked_pr_is_carried_as_a_judged_pr_not_an_issue() -> None:
     forge = _super_fr_forge()
 
-    facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#527"])
+    facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#527", "super-fr#476"])
 
     assert forge.called("view_issue") == []
     assert all(i.key != "super-fr#527" for i in facts.issues)
-    assert [u.key for u in facts.unviewed] == ["super-fr#527"]
-    assert "pull request" in facts.unviewed[0].reason
-    assert "MERGED" in facts.unviewed[0].reason
+    assert facts.unviewed == []
+    # Only the PR no other list carries: #476 is already in `prs`, open and unlinked.
+    assert [(p.number, p.state) for p in facts.judged_prs] == [(527, "MERGED")]
 
 
 def test_a_judged_key_the_forge_answers_with_a_pr_never_becomes_an_issue() -> None:
