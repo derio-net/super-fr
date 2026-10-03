@@ -9,3 +9,8 @@ On derio-net/super-fr with fr 5.2.0, `fr triage batch drive --once --repo derio-
 ### root-cause · root-cause · drive_pass owes a close-out to any landed batch without a closeout event, and the default selection is 'all' when no batch has a wave
 
 `batch_drive.drive_pass` step 2 skips a landed batch only when it has a `CloseoutEvent`, an event type that exists only since schema 3 (5.2.0); no pre-driver batch carries one, and nothing in judgements or facts records a hand close-out. `drive` with no ids selects "batches with a wave, else all" (spec Design B), and no super-fr batch has a wave yet, so all 74 batches are selected and the 50 landed ones all owe a close-out. The board had the same defect (wave-driver ri-3) and was fixed by requiring `b.wave` in `views.needs_you`; the driver pass never got the guard, and the spec never stated it.
+
+<!-- fr:journal kind=hypothesis scope=debug id=h-archived-signal created=2026-10-03T19:12:55+00:00 -->
+### h-archived-signal · hypothesis · A merged batch is archived when none of the fr artifacts its PR added is still live on the default branch
+
+Tested on real merges, via `git diff --name-only <merge>^1 <merge>` filtered to live artifact dirs (plans, specs, journals, runs, usage) and `git cat-file -e origin/main:<path>`: #867 (gate-ordering, closed out by hand in #874) -> every path gone; #865 (forge-honesty, owed per `fr status`) -> its debug journal LIVE; #876 (wave-driver, archived in #890) -> all 13 paths gone. Verdict: confirmed. Refinement: count only paths the PR ADDED (`--diff-filter=A`), so a PR that edits another run's live artifact (a spec amendment) does not owe a close-out forever. Needs no new forge operation: the merge commit is already read per candidate, and git runs only through gitseam.
