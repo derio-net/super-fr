@@ -166,3 +166,9 @@ Post-merge, operator-driven:
    `…/fr-isolation.html`. Both still load, and the index's new link opens the
    report.
 5. The README's Acceptance badge opens the report.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-03-acceptance-report-pages | `derio-net/super-fr` | `2026-10-03-acceptance-report-pages` | — |
