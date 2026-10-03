@@ -880,3 +880,8 @@ Filed at closeout as #884.
 ### rh-6-resolved-2 · finding [deferred → #885] · resolves rh-6: Facts schema 4 is stamped for repo and org scopes too
 
 Filed at closeout as #885.
+
+<!-- fr:journal kind=finding scope=plan id=rh-7-resolved-2 created=2026-10-03T18:39:49+00:00 state=open resolves=rh-7 tracked_by=#886 -->
+### rh-7-resolved-2 · finding [deferred → #886] · resolves rh-7: No check that facts.kind matches the requested scope
+
+Filed at closeout as #886.
