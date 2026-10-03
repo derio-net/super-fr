@@ -895,3 +895,8 @@ Filed at closeout as #887.
 ### rj-7-resolved-2 · finding [deferred → #888] · resolves rj-7: Closing-PR and issue lists rely on newest-first 1000-row pages
 
 Filed at closeout as #888.
+
+<!-- fr:journal kind=finding scope=plan id=rk-8-resolved-2 created=2026-10-03T18:39:51+00:00 state=open resolves=rk-8 tracked_by=#889 -->
+### rk-8-resolved-2 · finding [deferred → #889] · resolves rk-8: Checkout.show() is text-only by contract
+
+Filed at closeout as #889.
