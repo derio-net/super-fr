@@ -37,3 +37,8 @@ A first-parent commit whose patch adds every non-blank line the branch added is 
 ### rc-700 · root-cause · #700: two git seams with different ownership rules
 
 `_run_git` ran bare `git`, while `git_answer`/`git_argv` added `-c safe.directory=<enclosing repo>`. Red evidence: `fr.git.repo_root` exited 128 with dubious ownership in a foreign-owned linked worktree. The walk-up also ignored `GIT_CEILING_DIRECTORIES`, so it could name an ancestor repo that git's own discovery would never open. That same gap made the outside-any-repo test depend on `TMPDIR`.
+
+<!-- fr:journal kind=finding scope=debug id=fix-700 created=2026-10-03T20:09:09+00:00 state=fixed -->
+### fix-700 · finding [fixed] · #700 fixed: one seam, ceiling-aware, no opt-out
+
+Decision: no opt-out parameter. All ~50 call sites pass the repo fr was invoked on or created, so none reads an untrusted tree. The contract is in `safe_directory_args`'s docstring, and any future caller that reads a foreign tree must stay off this seam. Tests: `test_the_plain_wrappers_answer_in_a_foreign_owned_worktree`, `test_run_git_places_the_override_before_the_subcommand`, `test_safe_directory_never_names_a_repo_beyond_a_ceiling`, and the now-hermetic `test_safe_directory_outside_any_repo_is_empty`. Full suite: 7686 passed, 97 skipped.
