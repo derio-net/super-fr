@@ -885,3 +885,8 @@ Filed at closeout as #885.
 ### rh-7-resolved-2 · finding [deferred → #886] · resolves rh-7: No check that facts.kind matches the requested scope
 
 Filed at closeout as #886.
+
+<!-- fr:journal kind=finding scope=plan id=ri-6-resolved-2 created=2026-10-03T18:39:50+00:00 state=open resolves=ri-6 tracked_by=#887 -->
+### ri-6-resolved-2 · finding [deferred → #887] · resolves ri-6: The Closing order rows have no per-batch tier
+
+Filed at closeout as #887.
