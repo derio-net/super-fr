@@ -1,0 +1,119 @@
+schema_version: 1
+run: 2026-09-20-feat-bounded-executor-handoff
+captures:
+- host: h-20d831c6
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: phase/1/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 216
+  - session: phase/1/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 5903
+  - session: phase/2/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/implement-phase: 12650
+  - session: phase/2/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/review-phase: 15129
+  - session: phase/3/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/implement-phase: 15384
+  - session: phase/4/implement-phase#1
+    models:
+      unknown:
+        input: 356
+        cache_write: 380322
+        cache_read: 24865760
+        output: 96435
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/4/implement-phase: 10449
+  - session: phase/4/review-phase#1
+    models:
+      unknown:
+        input: 210
+        cache_write: 472573
+        cache_read: 13639290
+        output: 46496
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/4/review-phase: 22487
+  - session: phase/5/implement-phase#1
+    models:
+      unknown:
+        input: 608
+        cache_write: 415761
+        cache_read: 38511961
+        output: 63668
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/5/implement-phase: 30844
+  - session: phase/5/review-phase#1
+    models:
+      unknown:
+        input: 194
+        cache_write: 410877
+        cache_read: 11056202
+        output: 33846
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/5/review-phase: 39347
