@@ -1,0 +1,77 @@
+schema_version: 1
+run: 2026-09-21-fix-497-agent-tool-neutrality
+captures:
+- host: h-43c4cadc
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
+    role: main
+    models:
+      claude-sonnet-5:
+        input: 252
+        cache_write: 314884
+        cache_read: 8367565
+        output: 20637
+        usd: 3.3572746000000024
+        usd_source: exact
+      claude-opus-5:
+        input: 1590
+        cache_write: 4884085
+        cache_read: 269419882
+        output: 399882
+        usd: 197.36037775000017
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001373
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 64.62833806110957
+        turns: 392
+      other:
+        usd: 90.51833535541257
+        turns: 268
+      paperwork:
+        usd: 45.572351933477954
+        turns: 254
+    steps:
+      (outside run):
+        usd: 196.79571120699032
+        turns: 820
+      brainstorm:
+        usd: 0.341823730749785
+        turns: 8
+      spec-review:
+        usd: 0.030955181818162505
+        turns: 1
+      plan:
+        usd: 0.216845127005808
+        turns: 6
+      implement:
+        usd: 3.204011981346099
+        turns: 54
+      deliver:
+        usd: 0.1296781220899133
+        turns: 3
+    briefs:
+      phase/1/implement-phase: 3071
+      ab3aa2de87252c1ca: 4545
+      af897eeba63a2e812: 5744
+      a2c6be708f7da2a60: 2067
+      a736b1a0f4178ac86: 1891
+      a91bb0cbbf188cf3b: 3149
+      a595be6374237b183: 2979
+      ad17420997067763e: 5671
+      a44ffe50334af3c87: 4029
+      a3132710749f68b3e: 3614
+      a0eb0f895fbd2695f: 3134
+      aa9309756a5a3f98b: 3195
+      a6f25746b09733f74: 1944

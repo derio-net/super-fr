@@ -32,6 +32,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import subprocess_timeout
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "deliver-opencode-plugin.sh"
 REQUIRED = os.environ.get("FR_REQUIRE_OPENCODE") == "1"
@@ -91,7 +93,7 @@ def test_opencode_registers_the_delivered_loader(tmp_path: Path) -> None:
         env=env,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=subprocess_timeout(120),
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -165,7 +167,7 @@ def test_opencode_runs_the_delivered_gate(tmp_path: Path) -> None:
         env=env,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=subprocess_timeout(120),
         check=False,
     )
     assert result.returncode == 0, result.stderr

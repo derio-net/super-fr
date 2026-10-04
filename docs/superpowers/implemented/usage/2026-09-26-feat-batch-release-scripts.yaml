@@ -4,11 +4,12 @@ captures:
 - host: h-b3dc1514
   harness: claude-code
   mode: host-worktree
-  captured_at: '2026-09-26T11:02:59+00:00'
+  captured_at: '2026-10-04T05:15:23+00:00'
   at:
   - resolve:brainstorm
   - deliver
   - closeout
+  - backfill
   sessions:
   - session: adff62ba-fe43-4680-a6fe-ab62c9883057
     role: main
@@ -18,36 +19,43 @@ captures:
         cache_write: 433235
         cache_read: 9461187
         output: 34479
-        usd: null
-        usd_source: none
+        usd: 4.269229199999999
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001801
+        usd_source: exact
     activity:
       implementation:
-        usd: null
+        usd: 1.0089583176488506
         turns: 27
       other:
-        usd: null
+        usd: 1.2875771311424176
         turns: 25
       paperwork:
-        usd: null
+        usd: 1.9744947512087316
         turns: 39
     steps:
       (outside run):
-        usd: null
+        usd: 0.44968051027187056
         turns: 4
       brainstorm:
-        usd: null
+        usd: 0.26749043133502104
         turns: 6
       spec-review:
-        usd: null
+        usd: 0.5176410232762936
         turns: 12
       plan:
-        usd: null
+        usd: 0.32752549002370224
         turns: 7
       implement:
-        usd: null
+        usd: 1.651132061591012
         turns: 33
       deliver:
-        usd: null
+        usd: 1.0575606835021
         turns: 23
     briefs:
       ad2c6bee0d16b44ed: 787
@@ -57,26 +65,65 @@ captures:
     role: main
     models:
       claude-opus-5-5:
-        input: 260
-        cache_write: 487508
-        cache_read: 31980884
-        output: 121065
-        usd: null
-        usd_source: none
+        input: 2504
+        cache_write: 7524611
+        cache_read: 365597362
+        output: 724073
+        usd: 147.4156962000002
+        usd_source: exact
+      claude-sonnet-5-5:
+        input: 1412
+        cache_write: 5613844
+        cache_read: 149445213
+        output: 330544
+        usd: 6.478674199999998
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.00106
+        usd_source: exact
     activity:
       implementation:
-        usd: null
-        turns: 26
+        usd: 26.25767605806274
+        turns: 517
       other:
-        usd: null
-        turns: 79
+        usd: 109.7331731661814
+        turns: 1080
       paperwork:
-        usd: null
-        turns: 26
+        usd: 17.904581175755993
+        turns: 253
     steps:
       (outside run):
-        usd: null
-        turns: 120
+        usd: 153.01513959265918
+        turns: 1795
       deliver:
-        usd: null
+        usd: 0.880290807340941
         turns: 9
+    briefs:
+      toolu_016VsborF9AFafSkuDY467Jd: 685
+      toolu_01TBQrR3TN9iMmDTvxMBzNkw: 685
+      a4b4bc45c3cb892bc: 3982
+      ad45f1d1aafb3c7d5: 2009
+      aaa00bbff9bdba11e: 3159
+      a4fdfbf09f6e701e4: 4073
+      a7df61f841a081730: 2784
+      ab998787fa95c3690: 3462
+      a27010a36eb311c61: 6297
+      abf4367678a8975bf: 4138
+      a9faaf083e35053b1: 9520
+      a18045335f3a570db: 5012
+      a56ed763652174b78: 3214
+      aeb77116c2413cead: 3667
+      af78252668cef8ae8: 7351
+      a97529e8ea39eda8c: 5107
+      ae3ed92a18fe4861f: 4697
+      ac9d99d61e2251a6e: 6903
+      aaba0f1099fbbea05: 4133
+      a16fe790b7a40e8a4: 4867
+      a8e9fc8eaaf42940f: 7441
+      a5032d9503da11d81: 4785
+      af55b224993c8d95c: 5353
+      a700d0b7103512847: 4354

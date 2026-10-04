@@ -85,6 +85,19 @@ for _inherited in ("COLUMNS", "LINES"):
     os.environ.pop(_inherited, None)
 
 
+def subprocess_timeout(seconds: int, env: Mapping[str, str] = os.environ) -> int:
+    """`seconds` for a serial run, times the xdist worker count under `-n`.
+
+    gh#629/gh#640: a child that takes ~2 s alone overran a fixed 120 s under a
+    loaded `pytest -n auto` on a macOS host. Every worker competes for the same
+    cores, so the budget grows with them; a real hang still fails, later."""
+    try:
+        workers = int(env.get("PYTEST_XDIST_WORKER_COUNT", "1"))
+    except ValueError:
+        workers = 1
+    return seconds * max(1, workers)
+
+
 def uv_tool_bin_dir(env: Mapping[str, str]) -> Path:
     """Where `uv tool install` links executables under `env` — uv's own order:
     `UV_TOOL_BIN_DIR`, `XDG_BIN_HOME`, `$XDG_DATA_HOME/../bin`, `~/.local/bin`."""
