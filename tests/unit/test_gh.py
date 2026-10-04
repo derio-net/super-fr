@@ -4,7 +4,10 @@ These are contract tests: they verify the correct gh invocations
 are constructed, using mocked subprocess calls.
 """
 
+import os
 import subprocess
+import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -562,3 +565,36 @@ class TestCountIssuesWithLabel:
     def test_empty_returns_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(gh, "_run_gh", lambda args: "[]")
         assert gh.count_issues_with_label(repo="o/r", name="bug") == 0
+
+
+class TestRunGhTimeout:
+    """gh#909: a stalled `gh` (a GraphQL call that never answers) must not block its
+    caller forever — the wave driver's loop sat 16 minutes on one."""
+
+    def test_a_stalled_gh_raises_a_transient_gh_error_within_the_timeout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        stub = tmp_path / "gh"
+        stub.write_text("#!/bin/sh\nexec sleep 30\n", encoding="utf-8")
+        stub.chmod(0o755)
+        monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+        monkeypatch.setattr(gh, "GH_TIMEOUT_SECONDS", 0.5)
+        started = time.monotonic()
+        with pytest.raises(gh.GhError) as exc_info:
+            gh._run_gh(["issue", "list", "--limit", "1000"])
+        assert time.monotonic() - started < 10
+        assert "timed out" in str(exc_info.value)
+        assert "gh issue list" in str(exc_info.value)
+        assert gh.is_transient(exc_info.value)
+
+    def test_every_call_is_bounded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[object] = []
+
+        def fake_run(*a, **kw):  # type: ignore[no-untyped-def]
+            seen.append(kw.get("timeout"))
+            return subprocess.CompletedProcess(a[0], 0, stdout="ok\n", stderr="")
+
+        monkeypatch.setattr(gh.subprocess, "run", fake_run)
+        assert gh._run_gh(["api", "user"]) == "ok"
+        assert seen == [gh.GH_TIMEOUT_SECONDS]
+        assert 0 < gh.GH_TIMEOUT_SECONDS <= 600

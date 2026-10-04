@@ -129,7 +129,7 @@ from fr.triage.batch_merge import (
     run_queue,
 )
 from fr.triage.batch_version import read_source, reserve
-from fr.triage.errors import TriageError
+from fr.triage.errors import ForgeError, TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.model import (
     Batch,
@@ -1176,11 +1176,24 @@ DriveCheckoutOpt = Annotated[
 ]
 
 
+class ForgeReadError(Exception):
+    """A forge read failed or timed out during a drive pass (gh#910). Loop mode skips
+    the rest of the pass and reads again after `--interval`; `--once` and plan mode
+    exit with *code*, as before."""
+
+    def __init__(self, message: str, *, code: int) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def recollect(scope: Scope, target: Path) -> None:
     """Re-collect facts.json through the `Forge` seam, as `fr triage collect` does:
-    every stage is derived from facts, so each pass starts here (wave-driver §B)."""
+    every stage is derived from facts, so each pass starts here (wave-driver §B).
+    A forge that fails to answer raises `ForgeReadError`; any other refusal exits."""
     try:
         collect_into(scope, target)
+    except ForgeError as exc:
+        raise ForgeReadError(str(exc), code=2) from exc
     except TriageError as exc:
         _fail(str(exc))
 
@@ -1393,6 +1406,7 @@ class _Driver:
         self.max_inflight, self.yes = max_inflight, yes
         self.warned: set[str] = set()
         self.reported: set[str] = set()  # merge refusals already printed in full
+        self.read_failures: set[str] = set()  # forge read failures, since the last good pass
         self.failed_write = False  # a forge write failed this pass (--once exits 1)
         self._first_seen: dict[str, datetime] = {}  # merged with no merge time known
         self._ci: dict[str, bool] = {}  # per pass: repo -> origin/<default> says ci none
@@ -1433,6 +1447,8 @@ class _Driver:
                 _fail(str(exc))
             except TriageError as exc:
                 _fail(str(exc))
+            except FORGE_ERRORS as exc:
+                raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
             self._merge[repo] = MergeContext(
                 client=client,
                 checkout=checkout,
@@ -1515,7 +1531,7 @@ class _Driver:
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
-            _fail(f"a forge read failed: {exc}", code=1)
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         return Snapshot(
             batches=tuple(judgements.batches),
             stages=stages,
@@ -1769,6 +1785,9 @@ class _Driver:
             return f"stopped: {exc}", False, in_flight
         except TriageError as exc:
             _fail(str(exc))
+        except FORGE_ERRORS as exc:  # a re-read of the PR or its checks; the merge's own
+            # refusal is a MergeStopError above, so no write failure lands here
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         if attempt.outcome in ("merged", "already-merged"):
             self._unlanded.discard(batch.id)
             return f"merged PR #{action.pr} at {attempt.head[:12]}", True, in_flight - 1
@@ -1949,7 +1968,23 @@ def batch_drive_command(
     )
     with drive_lock(target):
         while True:
-            acted, summary, blocked = driver.run_pass()
+            try:
+                acted, summary, blocked = driver.run_pass()
+            except ForgeReadError as exc:
+                if once or not yes:
+                    _fail(str(exc), code=exc.code)
+                # Like a refused merge (rg-4), a degraded forge ends neither the run nor
+                # the loop: reported once per cause, then read again (gh#910).
+                if str(exc) not in driver.read_failures:
+                    driver.read_failures.add(str(exc))
+                    err_console.print(
+                        f"[yellow]warning:[/yellow] {escape(str(exc))}; pass skipped, "
+                        f"retrying every {interval}s",
+                        soft_wrap=True,
+                    )
+                _sleep(interval)
+                continue
+            driver.read_failures.clear()
             if not yes:
                 return  # the plan of one pass, in loop mode too
             if once:
