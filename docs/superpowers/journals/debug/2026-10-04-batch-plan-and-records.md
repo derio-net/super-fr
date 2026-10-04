@@ -34,3 +34,8 @@ commands/journal_cmd.py add writes journal_path(root, scope, slug) unconditional
 ### rc-675 · root-cause · #675: --phases-file help predates one-phase plans
 
 plan_cmd.py:156 says the skeleton marker is for the first agentic phase; since #674 it is owed only with 2+ agentic phases. #661 is not a defect: the duplicate header literal is a deliberate anti-tautology pin.
+
+<!-- fr:journal kind=ruled-out scope=debug id=ro-502-plan-ops created=2026-10-04T05:12:51+00:00 -->
+### ro-502-plan-ops · ruled-out · #502: plan_ops.tick is not the CLI's tick path
+
+First fix targeted plan_ops.tick/complete_phase. fr plan edit --tick/--complete-phase build a StepRecord and go through record/apply.py _plan_writes, which also re-dumps the whole phase file (overlay.put(..., _yaml_dump(data))). plan_ops.tick/complete_phase have no production caller. Corrected root cause: the record engine's _plan_writes; the splice must be text-in/text-out so the engine's in-memory overlay can use it, and the pinning test must go through the CLI.
