@@ -503,7 +503,7 @@ def summary_line(summary: Summary) -> str:
 
 
 def train_line(train: Train) -> str:
-    """R6: `train <repo>: head a (PR #12) · then b (#13) · queued c (#14) · stepped over d (#15)`."""
+    """R6: `train <repo>: head a (PR #12) · then b (#13) · queued c (#14) · stepped over d`."""
 
     def ref(bid: str) -> str:
         return f"{bid} (#{train.numbers[bid]})" if bid in train.numbers else bid

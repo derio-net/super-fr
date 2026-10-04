@@ -648,7 +648,10 @@ def test_green_pending_green_merges_one_and_queues_the_rest() -> None:
 def test_each_repo_has_its_own_train() -> None:
     other = "derio-net/other"
     got = drive_pass(
-        _train_snap(("a", "b", "c"), repos={"a": other, "b": REPO, "c": REPO}, )
+        _train_snap(
+            ("a", "b", "c"),
+            repos={"a": other, "b": REPO, "c": REPO},
+        )
     )
     assert [(t.repo, t.head, t.candidates) for t in got.trains] == [
         (other, "a", ("a",)),
@@ -684,8 +687,14 @@ def test_a_waiting_head_is_not_counted_as_queued() -> None:
 
 
 def _train(**kw: Any) -> Train:
-    base: dict[str, Any] = dict(repo="derio-net/super-fr", head="a", candidates=("a", "b", "c"),
-        queued=("d",), stepped=("e",), numbers={"a": 12, "b": 13, "c": 14, "d": 15, "e": 16})  # fmt: skip
+    base: dict[str, Any] = {
+        "repo": "derio-net/super-fr",
+        "head": "a",
+        "candidates": ("a", "b", "c"),
+        "queued": ("d",),
+        "stepped": ("e",),
+        "numbers": {"a": 12, "b": 13, "c": 14, "d": 15, "e": 16},
+    }
     return Train(**{**base, **kw})
 
 
@@ -710,7 +719,5 @@ def test_summary_line_adds_queued_between_closing_and_blocked() -> None:
     from fr.triage.batch_drive import Summary
 
     s = Summary(in_flight=1, merged=0, pending=0, closing=2, blocked=3, queued=4)
-    assert summary_line(s) == (
-        "in flight 1, merged 0, pending 0, closing 2, queued 4, blocked 3"
-    )
+    assert summary_line(s) == ("in flight 1, merged 0, pending 0, closing 2, queued 4, blocked 3")
     assert "queued" not in summary_line(Summary(1, 0, 0, 0))
