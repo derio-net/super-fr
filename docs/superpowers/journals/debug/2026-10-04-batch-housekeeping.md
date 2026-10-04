@@ -24,3 +24,8 @@ New _edit_profiles_text replaces/appends only the profile entry and the default:
 ### fix-806 · finding [fixed] · #806 three #794 nits fixed
 
 registry.split_lines (re.split on newline only) replaces str.splitlines(keepends=True) in the stamp writer, journal stamp reader and the services migration (test_line_surgery_separators.py, red first). local.py uncommitted-profile hint now names --force and --tracking none (test_isolation.py::test_up_uncommitted_profile_raises_actionable_error). test_migration_trigger docstring corrected.
+
+<!-- fr:journal kind=finding scope=debug id=fix-648 created=2026-10-04T05:15:40+00:00 state=fixed -->
+### fix-648 · finding [fixed] · #648: linked non-open PRs carried default checks/merge state
+
+Root cause: PullRequest defaulted checks to zero counts and mergeable/merge_state to UNKNOWN; parse_prs filled them with those defaults for list_prs(state=all) records that carry none, and only join_open overwrote them for open PRs. Fix: fields are Optional (None), parse_prs fills only when the record carries the key; consumers (render, views, snapshot, triage_batch_cmd) read None as no checks. Tests: test_triage_open_prs.py::test_a_linked_non_open_pr_carries_no_invented_checks_or_merge_state (red first); test_triage_facts_schema3 old-defaults test updated to the new contract.
