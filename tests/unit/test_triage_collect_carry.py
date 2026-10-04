@@ -16,8 +16,7 @@ from fr.triage.collect import CollectStats, collect_facts, collect_facts_counted
 from fr.triage.errors import ForgeError
 from fr.triage.model import Issue, Scope
 
-from tests.unit.test_triage_collect import _issue, _pr_closing
-from tests.unit.triage_fixtures import NOW, FakeForge
+from tests.unit.triage_fixtures import NOW, FakeForge, _issue, _pr_closing
 
 REPO = "o/repo"
 SCOPE = Scope(kind="repo", target=REPO)
@@ -161,6 +160,24 @@ def test_a_carried_issue_of_another_owner_is_not_carried_into_this_repo() -> Non
     assert [i.title for i in facts.issues] == ["fresh #5"]
 
 
+def test_a_carried_issue_in_a_skipped_repo_is_not_emitted() -> None:
+    scope = Scope(kind="org", target="example-org")
+    forge = FakeForge(
+        repos=[{"name": n, "isArchived": False} for n in ("alpha", "beta")],
+        issues={"example-org/alpha": [], "example-org/beta": []},
+        prs={"example-org/alpha": [], "example-org/beta": []},
+        failing={"example-org/beta": "HTTP 403"},
+    )
+
+    facts, stats = collect_facts_counted(
+        forge, scope, now=NOW, judged=["beta#5"], carried=[_carried(5, repo="example-org/beta")]
+    )
+
+    assert [s.repo for s in facts.skipped] == ["example-org/beta"]
+    assert facts.issues == []
+    assert stats == CollectStats(viewed=0, carried=0)
+
+
 def test_collect_facts_without_carried_equals_the_counted_facts_and_views_all() -> None:
     def mk() -> FakeForge:
         return _forge(closed={(REPO, 5): _view(5)})
@@ -220,6 +237,29 @@ def test_collect_into_with_carry_views_when_the_previous_facts_are_no_use(
     _, _, stats = triage_cmd.collect_into(SCOPE, tmp_path, carry=True)
 
     assert stats == CollectStats(viewed=1, carried=0)
+
+
+def test_collect_into_with_carry_views_a_key_the_previous_pass_could_not_view(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_judgements(tmp_path)
+    failing = _forge()
+
+    def view_fails(*, repo: str, number: int) -> dict[str, Any]:
+        raise ForgeError("HTTP 502")  # the read fails: #5 is recorded unviewed
+
+    failing.view_issue = view_fails  # type: ignore[method-assign]
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: failing)
+    facts, _, _ = triage_cmd.collect_into(SCOPE, tmp_path, carry=True)
+    assert [u.key for u in facts.unviewed] == ["repo#5"]
+
+    answering = _forge(closed={(REPO, 5): _view(5)})
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: answering)
+    facts, _, stats = triage_cmd.collect_into(SCOPE, tmp_path, carry=True)
+
+    assert len(_viewed(answering)) == 1
+    assert stats == CollectStats(viewed=1, carried=0)
+    assert [i.state for i in facts.issues] == ["closed"]
 
 
 def test_collect_into_without_carry_views_every_time(tmp_path: Path, forge: FakeForge) -> None:

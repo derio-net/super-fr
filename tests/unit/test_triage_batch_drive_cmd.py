@@ -853,30 +853,30 @@ def test_recollect_carries_a_known_closed_issue_over(
 def test_a_merged_batch_stays_merged_after_its_members_are_carried(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.triage.batch import derive_batch_stage
+    from fr.triage.batch import batch_pr, derive_batch_stage
     from fr.triage.model import Batch, DispatchEvent, Scope, load_facts
 
-    _closed_world(tmp_path, monkeypatch)
+    from tests.unit.triage_fixtures import _pr_closing
+
+    forge = _closed_world(tmp_path, monkeypatch)
+    merged = _pr_closing(owner="derio-net", name="super-fr", number=5, pr_number=9)
+    merged.update(
+        state="MERGED", headRefName="batch/b1", createdAt=NOW.isoformat(),
+        mergedAt=NOW.isoformat(),
+    )  # fmt: skip
+    forge.prs[REPO] = [merged]
     scope = Scope(kind="repo", target=REPO)
     triage_batch_cmd.recollect(scope, tmp_path)
-    triage_batch_cmd.recollect(scope, tmp_path)  # the member is now carried
+    triage_batch_cmd.recollect(scope, tmp_path)
+    assert len(forge.called("view_issue")) == 1  # the second pass carried #5
     facts = load_facts(tmp_path / "facts.json")
-    merged_pr = PullRequest(
-        repo=REPO,
-        number=9,
-        title="b",
-        state="MERGED",
-        is_draft=False,
-        url=f"https://github.com/{REPO}/pull/9",
-        head_ref="batch/b1",
-        merged_at=NOW.isoformat(),
-    )
-    facts = facts.model_copy(update={"batch_prs": [merged_pr]})
     dispatch = DispatchEvent(
         kind="dispatch", at=NOW - timedelta(days=1), runner="r", handle="h", branch="batch/b1"
     )
     batch = Batch(id="b1", title="t", ids=["super-fr#5"], events=[dispatch])
 
+    assert [p.number for p in facts.issues[0].prs] == [9]  # its link recomputed this pass
+    assert (pr := batch_pr(batch, facts)) is not None and pr.number == 9
     assert derive_batch_stage(batch, facts) == "merged"
 
 
