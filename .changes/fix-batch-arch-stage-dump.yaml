@@ -1,2 +1,0 @@
-bump: patch
-summary: The architecture page's snapshot tabs show batch counts per stage, with the per-batch list folded away, instead of a wall of every batch.
