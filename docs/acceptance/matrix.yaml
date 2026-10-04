@@ -4791,9 +4791,11 @@ rows:
       and carried over.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_recollect_carries_a_known_closed_issue_over
+    status: ci
+    notes: recollect prints the collect cost line
   - id: drive-pass-fast-on-settled-backlog
     capability: Backlog triage
     acceptance: On a repo with a large settled judged backlog, a drive pass after a
