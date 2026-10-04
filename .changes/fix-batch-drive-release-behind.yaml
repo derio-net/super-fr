@@ -1,0 +1,2 @@
+bump: patch
+summary: "`fr triage batch drive` / `batch merge` merge a PR behind main only by release commits or docs/superpowers-only close-out merges as it is, instead of updating it and re-running CI (#927)"
