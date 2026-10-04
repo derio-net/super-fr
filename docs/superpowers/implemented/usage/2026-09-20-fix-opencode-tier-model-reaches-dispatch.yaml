@@ -1,0 +1,73 @@
+schema_version: 1
+run: 2026-09-20-fix-opencode-tier-model-reaches-dispatch
+captures:
+- host: h-de58b8fb
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: phase/1/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 1518
+  - session: phase/1/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 8592
+  - session: phase/2/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/implement-phase: 8592
+  - session: phase/2/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/review-phase: 19206
+  - session: phase/3/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/implement-phase: 12780
+  - session: phase/3/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/review-phase: 17386
+  - session: phase/4/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/4/review-phase: 10382

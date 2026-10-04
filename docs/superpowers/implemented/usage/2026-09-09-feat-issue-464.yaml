@@ -1,0 +1,12 @@
+schema_version: 1
+run: 2026-09-09-feat-issue-464
+captures:
+- host: h-a2dbcfd1
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: ''
+    unavailable: no session found
