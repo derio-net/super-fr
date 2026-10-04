@@ -5820,9 +5820,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_ready_green_prs_form_one_train_in_order
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_pending_head_waits_and_the_rest_are_queued
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_an_updated_head_queues_the_rest_without_attempting_them
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_merged_head_lets_the_next_candidate_go_in_the_same_pass
+    status: ci
+    notes: Pure train walk and executor stop covered by unit tests
   - id: drive-merge-train-step-over
     capability: triage-batch-drive
     acceptance: A PR with failing CI or a refused merge is reported once and stepped
