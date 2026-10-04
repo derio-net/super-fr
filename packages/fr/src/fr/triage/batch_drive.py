@@ -311,8 +311,9 @@ def _walk_train(
     repo: str, entries: Sequence[QueueEntry], snap: Snapshot
 ) -> tuple[Train | None, list[Action]]:
     """§A: walk one repo's *entries* (already in train order). A green member becomes
-    a merge candidate and the walk goes on; a failing one is stepped over; a moved
-    head or a pending one stops it, and every member after the stop is queued."""
+    a merge candidate and the walk goes on; a failing one is stepped over, wherever it
+    sits; a moved head or a pending one stops it, and every other member after the
+    stop is queued."""
     merges: list[Action] = []
     candidates: list[str] = []
     stepped: list[str] = []
@@ -327,16 +328,16 @@ def _walk_train(
             continue  # not a member
         members += 1
         numbers[bid] = pr.number
-        if waiting is not None or queued:
-            queued.append(bid)
-            continue
-        if pr.checks == "failing":
+        if pr.checks == "failing":  # wherever it sits: reported now, not when it leads
             stepped.append(bid)
             if pr.head not in snap.warned:
                 merges.append(
                     Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
                            f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head)
                 )  # fmt: skip
+            continue
+        if waiting is not None or queued:
+            queued.append(bid)
             continue
         if pr.head != entry.pr.head_oid or pr.checks == "pending":
             if candidates:

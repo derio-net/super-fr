@@ -49,7 +49,8 @@ R9. The fr-triage skill's description of the driver states the merge train, in i
      member;
    - green: a `merge` action carrying `train=<repo>`. The first one is the head. Each later one is a candidate for
      the same pass (R3), and the walk continues.
-3. Every member after the stop is **queued**.
+3. Every member after the stop is **queued**, except a failing one: it is stepped over and warned wherever it sits,
+   so its failure is reported at once instead of when it reaches the front (review rv-queued-failing-unwarned).
 
 This adds a `Train` record to `Pass`:
 

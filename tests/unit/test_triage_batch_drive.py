@@ -645,6 +645,15 @@ def test_green_pending_green_merges_one_and_queues_the_rest() -> None:
     assert got.summary.queued == 2
 
 
+def test_a_failing_member_behind_the_stop_is_warned_and_stepped_over() -> None:
+    live = {"a": {"checks": "pending"}, "b": {"checks": "failing", "failing": ("lint",)}}
+    got = drive_pass(_train_snap(("a", "b", "c"), live))
+    assert _kinds(got.actions) == [("warn", "b")]
+    (train,) = got.trains
+    assert (train.head, train.queued, train.stepped) == ("a", ("c",), ("b",))
+    assert got.summary.queued == 1
+
+
 def test_each_repo_has_its_own_train() -> None:
     other = "derio-net/other"
     got = drive_pass(

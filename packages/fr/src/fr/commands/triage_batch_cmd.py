@@ -40,7 +40,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, NoReturn
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple, NoReturn
 from urllib.parse import urlparse
 
 import typer
@@ -1390,16 +1390,24 @@ def _live_head_prs(client: GhClient, repo: str, head: str) -> list[LivePr]:
     return out
 
 
-def _stops_train(
-    *, attempt: MergeAttempt | None = None, error: MergeStopError | None = None
-) -> bool:
+class _MergeOutcome(NamedTuple):
+    """What `_Driver._merge_batch` did: the outcome line, whether it acted, the
+    in-flight count, and whether it stops the repo's train (`_stops_train`)."""
+
+    line: str
+    acted: bool
+    in_flight: int
+    stops: bool
+
+
+def _stops_train(outcome: MergeAttempt | MergeStopError) -> bool:
     """Whether a merge's outcome stops its repo's train (spec §B): the head did not
     merge and is waiting on something (its new CI, its checks, a moved head); a
     refusal, a failing or draft PR, a PR no longer open or one already merged is
     stepped over or gone, and the train goes on."""
-    if error is not None:
-        return isinstance(error, HeadMovedError)
-    return attempt is not None and attempt.outcome in ("updated", "pending")
+    if isinstance(outcome, MergeStopError):
+        return isinstance(outcome, HeadMovedError)
+    return outcome.outcome in ("updated", "pending")
 
 
 class _Driver:
@@ -1734,12 +1742,10 @@ class _Driver:
                 self._unlanded.add(batch.id)
                 self._queued += 1
                 return f"queued: behind {behind}", False, in_flight
-            outcome, did, in_flight, stops = self._merge_batch(
-                action, facts, judgements, batch, repo, in_flight
-            )
-            if stops:
+            merged = self._merge_batch(action, facts, judgements, batch, repo, in_flight)
+            if merged.stops:
                 self._stopped[action.train] = batch.id
-            return outcome, did, in_flight
+            return merged.line, merged.acted, merged.in_flight
         if action.kind == "closeout":
             outcome, did = self._close_out(action, facts, judgements, batch, repo)
             return outcome, did, in_flight
@@ -1782,9 +1788,7 @@ class _Driver:
         batch: Batch,
         repo: str,
         in_flight: int,
-    ) -> tuple[str, bool, int, bool]:
-        """The merge's outcome line, whether it acted, the in-flight count and whether
-        the outcome stops the repo's train (`_stops_train`)."""
+    ) -> _MergeOutcome:
         ctx = self.merge_ctx(facts, repo)
         entries = [
             e
@@ -1796,9 +1800,11 @@ class _Driver:
             slots, _ = plan_queue(ctx, entries)
             if not slots:
                 self._unlanded.discard(batch.id)
-                return f"PR #{action.pr} is already merged", False, in_flight - 1, False
+                return _MergeOutcome(
+                    f"PR #{action.pr} is already merged", False, in_flight - 1, False
+                )
             if slots[0].head != action.head:  # pinned to the head whose checks were judged
-                return (
+                return _MergeOutcome(
                     f"held: PR #{action.pr} head moved from {action.head[:12]} to "
                     f"{slots[0].head[:12]} since its checks were judged; it is judged "
                     "again next pass",
@@ -1814,30 +1820,34 @@ class _Driver:
             # full once per batch, head and reason, and `--once` exits 1 on it.
             self.failed_write = True
             key = f"{batch.id}\0{action.head}\0{exc}"
-            stops = _stops_train(error=exc)
+            stops = _stops_train(exc)
             if key in self.reported:
                 again = f"stopped again at {action.head[:12]} (reported above)"
-                return again, False, in_flight, stops
+                return _MergeOutcome(again, False, in_flight, stops)
             self.reported.add(key)
-            return f"stopped: {exc}", False, in_flight, stops
+            return _MergeOutcome(f"stopped: {exc}", False, in_flight, stops)
         except TriageError as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:  # a re-read of the PR or its checks; the merge's own
             # refusal is a MergeStopError above, so no write failure lands here
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
-        stops = _stops_train(attempt=attempt)
+        stops = _stops_train(attempt)
         if attempt.outcome in ("merged", "already-merged"):
             self._unlanded.discard(batch.id)
-            return f"merged PR #{action.pr} at {attempt.head[:12]}", True, in_flight - 1, stops
+            return _MergeOutcome(
+                f"merged PR #{action.pr} at {attempt.head[:12]}", True, in_flight - 1, stops
+            )
         if attempt.outcome == "updated":
-            return (
+            return _MergeOutcome(
                 f"updated PR #{action.pr} to {attempt.head[:12]}; it merges on a later pass",
                 True,
                 in_flight,
                 stops,
             )
         held = f": {', '.join(attempt.checks)}" if attempt.checks else ""
-        return f"held: PR #{action.pr} is {attempt.outcome}{held}", False, in_flight, stops
+        return _MergeOutcome(
+            f"held: PR #{action.pr} is {attempt.outcome}{held}", False, in_flight, stops
+        )
 
     def _close_out(
         self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
