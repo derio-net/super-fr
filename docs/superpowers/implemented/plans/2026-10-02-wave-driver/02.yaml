@@ -1,0 +1,115 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'The driver: drive a wave to completion, close-out through the runner, post_merge'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - batch-drive-pass
+  - batch-drive-operator-boundary
+  - batch-closeout-after-merge
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/batch_merge.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr-herdr/tests/*
+  - tests/unit/test_triage_batch_drive*.py
+  - tests/unit/test_import_direction.py
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: Red — the pass as a pure function
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Write failing tests over a fake snapshot, fake runner and fake forge client: the in-flight cap, wave order then merge order then id, skipped unmet dependencies, `blocked` for a cancelled, abandoned or `partial` dependency, a merge freeing a slot used in the same pass
+  - id: P2.T1.S2
+    text: |-
+      Write failing tests for the merge rule: draft, pending, failing and moved-head PRs are never merged; a ready green PR is; a failing check warns once per head sha; a PR behind its base is updated and merged on a later pass; a `ci none` repo merges on non-draft alone; no call readies, approves or un-drafts a PR
+  - id: P2.T1.S3
+    text: |-
+      Write failing tests for close-out and archive: one close-out per merged batch with `--run` found from the cursor naming the batch branch, else `--branch`; none before the release commit or the injected ten-minute fallback; an existing close-out tab is recorded not re-dispatched; the archive PR merges only when ready, green and attributed to the batch; `post_merge` runs once per merge after the release commit, before the close-out, a failing command holds the close-out
+- number: 2
+  title: Green — the pure pass and the command
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Add the `PostMergeEvent` and `CloseoutEvent` kinds, the `post_merge` argument list in `TriageConfig`, and `fr/triage/batch_drive.py` with the pure pass returning ordered actions; keep it free of `fr_dispatch`, git and process starts
+  - id: P2.T2.S2
+    text: |-
+      Add `fr triage batch drive` in `triage_batch_cmd.py`: re-collect facts each pass, execute the actions through `dispatch_batch` and `merge_ready`, run the fast-forward through `gitseam.py` and `post_merge` in the command layer, take the `--checkout REPO=PATH` map, `--max-inflight`, `--interval`, `--once` and `--yes`, with the exit codes and one-line-per-action output of the spec
+- number: 3
+  title: Red then green — lock, resume and kill-safety
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Write failing tests: a second driver on the same state directory refuses; killing between any two actions and running again repeats nothing the file can show; the no-`--yes` plan print and loop-mode single pass; the same action reads the same line in `--once` and loop mode
+  - id: P2.T3.S2
+    text: |-
+      Make them pass with the `drive.lock` (pid, start time, stale when the pid is gone) and the recorded events
+- number: 4
+  title: Runner close-out characterisation, and the harness gates
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Add characterisation tests in the herdr package: a close-out item's agent name is unique per batch and stable, `can_dispatch` accepts `payload.kind: closeout`, and model and checkout come from `resolve_launch` and the checkout map
+  - id: P2.T4.S2
+    text: |-
+      Run the import-direction and harness tripwires so `batch_drive.py` imports nothing from `fr_dispatch` and starts no process; REFACTOR + quality gate: ruff, mypy and the triage and herdr tests green; refactor: share the action-line formatter between `--once` and loop mode
+- number: 5
+  title: Ship it
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Move the `batch-drive-pass`, `batch-drive-operator-boundary` and `batch-closeout-after-merge` rows with `fr acceptance set-status`, keeping `wave-driven-live` as the post-merge row; update the fr-triage, fr-goal and fr-debugging skills and AGENTS.md for the driver and waves, regenerate the mirrors with `scripts/sync-opencode.py` and `scripts/sync-hermes.py`
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-10-02T19:49:22+00:00'
+      note: null
+  completion:
+    at: '2026-10-02T19:49:22+00:00'
+    note: null
+    observed_prs: []

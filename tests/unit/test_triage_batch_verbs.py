@@ -100,11 +100,17 @@ def _run(tmp_path: Path, *args: str) -> tuple[int, str]:
 
 
 @pytest.fixture
-def gh(monkeypatch: pytest.MonkeyPatch) -> FakeGhClient:
+def gh(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> FakeGhClient:
+    from tests.unit.test_triage_batch_dispatch import FakeCheckout
+
     client = FakeGhClient()
     for n in (577, 575, 471, 438, 420):
         client.add_issue(REPO, n, labels={"fr:in-progress"})
     monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: client)
+    # cancel --yes reads the clone's tracking declaration (gh#803): a clone of
+    # REPO with none declared, never the cwd the suite happens to run in.
+    clone = FakeCheckout(tmp_path_factory.mktemp("clone"))
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: clone)
     return client
 
 
@@ -120,7 +126,7 @@ def _raw(tmp_path: Path) -> dict[str, Any]:
 # ------------------------------------------------------------------ create
 
 
-def test_create_writes_the_batch_at_schema_2(tmp_path: Path) -> None:
+def test_create_writes_the_batch_at_schema_3(tmp_path: Path) -> None:
     _state(tmp_path)
     code, out = _run(
         tmp_path,
@@ -144,7 +150,7 @@ def test_create_writes_the_batch_at_schema_2(tmp_path: Path) -> None:
         ["super-fr#577", "super-fr#575"],
         "minor",
     )
-    assert _raw(tmp_path)["schema"] == 2
+    assert _raw(tmp_path)["schema"] == 3
 
 
 def test_create_stores_only_the_launch_values_given(tmp_path: Path) -> None:

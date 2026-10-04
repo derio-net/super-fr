@@ -159,12 +159,13 @@ class GhClient(Protocol):
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         """Every PR (any state) whose head branch is *branch*, as `gh pr list`
-        records with `fr.gh.PR_LIST_FIELDS` plus `headRefOid`."""
+        records with `fr.gh.PR_LIST_FIELDS` plus `headRefOid` and `files`."""
         ...
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
-        """`{state, draft, head_oid, head_ref, mergeable, merge_state}` of one PR,
-        read fresh. `state` is OPEN | CLOSED | MERGED."""
+        """`{state, draft, head_oid, head_ref, mergeable, merge_state, merge_commit}`
+        of one PR, read fresh. `state` is OPEN | CLOSED | MERGED; `merge_commit` is
+        the commit the merge made on the base ("" while unmerged)."""
         ...
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:

@@ -5677,3 +5677,151 @@ rows:
     status: ci
     notes: Record chain reaches 7 hop by hop through the frozen RecordV6; delegated
       dropped; unconfirmed left byte-identical and reported; RecordV6 source pinned.
+  - id: batch-waves-and-deps
+    capability: triage-batch-drive
+    acceptance: An operator can give a triage batch a wave and prerequisite batches,
+      and invalid prerequisites (unknown, self, cycle) are refused before anything is
+      written
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_waves.py
+    status: ci
+    notes: wave and after round-trip through judgements schema 3; unknown, self and
+      cycle refused with the file unchanged; list shows wave, dependencies and close-out
+  - id: batch-drive-pass
+    capability: triage-batch-drive
+    acceptance: fr triage batch drive keeps at most N batches dispatched and unmerged,
+      dispatches in wave order, skips a batch whose prerequisites are unmerged, resumes
+      after a stop without repeating work, and signals done, waiting or refused through
+      its exit code
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+    status: ci
+    notes: Pure pass (cap, wave/merge/id order, unmet and unsatisfiable dependencies,
+      a merge freeing a slot) and the command (plan without --yes, one line per action,
+      exit codes 0/3/2/1, drive.lock, kill-safety) are unit-tested with a fake runner
+      and forge client.
+  - id: batch-drive-operator-boundary
+    capability: triage-batch-drive
+    acceptance: The driver merges a batch PR only when it is not a draft and every check
+      is green, and never readies, approves or un-drafts a PR
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+    status: ci
+    notes: Draft, pending, failing and moved-head PRs are never merged; required checks
+      else all checks, ci none on non-draft alone; failing CI warned once per head;
+      the fake forge client exposes no ready/approve call and none is made.
+  - id: batch-closeout-after-merge
+    capability: triage-batch-drive
+    acceptance: After a batch merges, the driver runs the repo's post_merge command,
+      starts the close-out session through the batch's runner, and merges the archive
+      PR when it is ready and green
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+      - super-fr:tests/unit/test_fr_herdr_closeout.py
+      - super-fr:tests/unit/test_triage_gitseam.py
+    status: ci
+    notes: post_merge runs once after the release commit (or the ten-minute fallback)
+      and before the close-out, a failure holds it; the close-out goes through the runner
+      as a run item with payload.kind closeout and --run/--branch; an attributed archive
+      PR is merged; herdr characterised unchanged.
+  - id: wave-driven-live
+    capability: triage-batch-drive
+    acceptance: A real wave of two batches runs from dispatch to a merged archive PR
+      with no hand step but the operator readying the PRs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: 'Live run 2026-10-03 (Test Plan 16, fr 5.2.1/5.2.2): batches arch-card-clip
+      (#905, archive #907) and unplaced-prs (#906, archive #908) each ran dispatch ->
+      merge -> release -> post_merge -> close-out -> archive merge, with the operator
+      readying the batch PRs. Not counted as passing: during a GitHub API degradation
+      the driver needed one manual restart (a hung forge read, then exit 2 on its failure)
+      and #907''s CI one re-run (a setup-bun 503). Rerun owed after #909 (read timeouts)
+      and #910 (retry failed reads in loop mode); see also #911, #912, #913.'
+    verify: post-merge
+  - id: triage-scope-groups
+    capability: triage-scope
+    acceptance: fr triage collects, ranks, renders and drives a comma-separated group
+      of repos, owners allowed to differ, as one board
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_scope_groups.py#test_drive_plans_both_repos_of_a_group_against_one_shared_cap
+    status: ci
+    notes: 'R15 shipped: --repo A/B,C/D is one group scope (facts schema 4, shared cap,
+      per-repo checkouts); covered by the group scope tests'
+  - id: board-decision-views
+    capability: triage-views
+    acceptance: The triage board opens with what changed since the last report, what
+      needs the operator now, and what would start next, shows waves as tabs with the
+      latest preselected, and keeps every section it showed before
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R16
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R18
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R19
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R20
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_board_views.py#test_the_board_is_ordered_since_needs_next_waves_backlog
+      - super-fr:tests/unit/test_triage_board_views.py#test_needs_you_now_lists_each_kind_and_the_unplaced_issues
+      - super-fr:tests/unit/test_triage_kind_features_snapshot.py#test_the_diff_lists_exactly_what_changed
+    status: ci
+    notes: 'Phase 4: the board opens with Since last report, Needs you now, Next up
+      and Waves tabs in the R20 order, keeping every earlier section; tabs preselect
+      the most recent wave and show every wave without scripts. Covered by unit tests
+      over a fixture board. The operator-answer row of R18 has no deterministic signal
+      and is not produced (spec amended).'
+  - id: defect-origins-page
+    capability: triage-views
+    acceptance: A defect-origins page is generated from classified issues, with counts
+      by category and source, filings per day and time to fix
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_origins.py#test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch
+      - super-fr:tests/unit/test_triage_origins.py#test_render_median_hours_to_fix_counts_completed_closes_only
+    status: ci
+    notes: 'fr triage origins collect|check|render ship: fifteen-issue fixture, counts,
+      per-day buckets, median time to fix and leaderboards match a hand computation;
+      the page ends in a conclusion linking each cause to its batch'
+  - id: architecture-page
+    capability: triage-views
+    acceptance: The architecture page's measured sections are generated from the triage
+      state and the repo, and authored fragments are spliced in in manifest order
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_architecture.py#test_line_counts_per_subsystem_at_then_and_now_name_their_commits
+    status: ci
+    notes: 'fr triage architecture render now builds the page: measured sections from
+      git ls-tree/show at two refs, authored fragments in manifest order, snapshot timeline,
+      wave tabs; covered by unit tests over a real two-ref fixture repo'

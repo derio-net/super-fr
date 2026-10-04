@@ -1,0 +1,1242 @@
+"""`fr triage batch drive` (wave-driver spec §B, §C; Test Plan 2-5, 11).
+
+Nothing here reaches a real forge, runner or clone. `World` is one in-memory
+forge: its PRs answer the adapter calls (`make_client`) AND are what each
+pass's re-collect writes into facts.json (`recollect`), so a merge on one pass
+is a merged PR in the next pass's facts, as on a real forge. The runner is the
+dispatch tests' `FakeRunner`; the clone is `DriveCheckout`.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+from fr.cli import app
+from fr.commands import triage_batch_cmd, triage_cmd
+from fr.gh import GhError
+from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
+from typer.testing import CliRunner
+
+from tests.unit.test_triage_batch_dispatch import FakeRunner
+
+REAL_CI_IS_NONE = triage_batch_cmd.ci_is_none
+
+REPO = "derio-net/super-fr"
+NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
+DISPATCHED = "2026-10-01T10:00:00Z"
+LAUNCH = "{runner: fake, harness: claude, model: claude-opus-5-5}"
+
+
+# ------------------------------------------------------------------ fakes
+
+
+class World:
+    """The forge: issues and PRs, served to the adapter and to re-collect."""
+
+    def __init__(self) -> None:
+        self.issues: dict[int, str] = {}
+        self.prs: dict[int, dict[str, Any]] = {}
+        self.checks: dict[int, list[dict[str, Any]]] = {}
+        self.all_checks: dict[int, dict[str, int]] = {}
+        self.merged: list[tuple[int, str, str]] = []
+        self.refuse_merge: str | None = None
+        self.calls: list[str] = []
+        self.comments: dict[int, list[dict[str, Any]]] = {}
+        self.config: dict[str, Any] | None = None
+
+    # -- world building
+    def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
+        self.prs[number] = {
+            "state": "OPEN",
+            "draft": False,
+            "head_oid": f"sha-{number}",
+            "head_ref": head_ref,
+            "closes": closes,
+            "files": [],
+            "created_at": "2026-10-01T11:00:00+00:00",
+            "merged_at": None,
+            **kw,
+        }
+
+    def facts(self) -> Facts:
+        prs = {n: self._pr(n) for n in self.prs}
+        linked = {i: [prs[n] for n, p in self.prs.items() if i in p["closes"]] for i in self.issues}
+        return Facts(
+            schema=3,
+            scope="derio-net--super-fr",
+            kind="repo",
+            collected_at=NOW.isoformat(),
+            repos=[REPO],
+            issues=[
+                Issue(
+                    repo=REPO,
+                    number=i,
+                    title=f"issue {i}",
+                    state=s,  # type: ignore[arg-type]
+                    url=f"https://github.com/{REPO}/issues/{i}",
+                    prs=linked[i],
+                )
+                for i, s in self.issues.items()
+            ],  # fmt: skip
+            prs=[prs[n] for n, p in self.prs.items() if not p["closes"] and p["state"] == "OPEN"],
+            config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
+        )
+
+    def _pr(self, n: int) -> PullRequest:
+        p = self.prs[n]
+        return PullRequest(
+            repo=REPO,
+            number=n,
+            title=p["head_ref"],
+            state=p["state"],
+            is_draft=p["draft"],
+            merged_at=p["merged_at"],
+            created_at=p["created_at"],
+            url=f"https://github.com/{REPO}/pull/{n}",
+            head_ref=p["head_ref"],
+            head_oid=p["head_oid"] if p["state"] == "OPEN" else "",
+            files=p["files"] if p["state"] == "OPEN" else [],
+            checks=self.all_checks.get(n, {"pass": 1, "fail": 0, "pending": 0}),
+        )
+
+    # -- the GhClient adapter
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+        self.calls.append(f"pr_view {number}")
+        p = self.prs[number]
+        view = {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
+        return {**view, "merge_commit": p.get("merge_commit", f"merge-{number}")}
+
+    def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
+
+    def wait_required_checks(self, repo: str, number: int, **kw: Any) -> list[dict[str, Any]]:
+        raise AssertionError("the driver never waits for checks")
+
+    def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        self.calls.append(f"pr_merge {number}")
+        if self.refuse_merge:
+            raise GhError(self.refuse_merge, returncode=1)
+        assert self.prs[number]["head_oid"] == head_sha
+        self.merged.append((number, head_sha, method))
+        self.prs[number].update(state="MERGED", merged_at=NOW.isoformat())
+        for i in self.prs[number]["closes"]:
+            self.issues[i] = "closed"
+
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        return {"default": "squash", "allowed": ["squash"]}
+
+    def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
+        return [
+            {"number": n, "state": p["state"], "isDraft": p["draft"], "headRefName": branch,
+             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]]}
+            for n, p in self.prs.items() if p["head_ref"] == branch
+        ]  # fmt: skip
+
+    def closing_ref(self, repo: str, number: int) -> str:
+        return f"Closes {repo}#{number}"
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        return list(self.comments.get(number, []))
+
+    def ensure_labels(self, repo: str, labels: list[Any]) -> None:
+        self.calls.append("ensure_labels")
+
+    def edit_issue_labels(self, repo: str, number: int, **kw: Any) -> None:
+        self.calls.append(f"label {number}")
+
+    def comment_issue(self, repo: str, number: int, body: str) -> None:
+        self.comments.setdefault(number, []).append({"author": "fr", "body": body})
+
+
+class DriveCheckout:
+    """The clone: origin is REPO, on main, fast-forwardable."""
+
+    def __init__(self, path: Path, world: World) -> None:
+        self.path = path
+        self.world = world
+        self.released = False
+        self.behind: set[str] = set()
+        self.commands: list[list[str]] = []
+        self.command_fails: str | None = None
+        self.forwarded = 0
+        self.files: dict[tuple[str, str], str] = {}
+        self.release_probes: list[str] = []
+        self.added: dict[str, tuple[str, ...]] = {}  # merge commit -> paths it added
+        self.live: set[str] = set()  # paths still on origin/main
+
+    def origin_repo(self) -> str | None:
+        return REPO
+
+    def default_branch(self) -> str:
+        return "main"
+
+    def fetch(self) -> None:
+        pass
+
+    def show(self, ref: str, file: str) -> str | None:
+        if file == ".fr/triage.yaml":
+            return yaml.safe_dump(self.world.config) if self.world.config else None
+        return self.files.get((ref, file))
+
+    def remote_branch_exists(self, branch: str) -> bool:
+        return False
+
+    def is_ancestor(self, ancestor: str, descendant: str) -> bool:
+        return descendant not in self.behind
+
+    def add_worktree(self, where: Path, ref: str) -> Any:
+        return _Worktree(self, where)
+
+    def remove_worktree(self, where: Path) -> None:
+        pass
+
+    def fast_forward(self) -> None:
+        self.forwarded += 1
+
+    def released_after(self, merge_commit: str) -> bool:
+        self.release_probes.append(merge_commit)
+        return self.released
+
+    def added_paths(self, merge_commit: str) -> tuple[str, ...]:
+        return self.added.get(merge_commit, ())
+
+    def exists_at(self, ref: str, path: str) -> bool:
+        return path in self.live
+
+    def snapshot_paths(self, ref: str, paths: tuple[str, ...], dest: Path) -> None:
+        """origin/<default>'s copy of *paths*: what `ci none` is read from."""
+        for (at, file), text in self.files.items():
+            if at == ref and any(file == p or file.startswith(p + "/") for p in paths):
+                (dest / file).parent.mkdir(parents=True, exist_ok=True)
+                (dest / file).write_text(text)
+
+    def run_command(self, argv: list[str]) -> str:
+        self.commands.append(list(argv))
+        if self.command_fails:
+            from fr.triage.gitseam import GitError
+
+            raise GitError(self.command_fails)
+        return ""
+
+
+class _Worktree:
+    """merge's scratch worktree: an update push moves the PR head."""
+
+    def __init__(self, checkout: DriveCheckout, path: Path) -> None:
+        self.checkout, self.path = checkout, path
+
+    def merge(self, ref: str) -> list[str]:
+        return []
+
+    def commit_all(self, message: str, version_files: list[str]) -> str | None:
+        return "sha-updated"
+
+    def push(self, branch: str) -> None:
+        for p in self.checkout.world.prs.values():
+            if p["head_ref"] == branch:
+                self.checkout.behind.discard(p["head_oid"])
+                p["head_oid"] = "sha-updated"
+
+
+# ---------------------------------------------------------------- fixtures
+
+
+@pytest.fixture(autouse=True)
+def _sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "home" / ".config"))
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: False)
+
+
+@pytest.fixture
+def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
+    w = World()
+    passes: list[int] = []
+
+    def _recollect(scope: Any, target: Path) -> None:
+        passes.append(1)
+        (target / "facts.json").write_text(json.dumps(w.facts().to_json()), "utf-8")
+
+    monkeypatch.setattr(triage_batch_cmd, "recollect", _recollect)
+    monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: w)
+    w.passes = passes  # type: ignore[attr-defined]
+    return w
+
+
+@pytest.fixture
+def checkout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World) -> DriveCheckout:
+    fake = DriveCheckout(tmp_path / "clone", world)
+    fake.path.mkdir()
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
+    return fake
+
+
+@pytest.fixture
+def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
+    fake = FakeRunner()
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", lambda name: fake)
+    return fake
+
+
+@pytest.fixture
+def sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    out: list[float] = []
+
+    def _sleep(seconds: float) -> None:
+        out.append(seconds)
+        if len(out) > 10:
+            raise AssertionError("the loop did not end")
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _sleep)
+    return out
+
+
+def _batch(bid: str, n: int, *, wave: int = 1, events: str = "", **kw: Any) -> str:
+    extra = "".join(f"    {k}: {v}\n" for k, v in kw.items())
+    ev = f"    events:\n{events}" if events else ""
+    return (
+        f'  - id: {bid}\n    title: {bid}\n    ids: ["super-fr#{n}"]\n    wave: {wave}\n'
+        f"    launch: {LAUNCH}\n{extra}{ev}"
+    )
+
+
+def _dispatch_event(bid: str, prefix: str = "feat") -> str:
+    return (
+        f"      - {{kind: dispatch, at: {DISPATCHED}, runner: fake, handle: h, "
+        f"branch: {prefix}/batch-{bid}}}\n"
+    )
+
+
+def _state(tmp_path: Path, world: World, *batches: str) -> Path:
+    issues = "".join(f"  super-fr#{n}: {{tier: 1}}\n" for n in world.issues)
+    (tmp_path / "judgements.yaml").write_text(
+        "schema: 3\ntiers:\n  - {n: 1, title: Now}\nissues:\n" + issues
+        + ("batches:\n" + "".join(batches) if batches else ""),
+        encoding="utf-8",
+    )  # fmt: skip
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    return tmp_path
+
+
+def _drive(tmp_path: Path, *args: str) -> tuple[int, str]:
+    result = CliRunner().invoke(
+        app, ["triage", "batch", "drive", *args, "--repo", REPO, "--dir", str(tmp_path)]
+    )
+    return result.exit_code, result.output
+
+
+def _lines(out: str, kind: str) -> list[str]:
+    return [line for line in out.splitlines() if line.startswith(f"{kind} ")]
+
+
+def _events(tmp_path: Path, bid: str) -> list[str]:
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == bid)
+    return [e.kind for e in batch.events]
+
+
+def _proposed(world: World, tmp_path: Path, n: int = 2) -> Path:
+    ids = [f"b{i}" for i in range(1, n + 1)]
+    for i in range(1, n + 1):
+        world.issues[i] = "open"
+    return _state(tmp_path, world, *(_batch(b, i) for i, b in enumerate(ids, 1)))
+
+
+# ------------------------------------------------- plan mode and passes (R2)
+
+
+def test_without_yes_a_pass_prints_its_plan_and_writes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, sleeps: list[float]
+) -> None:
+    _proposed(world, tmp_path)
+    before = (tmp_path / "judgements.yaml").read_text()
+    code, out = _drive(tmp_path)  # loop mode, no --yes: one pass, then exit
+    assert code == 0, out
+    assert _lines(out, "dispatch") == ["dispatch b1: wave 1", "dispatch b2: wave 1"]
+    assert "in flight 2, merged 0, pending 0, closing 0" in out
+    assert "re-run with --yes" in out
+    assert runner.dispatched == [] and sleeps == []
+    assert (tmp_path / "judgements.yaml").read_text() == before
+    assert world.passes == [1]  # type: ignore[attr-defined]
+
+
+def test_once_yes_dispatches_up_to_the_cap_with_one_line_each(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 3)
+    code, out = _drive(tmp_path, "--once", "--yes", "--max-inflight", "2")
+    assert code == 0, out
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1", f"{REPO}/run/batch-b2"]
+    assert _lines(out, "dispatch") == [
+        f"dispatch b1: dispatched to fake as {REPO}/run/batch-b1",
+        f"dispatch b2: dispatched to fake as {REPO}/run/batch-b2",
+    ]
+    assert "brief:" not in out  # dispatch_batch's own plan is not echoed
+    assert _events(tmp_path, "b1") == ["dispatch"]
+    assert _events(tmp_path, "b3") == []
+    assert out.rstrip().splitlines()[-1] == "in flight 2, merged 0, pending 1, closing 0"
+
+
+def test_the_same_action_reads_the_same_line_in_once_and_loop_mode(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, sleeps: list[float]
+) -> None:
+    _proposed(world, tmp_path, 1)
+    _, once = _drive(tmp_path, "--once")
+    _, loop = _drive(tmp_path)
+    assert _lines(once, "dispatch") == _lines(loop, "dispatch") == ["dispatch b1: wave 1"]
+
+
+def test_only_batches_with_a_wave_are_driven_by_default(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues.update({1: "open", 2: "open"})
+    loose = '  - id: loose\n    title: loose\n    ids: ["super-fr#2"]\n'
+    _state(tmp_path, world, _batch("waved", 1), loose)
+    _, out = _drive(tmp_path, "--once")
+    assert _lines(out, "dispatch") == ["dispatch waved: wave 1"]
+    _, named = _drive(tmp_path, "--once", "loose")
+    assert _lines(named, "dispatch") == ["dispatch loose: wave -"]
+
+
+# ------------------------------------------------------------- exit codes (R7)
+
+
+def test_nothing_to_do_while_work_remains_exits_3(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1], draft=True)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == []
+    assert "in flight 1" in out
+
+
+def test_everything_done_exits_0(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    _state(tmp_path, world)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "in flight 0, merged 0, pending 0, closing 0" in out
+
+
+def test_a_failed_forge_write_exits_1(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1])
+    world.refuse_merge = "protected branch"
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 1, out
+    assert "protected branch" in out
+
+
+def test_a_runner_preflight_refusal_exits_2_and_is_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 2)
+    runner.refusal = "not inside a herdr session"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 2
+    assert out.count("not inside a herdr session") == 1
+    assert runner.dispatched == []
+
+
+# ------------------------------------------------------------- merge (R4)
+
+
+def _pr_open(world: World, tmp_path: Path, **kw: Any) -> None:
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1], **kw)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+
+
+def test_a_ready_green_pr_is_merged_without_waiting(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(101, "sha-101", "squash")]
+    assert _lines(out, "merge") == ["merge b1: merged PR #101 at sha-101"]
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [
+        lambda w: w.prs[101].update(draft=True),
+        lambda w: w.checks.update({101: [{"name": "test", "bucket": "pending"}]}),
+        lambda w: (
+            w.all_checks.update({101: {"pass": 0, "fail": 0, "pending": 2}})
+            or w.checks.update({101: []})
+        ),
+    ],
+    ids=["draft", "pending-required", "pending-all"],
+)
+def test_a_pr_that_is_not_ready_and_green_is_left(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, setup: Any
+) -> None:
+    _pr_open(world, tmp_path)
+    setup(world)
+    code, _ = _drive(tmp_path, "--once", "--yes")
+    assert code == 3
+    assert world.merged == []
+    assert not any(c.startswith(("ready", "approve")) for c in world.calls)
+
+
+def test_a_ci_none_repo_merges_on_non_draft_alone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.checks[101] = []
+    world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 3}
+    monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: True)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_a_failing_check_warns_once_per_head_across_loop_passes(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    sleeps: list[float] = []
+
+    def _fix_after_two(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            world.checks[101] = [{"name": "lint", "bucket": "pass"}]
+        assert len(sleeps) < 10, "the loop did not end"
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _fix_after_two)
+    world.config = None
+    code, out = _drive(tmp_path, "--yes", "--interval", "5")
+    assert _lines(out, "warn") == ["warn b1: PR #101 CI failing at sha-101: lint"]
+    assert world.merged == [(101, "sha-101", "squash")]
+    assert sleeps[:2] == [5, 5]
+
+
+def test_a_pr_behind_its_base_is_updated_then_merged_on_a_later_pass(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path)
+    checkout.behind.add("sha-101")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == []
+    assert _lines(out, "merge") == [
+        "merge b1: updated PR #101 to sha-updated; it merges on a later pass"
+    ]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [(101, "sha-updated", "squash")]
+
+
+# ------------------------------------------------- close-out and post_merge
+
+
+def _merged(world: World, tmp_path: Path, *, events: str = "", skill: str = "goal") -> None:
+    prefix = "fix" if skill == "debug" else "feat"
+    world.issues[1] = "closed"
+    world.pr(101, f"{prefix}/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
+    extra = {"skill": skill} if skill != "goal" else {}
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1", prefix) + events, **extra))
+
+
+def _cursor(checkout: DriveCheckout, run: str, branch: str) -> None:
+    runs = checkout.path / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / f"{run}.yaml").write_text(
+        yaml.safe_dump({"run": run, "branch": branch,
+                        "steps": {"plan": {"emitted": {"plan": f"docs/superpowers/plans/{run}"}}}})
+    )  # fmt: skip
+
+
+def test_no_closeout_before_the_release_commit(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _merged(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert runner.dispatched == []
+
+
+def test_post_merge_then_one_closeout_through_the_runner(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.config = {"post_merge": ["./scripts/install.sh"]}
+    _merged(world, tmp_path)
+    _cursor(checkout, "2026-10-01-b1", "feat/batch-b1")
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert checkout.forwarded == 1
+    assert checkout.commands == [["./scripts/install.sh"]]
+    (item,) = runner.dispatched
+    assert item.id == f"{REPO}/run/closeout-b1"
+    assert item.unit == "run" and item.payload["kind"] == "closeout"
+    assert "fr pickup --run 2026-10-01-b1" in item.payload["brief"]
+    assert item.payload["model"] == "claude-opus-5-5"
+    assert item.payload["checkout"] == str(checkout.path)
+    assert _events(tmp_path, "b1") == ["dispatch", "post_merge", "closeout"]
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    closeout = batch.events[-1]
+    assert closeout.run == "2026-10-01-b1"  # type: ignore[union-attr]
+    assert closeout.archive == "chore/archive-2026-10-01-b1"  # type: ignore[union-attr]
+    assert _lines(out, "closeout") == [
+        f"closeout b1: started {REPO}/run/closeout-b1 (fr pickup --run 2026-10-01-b1)"
+    ]
+    # a second pass starts nothing
+    code, _ = _drive(tmp_path, "--once", "--yes")
+    assert len(runner.dispatched) == 1 and checkout.commands == [["./scripts/install.sh"]]
+
+
+def test_batches_closed_out_by_hand_are_not_closed_out_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Debug 2026-10-03: every batch merged before 5.2.0 has no close-out event, and
+    an unnamed drive on a repo with no waves (so every batch is selected) planned a
+    close-out for each — 50 on this repo. One whose run is archived is done; one
+    whose run is still live is owed, wave or no wave."""
+    world.issues.update({1: "closed", 2: "closed"})
+    for n, bid in ((101, "done"), (102, "owed")):
+        world.pr(n, f"feat/batch-{bid}", [n - 100], state="MERGED",
+                 merged_at=(NOW - timedelta(days=3)).isoformat(), merge_commit=f"m{n}")  # fmt: skip
+        checkout.added[f"m{n}"] = (f"docs/superpowers/journals/debug/{bid}.md",)
+    checkout.live.add("docs/superpowers/journals/debug/owed.md")
+    no_wave = [
+        _batch(bid, n, events=_dispatch_event(bid)).replace("    wave: 1\n", "")
+        for n, bid in ((1, "done"), (2, "owed"))
+    ]
+    _state(tmp_path, world, *no_wave)
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-owed"]
+    assert "m101" not in checkout.release_probes  # an archived batch probes no release
+
+
+def test_a_named_batch_already_archived_by_hand_is_not_closed_out(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    journal = "docs/superpowers/journals/debug/2026-10-01-b1.md"
+    _merged(world, tmp_path)
+    world.prs[101]["merge_commit"] = "m101"
+    checkout.added["m101"] = (journal, "packages/x.py")
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes", "b1")
+    assert code == 0, out
+    assert _lines(out, "closeout") == [] and runner.dispatched == []
+    assert "closing 0" in out
+    checkout.live.add(journal)  # not archived yet: the close-out is owed
+    code, out = _drive(tmp_path, "--once", "--yes", "b1")
+    assert code == 0, out
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
+
+
+def test_a_debug_batch_is_closed_out_with_branch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _merged(world, tmp_path, skill="debug")
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    (item,) = runner.dispatched
+    assert "fr pickup --branch fix/batch-b1" in item.payload["brief"]
+    assert checkout.commands == []  # no post_merge configured: nothing runs
+
+
+def test_the_ten_minute_fallback_starts_the_closeout(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _merged(world, tmp_path)
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW + timedelta(minutes=8))
+    code, _ = _drive(tmp_path, "--once", "--yes")
+    assert code == 0 and len(runner.dispatched) == 1
+
+
+def test_a_failing_post_merge_holds_the_closeout_every_pass(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.config = {"post_merge": ["./scripts/install.sh"]}
+    _merged(world, tmp_path)
+    checkout.released = True
+    checkout.command_fails = "install.sh: exit 1"
+    for _ in range(2):
+        code, out = _drive(tmp_path, "--once", "--yes")
+        assert code == 3, out
+        assert _lines(out, "closeout") == [
+            "closeout b1: post_merge failed, close-out held: install.sh: exit 1"
+        ]
+    assert runner.dispatched == []
+    assert _events(tmp_path, "b1") == ["dispatch"]
+
+
+def test_a_kill_after_post_merge_does_not_rerun_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.config = {"post_merge": ["./scripts/install.sh"]}
+    _merged(world, tmp_path, events="      - {kind: post_merge, at: 2026-10-02T11:59:00Z}\n")
+    checkout.released = True
+    code, _ = _drive(tmp_path, "--once", "--yes")
+    assert code == 0
+    assert checkout.commands == []
+    assert len(runner.dispatched) == 1
+
+
+def test_an_existing_closeout_tab_is_recorded_not_redispatched(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _merged(world, tmp_path)
+    checkout.released = True
+    runner.live.add(f"{REPO}/run/closeout-b1")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert runner.dispatched == []
+    assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
+    assert _lines(out, "closeout") == [f"closeout b1: recorded the live {REPO}/run/closeout-b1"]
+
+
+# ---------------------------------------------------------------- archive
+
+
+def test_the_attributed_archive_pr_is_merged_and_the_batch_finishes(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _merged(world, tmp_path, events=closeout)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    world.pr(202, "chore/archive-someone-else", [])
+    world.pr(203, "chore/archive-p1-lookalike", [])  # no run file: never attributed
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [m[0] for m in world.merged] == [201]
+    assert _lines(out, "archive") == ["archive b1: merged archive PR #201"]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0 and "closing 0" in out
+
+
+# ------------------------------------------------------------ lock (R6)
+
+
+def test_a_second_driver_on_the_same_state_directory_refuses(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    (tmp_path / "drive.lock").write_text(json.dumps({"pid": os.getpid(), "started": "x"}))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 2
+    assert "drive.lock" in out and str(os.getpid()) in out
+    assert runner.dispatched == [] and world.passes == []  # type: ignore[attr-defined]
+
+
+def test_a_stale_lock_is_taken_over_and_released(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _proposed(world, tmp_path, 1)
+    (tmp_path / "drive.lock").write_text(json.dumps({"pid": 999_999_999, "started": "x"}))
+    monkeypatch.setattr(triage_batch_cmd, "_pid_alive", lambda pid: pid == os.getpid())
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert not (tmp_path / "drive.lock").exists()
+
+
+# --------------------------------------------------------- --checkout map
+
+
+def test_a_malformed_checkout_mapping_is_refused(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once", "--checkout", "no-equals-sign")
+    assert code == 2 and "REPO=PATH" in out
+    code, out = _drive(tmp_path, "--once", "--checkout", f"other/repo={tmp_path}")
+    assert code == 2 and "other/repo" in out
+
+
+def test_the_checkout_map_reaches_dispatch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    seen: list[Path | None] = []
+    monkeypatch.setattr(
+        triage_batch_cmd, "make_checkout", lambda path: seen.append(path) or checkout
+    )
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once", "--yes", "--checkout", f"{REPO}={checkout.path}")
+    assert code == 0, out
+    assert set(seen) == {checkout.path}
+
+
+# ------------------------------------------------- re-collect (Forge seam)
+
+
+def test_recollect_goes_through_the_forge_seam(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.model import Scope, load_facts
+
+    from tests.unit.triage_fixtures import FakeForge
+
+    forge = FakeForge(issues={REPO: []}, prs={REPO: []})
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    triage_batch_cmd.recollect(Scope(kind="repo", target=REPO), tmp_path)
+    assert forge.called("list_issues")
+    assert load_facts(tmp_path / "facts.json").repos == [REPO]
+
+
+# ------------------------------------------------- kill-safety (R6, Test Plan 5)
+
+
+def test_a_second_run_after_a_pass_repeats_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 2)
+    assert _drive(tmp_path, "--once", "--yes")[0] == 0
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert len(runner.dispatched) == 2
+    assert _lines(out, "dispatch") == []
+    assert code == 3  # both in flight, nothing to do
+
+
+def test_a_kill_between_launch_and_event_never_launches_twice(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    runner.live.add(f"{REPO}/run/batch-b1")  # launched, event never written
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 2
+    assert runner.dispatched == []
+    assert "already holds" in out
+
+
+# ---------------------------------------------- phase 2 review fixes (rg-*)
+
+
+class _StopError(Exception):
+    """Ends a loop-mode test from its sleep hook."""
+
+
+def _drive_named(tmp_path: Path, *args: str) -> Any:
+    return CliRunner().invoke(
+        app, ["triage", "batch", "drive", *args, "--repo", REPO, "--dir", str(tmp_path)]
+    )
+
+
+def _unwaved(bid: str, n: int, *, events: str = "", **kw: Any) -> str:
+    extra = "".join(f"    {k}: {v}\n" for k, v in kw.items())
+    ev = f"    events:\n{events}" if events else ""
+    return (
+        f'  - id: {bid}\n    title: {bid}\n    ids: ["super-fr#{n}"]\n'
+        f"    launch: {LAUNCH}\n{extra}{ev}"
+    )
+
+
+def test_a_dependent_is_not_dispatched_when_its_dependencys_merge_did_not_land(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-1: b1 is behind its base, so the pass updates it instead of merging it;
+    b2 (`after: [b1]`) must not start, and the summary must not count b1 merged."""
+    world.issues.update({1: "open", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1])
+    checkout.behind.add("sha-101")
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
+           _batch("b2", 2, after="[b1]"))  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out  # the update push is an act
+    assert world.merged == [] and runner.dispatched == []
+    assert _lines(out, "dispatch") == [
+        "dispatch b2: held: waits on b1, whose merge did not land this pass"
+    ]
+    assert out.rstrip().splitlines()[-1] == "in flight 1, merged 0, pending 1, closing 0"
+
+
+def test_a_merge_held_at_act_time_holds_its_dependent(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-1/rg-15: the snapshot judged b1 green, but at the merge a required check is
+    pending again; b1 is held and b2 does not start."""
+    world.issues.update({1: "open", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
+           _batch("b2", 2, after="[b1]"))  # fmt: skip
+    seen: list[int] = []
+
+    def _checks(repo: str, number: int) -> list[dict[str, Any]]:
+        seen.append(number)
+        bucket = "pass" if len(seen) == 1 else "pending"
+        return [{"name": "test", "bucket": bucket}]
+
+    monkeypatch.setattr(world, "pr_required_checks", _checks)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == [] and runner.dispatched == []
+    assert _lines(out, "merge") == ["merge b1: held: PR #101 is pending: test"]
+    assert "merged 0" in out
+
+
+@pytest.mark.parametrize("required", [True, False], ids=["required-checks", "no-required"])
+def test_a_head_that_moves_after_the_snapshot_is_not_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, required: bool,
+) -> None:  # fmt: skip
+    """rg-2: the merge is pinned to the head whose checks were judged."""
+    _pr_open(world, tmp_path)
+    if not required:
+        world.checks[101] = []
+    views: list[int] = []
+    real_view = world.pr_view
+
+    def _view(repo: str, number: int) -> dict[str, Any]:
+        views.append(number)
+        if len(views) == 2:  # after the snapshot read it: someone pushes
+            world.prs[101]["head_oid"] = "sha-pushed"
+        return real_view(repo, number)
+
+    monkeypatch.setattr(world, "pr_view", _view)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [], out
+    assert _lines(out, "merge") == [
+        "merge b1: held: PR #101 head moved from sha-101 to sha-pushed since its checks "
+        "were judged; it is judged again next pass"
+    ]
+    assert code == 3
+
+
+def test_the_cap_counts_batches_outside_the_selection(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-3: `drive b5` with four other batches in flight dispatches nothing."""
+    for n in range(1, 6):
+        world.issues[n] = "open"
+    others = [_batch(f"o{n}", n, events=_dispatch_event(f"o{n}")) for n in range(1, 5)]
+    _state(tmp_path, world, *others, _batch("b5", 5))
+    code, out = _drive(tmp_path, "--once", "--yes", "b5")
+    assert code == 3, out
+    assert runner.dispatched == []
+
+
+def test_a_merged_dependency_outside_the_selection_is_not_blocking(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-3: `drive b2` where b1 (unselected) is merged dispatches b2."""
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1], state="MERGED", merged_at=NOW.isoformat())
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
+           _batch("b2", 2, after="[b1]"))  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes", "b2")
+    assert code == 0, out
+    assert _lines(out, "blocked") == []
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+
+
+def test_a_waved_batch_on_an_unwaved_merged_batch_is_not_blocked(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-3: the default selection (batches with a wave) still resolves its
+    dependencies over every batch."""
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b0", [1], state="MERGED", merged_at=NOW.isoformat())
+    _state(tmp_path, world, _unwaved("b0", 1, events=_dispatch_event("b0")),
+           _batch("b2", 2, after="[b0]"))  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "blocked") == []
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+
+
+def test_zero_reported_checks_are_not_green(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-4: no required checks and no checks at all (CI not queued yet) waits."""
+    _pr_open(world, tmp_path)
+    world.checks[101] = []
+    world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == []
+
+
+def test_a_merge_stop_does_not_end_the_loop_and_is_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-4: a repo with required checks the forge does not report (`--required`
+    says none) gets a merge refusal; the loop reports it once and keeps going."""
+    _pr_open(world, tmp_path)
+    world.checks[101] = []
+    world.refuse_merge = "required status check is expected"
+    naps: list[float] = []
+
+    def _nap(seconds: float) -> None:
+        naps.append(seconds)
+        if len(naps) == 3:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("required status check is expected") == 1
+    assert world.calls.count("pr_merge 101") == 3
+
+
+def test_ci_none_is_read_from_the_default_branch_not_the_working_tree(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-5: a clone on a feature branch whose tree declares `ci none` does not make
+    the driver merge on non-draft alone; origin/main has CI."""
+    monkeypatch.setattr(triage_batch_cmd, "ci_is_none", REAL_CI_IS_NONE)
+    _pr_open(world, tmp_path)
+    world.checks[101] = []
+    world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 2}
+    profiles = "version: 2\nforge: {type: github}\nci: {type: none}\n"
+    (checkout.path / ".devcontainer").mkdir()
+    (checkout.path / ".devcontainer" / "fr-profiles.yaml").write_text(profiles)
+    checkout.files[("origin/main", ".github/workflows/ci.yml")] = "on: push\njobs: {}\n"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == []
+    # and when origin/main itself declares it, the merge goes ahead
+    checkout.files[("origin/main", ".devcontainer/fr-profiles.yaml")] = profiles
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_an_archive_merged_by_file_attribution_finishes_the_batch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-6: the archive PR's head is neither the close-out's own nor the recorded
+    archive branch, so only its files attribute it; once the driver merged it, the
+    next pass sees the batch archived and `--once` exits 0."""
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _merged(world, tmp_path, events=closeout)
+    world.pr(201, "chore/archive-renamed", [], files=["docs/superpowers/runs/r1.yaml"])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [m[0] for m in world.merged] == [201]
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    assert batch.events[-1].archived == 201  # type: ignore[union-attr]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert out.rstrip().splitlines()[-1] == "in flight 0, merged 1, pending 0, closing 0"
+
+
+def test_an_unparsable_lock_is_held_for_its_grace_period(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-7a: a lock another starter created but has not written yet is not stale."""
+    _proposed(world, tmp_path, 1)
+    (tmp_path / "drive.lock").write_text("")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 2, out
+    assert world.passes == []  # type: ignore[attr-defined]
+    assert (tmp_path / "drive.lock").read_text() == ""
+
+
+def test_an_unparsable_lock_past_its_grace_period_is_taken_over(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    lock = tmp_path / "drive.lock"
+    lock.write_text("")
+    old = lock.stat().st_mtime - 3600
+    os.utime(lock, (old, old))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert not lock.exists()
+
+
+def test_a_stale_lock_retaken_by_another_starter_is_not_removed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-7b: between reading the stale lock and taking it, another driver took it
+    over; this starter must neither remove that lock nor run."""
+    _proposed(world, tmp_path, 1)
+    lock = tmp_path / "drive.lock"
+    lock.write_text(json.dumps({"pid": 999_999_999, "started": "x"}))
+    rival = json.dumps({"pid": 4242, "started": "rival"})
+
+    def _alive(pid: int) -> bool:
+        if pid == 999_999_999:
+            lock.write_text(rival)  # the rival replaced the stale lock meanwhile
+            return False
+        return pid == 4242
+
+    monkeypatch.setattr(triage_batch_cmd, "_pid_alive", _alive)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 2, out
+    assert lock.read_text() == rival
+    assert world.passes == []  # type: ignore[attr-defined]
+
+
+def test_a_driver_does_not_remove_a_lock_it_no_longer_owns(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-7c: the lock is released only when it is still this driver's."""
+    _proposed(world, tmp_path, 1)
+    lock = tmp_path / "drive.lock"
+    rival = json.dumps({"pid": 4242, "started": "rival"})
+    real = triage_batch_cmd.recollect
+
+    def _recollect(scope: Any, target: Path) -> None:
+        lock.write_text(rival)
+        real(scope, target)
+
+    monkeypatch.setattr(triage_batch_cmd, "recollect", _recollect)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert lock.read_text() == rival
+
+
+def test_the_lock_is_written_whole_before_it_is_visible(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """rg-7a: the lock appears with its pid already in it (link of a written file),
+    never as an empty O_EXCL file."""
+    _proposed(world, tmp_path, 1)
+    lock = tmp_path / "drive.lock"
+    seen: list[str] = []
+    real = triage_batch_cmd.recollect
+
+    def _recollect(scope: Any, target: Path) -> None:
+        seen.append(lock.read_text())
+        real(scope, target)
+
+    monkeypatch.setattr(triage_batch_cmd, "recollect", _recollect)
+    assert _drive(tmp_path, "--once", "--yes")[0] == 0
+    assert json.loads(seen[0])["pid"] == os.getpid()
+    assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith("drive.lock")) == []
+
+
+def test_closeout_and_batch_dispatch_resolve_the_same_model(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-8: the close-out reads the clone's models.yaml as `batch dispatch` does,
+    also when no --checkout is given."""
+    no_model = "{runner: fake, harness: claude}"
+    models = checkout.path / "docs" / "superpowers" / "models.yaml"
+    models.parent.mkdir(parents=True)
+    models.write_text("claude-code:\n  orchestrator: repo-model\n")
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
+    b1 = _batch("b1", 1, events=_dispatch_event("b1")).replace(LAUNCH, no_model)
+    b2 = _batch("b2", 2).replace(LAUNCH, no_model)
+    _state(tmp_path, world, b1, b2)
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    models_by_item = {i.id: i.payload["model"] for i in runner.dispatched}
+    assert models_by_item == {
+        f"{REPO}/run/closeout-b1": "repo-model",
+        f"{REPO}/run/batch-b2": "repo-model",
+    }
+
+
+def test_the_release_probe_names_the_batchs_merge_commit(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-9: the release must follow THIS merge, so the probe is by merge commit."""
+    _merged(world, tmp_path)
+    world.prs[101]["merge_commit"] = "c0ffee"
+    _drive(tmp_path, "--once", "--yes")
+    assert checkout.release_probes == ["c0ffee"]
+
+
+def test_a_preflight_refusal_does_not_stop_a_merge_when_no_closeout_is_due(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-10: only a due close-out is probed through its runner."""
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
+    world.pr(102, "feat/batch-b2", [2])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
+           _batch("b2", 2, events=_dispatch_event("b2")))  # fmt: skip
+    runner.refusal = "HERDR_ENV is not set"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(102, "sha-102", "squash")]
+    assert "HERDR_ENV" not in out
+
+
+def _blocked_state(world: World, tmp_path: Path) -> None:
+    world.issues.update({1: "open", 2: "open"})
+    cancel = "      - {kind: cancel, at: 2026-10-01T11:00:00Z}\n"
+    _state(tmp_path, world, _batch("b0", 1, events=_dispatch_event("b0") + cancel),
+           _batch("b1", 2, after="[b0]"))  # fmt: skip
+
+
+def test_once_with_only_blocked_work_left_exits_3(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """rg-11: blocked work needs the operator, so it is not `done`."""
+    _blocked_state(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert _lines(out, "blocked") == ["blocked b1: waits on b0 is cancelled"]
+
+
+def test_the_loop_ends_with_exit_3_naming_the_blocked_batches(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, sleeps: list[float]
+) -> None:
+    _blocked_state(world, tmp_path)
+    code, out = _drive(tmp_path, "--yes")
+    assert code == 3, out
+    assert sleeps == []
+    assert out.rstrip().splitlines()[-1] == (
+        "stopped: only blocked batches remain (b1); they need the operator"
+    )
+
+
+@pytest.mark.parametrize(
+    ("required", "all_checks", "merged"),
+    [
+        ([], {"pass": 2, "fail": 0, "pending": 0}, True),
+        ([], {"pass": 2, "fail": 1, "pending": 0}, False),
+        ([{"name": "test", "bucket": "pass"}], {"pass": 0, "fail": 3, "pending": 0}, True),
+        ([{"name": "test", "bucket": "fail"}], {"pass": 5, "fail": 0, "pending": 0}, False),
+    ],
+    ids=["none-required-all-green", "none-required-one-failing", "required-passing",
+         "required-failing"],
+)  # fmt: skip
+def test_required_checks_when_there_are_any_else_all_checks(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    required: list[dict[str, Any]], all_checks: dict[str, int], merged: bool,
+) -> None:  # fmt: skip
+    """rg-15: the World default (one passing required check) must not hide the
+    all-checks fallback."""
+    _pr_open(world, tmp_path)
+    world.checks[101] = required
+    world.all_checks[101] = all_checks
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert bool(world.merged) is merged, out

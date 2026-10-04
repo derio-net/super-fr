@@ -22,12 +22,16 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+from urllib.parse import urlparse
 
 from fr import _hosts, hostclient
 
 from fr_vk import _cardref
 from fr_vk.workspaces import MCPArchiver, archive_for_card
+
+if TYPE_CHECKING:
+    from fr.ghclient import GhClient
 
 __all__ = ["reconcile_done_issues", "tick"]
 
@@ -73,43 +77,27 @@ def _normalize_issues(resp: Any) -> list[dict[str, Any]]:
     return [c for c in items if isinstance(c, dict)]
 
 
-def _default_close_gh_issue(repo: str, issue_number: str, backend: str) -> None:
-    """Resolve a `GhClient`-shaped adapter for `backend` and call
-    `edit_issue_state(..., state="CLOSED")`. Non-fatal on failure.
+# The Issue-close seam: repo, issue number, and the client ALREADY RESOLVED
+# for the forge and host the Issue lives on. It used to carry a backend
+# string, which had no room for a host, so a self-hosted GitLab close built
+# the right adapter aimed at gitlab.com (gh#490). Resolution now happens
+# once, where the URL is, and the closer only closes.
+Closer = Callable[[str, str, "GhClient"], None]
 
-    Previously shelled out to a raw `gh issue close` subprocess directly,
-    bypassing `GhClient` entirely — fixed as part of the multi-backend
-    design (see docs/superpowers/specs/
-    2026-07-09-multi-backend-git-host-adapters-design.md §6). Each
-    adapter's own already-closed-is-a-no-op behavior (or lack thereof)
-    is that adapter's concern, not this caller's.
 
-    `backend` is typed `str`, not `fr._hosts.HostBackend`, to match the
-    public `closer: Callable[[str, str, str], None]` signature every
-    caller (including test doubles) satisfies structurally; it's always
-    one of the three literal values in practice (both call sites derive
-    it via `fr._hosts.backend_for_url`/`fr_vk._cardref.BACKEND_FOR_TAG`).
+def _client_for_url(url: str) -> GhClient:
+    """The client for the forge AND host *url* lives on — `pr_observe`'s own
+    resolution (backend from the path shape, a host only when self-hosted)."""
+    return hostclient.client_for_backend(
+        _hosts.backend_for_url(url),
+        host=_hosts.self_hosted_hostname(urlparse(url).hostname),
+    )
 
-    NOT threading a host here — unlike `pr_observe`'s sibling fetch
-    (gh-486, spec §4.C/§4.C2) — is a deliberate, documented limit with
-    exactly one cause, and it is **not** backend resolution: as of §4.C2
-    the backend arriving here is correct for a self-hosted instance too
-    (`_close_linked_gh_issue` resolves it via `_hosts.backend_for_url`,
-    off the MR path shape). The blocker is this function's ARITY. The
-    hostname sits one frame up in `_close_linked_gh_issue`, parsed from
-    the same `pr_url`, but the public seam is
-    `closer: Callable[[str, str, str], None]` — repo, issue_number,
-    backend — with two call sites in this module and a test double per
-    test satisfying it structurally. There is no room for a host without
-    widening that signature bridge-wide, which is beyond gh-486's scope.
 
-    Consequence, stated so nobody has to rediscover it: on a self-hosted
-    GitLab instance this builds the RIGHT adapter aimed at the WRONG host
-    (glab's `gitlab.com` default), and the close fails non-fatally with
-    the logged warning below. The practical loss is a missed backstop —
-    the forge's own close-on-merge already ran — not a broken merge.
-    """
-    client = hostclient.client_for_backend(backend)  # type: ignore[arg-type]
+def _default_close_gh_issue(repo: str, issue_number: str, client: GhClient) -> None:
+    """`edit_issue_state(..., state="CLOSED")` on the resolved *client*.
+    Non-fatal on failure: the forge's own close-on-merge already ran, so a
+    failure here is a missed backstop, not a broken merge."""
     try:
         client.edit_issue_state(repo, int(issue_number), state="CLOSED")
     except Exception as e:  # noqa: BLE001 — non-fatal, mirrors the old subprocess posture
@@ -121,10 +109,10 @@ def _default_close_gh_issue(repo: str, issue_number: str, backend: str) -> None:
 def _close_linked_gh_issue(
     title: str,
     pr_url: str | None,
-    closer: Callable[[str, str, str], None],
+    closer: Closer,
 ) -> None:
-    """Resolve owner/repo from `pr_url`, Issue number from `title`, and
-    backend from `pr_url` itself, then close.
+    """Resolve owner/repo from `pr_url`, Issue number from `title`, and the
+    client (backend AND host) from `pr_url` itself, then close.
 
     Guards against a split-source mismatch: if the card title carries an
     `[owner/repo]` that disagrees with the PR url's repo (a recycled / mis-
@@ -136,7 +124,7 @@ def _close_linked_gh_issue(
     `_hosts.backend_for_url`, not the hostname alone: a self-hosted GitLab
     MR URL has no `gitlab.com` in it, so hostname-only resolution handed
     its close to `gh` (gh-486, spec §4.C2). The MR path shape names the
-    forge instead.
+    forge instead, and the URL's hostname names the instance (gh#490).
     """
     if not pr_url or not title:
         return
@@ -154,15 +142,14 @@ def _close_linked_gh_issue(
             issue_num,
         )
         return
-    backend = _hosts.backend_for_url(pr_url)
-    closer(title_repo, str(issue_num), backend)
+    closer(title_repo, str(issue_num), _client_for_url(pr_url))
 
 
 def tick(
     mcp: MCPCardClient,
     pr_observations: dict[str, str],
     *,
-    close_gh_issue: Callable[[str, str, str], None] | None = None,
+    close_gh_issue: Closer | None = None,
     project_id: str | None = None,
 ) -> int:
     """Transition cards based on their linked PR's observed status.
@@ -173,10 +160,10 @@ def tick(
     ignored — only `"open"` (→ In review) and `"merged"` (→ Done) cause
     a transition.
 
-    `close_gh_issue(repo, issue_number)` is the side-channel that runs
-    the belt-and-braces `gh issue close` for the In-review → Done
-    cascade. Injectable for unit tests; defaults to a `gh` subprocess
-    call.
+    `close_gh_issue(repo, issue_number, client)` is the side-channel that
+    runs the belt-and-braces Issue close for the In-review → Done cascade,
+    on the client resolved from the card's PR URL. Injectable for unit
+    tests; defaults to `client.edit_issue_state`.
 
     `project_id` is forwarded to `list_issues` so the sweep only
     considers cards in the bridge's own VK project. The legacy bridge
@@ -274,7 +261,7 @@ def reconcile_done_issues(
     *,
     project_id: str | None = None,
     seen: set[str] | None = None,
-    close_gh_issue: Callable[[str, str, str], None] | None = None,
+    close_gh_issue: Closer | None = None,
     max_closes: int = _MAX_DONE_CLOSES_PER_TICK,
 ) -> set[str]:
     """Close the linked GH Issue of every terminal-Done card (#294).
@@ -298,13 +285,13 @@ def reconcile_done_issues(
     short strings and the idempotent closer makes a lost/stale file harmless,
     so unbounded growth is an accepted trade-off.
 
-    Backend is resolved from the card title's tag (`_cardref.BACKEND_FOR_TAG`)
-    — there's no PR url here to derive it from (a manually-Done card may
-    have none), so the title's tag is the only signal available. In
-    practice this is "github" for every card today (nothing threads a
-    real backend into dispatched titles yet — see
-    `fr_vk.dispatch.build_card_title`'s docstring), but the parse is
-    already multi-backend-capable.
+    The client is resolved from the card's PR URL when it has one for the
+    title's own repo — the only place a self-hosted instance's host is
+    recorded (gh#490) — and otherwise from the title's tag
+    (`_cardref.BACKEND_FOR_TAG`), with no host: a manually-Done card may
+    have no PR at all. The tag is "github" for every card today (nothing
+    threads a real backend into dispatched titles yet — see
+    `fr_vk.dispatch.build_card_title`'s docstring).
     """
     closer = close_gh_issue if close_gh_issue is not None else _default_close_gh_issue
     seen = set(seen or ())
@@ -342,12 +329,23 @@ def reconcile_done_issues(
             )
             break
         closes += 1
-        backend = _cardref.BACKEND_FOR_TAG.get(tag, "github")
         try:
-            closer(repo, str(num), backend)
+            closer(repo, str(num), _client_for_card(card, repo, tag))
         except Exception as e:  # noqa: BLE001 — one bad close mustn't drop the rest
             logger.warning("pr_state: reconcile close %s failed: %s", key, e)
             continue
         seen.add(key)
 
     return seen
+
+
+def _client_for_card(card: dict[str, Any], repo: str, tag: str) -> GhClient:
+    """The client for a Done card's Issue: from its PR URL when that URL is
+    the title's own repo (a recycled card's foreign PR says nothing about
+    where this Issue lives), else from the title's tag, hostless."""
+    pr_url = card.get("latest_pr_url")
+    if isinstance(pr_url, str):
+        m = _REPO_FROM_URL_RE.match(pr_url)
+        if m and m.group(1) == repo:
+            return _client_for_url(pr_url)
+    return hostclient.client_for_backend(_cardref.BACKEND_FOR_TAG.get(tag, "github"))
