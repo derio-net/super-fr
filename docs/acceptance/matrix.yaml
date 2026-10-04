@@ -5840,8 +5840,10 @@ rows:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_a_failing_head_is_stepped_over_and_the_next_leads
       - super-fr:tests/unit/test_triage_batch_drive.py#test_a_green_member_ahead_is_the_head_with_no_stored_state
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_refused_head_is_reported_and_stepped_over
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_failing_member_behind_the_stop_is_warned_and_stepped_over
     status: ci
-    notes: Failing and refused PRs are stepped over; order is stable so they rejoin
+    notes: 'Review fix: a failing PR behind the stop is warned and stepped over at once
+      (test_a_failing_member_behind_the_stop_is_warned_and_stepped_over).'
   - id: drive-merge-train-output
     capability: triage-batch-drive
     acceptance: Every drive pass prints one train line per repo (head, queued, stepped
