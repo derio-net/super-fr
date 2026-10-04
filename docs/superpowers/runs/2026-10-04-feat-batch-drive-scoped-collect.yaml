@@ -3,7 +3,7 @@ run: 2026-10-04-feat-batch-drive-scoped-collect
 workflow: fr-goal@1
 branch: feat/batch-drive-scoped-collect
 started: '2026-10-04T05:51:48+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -84,6 +84,9 @@ steps:
           visual: none
           findings: cr-r7-drive-test-not-tied-to-carry,cr-spec-d-cases-untested,cr-test-imports-private-helpers-from-test-module,cr-previous-facts-scope-check-batch-prs
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-04T06:27:43+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending
