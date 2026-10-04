@@ -241,6 +241,10 @@ def test_create_rejects_spec_with_mislabeled_table_header(tmp_path):
     assert slug not in spec_path.read_text()
 
 
+# Deliberately a literal, NOT an import of `_CANONICAL_HEADER_LINE` (gh#661):
+# a test that reads the expected header from the code under test passes for
+# any header the code emits. Changing the canonical header means changing this
+# pin too, which is the point.
 _HEADER = "| Plan | Repo | File | Depends on |"
 
 
