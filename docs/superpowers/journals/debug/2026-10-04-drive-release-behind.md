@@ -9,3 +9,8 @@ super-fr#927: on 2026-10-04 PRs #894 and #897 were each updated three times in o
 ### 83cb770f34dc · root-cause · _land's behind test counts every main commit, however routine
 
 `fr.triage.batch_merge._land` sets `behind = not checkout.is_ancestor(origin/main, head)`: true the moment main gains any commit. Both `merge_ready` (drive) and `merge_one` (batch merge) then call `_update`, which merges main into the PR branch and pushes, restarting CI. Nothing distinguishes a commit that cannot change what the PR's CI proves (a version-only release commit, a docs/superpowers-only archive move) from a real code change. main has no branch protection here, so the forge does not require an up-to-date head to merge.
+
+<!-- fr:journal kind=ruled-out scope=debug id=cfefe6c3022f created=2026-10-04T06:05:14+00:00 -->
+### cfefe6c3022f · ruled-out · Trusting the release: subject line
+
+Rejected per the operator's widened decision on #927: classify by files. A 'release:' commit that also adds a dependency is a real change; test_a_release_shaped_commit_that_changes_more_than_versions_still_updates pins it. Also rejected: PullRequest.files from facts for the overlap check (gh's files list caps per PR); a git ref...head diff is authoritative.
