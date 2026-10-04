@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from fr.triage.batch import pr_open_queue
 from fr.triage.batch_merge import (
+    HeadMovedError,
     MergeAttempt,
     MergeContext,
     MergeStopError,
@@ -96,6 +97,18 @@ def test_a_moved_head_stops(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     forge.prs[1001]["head_oid"] = "elsewhere"
     with pytest.raises(MergeStopError, match="head moved"):
         merge_ready(ctx, slot, None)
+
+
+def test_a_moved_head_is_told_from_a_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The driver stops a train on a moved head and steps over a refusal (R3, R4)."""
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    forge.prs[1001]["head_oid"] = "elsewhere"
+    with pytest.raises(HeadMovedError):
+        merge_ready(ctx, slot, None)
+    assert issubclass(HeadMovedError, MergeStopError)
 
 
 def test_a_pr_behind_its_base_is_updated_and_left_for_a_later_pass(
