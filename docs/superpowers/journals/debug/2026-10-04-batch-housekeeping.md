@@ -69,3 +69,8 @@ read_text converted CRLF to LF before _edit_profiles_text. Fixed: read_verbatim 
 ### review-r2-dupkey · finding [fixed] (reviewer: in scope) · Review: verification could not see duplicate keys
 
 safe_load keeps the last duplicate, so an entry appended beside a quoted "dev": passed verification. Fixed: re-read with fr.artifacts.structure._StrictLoader; BOM split off by read_verbatim. Test: test_init_scaffold.py::test_a_quoted_profile_key_never_ends_up_duplicated (red first).
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-10-04T05:40:54+00:00 -->
+### review · review · Milestone review
+
+Independent code review of the branch diff (feature-dev code-reviewer, read-only). Raised two findings, both in scope and fixed: review-r1-crlf, review-r2-dupkey. Checked clean: hook set -eu/pipeline/newline handling, PullRequest None consumers, statusline -ef, deleted-script references. Separately, a background commit security review raised symlink-following writes in the #455 hook (sec-455-symlink, fixed).
