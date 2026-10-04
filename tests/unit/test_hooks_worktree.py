@@ -214,6 +214,31 @@ class TestWorktreeCreate:
         assert not (wt / "build").exists()
         assert not (wt / "notes.txt").exists()
 
+    def test_agent_worktree_include_copy_never_writes_through_a_symlink(
+        self, tmp_path: Path, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        """The agent worktree is cut from the COMMITTED tree, which may hold a
+        symlink where the base checkout has a real directory. The copy must not
+        follow it out of the worktree (security review of super-fr#455)."""
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (repo / ".gitignore").write_text(".env\n")
+        (repo / ".worktreeinclude").write_text(".env\n")
+        (repo / "cfg").symlink_to(outside)
+        _git(repo, "add", ".gitignore", ".worktreeinclude", "cfg")
+        _git(repo, "commit", "-qm", "cfg is a symlink in the committed tree")
+        (repo / "cfg").unlink()
+        (repo / "cfg").mkdir()  # ...but a real directory in the base checkout
+        (repo / "cfg" / ".env").write_text("TOKEN=x\n")
+        (repo / ".env").symlink_to(outside / "secret")  # an ignored symlink source
+        (outside / "secret").write_text("s\n")
+
+        result = run_hook(CREATE, create_payload("agent-inc3", repo), stub_fr)
+        assert result.returncode == 0, result.stderr
+        wt = repo / ".claude" / "worktrees" / "agent-inc3"
+        assert not (outside / ".env").exists(), "copied through the committed symlink"
+        assert (wt / ".env").is_symlink()  # copied as a link, not its target's bytes
+
     def test_agent_worktree_without_worktreeinclude_copies_nothing(
         self, repo: Path, stub_fr: dict[str, str]
     ) -> None:

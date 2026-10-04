@@ -28,13 +28,34 @@ copy_worktreeinclude() {
   # is git-ignored AND named by a `.worktreeinclude` pattern (gitignore syntax).
   # `ls-files -o -i --exclude-from` lists untracked files matching the include
   # patterns; `check-ignore` keeps those the repo's own ignore rules ignore.
+  # The worktree is the COMMITTED tree, which may hold a symlink where the base
+  # checkout has a real directory: never write through one (`no_link_under`),
+  # never overwrite, and copy a source symlink as a link (`cp -P`), not its target.
   [ -f "$root/.worktreeinclude" ] || return 0
   git -C "$root" ls-files -z --others --ignored --exclude-from="$root/.worktreeinclude" 2>/dev/null \
     | git -C "$root" check-ignore -z --stdin 2>/dev/null \
     | while IFS= read -r -d '' rel; do
-        mkdir -p "$1/$(dirname "$rel")" && cp -p "$root/$rel" "$1/$rel" \
+        if ! no_link_under "$1" "$rel"; then
+          echo "fr-worktree-create: not copying $rel (a symlink or file is in the way)" >&2
+          continue
+        fi
+        mkdir -p "$1/$(dirname "$rel")" && cp -P -p "$root/$rel" "$1/$rel" \
           || echo "fr-worktree-create: could not copy $rel" >&2
       done || true
+}
+no_link_under() {
+  # True when no component of <dir>/<rel> exists as a symlink and <rel> itself
+  # does not exist yet.
+  # Expansion, not `read`, so a name holding a newline is still walked whole.
+  local p="$1" rest="$2" part
+  while [ -n "$rest" ]; do
+    part=${rest%%/*}
+    rest=${rest#"$part"}
+    rest=${rest#/}
+    p="$p/$part"
+    [ -L "$p" ] && return 1
+  done
+  [ ! -e "$p" ]
 }
 has_profile() { ls -d "$root"/.devcontainer/*/ >/dev/null 2>&1; }
 fr_enabled() { [ -d "$root/docs/superpowers/plans" ] || has_profile; }
