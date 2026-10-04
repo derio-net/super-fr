@@ -17,6 +17,19 @@ from typer.testing import CliRunner
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _slugs_need_no_artifact(request: pytest.FixtureRequest, monkeypatch) -> None:
+    """These tests journal under bare slugs (`S`, `RR9`) in repos holding no
+    spec or plan, to exercise everything EXCEPT the orphan check (gh#639);
+    many build their own plans under those slugs. `TestAddRefusesAnOrphanSlug`
+    is the one class that keeps the check live."""
+    if request.cls is not None and request.cls.__name__ == "TestAddRefusesAnOrphanSlug":
+        return
+    from fr.commands import journal_cmd
+
+    monkeypatch.setattr(journal_cmd, "_orphan_refusal", lambda *a, **k: None)
+
+
 def _init_repo(tmp_path: Path) -> Path:
     # `fr journal` resolves the repo root via git; make tmp_path a repo.
     import subprocess
@@ -2342,7 +2355,7 @@ class TestAddRefusesAnOrphanSlug:
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
         specs = root / "docs/superpowers/specs"
-        specs.mkdir(parents=True)
+        specs.mkdir(parents=True, exist_ok=True)
         (specs / "2026-09-26-real-design.md").write_text("# real\n")
 
         res = self._decision(root, "spec", "2026-09-26-run-id-505")
@@ -2355,7 +2368,7 @@ class TestAddRefusesAnOrphanSlug:
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
         specs = root / "docs/superpowers/specs"
-        specs.mkdir(parents=True)
+        specs.mkdir(parents=True, exist_ok=True)
         (specs / "2026-09-26-real-design.md").write_text("# real\n")
 
         assert self._decision(root, "spec", "2026-09-26-real").exit_code == 0

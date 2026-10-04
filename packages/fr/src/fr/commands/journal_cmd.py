@@ -36,6 +36,7 @@ from fr.journal.model import (
     resolution_record_id,
     resolve_journal_read_path,
     serialize_entry,
+    spec_journal_slug,
     unauthorized_fixes,
 )
 from fr.run.model import AnsweredBy
@@ -128,6 +129,33 @@ def _validate_answered_by(answered_by: str | None) -> None:
             f"(got {answered_by!r})[/red]"
         )
         raise typer.Exit(2)
+
+
+def _orphan_refusal(root: Path, scope: str, slug: str, path: Path, *, is_input: bool) -> str | None:
+    """Why a spec/plan journal for `slug` would be an orphan, or None (gh#639).
+
+    A journal filed under a slug that names no spec or plan (a run id, say) is
+    read by nothing and archived by nothing. A debug journal owns its slug.
+    An existing journal is already anchored, and the operator's brief
+    (`--input`) is recorded before exploring, so before its spec exists
+    (fr-brainstorming); it starts the journal the spec then joins.
+    """
+    if scope == "debug" or path.exists() or (scope == "spec" and is_input):
+        return None
+    if scope == "spec":
+        specs = root / "docs" / "superpowers" / "specs"
+        known = sorted({spec_journal_slug(p.stem) for p in specs.glob("*.md")})
+        where = f"docs/superpowers/specs/{slug}-design.md"
+    else:
+        plans = root / "docs" / "superpowers" / "plans"
+        known = sorted(p.name for p in plans.iterdir() if p.is_dir()) if plans.is_dir() else []
+        where = f"docs/superpowers/plans/{slug}/"
+    if slug in known:
+        return None
+    return (
+        f"no {scope} named {slug!r} (looked for {where}): a {scope} journal under it would "
+        "be orphaned. Known: " + (", ".join(known) or "none")
+    )
 
 
 @journal_app.command("add")
@@ -234,6 +262,11 @@ def add(
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
+
+    orphan = _orphan_refusal(root, scope, slug, path, is_input=is_input)
+    if orphan is not None:
+        err_console.print(orphan, soft_wrap=True, markup=False)
+        raise typer.Exit(2)
 
     existing = _load(path)
     if any(e.id == eid for e in existing):
