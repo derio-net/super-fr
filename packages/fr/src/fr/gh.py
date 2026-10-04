@@ -369,8 +369,9 @@ def list_open_prs(*, repo: str, limit: int) -> list[dict[str, object]]:
 
 
 def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[str, object]]:
-    """Every PR (any state) whose head is *branch*: `PR_LIST_FIELDS` plus `headRefOid`
-    and `files` (the wave driver attributes a merged archive PR by them)."""
+    """Every PR (any state) whose head is *branch*: `PR_LIST_FIELDS` plus `headRefOid`,
+    `files` (the wave driver attributes a merged archive PR by them) and
+    `isCrossRepository` (`--head` matches a fork's branch of the same name too)."""
     import json
 
     out = _run_gh(
@@ -386,7 +387,7 @@ def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[s
             "--limit",
             str(limit),
             "--json",
-            PR_LIST_FIELDS + ",headRefOid,files",
+            PR_LIST_FIELDS + ",headRefOid,files,isCrossRepository",
         ]
     )
     return json.loads(out) if out else []

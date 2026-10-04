@@ -1373,6 +1373,8 @@ def _live_head_prs(client: GhClient, repo: str, head: str) -> list[LivePr]:
                 head=str(rec.get("headRefOid") or ""),
                 checks="pending",  # an open one's checks come from the facts' record
                 head_ref=str(rec.get("headRefName") or head),
+                # unknown reads as a fork: adoption trusts only the repo's own branches
+                cross_repo=rec.get("isCrossRepository") is not False,
                 files=tuple(
                     str(f.get("path") if isinstance(f, dict) else f) for f in rec.get("files") or ()
                 ),
@@ -1550,8 +1552,14 @@ class _Driver:
         """The close-out PR started by hand for *batch*, merged first, else open: the
         one on `chore/closeout-<batch branch>`, a head only this batch produces, the
         attribution the archive step already trusts (gh#912). A closed one is
-        abandoned and attributes nothing."""
-        found = _live_head_prs(self.client(facts, repo), repo, _closeout_head(batch))
+        abandoned and attributes nothing. A fork's PR on that name is never adopted:
+        batch branch names are predictable, and an adopted open PR is merged by the
+        archive step once green."""
+        found = [
+            p
+            for p in _live_head_prs(self.client(facts, repo), repo, _closeout_head(batch))
+            if not p.cross_repo
+        ]
         for state in ("MERGED", "OPEN"):
             pick = next((p for p in found if p.state == state), None)
             if pick is not None:

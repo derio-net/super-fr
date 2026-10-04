@@ -70,6 +70,7 @@ class LivePr:
     failing: tuple[str, ...] = ()
     head_ref: str = ""
     files: tuple[str, ...] = ()
+    cross_repo: bool = False  # its head lives in a fork, not in the repo itself
 
 
 @dataclass(frozen=True)

@@ -134,7 +134,8 @@ class World:
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         return [
             {"number": n, "state": p["state"], "isDraft": p["draft"], "headRefName": branch,
-             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]]}
+             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]],
+             "isCrossRepository": p.get("cross_repo", False)}
             for n, p in self.prs.items() if p["head_ref"] == branch
         ]  # fmt: skip
 
@@ -738,6 +739,24 @@ def test_a_closed_hand_closeout_pr_leaves_the_closeout_owed(
     _merged(world, tmp_path)
     checkout.released = True
     world.pr(895, "chore/closeout-feat-batch-b1", [], state="CLOSED")
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "adopt") == []
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
+
+
+def test_a_forks_pr_on_the_closeout_head_is_never_adopted(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Batch branch names are predictable and `gh pr list --head` matches a fork's
+    branch of the same name; an adopted open PR is merged by the archive step, so a
+    fork's PR must never be adopted. The close-out stays owed and starts as usual."""
+    _merged(world, tmp_path)
+    checkout.released = True
+    world.pr(895, "chore/closeout-feat-batch-b1", [], cross_repo=True)
+    world.pr(896, "chore/closeout-feat-batch-b1", [], state="MERGED", cross_repo=True,
+             merged_at=NOW.isoformat())  # fmt: skip
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
