@@ -1,0 +1,45 @@
+schema_version: 1
+run: 2026-09-25-fix-605-agent-step-evidence-debt
+captures:
+- host: h-1331edd3
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:22+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: (main)
+    role: main
+    models:
+      unknown:
+        input: 35830
+        cache_write: 0
+        cache_read: 3862631
+        output: 6613
+        usd: 0.046409234999999986
+        usd_source: exact
+    activity: {}
+    steps:
+      implement:
+        usd: 0.046409234999999986
+        turns: 32
+  - session: opencode-phase-605
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 131
+  - session: phase/1/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 972

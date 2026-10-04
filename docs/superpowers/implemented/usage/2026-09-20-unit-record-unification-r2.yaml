@@ -1,0 +1,79 @@
+schema_version: 1
+run: 2026-09-20-unit-record-unification-r2
+captures:
+- host: h-da3619d9
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: 804646ff-3618-47b5-9860-bf5f37f52c96
+    role: main
+    models:
+      claude-opus-5:
+        input: 2082
+        cache_write: 2348135
+        cache_read: 248582544
+        output: 528593
+        usd: 185.07653125000002
+        usd_source: exact
+      claude-fable-5-1:
+        input: 1704
+        cache_write: 4249665
+        cache_read: 266012829
+        output: 533246
+        usd: 199.64718100000036
+        usd_source: exact
+      claude-sonnet-5:
+        input: 624
+        cache_write: 634462
+        cache_read: 37837340
+        output: 28976
+        usd: 14.215363499999988
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001194
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 143.26888961267906
+        turns: 1041
+      other:
+        usd: 119.93808174231653
+        turns: 473
+      paperwork:
+        usd: 135.7332983950046
+        turns: 668
+    steps:
+      (outside run):
+        usd: 268.6454457362431
+        turns: 1346
+      implement:
+        usd: 126.82468344098058
+        turns: 823
+      journal-check:
+        usd: 0.5515933481004534
+        turns: 1
+      deliver:
+        usd: 2.918547224675884
+        turns: 5
+    briefs:
+      a6b9f89715e724529: 3184
+      a522577eb020dd1c9: 3958
+      a5dbd5f0e9bdf3362: 3896
+      a5b15f633d8225e2c: 4334
+      a182c94fe152e508c: 4347
+      a752dda378d1adbfb: 6129
+      a77988a78252d0c9f: 6108
+      phase/2/implement-phase: 6825
+      phase/3/implement-phase: 8553
+      phase/4/implement-phase: 7731
+      phase/5/implement-phase: 7564
+      phase/6/implement-phase: 9749
+      phase/7/implement-phase: 9701
+      a8b2ab9c143a2d0d1: 5076

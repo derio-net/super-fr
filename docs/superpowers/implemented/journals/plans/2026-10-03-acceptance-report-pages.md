@@ -44,3 +44,8 @@ test_fr_is_installed_like_acceptance_report_installs_it asserts pages.yml's setu
 ### p1-r3-resolved · finding [out-of-scope] · resolves p1-r3: The CLI-entry migration gate can fail the deploy, and cancel-in-progress applies (phase 1)
 
 The migration-gate refusal is an accepted design decision (spec §A step 5); cancel-in-progress predates this change.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved-2 created=2026-10-04T05:02:10+00:00 state=open resolves=p1-r3 tracked_by=#924 -->
+### p1-r3-resolved-2 · finding [deferred → #924] · resolves p1-r3: The CLI-entry migration gate can fail the deploy, and cancel-in-progress applies
+
+Filed at closeout as #924.

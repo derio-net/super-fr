@@ -1,0 +1,86 @@
+schema_version: 1
+run: 2026-09-25-fix-610-closeout-defects
+captures:
+- host: h-e3773c0c
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:22+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: 9599a7d1-a201-4c49-a8ff-a1bc26f5f517
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 1300
+        cache_write: 2521855
+        cache_read: 101470031
+        output: 192700
+        usd: 50.38934839999995
+        usd_source: exact
+      claude-sonnet-5:
+        input: 2420
+        cache_write: 2946765
+        cache_read: 150233156
+        output: 19810
+        usd: 53.17915119999991
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 942
+        cache_write: 135933
+        cache_read: 10392954
+        output: 280
+        usd: 1.79519395
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 54.06157201996995
+        turns: 1240
+      other:
+        usd: 31.751798711798802
+        turns: 427
+      paperwork:
+        usd: 19.55032281823126
+        turns: 290
+    steps:
+      (outside run):
+        usd: 17.245083388081245
+        turns: 228
+      brainstorm:
+        usd: 4.4722915314170555
+        turns: 115
+      spec-review:
+        usd: 2.067274106981241
+        turns: 48
+      plan:
+        usd: 1.0487787690339965
+        turns: 12
+      implement:
+        usd: 77.74937176476207
+        turns: 1517
+      deliver:
+        usd: 2.7808939897244045
+        turns: 18
+    briefs:
+      abfaa566190622718: 1947
+      a2db8fde8a01bf64e: 1703
+      a5438f2e4f36d697c: 1874
+      ab41970f68a851643: 2146
+      phase/1/implement-phase: 5604
+      phase/1/review-phase: 4391
+      phase/2/implement-phase: 3153
+      phase/2/review-phase: 4036
+      phase/3/implement-phase: 4621
+      phase/3/review-phase: 4859
+      a16dba89aaf6efaf9: 4793
+      a69bd8e5a949a4d48: 3026
+      a5048b2d3e80d2dd7: 4579
+      phase/4/implement-phase: 3452
+      a21124d5cf975ba28: 3432
+      phase/4/review-phase: 3903
+      a76ce02f43724de4b: 3709
+      phase/5/implement-phase: 5445
+      phase/5/review-phase: 3983
+      ab92804c750f04b7c: 2276
+      a4b08b0711a60bd37: 3780
+      a87414ee8521e7534: 1921
