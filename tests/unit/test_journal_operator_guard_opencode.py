@@ -20,6 +20,16 @@ from tests.unit.test_journal_cmd import _init_repo, _journal_file
 _Guard = jc.TestOperatorGuard
 
 
+@pytest.fixture(autouse=True)
+def _slugs_need_no_artifact(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Like `test_journal_cmd.py`'s autouse fixture of the same name: these tests journal
+    under the bare slug `S` in a repo holding no plan, to exercise the operator guard and
+    not the orphan check (gh#639), which `TestAddRefusesAnOrphanSlug` keeps live."""
+    from fr.commands import journal_cmd
+
+    monkeypatch.setattr(journal_cmd, "_orphan_refusal", lambda *a, **k: None)
+
+
 def _out_of_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "repo").mkdir()
     root = _init_repo(tmp_path / "repo")
