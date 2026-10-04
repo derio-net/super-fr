@@ -14,3 +14,8 @@ One missing contract, two places it shows. (1) `fr.gh._run_gh` — the one funne
 ### e824155a5eef · finding [fixed] · Forge reads bounded; a failed read skips the pass in loop mode
 
 `fr.gh._run_gh` passes `timeout=GH_TIMEOUT_SECONDS` (120s) and raises a transient `GhError` on `TimeoutExpired`. `triage_batch_cmd`: `recollect` (ForgeError), `_Driver.snapshot` and `_Driver.merge_ctx` (FORGE_ERRORS) raise `ForgeReadError`; the drive loop reports it once per cause (cleared on a good pass), sleeps `--interval` and retries; `--once`/plan mode keep exit 2 (re-collect) / 1 (in-pass read). Pinned failing-first by `tests/unit/test_gh.py#TestRunGhTimeout` (a real stalled `gh` stub) and `tests/unit/test_triage_batch_drive_cmd.py#test_a_failed_recollect_does_not_end_the_loop_and_is_reported_once`, `#test_a_failed_snapshot_read_does_not_end_the_loop`, `#test_a_failed_merge_method_read_does_not_end_the_loop`, `#test_once_still_exits_non_zero_on_a_failed_forge_read`. Fixed on the first attempt.
+
+<!-- fr:journal kind=finding scope=debug id=fe16683779c4 created=2026-10-04T04:43:48+00:00 state=fixed -->
+### fe16683779c4 · finding [fixed] · Review r1: act-time forge reads in a merge still crashed the loop
+
+Independent review: `_Driver._merge_batch` caught only UnsupportedForgeOperation/MergeStopError/TriageError, so a `GhError` from `plan_queue`/`merge_ready`'s re-reads (`pr_view`, `pr_required_checks`, batch_merge.py:148/191/209/277/283) escaped as a traceback. Fixed: `except FORGE_ERRORS` → `ForgeReadError(code=1)` (the merge write itself is already a MergeStopError at batch_merge.py:307, so no write failure is swallowed). Pinned failing-first by `tests/unit/test_triage_batch_drive_cmd.py#test_a_failed_read_while_acting_on_a_merge_does_not_end_the_loop`.
