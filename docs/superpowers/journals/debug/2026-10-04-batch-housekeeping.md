@@ -14,3 +14,8 @@ Operator chose: one PR fixing the eight mechanical members (#455 #456 #619 #805 
 ### rc-805 · root-cause · #805: scaffold round-trips fr-profiles.yaml
 
 _update_profiles_yaml (fr/isolation/scaffold.py) rebuilt the file with yaml.safe_load + safe_dump, which carry no comments, so every scaffold dropped operator comments.
+
+<!-- fr:journal kind=finding scope=debug id=fix-805 created=2026-10-04T05:12:14+00:00 state=fixed -->
+### fix-805 · finding [fixed] · #805 fixed by line surgery
+
+New _edit_profiles_text replaces/appends only the profile entry and the default: line, drops service/legacy keys by line, and verifies the result re-reads to the intended data, else falls back to the old dump. Tests: test_init_scaffold.py::test_adding_a_profile_keeps_every_comment, ::test_rescaffolding_a_profile_replaces_only_its_entry (red first).
