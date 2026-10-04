@@ -25,6 +25,7 @@ from fr.triage.batch_version import (
     is_above,
     is_lockfile,
     only_version_changed,
+    only_versions_bumped,
     read_source,
     slot_versions,
 )
@@ -32,6 +33,13 @@ from fr.triage.errors import TriageError
 from fr.triage.model import VersionBlock
 
 FAILING_BUCKETS = frozenset({"fail", "cancel"})
+# One commit on main as `CheckoutSeam.commits_behind` reports it: its sha and its
+# (status, path) changes against its first parent, a rename split into D + A.
+BaseCommit = tuple[str, tuple[tuple[str, str], ...]]
+# Close-out and archive merges move a run's artifacts and nothing else (gh#927).
+ARCHIVE_PREFIX = "docs/superpowers/"
+# Change fragments: a release commit deletes the ones it consumed.
+FRAGMENT_PREFIX = ".changes/"
 # Update-push-wait rounds per PR before merge gives up on a moving main.
 MAX_UPDATES = 3
 
@@ -61,6 +69,8 @@ class CheckoutSeam(Protocol):
     def default_branch(self) -> str: ...
     def show(self, ref: str, file: str) -> str | None: ...
     def is_ancestor(self, ancestor: str, descendant: str) -> bool: ...
+    def commits_behind(self, head: str, ref: str) -> tuple[BaseCommit, ...]: ...
+    def changed_paths(self, ref: str, head: str) -> frozenset[str]: ...
     def add_worktree(self, where: Path, ref: str) -> Any: ...
     def remove_worktree(self, where: Path) -> None: ...
 
@@ -243,13 +253,58 @@ def _land(ctx: MergeContext, slot: Slot, head: str, previous: str | None) -> str
     """Steps 2-3: merge a PR that is current and on its slot (returns None), else push
     the update that brings it there (returns the new head)."""
     ctx.checkout.fetch()
-    behind = not ctx.checkout.is_ancestor(ctx.main, head)
+    behind = not ctx.checkout.is_ancestor(ctx.main, head) and not _behind_only_routinely(ctx, head)
     head_version = ctx.version_at(head)
     wrong_slot = slot.slot is not None and head_version != slot.slot
     if not behind and not wrong_slot:
         _merge(ctx, slot, head, head_version)  # step 2
         return None
     return _update(ctx, slot, head, behind, previous)  # step 3
+
+
+def routine_commit(
+    changes: Sequence[tuple[str, str]], show: Callable[[str, str], str | None], sha: str = ""
+) -> bool:
+    """Whether a commit on main cannot change what a PR's CI proved (gh#927),
+    judged by the files it changes, never by its subject line:
+
+    - a close-out / archive merge: every path under `docs/superpowers/`;
+    - a release commit: it deletes `.changes/` fragments, and every other file
+      it changes only moves one version up (`only_versions_bumped`).
+
+    A commit that changed nothing knowable is not routine.
+    """
+    if not changes:
+        return False
+    if all(path.startswith(ARCHIVE_PREFIX) for _, path in changes):
+        return True
+    pairs: list[tuple[str, str]] = []
+    for status, path in changes:
+        if path.startswith(FRAGMENT_PREFIX) and status == "D":
+            continue
+        before, after = show(f"{sha}^", path), show(sha, path)
+        if status != "M" or before is None or after is None:
+            return False
+        pairs.append((before, after))
+    return not pairs or only_versions_bumped(pairs)
+
+
+def _behind_only_routinely(ctx: MergeContext, head: str) -> bool:
+    """Whether every commit main has that *head* lacks is routine and touches no
+    path the PR changed, so the PR merges as it is instead of being updated.
+
+    The overlap rule keeps the forge's merge conflict-free and the PR's own change
+    to a file from landing on a version of it the PR's CI never saw.
+    """
+    commits = ctx.checkout.commits_behind(head, ctx.main)
+    if not commits:
+        return False
+    touched = ctx.checkout.changed_paths(ctx.main, head)
+    return all(
+        routine_commit(changes, ctx.checkout.show, sha)
+        and not touched.intersection(path for _, path in changes)
+        for sha, changes in commits
+    )
 
 
 MergeReadiness = Literal["merged", "updated", "already-merged", "draft", "failing", "pending"]
