@@ -285,5 +285,4 @@ def test_phases_file_help_says_the_skeleton_marker_is_owed_only_with_two_agentic
     res = CliRunner().invoke(app, ["plan", "create", "--help"], env={"COLUMNS": "400"})
 
     text = re.sub(r"\s+", " ", res.output)
-    assert "for the first agentic phase" not in text
-    assert "two or more agentic phases" in text
+    assert "owed only when the plan has two or more agentic phases" in text
