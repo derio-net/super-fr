@@ -372,6 +372,20 @@ Claude Code's markers, and `fr` used to believe them. It now names the
 harness nearest to it in its own process tree, and records a session only
 when that harness owns the session variable it read.
 
+That session is also what lets `fr` check a few things on OpenCode that it
+could only take on trust before. The plugin hands the calling session's
+identifier to every shell command, and `fr` climbs from it to the top-level
+session, the run's own, because a child that runs the command is still acting
+for the run. From that session `fr` reads what the gates ask about: whether
+the operator really answered the questions you put to them through OpenCode's
+question tool (a dismissed question is no answer), whether the reviewer you
+name is an agent the run dispatched, and whether the screenshots a unit owes
+were opened by the session that owes them. Where it cannot read the session
+(an older plugin, a database it cannot open) it does not guess. It asks you to
+say who answered the gate, there is no default any more, and it reports your
+word as a claim: "cleared by the agent, as claimed, unobserved" rather than
+the flat sentence it prints when it did watch.
+
 One more limit on what the record may say: a model is written down only when
 the tool has *seen* it. A tier binding says which model a dispatched phase
 *should* get, and that is a promise, not an observation. For a while the tool

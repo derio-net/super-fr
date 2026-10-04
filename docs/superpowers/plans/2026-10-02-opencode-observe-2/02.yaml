@@ -1,0 +1,95 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Reviewer identity, holder fill, and what the reviewer returned (#816)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-child-dispatch
+  - review-phase-findings-block
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/observed.py
+  - packages/fr/src/fr/run/review_return.py
+  - packages/fr/src/fr/run/visual.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/workflows/fr-goal.yaml
+  - packages/fr/src/fr/workflows/fr-goal-light.yaml
+  - plugins/super-fr/workflows/fr-goal.yaml
+  - plugins/super-fr/workflows/fr-goal-light.yaml
+  - tests/unit/test_run_observed_resolve_opencode.py
+  - tests/unit/test_run_review_return*.py
+  - tests/unit/test_run_evidence_visual.py
+  - tests/unit/test_record_pr_body*.py
+  - tests/unit/test_run_brief*.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: One agent-name normaliser at all three comparison sites; reviewer id refused
+    on OpenCode
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: port salvage 33fed900 / 2aa091c5 tests: on OpenCode an invented reviewer id (`opencode-gpt-6-luna`) is refused at review-phase AND spec-review; an OpenCode `fr-phase-executor-standard` named as reviewer is refused; a `general` child named as the spec reviewer is refused (wrong agent type). Fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: `_same_agent` (`run_cmd.py:2088`), `run/visual.py`'s `_same_agent`, and the phase-executor refusal (`run_cmd.py:2048`) all compare through `observed.agent_name`; `_verify_reviewer` asks the protocol for the named dispatch on every observable harness. Green.
+- number: 2
+  title: Holder fill from the single observed child (R5), before the visual derive
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: port salvage f90b0c80 tests (exactly one matching child fills the unclaimed attempt's `agent`; zero or two leave it unclaimed) and add: a unit owing `visual` whose single matching child is unclaimed resolves — the fill runs before `run/visual.py`'s "unclaimed" refusal (`:468-482`). Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: port the fill (f90b0c80) onto current main's resolve path, placed FIRST, before any evidence derive. Green.
+- number: 3
+  title: review-phase — the returned review-findings blocks must be in the journal
+    (R7, R8)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: port salvage d28086a5 tests (test_run_review_return.py, test_run_review_return_resolve.py) with the spec §E changes: fence name `review-findings` (not `findings`); a reviewer is a child named in the record's `reviewer` evidence OR whose return carries the fence — an unnamed helper child with no block owes nothing and the honest run resolves; refused: a named reviewer with no/malformed block, an id repeated across two returns, a returned id with no `kind=finding` phase-N plan-journal entry of the same `review_scope` (refusal names every missing id); take 10 B's shape (three reviewers, six ids, none filed) refused; Claude Code transcript-fixture cases too; an unreadable return resolves with `unobserved=reviewer-return` and a yellow warning. Plus a `_build_brief` test: every `review-phase` brief on both `fr-goal` and `fr-goal-light` carries a `review_findings` key with the instruction text and this phase's N. Plus a `render_pr_body` test: plan-journal review-phase findings render with their resolution. Fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: port `fr/run/review_return.py` (d28086a5, 2e7331be) WITHOUT any input-coverage code (salvage 9689ee7a is dropped entirely), renamed fence; wire the check into the review-phase `done` resolve; `_build_brief` (`run_cmd.py:2737`) emits `review_findings`; document it in the review-phase comment of all four manifest copies (plugins/super-fr/workflows/ and packages/fr/src/fr/workflows/, fr-goal and fr-goal-light), keeping each pair identical. Green; `uv run pytest tests/unit/test_tripwire_shipped_workflows.py -q --no-cov` green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: one refusal helper for the reviewer-return checks (as salvage 2e7331be), naming the step, the reviewer and every missing id in one message.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-02T20:29:56+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-02T20:29:56+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-02T20:29:56+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-02T20:29:56+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-02T20:29:56+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-02T20:29:56+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-10-02T20:29:56+00:00'
+      note: null
+  completion:
+    at: '2026-10-02T20:29:56+00:00'
+    note: null
+    observed_prs: []

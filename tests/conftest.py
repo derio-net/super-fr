@@ -204,8 +204,11 @@ def _no_ambient_session(monkeypatch: pytest.MonkeyPatch) -> None:
     session behaved differently from CI, where no session id exists — found
     when merging main made two `down --all` tests fail locally only. A test
     that needs a session sets one explicitly; nothing inherits the operator's.
+    OpenCode's key (`FR_OPENCODE_SESSION_ID`, exported by the super-fr plugin
+    into every bash call) is cleared for the same reason.
     """
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
+    monkeypatch.delenv("FR_OPENCODE_SESSION_ID", raising=False)
 
 
 @pytest.fixture(autouse=True)

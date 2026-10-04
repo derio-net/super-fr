@@ -37,7 +37,7 @@ def ambient_binding(
     entry points cannot drift (2026-09-21 debug journal, C4).
 
     An explicit `--session` always wins. Otherwise the session is the one fr
-    already stamps on every run attempt (`fr.run.telemetry.current_session`,
+    already stamps on every run attempt (`fr.run.telemetry.run_session`,
     one rule, not a second `env.get`), and the harness is detected. Before
     this, binding was left to a PostToolUse hook whose start-anchored `^fr …`
     regex never matched `uv run fr …` — the form this repo's own AGENTS.md
@@ -46,11 +46,11 @@ def ambient_binding(
     Never invents a session: none in the environment means none bound.
     """
     from fr.harness.detect import detect_harness
-    from fr.run.telemetry import current_session
+    from fr.run.telemetry import run_session
 
     if session:
         return session, harness
-    ambient = current_session(env)
+    ambient = run_session(env)
     if ambient is None:
         return None, harness
     if harness == "unknown":

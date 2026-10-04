@@ -196,10 +196,12 @@ def summarize(entries: Iterable[SessionEntry], step_order: Sequence[str] = ()) -
 def recompute_entries(
     repo_root: Path, state: RunState, env: Mapping[str, str]
 ) -> list[SessionEntry]:
-    """Every session the run names, re-read from THIS host's transcripts —
-    what a capture here would record, without writing it."""
+    """Every session the run has evidence for, re-read from THIS host's
+    transcripts — what a capture here would record, without writing it. Never
+    the session of whoever runs it (spec 2026-10-02-opencode-observe-2 §C,
+    #848); with none, the `NO_SESSION_FOUND` placeholder a capture writes."""
     from fr.usage.capture import candidates
-    from fr.usage.file import session_entry, units_by_agent
+    from fr.usage.file import NO_SESSION_FOUND, session_entry, units_by_agent
     from fr.usage.model import unavailable
     from fr.usage.rollup import windows_from_cursor
     from fr.usage.sources import read_session
@@ -209,12 +211,14 @@ def recompute_entries(
     )
     units = units_by_agent(state.model_dump(mode="json"))
     out: list[SessionEntry] = []
-    for harness, session in candidates(state, env, repo_root):
+    for harness, session in candidates(state, env, repo_root, ambient=False):
         try:
             record = read_session(harness, session, env)
         except Exception as e:  # noqa: BLE001 — one bad reader is one unavailable session
             record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
         out.append(session_entry(record, windows, units))
+    if not out:
+        out.append(session_entry(unavailable("", "unknown", NO_SESSION_FOUND), windows, units))
     return out
 
 
