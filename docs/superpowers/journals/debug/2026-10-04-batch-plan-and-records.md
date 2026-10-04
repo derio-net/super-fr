@@ -19,3 +19,8 @@ Repro: a phase with tag: "[/red]" -> fr plan self-review dies with MarkupError (
 ### rc-502 · root-cause · #502: every plan_ops writer safe_loads and re-dumps the whole phase file
 
 tick/complete_phase/set_tracking_issue/clear_tracking_issue: yaml.safe_load -> mutate -> _yaml_dump(whole doc). Any style the dumper would not emit is normalised on every tick.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-763 created=2026-10-04T05:03:56+00:00 -->
+### rc-763 · root-cause · #763: parse_journal catches KeyError only
+
+JournalEntry's model_validator raises ValueError (pydantic ValidationError) for a scope-invalid token; parse_journal (journal/model.py:356) converts only KeyError to JournalParseError. int(phase) on a hand-typed phase= has the same escape.
