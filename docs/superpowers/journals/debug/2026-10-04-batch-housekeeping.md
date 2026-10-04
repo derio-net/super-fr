@@ -64,3 +64,8 @@ Root cause: 01-fr-goal.md paragraph predated the transcript-observed provenance 
 ### review-r1-crlf · finding [fixed] (reviewer: in scope) · Review: scaffold surgery normalised CRLF
 
 read_text converted CRLF to LF before _edit_profiles_text. Fixed: read_verbatim + write newline="", BOM preserved. Test: test_init_scaffold.py::test_a_crlf_profiles_file_stays_crlf_and_keeps_its_comments (red first).
+
+<!-- fr:journal kind=finding scope=debug id=review-r2-dupkey created=2026-10-04T05:40:53+00:00 state=fixed review_scope=in -->
+### review-r2-dupkey · finding [fixed] (reviewer: in scope) · Review: verification could not see duplicate keys
+
+safe_load keeps the last duplicate, so an entry appended beside a quoted "dev": passed verification. Fixed: re-read with fr.artifacts.structure._StrictLoader; BOM split off by read_verbatim. Test: test_init_scaffold.py::test_a_quoted_profile_key_never_ends_up_duplicated (red first).
