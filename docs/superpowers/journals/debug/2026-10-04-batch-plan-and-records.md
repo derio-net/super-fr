@@ -14,3 +14,8 @@ record/apply.py mkdirs only at apply, so a heredoc into the printed path fails. 
 ### rc-525 · root-cause · #525: exception text interpolated into Rich markup
 
 Repro: a phase with tag: "[/red]" -> fr plan self-review dies with MarkupError (plan_cmd.py:453 prints the parse error via f-string with markup on). Same shape at ~50 except-handler sites in commands/.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-502 created=2026-10-04T05:03:49+00:00 -->
+### rc-502 · root-cause · #502: every plan_ops writer safe_loads and re-dumps the whole phase file
+
+tick/complete_phase/set_tracking_issue/clear_tracking_issue: yaml.safe_load -> mutate -> _yaml_dump(whole doc). Any style the dumper would not emit is normalised on every tick.
