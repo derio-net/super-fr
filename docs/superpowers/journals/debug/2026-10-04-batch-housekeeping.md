@@ -34,3 +34,8 @@ Root cause: PullRequest defaulted checks to zero counts and mergeable/merge_stat
 ### fix-646 · finding [fixed] · #646: brief overstated the reserved version
 
 Root cause: live_reservations walks only the dispatching scope batches, yet the brief said reserved for this batch; do not pick another number. batch_merge already recomputes slots from main, so only the wording misled. Fix (cheapest cut named in triage): the brief calls the number provisional and says merge renumbers. Test: test_triage_batch_dispatch.py::test_the_reserved_version_is_called_provisional_until_merge (red first).
+
+<!-- fr:journal kind=finding scope=debug id=fix-619 created=2026-10-04T05:17:11+00:00 state=fixed -->
+### fix-619 · finding [fixed] · #619: retired installer deleted
+
+Root cause: the script outlived its caller (install.sh dropped it; fr init validator-wrapper replaced it) and stayed shipped as a hand-copied WRAPPER_TEXT duplicate. Pure deletion: script, tests/integration/test_install_validator_wrapper.py, test_closeout_run_clean byte-pin test, check-change-fragment VERSION_REQUIRED_EXACT entry, AGENTS.md/HERMES.md mentions. No red-first test: a deletion has no behaviour to pin; test_install_sh.py already pins install.sh not naming it. Historical comments naming it as retired (plan_validator_wrapper.py, test_init_cmd.py) kept.
