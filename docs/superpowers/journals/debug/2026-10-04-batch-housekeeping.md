@@ -79,3 +79,8 @@ Independent code review of the branch diff (feature-dev code-reviewer, read-only
 ### ci-py311-read-text · finding [fixed] · CI: 3.13-only read_text(newline=) in a test
 
 CI (Python 3.12; floor 3.11) failed test_line_surgery_separators.py: Path.read_text(newline=) is 3.13+. Replaced with open(path, encoding='utf-8', newline='').read(). Scanned the branch diff for other 3.13+ APIs: none (write_text(newline=) is 3.10+). Verified: uv run --python 3.11 pytest tests/unit/test_line_surgery_separators.py -> 2 passed; every test file the branch touches under 3.11 -> 500 passed.
+
+<!-- fr:journal kind=decision scope=debug id=merge-main-939 created=2026-10-04T07:41:02+00:00 -->
+### merge-main-939 · decision · Merged origin/main (#939 conflict)
+
+Conflicts with #939 resolved keeping both: views.needs_you keeps #939's foreign-PR skip (gh#936) and this branch's None-safe pr.checks or {}; test_triage_open_prs keeps both sides' new tests (#939's author/cross_repo parsing follows the same absence-stays-unknown convention as #648). Remote branch had three 'update from main' merges not made in this session; merged them in rather than force-pushing. Merged explainer re-rendered byte-identical to its committed html. Verified on the merged tree: requested triage subset 58 passed; full suite 8333 passed, 105 skipped; mypy/ruff/acceptance/change-fragment/validate-artifacts green; later main commits were journal archive renames only (artifact gates re-run green).
