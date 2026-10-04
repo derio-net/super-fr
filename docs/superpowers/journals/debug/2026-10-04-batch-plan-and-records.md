@@ -9,3 +9,8 @@ Investigation on origin/main a11aa07f confirms the members are live but share no
 ### rc-653 · root-cause · #653: advance never makes .records/; derived evidence listed in two drifting copies
 
 record/apply.py mkdirs only at apply, so a heredoc into the printed path fails. The brief copies step.evidence verbatim (run_cmd.py _build_brief/_build_member_brief) incl. derived 'findings'; record/template.py keeps its own _DERIVED copy which already lacks 'single-phase'. The template's journal comment never mentions phase|global for plan scope, though record/apply.py:326 refuses an untagged plan entry.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-525 created=2026-10-04T05:03:40+00:00 -->
+### rc-525 · root-cause · #525: exception text interpolated into Rich markup
+
+Repro: a phase with tag: "[/red]" -> fr plan self-review dies with MarkupError (plan_cmd.py:453 prints the parse error via f-string with markup on). Same shape at ~50 except-handler sites in commands/.
