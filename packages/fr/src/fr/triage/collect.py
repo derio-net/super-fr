@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -348,6 +349,19 @@ def _judged_elsewhere(
     return wanted
 
 
+@dataclass(frozen=True)
+class CollectStats:
+    """What one collect cost in single-issue reads (gh#911).
+
+    *viewed* counts every `view_issue` call, failures and PR-past-limit answers
+    included; *carried* counts judged closed issues taken from the previous
+    facts instead of being viewed.
+    """
+
+    viewed: int = 0
+    carried: int = 0
+
+
 def collect_facts(
     forge: Forge,
     scope: Scope,
@@ -360,7 +374,40 @@ def collect_facts(
     pr_limit: int = PR_LIMIT,
     repo_limit: int = REPO_LIMIT,
 ) -> Facts:
+    """`collect_facts_counted` without a carried set: every not-open judged key is viewed."""
+    return collect_facts_counted(
+        forge,
+        scope,
+        now=now,
+        judged=judged,
+        batch_branches=batch_branches,
+        known_batch_prs=known_batch_prs,
+        issue_limit=issue_limit,
+        pr_limit=pr_limit,
+        repo_limit=repo_limit,
+    )[0]
+
+
+def collect_facts_counted(
+    forge: Forge,
+    scope: Scope,
+    *,
+    now: datetime,
+    judged: Iterable[str] = (),
+    batch_branches: Iterable[tuple[str, str, datetime]] = (),
+    known_batch_prs: Iterable[PullRequest] = (),
+    issue_limit: int = ISSUE_LIMIT,
+    pr_limit: int = PR_LIMIT,
+    repo_limit: int = REPO_LIMIT,
+    carried: Iterable[Issue] = (),
+) -> tuple[Facts, CollectStats]:
     """Build the facts for *scope*: two bulk calls per repo, inverted.
+
+    *carried* is the previous facts' issues: a judged key that is not open now
+    and was CLOSED there is taken from it instead of viewed (gh#911) — closed is
+    terminal for the board, and its PR links are recomputed from this pass. A
+    repo whose open-issue list was truncated carries nothing: a key missing from
+    a cut-short list is not known to have left it, so each is viewed again.
 
     In org scope a repo whose lists, config or comment reads fail — or whose
     `.fr/triage.yaml` is invalid — is recorded under `skipped` and the rest
@@ -444,12 +491,22 @@ def collect_facts(
         for repo, i in raw_issues
     ]
     open_keys = {i.key for i in out}
+    carry = {(i.repo.lower(), i.number): i for i in carried if i.state == "closed"}
+    truncated = {w.target for w in warnings if w.source == "issues"}
+    viewed = carried_n = 0
     unviewed: list[Unviewed] = []
     judged_prs: list[PullRequest] = []
     for repo, number in _judged_elsewhere(judged, open_keys, collected):
         if (listed := listed_prs.get(issue_key(repo, number))) is not None:
             judged_prs.append(listed)
             continue
+        if repo not in truncated and (hit := carry.get((repo.lower(), number))) is not None:
+            out.append(
+                hit.model_copy(update={"prs": linked(repo, number), "dispatch_marker_at": None})
+            )
+            carried_n += 1
+            continue
+        viewed += 1
         try:
             raw = forge.view_issue(repo=repo, number=number)
         except ForgeError as exc:
@@ -478,7 +535,7 @@ def collect_facts(
     )
     in_facts = {(p.repo, p.number) for p in [*linked_prs_all(out), *unlinked, *batch_prs]}
     judged_prs = [p for p in judged_prs if (p.repo, p.number) not in in_facts]
-    return Facts(
+    facts = Facts(
         schema=FACTS_SCHEMA,
         scope=scope.name,
         kind=scope.kind,
@@ -494,6 +551,7 @@ def collect_facts(
         config=config,
         viewer=viewer,
     )
+    return facts, CollectStats(viewed=viewed, carried=carried_n)
 
 
 def linked_prs_all(issues: Iterable[Issue]) -> list[PullRequest]:

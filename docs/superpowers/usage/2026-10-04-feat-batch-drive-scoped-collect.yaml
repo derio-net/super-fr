@@ -1,0 +1,61 @@
+schema_version: 1
+run: 2026-10-04-feat-batch-drive-scoped-collect
+captures:
+- host: h-0a246dfc
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-04T06:44:40+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  sessions:
+  - session: 5a61e23e-3e96-437f-bd16-01a8661a14b8
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 198
+        cache_write: 370112
+        cache_read: 12088214
+        output: 52912
+        usd: null
+        usd_source: none
+      claude-sonnet-5-5:
+        input: 54
+        cache_write: 222596
+        cache_read: 2318721
+        output: 363
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 59
+      other:
+        usd: null
+        turns: 31
+      paperwork:
+        usd: null
+        turns: 35
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+      brainstorm:
+        usd: null
+        turns: 17
+      spec-review:
+        usd: null
+        turns: 26
+      plan:
+        usd: null
+        turns: 9
+      implement:
+        usd: null
+        turns: 62
+      deliver:
+        usd: null
+        turns: 6
+    briefs:
+      a0bdb0d8ca051c1e9: 1814
+      phase/1/implement-phase: 3792
+      phase/1/review-phase: 2420

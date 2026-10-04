@@ -14,6 +14,7 @@ never through a `sys.path` insert (review r-p3-syspath).
 from __future__ import annotations
 
 import ast
+import copy
 import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -35,6 +36,31 @@ def _load(name: str) -> list[dict[str, Any]]:
 
 ISSUES = _load("super-fr-issues.json")
 PRS = _load("super-fr-prs.json")
+
+
+def _captured_pr_with_refs() -> dict[str, Any]:
+    """A captured PR record that carries at least one closing reference."""
+    return next(p for p in PRS if p["closingIssuesReferences"])
+
+
+def _pr_closing(*, owner: str, name: str, number: int, pr_number: int) -> dict[str, Any]:
+    """A deep copy of a captured PR whose single reference names owner/name#number."""
+    pr = copy.deepcopy(_captured_pr_with_refs())
+    ref = pr["closingIssuesReferences"][0]
+    ref["repository"]["owner"]["login"] = owner
+    ref["repository"]["name"] = name
+    ref["number"] = number
+    pr["closingIssuesReferences"] = [ref]
+    pr["number"] = pr_number
+    return pr
+
+
+def _issue(number: int, *, title: str = "t") -> dict[str, Any]:
+    """A deep copy of a captured issue record, renumbered."""
+    issue = copy.deepcopy(ISSUES[0])
+    issue["number"] = number
+    issue["title"] = title
+    return issue
 
 
 class FakeForge:
