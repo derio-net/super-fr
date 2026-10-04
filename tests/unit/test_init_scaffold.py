@@ -1066,13 +1066,30 @@ def test_adding_a_profile_keeps_every_comment(repo: Path) -> None:
     (repo / PROFILES).write_text(_COMMENTED_PROFILES)
     res = runner.invoke(
         app,
-        ["init", "scaffold", "--repo", str(repo), "--profile", "readonly",
-         "--purpose", "read-only review", "--tracking", "none", "--backend", "github"],
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "readonly",
+            "--purpose",
+            "read-only review",
+            "--tracking",
+            "none",
+            "--backend",
+            "github",
+        ],
     )
     assert res.exit_code == 0, res.output
     text = (repo / PROFILES).read_text()
-    for comment in ("# operator header", "# the everyday one", "# keep it lean",
-                    "# gh writes only", "# rotated monthly"):
+    for comment in (
+        "# operator header",
+        "# the everyday one",
+        "# keep it lean",
+        "# gh writes only",
+        "# rotated monthly",
+    ):
         assert comment in text, f"{comment!r} dropped:\n{text}"
     data = _profiles(repo)
     assert list(data["profiles"]) == ["dev", "admin", "readonly"]
@@ -1087,8 +1104,22 @@ def test_rescaffolding_a_profile_replaces_only_its_entry(repo: Path) -> None:
     (repo / PROFILES).write_text(_COMMENTED_PROFILES)
     res = runner.invoke(
         app,
-        ["init", "scaffold", "--repo", str(repo), "--profile", "dev", "--purpose",
-         "new purpose", "--tracking", "none", "--backend", "github", "--force", "--default"],
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "dev",
+            "--purpose",
+            "new purpose",
+            "--tracking",
+            "none",
+            "--backend",
+            "github",
+            "--force",
+            "--default",
+        ],
     )
     assert res.exit_code == 0, res.output
     text = (repo / PROFILES).read_text()

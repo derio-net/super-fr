@@ -184,9 +184,7 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             # Only a record that carries the field gets a value (super-fr#648).
             checks=_checks(r["statusCheckRollup"] or []) if "statusCheckRollup" in r else None,
             mergeable=(r["mergeable"] or "UNKNOWN") if "mergeable" in r else None,
-            merge_state=(
-                (r["mergeStateStatus"] or "UNKNOWN") if "mergeStateStatus" in r else None
-            ),
+            merge_state=((r["mergeStateStatus"] or "UNKNOWN") if "mergeStateStatus" in r else None),
             review=r.get("reviewDecision") or None,
         )
         refs = [
