@@ -1028,3 +1028,13 @@ def test_repair_completes_a_batch_in_flight(
     assert code == 0, out
     for n in MEMBERS:
         assert "fr:in-progress" in gh.issues[(REPO, n)].labels
+
+
+def test_the_reserved_version_is_called_provisional_until_merge() -> None:
+    """super-fr#646: reservations see only the dispatching scope's batches, so a
+    repo-scope and an org-scope triage can reserve the same number; merge
+    reconcile renumbers. The brief must not claim the number is final."""
+    brief = _brief()
+    line = next(ln for ln in brief.splitlines() if "Bump the version" in ln)
+    assert "provisional" in line
+    assert "do not pick another number" not in line

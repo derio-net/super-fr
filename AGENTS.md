@@ -367,8 +367,7 @@ used to bump the same lines, so every pair of open PRs conflicted.)
 
 A fragment is required if the PR changes any of: `plugins/*/skills/**`,
 `packages/*/src/**` (Python), `plugins/super-fr/rules/**`, or
-`scripts/install.sh` / `scripts/install-validator-wrapper.sh` /
-`scripts/validate-plans.sh` (skill validation itself is
+`scripts/install.sh` / `scripts/validate-plans.sh` (skill validation itself is
 `tests/unit/test_skill_validation.py`, not a script — don't look for
 `validate-skills.sh`, it was deleted). None is needed for `docs/**`,
 `tests/**`, `.github/**`, or `README.md`/`CLAUDE.md`/`AGENTS.md` alone. Mixed

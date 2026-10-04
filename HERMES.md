@@ -29,8 +29,7 @@ force-push and deletion; only the release bot commits to `main`.
 
 **3. Declare a release with a change fragment — never edit a version.** Any PR
 touching `plugins/*/skills/**`, `packages/*/src/**`, `plugins/super-fr/rules/**`,
-or `scripts/install.sh` (plus `install-validator-wrapper.sh` /
-`validate-plans.sh`) adds one file, `.changes/<branch-slug>.yaml`
+or `scripts/install.sh` (plus `validate-plans.sh`) adds one file, `.changes/<branch-slug>.yaml`
 (`feat/foo` → `feat-foo.yaml`):
 
 ```yaml

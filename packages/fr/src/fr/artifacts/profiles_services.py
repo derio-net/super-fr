@@ -163,9 +163,11 @@ def v1_services(
 def _drop_legacy_lines(text: str) -> str:
     """`text` without its top-level `backend:`/`host:` lines (and any indented
     continuation of their value). Every other line is kept byte-for-byte."""
+    from fr.artifacts.registry import split_lines
+
     kept: list[str] = []
     dropping = False
-    for line in text.splitlines(keepends=True):
+    for line in split_lines(text):
         if _LEGACY_LINE_RE.match(line):
             dropping = True
             continue
