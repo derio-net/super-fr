@@ -89,4 +89,12 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: pending
+    state: running
+    at: '2026-10-04T06:27:43+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-04T06:27:43+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 5a61e23e-3e96-437f-bd16-01a8661a14b8
