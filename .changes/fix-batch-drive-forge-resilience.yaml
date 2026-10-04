@@ -1,0 +1,2 @@
+bump: patch
+summary: "`fr triage batch drive` survives a degraded forge: every `gh` call times out after 120s, and in loop mode a failed or timed-out forge read skips the pass, is reported once and is retried after `--interval` instead of ending the run"

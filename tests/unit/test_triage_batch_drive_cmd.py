@@ -1331,3 +1331,27 @@ def test_once_still_exits_non_zero_on_a_failed_forge_read(
     assert code == 2, out
     assert "unexpected EOF" in out
     assert world.merged == []
+
+
+def test_a_failed_merge_method_read_does_not_end_the_loop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#910: the repo's merge methods are read when the first merge is acted on;
+    that read failing skips the pass like any other, and is read again next pass."""
+    _pr_open(world, tmp_path)
+    real = world.repo_merge_methods
+    failed: list[str] = []
+
+    def _methods(repo: str) -> dict[str, Any]:
+        if not failed:
+            failed.append(repo)
+            raise GhError(EOF_MSG, returncode=1)
+        return real(repo)
+
+    monkeypatch.setattr(world, "repo_merge_methods", _methods)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("unexpected EOF") == 1
+    assert world.merged == [(101, "sha-101", "squash")]
