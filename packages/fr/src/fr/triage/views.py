@@ -82,7 +82,7 @@ def drive_snapshot(
     queue = tuple(pr_open_queue(batches, facts, judgements.issues))
     live: dict[str, LivePr] = {}
     for entry in queue:
-        verdict, failing = checks_verdict([], entry.pr.checks, ci_none=False)
+        verdict, failing = checks_verdict([], entry.pr.checks or {}, ci_none=False)
         live[entry.batch.id] = LivePr(
             number=entry.pr.number,
             state=entry.pr.state,
@@ -157,7 +157,7 @@ def needs_you(facts: Facts, judgements: Judgements) -> list[Need]:
     for pr in _all_prs(facts):
         if pr.state != "OPEN" or not pr.is_draft:
             continue
-        verdict, _ = checks_verdict([], pr.checks, ci_none=False)
+        verdict, _ = checks_verdict([], pr.checks or {}, ci_none=False)
         if verdict != "green":
             continue
         bid = batch_of_pr.get((pr.repo, pr.number))

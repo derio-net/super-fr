@@ -111,14 +111,17 @@ def test_a_linked_open_pr_gains_files_head_oid_checks_and_merge_state_from_the_j
     assert pr.merge_state == "DIRTY"
 
 
-def test_a_closed_linked_pr_keeps_its_defaults() -> None:
+def test_a_closed_linked_pr_carries_no_forge_only_fields() -> None:
+    """Files and head oid keep their empty defaults; checks and merge state are
+    `None`, never a value the forge did not report (super-fr#648)."""
     forge = _Forge(
         issues={REPO: [_issue(7)]}, prs={REPO: [_pr(3, state="MERGED", refs=[7])]}, open_prs=[]
     )
 
     (pr,) = collect_facts(forge, SCOPE, now=NOW).issues[0].prs
 
-    assert (pr.files, pr.head_oid, pr.merge_state) == ([], "", "UNKNOWN")
+    assert (pr.files, pr.head_oid) == ([], "")
+    assert (pr.checks, pr.mergeable, pr.merge_state) == (None, None, None)
 
 
 def test_an_in_progress_issue_gets_the_age_of_its_latest_fr_batch_marker() -> None:

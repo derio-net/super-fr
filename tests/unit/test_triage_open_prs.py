@@ -218,3 +218,38 @@ def test_closing_issue_anchor_wins_before_file_anchors() -> None:
     assert facts.prs == []
     assert facts.issues[0].prs[0].anchor == "issue"
     assert forge.anchor_reads() == []
+
+
+def test_a_linked_non_open_pr_carries_no_invented_checks_or_merge_state() -> None:
+    """super-fr#648: a PR linked through `list_prs(state=all)` has no checks or
+    merge state in its record; only the open-PR list carries them. Defaults
+    that read as data ("0 checks, UNKNOWN") made a merged PR's facts look
+    observed — the fields are `None` until the forge actually said them."""
+    from fr.triage.collect import join_open, parse_prs
+
+    base = {"title": "t", "isDraft": False, "url": "u", "closingIssuesReferences": []}
+    linked = parse_prs(
+        "o/r",
+        [
+            {**base, "number": 1, "state": "MERGED"},
+            {**base, "number": 2, "state": "OPEN"},
+        ],
+    )
+    open_list = parse_prs(
+        "o/r",
+        [
+            {
+                **base,
+                "number": 2,
+                "state": "OPEN",
+                "statusCheckRollup": [{"conclusion": "SUCCESS"}],
+                "mergeable": "MERGEABLE",
+                "mergeStateStatus": "CLEAN",
+            }
+        ],
+    )
+    joined = {pr.number: pr for pr, _ in join_open(linked, [p for p, _ in open_list])}
+    merged, live = joined[1], joined[2]
+    assert (merged.checks, merged.mergeable, merged.merge_state) == (None, None, None)
+    assert live.checks == {"pass": 1, "fail": 0, "pending": 0}
+    assert (live.mergeable, live.merge_state) == ("MERGEABLE", "CLEAN")

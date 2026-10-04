@@ -82,8 +82,12 @@ def render_brief(
     ]
     if reserved_version is not None:
         lines.append(
-            f"- Bump the version to `{reserved_version}` (reserved for this batch; "
-            "do not pick another number)."
+            # Provisional (super-fr#646): `live_reservations` sees only this
+            # triage scope's batches, so another scope may hold the same number;
+            # merge reconcile (`batch_merge`) renumbers, so nothing bad ships.
+            f"- Bump the version to `{reserved_version}` (provisional: reserved within "
+            "this triage only, and the merge renumbers it if another batch lands "
+            "that number first)."
         )
     lines += [
         "- Do not name any member issue as a phase `tracking_issue` in the plan: the "

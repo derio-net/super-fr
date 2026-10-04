@@ -177,9 +177,11 @@ class PullRequest(_Strict):
     head_ref: str = ""
     head_oid: str = ""  # open PRs only (the open-PR list carries headRefOid)
     files: list[str] = []  # open PRs only: the paths the PR touches
-    checks: dict[str, int] = {"pass": 0, "fail": 0, "pending": 0}
-    mergeable: str = "UNKNOWN"
-    merge_state: str = "UNKNOWN"
+    # Open PRs only — `None` when the record came from `list_prs(state=all)`,
+    # which carries none of them, so a default can never pass for data (#648).
+    checks: dict[str, int] | None = None
+    mergeable: str | None = None
+    merge_state: str | None = None
     review: str | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None

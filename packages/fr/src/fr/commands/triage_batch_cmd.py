@@ -1471,7 +1471,7 @@ class _Driver:
                 view = client.pr_view(repo, e.pr.number)
                 verdict, failing = checks_verdict(
                     client.pr_required_checks(repo, e.pr.number),
-                    e.pr.checks,
+                    e.pr.checks or {},
                     ci_none=self._ci_none(repo),
                 )
                 live[e.batch.id] = LivePr(
@@ -1597,7 +1597,7 @@ class _Driver:
                 continue
             verdict, failing = checks_verdict(
                 client.pr_required_checks(repo, pr.number),
-                pr.checks,
+                pr.checks or {},
                 ci_none=self._ci_none(repo),
             )
             out[pr.number] = LivePr(
