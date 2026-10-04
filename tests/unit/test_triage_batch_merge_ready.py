@@ -216,14 +216,28 @@ def test_a_routine_commit_touching_a_file_the_pr_changed_still_updates(
     ("changes", "expected"),
     [
         ((("M", "docs/superpowers/journals/debug/x.md"),), True),
-        ((("D", ".changes/fix-x.yaml"),), True),
-        ((("A", ".changes/fix-x.yaml"),), False),  # adding a fragment is a PR's job
+        ((("D", ".changes/fix-x.yaml"), ("M", "pyproject.toml")), True),
+        # Review: a version-shaped edit that consumes no fragment is not a release —
+        # a pinned tool in a workflow, a constant in source.
+        ((("M", ".github/workflows/ci.yml"),), False),
+        ((("M", "pyproject.toml"),), False),
+        ((("D", ".changes/fix-x.yaml"),), False),  # deletes a fragment, bumps nothing
+        ((("D", ".changes/fix-x.yaml"), ("M", "run.sh")), False),  # a mode-only change
+        ((("A", ".changes/fix-x.yaml"), ("M", "pyproject.toml")), False),  # adds one
         ((("M", "docs/acceptance/matrix.yaml"),), False),
         ((), False),  # nothing knowable is not routine
     ],
 )
 def test_routine_commit_classifies_by_files(changes: tuple, expected: bool) -> None:
-    assert routine_commit(changes, lambda ref, path: None) is expected
+    files = {
+        ("rel^", "pyproject.toml"): 'version = "1.0.0"\n',
+        ("rel", "pyproject.toml"): 'version = "1.0.1"\n',
+        ("rel^", ".github/workflows/ci.yml"): 'uv: "0.5.1"\n',
+        ("rel", ".github/workflows/ci.yml"): 'uv: "0.5.2"\n',
+        ("rel^", "run.sh"): "echo\n",
+        ("rel", "run.sh"): "echo\n",
+    }
+    assert routine_commit(changes, lambda ref, path: files.get((ref, path)), "rel") is expected
 
 
 @pytest.mark.parametrize(

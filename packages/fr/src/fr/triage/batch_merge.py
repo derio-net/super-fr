@@ -269,24 +269,29 @@ def routine_commit(
     judged by the files it changes, never by its subject line:
 
     - a close-out / archive merge: every path under `docs/superpowers/`;
-    - a release commit: it deletes `.changes/` fragments, and every other file
-      it changes only moves one version up (`only_versions_bumped`).
+    - a release commit: it deletes at least one `.changes/` fragment, and every
+      other file it changes only moves one version up (`only_versions_bumped`).
+      The fragment is what tells a release from a version-shaped edit elsewhere,
+      a pinned tool in a workflow or a constant in source (review).
 
-    A commit that changed nothing knowable is not routine.
+    A commit that changed nothing knowable is not routine, nor is a file whose
+    content did not change (a mode flip shows as `M` with equal bytes).
     """
     if not changes:
         return False
     if all(path.startswith(ARCHIVE_PREFIX) for _, path in changes):
         return True
+    consumed = False
     pairs: list[tuple[str, str]] = []
     for status, path in changes:
         if path.startswith(FRAGMENT_PREFIX) and status == "D":
+            consumed = True
             continue
         before, after = show(f"{sha}^", path), show(sha, path)
-        if status != "M" or before is None or after is None:
+        if status != "M" or before is None or after is None or before == after:
             return False
         pairs.append((before, after))
-    return not pairs or only_versions_bumped(pairs)
+    return consumed and bool(pairs) and only_versions_bumped(pairs)
 
 
 def _behind_only_routinely(ctx: MergeContext, head: str) -> bool:
