@@ -287,6 +287,9 @@ def list_repos(
 
 
 ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body"
+# `fr triage origins` alone needs how an issue ended; `stateReason` wants a newer gh, so no
+# other issue-list verb asks for it.
+ORIGINS_ISSUE_LIST_FIELDS = ISSUE_LIST_FIELDS + ",state,closedAt,stateReason"
 PR_LIST_FIELDS = (
     "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences"
 )
@@ -295,7 +298,9 @@ OPEN_PR_LIST_FIELDS = (
 )
 
 
-def list_issues(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
+def list_issues(
+    *, repo: str, state: str, limit: int, fields: str = ISSUE_LIST_FIELDS
+) -> list[dict[str, object]]:
     """Return issues in *repo* via one bulk ``gh issue list``.
 
     ``--limit`` is always explicit: gh's default is 30, which would silently
@@ -314,7 +319,7 @@ def list_issues(*, repo: str, state: str, limit: int) -> list[dict[str, object]]
             "--limit",
             str(limit),
             "--json",
-            ISSUE_LIST_FIELDS,
+            fields,
         ]
     )
     issues: list[dict[str, object]] = json.loads(out) if out else []
@@ -364,7 +369,8 @@ def list_open_prs(*, repo: str, limit: int) -> list[dict[str, object]]:
 
 
 def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[str, object]]:
-    """Every PR (any state) whose head is *branch*: `PR_LIST_FIELDS` plus `headRefOid`."""
+    """Every PR (any state) whose head is *branch*: `PR_LIST_FIELDS` plus `headRefOid`
+    and `files` (the wave driver attributes a merged archive PR by them)."""
     import json
 
     out = _run_gh(
@@ -380,7 +386,7 @@ def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[s
             "--limit",
             str(limit),
             "--json",
-            PR_LIST_FIELDS + ",headRefOid",
+            PR_LIST_FIELDS + ",headRefOid,files",
         ]
     )
     return json.loads(out) if out else []

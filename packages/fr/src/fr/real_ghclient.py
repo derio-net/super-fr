@@ -282,7 +282,7 @@ class RealGhClient:
                 "--repo",
                 repo,
                 "--json",
-                "state,isDraft,headRefOid,headRefName,mergeable,mergeStateStatus",
+                "state,isDraft,headRefOid,headRefName,mergeable,mergeStateStatus,mergeCommit",
             ]
         )
         raw: dict[str, Any] = json.loads(out)
@@ -293,6 +293,7 @@ class RealGhClient:
             "head_ref": raw.get("headRefName", ""),
             "mergeable": raw.get("mergeable") or "UNKNOWN",
             "merge_state": raw.get("mergeStateStatus") or "UNKNOWN",
+            "merge_commit": (raw.get("mergeCommit") or {}).get("oid", ""),
         }
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:

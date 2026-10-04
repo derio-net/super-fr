@@ -685,13 +685,112 @@ def test_deliver_does_not_ask_the_caller_for_proportionality(tmp_path: Path) -> 
     assert "--evidence proportionality" not in _squash(result.output)
 
 
+def _drop_local_main(tmp_path: Path) -> None:
+    """Leave the base clone with no `main` (or `master`) branch at all."""
+    base = tmp_path / "base"
+    _git(base, "checkout", "-q", "-b", "parking")
+    _git(base, "branch", "-q", "-D", "main")
+
+
 def test_deliver_with_no_determinable_base_is_refused_naming_it(tmp_path: Path) -> None:
     """Fail-closed like `findings`: a witness needs a merge-base, and fr
-    will not record one it could not compute."""
+    will not record one it could not compute. No remote, no isolation start
+    commit, no local default branch: nothing left to fall back to."""
     repo, shipped = _at_deliver(tmp_path, with_origin=False)
+    _drop_local_main(tmp_path)
 
     result = _deliver(repo, shipped, "tests=suite.log")
 
     assert result.exit_code == 2, result.output
-    assert "--base" in _squash(result.output)
-    assert "proportionality" in _squash(result.output)
+    out = _squash(result.output)
+    assert "proportionality" in out
+    assert "isolation start commit" in out and "local default branch" in out
+
+
+def test_deliver_without_a_remote_falls_back_to_the_local_default_branch(
+    tmp_path: Path,
+) -> None:
+    """gh#768: a repo with no fetchable remote could never resolve `deliver`
+    (`fr run resolve` takes no --base). The local default branch is the last
+    fallback, and the resolve says which base it used."""
+    repo, shipped = _at_deliver(tmp_path, with_origin=False)
+
+    result = _deliver(repo, shipped, "tests=suite.log")
+
+    assert result.exit_code == 0, result.output
+    assert "base main (local default branch)" in _squash(result.output)
+    stored = units.evidence_of(load_run_state(repo, "r1").steps["deliver"], "step/deliver")
+    assert stored["proportionality"].startswith(_git(repo, "merge-base", "HEAD", "main") + ":")
+
+
+def test_deliver_without_a_remote_prefers_the_isolation_start_commit(tmp_path: Path) -> None:
+    """The commit `fr isolation up` cut the branch from beats a guessed local
+    default branch: a stacked branch's base is not `main`."""
+    from fr.isolation.types import IsolationState, save_state
+
+    repo, shipped = _at_deliver(tmp_path, with_origin=False)
+    start = _git(repo, "rev-parse", "HEAD~2")
+    _drop_local_main(tmp_path)
+    save_state(
+        IsolationState(
+            repo_root=tmp_path / "base",
+            branch="b",
+            worktree=repo,
+            profile="host",
+            target="worktree",
+            created_at="2026-10-02T00:00:00+00:00",
+            base_sha=start,
+        )
+    )
+
+    result = _deliver(repo, shipped, "tests=suite.log")
+
+    assert result.exit_code == 0, result.output
+    assert f"base {start[:12]} (isolation start commit)" in _squash(result.output)
+    stored = units.evidence_of(load_run_state(repo, "r1").steps["deliver"], "step/deliver")
+    assert stored["proportionality"].startswith(start + ":")
+
+
+_TWO_DERIVED_SHAPE = """
+workflow: grouped
+schema: 1
+unit: run
+steps:
+  - id: plan
+    kind: agent
+    emits: [plan]
+  - id: deliver
+    kind: agent
+    needs: [plan]
+    evidence: [tests, proportionality, single-phase]
+"""
+
+
+def test_every_derived_witness_is_evaluated_and_every_refusal_reported(
+    tmp_path: Path,
+) -> None:
+    """gh#768: the first derived refusal used to exit, so every witness after
+    it went unevaluated and the operator learned of the next blocker only
+    after fixing the first. Now each is derived and all refusals print."""
+    from tests.unit.test_run_cli import _plan_with_tags
+
+    repo = _repo(tmp_path)
+    (repo / "feature.py").write_text("print('x')\n")
+    _git(repo, "add", "feature.py")
+    _git(repo, "commit", "-qm", "work")
+    _drop_local_main(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _TWO_DERIVED_SHAPE)
+    plan_rel = _plan_with_tags(repo, [(1, "agentic", ()), (2, "agentic", ())])
+    _started_grouped_with_plan(repo, shipped, plan_rel)
+    _git(repo, "add", "docs/superpowers")
+    _git(repo, "commit", "-qm", "plan")
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    (repo / "suite.log").write_text("1 passed\n")
+
+    result = _deliver(repo, shipped, "tests=suite.log")
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "cannot derive proportionality evidence" in out
+    assert "single-phase: the light shape takes one agentic phase" in out

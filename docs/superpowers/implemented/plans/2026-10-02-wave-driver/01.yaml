@@ -1,0 +1,102 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Waves and dependencies on a batch, and the helpers the driver reuses
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - batch-waves-and-deps
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_*.py
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Smoke — a trivial test, CI green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add a trivial unit test for a new `wave` field on `Batch`, run the local suite on it and push the branch so CI runs it green before the real work (ci is github; fixtures are captured, never constructed)
+- number: 2
+  title: Red — the schema and validation tests
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write failing tests: `wave` and `after` round-trip through judgements schema 3; schemas 1 and 2 load, and `kind` and `features` load on any version; the first write stamps 3
+  - id: P1.T2.S2
+    text: |-
+      Write failing tests: `batch create` and `edit` take `--wave` and repeatable `--after`; an unknown id, the batch's own id and a cycle are refused with exit 2 and the file unchanged; `--wave` and `--after` stay editable on a dispatched, unmerged batch
+  - id: P1.T2.S3
+    text: |-
+      Write failing tests for `batch list` showing wave, dependencies and a close-out column, and for `partial`, `cancelled` and `abandoned` dependencies reading as unsatisfiable
+- number: 3
+  title: Green — model, validation, CLI
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Add `wave` and `after` to `Batch`, accept schema 1, 2 and 3 on read, stamp 3 on write, and validate ids, self and cycles beside the open-batch rule
+  - id: P1.T3.S2
+    text: |-
+      Add the options to `batch create` and `batch edit`, and the wave, dependency and close-out columns to `batch list`
+- number: 4
+  title: Extract the helpers the driver reuses
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Extract the bodies of `batch dispatch` and `batch merge` into callable `dispatch_batch(...)` and a non-blocking `merge_ready(...)` split out of `merge_one`, behaviour-preserving, with every existing batch test passing unchanged
+  - id: P1.T4.S2
+    text: |-
+      REFACTOR + quality gate: ruff format, ruff check, mypy and the triage test files green; refactor: no further cleanup needed once the helpers are shared
+- number: 5
+  title: Ship it
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Move the `batch-waves-and-deps` row with `fr acceptance set-status` and its test refs; add the change fragment `.changes/feat-wave-driver.yaml` (minor) if absent
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-02T19:14:09+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-02T19:14:09+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-02T19:14:09+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-10-02T19:14:09+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-02T19:14:09+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-02T19:14:09+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-02T19:14:09+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-02T19:14:09+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-10-02T19:14:09+00:00'
+      note: null
+  completion:
+    at: '2026-10-02T19:14:09+00:00'
+    note: null
+    observed_prs: []

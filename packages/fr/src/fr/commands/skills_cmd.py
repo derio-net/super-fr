@@ -54,6 +54,11 @@ SKILLS: list[tuple[str, str, str]] = [
         "fr triage {collect,check,render}  ·  judgements.yaml in $HOME/.cache/fr/triage/<scope>/",
     ),
     (
+        "fr-origins",
+        "Classify the issues filed in a window by origin onto a defect-origins page (skill).",
+        "fr triage origins {collect,check,render}  ·  origins.yaml in the triage state dir",
+    ),
+    (
         "fr-audit",
         "What a run or session cost, split by activity and step (skill).",
         "fr usage {collect,report}  ·  records in $HOME/.cache/fr/usage/",

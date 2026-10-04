@@ -31,6 +31,12 @@ stopped being a reviewer.
 If the spec or journal is missing at those paths, STOP and say so: you are
 probably not in the workspace you were meant for.
 
+No step record is an input (gh#699). The brainstorm step's record was applied
+to the spec journal and deleted when `brainstorm` resolved — its answers are
+the journal's `decision` entries — and this step's own record is the YAML you
+return. A missing file under `docs/superpowers/runs/<run-id>.records/` is
+expected, never a finding.
+
 ## What you check — three things, in this order
 
 1. **Decisions vs. spec.** Every `decision` entry in the spec journal is honoured

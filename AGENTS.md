@@ -121,10 +121,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
     stale dispatch, arrived with batches: an `fr:in-progress` issue whose
     batch marker comment is older than `stale_dispatch_days`, with no PR.
     **Batches** (2026-09-25 spec, `triage-batches`): `fr triage batch
-    {list,create,edit,cancel,suggest,dispatch,merge}`
+    {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
-    fr-goal run with one PR. `judgements.yaml` is schema 2 (`batches:` with
-    engine-appended `events`; schema 1 still loads) and `facts.json` schema 3
+    fr-goal run with one PR. `judgements.yaml` carries `batches:` with
+    engine-appended `events` (fr reads schemas 1, 2 and 3 and writes 3, see
+    the waves paragraph below) and `facts.json` schema 3
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
     (stages, open-batch rule, the one writer, the §3.F merge order),
@@ -137,6 +138,26 @@ uv workspace monorepo, version lockstepped across every manifest (see
     that globs every `batch*` module. `triage_batch_cmd.py` is `fr`'s second
     `find_spec`-guarded soft point into `fr_dispatch`
     (`test_import_direction.py` `_SOFT_POINTS`).
+    **The board's decision views** (2026-10-02 spec `wave-driver`, I): `views.py` is pure (`needs_you`, `next_up`,
+    `preselected_wave` over a driver `Snapshot` built from facts alone, so the board and `drive_pass` read the same
+    inputs), `snapshot.py` stores/diffs the per-render snapshots (`render.py` reads no clock; the command passes it),
+    `components.py` holds the colour tokens, the phone gutter and the one `tabs()` component. `Judgement.kind` and
+    `Judgements.features` load on any schema; `check` has an `unplaced` set.
+    **Origins and the architecture page** (same spec, E and F): `fr triage origins {collect,check,render}`
+    (`origins.py`; classification is the `fr-origins` skill's) and `fr triage architecture render`
+    (`architecture.py`): the snapshot timeline, measured sections (line counts via the `gitseam`
+    `ls-tree`/`show` at each `subsystems.yaml` ref), then authored `architecture/` fragments in manifest order.
+    **Waves and the driver** (2026-10-02 spec, `wave-driver`): judgements
+    schema 3 adds `wave`/`after` per batch and the `post_merge`/`closeout`
+    events; `fr triage batch drive` runs the waves to completion.
+    `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `merge`,
+    `closeout`, `archive`, `dispatch`, `blocked`, `warn` actions out; no
+    `fr_dispatch`, no git, no process, the clock passed in); the command
+    re-collects facts each pass (`triage_cmd.collect_into`), executes through
+    `dispatch_batch`/`merge_ready`, fast-forwards and runs the repo's
+    `post_merge` argument list through `gitseam.Checkout`, and starts each
+    close-out as a `unit="run"` item with `payload.kind: closeout`. A
+    `drive.lock` (pid, start time) refuses a second driver.
   - **`fr/usage`** (2026-09-25 spec, `lean-cost-aware-process` §5.A) — what a
     session or run cost, and on what, reconstructed from the harness's own
     records: `readers/` (one per harness — Claude Code transcripts, OpenCode and

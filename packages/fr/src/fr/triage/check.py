@@ -3,7 +3,8 @@
 Pure: facts and judgements in, sets out. The command only formats them.
 
 - **unranked** — an open issue with no judgement;
-- **settled** — judged, and now `closed` or `merged`;
+- **settled** — judged, and now `closed` or `merged`; a judged PR that is now
+  closed or merged is settled too (`settled_prs`, gh#902);
 - **orphaned** — a judgement whose key names no repo collect read: a typo'd or
   renamed repo, or one outside the scope. That is the ONLY meaning, so it is the
   only set whose members are safe to fix or remove without asking the forge again;
@@ -13,6 +14,9 @@ Pure: facts and judgements in, sets out. The command only formats them.
   or its key names a collected repo but was added after the last collect. Never
   orphaned: pruning a judgement over a transient failure, or over stale facts,
   would destroy the ranking (reviews r-p2-check-sets, phase-4 C1/C2);
+- **unplaced** — an open issue (judged or not) in no open batch, in no feature
+  group and not parked (wave-driver R9). The still-open members of a cancelled,
+  merged, partial or abandoned batch are unplaced: that batch is no longer open;
 - **stale dispatch** — an open issue labelled `fr:in-progress` whose fr-batch
   marker comment is older than the repo's `stale_dispatch_days` (default 3)
   with no open or merged linked PR — a closed-unmerged one is not progress
@@ -32,6 +36,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fr.labels import FR_IN_PROGRESS
+from fr.triage.batch import is_open
 from fr.triage.model import Facts, Issue, Judgements, PullRequest, issue_key, normalize_key
 
 SETTLED_STAGES = frozenset({"closed", "merged"})
@@ -67,6 +72,8 @@ class CheckResult:
     orphaned: list[str]
     unreachable: list[Unreachable]
     stale: list[Stale] = field(default_factory=list)
+    unplaced: list[Issue] = field(default_factory=list)
+    settled_prs: list[PullRequest] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -85,8 +92,10 @@ class CheckResult:
             "unranked": [row(i) for i in self.unranked],
             "unranked_prs": [pr_row(pr) for pr in self.unranked_prs],
             "settled": [row(i) for i in self.settled],
+            "settled_prs": [pr_row(pr) for pr in self.settled_prs],
             "orphaned": list(self.orphaned),
             "unreachable": [{"key": u.key, "reason": u.reason} for u in self.unreachable],
+            "unplaced": [row(i) for i in self.unplaced],
             "stale_dispatch": [
                 {
                     "key": s.key,
@@ -163,6 +172,18 @@ def stale_dispatches(facts: Facts) -> list[Stale]:
     return out
 
 
+def unplaced_issues(facts: Facts, judgements: Judgements) -> list[Issue]:
+    """The unplaced set: see the module docstring."""
+    placed: set[str] = set()
+    for batch in judgements.batches:
+        if is_open(batch, facts):
+            placed.update(batch.ids)
+    for feature in judgements.features:
+        placed.update(feature.ids)
+    placed.update(k for k, j in judgements.issues.items() if j.kind == "parked")
+    return [i for i in facts.issues if i.state == "open" and i.key not in placed]
+
+
 def classify(facts: Facts, judgements: Judgements) -> CheckResult:
     """Sort issues into their sets and report open PRs without a judgement."""
     judged = {normalize_key(k) for k in judgements.issues}
@@ -174,7 +195,24 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
     settled = [found[k] for k in sorted(judged & found.keys()) if found[k].stage in SETTLED_STAGES]
     orphaned: list[str] = []
     unreachable: list[Unreachable] = []
-    for key in sorted(judged - found.keys()):
+    # A judgement may name a PR (open PRs are ranked under the same key); one the
+    # facts carry is found, never orphaned or unreachable (gh#902).
+    prs = [
+        *facts.prs,
+        *facts.batch_prs,
+        *facts.judged_prs,
+        *(p for i in facts.issues for p in i.prs),
+    ]
+    found_prs = {issue_key(p.repo, p.number) for p in prs}
+    settled_prs = sorted(
+        (
+            p
+            for p in facts.judged_prs
+            if p.state != "OPEN" and issue_key(p.repo, p.number) in judged
+        ),
+        key=lambda p: issue_key(p.repo, p.number),
+    )
+    for key in sorted(judged - found.keys() - found_prs):
         reason = _unreachable_reason(key, facts)
         if reason is None:
             orphaned.append(key)
@@ -187,4 +225,6 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
         orphaned=orphaned,
         unreachable=unreachable,
         stale=stale_dispatches(facts),
+        unplaced=unplaced_issues(facts, judgements),
+        settled_prs=settled_prs,
     )

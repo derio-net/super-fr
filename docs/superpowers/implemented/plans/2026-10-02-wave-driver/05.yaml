@@ -1,0 +1,62 @@
+schema_version: 2
+phase:
+  number: 5
+  title: 'Defect origins: collect, classify, render, and the fr-origins skill'
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - defect-origins-page
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/origins.py
+  - packages/fr/src/fr/commands/triage_origins_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - plugins/super-fr/skills/fr-origins/SKILL.md
+  - tests/unit/test_triage_origins*.py
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Red — collect, check, render
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Write failing tests over a fixture of fifteen issues: `collect --since` records state, closing PRs and hours to close; `check` lists unclassified issues; `render` counts by category and source, per-day buckets and median time to fix match a hand computation, per-PR leaderboards list the new-feature and leftover producers, and the page ends in a conclusion linking each cause to a batch
+- number: 2
+  title: Green — the engine and the skill
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Add `origins.py` and the `fr triage origins collect|check|render` verbs, reusing the shared renderer shell, theme and gutter
+  - id: P5.T2.S2
+    text: |-
+      Write the `fr-origins` skill with the classification discipline (category by what the defect is, source by who found it, evidence read from the issue and the code), then regenerate the mirrors; REFACTOR + quality gate; refactor: reuse the board's chart and table helpers
+- number: 3
+  title: Ship it
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      Move the `defect-origins-page` row with `fr acceptance set-status`; run the install and mirror tripwires for the new skill
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-10-02T21:34:20+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-10-02T21:34:20+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-10-02T21:34:20+00:00'
+      note: null
+    P5.T3.S1:
+      state: x
+      ticked_at: '2026-10-02T21:34:20+00:00'
+      note: null
+  completion:
+    at: '2026-10-02T21:34:20+00:00'
+    note: null
+    observed_prs: []

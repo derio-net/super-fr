@@ -27,22 +27,20 @@ means. Never add a figure by hand, never price tokens yourself, and never write
 | `fr usage report --session <id>… --format html -o <file>` | the same as one self-contained page |
 
 Both are read-only: they read a run cursor and the harness store, and write only
-under the cache. They run anywhere, even where the cursor is stale. `report`
-reads any session not yet collected live. Pass `--repo <path>` when the run's
-cursor lives in another checkout (active or archived cursors both resolve).
+under the cache, anywhere, even with a stale cursor. `report` reads any uncollected
+session live. Pass `--repo <path>` when the cursor lives in another checkout.
 
 ## Choosing what to compare
 
 - **One run:** `--run <id>`. The step table shows which pipeline step spent what.
 - **Before and after a process change:** collect a comparable run on each side (same
-  shape of work, same harness, similar size). Report them separately, then side by
-  side. One run per side is an anecdote. Say so if that is all there is.
-- **A sample:** name the sessions explicitly and report them together. The pooled
-  shares weight each session by its dollars, not equally.
+  shape, harness, size); report separately, then side by side. One run per side is an
+  anecdote; say so.
+- **A sample:** name the sessions and report them together; pooled shares weight each
+  session by its dollars.
 
-A session another host ran is not on this host. It comes back `unavailable` and
-renders `—`. That is an absence, not a cheap session: never drop it from the
-comparison silently, and never count it as zero.
+A session another host ran comes back `unavailable` and renders `—`: an absence, not a
+cheap session. Never drop it from the comparison silently or count it as zero.
 
 ## Reading the split
 
@@ -64,11 +62,10 @@ comparison silently, and never count it as zero.
   the report's `turns` columns do (By activity, By step). A turn is one assistant
   message, counted once for each activity its tool calls touched, so activity turns
   can sum past the message count; step turns cannot.
-- **Coarse sessions.** A `coarse attribution` note means the harness keeps one token
-  count per message (Hermes), so its split is token-count-weighted. Compare it to other
-  harnesses with that caveat stated.
-- **source.** `exact` is the harness's billed figure, `estimated` its own estimate,
-  `none` no figure at all. Carry the source into any claim you make.
+- **Coarse sessions.** A `coarse attribution` note means the harness keeps one token count
+  per message (Hermes): token-weighted split. State that caveat when comparing.
+- **source.** `exact` is the billed figure, `estimated` the harness's estimate, `none` no
+  figure. Carry it into any claim.
 
 ## Pages
 
@@ -76,17 +73,42 @@ comparison silently, and never count it as zero.
 $HOME/.cache/fr/usage/<name>.html`. Report the pooled shares and the per-session
 range, name the sessions, and state what was unavailable.
 
-**Architecture page (two halves).**
+**Architecture page.** The engine builds it: `fr triage architecture render --repo
+<owner/repo> [--checkout <clone>] [--now-ref <ref>]` writes `architecture.html` into the
+triage state directory (the usual `fr triage` scope options), and nothing else. Its sections
+are generated, so you never type a figure into it: the snapshot timeline, then the measured
+sections (summary, waves, subsystem cards, size table, filings, origins, operator actions),
+then your fragments. You supply three inputs, all in the state directory:
 
-1. *Current state* is measured: the audit page's figures, per step.
-2. *Future state* is design, authored from the spec, never measured. For each step
-   the spec changes, state the turns it removes or adds and why. Derive the expected
-   effect from the current-state figures (for example "the resolve step drops from ~6
-   turns to ≤2"), and label every such figure a projection. A future-state number
-   presented as measured is the defect this skill exists to prevent.
+- `subsystems.yaml`: a `subsystems:` list, each with `name`, `path` (globs; `*` spans `/`),
+  `then_ref` (the git ref "then" is measured at) and `themes` (the judgement themes that place
+  an open issue on it); an issue whose theme maps nowhere lands under *Other*. Lines: every line
+  of every text file the globs match; binary files, symlinks and submodules are not counted, and
+  a moved file moves its lines. Each commit is named; a figure not taken is `—`.
+- `architecture/<name>.html`: authored fragments (diagrams, narrative, inline SVG), using the
+  page's tokens (`var(--accent)`, `var(--ink)`). Close every tag; self-closing only on void
+  elements and SVG shapes. Refused, by name, with nothing written: `<script>`, `<style>`, `<link>`,
+  `<iframe>`, `<object>`, `<embed>`, `<meta>`, `<base>`, `<form>`, `<html>`, `<head>`, `<body>`,
+  a page-level `<title>` (`<svg><title>` is fine), `on*` attributes and `javascript:` or
+  `data:text/html` URLs. That is all the check does, so a fragment must carry no untrusted
+  text: HTML-escape any issue title or other outside text yourself.
+- `architecture/manifest.yaml`: `sections:`, an ordered list of generated section names
+  (`summary`, `waves`, `subsystems`, `size-table`, `filings-per-day`, `origin-counts`,
+  `operator-actions`) and fragment file names. A listed file that does not exist is reported
+  and shown on the page; a generated section you do not name is appended, with a note on
+  the page, before the fragments; with no manifest every generated section shows.
 
-When the change ships, run a comparable run through `fr usage report` and put the
-measured figure beside the projection. Keep both; do not overwrite the projection.
+**Measured versus projected is the rule.** The verb's sections are measurements. Everything
+you author is the future state, design: for each step the spec changes, state the turns it removes
+or adds and why, derive it from the measured figures, and label every such figure a projection
+(in the fragment itself). A projection presented as a measurement is the defect this skill
+exists to prevent. When the change ships, render again and put the measured figure beside the
+projection; keep both.
+
+Refresh the inputs first when you want a current page: `fr triage render` stores a snapshot, and
+`fr triage origins collect` plus the `fr-origins` skill provide the origins data. **Publishing
+stays yours**: fr writes a file under `$HOME/.cache/fr/triage/<scope>/`; copy or host it
+wherever the operator publishes, after redacting any third-party identity it carries.
 
 ## Red flags
 
@@ -94,5 +116,4 @@ measured figure beside the projection. Keep both; do not overwrite the projectio
 - `—` turned into `0`, or an unavailable session left out of the denominator's story.
 - A dollar figure computed from a list price. fr knows only ratios.
 - A before/after claim from runs of different shape or harness, unstated.
-- A report's session ids, paths or model names pasted into a public artifact without
-  first redacting any third-party identity they carry.
+- Session ids, paths or model names pasted into a public artifact unredacted.

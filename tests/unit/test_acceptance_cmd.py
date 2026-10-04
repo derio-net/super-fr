@@ -154,8 +154,9 @@ def test_own_ref_missing_file_errors(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_fragment_stripped_for_existence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Trap 3: `#L10` is URL decoration, not part of the path on disk."""
-    root = make_repo(tmp_path, row(unit='"own:tests/test_a.py#L1"'))
+    """Trap 3: a fragment is URL decoration, not part of the path on disk.
+    (Into a `.py` file it names a test — gh#531; a `#L<n>` there is refused.)"""
+    root = make_repo(tmp_path, row(unit='"own:tests/test_a.py#test_a"'))
     assert run_check(root, monkeypatch).exit_code == 0
 
 

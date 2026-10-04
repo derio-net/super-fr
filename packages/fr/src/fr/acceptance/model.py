@@ -1,8 +1,9 @@
 """Matrix schema, ref grammar, archive-twin resolution.
 
-Row refs are `<repo>:<path>[#fragment]` — the fragment (a `#L12` line pin or
-a heading anchor) is kept for GitHub URLs and stripped for existence checks
-and local links (spec trap 3).
+Row refs are `<repo>:<path>[#fragment]` — the fragment (a heading anchor, a
+`#L12` line pin into a non-Python file, or a test's name into a `.py` file —
+`fr.acceptance.anchors`) is kept for GitHub URLs and stripped for existence
+checks and local links (spec trap 3).
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ def split_ref(ref: str) -> tuple[str, str, str]:
     """`'<repo>:<path>[#frag]'` → `(repo, path, fragment)`."""
     repo, sep, rest = ref.partition(":")
     if not sep or not rest or not repo or "/" in repo:
-        raise AcceptanceError(f"ref must be '<repo>:<path>[#Lline|#anchor]': {ref!r}")
+        raise AcceptanceError(f"ref must be '<repo>:<path>[#anchor]': {ref!r}")
     path, _, frag = rest.partition("#")
     return repo, path, frag
 

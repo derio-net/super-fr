@@ -40,6 +40,13 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
   CURRENT state, so this mutates;
   its journal counterpart `fr journal resolve` appends instead, because a
   journal is a log.
+- Anchor a Python ref on the test's NAME, never its line:
+  `<repo>:tests/x.py#test_y` or `#TestX::test_y` (pytest's node spelling). A
+  `#L<n>` slides onto whatever test lands there next, silently — 27 of this
+  matrix's 78 had, by the time gh#531 measured it. `add` / `set-status` refuse
+  a new one; `check` fails one, and a name that no longer resolves;
+  `fr migrate artifacts --yes` converts existing ones where the line still
+  sits in a test.
 - Check: `fr acceptance check` (refs, staleness, statuses; exit 2 on
   `failing`). Nag: `fr acceptance status` — **any agent session in this repo
   runs `fr acceptance status --brief` at session start** (Claude Code does it

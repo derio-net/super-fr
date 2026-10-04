@@ -1,0 +1,62 @@
+schema_version: 2
+phase:
+  number: 6
+  title: 'The architecture page: generated measured sections, spliced authored fragments'
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - architecture-page
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/architecture.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - plugins/super-fr/skills/fr-audit/SKILL.md
+  - AGENTS.md
+  - tests/unit/test_triage_architecture*.py
+  estimate_lines: 1200
+tasks:
+- number: 1
+  title: Red — measured sections and fragments
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Write failing tests over a fixture repo with two refs: line counts per subsystem at then and now are correct and name their commits; subsystem cards place open issues; a fragment is inlined in manifest order, a malformed fragment is refused, a missing manifest entry is reported; the page has the real title, the three theme blocks, the wave tabs and the snapshot timeline, and the required section order
+- number: 2
+  title: Green — the page and the audit skill
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Add `architecture.py` and `fr triage architecture render`, reading facts, judgements, origins, `subsystems.yaml` and the fragment manifest, using `git ls-tree` and `git show` through the git seam
+  - id: P6.T2.S2
+    text: |-
+      Rewrite the `fr-audit` skill's architecture-page section around the verb, keeping its measured-versus-projected rule, and update AGENTS.md; regenerate the mirrors; REFACTOR + quality gate; refactor: none beyond sharing the page shell
+- number: 3
+  title: Ship it
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      Move the `architecture-page` row with `fr acceptance set-status`; confirm the full suite, ruff, mypy, the mirror, parity and neutrality tripwires are green
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-10-02T22:06:44+00:00'
+      note: null
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-10-02T22:06:44+00:00'
+      note: null
+    P6.T2.S2:
+      state: x
+      ticked_at: '2026-10-02T22:06:44+00:00'
+      note: null
+    P6.T3.S1:
+      state: x
+      ticked_at: '2026-10-02T22:06:44+00:00'
+      note: null
+  completion:
+    at: '2026-10-02T22:06:44+00:00'
+    note: null
+    observed_prs: []
