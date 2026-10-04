@@ -3,7 +3,7 @@ run: 2026-10-04-feat-batch-drive-scoped-collect
 workflow: fr-goal@1
 branch: feat/batch-drive-scoped-collect
 started: '2026-10-04T05:51:48+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -43,7 +43,11 @@ steps:
           returned: '2026-10-04T06:06:12+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-10-04T06:06:14+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
