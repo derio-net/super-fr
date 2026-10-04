@@ -64,3 +64,8 @@ parse_journal converts ValueError (and a non-numeric phase=) to JournalParseErro
 ### fx-639 · finding [fixed] · #639 fixed: journal add refuses an orphan spec/plan slug
 
 _orphan_refusal: debug, an existing journal, and a spec --input brief are admitted. Orphan journal deleted. Three older spec journals with no spec (scaffold-batch-574-576-569, triage-open-prs, uninstall-installed-rules) left in place: outside the brief's authorised deletion. Pinned by test_journal_cmd.py::TestAddRefusesAnOrphanSlug.
+
+<!-- fr:journal kind=finding scope=debug id=fx-675 created=2026-10-04T05:44:46+00:00 state=fixed -->
+### fx-675 · finding [fixed] · #675 fixed; #661 kept as intended
+
+--phases-file help says the skeleton marker is owed only with 2+ agentic phases (test_plan_cmd.py). #661: the literal header pin is deliberate; now documented in test_v2_plan_ops.py.
