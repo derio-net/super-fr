@@ -42,3 +42,8 @@ Built a copy of the env aside and pointed the PATH symlink at it during `uv tool
 ### 3c63c3cc35c8 · hypothesis · uv's entry point in a private bin dir; install.sh owns the PATH link (fix 2 — partial)
 
 Real install with UV_TOOL_BIN_DIR=~/.local/share/fr/uv-bin; install.sh repoints ~/.local/bin/fr by rename. Live: fr never missing (0 samples). But 5/60 calls crashed mid-import from the STAGED env: the stage was deleted the moment the link moved back.
+
+<!-- fr:journal kind=finding scope=debug id=fix-install-938 created=2026-10-04T08:17:04+00:00 state=fixed -->
+### fix-install-938 · finding [fixed] · Plugin cache is one in-place directory; installs serialised; fr never leaves PATH
+
+scripts/install.sh: (1) `current` is a real directory synced in place (rsync --checksum --delete-after --delay-updates), migrated once off the symlink layout; legacy version dirs go only at 7 days old. (2) A machine-wide mkdir lock (~/.cache/fr/install.lock): a second install waits up to FR_INSTALL_LOCK_TIMEOUT (900 s) with a message naming the holder, a dead holder's lock is reclaimed. (3) fr: staged copy + private uv bin dir + rename-swapped PATH link, a 2 s drain before the old env goes, and each stage kept until the next install (fix 3). Live, real uv, 3 concurrent installs, twice: 120/120 fr calls succeeded, fr never absent, installs serialised. Limits: a receipt from before this change names ~/.local/bin/fr, so the first install after it loses fr once; an fr process running for longer than an install from uv's env can still see that env rebuilt under it. Tests: tests/integration/test_install_atomic.py (session-held path across releases, lock serialise/timeout/stale, fr runnable during reinstall, rename swap), TestPluginCacheDirectory in test_install_sh.py.
