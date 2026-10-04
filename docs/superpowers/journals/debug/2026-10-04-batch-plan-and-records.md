@@ -69,3 +69,8 @@ _orphan_refusal: debug, an existing journal, and a spec --input brief are admitt
 ### fx-675 · finding [fixed] · #675 fixed; #661 kept as intended
 
 --phases-file help says the skeleton marker is owed only with 2+ agentic phases (test_plan_cmd.py). #661: the literal header pin is deliberate; now documented in test_v2_plan_ops.py.
+
+<!-- fr:journal kind=finding scope=debug id=f-multi-cause-resolved created=2026-10-04T05:44:55+00:00 state=fixed resolves=f-multi-cause answered_by=operator -->
+### f-multi-cause-resolved · finding [fixed] · resolves f-multi-cause: Batch has six independent root causes, not one
+
+Operator chose: one PR, per-member TDD — each member its own failing test, fix and journal entries; #661 closed as deliberate.
