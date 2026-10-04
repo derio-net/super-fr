@@ -14,3 +14,8 @@ gh#913: four unselected batches in flight, two selected wave-1 batches proposed,
 ### 2d48a20cc162 · finding [fixed] · drive_pass emits a held action when the in-flight cap holds a batch
 
 `batch_drive.py`: new `held` ActionKind; the cap branch tracks the occupying batch ids (in flight, not merging this pass, plus this pass's dispatches) and emits `held <id>: the in-flight cap (N) is full: <occupants>`. `triage_batch_cmd._act` treats `held` like `blocked`. Pinned by `test_a_batch_the_cap_holds_says_so_and_names_the_occupants` and the CLI's `test_the_cap_counts_batches_outside_the_selection` (both red first). Two existing tests asserted the silence (`actions == ()`) and were updated.
+
+<!-- fr:journal kind=review scope=debug id=97eeb3765971 created=2026-10-04T04:37:50+00:00 -->
+### 97eeb3765971 · review · self-review: no findings
+
+Checked: occupants equals the old cap_used (merging batches are pr-open, so removing them matches the old subtraction); `held` is not counted as blocked, so the --once exit code and `waiting_on_operator` are unchanged; the board (views.py) reads only dispatch/warn/blocked and derives its own cap reason, so it is unaffected; loop mode repeats the line each pass, as `blocked` already does. Full suite 8094 passed, ruff and mypy clean.
