@@ -146,6 +146,9 @@ class FakeCheckout:
         self.worktrees: list[FakeWorktree] = []
         self.removed: list[Path] = []
         self.forge = forge
+        # head -> the first-parent commits main has that it lacks; unset is one code commit
+        self.base_commits: dict[str, tuple[tuple[str, tuple[tuple[str, str], ...]], ...]] = {}
+        self.pr_paths: dict[str, frozenset[str]] = {}  # head -> paths the PR changed
 
     def origin_repo(self) -> str | None:
         return REPO
@@ -161,6 +164,14 @@ class FakeCheckout:
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return descendant in self.up_to_date
+
+    def commits_behind(
+        self, head: str, ref: str
+    ) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
+        return self.base_commits.get(head, (("code", (("M", "packages/x.py"),)),))
+
+    def changed_paths(self, ref: str, head: str) -> frozenset[str]:
+        return self.pr_paths.get(head, frozenset({"a.py"}))
 
     def add_worktree(self, where: Path, ref: str) -> FakeWorktree:
         wt = FakeWorktree(self, where, ref)
