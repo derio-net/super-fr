@@ -9,3 +9,8 @@ Batch premise 'ONE root cause' ruled out on investigation. Members touch six unr
 ### scope-decision · decision · Operator scope decision
 
 Operator chose: one PR fixing the eight mechanical members (#455 #456 #619 #805 #806 #648 #646 #691), each journalled per cause with its own failing test; #746 is a design ask, excluded from Closes, routed to its own fr-goal run.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-805 created=2026-10-04T05:12:12+00:00 -->
+### rc-805 · root-cause · #805: scaffold round-trips fr-profiles.yaml
+
+_update_profiles_yaml (fr/isolation/scaffold.py) rebuilt the file with yaml.safe_load + safe_dump, which carry no comments, so every scaffold dropped operator comments.
