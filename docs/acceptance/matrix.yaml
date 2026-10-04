@@ -5811,6 +5811,47 @@ rows:
       and #907''s CI one re-run (a setup-bun 503). Rerun owed after #909 (read timeouts)
       and #910 (retry failed reads in loop mode); see also #911, #912, #913.'
     verify: post-merge
+  - id: drive-merge-train-head-only
+    capability: triage-batch-drive
+    acceptance: The drive acts only on the head of each repo's merge train — PRs behind
+      it are neither updated nor merged — and advances past a merged head in the same
+      pass
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: drive-merge-train-step-over
+    capability: triage-batch-drive
+    acceptance: A PR with failing CI or a refused merge is reported once and stepped
+      over, and rejoins the train at its merge-order place once green
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: drive-merge-train-output
+    capability: triage-batch-drive
+    acceptance: Every drive pass prints one train line per repo (head, queued, stepped
+      over) and the summary counts queued PRs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: drive-merge-train-live-wave
+    capability: triage-batch-drive
+    acceptance: In a live wave of several ready PRs in one repo, each PR is updated
+      at most once per PR merged ahead of it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group

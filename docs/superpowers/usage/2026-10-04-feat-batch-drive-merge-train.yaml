@@ -1,0 +1,37 @@
+schema_version: 1
+run: 2026-10-04-feat-batch-drive-merge-train
+captures:
+- host: h-3767742d
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-04T07:29:38+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: f396c9d6-799d-4d9b-95d6-7cee134b0041
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 54
+        cache_write: 136843
+        cache_read: 3423711
+        output: 20083
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 3
+      other:
+        usd: null
+        turns: 11
+      paperwork:
+        usd: null
+        turns: 14
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+      brainstorm:
+        usd: null
+        turns: 24

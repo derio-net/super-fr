@@ -1,16 +1,19 @@
 schema_version: 8
 run: 2026-10-04-feat-batch-drive-merge-train
-workflow: fr-goal@1
+workflow: fr-goal-light@1
 branch: feat/batch-drive-merge-train
 started: '2026-10-04T07:03:44+00:00'
-cursor: brainstorm
+cursor: plan
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-04T07:03:52+00:00'
-  spec-review:
-    state: pending
+    state: done
+    at: '2026-10-04T07:29:38+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-04-drive-merge-train-design.md
   plan:
+    state: pending
+  spec-plan-review:
     state: pending
   plan-review:
     state: pending
