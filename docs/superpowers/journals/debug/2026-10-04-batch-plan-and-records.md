@@ -74,3 +74,8 @@ _orphan_refusal: debug, an existing journal, and a spec --input brief are admitt
 ### f-multi-cause-resolved · finding [fixed] · resolves f-multi-cause: Batch has six independent root causes, not one
 
 Operator chose: one PR, per-member TDD — each member its own failing test, fix and journal entries; #661 closed as deliberate.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-10-04T05:49:54+00:00 -->
+### review-1 · review · Independent adversarial review: no high/medium findings
+
+A separate reviewer read the five areas. No high/medium. Lows fixed in this PR: fr pickup did not create .records/ (mkdir moved into record_brief); a YAMLError on the spliced text raised instead of falling back. Lows accepted, stated in the PR: comments inside state: are not preserved; CRLF normalises to LF (read_text already did); phase=-1/+2 now refused (writers never emit them); archived specs/plans are not looked up by the orphan check; cross-repo spec adds in the non-spec repo are refused; the Rich tripwire covers only except-bound f-string interpolation into *console.print.
