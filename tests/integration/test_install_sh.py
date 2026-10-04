@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -50,6 +51,7 @@ def _run_install(
     *extra_args: str,
     expect_fail: bool = False,
     xdg_config_home: Path | None = None,
+    install_sh: Path = INSTALL_SH,
 ) -> subprocess.CompletedProcess[str]:
     """Run install.sh with fake HOME, stubbing uv so step 10 is a no-op.
 
@@ -83,7 +85,7 @@ def _run_install(
         "VK_INSTALL_SKIP_PREFLIGHT": "1",
     }
     result = subprocess.run(
-        ["bash", str(INSTALL_SH), *extra_args],
+        ["bash", str(install_sh), *extra_args],
         capture_output=True,
         text=True,
         env=env,
@@ -615,6 +617,45 @@ class TestPluginCacheSymlink:
 
 
 # ── Workflow manifests ──────────────────────────────────────────────
+
+
+class TestMarketplaceRsyncSkipsLocalState:
+    """gh#630: the marketplace rsync copies the repo root wholesale. Local
+    state there (coverage data, which xdist workers create and delete while
+    the rsync walks it, and the container venv) must not ship, and must not
+    be able to fail the copy. Runs from a copy of the tracked tree, so the
+    stray files never touch the real checkout."""
+
+    STRAYS = (".coverage", ".coverage.host.1234.XyZ", ".venv-container/bin/python")
+
+    def test_local_state_never_reaches_the_marketplace(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        tracked = (
+            subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
+                capture_output=True,
+                check=True,
+            )
+            .stdout.decode()
+            .split("\0")
+        )
+        checkout = tmp_path / "checkout"
+        for rel in filter(None, tracked):
+            src = REPO_ROOT / rel
+            if src.is_file():
+                (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, checkout / rel)
+        for rel in self.STRAYS:
+            (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+            (checkout / rel).write_text("local state\n")
+
+        _run_install(fake_home, install_sh=checkout / "scripts" / "install.sh")
+
+        marketplace = fake_home / ".claude" / "plugins" / "marketplaces" / "derio-net--super-fr"
+        assert (marketplace / "scripts" / "install.sh").is_file()
+        shipped = [rel for rel in self.STRAYS if (marketplace / rel).exists()]
+        assert not shipped, f"local state copied into the marketplace: {shipped}"
 
 
 class TestInstallWorkflows:

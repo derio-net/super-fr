@@ -1,0 +1,71 @@
+schema_version: 1
+run: 2026-09-23-fix-526-status-archivable-merged
+captures:
+- host: h-80e69396
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:22+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: 23343080-96cd-4d63-a694-ddef4d6fb103
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 588
+        cache_write: 1164787
+        cache_read: 39966759
+        output: 93292
+        usd: 22.264030599999955
+        usd_source: exact
+      claude-sonnet-5:
+        input: 94
+        cache_write: 352041
+        cache_read: 4212028
+        output: 816
+        usd: 2.545041400000001
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001228
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 10.36481891899879
+        turns: 166
+      other:
+        usd: 5.209279509608141
+        turns: 68
+      paperwork:
+        usd: 9.23620157139303
+        turns: 113
+    steps:
+      brainstorm:
+        usd: 2.0559565619955946
+        turns: 26
+      spec-review:
+        usd: 1.835153161093134
+        turns: 19
+      plan:
+        usd: 0.5169558521907515
+        turns: 5
+      implement:
+        usd: 14.448397395065129
+        turns: 242
+      deliver:
+        usd: 2.73181743011585
+        turns: 26
+      (outside run):
+        usd: 3.222019599539513
+        turns: 15
+    briefs:
+      ac14bc8780669d4e6: 1835
+      phase/1/implement-phase: 2424
+      phase/1/review-phase: 1653
+      phase/2/implement-phase: 3094
+      phase/2/review-phase: 2019
+      phase/3/implement-phase: 3819
+      phase/3/review-phase: 2949

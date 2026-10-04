@@ -1,0 +1,136 @@
+schema_version: 1
+run: 2026-09-18-feat-harness-parity-matrix
+captures:
+- host: h-a8137dce
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: phase/1/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 21696
+  - session: phase/1/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 21696
+  - session: phase/2/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/implement-phase: 21696
+  - session: phase/2/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/review-phase: 35491
+  - session: phase/3/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/implement-phase: 23579
+  - session: phase/3/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/review-phase: 36667
+  - session: phase/4/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/4/implement-phase: 26303
+  - session: phase/4/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/4/review-phase: 43295
+  - session: phase/5/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/5/implement-phase: 65805
+  - session: phase/5/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/5/review-phase: 65805
+  - session: phase/6/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/6/implement-phase: 82664
+  - session: phase/6/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/6/review-phase: 82664
+  - session: phase/7/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/7/implement-phase: 68564
+  - session: phase/7/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/7/review-phase: 68564

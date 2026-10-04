@@ -4,11 +4,12 @@ captures:
 - host: h-f351dad3
   harness: claude-code
   mode: devcontainer
-  captured_at: '2026-09-27T17:38:40+00:00'
+  captured_at: '2026-10-04T05:15:24+00:00'
   at:
   - resolve:brainstorm
   - deliver
   - closeout
+  - backfill
   sessions:
   - session: 0e72b170-33ae-4ae8-b736-a8b2f84dc9b1
     role: main
@@ -18,43 +19,50 @@ captures:
         cache_write: 352917
         cache_read: 9328605
         output: 49594
-        usd: null
-        usd_source: none
+        usd: 5.7749961999999995
+        usd_source: exact
       claude-sonnet-5:
         input: 174
         cache_write: 263666
         cache_read: 8500169
         output: 869
-        usd: null
-        usd_source: none
+        usd: 3.7737388000000003
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.0016660000000000002
+        usd_source: exact
     activity:
       implementation:
-        usd: null
+        usd: 1.8794046546636156
         turns: 42
       other:
-        usd: null
+        usd: 4.0442900972007925
         turns: 62
       paperwork:
-        usd: null
+        usd: 3.6267062481355925
         turns: 57
     steps:
       (outside run):
-        usd: null
+        usd: 0.6463621318178783
         turns: 4
       brainstorm:
-        usd: null
+        usd: 1.5369650239584551
         turns: 17
       spec-review:
-        usd: null
+        usd: 1.6218488603680534
         turns: 33
       plan:
-        usd: null
+        usd: 0.6678992807055105
         turns: 9
       implement:
-        usd: null
+        usd: 4.256060022165534
         turns: 83
       deliver:
-        usd: null
+        usd: 0.8212656809845645
         turns: 11
     briefs:
       a178979bb08f82fdb: 1944
@@ -64,20 +72,27 @@ captures:
     role: main
     models:
       claude-opus-5-5:
-        input: 8
-        cache_write: 57524
-        cache_read: 276635
-        output: 819
-        usd: null
-        usd_source: none
+        input: 14
+        cache_write: 60303
+        cache_read: 533941
+        output: 2144
+        usd: 0.6572233999999999
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.00104
+        usd_source: exact
     activity:
       other:
-        usd: null
-        turns: 1
-      paperwork:
-        usd: null
+        usd: 0.11947989333187536
         turns: 3
+      paperwork:
+        usd: 0.5387835066681246
+        turns: 4
     steps:
       (outside run):
-        usd: null
-        turns: 4
+        usd: 0.6582633999999999
+        turns: 7
