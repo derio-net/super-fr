@@ -304,8 +304,11 @@ ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body"
 # `fr triage origins` alone needs how an issue ended; `stateReason` wants a newer gh, so no
 # other issue-list verb asks for it.
 ORIGINS_ISSUE_LIST_FIELDS = ISSUE_LIST_FIELDS + ",state,closedAt,stateReason"
+# `author` and `isCrossRepository` are who opened a PR and whether from a fork: a batch
+# PR is attributed by them, never by its head branch name alone (gh#936).
 PR_LIST_FIELDS = (
-    "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences"
+    "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences,"
+    "author,isCrossRepository"
 )
 OPEN_PR_LIST_FIELDS = (
     PR_LIST_FIELDS + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision,headRefOid"
@@ -432,6 +435,11 @@ def count_issues_with_label(*, repo: str, name: str) -> int:
         ]
     )
     return len(json.loads(out)) if out else 0
+
+
+def viewer_login() -> str:
+    """The login of the user `gh` is authenticated as."""
+    return _run_gh(["api", "user", "--jq", ".login"])
 
 
 def auth_status() -> bool:

@@ -245,7 +245,7 @@ def test_a_foreign_pr_on_a_batch_branch_is_reported_once_and_never_merged() -> N
         (81, f"foreign:{REPO}#81"),
     ]
     assert first.actions[0].detail == (
-        f"PR #80 on feat/batch-x is not this batch's: opened from a fork; it is never merged"
+        "PR #80 on feat/batch-x is not this batch's: opened from a fork; it is never merged"
     )
     again = drive_pass(
         _snap([b], {"x": "dispatched"}, foreign=foreign, warned=frozenset({f"foreign:{REPO}#80"}))
