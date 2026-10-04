@@ -44,3 +44,8 @@ First fix targeted plan_ops.tick/complete_phase. fr plan edit --tick/--complete-
 ### fx-525 · finding [fixed] · #525 fixed: exception text escaped at 61 sites
 
 escape(str(e)) at each except-bound interpolation into a markup-on console.print (authored [red] unchanged). Pinned by tests/unit/test_plan_cmd.py::test_a_parse_error_quoting_rich_markup_is_reported_not_raised (self-review AND proportionality crashed) and the AST tripwire tests/unit/test_tripwire_rich_exception_markup.py.
+
+<!-- fr:journal kind=finding scope=debug id=fx-502 created=2026-10-04T05:44:32+00:00 state=fixed -->
+### fx-502 · finding [fixed] · #502 fixed: ticks rewrite only the state: block
+
+plan_ops.rewrite_phase_text splices the changed top-level block, trusted only if it parses back to the intended doc. Wired into record/apply.py _plan_writes (the real CLI path) and the plan_ops writers. Pinned by tests/unit/test_record_verbs.py::test_plan_edit_rewrites_only_the_state_block_it_changes (RED with the engine change reverted) plus plan_ops tests.
