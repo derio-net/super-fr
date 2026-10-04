@@ -14,3 +14,8 @@ Two mechanical causes in the same workflow files, batched deliberately by the op
 ### ci-floor-and-trigger · finding [fixed] · CI pins UV_PYTHON=3.11, tests 3.11+3.14, triggers push on main only
 
 ci.yml + release.yml: workflow-level UV_PYTHON=3.11 (an env var, not .python-version, so operators' local runs stay unpinned). ci.yml test matrix gains python: [3.11, 3.14] with job env UV_PYTHON=${{ matrix.python }}; only the 3.11 leg uploads coverage. ci.yml and acceptance-report.yml: push scoped to main. Pinned by tests/unit/test_ci_python_floor.py (5 tests, red before, green after; floor read from requires-python). Full suite run locally on 3.11.15: 8154 passed — the one failure was mirror drift from editing acceptance-matrix.md mid-run, fixed by sync-opencode.py.
+
+<!-- fr:journal kind=review scope=debug id=08972d833f08 created=2026-10-04T06:54:30+00:00 -->
+### 08972d833f08 · review · Self-review: no defects; check-context names change
+
+Reviewed the branch diff plus actionlint (clean). Noted, not a defect: test check contexts rename from 'test (N)' to 'test (py3.11, N)' / 'test (py3.14, N)'; main's ruleset requires no status checks and ci-ok is the stable aggregate (#706), so nothing keys on the old names. Not changed (out of scope): the scaffolded consumer acceptance-report template (fr acceptance init) and fr-spec-status.yml's setup-python 3.12 (reusable workflow, not uv-driven).
