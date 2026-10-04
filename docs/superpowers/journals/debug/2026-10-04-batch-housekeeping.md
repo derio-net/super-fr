@@ -29,3 +29,8 @@ registry.split_lines (re.split on newline only) replaces str.splitlines(keepends
 ### fix-648 · finding [fixed] · #648: linked non-open PRs carried default checks/merge state
 
 Root cause: PullRequest defaulted checks to zero counts and mergeable/merge_state to UNKNOWN; parse_prs filled them with those defaults for list_prs(state=all) records that carry none, and only join_open overwrote them for open PRs. Fix: fields are Optional (None), parse_prs fills only when the record carries the key; consumers (render, views, snapshot, triage_batch_cmd) read None as no checks. Tests: test_triage_open_prs.py::test_a_linked_non_open_pr_carries_no_invented_checks_or_merge_state (red first); test_triage_facts_schema3 old-defaults test updated to the new contract.
+
+<!-- fr:journal kind=finding scope=debug id=fix-646 created=2026-10-04T05:15:41+00:00 state=fixed -->
+### fix-646 · finding [fixed] · #646: brief overstated the reserved version
+
+Root cause: live_reservations walks only the dispatching scope batches, yet the brief said reserved for this batch; do not pick another number. batch_merge already recomputes slots from main, so only the wording misled. Fix (cheapest cut named in triage): the brief calls the number provisional and says merge renumbers. Test: test_triage_batch_dispatch.py::test_the_reserved_version_is_called_provisional_until_merge (red first).
