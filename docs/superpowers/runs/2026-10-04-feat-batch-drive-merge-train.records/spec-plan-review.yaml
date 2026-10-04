@@ -1,0 +1,63 @@
+schema_version: 7
+run: 2026-10-04-feat-batch-drive-merge-train
+step: spec-plan-review
+outcome: done
+journal:
+  - kind: finding
+    id: spr-order-unstable
+    review_scope: in
+    title: merge_order is not stable when a merged PR leaves the queue, so the train head can change between passes and update a second PR
+    body: |
+      target: spec. batch.py:619-631: merge_order's overlap counts and adjacency search depend on which entries are in the queue (and the queue is already filtered to the selection, triage_batch_cmd.py:1472-1476). When head A merges and B is updated, the next pass recounts without A and may put C ahead of B. C is then updated too, the churn #942 is meant to remove.
+  - kind: finding
+    id: spr-stop-member-unplaced
+    review_scope: in
+    title: A non-head member that stops the walk (pending or moved after a green candidate) is in no Train field and is not counted
+    body: "target: spec. For green A, pending B, green C, B was neither head, candidate, queued nor stepped over."
+  - kind: finding
+    id: spr-train-line-fields
+    review_scope: in
+    title: The Train record cannot produce the specified train line, and the line has no slot for the green candidates after the head
+    body: "target: spec. train_line needed PR numbers that Train did not carry; candidates[1:] had no part in the line; §B's _stopped was a set where the queued outcome names the head."
+  - kind: finding
+    id: spr-mergestop-head-moved
+    review_scope: in
+    title: A head-moved or closed MergeStopError from merge_ready is stepped over as a refusal, which contradicts R3 (a moved head stops the train)
+    body: "target: spec. batch_merge.py:236-249 (_open_head raises MergeStopError for a non-OPEN state and for a moved head)."
+  - kind: finding
+    id: spr-skill-prose-stale
+    review_scope: in
+    title: The fr-triage skill still says each pass merges every green PR; neither the spec nor the plan updates it or its mirrors
+    body: "target: plan. plugins/super-fr/skills/fr-triage/SKILL.md:96."
+  - kind: finding
+    id: spr-snap-helper-repos
+    review_scope: in
+    title: The two-repo pure test cannot be written with the `_snap` helper as it is
+    body: "target: plan. tests/unit/test_triage_batch_drive.py:89-96: _snap hard-codes repos= and forwards **kw, so passing repos raises TypeError."
+  - kind: review
+    id: spr-review
+    title: "Independent spec+plan review: 6 findings, all in scope, all fixed"
+    body: |
+      Read-only fr-spec-reviewer checked all six spec-journal decisions against the spec and the code it names (file:line verified across batch_drive.py, batch.py, batch_merge.py, triage_batch_cmd.py and the drive tests). It confirmed one agentic phase with a TDD shape and the three CI rows linked. Six findings were raised (4 spec, 2 plan), all in scope, all fixed in the spec and the plan.
+resolves:
+  - id: spr-order-unstable
+    state: fixed
+    body: The train is now ordered by wave, then `order`, then id (`_dispatch_key`, the order the operator's brief names), which does not change when a member leaves. merge_order is no longer used by the drive's merge step (R1, §A step 1). Plan T1 adds an order-stability test.
+  - id: spr-stop-member-unplaced
+    state: fixed
+    body: §A step 2 now says the member that stops the walk is the head when no candidate came before it, and otherwise the first queued member. The Train docstring and plan case (e) match (queued == (b, c)).
+  - id: spr-train-line-fields
+    state: fixed
+    body: Train gains `numbers`. The line gains a `then` part for candidates[1:]. §B's `_stopped` is a dict from repo to the batch that stopped the train.
+  - id: spr-mergestop-head-moved
+    state: fixed
+    body: A new `HeadMovedError(MergeStopError)`, raised by _open_head for a moved head, stops the train. A no-longer-OPEN PR is not a member. A conflict, version or forge refusal is stepped over (§B table; plan T3/T4). Existing MergeStopError catches are unchanged (R8).
+  - id: spr-skill-prose-stale
+    state: fixed
+    body: Added R9 and plan task T6 to edit SKILL.md's driver sentence and regenerate both mirrors. The phase `files` list them, and §D lists them as changed.
+  - id: spr-snap-helper-repos
+    state: fixed
+    body: Plan T1.S1 first gives `_snap` an optional `repos` override, then writes the two-repo test with it.
+evidence:
+  review: spr-review
+  reviewer: a76c3c305ca82e198
