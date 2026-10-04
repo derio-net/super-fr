@@ -59,3 +59,8 @@ Re-measured first (the script was rewritten after #456: one rev-parse, no worktr
 ### fix-691 · finding [fixed] · #691: explainer gate provenance rewritten
 
 Root cause: 01-fr-goal.md paragraph predated the transcript-observed provenance in run_cmd._gate_provenance (operator observed; refusal unless --no-questions --reason -> agent + journal; typed claim only where unobservable, marked unverified). Rewrote the paragraph; re-rendered .html with the blog-craft renderer from / with --isolated after confirming the unmodified render was byte-identical to the committed page; page diff is exactly that paragraph. No test (prose); test_tripwire_explainers_fresh covers heading/title survival.
+
+<!-- fr:journal kind=finding scope=debug id=review-r1-crlf created=2026-10-04T05:40:52+00:00 state=fixed review_scope=in -->
+### review-r1-crlf · finding [fixed] (reviewer: in scope) · Review: scaffold surgery normalised CRLF
+
+read_text converted CRLF to LF before _edit_profiles_text. Fixed: read_verbatim + write newline="", BOM preserved. Test: test_init_scaffold.py::test_a_crlf_profiles_file_stays_crlf_and_keeps_its_comments (red first).
