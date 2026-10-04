@@ -192,6 +192,14 @@ class DriveCheckout:
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return descendant not in self.behind
 
+    def commits_behind(
+        self, head: str, ref: str
+    ) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
+        return (("code", (("M", "packages/x.py"),)),)
+
+    def changed_paths(self, ref: str, head: str) -> frozenset[str]:
+        return frozenset()
+
     def add_worktree(self, where: Path, ref: str) -> Any:
         return _Worktree(self, where)
 
