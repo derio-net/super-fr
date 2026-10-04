@@ -1785,6 +1785,9 @@ class _Driver:
             return f"stopped: {exc}", False, in_flight
         except TriageError as exc:
             _fail(str(exc))
+        except FORGE_ERRORS as exc:  # a re-read of the PR or its checks; the merge's own
+            # refusal is a MergeStopError above, so no write failure lands here
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         if attempt.outcome in ("merged", "already-merged"):
             self._unlanded.discard(batch.id)
             return f"merged PR #{action.pr} at {attempt.head[:12]}", True, in_flight - 1

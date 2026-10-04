@@ -1355,3 +1355,27 @@ def test_a_failed_merge_method_read_does_not_end_the_loop(
     assert isinstance(result.exception, _StopError), result.output
     assert result.output.count("unexpected EOF") == 1
     assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_a_failed_read_while_acting_on_a_merge_does_not_end_the_loop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#910 (review): the merge re-reads the PR before acting (`plan_queue`); that
+    read failing after the snapshot's succeeded skips the pass like any other."""
+    _pr_open(world, tmp_path)
+    real_view = world.pr_view
+    calls: list[int] = []
+
+    def _view(repo: str, number: int) -> dict[str, Any]:
+        calls.append(number)
+        if len(calls) == 2:  # the snapshot's read answered; the act-time one fails
+            raise GhError(EOF_MSG, returncode=1)
+        return real_view(repo, number)
+
+    monkeypatch.setattr(world, "pr_view", _view)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("unexpected EOF") == 1
+    assert world.merged == [(101, "sha-101", "squash")]
