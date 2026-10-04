@@ -32,3 +32,8 @@ Supersedes the earlier root-cause entry as an account of the OBSERVED error. Eve
 ### 6cfa22c2f2cf · ruled-out · ln -sfn gap as the cause of the observed error
 
 Real but not what the operator hit: the observed stderr names a missing VERSION directory, not a missing `current`. Also, on macOS/APFS even rename(2) over a symlink lets a concurrent lookup see ENOENT (60 misses in 300 os.replace swaps), so an atomic swap narrows that gap ~100x but cannot close it.
+
+<!-- fr:journal kind=hypothesis scope=debug id=9fadb88aefd4 created=2026-10-04T08:17:00+00:00 -->
+### 9fadb88aefd4 · hypothesis · Staging fr aside is enough to keep it on PATH (fix 1 — failed live)
+
+Built a copy of the env aside and pointed the PATH symlink at it during `uv tool install --force`. The stub test passed; a live run with real uv still lost fr (~250 ms, `fr: command not found`). Probed directly: uv --force deletes the entry point its RECEIPT names — whatever that path points at by then — at 0.77 s and relinks at 2.1 s. The stub did not model that; it does now.
