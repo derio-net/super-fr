@@ -39,3 +39,8 @@ plan_cmd.py:156 says the skeleton marker is for the first agentic phase; since #
 ### ro-502-plan-ops · ruled-out · #502: plan_ops.tick is not the CLI's tick path
 
 First fix targeted plan_ops.tick/complete_phase. fr plan edit --tick/--complete-phase build a StepRecord and go through record/apply.py _plan_writes, which also re-dumps the whole phase file (overlay.put(..., _yaml_dump(data))). plan_ops.tick/complete_phase have no production caller. Corrected root cause: the record engine's _plan_writes; the splice must be text-in/text-out so the engine's in-memory overlay can use it, and the pinning test must go through the CLI.
+
+<!-- fr:journal kind=finding scope=debug id=fx-525 created=2026-10-04T05:44:28+00:00 state=fixed -->
+### fx-525 · finding [fixed] · #525 fixed: exception text escaped at 61 sites
+
+escape(str(e)) at each except-bound interpolation into a markup-on console.print (authored [red] unchanged). Pinned by tests/unit/test_plan_cmd.py::test_a_parse_error_quoting_rich_markup_is_reported_not_raised (self-review AND proportionality crashed) and the AST tripwire tests/unit/test_tripwire_rich_exception_markup.py.
