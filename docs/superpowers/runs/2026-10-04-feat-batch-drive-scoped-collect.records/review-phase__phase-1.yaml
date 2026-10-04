@@ -1,0 +1,40 @@
+schema_version: 7
+run: 2026-10-04-feat-batch-drive-scoped-collect
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: cr-r7-drive-test-not-tied-to-carry
+    review_scope: in
+    title: The R7 drive test would stay green if the carry were removed
+    body: test_a_merged_batch_stays_merged_after_its_members_are_carried injected the batch PR by hand and never asserted that the member was carried.
+  - kind: finding
+    id: cr-spec-d-cases-untested
+    review_scope: in
+    title: No test for a carried key in a skipped repo, or for a previously-unviewed key at the command layer
+    body: Spec §D lists both cases. They hold by construction today (collect.py iterates collected repos only; carried is built from previous.issues only), but nothing pins them.
+  - kind: finding
+    id: cr-test-imports-private-helpers-from-test-module
+    review_scope: in
+    title: The carry tests import _issue and _pr_closing from test_triage_collect
+    body: The shared home for these helpers is tests/unit/triage_fixtures.py.
+  - kind: finding
+    id: cr-previous-facts-scope-check-batch-prs
+    review_scope: in
+    title: _previous_facts now scope-checks known_batch_prs too
+    body: This only matters when --dir is shared between scopes. It costs one extra head lookup per batch there; correctness is unaffected.
+  - kind: review
+    id: review-p1
+    title: "phase 1 code review: 4 findings, all in scope, none a correctness bug"
+    body: |
+      The dispatched code reviewer read spec, plan and the changed files: collect.py (carry keyed by (repo.lower(), number), closed only, truncation guard, links recomputed, viewed counted before every view_issue), triage_cmd.py (collect_into carry=, _previous_facts parsed once and scope-checked), triage_batch_cmd.py (recollect carry=True and the collect line), and the tests. It found no correctness bugs. Findings: cr-r7-drive-test-not-tied-to-carry, cr-spec-d-cases-untested, cr-test-imports-private-helpers-from-test-module, cr-previous-facts-scope-check-batch-prs.
+resolves:
+  - {id: cr-r7-drive-test-not-tied-to-carry, state: fixed, body: "The merged PR now comes through FakeForge prs with a closing reference to #5. The test asserts a single view_issue across both passes (the member was carried), that the link was recomputed (issue.prs == [9]), and that batch_pr finds it, before asserting merged."}
+  - {id: cr-spec-d-cases-untested, state: fixed, body: "Added test_a_carried_issue_in_a_skipped_repo_is_not_emitted (org scope, failing repo) and test_collect_into_with_carry_views_a_key_the_previous_pass_could_not_view (a ForgeError leaves #5 unviewed, and the next carry pass views it)."}
+  - {id: cr-test-imports-private-helpers-from-test-module, state: fixed, body: "_issue, _pr_closing and _captured_pr_with_refs moved to tests/unit/triage_fixtures.py; test_triage_collect.py and test_triage_collect_carry.py import them from there."}
+  - {id: cr-previous-facts-scope-check-batch-prs, state: refuted, body: "Not a defect. The reviewer itself concludes it is harmless. state_dir is keyed by scope, so only a --dir shared across scopes sees it, and there reusing another scope's batch PRs was never meaningful. Reading facts.json once for both uses is what P1.T2.S3 asked for."}
+evidence:
+  review: review-p1
+  reviewer: aacd154ee9b05a280
+  model: claude-opus-5-5
