@@ -14,3 +14,8 @@ super-fr#927: on 2026-10-04 PRs #894 and #897 were each updated three times in o
 ### cfefe6c3022f · ruled-out · Trusting the release: subject line
 
 Rejected per the operator's widened decision on #927: classify by files. A 'release:' commit that also adds a dependency is a real change; test_a_release_shaped_commit_that_changes_more_than_versions_still_updates pins it. Also rejected: PullRequest.files from facts for the overlap check (gh's files list caps per PR); a git ref...head diff is authoritative.
+
+<!-- fr:journal kind=finding scope=debug id=09323c4316e7 created=2026-10-04T06:05:15+00:00 state=fixed -->
+### 09323c4316e7 · finding [fixed] · _land skips the update when main is ahead only by routine commits
+
+batch_merge._behind_only_routinely: every first-parent commit main has that the head lacks (Checkout.commits_behind) must be routine (routine_commit: all paths under docs/superpowers/, or .changes/ deletions plus only_versions_bumped files — one quoted version moved up, the same move everywhere) and touch no path the PR changed (Checkout.changed_paths, main...head). Otherwise the R4 update runs as before. Shared by drive's merge_ready and batch merge's merge_one. Pinned failing-first in tests/unit/test_triage_batch_merge_ready.py (release-only merges, archive-only merges, routine+code still updates, release+dependency still updates, overlap still updates) and against real git in tests/integration/test_triage_merge_routine_git.py.
