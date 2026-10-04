@@ -1,0 +1,20 @@
+schema_version: 7
+run: 2026-10-04-feat-batch-drive-merge-train
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T6.S1, P1.T7.S1, P1.T7.S2, P1.T7.S3]
+refactor:
+  P1.T2: "train_line and summary_line were small additions beside existing helpers; nothing to clean."
+  P1.T3: "A two-line subclass and one raise site; nothing to clean."
+  P1.T5: "One loop printing train_line before the actions; nothing to clean."
+  P1.T7: "A fragment file and acceptance rows; no code to clean."
+journal:
+  - kind: discovery
+    id: p1-visual-evidence-tests-fail-under-xdist
+    title: tests/unit/test_run_evidence_visual.py (and a few timing tests) fail in the full -n auto suite but pass alone
+    body: |
+      The full suite on this host fails 4-7 tests (test_run_evidence_visual.py transcript-witness tests; once also test_records_commit stuck-lock, test_statusline_segment budget, test_sentinel_liveness) in two consecutive runs, yet all pass when run as those files alone (113 passed). They depend on harness transcripts/wall-clock and the host was loaded (suite took ~35 min). None touch the files this phase changed.
+    phase: 1
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f396c9d6-799d-4d9b-95d6-7cee134b0041/scratchpad/phase1-suite2.log
