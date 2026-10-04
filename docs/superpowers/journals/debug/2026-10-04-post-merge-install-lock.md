@@ -12,3 +12,8 @@ Sandboxed HOME (UV_TOOL_DIR/UV_TOOL_BIN_DIR under it, VK_INSTALL_SKIP_PREFLIGHT=
 ### 1a99f0e737d7 · ruled-out · The idle-guard script's own handling of a failing fr
 
 Once bash has the script open, `trap 'exit 0' EXIT` + fail-open checks make every fr failure (missing, half-built, refusing, hung past the 20 s watchdog) exit 0. Confirmed under live installs: every probe returned 0. A Stop-hook *error* needs the script itself to be unrunnable.
+
+<!-- fr:journal kind=ruled-out scope=debug id=fccccb18e375 created=2026-10-04T06:33:53+00:00 -->
+### fccccb18e375 · ruled-out · Hook timeout while fr starts slowly mid-build
+
+The hook bounds fr with its own 20 s watchdog (FR_IDLE_GUARD_TIMEOUT); probes during installs ran 1-2 s. Not the cause.
