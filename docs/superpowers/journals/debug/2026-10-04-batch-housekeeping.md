@@ -44,3 +44,8 @@ Root cause: the script outlived its caller (install.sh dropped it; fr init valid
 ### fix-455 · finding [fixed] · #455: agent-* mimic copies .worktreeinclude matches
 
 Root cause: mimic_default in plugins/super-fr/hooks/fr-worktree-create.sh ran only git worktree add, never the .worktreeinclude step spec 2026-09-04 §5.B.3 asks for. Fix: copy_worktreeinclude pipes git ls-files -o -i --exclude-from=.worktreeinclude through git check-ignore --stdin (ignored AND included), copying each best effort. Tests: test_hooks_worktree.py::TestWorktreeCreate::test_agent_worktree_copies_worktreeinclude_matches (red first), ::test_agent_worktree_without_worktreeinclude_copies_nothing.
+
+<!-- fr:journal kind=finding scope=debug id=sec-455-symlink created=2026-10-04T05:21:32+00:00 state=fixed -->
+### sec-455-symlink · finding [fixed] · Security: #455 include copy followed symlinks
+
+Background commit security review flagged symlink-following writes in copy_worktreeinclude. Reproduced red first: a committed cfg -> outside symlink with a real cfg/ in the base checkout made the copy write cfg/.env outside the worktree. Fix: no_link_under refuses any destination with a symlink component or an existing file; cp -P copies source symlinks as links. Test: test_hooks_worktree.py::TestWorktreeCreate::test_agent_worktree_include_copy_never_writes_through_a_symlink.
