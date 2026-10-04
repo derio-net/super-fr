@@ -49,3 +49,8 @@ Root cause: mimic_default in plugins/super-fr/hooks/fr-worktree-create.sh ran on
 ### sec-455-symlink · finding [fixed] · Security: #455 include copy followed symlinks
 
 Background commit security review flagged symlink-following writes in copy_worktreeinclude. Reproduced red first: a committed cfg -> outside symlink with a real cfg/ in the base checkout made the copy write cfg/.env outside the worktree. Fix: no_link_under refuses any destination with a symlink component or an existing file; cp -P copies source symlinks as links. Test: test_hooks_worktree.py::TestWorktreeCreate::test_agent_worktree_include_copy_never_writes_through_a_symlink.
+
+<!-- fr:journal kind=finding scope=debug id=fix-456 created=2026-10-04T05:22:50+00:00 state=fixed -->
+### fix-456 · finding [fixed] · #456: statusline within the 60 ms budget
+
+Re-measured first (the script was rewritten after #456: one rev-parse, no worktree list). Component profile on the operator Mac: bash 16 ms, jq stdin 15, git rev-parse 16, jq over 13 state files 16, and 13 (cd && pwd -P) subshells ~34 ms on top: the remaining over-budget cost. Fix: [ "$wt" -ef "$toplevel" ] (builtin inode compare). Interleaved warm medians: base clone 47-59 -> 31-37 ms; fr worktree 40-49 -> 30-33 ms (machine load is noisy; a first unloaded-vs-loaded read showed 85-113 ms before). Neither of the issue's heavier options (cache, pure-bash git walk) is needed. Guard: test_statusline_segment.py::test_a_state_file_naming_the_worktree_through_a_symlink_still_matches pins the physical-path semantics; CI timing guard stays 0.5 s.
