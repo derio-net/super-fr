@@ -37,3 +37,8 @@ Real but not what the operator hit: the observed stderr names a missing VERSION 
 ### 9fadb88aefd4 · hypothesis · Staging fr aside is enough to keep it on PATH (fix 1 — failed live)
 
 Built a copy of the env aside and pointed the PATH symlink at it during `uv tool install --force`. The stub test passed; a live run with real uv still lost fr (~250 ms, `fr: command not found`). Probed directly: uv --force deletes the entry point its RECEIPT names — whatever that path points at by then — at 0.77 s and relinks at 2.1 s. The stub did not model that; it does now.
+
+<!-- fr:journal kind=hypothesis scope=debug id=3c63c3cc35c8 created=2026-10-04T08:17:02+00:00 -->
+### 3c63c3cc35c8 · hypothesis · uv's entry point in a private bin dir; install.sh owns the PATH link (fix 2 — partial)
+
+Real install with UV_TOOL_BIN_DIR=~/.local/share/fr/uv-bin; install.sh repoints ~/.local/bin/fr by rename. Live: fr never missing (0 samples). But 5/60 calls crashed mid-import from the STAGED env: the stage was deleted the moment the link moved back.
