@@ -3,7 +3,7 @@ run: 2026-10-04-feat-batch-drive-merge-train
 workflow: fr-goal-light@1
 branch: feat/batch-drive-merge-train
 started: '2026-10-04T07:03:44+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -45,7 +45,11 @@ steps:
           reviewer: a76c3c305ca82e198
           findings: spr-order-unstable,spr-stop-member-unplaced,spr-train-line-fields,spr-mergestop-head-moved,spr-skill-prose-stale,spr-snap-helper-repos
   plan-review:
-    state: pending
+    state: done
+    at: '2026-10-04T07:36:23+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
