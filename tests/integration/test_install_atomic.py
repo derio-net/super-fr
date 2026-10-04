@@ -164,6 +164,17 @@ class TestInstallLock:
         assert lock.exists(), "a timed-out waiter must not remove a live holder's lock"
         assert not (sandbox["state"] / "installs").exists(), "nothing may be installed"
 
+    def test_a_lock_whose_holder_died_before_writing_its_pid_is_reclaimed(
+        self, sandbox: dict[str, Path]
+    ) -> None:
+        lock = sandbox["home"] / ".cache" / "fr" / "install.lock"
+        lock.mkdir(parents=True)
+        os.utime(lock, (1, 1))  # no pid file, long after its mkdir
+        p = _install(sandbox, FR_INSTALL_LOCK_TIMEOUT="5")
+        _, err = p.communicate(timeout=60)
+        assert p.returncode == 0, err
+        assert "stale" in err
+
     def test_a_dead_holders_lock_is_reclaimed(self, sandbox: dict[str, Path]) -> None:
         lock = sandbox["home"] / ".cache" / "fr" / "install.lock"
         lock.mkdir(parents=True)
@@ -239,14 +250,16 @@ class TestSessionHeldPluginPath:
     def test_the_move_off_the_versioned_layout_keeps_held_version_dirs(
         self, sandbox: dict[str, Path], tmp_path: Path
     ) -> None:
-        """A session started before the upgrade holds `<version>/`; the first
-        new-style install must not delete it, and a week later it goes."""
+        """A session started before the upgrade holds some `<version>/`; the
+        first new-style install must delete none of them, and a week later
+        they go. A dir's mtime is its SOURCE's (rsync -a), so an old mtime says
+        nothing about when it was installed or whether a session holds it."""
         cache = sandbox["home"] / ".claude" / "plugins" / "cache" / "derio-net--super-fr"
         for plugin in ("super-fr", "super-fr-dispatch"):
             (cache / plugin / "0.9.0" / "hooks").mkdir(parents=True)
             (cache / plugin / "0.8.0").mkdir()
-            os.utime(cache / plugin / "0.9.0", (1, 1))  # old, but still held
-            os.utime(cache / plugin / "0.8.0", (1, 1))  # old, nobody's
+            os.utime(cache / plugin / "0.9.0", (1, 1))
+            os.utime(cache / plugin / "0.8.0", (1, 1))
             (cache / plugin / "current").symlink_to("0.9.0")
 
         r = _install(sandbox)
@@ -256,23 +269,21 @@ class TestSessionHeldPluginPath:
         live = cache / "super-fr" / "current"
         assert live.is_dir() and not live.is_symlink()
         assert (live / "hooks" / "fr-run-idle-guard.sh").is_file()
-        assert (cache / "super-fr" / "0.9.0").is_dir(), (
-            "the dir `current` named must outlive the move"
-        )
-        assert not (cache / "super-fr" / "0.8.0").exists(), "a legacy dir over 7 days old goes"
-
-        os.utime(cache / "super-fr" / "0.9.0", (1, 1))  # a week on
+        for legacy in ("0.9.0", "0.8.0"):
+            assert (cache / "super-fr" / legacy).is_dir(), f"{legacy} must outlive the move"
+            os.utime(cache / "super-fr" / legacy, (1, 1))  # a week on
         r = _install(sandbox)
         _, err = r.communicate(timeout=120)
         assert r.returncode == 0, err
         assert not (cache / "super-fr" / "0.9.0").exists()
+        assert not (cache / "super-fr" / "0.8.0").exists()
         assert sorted(p.name for p in (cache / "super-fr").iterdir()) == ["current"]
 
 
 class TestAtomicReplacement:
     def test_a_live_link_is_repointed_by_rename(self, tmp_path: Path) -> None:
         """`ln -sfn` unlinks then creates; `atomic_symlink` (used for the `fr`
-        on PATH) is a rename, so a concurrent reader resolves the link to one
+        on PATH, a link to a file) is a rename, so a reader resolves it to one
         target or the other. On Linux that is exact. On macOS APFS a lookup can
         still race a rename (measured: 60 misses in 300 os.replace swaps), so
         there only the end state is checked — which is why the plugin path is
@@ -282,11 +293,10 @@ class TestAtomicReplacement:
             "a live link must be swapped with atomic_symlink"
         )
         for v in ("1.0.0", "2.0.0"):
-            (tmp_path / v / "hooks").mkdir(parents=True)
-            (tmp_path / v / "hooks" / "h.sh").write_text("exit 0\n")
-        link = tmp_path / "current"
+            (tmp_path / v).write_text("#!/bin/sh\n")  # an entry point: a file
+        link = tmp_path / "fr"
         link.symlink_to("1.0.0")
-        probe = link / "hooks" / "h.sh"
+        probe = link
         stop = threading.Event()
         misses = []
 

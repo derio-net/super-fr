@@ -19,9 +19,16 @@ acquire_install_lock() {
   mkdir -p "$(dirname "$INSTALL_LOCK")"
   while ! mkdir "$INSTALL_LOCK" 2>/dev/null; do
     holder="$(cat "$INSTALL_LOCK/pid" 2>/dev/null || true)"
-    if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
-      echo "Reclaiming stale install lock $INSTALL_LOCK (holder pid $holder is gone)" >&2
-      rm -rf "$INSTALL_LOCK"
+    # Stale: the holder is gone, or it died between mkdir and writing its pid
+    # (no pid a minute on). Reclaim by renaming the lock aside first, so two
+    # waiters that both saw it stale cannot remove each other's fresh lock:
+    # only one rename of that directory can succeed.
+    if { [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; } \
+       || { [ -z "$holder" ] && [ -n "$(find "$INSTALL_LOCK" -maxdepth 0 -mmin +1 2>/dev/null)" ]; }; then
+      if mv "$INSTALL_LOCK" "$INSTALL_LOCK.stale.$$" 2>/dev/null; then
+        echo "Reclaiming stale install lock $INSTALL_LOCK (holder pid ${holder:-unknown} is gone)" >&2
+        rm -rf "$INSTALL_LOCK.stale.$$"
+      fi
       continue
     fi
     if [ -z "$announced" ]; then
@@ -47,27 +54,27 @@ release_install_lock() {
   INSTALL_LOCK_HELD=""
 }
 
-# Repoint a live symlink with rename(2), never `ln -sfn` — that unlinks, then
-# creates, and a hook resolving the path in between exits 127 (gh#938). GNU mv
-# needs -T and BSD mv -h to replace a link to a directory instead of moving
-# into it.
+# Repoint a live symlink to a FILE with rename(2), never `ln -sf` — that
+# unlinks, then creates, and a call resolving the path in between finds nothing
+# (gh#938). Files only: `mv` onto a link to a directory would move into it, and
+# the flags that stop that (GNU -T, BSD -h) are not portable (busybox has
+# neither).
 atomic_symlink() {
   local target="$1" link="$2" tmp="$2.tmp.$$"
   rm -f "$tmp"
   ln -s "$target" "$tmp"
-  if mv --version >/dev/null 2>&1; then
-    mv -fT "$tmp" "$link"
-  else
-    mv -fh "$tmp" "$link"
-  fi
+  mv -f "$tmp" "$link"
 }
 
 # Clean up any .tmp sidecar files on failure so a rerun starts clean.
 cleanup_tmps() {
   local rc=$?
   if [ "$rc" -ne 0 ]; then
-    rm -f "${SETTINGS:-}.tmp" "${MCP_CONFIG:-}.tmp" \
-          "${KNOWN_MARKETPLACES:-}.tmp" "${INSTALLED_PLUGINS:-}.tmp" 2>/dev/null || true
+    # Only sidecars of files this run named: an exit before they are set (a
+    # timed-out lock wait) must not remove a stray `.tmp` from the cwd.
+    for f in "${SETTINGS:-}" "${MCP_CONFIG:-}" "${KNOWN_MARKETPLACES:-}" "${INSTALLED_PLUGINS:-}"; do
+      [ -z "$f" ] || rm -f "$f.tmp" 2>/dev/null || true
+    done
     echo "install.sh failed (exit $rc). Rerun after fixing." >&2
   fi
   release_install_lock
@@ -572,10 +579,12 @@ if command -v jq &>/dev/null && [ -f "$INSTALLED_PLUGINS" ]; then
     # mtime) skips a same-length edit made within the same second, and in
     # place a skipped file stays stale for good.
     if [ -L "$CACHE_CURRENT" ]; then
-      # One-time move off the versioned layout. Sessions started before it hold
-      # the version dir the link named; restart its 7-day clock (below).
-      legacy_target="$(readlink "$CACHE_CURRENT")"
-      [ -d "$PLUGIN_CACHE/$legacy_target" ] && touch "$PLUGIN_CACHE/$legacy_target"
+      # One-time move off the versioned layout. A session started before it
+      # holds some version dir, and a dir's mtime is the SOURCE's (rsync -a),
+      # not when it was installed — so restart every one's 7-day clock (below).
+      for legacy in "$PLUGIN_CACHE"/*/; do
+        [ -L "${legacy%/}" ] || touch "${legacy%/}"
+      done
       cache_stage="$PLUGIN_CACHE/.current.new.$$"
       rm -rf "$cache_stage"
       mkdir -p "$cache_stage"
@@ -775,13 +784,14 @@ if command -v uv &>/dev/null; then
     mkdir -p "$fr_uv_bin"
   fi
   if [ -n "$fr_manage_path" ] && [ -e "$fr_path_link" ]; then
-    fr_stage="$fr_stage_root/$$"
+    fr_stage="$fr_stage_root/$$.$(date +%s)"
     rm -rf "$fr_stage"
     mkdir -p "$fr_stage"
     if UV_TOOL_DIR="$fr_stage/tools" UV_TOOL_BIN_DIR="$fr_stage/bin" \
          uv tool install --force "${FR_RUNNER_WITH[@]}" "$PLUGIN_ROOT/packages/fr" \
          >/dev/null 2>&1 \
-       && "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1; then
+       && { "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1 \
+            || { sleep "$fr_install_retry_sleep"; "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1; }; }; then
       atomic_symlink "$fr_stage/tools/fr/bin/fr" "$fr_path_link"
       echo "  fr on PATH points at a staged copy while the tool env is rebuilt"
       # Let an fr that started on the old env just before the swap finish
