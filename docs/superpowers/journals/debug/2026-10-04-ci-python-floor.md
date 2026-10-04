@@ -9,3 +9,8 @@
 ### aac6785734fc · root-cause · Workflow config: unpinned interpreter + push trigger not scoped to main
 
 Two mechanical causes in the same workflow files, batched deliberately by the operator (same file, shared CI-load motive) rather than one shared cause: (1) the absence of an interpreter pin lets uv choose the runner Python; (2) an unfiltered `push` trigger overlaps `pull_request` on every PR branch. No source code is involved.
+
+<!-- fr:journal kind=finding scope=debug id=ci-floor-and-trigger created=2026-10-04T06:54:25+00:00 state=fixed -->
+### ci-floor-and-trigger · finding [fixed] · CI pins UV_PYTHON=3.11, tests 3.11+3.14, triggers push on main only
+
+ci.yml + release.yml: workflow-level UV_PYTHON=3.11 (an env var, not .python-version, so operators' local runs stay unpinned). ci.yml test matrix gains python: [3.11, 3.14] with job env UV_PYTHON=${{ matrix.python }}; only the 3.11 leg uploads coverage. ci.yml and acceptance-report.yml: push scoped to main. Pinned by tests/unit/test_ci_python_floor.py (5 tests, red before, green after; floor read from requires-python). Full suite run locally on 3.11.15: 8154 passed — the one failure was mirror drift from editing acceptance-matrix.md mid-run, fixed by sync-opencode.py.
