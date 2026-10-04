@@ -1,0 +1,56 @@
+schema_version: 7
+run: 2026-10-04-feat-batch-drive-scoped-collect
+step: spec-review
+outcome: done
+journal:
+  - kind: finding
+    id: sr-truncated-issue-list
+    review_scope: in
+    title: "Carry-over breaks R3 when a repo's open-issue list hit its limit"
+    body: |
+      A judged issue reopened past a truncated open list (len == ISSUE_LIMIT) would stay carried as closed and could stage its batch merged instead of partial. collect.py:376,393-394,431-447. Fix: carry nothing in a repo whose issue list was truncated this pass.
+  - kind: finding
+    id: sr-older-schema-not-refused
+    review_scope: in
+    title: "§B says an older-schema facts.json carries nothing, but load_facts accepts schema 3"
+    body: |
+      model.py:41 FACTS_READS = (3, 4); load_facts refuses only outside it. The spec must say which schemas are carried.
+  - kind: finding
+    id: sr-viewed-count-definition
+    review_scope: in
+    title: "R6 'issues viewed' is undefined for failed or PR views, and the counts have no path from collect_into to recollect"
+    body: |
+      Count view_issue calls, failures included. collect_into must return the stats, because recollect only sees collect_into (triage_cmd.py:178, triage_batch_cmd.py:1189).
+  - kind: finding
+    id: sr-test-plan-2-no-row
+    review_scope: in
+    title: "Test Plan item 2 (check's settled count) has no acceptance row"
+    body: |
+      No row cites Test Plan 2; add a verify: post-merge row.
+  - kind: finding
+    id: sr-group-scope-name-collision
+    review_scope: out
+    title: "Judgement keys are owner-blind, so two repos with the same name in a group scope collide"
+    body: |
+      collect.py:324 _judged_elsewhere keys by repo name only; model.py:154-156 issue_key drops the owner. This predates the change, and the carried lookup only inherits it.
+  - kind: review
+    id: spec-review-1
+    title: "independent spec review: 5 findings (4 in scope, 1 out)"
+    body: |
+      fr-spec-reviewer checked decisions d1-d4 (all honoured), the §2 safety argument against batch.py:163-179, stage.py, check.py:195 and render/views, skipped-repo handling (collect.py:324-331), unviewed handling and the scope/kind match (model.py:314-315). Findings: sr-truncated-issue-list, sr-older-schema-not-refused, sr-viewed-count-definition, sr-test-plan-2-no-row (in); sr-group-scope-name-collision (out).
+resolves:
+  - {id: sr-truncated-issue-list, state: fixed, body: "Spec §2 and §A now say a repo whose open-issue list was truncated this pass carries nothing; R1 and R3 are reworded, and an engine test is named in §D."}
+  - {id: sr-older-schema-not-refused, state: fixed, body: "§B now says both readable schemas (FACTS_READS 3 and 4) are carried, since Issue has the same shape; anything load_facts refuses carries nothing."}
+  - {id: sr-viewed-count-definition, state: fixed, body: "R6 and §A now define viewed as view_issue calls, failures and PR answers included. CollectStats comes from collect_facts_counted, and collect_into returns it to recollect (§B)."}
+  - {id: sr-test-plan-2-no-row, state: fixed, body: "Added the drive-carry-keeps-settled-set row (verify: post-merge) for Test Plan 2."}
+  - {id: sr-group-scope-name-collision, state: out-of-scope, body: "Pre-existing: the judgement key grammar has no owner, and this change did not cause that. To avoid adding a new cross-carry, the spec keys the carried map by (repo.lower(), number), checked against the loop's repo."}
+acceptance:
+  - id: drive-carry-keeps-settled-set
+    capability: Backlog triage
+    acceptance: After drive passes that carried facts over, fr triage check reports the same settled set as right after a full fr triage collect.
+    origin: ["super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R7"]
+    status: not-implemented
+    verify: post-merge
+evidence:
+  review: spec-review-1
+  reviewer: a0bdb0d8ca051c1e9
