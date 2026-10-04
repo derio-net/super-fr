@@ -682,8 +682,8 @@ def _update_profiles_yaml(
     from fr.services.render import SERVICE_ORDER, render_services
 
     path = repo_root / ".devcontainer" / "fr-profiles.yaml"
-    data = yaml.safe_load(path.read_text()) if path.is_file() else {}
-    data = data or {}
+    text = path.read_text() if path.is_file() else ""
+    data = (yaml.safe_load(text) if text else {}) or {}
     data.setdefault("profiles", {})
     entry: dict[str, object] = {"purpose": purpose, "secrets": secrets}
     data["profiles"][profile] = entry
@@ -691,11 +691,114 @@ def _update_profiles_yaml(
         data["default"] = profile if default else data.get("default", profile)
     # The stamp is re-applied below; the service blocks are rendered as text
     # (the one renderer the migration also uses), never round-tripped.
-    for key in ("schema_version", "backend", "host", *SERVICE_ORDER):
+    dropped = ("schema_version", "backend", "host", *SERVICE_ORDER)
+    for key in dropped:
         data.pop(key, None)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(data, sort_keys=False) + render_services(services))
+    edited = _edit_profiles_text(text, profile, entry, data["default"], dropped[1:], data)
+    if edited is None:
+        # No file yet, or a layout line surgery cannot handle: the whole-file
+        # dump, which says the right thing but drops the operator's comments.
+        edited = yaml.safe_dump(data, sort_keys=False)
+    newline = "\r\n" if "\r\n" in text else "\n"
+    path.write_text(edited + render_services(services, newline=newline))
     artifact_kind("profiles").write_version(path, artifact_kind("profiles").current_version)
+
+
+_TOP_LEVEL_KEY_RE = re.compile(r"^([A-Za-z_][\w-]*)[ \t]*:")
+
+
+def _edit_profiles_text(
+    text: str,
+    profile: str,
+    entry: dict[str, object],
+    default: str,
+    drop: tuple[str, ...],
+    expected: dict[str, object],
+) -> str | None:
+    """`text` with `profile`'s entry under `profiles:` replaced or appended,
+    `default:` set, and the top-level `drop` keys removed — every other line,
+    comments included, kept byte-for-byte (super-fr#805). `None` when there is
+    no text or the result does not parse back to `expected` (a flow-style
+    `profiles: {...}`, an anchor...): the caller then dumps the whole file."""
+    if not text.strip():
+        return None
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = _drop_top_level_keys(text.split("\n"), drop)
+    if lines and lines[-1] == "":
+        lines.pop()  # the final newline is re-added below
+
+    def top(i: int) -> str | None:
+        m = _TOP_LEVEL_KEY_RE.match(lines[i])
+        return m.group(1) if m else None
+
+    starts = [i for i in range(len(lines)) if top(i) == "profiles"]
+    if len(starts) != 1 or yaml.safe_load(lines[starts[0]].split(":", 1)[1] or "") is not None:
+        return None  # absent, duplicated, or `profiles: {...}` on one line
+    head = starts[0]
+    end = head + 1  # the block: indented, blank or indented-comment lines
+    while end < len(lines) and (not lines[end].strip() or lines[end][:1] in (" ", "\t")):
+        end += 1
+    while end > head + 1 and not lines[end - 1].strip():
+        end -= 1
+
+    def indent(line: str) -> int:
+        return len(line) - len(line.lstrip(" \t"))
+
+    def is_key(line: str) -> bool:
+        return bool(line.strip()) and not line.lstrip().startswith("#")
+
+    keys = [i for i in range(head + 1, end) if is_key(lines[i])]
+    child = min((indent(lines[i]) for i in keys), default=2)
+    rendered = [
+        " " * child + ln
+        for ln in yaml.safe_dump({profile: entry}, sort_keys=False).rstrip("\n").split("\n")
+    ]
+    entry_re = re.compile(rf"^[ \t]{{{child}}}{re.escape(profile)}[ \t]*:")
+    at = next((i for i in keys if entry_re.match(lines[i])), None)
+    if at is None:
+        lines[end:end] = rendered
+    else:
+        # The entry runs to the next line at or above its indent — a sibling,
+        # or a comment that heads the sibling — less its trailing blank lines.
+        stop = at + 1
+        while stop < end and (not lines[stop].strip() or indent(lines[stop]) > child):
+            stop += 1
+        while stop > at + 1 and not lines[stop - 1].strip():
+            stop -= 1
+        lines[at:stop] = rendered
+
+    default_line = yaml.safe_dump({"default": default}, sort_keys=False).rstrip("\n")
+    at_default = next((i for i in range(len(lines)) if top(i) == "default"), None)
+    if at_default is None:
+        lines.append(default_line)
+    else:
+        lines[at_default] = default_line
+
+    # Split on `\n` alone (never `splitlines`, which also breaks on `\x0c` and
+    # U+2028 inside a comment); a kept `\r` is stripped here and re-added.
+    out = newline.join(ln.rstrip("\r") for ln in lines) + newline
+    try:
+        reread = yaml.safe_load(out) or {}
+    except yaml.YAMLError:
+        return None
+    reread.pop("schema_version", None)
+    return out if reread == expected else None
+
+
+def _drop_top_level_keys(lines: list[str], keys: tuple[str, ...]) -> list[str]:
+    """`lines` without the top-level `keys` and their indented continuation."""
+    kept: list[str] = []
+    dropping = False
+    for line in lines:
+        m = _TOP_LEVEL_KEY_RE.match(line)
+        if m:
+            dropping = m.group(1) in keys
+        elif line[:1] not in (" ", "\t") and line.strip():
+            dropping = False  # a top-level comment ends the block
+        if not dropping:
+            kept.append(line)
+    return kept
 
 
 def _ensure_env_placeholders(env_file: Path, repo: str, profile: str, secrets: list[str]) -> None:

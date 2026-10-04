@@ -1061,8 +1061,9 @@ class LocalWorktreeDevcontainerTarget:
             if base_status.stdout.strip():
                 raise IsolationError(
                     f"profile {name!r} is written in the base repo but not committed, so the "
-                    f"worktree can't see it — run `fr init scaffold --profile {name}` (which now "
-                    "commits) or commit .devcontainer/ yourself, then retry `fr isolation up`."
+                    f"worktree can't see it — run `fr init scaffold --profile {name} --force` "
+                    "(which commits; add `--tracking none` if the repo has no recognised "
+                    "remote) or commit .devcontainer/ yourself, then retry `fr isolation up`."
                 )
         # Record BEFORE the side effect that can fail (gh#578): a failing
         # postCreate used to leave a worktree and a container that neither

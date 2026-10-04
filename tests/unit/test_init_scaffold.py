@@ -1032,3 +1032,70 @@ def test_a_forge_change_redetects_blocks_the_new_forge_rejects(repo: Path) -> No
     assert data["forge"]["type"] == "gitlab"
     assert data["ci"] == {"type": "none"}  # github-actions no longer fits; no CI files
     assert data["tracking"] == {"type": "none"}  # autouse fake: issues off
+
+
+# --- super-fr#805: scaffold keeps the operator's comments in fr-profiles.yaml ---
+
+
+_COMMENTED_PROFILES = """\
+# operator header: who owns these profiles
+schema_version: 2
+profiles:
+  # the everyday one
+  dev:
+    purpose: day-to-day development  # keep it lean
+    secrets: []
+  # gh writes only
+  admin:
+    purpose: in-container gh writes
+    secrets:
+    - GH_TOKEN  # rotated monthly
+default: dev
+forge:
+  type: github
+ci:
+  type: github-actions
+tracking:
+  type: none
+"""
+
+
+def test_adding_a_profile_keeps_every_comment(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_text(_COMMENTED_PROFILES)
+    res = runner.invoke(
+        app,
+        ["init", "scaffold", "--repo", str(repo), "--profile", "readonly",
+         "--purpose", "read-only review", "--tracking", "none", "--backend", "github"],
+    )
+    assert res.exit_code == 0, res.output
+    text = (repo / PROFILES).read_text()
+    for comment in ("# operator header", "# the everyday one", "# keep it lean",
+                    "# gh writes only", "# rotated monthly"):
+        assert comment in text, f"{comment!r} dropped:\n{text}"
+    data = _profiles(repo)
+    assert list(data["profiles"]) == ["dev", "admin", "readonly"]
+    assert data["profiles"]["readonly"] == {"purpose": "read-only review", "secrets": []}
+    assert data["profiles"]["admin"]["secrets"] == ["GH_TOKEN"]
+    assert data["default"] == "dev"
+
+
+def test_rescaffolding_a_profile_replaces_only_its_entry(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_text(_COMMENTED_PROFILES)
+    res = runner.invoke(
+        app,
+        ["init", "scaffold", "--repo", str(repo), "--profile", "dev", "--purpose",
+         "new purpose", "--tracking", "none", "--backend", "github", "--force", "--default"],
+    )
+    assert res.exit_code == 0, res.output
+    text = (repo / PROFILES).read_text()
+    assert "# the everyday one" in text  # sits above the entry, not inside it
+    assert "# gh writes only" in text and "# rotated monthly" in text
+    assert "# keep it lean" not in text  # that comment was on the replaced value
+    data = _profiles(repo)
+    assert data["profiles"]["dev"] == {"purpose": "new purpose", "secrets": []}
+    assert list(data["profiles"]) == ["dev", "admin"]
+    assert data["default"] == "dev"

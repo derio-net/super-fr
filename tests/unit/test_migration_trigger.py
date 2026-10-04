@@ -176,9 +176,11 @@ def test_the_rule_prose_names_every_read_only_command() -> None:
 def test_a_read_only_command_never_migrates_or_commits(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """r4-f5 / r4-f11. Each of these either promises not to mutate, or is the
-    diagnostic whose whole job is to REPORT the state the gate would silently
-    repair. None of them may rewrite an artifact or write to git history."""
+    """r4-f5 / r4-f11. Each of these either promises not to mutate a registered
+    artifact through the gate, or is the diagnostic whose whole job is to REPORT
+    the state the gate would silently repair: the gate never migrates or commits
+    on their behalf. (Not "never writes": `init scaffold` writes and commits its
+    own profile — super-fr#806.)"""
     _plan(tmp_path)  # stale
     ran: list[int] = []
     monkeypatch.setattr(trigger, "is_stale", lambda *a, **k: ran.append(1) or True)
