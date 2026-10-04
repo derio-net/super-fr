@@ -4,7 +4,7 @@ name: acceptance-report
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
 # - `skipped` / `not-implemented` rows surface as warning annotations; the
 #   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
-# - A Markdown summary is written to each Actions run (branch, PR, main).
+# - A Markdown summary is written to each Actions run (PR, main).
 # - The built report (GitHub-linked at this ref) is uploaded as an artifact.
 # - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).
 # Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
@@ -12,10 +12,12 @@ name: acceptance-report
 # If PR-time path filters are added later, they must include every own-repo
 # path the matrix references — `fr acceptance check` warns when one falls outside them.
 
+# push is scoped to main: `["**"]` overlapped pull_request and ran the gate
+# twice on every PR push (#941).
 on:
   pull_request: {}
   push:
-    branches: ["**"]
+    branches: [main]
   schedule:
     - cron: "47 5 * * 1" # weekly, Monday 05:47 UTC
   workflow_dispatch:
@@ -38,7 +40,7 @@ jobs:
         run: uv tool install ./packages/fr
       - name: Check matrix (gate — failing rows fail here)
         run: fr acceptance check
-      - name: Write Actions summary (branch / PR / main)
+      - name: Write Actions summary (PR / main)
         if: always()
         run: fr acceptance summary >> "$GITHUB_STEP_SUMMARY"
       - name: Build report (GitHub links at this ref)
