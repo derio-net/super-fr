@@ -1,0 +1,24 @@
+schema_version: 8
+run: 2026-10-04-feat-batch-drive-merge-train
+workflow: fr-goal@1
+branch: feat/batch-drive-merge-train
+started: '2026-10-04T07:03:44+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
