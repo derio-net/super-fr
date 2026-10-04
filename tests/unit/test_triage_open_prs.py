@@ -253,3 +253,30 @@ def test_a_linked_non_open_pr_carries_no_invented_checks_or_merge_state() -> Non
     assert (merged.checks, merged.mergeable, merged.merge_state) == (None, None, None)
     assert live.checks == {"pass": 1, "fail": 0, "pending": 0}
     assert (live.mergeable, live.merge_state) == ("MERGEABLE", "CLEAN")
+
+
+# gh#936: who opened a PR, and from where, is what attributes it to a batch.
+
+
+def test_every_pr_read_asks_for_its_author_and_origin() -> None:
+    from fr import gh
+
+    fields = gh.PR_LIST_FIELDS.split(",")
+    assert "author" in fields and "isCrossRepository" in fields
+
+
+def test_a_prs_author_and_origin_are_parsed_and_absence_stays_unknown() -> None:
+    from fr.triage.collect import parse_prs
+
+    own = {**_pr(1), "author": {"login": "operator"}, "isCrossRepository": False}
+    fork = {**_pr(2), "author": {"login": "mallory"}, "isCrossRepository": True}
+    unread = _pr(3)
+    got = [(p.author, p.cross_repo) for p, _ in parse_prs("example.com/repo", [own, fork, unread])]
+    assert got == [("operator", False), ("mallory", True), (None, None)]
+
+
+def test_collect_records_the_authenticated_user_once() -> None:
+    forge = FakeForge(issues={"example.com/repo": []}, prs={"example.com/repo": []}, viewer="me")
+    facts = collect_facts(forge, SCOPE, now=NOW)
+    assert facts.viewer == "me"
+    assert forge.called("viewer_login") == [{}]

@@ -153,7 +153,8 @@ def create_cmd(
     --phases-file YAML shape:
       - {number, title, tag (agentic|manual), depends_on: [N,...],
           acceptance ([row-ids], acceptance-matrix rows this phase advances),
-          skeleton (bool, walking-skeleton marker for the first agentic phase),
+          skeleton (bool, walking-skeleton marker for the first agentic phase;
+            owed only when the plan has two or more agentic phases),
           tier (mechanical|standard|hard, harness-neutral dispatch complexity
             hint; agentic phases should set one, see fr-plan),
           files ([globs], repo-relative paths the phase expects to touch) and
@@ -242,7 +243,7 @@ def create_cmd(
         )
         console.print(f"created plan: {plan.dir}")
     except PlanEditError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     candidates = [
         plan.dir,
@@ -297,7 +298,7 @@ def edit(
     try:
         repo_root = parse(resolved).repo_root or resolved
     except Exception as e:  # noqa: BLE001 — the verb's own parse error, as before
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     try:
         engine.apply_record(
@@ -309,7 +310,7 @@ def edit(
             ),
         )
     except engine.RecordRefusedError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     console.print(line)
     if complete_phase_n is not None:
@@ -362,7 +363,7 @@ def rework(
         plan = rework_create(parent_plan_dir)
         console.print(f"created rework plan: {plan.dir}")
     except PlanEditError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     candidates = [plan.dir]
     spec_path = _same_repo_spec_path(plan)
@@ -400,7 +401,7 @@ def rework_add(
         new_id = rework_add_origin(rework_dir, item=item, source=source, track=track)
         console.print(f"added origin item #{new_id}")
     except PlanEditError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     resolved = rework_dir.resolve()
     _commit_plan_writes(
@@ -450,7 +451,7 @@ def self_review_cmd(
     try:
         plan = parse(plan_dir)
     except PlanSchemaError as e:
-        err_console.print(f"[red]parse error:[/red] {e}")
+        err_console.print(f"[red]parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
 
     issues = self_review(plan)
@@ -486,7 +487,7 @@ def proportionality_cmd(
     try:
         plan = parse(plan_dir)
     except PlanSchemaError as e:
-        err_console.print(f"[red]parse error:[/red] {e}")
+        err_console.print(f"[red]parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     root = plan.repo_root or git_repo_root()
     # Plain echo, not rich: the report is pasted into a PR body verbatim, and

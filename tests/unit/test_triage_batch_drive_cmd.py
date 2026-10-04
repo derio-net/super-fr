@@ -20,12 +20,14 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd
 from fr.gh import GhError
+from fr.triage.errors import ForgeError
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
 
 from tests.unit.test_triage_batch_dispatch import FakeRunner
 
 REAL_CI_IS_NONE = triage_batch_cmd.ci_is_none
+REAL_RECOLLECT = triage_batch_cmd.recollect
 
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
@@ -61,6 +63,8 @@ class World:
             "files": [],
             "created_at": "2026-10-01T11:00:00+00:00",
             "merged_at": None,
+            "author": "operator",
+            "cross_repo": False,
             **kw,
         }
 
@@ -86,6 +90,7 @@ class World:
             ],  # fmt: skip
             prs=[prs[n] for n, p in self.prs.items() if not p["closes"] and p["state"] == "OPEN"],
             config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
+            viewer="operator",
         )
 
     def _pr(self, n: int) -> PullRequest:
@@ -103,6 +108,8 @@ class World:
             head_oid=p["head_oid"] if p["state"] == "OPEN" else "",
             files=p["files"] if p["state"] == "OPEN" else [],
             checks=self.all_checks.get(n, {"pass": 1, "fail": 0, "pending": 0}),
+            author=p["author"],
+            cross_repo=p["cross_repo"],
         )
 
     # -- the GhClient adapter
@@ -134,7 +141,8 @@ class World:
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         return [
             {"number": n, "state": p["state"], "isDraft": p["draft"], "headRefName": branch,
-             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]]}
+             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]],
+             "author": {"login": p["author"]}, "isCrossRepository": p["cross_repo"]}
             for n, p in self.prs.items() if p["head_ref"] == branch
         ]  # fmt: skip
 
@@ -189,6 +197,14 @@ class DriveCheckout:
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return descendant not in self.behind
+
+    def commits_behind(
+        self, head: str, ref: str
+    ) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
+        return (("code", (("M", "packages/x.py"),)),)
+
+    def changed_paths(self, ref: str, head: str) -> frozenset[str]:
+        return frozenset()
 
     def add_worktree(self, where: Path, ref: str) -> Any:
         return _Worktree(self, where)
@@ -527,6 +543,63 @@ def test_a_failing_check_warns_once_per_head_across_loop_passes(
     assert _lines(out, "warn") == ["warn b1: PR #101 CI failing at sha-101: lint"]
     assert world.merged == [(101, "sha-101", "squash")]
     assert sleeps[:2] == [5, 5]
+
+
+@pytest.mark.parametrize(
+    ("kw", "reason"),
+    [
+        (dict(cross_repo=True), "opened from a fork"),
+        (dict(author="mallory"), "by mallory, not an allowed author"),
+    ],
+    ids=["fork", "foreign-author"],
+)
+def test_a_foreign_pr_on_the_batch_branch_is_never_merged_and_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, kw: dict[str, Any], reason: str,
+) -> None:  # fmt: skip
+    """gh#936: green, not a draft, on `feat/batch-b1` after the dispatch — and still
+    never merged, because a branch name is not an identity."""
+    _pr_open(world, tmp_path, **kw)
+    sleeps: list[float] = []
+
+    def _stop_after_three(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop_after_three)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    assert isinstance(result.exception, _StopError), result.output
+    assert len(world.passes) >= 3  # type: ignore[attr-defined]
+    assert world.merged == [] and not [c for c in world.calls if c.startswith("pr_merge")]
+    assert _lines(result.output, "foreign") == [
+        f"foreign b1: PR #101 on feat/batch-b1 is not this batch's: {reason}; it is never merged"
+    ]
+
+
+def test_an_allow_listed_author_in_triage_yaml_is_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.config = {"pr_authors": ["fr-bot"]}
+    _pr_open(world, tmp_path, author="fr-bot")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_an_untrusted_archive_pr_is_never_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _merged(world, tmp_path, events=closeout)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"], cross_repo=True)
+    world.pr(202, "chore/closeout-feat-batch-b1", [], author="mallory")
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    _drive(tmp_path, "--once", "--yes")
+    assert world.merged == []
 
 
 def test_a_pr_behind_its_base_is_updated_then_merged_on_a_later_pass(
@@ -1242,3 +1315,140 @@ def test_required_checks_when_there_are_any_else_all_checks(
     world.all_checks[101] = all_checks
     code, out = _drive(tmp_path, "--once", "--yes")
     assert bool(world.merged) is merged, out
+
+
+# ------------------------------------------- a degraded forge (gh#909, gh#910)
+
+
+def _flaky_collect(
+    monkeypatch: pytest.MonkeyPatch, world: World, failures: int, message: str
+) -> list[int]:
+    """The real `recollect` over a `collect_into` whose first *failures* calls fail
+    as a stalled-then-dropped `gh` read does; later calls write the world's facts."""
+    calls: list[int] = []
+
+    def _collect_into(scope: Any, target: Path) -> None:
+        calls.append(1)
+        if len(calls) <= failures:
+            raise ForgeError(message)
+        (target / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+
+    monkeypatch.setattr(triage_batch_cmd, "recollect", REAL_RECOLLECT)
+    monkeypatch.setattr(triage_batch_cmd, "collect_into", _collect_into)
+    return calls
+
+
+def _naps_until(monkeypatch: pytest.MonkeyPatch, n: int) -> list[float]:
+    naps: list[float] = []
+
+    def _nap(seconds: float) -> None:
+        naps.append(seconds)
+        if len(naps) == n:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    return naps
+
+
+EOF_MSG = "Post https://api.github.com/graphql: unexpected EOF"
+
+
+def test_a_failed_recollect_does_not_end_the_loop_and_is_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#910: loop mode skips the pass, waits --interval and reads again; the same
+    cause twice in a row is reported once; the merge lands once the forge answers."""
+    _pr_open(world, tmp_path)
+    calls = _flaky_collect(monkeypatch, world, failures=2, message=EOF_MSG)
+    naps = _naps_until(monkeypatch, 3)
+    result = _drive_named(tmp_path, "--yes", "--interval", "7")
+    assert isinstance(result.exception, _StopError), result.output
+    assert len(calls) == 3
+    assert naps[:2] == [7, 7]
+    assert result.output.count("unexpected EOF") == 1
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_a_failed_snapshot_read_does_not_end_the_loop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#910: a forge read inside the pass (the PR's live view) fails like the
+    re-collect can; the pass is skipped and the next one merges."""
+    _pr_open(world, tmp_path)
+    real_view = world.pr_view
+    failed: list[int] = []
+
+    def _view(repo: str, number: int) -> dict[str, Any]:
+        if not failed:
+            failed.append(number)
+            raise GhError(EOF_MSG, returncode=1)
+        return real_view(repo, number)
+
+    monkeypatch.setattr(world, "pr_view", _view)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("unexpected EOF") == 1
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_once_still_exits_non_zero_on_a_failed_forge_read(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    _flaky_collect(monkeypatch, world, failures=1, message=EOF_MSG)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 2, out
+    assert "unexpected EOF" in out
+    assert world.merged == []
+
+
+def test_a_failed_merge_method_read_does_not_end_the_loop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#910: the repo's merge methods are read when the first merge is acted on;
+    that read failing skips the pass like any other, and is read again next pass."""
+    _pr_open(world, tmp_path)
+    real = world.repo_merge_methods
+    failed: list[str] = []
+
+    def _methods(repo: str) -> dict[str, Any]:
+        if not failed:
+            failed.append(repo)
+            raise GhError(EOF_MSG, returncode=1)
+        return real(repo)
+
+    monkeypatch.setattr(world, "repo_merge_methods", _methods)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("unexpected EOF") == 1
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_a_failed_read_while_acting_on_a_merge_does_not_end_the_loop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#910 (review): the merge re-reads the PR before acting (`plan_queue`); that
+    read failing after the snapshot's succeeded skips the pass like any other."""
+    _pr_open(world, tmp_path)
+    real_view = world.pr_view
+    calls: list[int] = []
+
+    def _view(repo: str, number: int) -> dict[str, Any]:
+        calls.append(number)
+        if len(calls) == 2:  # the snapshot's read answered; the act-time one fails
+            raise GhError(EOF_MSG, returncode=1)
+        return real_view(repo, number)
+
+    monkeypatch.setattr(world, "pr_view", _view)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("unexpected EOF") == 1
+    assert world.merged == [(101, "sha-101", "squash")]

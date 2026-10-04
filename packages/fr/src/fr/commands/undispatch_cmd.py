@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr import plan_ops
 from fr._urls import parse_issue_url
@@ -71,7 +72,7 @@ def undispatch_command(
     try:
         plan = parse(plan_dir)
     except PlanSchemaError as e:
-        err_console.print(f"parse error: {e}")
+        err_console.print(f"parse error: {escape(str(e))}")
         raise typer.Exit(5) from e
 
     tracked = [(p, p.phase.tracking_issue) for p in plan.phases if p.phase.tracking_issue]

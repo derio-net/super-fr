@@ -1,0 +1,77 @@
+schema_version: 1
+run: 2026-09-22-fix-532-repair-harness-neutrality
+captures:
+- host: h-f6005dc3
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:22+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
+    role: main
+    models:
+      claude-sonnet-5:
+        input: 252
+        cache_write: 314884
+        cache_read: 8367565
+        output: 20637
+        usd: 3.3572746000000024
+        usd_source: exact
+      claude-opus-5:
+        input: 1590
+        cache_write: 4884085
+        cache_read: 269419882
+        output: 399882
+        usd: 197.36037775000017
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001373
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 64.62833806110957
+        turns: 392
+      other:
+        usd: 90.51833535541257
+        turns: 268
+      paperwork:
+        usd: 45.572351933477954
+        turns: 254
+    steps:
+      (outside run):
+        usd: 136.01683899780372
+        turns: 498
+      brainstorm:
+        usd: 5.892150045849139
+        turns: 16
+      spec-review:
+        usd: 1.066417537885445
+        turns: 3
+      plan:
+        usd: 1.6516869611598488
+        turns: 4
+      implement:
+        usd: 53.78000759935941
+        turns: 366
+      deliver:
+        usd: 2.3119242079423996
+        turns: 5
+    briefs:
+      a7f7752732ccd28a8: 3071
+      ab3aa2de87252c1ca: 4545
+      af897eeba63a2e812: 5744
+      phase/1/implement-phase: 2067
+      phase/1/review-phase: 1891
+      phase/2/implement-phase: 3149
+      phase/2/review-phase: 2979
+      phase/3/implement-phase: 5671
+      phase/3/review-phase: 4029
+      phase/4/implement-phase: 3614
+      phase/4/review-phase: 3134
+      phase/5/implement-phase: 3195
+      phase/5/review-phase: 1944

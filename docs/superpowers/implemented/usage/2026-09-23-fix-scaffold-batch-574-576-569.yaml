@@ -1,0 +1,73 @@
+schema_version: 1
+run: 2026-09-23-fix-scaffold-batch-574-576-569
+captures:
+- host: h-3070cbc2
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:22+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: ec61d713-0539-4679-a830-b48e724c8675
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 1288
+        cache_write: 3285843
+        cache_read: 80607507
+        output: 136320
+        usd: 47.189113400000025
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.005821999999999999
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 13.212651697689564
+        turns: 248
+      other:
+        usd: 16.541333345074776
+        turns: 197
+      paperwork:
+        usd: 17.440950357235728
+        turns: 202
+    steps:
+      (outside run):
+        usd: 5.865421060280061
+        turns: 28
+      brainstorm:
+        usd: 1.6518615729012538
+        turns: 20
+      spec-review:
+        usd: 2.4024076647645374
+        turns: 34
+      plan:
+        usd: 0.9598440036747109
+        turns: 7
+      implement:
+        usd: 34.611793273429384
+        turns: 518
+      journal-check:
+        usd: 0.13256627013364386
+        turns: 1
+      deliver:
+        usd: 1.5710415548164853
+        turns: 12
+    briefs:
+      a698b8a5478165372: 2497
+      phase/1/implement-phase: 1673
+      a131bea6b86512dff: 1342
+      phase/2/implement-phase: 1987
+      a7f8e3251f9ccf794: 2168
+      phase/3/implement-phase: 2352
+      a91535b05372f8b5b: 2272
+      phase/4/implement-phase: 2476
+      ad78ac42d930700cd: 2823
+      phase/5/implement-phase: 2524
+      a6ef5799e2154ab04: 2720
+      phase/6/implement-phase: 4134
+      ae54bd0a6309d2887: 2940

@@ -95,6 +95,12 @@ RECORD_EMIT_TOKENS = frozenset({"plan:ticks", "acceptance"})
 ALWAYS_RECORD_SECTIONS = frozenset({"outcome", "evidence"})
 """Every step's record may say how it ended and what proves it."""
 
+DERIVED_EVIDENCE = frozenset({"findings", "proportionality", "visual", "single-phase"})
+"""The evidence `fr run resolve` derives ITSELF and refuses from the caller.
+One set, read by the resolve gate, the dispatch brief and the record
+template: the template once kept its own copy, which lost `single-phase`,
+and the brief listed `findings` as owed (gh#653)."""
+
 _JOURNAL_PREFIX = "journal:"
 
 

@@ -22,6 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.conftest import subprocess_timeout
+
 CONFTEST = Path(__file__).resolve().parents[1] / "conftest.py"
 
 PAIR = """
@@ -68,7 +70,7 @@ def test_repo_cache_does_not_leak_between_tests(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=subprocess_timeout(120),
     )
 
     assert result.returncode == 0, result.stdout + result.stderr

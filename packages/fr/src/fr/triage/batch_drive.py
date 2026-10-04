@@ -23,6 +23,7 @@ from typing import Any, Literal
 from fr.triage.batch import (
     UNSATISFIABLE,
     BatchStage,
+    ForeignPr,
     QueueEntry,
     batch_branch,
     merge_order,
@@ -47,7 +48,9 @@ RUN_ARTIFACT_DIRS = tuple(
 `docs/superpowers/implemented/` (`fr archive --branch`)."""
 
 ChecksVerdict = Literal["green", "pending", "failing"]
-ActionKind = Literal["merge", "closeout", "archive", "dispatch", "blocked", "held", "warn"]
+ActionKind = Literal[
+    "merge", "closeout", "archive", "dispatch", "blocked", "held", "warn", "foreign"
+]
 
 _FAILING_BUCKETS = frozenset({"fail", "cancel"})
 
@@ -64,6 +67,9 @@ class LivePr:
     failing: tuple[str, ...] = ()
     head_ref: str = ""
     files: tuple[str, ...] = ()
+    # From the repo itself, by an allowed author (`fr.triage.batch.distrust`). False
+    # unless the command checked it: an archive PR is attributed only when True (gh#936).
+    trusted: bool = False
 
 
 @dataclass(frozen=True)
@@ -81,7 +87,8 @@ class Snapshot:
     released: frozenset[str] = frozenset()  # merged batches whose release commit landed
     archives: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)  # repo -> PRs
     existing: frozenset[str] = frozenset()  # runner item ids live now
-    warned: frozenset[str] = frozenset()  # head shas whose failing CI was reported
+    # What was reported already: a head sha whose CI failed, or a `ForeignPr.key`.
+    warned: frozenset[str] = frozenset()
     # The batches this drive acts on (None: all). The in-flight cap and dependency
     # resolution always read every batch: a batch outside the selection still holds
     # a slot, and a dependency outside it is still merged or not (review rg-3).
@@ -91,6 +98,8 @@ class Snapshot:
     # before the driver existed carries no close-out event, so without this every one
     # of them read as owed (debug 2026-10-03: 50 on this repo).
     archived: frozenset[str] = frozenset()
+    # batch id -> the open PRs on its branch that are not its own (gh#936).
+    foreign: Mapping[str, tuple[ForeignPr, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -250,7 +259,11 @@ def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
     Its head alone attributes it only when the head is `chore/closeout-<batch branch
     with / as ->`, a name no other batch can produce. Any other `chore/archive-*` or
     `chore/closeout-*` head (`chore/archive-<plan>`, `chore/closeout-<run-id>`) must
-    also change the batch's run file or its plan journal (review rg-12)."""
+    also change the batch's run file or its plan journal (review rg-12). Neither
+    attributes a PR that is not `trusted`: a fork or a foreign author can choose
+    both the head name and the files (gh#936)."""
+    if not pr.trusted:
+        return False
     branch = batch_branch(batch)
     if pr.head_ref == f"chore/closeout-{branch.replace('/', '-')}":
         return True
@@ -293,12 +306,24 @@ def _dispatch_key(batch: Batch) -> tuple[int, int, int, int, str]:
 
 
 def drive_pass(snap: Snapshot) -> Pass:
-    """One pass: merge, close out, archive, dispatch — in that order, so a slot a
-    merge frees is used in the same pass."""
+    """One pass: report foreign PRs, merge, close out, archive, dispatch — in that
+    order, so a slot a merge frees is used in the same pass."""
     actions: list[Action] = []
     stages = dict(snap.stages)
     merging: set[str] = set()
     chosen = tuple(b for b in snap.batches if snap.selected is None or b.id in snap.selected)
+
+    # 0. Report a PR on a batch branch that is not the batch's, once (gh#936). It
+    # never reaches the queue, so it is never merged.
+    for batch in chosen:
+        for found in snap.foreign.get(batch.id, ()):
+            if found.key not in snap.warned:
+                actions.append(
+                    Action("foreign", batch.id,
+                           f"PR #{found.pr.number} on {found.pr.head_ref} is not this batch's: "
+                           f"{found.reason}; it is never merged", pr=found.pr.number,
+                           head=found.key)
+                )  # fmt: skip
 
     # 1. Merge.
     for entry in merge_order(list(snap.queue)):

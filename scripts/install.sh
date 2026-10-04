@@ -474,7 +474,10 @@ if [ -e "$MARKETPLACE_DIR/.git" ]; then
   rm -rf "$MARKETPLACE_DIR/.git"
   echo "  Removed stale .git from cache (cache is ephemeral)"
 fi
+# Local state never ships (gh#630): coverage data, which a parallel test run
+# creates and deletes mid-copy (rsync exit 23), and the devcontainer's venv.
 rsync -a --delete --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
+  --exclude='.venv-container' --exclude='.coverage*' \
   "$PLUGIN_ROOT/" "$MARKETPLACE_DIR/"
 echo "  Copied plugin into $MARKETPLACE_DIR"
 # Shipped workflow manifests (plugins/super-fr/workflows/*.yaml, spec §4.A)

@@ -53,6 +53,9 @@ class _Forge:
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
         return []
 
+    def viewer_login(self) -> str:
+        return "operator"
+
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         self.viewed.append((repo, number))
         return {

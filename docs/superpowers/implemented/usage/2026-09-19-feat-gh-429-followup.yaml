@@ -1,0 +1,19 @@
+schema_version: 1
+run: 2026-09-19-feat-gh-429-followup
+captures:
+- host: h-75843529
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: phase/1/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 411

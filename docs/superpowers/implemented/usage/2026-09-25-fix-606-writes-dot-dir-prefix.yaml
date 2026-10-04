@@ -1,0 +1,67 @@
+schema_version: 1
+run: 2026-09-25-fix-606-writes-dot-dir-prefix
+captures:
+- host: h-45668eb4
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:22+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: 0d3c7c4c-bb15-449a-be4d-305ec50abe9f
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 228
+        cache_write: 427410
+        cache_read: 12241609
+        output: 42373
+        usd: 6.8819095999999975
+        usd_source: exact
+      claude-sonnet-5:
+        input: 22
+        cache_write: 56761
+        cache_read: 493114
+        output: 76
+        usd: 0.33321890000000004
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.0009490000000000001
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 1.507092582879013
+        turns: 38
+      other:
+        usd: 3.1127764263166524
+        turns: 39
+      paperwork:
+        usd: 2.5962084908043344
+        turns: 48
+    steps:
+      (outside run):
+        usd: 2.5213659484808986
+        turns: 22
+      brainstorm:
+        usd: 0.6377480204726034
+        turns: 13
+      spec-review:
+        usd: 0.7003629060363824
+        turns: 16
+      plan:
+        usd: 0.486101401923454
+        turns: 8
+      implement:
+        usd: 1.461537875202778
+        turns: 38
+      deliver:
+        usd: 1.4089613478838834
+        turns: 23
+    briefs:
+      aee72c1759fe47d86: 1187
+      phase/1/implement-phase: 1829
+      a35ad4a8932054280: 1528

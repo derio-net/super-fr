@@ -3,7 +3,7 @@
 **Needs you now** and **Next up** are computed from the SAME inputs the driver reads, so
 the two cannot disagree about what is waiting: this module builds a driver `Snapshot`
 from `facts.json` alone (`drive_snapshot`) and runs `batch_drive.drive_pass` over it.
-What the driver would do (`dispatch`, `warn`, `blocked`) is read off its actions, never
+What the driver would do (`dispatch`, `warn`, `foreign`, `blocked`) is read off its actions, never
 re-derived; only what the driver cannot see offline (a draft PR that is green, a stale
 dispatch, a `post_merge` that never succeeded, an unplaced issue) is computed here, and
 every one of those reads the facts and the driver's own `checks_verdict`.
@@ -26,6 +26,7 @@ from fr.triage.batch import (
     batch_pr,
     batch_repo,
     derive_batch_stage,
+    foreign_batch_prs,
     pr_open_queue,
 )
 from fr.triage.batch_drive import (
@@ -91,6 +92,7 @@ def drive_snapshot(
             checks=verdict,
             failing=failing,
             head_ref=entry.pr.head_ref,
+            trusted=True,  # the queue holds `batch_pr`s only (gh#936)
         )
     merged_at: dict[str, datetime] = {}
     for b in batches:
@@ -108,6 +110,7 @@ def drive_snapshot(
         now=collected(facts),
         max_inflight=max_inflight,
         merged_at=merged_at,
+        foreign={b.id: found for b in batches if (found := tuple(foreign_batch_prs(b, facts)))},
     )
 
 
@@ -116,7 +119,8 @@ def drive_snapshot(
 
 @dataclass(frozen=True)
 class Need:
-    kind: str  # ready-pr | failing-ci | blocked-batch | post-merge | stale-dispatch | unplaced
+    # ready-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch | unplaced
+    kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
     text: str
     href: str | None  # an https URL, or `#batch-<id>` on the page itself
@@ -125,6 +129,7 @@ class Need:
 NEED_LABELS = {
     "ready-pr": "Ready a green draft",
     "failing-ci": "Failing CI",
+    "foreign-pr": "Foreign PR on a batch branch",
     "blocked-batch": "Blocked batch",
     "post-merge": "post_merge not done",
     "stale-dispatch": "Stale dispatch",
@@ -152,11 +157,15 @@ def needs_you(facts: Facts, judgements: Judgements) -> list[Need]:
         for b in judgements.batches
         if (pr := batch_pr(b, facts)) is not None
     }
+    foreign = {
+        (found.pr.repo, found.pr.number): found for found_all in snap.foreign.values()
+        for found in found_all
+    }  # fmt: skip
     out: list[Need] = []
 
     for pr in _all_prs(facts):
-        if pr.state != "OPEN" or not pr.is_draft:
-            continue
+        if pr.state != "OPEN" or not pr.is_draft or (pr.repo, pr.number) in foreign:
+            continue  # a foreign PR is never one to ready (gh#936)
         verdict, _ = checks_verdict([], pr.checks or {}, ci_none=False)
         if verdict != "green":
             continue
@@ -174,6 +183,12 @@ def needs_you(facts: Facts, judgements: Judgements) -> list[Need]:
                 Need("failing-ci", action.batch, action.detail,
                      failing_pr.url if failing_pr else None)
             )  # fmt: skip
+    for action in plan.actions:
+        if action.kind == "foreign":
+            found_pr = next(
+                f.pr for f in snap.foreign.get(action.batch, ()) if f.pr.number == action.pr
+            )
+            out.append(Need("foreign-pr", action.batch, action.detail, found_pr.url))
     for action in plan.actions:
         if action.kind == "blocked":
             out.append(

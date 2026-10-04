@@ -20,9 +20,13 @@ from pathlib import Path
 
 
 def _run_git(args: list[str], cwd: Path | None = None) -> str:
-    """Run a git command and return stdout."""
+    """Run a git command and return stdout.
+
+    Built by `git_argv`, like `git_answer`, so fr has ONE git seam and one
+    ownership rule (#700): these wrappers once ran bare `git` and failed in a
+    foreign-owned container worktree the way `git_answer` used to."""
     result = subprocess.run(
-        ["git", *args],
+        git_argv(cwd if cwd is not None else Path.cwd(), *args),
         capture_output=True,
         text=True,
         check=True,
@@ -212,15 +216,42 @@ def safe_directory_args(root: Path) -> list[str]:
     Walks UP to the nearest `.git` entry (a file for a linked worktree, a
     directory otherwise) because git matches the repository toplevel, not the
     caller's cwd. Returns [] outside any repository, leaving the refusal loud.
+
+    The walk stops where git's own discovery stops: it never climbs INTO a
+    `GIT_CEILING_DIRECTORIES` entry (#700), so the one path named is always the
+    repository git itself would open from `root`, never an unrelated ancestor.
+
+    The trust contract, decided in #700: every caller of `git_answer`,
+    `git_argv` and `_run_git` passes the repository fr was invoked on or
+    created (its own checkout, worktree, or isolation workspace), so none opts
+    out. A future caller that reads a tree fr did not create (a third-party
+    clone) must not use this seam: it would switch git's ownership check off
+    for that tree.
     """
     try:
         here = Path(root).resolve()
     except OSError:
         return []
+    ceilings = _ceiling_directories()
     for candidate in (here, *here.parents):
+        if candidate != here and candidate in ceilings:
+            return []
         if (candidate / ".git").exists():
             return ["-c", f"safe.directory={candidate}"]
     return []
+
+
+def _ceiling_directories() -> set[Path]:
+    """`GIT_CEILING_DIRECTORIES`, resolved; empty entries (git's own
+    "do not resolve the rest" marker) are skipped."""
+    found: set[Path] = set()
+    for entry in os.environ.get("GIT_CEILING_DIRECTORIES", "").split(os.pathsep):
+        if entry:
+            try:
+                found.add(Path(entry).resolve())
+            except OSError:
+                continue
+    return found
 
 
 def git_argv(root: Path, *args: str) -> list[str]:

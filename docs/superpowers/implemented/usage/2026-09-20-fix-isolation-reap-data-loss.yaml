@@ -1,0 +1,19 @@
+schema_version: 1
+run: 2026-09-20-fix-isolation-reap-data-loss
+captures:
+- host: h-2f4ebd6e
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: phase/1/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 274

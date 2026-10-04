@@ -17,6 +17,19 @@ from typer.testing import CliRunner
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _slugs_need_no_artifact(request: pytest.FixtureRequest, monkeypatch) -> None:
+    """These tests journal under bare slugs (`S`, `RR9`) in repos holding no
+    spec or plan, to exercise everything EXCEPT the orphan check (gh#639);
+    many build their own plans under those slugs. `TestAddRefusesAnOrphanSlug`
+    is the one class that keeps the check live."""
+    if request.cls is not None and request.cls.__name__ == "TestAddRefusesAnOrphanSlug":
+        return
+    from fr.commands import journal_cmd
+
+    monkeypatch.setattr(journal_cmd, "_orphan_refusal", lambda *a, **k: None)
+
+
 def _init_repo(tmp_path: Path) -> Path:
     # `fr journal` resolves the repo root via git; make tmp_path a repo.
     import subprocess
@@ -2324,3 +2337,75 @@ class TestJournalCommits:
         subject = _git_out(root, "log", "-1", "--format=%s", "--", journal)
         assert subject.startswith("chore(fr): journal plan/S — finding "), subject
         assert _git_out(root, "status", "--porcelain", "--", "docs") == ""
+
+
+class TestAddRefusesAnOrphanSlug:
+    """gh#639: a spec/plan journal filed under a slug that names no artifact
+    (a run id, say) orphans silently — nothing reads or archives it."""
+
+    def _decision(self, root: Path, scope: str, slug: str, *extra: str):
+        return _add(
+            root, "--scope", scope, "--slug", slug, "--kind", "decision",
+            "--title", "t", "--id", "d1", *extra,
+        )  # fmt: skip
+
+    def test_a_spec_slug_with_no_spec_is_refused_naming_the_specs_that_exist(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        specs = root / "docs/superpowers/specs"
+        specs.mkdir(parents=True, exist_ok=True)
+        (specs / "2026-09-26-real-design.md").write_text("# real\n")
+
+        res = self._decision(root, "spec", "2026-09-26-run-id-505")
+
+        assert res.exit_code == 2
+        assert "2026-09-26-real" in res.output
+        assert not (root / "docs/superpowers/journals/specs").exists()
+
+    def test_a_spec_slug_naming_a_spec_is_accepted(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        specs = root / "docs/superpowers/specs"
+        specs.mkdir(parents=True, exist_ok=True)
+        (specs / "2026-09-26-real-design.md").write_text("# real\n")
+
+        assert self._decision(root, "spec", "2026-09-26-real").exit_code == 0
+
+    def test_the_operators_brief_may_precede_its_spec(self, tmp_path: Path, monkeypatch) -> None:
+        """fr-brainstorming records the brief BEFORE exploring, so before any
+        spec exists; the journal it starts then admits later entries."""
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        brief = _add(
+            root, "--scope", "spec", "--slug", "2026-10-04-new", "--kind", "discovery",
+            "--input", "--title", "brief", "--id", "input-1",
+        )  # fmt: skip
+        assert brief.exit_code == 0, brief.output
+
+        assert self._decision(root, "spec", "2026-10-04-new").exit_code == 0
+
+    def test_a_plan_slug_with_no_plan_folder_is_refused(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = self._decision(root, "plan", "2026-09-26-nope", "--global")
+
+        assert res.exit_code == 2
+        assert "no plan" in res.output
+
+    def test_a_plan_slug_naming_a_plan_folder_is_accepted(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        (root / "docs/superpowers/plans/2026-09-26-real").mkdir(parents=True)
+
+        assert self._decision(root, "plan", "2026-09-26-real", "--global").exit_code == 0
+
+    def test_debug_scope_owns_its_slug(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        assert self._decision(root, "debug", "2026-10-04-anything").exit_code == 0

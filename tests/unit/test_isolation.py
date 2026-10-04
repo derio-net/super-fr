@@ -18,6 +18,7 @@ from fr.isolation.local import (
     LocalWorktreeDevcontainerTarget,
     ReapHazard,
     ReapRefused,
+    branch_changed_paths,
     branch_changes_present,
     subprocess_runner,
 )
@@ -3650,6 +3651,55 @@ def test_branch_changes_present_revert_after_other_prs_touched_the_file_is_missi
     assert res.missing == ["report.md"]
 
 
+def _concurrent_squash_feature(repo: Path) -> None:
+    """The base edits report.md while `feature` is open and the branch never
+    syncs, so the squash's blob combines both edits: never the branch's own."""
+    _commit(repo, "report.md", "a\nb\nc\nd\ne\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "a\nfoo\nbar\nb\nc\nd\ne\n", "feature adds lines")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "report.md", "a\nb\nc\nd\nE\n", "another PR lands concurrently")
+    _squash_merge(repo, "feature", "squash feature")
+
+
+def test_branch_changes_present_concurrent_edit_then_rewrite_counts_as_landed(
+    tmp_path: Path,
+) -> None:
+    """#715: after the squash, a later commit rewrites the branch's lines. Its
+    blob never matches and its lines are gone, but the squash's own patch
+    added every one of them: that is the landing."""
+    repo = make_repo(tmp_path)
+    _concurrent_squash_feature(repo)
+    _commit(repo, "report.md", "a\nFOO2\nBAR2\nb\nc\nd\nE\n", "later merge rewrites the lines")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_concurrent_edit_then_revert_is_missing(tmp_path: Path) -> None:
+    """The same landing, reverted rather than rewritten, stays missing."""
+    repo = make_repo(tmp_path)
+    _concurrent_squash_feature(repo)
+    _revert_head(repo)
+    _commit(repo, "report.md", "a\nb\nc\nd\nE\nlater\n", "a later PR edits the report")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+def test_branch_changes_present_concurrent_edit_orphan_line_is_missing(tmp_path: Path) -> None:
+    """A line pushed to the branch after the squash was never in any base
+    commit's patch: the landing must add EVERY line the branch added."""
+    repo = make_repo(tmp_path)
+    _concurrent_squash_feature(repo)
+    _commit(repo, "report.md", "a\nFOO2\nBAR2\nb\nc\nd\nE\n", "later merge rewrites the lines")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "report.md", "a\nfoo\nbar\nb\nc\nd\ne\norphan\n", "pushed after the merge")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
 def test_branch_changes_present_revert_of_the_revert_counts_as_landed(tmp_path: Path) -> None:
     """Re-landed (the revert reverted), then its lines rewritten: landed again."""
     repo = make_repo(tmp_path)
@@ -3776,6 +3826,62 @@ def test_branch_changes_present_fast_forward_and_empty_branch_stay_present(
         assert res.missing == [], branch
 
 
+def _head(repo: Path) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _ff_landed_feature(repo: Path) -> str:
+    """`feature` forked from main, landed by `--ff-only`; returns the start commit."""
+    _commit(repo, "fix.py", "broken\n", "base")
+    start = _head(repo)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "merge", "-q", "--ff-only", "feature")
+    return start
+
+
+def test_branch_changes_present_reverted_fast_forward_with_recorded_start_is_missing(
+    tmp_path: Path,
+) -> None:
+    """#757: a fast-forward landing leaves no merge to find the fork from, so
+    only the recorded start (fr's `base_sha` at `up`) shows what the branch
+    contributed; with it, a later revert reads as missing."""
+    repo = make_repo(tmp_path)
+    start = _ff_landed_feature(repo)
+    _revert_head(repo)
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main", start=start)
+    assert not res.changes_present
+    assert res.missing == ["fix.py"]
+    assert branch_changed_paths(subprocess_runner, repo, "feature", "main", start=start) == [
+        "fix.py"
+    ]
+
+
+def test_branch_changes_present_fast_forward_with_recorded_start_stays_present(
+    tmp_path: Path,
+) -> None:
+    """The recorded start only widens what is judged: an unreverted
+    fast-forward, an empty branch (start == tip), and a start that is not an
+    ancestor of the tip (a reused branch name) all keep their verdict."""
+    repo = make_repo(tmp_path)
+    start = _ff_landed_feature(repo)
+    _commit(repo, "other.py", "x\n", "main moved on")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main", start=start)
+    assert res.changes_present
+    assert res.changed == ["fix.py"]
+    _git(repo, "branch", "empty")
+    head = _head(repo)
+    assert branch_changes_present(
+        subprocess_runner, repo, "empty", "main", start=head
+    ).changes_present
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main", start=head)
+    assert res.changes_present
+    assert res.changed == []
+
+
 def test_branch_changes_present_failed_landing_lookup_raises(tmp_path: Path) -> None:
     """A failed `git rev-list` for the landing merge must not fall back to the
     tip as the fork point — that reads as ALL CHANGES PRESENT (#705 shape)."""
@@ -3838,6 +3944,24 @@ def test_verify_merge_reverted_merge_is_not_verified(
     res = target.verify_merge(_state(repo, "feature"), default_branch="main")
     assert res["verified"] is False
     assert res["missing"] == ["report.md"]
+
+
+def test_verify_merge_reverted_fast_forward_uses_the_recorded_base_sha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#757 at the caller: verify_merge hands the state's `base_sha` to the
+    content check, so a reverted fast-forward is not verified."""
+    repo = make_repo(tmp_path)
+    start = _ff_landed_feature(repo)
+    _revert_head(repo)
+    _with_origin(repo)
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    state = _state(repo, "feature").model_copy(update={"base_sha": start})
+    res = target.verify_merge(state, default_branch="main")
+    assert res["verified"] is False
+    assert res["missing"] == ["fix.py"]
 
 
 # ---------- `fr archive` moves the branch's fr artifacts after merge (#598 / #665) ----------
