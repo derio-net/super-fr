@@ -20,6 +20,7 @@ from typing import get_args
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.commands.common import resolve_repo_root
 from fr.journal.model import (
@@ -35,6 +36,7 @@ from fr.journal.model import (
     resolution_record_id,
     resolve_journal_read_path,
     serialize_entry,
+    spec_journal_slug,
     unauthorized_fixes,
 )
 from fr.run.model import AnsweredBy
@@ -127,6 +129,33 @@ def _validate_answered_by(answered_by: str | None) -> None:
             f"(got {answered_by!r})[/red]"
         )
         raise typer.Exit(2)
+
+
+def _orphan_refusal(root: Path, scope: str, slug: str, path: Path, *, is_input: bool) -> str | None:
+    """Why a spec/plan journal for `slug` would be an orphan, or None (gh#639).
+
+    A journal filed under a slug that names no spec or plan (a run id, say) is
+    read by nothing and archived by nothing. A debug journal owns its slug.
+    An existing journal is already anchored, and the operator's brief
+    (`--input`) is recorded before exploring, so before its spec exists
+    (fr-brainstorming); it starts the journal the spec then joins.
+    """
+    if scope == "debug" or path.exists() or (scope == "spec" and is_input):
+        return None
+    if scope == "spec":
+        specs = root / "docs" / "superpowers" / "specs"
+        known = sorted({spec_journal_slug(p.stem) for p in specs.glob("*.md")})
+        where = f"docs/superpowers/specs/{slug}-design.md"
+    else:
+        plans = root / "docs" / "superpowers" / "plans"
+        known = sorted(p.name for p in plans.iterdir() if p.is_dir()) if plans.is_dir() else []
+        where = f"docs/superpowers/plans/{slug}/"
+    if slug in known:
+        return None
+    return (
+        f"no {scope} named {slug!r} (looked for {where}): a {scope} journal under it would "
+        "be orphaned. Known: " + (", ".join(known) or "none")
+    )
 
 
 @journal_app.command("add")
@@ -231,8 +260,13 @@ def add(
             input=is_input,
         )
     except ValueError as e:
-        err_console.print(f"[red]invalid entry:[/red] {e}")
+        err_console.print(f"[red]invalid entry:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
+
+    orphan = _orphan_refusal(root, scope, slug, path, is_input=is_input)
+    if orphan is not None:
+        err_console.print(orphan, soft_wrap=True, markup=False)
+        raise typer.Exit(2)
 
     existing = _load(path)
     if any(e.id == eid for e in existing):
@@ -296,7 +330,7 @@ def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, mes
             ),
         )
     except engine.RecordRefusedError as e:
-        err_console.print(f"[red]{e}[/red] — nothing written", soft_wrap=True)
+        err_console.print(f"[red]{escape(str(e))}[/red] — nothing written", soft_wrap=True)
         raise typer.Exit(2) from e
     for notice in outcome.notices:  # an unverifiable operator claim says so (p3-r1)
         err_console.print(notice, markup=False, soft_wrap=True)
@@ -399,7 +433,7 @@ def resolve(
     try:
         entries = _load(path)
     except JournalParseError as e:
-        err_console.print(f"[red]journal parse error:[/red] {e}")
+        err_console.print(f"[red]journal parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     target = next((e for e in entries if e.id == entry_id), None)
     if target is None:
@@ -583,7 +617,7 @@ def check(
     try:
         entries = _load(path)
     except JournalParseError as e:
-        err_console.print(f"[red]journal parse error:[/red] {e}")
+        err_console.print(f"[red]journal parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     failed = False
     # Deferrals pass the gate, but are SAID, never silent: each names the
@@ -737,7 +771,7 @@ def handoff(
     try:
         entries = _load(path)
     except JournalParseError as e:
-        err_console.print(f"[red]journal parse error:[/red] {e}")
+        err_console.print(f"[red]journal parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     plan_path = root / plan_dir if plan_dir else root / "docs" / "superpowers" / "plans" / slug
     try:
@@ -745,7 +779,7 @@ def handoff(
     except (PlanSchemaError, OSError) as e:
         err_console.print(
             f"[red]cannot compose a dependency-scoped handoff: plan {plan_path} "
-            f"is not parseable ({e})[/red]"
+            f"is not parseable ({escape(str(e))})[/red]"
         )
         raise typer.Exit(2) from e
     headers = [p.phase for p in plan.phases if p.phase.number == phase]

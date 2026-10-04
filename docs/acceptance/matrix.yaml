@@ -5261,8 +5261,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_container_git_ownership.py
     status: ci
-    notes: safe.directory override on git_answer, update-index restore and record/apply
+    notes: 'safe.directory override on git_answer, update-index restore and record/apply
       git calls; proven in a foreign-owned linked worktree from root and subdirectory
+      super-fr#700: _run_git (repo_root/add/commit/status) shares the git_argv seam,
+      proven in the same foreign-owned worktree; the walk-up honours GIT_CEILING_DIRECTORIES
+      so fr never trusts a repository git would not open.'
   - id: scaffold-trusts-workspace
     capability: isolation-git-ownership
     acceptance: A scaffolded devcontainer profile trusts its own workspace path for
@@ -5299,7 +5302,12 @@ rows:
       revert reads missing (the same log call reads each commit''s patch; the branch''s
       patch inverted un-lands). Known limit: a revert of a branch that only ADDED files
       stays indistinguishable from a later deletion or a consumed fragment. Still unit-only
-      in tests/unit/test_isolation.py.'
+      in tests/unit/test_isolation.py. super-fr#757: a fast-forward landing later reverted
+      reads missing when fr recorded the branch''s start at up (IsolationState.base_sha
+      passed by verify-merge, gc and archive); with no surviving record it is indistinguishable,
+      as before. super-fr#715: a squash whose blob combined a concurrent base edit,
+      then rewritten, reads landed (the landing is recognised by its patch adding every
+      line the branch added).'
   - id: installed-fr-carries-every-runner
     capability: fr install (host install.sh + devcontainer POST_CREATE)
     acceptance: An installed fr loads every runner the workspace declares (fr.runners

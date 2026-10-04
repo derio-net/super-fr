@@ -1094,6 +1094,41 @@ def test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields(tmp_pat
     assert set(brief) == step_fields | {"run", "workflow", "step", "record"}
 
 
+# --- gh#653: the brief and the records dir must match what resolve accepts --
+
+_REVIEW_SHAPE = (
+    "workflow: reviewing\nschema: 1\nunit: run\n"
+    "steps:\n  - id: review\n    kind: agent\n"
+    "    emits: [journal:spec]\n    evidence: [review, reviewer, findings]\n"
+)
+
+
+def test_the_brief_never_lists_evidence_fr_derives_itself(tmp_path: Path) -> None:
+    """`resolve` refuses a caller-passed `findings` ("not yours to pass"), so a
+    brief listing it sends the agent straight into that refusal (gh#653)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "reviewing", _REVIEW_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "reviewing", "--branch", "b", "--run-id", "r1"])
+
+    brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
+
+    assert brief["evidence"] == ["review", "reviewer"]
+
+
+def test_advance_creates_the_records_dir_the_brief_points_into(tmp_path: Path) -> None:
+    """The brief prints `<run>.records/<step>.yaml`; writing it with a shell
+    heredoc failed because nothing had made the directory yet (gh#653)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "reviewing", _REVIEW_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "reviewing", "--branch", "b", "--run-id", "r1"])
+
+    brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
+
+    assert (repo / brief["record"]["path"]).parent.is_dir()
+
+
 # --- r2-f7: a manifest that grew a step must not traceback -----------------
 
 

@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any, Literal, NoReturn, TypeVar, cast
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.artifacts.commit import CommitOutcome
 from fr.commands.common import resolve_repo_root
@@ -90,7 +91,7 @@ from fr.run.provenance import cleared_gates, gates
 from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.types import PHASE_TIERS
-from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS, emitted_artifacts
+from fr.workflow.artifacts import DERIVED_EVIDENCE, REPO_TRACKED_ARTIFACTS, emitted_artifacts
 from fr.workflow.check import check_workflow
 from fr.workflow.model import Step, WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
@@ -571,7 +572,7 @@ def _unit_key(
             # dispatched, so only the agentic list can name a unit key.
             agentic, manual = _group_phases(repo_root, state)
         except (RunStateError, AdoptError) as e:
-            err_console.print(f"[red]{parent.id}: {e}[/red]", soft_wrap=True)
+            err_console.print(f"[red]{parent.id}: {escape(str(e))}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
         expected = _expected_group_items(parent, agentic)
         key = f"{item}/{step.id}"
@@ -1509,14 +1510,7 @@ _VERIFIABLE_EVIDENCE = (
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
-_DERIVED_EVIDENCE = frozenset(
-    {
-        "findings",
-        "proportionality",
-        "visual",
-        "single-phase",
-    }
-)
+_DERIVED_EVIDENCE = DERIVED_EVIDENCE
 # `single-phase` (2026-09-29-fr-goal-light-path §A, R2) is the light shape's
 # `plan` witness: the emitted plan has exactly one phase that is not `[manual]`.
 # `visual` (2026-09-28-ui-visual-evidence §C) is derived from the step record's
@@ -1861,7 +1855,7 @@ def _verified_evidence(
         try:
             review_journal = _review_journal_entries(repo_root, state, target)
         except RunStateError as e:
-            err_console.print(f"[red]{key}: {e}[/red]", soft_wrap=True)
+            err_console.print(f"[red]{key}: {escape(str(e))}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
     if "review" in offered:
         assert review_journal is not None and target is not None
@@ -1988,7 +1982,8 @@ def _single_phase_witness(
         tags = plan_phase_tags(repo_root, plan_rel)
     except AdoptError as e:
         err_console.print(
-            f"[red]{key}: cannot derive single-phase evidence — {e}[/red]", soft_wrap=True
+            f"[red]{key}: cannot derive single-phase evidence — {escape(str(e))}[/red]",
+            soft_wrap=True,
         )
         raise typer.Exit(2) from e
     agentic = sorted(n for n, tag in tags.items() if tag != "manual")
@@ -2030,7 +2025,7 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
     except PlanSchemaError as e:
         err_console.print(
             f"[red]{key}: cannot derive proportionality evidence — plan {plan_rel} "
-            f"does not parse: {e}[/red]",
+            f"does not parse: {escape(str(e))}[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
@@ -2568,7 +2563,8 @@ def _reuse_tests_witness(key: str, repo_root: Path, state: RunState) -> str:
             changed = [p for p in changed if p != own_log]
     except GitUnavailableError as e:
         err_console.print(
-            f"[red]{key}: tests: reuse — cannot compute the code tree: {e}[/red]", soft_wrap=True
+            f"[red]{key}: tests: reuse — cannot compute the code tree: {escape(str(e))}[/red]",
+            soft_wrap=True,
         )
         raise typer.Exit(2) from e
     if not same:
@@ -2709,7 +2705,7 @@ def _verify_phase_tests_log(
     except GitUnavailableError as e:
         err_console.print(
             f"[red]{key}: --evidence tests={log}: cannot compute the code tree it "
-            f"covers — {e}[/red]",
+            f"covers — {escape(str(e))}[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
@@ -3014,13 +3010,20 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         "emits": list(step.emits),
         "gate": step.gate,
         "tier": step.tier,
-        "evidence": list(step.evidence),
+        "evidence": _caller_evidence(step),
         "for_each": step.for_each,
         "steps": [m.model_dump(exclude_none=True) for m in step.steps],
         # spec 2026-09-25 §5.C.3: the pre-filled step record — for a flat
         # step; a fan-out group's record is per member, in the member brief.
         "record": None if step.steps else _record_brief(state, step),
     }
+
+
+def _caller_evidence(step: Step) -> list[str]:
+    """The evidence a brief lists: what the caller passes. A derived name is
+    refused from the caller ("not yours to pass"), so listing it sent agents
+    straight into that refusal (gh#653)."""
+    return [n for n in step.evidence if n not in DERIVED_EVIDENCE]
 
 
 def _record_brief(
@@ -3443,7 +3446,7 @@ def _build_member_brief(
         # The member's OWN, never the group's: an obligation is a property of
         # the step that carries it, and inheriting it would make every member
         # of the loop owe the review member's evidence.
-        "evidence": list(member.evidence),
+        "evidence": _caller_evidence(member),
         "resolved_tier": resolved_tier,
         "for_each": group.for_each,
         "steps": [],
@@ -3739,7 +3742,7 @@ def _advance_group(
     try:
         agentic, manual = _group_phases(repo_root, state)
     except (RunStateError, AdoptError) as e:
-        err_console.print(f"[red]{step.id}: {e}[/red]", soft_wrap=True)
+        err_console.print(f"[red]{step.id}: {escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
     expected = _expected_group_items(step, agentic)
     # #496 (spec §3.D.3): the manual markers are merged in HERE, above the
@@ -3917,7 +3920,7 @@ def _bind_session(workspace: Path, branch: str, session: str | None, harness: st
         # captures it (journal p1-f1, r1-f2).
         err_console.print(
             f"[yellow]warning: could not bind session {session!r} to branch "
-            f"{branch!r}: {e}[/yellow]",
+            f"{branch!r}: {escape(str(e))}[/yellow]",
             soft_wrap=True,
         )
         err_console.print(
@@ -3969,7 +3972,7 @@ def start_cmd(
     try:
         manifest = resolve_workflow(workflow, repo_root)
     except WorkflowError as e:
-        err_console.print(f"[red]{e}[/red]")
+        err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
     if not manifest.steps:
         err_console.print(f"[red]workflow {workflow!r} has no steps[/red]")
@@ -3996,7 +3999,7 @@ def start_cmd(
         # with long temp paths it broke `is not a linked git worktree` across a
         # newline mid-phrase. A refusal an operator cannot read, or grep for,
         # is a bug wherever it appears.
-        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
     if workspace.resolve() != repo_root.resolve():
@@ -4010,7 +4013,7 @@ def start_cmd(
         try:
             manifest = resolve_workflow(workflow, workspace)
         except WorkflowError as e:
-            err_console.print(f"[red]{e}[/red]")
+            err_console.print(f"[red]{escape(str(e))}[/red]")
             raise typer.Exit(2) from e
         shape_errors = check_workflow(manifest)
         if shape_errors:
@@ -4027,7 +4030,7 @@ def start_cmd(
         # ever fires on an explicit override.
         rid = validate_run_id(run_id) if run_id else derive_run_id(branch)
     except RunStateError as e:
-        err_console.print(f"[red]{e}[/red]")
+        err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
     path = run_path(workspace, rid)
     # The case check runs FIRST so its (more informative) message wins on both
@@ -4149,7 +4152,7 @@ def adopt_cmd(
             notes=notes,
         )
     except AdoptError as e:
-        err_console.print(f"[red]{e}[/red]")
+        err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
     _note_record_write(repo_root, run_path(repo_root, state.run), state)
 
@@ -4221,11 +4224,12 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
     try:
         state = load_run_state(repo_root, run_id)
     except RunStateError as e:
-        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
     except OSError as e:  # pragma: no cover — unreadable file
         err_console.print(
-            f"[red]cannot read {run_path(repo_root, run_id)}: {e}[/red]", soft_wrap=True
+            f"[red]cannot read {run_path(repo_root, run_id)}: {escape(str(e))}[/red]",
+            soft_wrap=True,
         )
         raise typer.Exit(2) from e
     _note_loaded(state)
@@ -4399,7 +4403,8 @@ def cost_cmd(
             usage = load_run_usage(repo_root, run_id)
         except (OSError, UsageFileError) as e:
             err_console.print(
-                f"[red]fr run cost: the usage file of {run_id} is unreadable: {e}[/red]"
+                f"[red]fr run cost: the usage file of {run_id} is unreadable: "
+                f"{escape(str(e))}[/red]"
             )
             raise typer.Exit(2) from e
         if usage is None:
@@ -4606,7 +4611,7 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         manifest = _resolve_manifest_for_state(repo_root, state)
         step = _step_by_id(manifest, state.cursor)
     except (RunStateError, WorkflowError, AdoptError) as e:
-        err_console.print(f"[red]{e}[/red]")
+        err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
 
     record = state.steps.get(state.cursor)
@@ -4671,7 +4676,7 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         try:
             notice = _gate_degradation_notice()
         except HarnessError as e:
-            err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+            err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
         # R10: where fr cannot observe who answers, the resolve must carry the
         # claim — so the command the agent copies carries it too.
@@ -4750,7 +4755,7 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
     try:
         command = _render_template(step.run or "", context, quote=True)
     except RunStateError as e:
-        err_console.print(f"[red]{e}[/red]")
+        err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
 
     if not command.strip():
@@ -4834,7 +4839,7 @@ def _resolve_member(
     try:
         agentic, manual = _group_phases(repo_root, state)
     except (RunStateError, AdoptError) as e:
-        err_console.print(f"[red]{group.id}: {e}[/red]", soft_wrap=True)
+        err_console.print(f"[red]{group.id}: {escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
     expected = _expected_group_items(group, agentic)
     # The manual markers are `_advance_group`'s to write (a group can only be
@@ -5303,7 +5308,7 @@ def _resolve_body(
         # in a flag pair the operator copy-pastes, and rich folds at width 80
         # whenever stderr is not a tty — i.e. exactly when a harness captures
         # it. Same reason every other hint in this module carries it.
-        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
     if parent is not None and (no_questions or reason is not None or questions is not None):
@@ -6061,7 +6066,7 @@ def claim_cmd(
         try:
             resolved_harness = detect_harness(os.environ)
         except HarnessError as e:
-            err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+            err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
     if open_unit:
         assert agent is not None and agent_type is not None  # guarded above
@@ -6081,7 +6086,7 @@ def claim_cmd(
         step, parent = _find_step(manifest, step_id)
         key = _unit_key(repo_root, state, step, parent, item)
     except (RunStateError, WorkflowError, AdoptError) as e:
-        err_console.print(f"[red]{e}[/red]")
+        err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
 
     owner_id = parent.id if parent is not None else step.id
@@ -6416,7 +6421,7 @@ def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
     except (RunStateError, WorkflowError, AdoptError) as e:
-        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
     statuses = gates(state, manifest)

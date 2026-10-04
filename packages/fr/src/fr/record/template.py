@@ -24,6 +24,7 @@ from fr.record.model import (
     load_record,
     record_path,
 )
+from fr.workflow.artifacts import DERIVED_EVIDENCE, journal_scope
 
 if TYPE_CHECKING:
     from fr.run.model import RunState
@@ -31,7 +32,6 @@ if TYPE_CHECKING:
 
 __all__ = ["RecordBrief", "in_progress_summary", "record_brief", "render_template"]
 
-_DERIVED = frozenset({"findings", "proportionality", "visual"})
 _EMITTED_NAMES = ("spec", "plan", "pr")
 
 
@@ -47,6 +47,7 @@ def render_template(
     emitted: list[str],
     resolve: str,
     gated: bool = False,
+    journal: str | None = None,
 ) -> str:
     """The YAML text of an empty record for one unit — valid as it stands.
 
@@ -55,6 +56,10 @@ def render_template(
     `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B: such a
     step's template carries a commented `questions:` hint, so the agent
     resolving it sees the declaration is available without reading the spec.
+
+    `journal` is the scope the record's `journal:` entries land in; a plan
+    journal refuses an entry with neither `phase` nor `global: true`, so its
+    template says so (gh#653).
     """
     lines = [
         "# Step record. Fill it as you work and commit it with your work; then",
@@ -85,6 +90,8 @@ def render_template(
             "#   - {kind: decision|discovery|finding, id: <id>, title: <line>, body: <md>}"
         )
         lines.append("#     a finding also takes review_scope: in|out (state defaults to open)")
+        if journal == "plan":
+            lines.append("#     a plan-journal entry also takes phase: <n> or global: true")
         lines.append(
             "#     a spec-journal discovery holding the operator's brief takes input: true"
         )
@@ -103,7 +110,7 @@ def render_template(
     if emitted:
         lines.append("emitted: {}")
         lines.append(f"#   {', '.join(f'{n}: <path or url>' for n in emitted)}")
-    owed = [n for n in evidence if n not in _DERIVED]
+    owed = [n for n in evidence if n not in DERIVED_EVIDENCE]
     lines.append("evidence: {}")
     if owed:
         lines.append(f"#   owed: {', '.join(f'{n}: <id>' for n in owed)}")
@@ -170,8 +177,18 @@ def record_brief(
     group: Step | None = None,
     item: str | None = None,
 ) -> RecordBrief:
-    """The record a unit of `state` is handed, or its in-progress form."""
+    """The record a unit of `state` is handed, or its in-progress form.
+
+    It also makes the directory the record's path points into: an agent
+    writing the record with a shell heredoc found none there, because only the
+    apply engine ever made one (gh#653). Both callers, `fr run advance`'s brief
+    and `fr pickup`, come through here. A failure to make it costs the agent
+    nothing it had before, so it never costs the template."""
     path = record_path(repo_root, state.run, step.id, item)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     rel = path.relative_to(repo_root).as_posix()
     plan_rel = next(
         (r.emitted["plan"] for r in state.steps.values() if r.emitted and "plan" in r.emitted),
@@ -199,6 +216,7 @@ def record_brief(
         emitted=[n for n in _EMITTED_NAMES if n in emits],
         resolve=resolve,
         gated=step.gate == "operator",
+        journal=journal_scope(emits),
     )
     progress: str | None = None
     if path.is_file():

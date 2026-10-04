@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.commands.common import require_migrated_layout
 from fr.migrate import MigrationError, migrate_repo
@@ -62,7 +63,7 @@ def v1_to_v2_cmd(
             target_repo=target_repo,
         )
     except MigrationError as e:
-        err_console.print(f"[red]migration error:[/red] {e}")
+        err_console.print(f"[red]migration error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
 
     for o in outcomes:
@@ -97,7 +98,7 @@ def dirs_cmd(
     try:
         moves, notes = migrate_dirs(repo_root, dry_run=not yes)
     except MigrationError as e:
-        err_console.print(f"[red]migration error:[/red] {e}")
+        err_console.print(f"[red]migration error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
 
     if not moves:
@@ -173,7 +174,7 @@ def artifacts_cmd(
                 raise typer.Exit(2)
             report = run_migrations(repo_root, dry_run=not yes)
     except MigrationChainError as e:
-        err_console.print(f"[red]migration error:[/red] {e}")
+        err_console.print(f"[red]migration error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
 
     verb = "migrated" if yes else "would migrate"
