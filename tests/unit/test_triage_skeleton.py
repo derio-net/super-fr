@@ -59,6 +59,9 @@ class FixtureForge:
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
         raise AssertionError("the skeleton has no batches")
 
+    def viewer_login(self) -> str:
+        return "operator"
+
 
 def test_collect_writes_facts_json_from_the_forge(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

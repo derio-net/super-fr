@@ -78,6 +78,7 @@ def _issue(number: int, **kw: Any) -> Issue:
 
 def _facts(config: dict[str, Any] | None = None, **kw: Any) -> Facts:
     return Facts(
+        viewer="operator",
         schema=3,
         scope="derio-net--super-fr",
         kind="repo",
@@ -576,6 +577,8 @@ def _pr(state: str = "OPEN", **kw: Any) -> Any:
     from fr.triage.model import PullRequest
 
     return PullRequest(
+        author="operator",
+        cross_repo=False,
         repo=REPO,
         number=kw.pop("number", 700),
         title="batch PR",

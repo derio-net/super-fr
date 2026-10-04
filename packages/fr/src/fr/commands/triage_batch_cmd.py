@@ -69,6 +69,7 @@ from fr.services import ServicesError, require_tracker
 from fr.services.resolve import resolve_services
 from fr.triage.batch import (
     CLOSED_OUT,
+    allowed_authors,
     batch_branch,
     batch_item_id,
     batch_pr,
@@ -79,6 +80,8 @@ from fr.triage.batch import (
     closeout_state,
     dependency_state,
     derive_batch_stage,
+    distrust,
+    foreign_batch_prs,
     last_dispatch,
     mixed_themes,
     pr_open_queue,
@@ -1367,10 +1370,22 @@ def _parse_at(stamp: str | None) -> datetime | None:
     return parsed if parsed.tzinfo is not None else None
 
 
-def _live_head_prs(client: GhClient, repo: str, head: str) -> list[LivePr]:
-    """The PRs with head *head*, as the archive step reads them (merged ones too)."""
+def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[str]) -> list[LivePr]:
+    """The PRs with head *head*, as the archive step reads them (merged ones too),
+    each `trusted` only from *repo* itself by an *allowed* author (gh#936)."""
     out: list[LivePr] = []
     for rec in client.list_prs_by_head(repo, head):
+        author = rec.get("author")
+        login = author.get("login") if isinstance(author, dict) else None
+        cross = rec.get("isCrossRepository")
+        trusted = (
+            distrust(
+                str(login) if login else None,
+                cross if isinstance(cross, bool) else None,
+                allowed,
+            )
+            is None
+        )
         out.append(
             LivePr(
                 number=int(rec.get("number", 0)),
@@ -1382,6 +1397,7 @@ def _live_head_prs(client: GhClient, repo: str, head: str) -> list[LivePr]:
                 files=tuple(
                     str(f.get("path") if isinstance(f, dict) else f) for f in rec.get("files") or ()
                 ),
+                trusted=trusted,
             )
         )
     return out
@@ -1498,6 +1514,7 @@ class _Driver:
                     checks=verdict,
                     failing=failing,
                     head_ref=e.pr.head_ref,
+                    trusted=True,  # the queue holds `batch_pr`s only (gh#936)
                 )
             for b in chosen:
                 if stages[b.id] not in ("merged", "partial") or b.id not in repos:
@@ -1547,6 +1564,7 @@ class _Driver:
             warned=frozenset(self.warned),
             selected=frozenset(ids),
             archived=frozenset(archived),
+            foreign={b.id: found for b in chosen if (found := tuple(foreign_batch_prs(b, facts)))},
         )
 
     def _reader(self, repo: str) -> Checkout:
@@ -1603,6 +1621,7 @@ class _Driver:
         """Archive PR candidates: the open `chore/*` PRs collect read (with files and
         checks), plus any PR on the close-out's own heads, merged ones included."""
         client = self.client(facts, repo)
+        allowed = allowed_authors(repo, facts)
         out: dict[int, LivePr] = {}
         for pr in facts.prs:
             if (
@@ -1619,12 +1638,13 @@ class _Driver:
             out[pr.number] = LivePr(
                 number=pr.number, state="OPEN", draft=pr.is_draft, head=pr.head_oid,
                 checks=verdict, failing=failing, head_ref=pr.head_ref, files=tuple(pr.files),
+                trusted=distrust(pr.author, pr.cross_repo, allowed) is None,
             )  # fmt: skip
         last = last_dispatch(batch)
         heads = {housekeeping_branch(last.branch if last else batch_branch(batch), None, None)}
         heads |= {event.archive} if event.archive else set()
         for head in sorted(heads):
-            for found in _live_head_prs(client, repo, head):
+            for found in _live_head_prs(client, repo, head, allowed):
                 if found.state != "OPEN" or found.number not in out:
                     out[found.number] = found
         return list(out.values())
@@ -1703,7 +1723,7 @@ class _Driver:
         repo = batch_repo(batch, facts)
         if action.kind in ("blocked", "held") or repo is None:
             return action.detail, False, in_flight
-        if action.kind == "warn":
+        if action.kind in ("warn", "foreign"):
             self.warned.add(action.head)
             return action.detail, False, in_flight
         if action.kind == "merge":
