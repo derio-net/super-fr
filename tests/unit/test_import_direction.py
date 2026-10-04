@@ -31,16 +31,20 @@ def _imports_of(package_dir: Path) -> dict[Path, set[str]]:
 _SOFT_POINTS = ("apply_cmd.py", "triage_batch_cmd.py")
 _SOFT_TARGET = "fr_dispatch"
 
+# Every workspace package but `fr` itself, read from disk (gh#643): a hand
+# list missed `fr_cncd`, and would miss the next package the same way.
+_SIBLINGS = frozenset(p.parent.name for p in PACKAGES.glob("*/src/*/__init__.py")) - {"fr"}
+
 
 def _sibling_offenders(src_root: Path) -> dict[str, set[str]]:
     return {
-        str(f): roots & {"fr_dispatch", "fr_vk"}
+        str(f): roots & _SIBLINGS
         for f, roots in _imports_of(src_root).items()
-        if roots & {"fr_dispatch", "fr_vk"}
+        if roots & _SIBLINGS
         and not (
             f.parent.name == "commands"
             and f.name in _SOFT_POINTS
-            and roots & {"fr_dispatch", "fr_vk"} == {_SOFT_TARGET}
+            and roots & _SIBLINGS == {_SOFT_TARGET}
         )
     }
 
@@ -48,6 +52,18 @@ def _sibling_offenders(src_root: Path) -> dict[str, set[str]]:
 def test_fr_imports_no_siblings() -> None:
     offenders = _sibling_offenders(PACKAGES / "fr" / "src" / "fr")
     assert not offenders, f"fr must not import siblings: {offenders}"
+
+
+def test_every_sibling_package_is_an_offender(tmp_path: Path) -> None:
+    """gh#643: a hand-written banned set missed `fr_cncd`. Every package under
+    `packages/*/src/` other than `fr` itself is a sibling, including ones added
+    after this test was written."""
+    siblings = {p.parent.name for p in PACKAGES.glob("*/src/*/__init__.py")} - {"fr"}
+    assert {"fr_cncd", "fr_dispatch", "fr_herdr", "fr_vk"} <= siblings
+    for name in siblings:
+        (tmp_path / f"imports_{name}.py").write_text(f"from {name}.x import y\n")
+    offenders = _sibling_offenders(tmp_path)
+    assert set(offenders) == {str(tmp_path / f"imports_{n}.py") for n in siblings}
 
 
 def test_a_third_fr_dispatch_import_is_refused(tmp_path: Path) -> None:
@@ -118,17 +134,6 @@ def test_fr_vk_strings_stay_in_the_adapter() -> None:
             if banned.search(line):
                 offenders.append(f"{py.name}:{n}: {line.strip()}")
     assert not offenders, "VK vocabulary leaked into fr_dispatch:\n" + "\n".join(offenders)
-
-
-def test_fr_never_imports_fr_herdr() -> None:
-    """Spec 2026-09-25-triage-batches §3.C: `fr` never imports `fr_herdr`;
-    the runner is reached only through the `fr.runners` entry point."""
-    offenders = {
-        str(f): roots & {"fr_herdr"}
-        for f, roots in _imports_of(PACKAGES / "fr" / "src" / "fr").items()
-        if "fr_herdr" in roots
-    }
-    assert not offenders, f"fr must not import fr_herdr: {offenders}"
 
 
 def test_fr_dispatch_never_imports_fr_herdr() -> None:
