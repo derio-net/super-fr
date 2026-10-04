@@ -49,3 +49,8 @@ escape(str(e)) at each except-bound interpolation into a markup-on console.print
 ### fx-502 · finding [fixed] · #502 fixed: ticks rewrite only the state: block
 
 plan_ops.rewrite_phase_text splices the changed top-level block, trusted only if it parses back to the intended doc. Wired into record/apply.py _plan_writes (the real CLI path) and the plan_ops writers. Pinned by tests/unit/test_record_verbs.py::test_plan_edit_rewrites_only_the_state_block_it_changes (RED with the engine change reverted) plus plan_ops tests.
+
+<!-- fr:journal kind=finding scope=debug id=fx-653 created=2026-10-04T05:44:36+00:00 state=fixed -->
+### fx-653 · finding [fixed] · #653 fixed: brief/template read one derived set; advance makes .records/
+
+fr.workflow.artifacts.DERIVED_EVIDENCE shared by gate, brief and template; brief lists caller evidence only; _record_brief mkdirs the records dir; plan-journal template names phase|global. Pinned in test_run_cli.py and test_record_template.py.
