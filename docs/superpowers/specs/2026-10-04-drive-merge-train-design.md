@@ -145,3 +145,9 @@ Post-merge, operator-driven: drive the next wave of three or more ready batch PR
 `fr triage batch drive --yes`. Check that each pass prints one train line. Check that only the head is updated after
 each merge. Check that no PR is updated more than once for each PR merged ahead of it. Flip
 `drive-merge-train-live-wave` with the observation.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-04-drive-merge-train | `derio-net/super-fr` | `2026-10-04-drive-merge-train` | — |

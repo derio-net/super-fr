@@ -1,0 +1,182 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Drive merges each repo's ready PRs as a merge train
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - drive-merge-train-head-only
+  - drive-merge-train-step-over
+  - drive-merge-train-output
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_batch_drive.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - .changes/feat-batch-drive-merge-train.yaml
+  - docs/acceptance/*
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: The pure pass walks a train per repo (spec §A; R1, R2, R4 checks, R5)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_drive.py, using the file's _snap/_pr/_live/_dispatched helpers, add
+      tests: (a) three ready green PRs in one repo give three `merge` actions in merge order and
+      `plan.trains == (Train(repo=REPO, head=<first>, candidates=(a, b, c), queued=(), stepped=()),)`, each
+      merge Action carrying `train=REPO`; (b) the first PR pending: no `merge` action at all, it is the head, the
+      rest are queued; (c) the first PR's live head differs from its collected head_oid: no merge action, it is
+      the waiting head, the rest are queued; (d) the first PR failing: one `warn` (once per head sha, the
+      existing rule), stepped=(it,), the second is the head and gets the merge action; (e) a green PR followed by
+      a pending one followed by a green one: one merge action (the first), the walk stops at the pending one, the
+      third is queued; (f) PRs in two repos (snap.repos maps them) give two Trains, ordered by repo, each with
+      its own head; (g) R5: with no stored state, a PR earlier in merge order that is green now is the head and
+      gets the merge action even though a later PR is pending; (h) Summary.queued equals the number of queued
+      members, the waiting head excluded. Keep test_merges_follow_the_merge_order green.
+      Run `uv run pytest tests/unit/test_triage_batch_drive.py -q --no-cov`: the new tests fail (no Train yet).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/triage/batch_drive.py add the frozen `Train` dataclass (repo, head,
+      candidates, queued, stepped), `Pass.trains: tuple[Train, ...] = ()`, `Action.train: str = ""`,
+      `Summary.queued: int = 0`. Rewrite step 1 of drive_pass as the spec §A walk: merge_order over the queue,
+      grouped by snap.repos.get(bid, "") keeping that order; per member: missing/not OPEN/draft -> skip;
+      failing -> warn once per head, stepped; moved head or pending -> waiting head, stop, rest queued;
+      green -> merge action with train=repo, candidate, continue. Summary.queued = total queued.
+      Re-run the file: green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: extract the per-repo walk into a helper (`_walk_train`) so drive_pass stays readable; keep the
+      purity test (test_the_pass_module_reaches_no_runner_git_process_or_clock) green; re-run the file.
+- number: 2
+  title: train_line and summary_line (spec §C; R6)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests for `train_line`: `train derio-net/super-fr: head a (PR #12) · queued b (#13), c (#14) ·
+      stepped over d (#15)`; empty parts omitted; no head reads `train <repo>: no head · stepped over …`.
+      summary_line appends `, queued N` only when N > 0, in the order `..., closing C, queued N, blocked B`.
+      Run them: red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement train_line in batch_drive.py, taking the PR numbers from a `numbers` mapping on Train
+      (batch id -> PR number, filled by drive_pass from snap.live), and extend summary_line. Re-run: green.
+- number: 3
+  title: The executor stops a train at the first head that does not merge (spec §B;
+    R3, R4)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_drive_cmd.py, with the World/DriveCheckout fixtures and
+      triage_batch_cmd.merge_ready monkeypatched to a scripted fake that returns MergeAttempt outcomes (or
+      raises MergeStopError) per PR number, add: (a) three ready green PRs, the first `updated`: the other two
+      print `merge <id>: queued: behind <head>` and the fake is called exactly once; (b) the first `merged`: the
+      second is attempted in the same pass; (c) the first raises MergeStopError: reported (`stopped: ...`), and
+      the second is attempted; (d) the first returns `pending`: the train stops; (e) the head-moved hold
+      (slots[0].head != action.head) stops the train; (f) the first `failing` or `draft` at merge time: stepped
+      over, the second is attempted; (g) two repos: a stop in one does not stop the other; (h) the summary line
+      shows `queued N` for the queued candidates. Run the file: red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/triage_batch_cmd.py, _Driver gets per-pass `_stopped: dict[str, str]`
+      (repo -> the head batch that stopped it) and `_queued: int`, reset in run_pass beside _unlanded. In _act, a
+      merge action whose train is stopped returns `queued: behind <head>`, adds the batch to _unlanded and
+      increments _queued, without calling _merge_batch. _merge_batch also returns whether its outcome stops the
+      train (updated, head moved, pending stop; merged, already merged, failing, draft, MergeStopError go on);
+      _act records the stop. settle gains `queued: int = 0`, added to Summary.queued; run_pass passes
+      self._queued. Re-run the file: green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: keep the stop decision in one place (a small function or table beside _merge_batch) instead
+      of branches spread over _act; re-run tests/unit/test_triage_batch_drive_cmd.py and
+      tests/unit/test_triage_batch_drive.py.
+- number: 4
+  title: Train lines printed before the actions, in plan mode and with --yes (spec
+    §C; R6)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: command-level tests: plan mode (no --yes) and --once --yes both print the `train <repo>: ...` line
+      before the pass's first action line; no train line when the repo has no ready PR. Run: red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: run_pass prints train_line for each of plan.trains before iterating the actions. Re-run: green.
+- number: 5
+  title: Change fragment, acceptance rows, and the full gate
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Add .changes/feat-batch-drive-merge-train.yaml with `bump: minor` and the summary
+      `fr triage batch drive merges each repo's ready PRs as a merge train: only the head is updated or merged,
+      failing and refused PRs are stepped over, and each pass prints the train`.
+  - id: P1.T5.S2
+    text: |-
+      Move rows drive-merge-train-head-only, drive-merge-train-step-over and drive-merge-train-output to `ci`
+      with `uv run fr acceptance set-status --id <row> --status ci --notes "<why>" --level
+      unit=super-fr:tests/unit/<file>.py#<test_name>` (name-anchored refs to the new tests); it regenerates the
+      three reports. Leave drive-merge-train-live-wave not-implemented (post-merge).
+  - id: P1.T5.S3
+    text: |-
+      Gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src`, `uv run fr acceptance check`, then the full suite
+      `uv run pytest -q --no-cov -n auto` into a log outside the repo; all green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
