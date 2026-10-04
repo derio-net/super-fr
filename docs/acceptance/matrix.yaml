@@ -4742,6 +4742,58 @@ rows:
     notes: Batch.skill (goal|debug), batch_branch/batch_workflow, the debug brief's
       fix/batch-<id> branch and Debugging rules block, --skill on create/edit, and mixed_themes'
       create/edit warning are exercised by the model, dispatch and verbs test files.
+  - id: drive-collect-carries-closed
+    capability: Backlog triage
+    acceptance: A drive pass never views a judged issue the previous facts already show
+      closed; it carries it with fresh PR links, an issue open again reads open, and
+      a fully closed merged batch stays merged.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: drive-collect-views-what-changed
+    capability: Backlog triage
+    acceptance: A drive pass views every judged issue that just left the open list,
+      was unviewed or never seen, and collects fully when no same-scope previous facts
+      are readable.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: collect-stays-full
+    capability: Backlog triage
+    acceptance: fr triage collect never carries facts over; it views every judged issue
+      that is not open.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: drive-collect-cost-line
+    capability: Backlog triage
+    acceptance: Each drive pass prints one line naming the issues its collect viewed
+      and carried over.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: drive-pass-fast-on-settled-backlog
+    capability: Backlog triage
+    acceptance: On a repo with a large settled judged backlog, a drive pass after a
+      full collect takes seconds, not minutes, and fr triage check reports the same
+      settled count.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity

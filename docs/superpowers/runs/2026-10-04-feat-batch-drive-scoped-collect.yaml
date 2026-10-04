@@ -3,11 +3,14 @@ run: 2026-10-04-feat-batch-drive-scoped-collect
 workflow: fr-goal@1
 branch: feat/batch-drive-scoped-collect
 started: '2026-10-04T05:51:48+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-04T05:51:56+00:00'
+    state: done
+    at: '2026-10-04T06:00:48+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md
   spec-review:
     state: pending
   plan:
