@@ -27,3 +27,8 @@ Every surface a running session executes is replaced in place: the plugin's `cur
 ### c3a06b737277 · root-cause · Observed hook errors: Claude Code holds the resolved version dir, and install.sh prunes it
 
 Supersedes the earlier root-cause entry as an account of the OBSERVED error. Every hook_non_blocking_error in the operator's last 30 days of transcripts (≈50, across Stop, PreToolUse, PostToolUse and SessionStart, Claude Code 2.1.280–2.1.287, 2026-09-24 → 2026-10-04) has the same text: `Failed to run: Plugin directory does not exist: ~/.claude/plugins/cache/derio-net--super-fr/super-fr/<version> (… run /plugin to reinstall)`, exit 1, durationMs ~2: the script never ran. Claude Code resolves installPath (`…/current`) to the version directory when it loads the plugin and keeps that path for the session; install.sh step 4 keeps only current + one previous version dir, so the third release after a session started deletes the directory it runs every hook from. The 2026-06-21 premise that a session "keeps installPath literal" no longer holds. Consequence beyond the Stop hook: the PreToolUse guards (fr-isolation-required, fr-isolation-guard, merged-pr-push-guard) fail OPEN in those sessions. Not overlap- or race-dependent: one install per release suffices.
+
+<!-- fr:journal kind=ruled-out scope=debug id=6cfa22c2f2cf created=2026-10-04T06:41:54+00:00 -->
+### 6cfa22c2f2cf · ruled-out · ln -sfn gap as the cause of the observed error
+
+Real but not what the operator hit: the observed stderr names a missing VERSION directory, not a missing `current`. Also, on macOS/APFS even rename(2) over a symlink lets a concurrent lookup see ENOENT (60 misses in 300 os.replace swaps), so an atomic swap narrows that gap ~100x but cannot close it.
