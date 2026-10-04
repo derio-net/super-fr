@@ -187,9 +187,10 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             head_ref=r.get("headRefName") or "",
             head_oid=r.get("headRefOid") or "",
             files=[f["path"] for f in r.get("files") or [] if "path" in f],
-            checks=_checks(r.get("statusCheckRollup") or []),
-            mergeable=r.get("mergeable") or "UNKNOWN",
-            merge_state=r.get("mergeStateStatus") or "UNKNOWN",
+            # Only a record that carries the field gets a value (super-fr#648).
+            checks=_checks(r["statusCheckRollup"] or []) if "statusCheckRollup" in r else None,
+            mergeable=(r["mergeable"] or "UNKNOWN") if "mergeable" in r else None,
+            merge_state=((r["mergeStateStatus"] or "UNKNOWN") if "mergeStateStatus" in r else None),
             review=r.get("reviewDecision") or None,
             author=_login(r),
             cross_repo=r.get("isCrossRepository"),

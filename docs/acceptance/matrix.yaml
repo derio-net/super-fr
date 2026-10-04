@@ -577,12 +577,13 @@ rows:
       - super-fr:tests/unit/test_init_scaffold.py
       - super-fr:tests/unit/test_isolation_cmd.py
       - super-fr:tests/integration/test_install_sh.py
-      - super-fr:tests/integration/test_install_validator_wrapper.py
       - super-fr:tests/unit/test_closeout_run_clean.py
     status: ci
     notes: 'Scaffold install/refusal, isolation fail-closed behavior, and installer-output
       cleanup are pinned per-PR. gh#826: the wrapper runs fr validate plans (bundled
-      validator) on any harness, falling back to the marketplace copy (test_closeout_run_clean.py).'
+      validator) on any harness, falling back to the marketplace copy (test_closeout_run_clean.py).
+      gh#619: the retired install-validator-wrapper.sh and its integration test are
+      deleted; fr init validator-wrapper is the remedy.'
   - id: migrate-creates-missing-spec-table
     capability: Migrate v1-to-v2
     acceptance: fr migrate v1-to-v2 creates the spec-s Implementation Plans table (canonical

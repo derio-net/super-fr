@@ -1032,3 +1032,165 @@ def test_a_forge_change_redetects_blocks_the_new_forge_rejects(repo: Path) -> No
     assert data["forge"]["type"] == "gitlab"
     assert data["ci"] == {"type": "none"}  # github-actions no longer fits; no CI files
     assert data["tracking"] == {"type": "none"}  # autouse fake: issues off
+
+
+# --- super-fr#805: scaffold keeps the operator's comments in fr-profiles.yaml ---
+
+
+_COMMENTED_PROFILES = """\
+# operator header: who owns these profiles
+schema_version: 2
+profiles:
+  # the everyday one
+  dev:
+    purpose: day-to-day development  # keep it lean
+    secrets: []
+  # gh writes only
+  admin:
+    purpose: in-container gh writes
+    secrets:
+    - GH_TOKEN  # rotated monthly
+default: dev
+forge:
+  type: github
+ci:
+  type: github-actions
+tracking:
+  type: none
+"""
+
+
+def test_adding_a_profile_keeps_every_comment(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_text(_COMMENTED_PROFILES)
+    res = runner.invoke(
+        app,
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "readonly",
+            "--purpose",
+            "read-only review",
+            "--tracking",
+            "none",
+            "--backend",
+            "github",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    text = (repo / PROFILES).read_text()
+    for comment in (
+        "# operator header",
+        "# the everyday one",
+        "# keep it lean",
+        "# gh writes only",
+        "# rotated monthly",
+    ):
+        assert comment in text, f"{comment!r} dropped:\n{text}"
+    data = _profiles(repo)
+    assert list(data["profiles"]) == ["dev", "admin", "readonly"]
+    assert data["profiles"]["readonly"] == {"purpose": "read-only review", "secrets": []}
+    assert data["profiles"]["admin"]["secrets"] == ["GH_TOKEN"]
+    assert data["default"] == "dev"
+
+
+def test_rescaffolding_a_profile_replaces_only_its_entry(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_text(_COMMENTED_PROFILES)
+    res = runner.invoke(
+        app,
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "dev",
+            "--purpose",
+            "new purpose",
+            "--tracking",
+            "none",
+            "--backend",
+            "github",
+            "--force",
+            "--default",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    text = (repo / PROFILES).read_text()
+    assert "# the everyday one" in text  # sits above the entry, not inside it
+    assert "# gh writes only" in text and "# rotated monthly" in text
+    assert "# keep it lean" not in text  # that comment was on the replaced value
+    data = _profiles(repo)
+    assert data["profiles"]["dev"] == {"purpose": "new purpose", "secrets": []}
+    assert list(data["profiles"]) == ["dev", "admin"]
+    assert data["default"] == "dev"
+
+
+def test_a_crlf_profiles_file_stays_crlf_and_keeps_its_comments(repo: Path) -> None:
+    """Review of #805: `read_text` turned CRLF into LF before the line surgery
+    saw it, so the whole file came back with new line endings."""
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_bytes(_COMMENTED_PROFILES.replace("\n", "\r\n").encode())
+    res = runner.invoke(
+        app,
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "readonly",
+            "--purpose",
+            "read-only review",
+            "--tracking",
+            "none",
+            "--backend",
+            "github",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    raw = (repo / PROFILES).read_bytes().decode()
+    assert "# the everyday one\r\n" in raw
+    assert "\n" not in raw.replace("\r\n", "")  # no bare LF anywhere
+    assert list(_profiles(repo)["profiles"]) == ["dev", "admin", "readonly"]
+
+
+def test_a_quoted_profile_key_never_ends_up_duplicated(repo: Path) -> None:
+    """Review of #805: `safe_load` keeps the last of two equal keys, so a
+    surgery that appended a second `dev:` beside a quoted `"dev":` read back
+    as intended. The re-read must refuse duplicates and fall back instead."""
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_text(
+        'schema_version: 2\nprofiles:\n  "dev":\n    purpose: old\n    secrets: []\ndefault: dev\n'
+    )
+    res = runner.invoke(
+        app,
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "dev",
+            "--purpose",
+            "new",
+            "--tracking",
+            "none",
+            "--backend",
+            "github",
+            "--force",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    from fr.artifacts.structure import _StrictLoader
+
+    data = yaml.load((repo / PROFILES).read_text(), Loader=_StrictLoader)  # noqa: S506
+    assert data["profiles"] == {"dev": {"purpose": "new", "secrets": []}}

@@ -136,7 +136,7 @@ def take_snapshot(
             for i in facts.issues
         },
         prs={
-            pr_key(pr): PrState(state=pr.state, draft=pr.is_draft, checks=dict(pr.checks))
+            pr_key(pr): PrState(state=pr.state, draft=pr.is_draft, checks=dict(pr.checks or {}))
             for pr in _all_prs(facts)
         },
         acceptance=acc,

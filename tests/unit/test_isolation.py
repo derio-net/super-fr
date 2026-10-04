@@ -528,6 +528,10 @@ def test_up_uncommitted_profile_raises_actionable_error(
     msg = str(ei.value)
     assert "not committed" in msg
     assert "fr init scaffold" in msg
+    # super-fr#806: the hint names the flags the re-run needs up front — the
+    # profile exists, so `--force`; and with no recognised remote `auto`
+    # tracking refuses, so `--tracking none`.
+    assert "--force" in msg and "--tracking none" in msg
     assert not runner.argv_for("devcontainer")  # never reached devcontainer up
 
 

@@ -1,0 +1,2 @@
+bump: patch
+summary: "Housekeeping: fr init scaffold keeps comments in fr-profiles.yaml; agent-* worktrees copy .worktreeinclude matches (never through a symlink); faster status line; triage facts no longer invent checks on non-open PRs; batch briefs call the reserved version provisional; retire install-validator-wrapper.sh."

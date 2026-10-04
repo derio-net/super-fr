@@ -41,7 +41,6 @@ REPO = Path(__file__).resolve().parent.parent
 
 VERSION_REQUIRED_EXACT = {
     "scripts/install.sh",
-    "scripts/install-validator-wrapper.sh",
     "scripts/validate-plans.sh",
 }
 
