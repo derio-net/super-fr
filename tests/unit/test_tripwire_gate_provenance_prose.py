@@ -1,13 +1,13 @@
-"""CI tripwire: fr-goal must keep telling the ENFORCED harness to type the truth.
+"""CI tripwire: fr-goal must keep telling the orchestrator to type the truth.
 
-`--answered-by` defaults to `agent` on purpose — the honesty property of spec
-§3.D.2 is that the stronger claim ("a human answered this") has to be typed
-deliberately. That default only works if the one harness where an operator
-really does answer is told to type it. Review finding `r4-i1` found that
-nothing did: the flag appeared nowhere in `plugins/` or `.opencode/`, so every
-Claude Code run would have recorded `answered_by: agent` and every PR body
-would have said "no operator answered it" on runs where one did. A warning that
-fires every time is a warning nobody reads.
+`--answered-by` has NO default (spec 2026-10-02-opencode-observe-2 §F, R10):
+where fr cannot observe who answered an operator gate, a resolve that states
+neither `operator` nor `agent` is refused. So the claim must be typed, and the
+skill must say how. Review finding `r4-i1` (from when the flag defaulted to
+`agent`) found that nothing did: the flag appeared nowhere in `plugins/` or
+`.opencode/`, so every run would have recorded `answered_by: agent` and every
+PR body would have said "no operator answered it" on runs where one did. Under
+R10 the same gap would now strand every unobservable gate on a refusal instead.
 
 Phase 5 added the prose. This pins it, because `r4-i1` asked for the pin and
 review `r5-c1` found the journal had CLAIMED the pin existed when it did not —
@@ -40,11 +40,10 @@ def test_fr_goal_tells_the_operator_path_to_record_operator_provenance(skill: Pa
     text = skill.read_text()
     assert "--answered-by operator" in text, (
         f"{skill.relative_to(REPO_ROOT)} no longer tells the orchestrator to record "
-        "operator provenance. `--answered-by` defaults to `agent`, so without this "
-        "clause every Claude Code run — the one harness where a human actually "
-        "answers — records `answered_by: agent`, and `fr run check` and the "
-        "delivered PR body both say 'no operator answered it' on runs where one "
-        "did (review r4-i1). Restore it in the canonical skill and re-sync."
+        "operator provenance. `--answered-by` has no default (R10): where fr cannot "
+        "observe who answered, a gate resolved with no claim is refused, so without "
+        "this clause an orchestrator is never told which claim to type when a human "
+        "did answer (review r4-i1). Restore it in the canonical skill and re-sync."
     )
 
 

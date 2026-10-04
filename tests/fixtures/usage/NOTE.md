@@ -57,6 +57,26 @@ a `task` dispatch part whose shape — `state.input.prompt`,
 `state.metadata.sessionId` — follows a live task part of the same capture, its
 prompt a same-length placeholder; added for p2-r24).
 
+**The run tree** (added 2026-10-02, spec `2026-10-02-opencode-observe-2` §H,
+beside the rows above and under session ids no existing assertion reads):
+shapes follow a live OpenCode 1.18.33 capture of 2026-09-29 (read-only, shapes
+only, no content copied), all identities fictional. A top-level `ses_run`
+(directory `/work/example/wt`) whose parts are, in time order: an answered
+`question` (`status: completed`, `state.metadata.answers`), a `todowrite`, a
+second answered `question`, a `read` (closing that round), a declined
+`question` (`status: error`), a pending one (`status: running`), a `read` of
+`/work/example/wt/shots/a.png`, a `bash` running `node shots.cjs`, a `bash`
+writing `/tmp/example/full-suite.log`, and `task` dispatches of `ses_rev`
+(`fr-spec-reviewer-hard`, returning a plain YAML record), `ses_gen1`
+(`general`, returning a fenced `review-findings` block, and itself reading the
+same PNG), `ses_gen2` (`general`, prose only, no block), `ses_exec`
+(`fr-phase-executor-standard`, still `running`) and `ses_stray`, whose
+`parentSessionId` names `ses_run` while its session row's `parent_id` names
+`ses_other`. `ses_other` is a sibling top-level session with its own `bash`
+write of the same log and the `task` that really dispatched `ses_stray`. Each
+child has its own `session` row (`parent_id`), an assistant message with a
+`cost`, and its final `text` part.
+
 ## hermes/
 
 `state.db` is built by `hermes/build.py` from `hermes/schema.sql`, a verbatim
@@ -70,6 +90,6 @@ assumption, not a capture. Includes an ACP-style session with zero tokens
 
 | file | sha256 |
 |---|---|
-| `opencode/opencode.db` | `f639094172d47718427ae135fea8b1692dec83a1adbabdc0363ce514f779ec79` |
+| `opencode/opencode.db` | `3434f41ea1910025e39b3d6051d65b2c3afefff9333a0aed1007fa165c268173` |
 | `hermes/schema.sql` | `342e5bfaf785b6a9281de19d9296b3199f04fb98a723c54abf39454c1ecdd4a7` |
 | `hermes/state.db` | `46a42617cd2774d0a9a0bdaddb430b004c5b6e7bff352ab52e7b27387ac602be` |

@@ -442,6 +442,19 @@ environment variables. An OpenCode started from a Claude Code shell carries
 Claude Code's markers, and <code>fr</code> used to believe them. It now names the
 harness nearest to it in its own process tree, and records a session only
 when that harness owns the session variable it read.</p>
+<p>That session is also what lets <code>fr</code> check a few things on OpenCode that it
+could only take on trust before. The plugin hands the calling session's
+identifier to every shell command, and <code>fr</code> climbs from it to the top-level
+session, the run's own, because a child that runs the command is still acting
+for the run. From that session <code>fr</code> reads what the gates ask about: whether
+the operator really answered the questions you put to them through OpenCode's
+question tool (a dismissed question is no answer), whether the reviewer you
+name is an agent the run dispatched, and whether the screenshots a unit owes
+were opened by the session that owes them. Where it cannot read the session
+(an older plugin, a database it cannot open) it does not guess. It asks you to
+say who answered the gate, there is no default any more, and it reports your
+word as a claim: "cleared by the agent, as claimed, unobserved" rather than
+the flat sentence it prints when it did watch.</p>
 <p>One more limit on what the record may say: a model is written down only when
 the tool has <em>seen</em> it. A tier binding says which model a dispatched phase
 <em>should</em> get, and that is a promise, not an observation. For a while the tool

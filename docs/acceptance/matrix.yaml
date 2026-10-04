@@ -5727,6 +5727,148 @@ rows:
     status: ci
     notes: Record chain reaches 7 hop by hop through the frozen RecordV6; delegated
       dropped; unconfirmed left byte-identical and reported; RecordV6 source pinned.
+  - id: opencode-run-session
+    capability: fr-goal on OpenCode
+    acceptance: On OpenCode, the super-fr plugin hands fr the run's session id, advance
+      records the top-level session on the attempt, and fr run cost and the PR's Cost
+      table show the run's real figures
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_advance_from_a_child_session_records_the_run_session
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_an_opencode_runs_own_session_fills_the_cost_table
+      - super-fr:packages/fr-opencode-plugin/test/session.test.ts
+    status: ci
+    notes: 'R1/R2: advance records the root OpenCode session (from a child''s id too),
+      plugin shell.env export, real cost on the fixture run (phase 1); live run owed
+      by opencode-observe-take10-rerun'
+  - id: opencode-child-dispatch
+    capability: fr-goal on OpenCode
+    acceptance: On OpenCode, fr maps each dispatch to its child session, fills an unclaimed
+      holder from the single matching child, and refuses a reviewer id that names no
+      dispatched child or names a phase executor
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_an_invented_reviewer_id_is_refused_at_the_phase_review_on_opencode
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_a_tiered_opencode_phase_executor_is_never_a_reviewer
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_the_one_observed_executor_child_becomes_the_holder
+    status: ci
+    notes: 'R5/R6: holder fill from the one observed child, invented and executor reviewer
+      ids refused on OpenCode (phase 2)'
+  - id: opencode-observe-take10-rerun
+    capability: fr-goal on OpenCode
+    acceptance: Re-running take 10 run B's shape on OpenCode with this release, the
+      invented reviewer and the missing answered_by are refused or corrected and the
+      Cost table has real numbers
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
+  - id: run-cost-positive-attribution
+    capability: usage
+    acceptance: fr run cost --recompute and fr archive's capture attribute a session
+      to a run only when an attempt or workspace binding names it, and say unavailable
+      rather than show a foreign session's figures
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_recompute_never_adds_the_callers_session
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_the_archive_capture_adds_no_ambient_session
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_advance_records_no_session_when_no_harness_owns_one
+    status: ci
+    notes: 'R3/#848: recompute and archive never add the caller''s session; no evidence
+      reads unavailable (phase 1)'
+  - id: session-observer-protocol
+    capability: transcript gates
+    acceptance: Every transcript gate reads the harness through one session protocol
+      with a Claude Code and an OpenCode backend, keeping the could-not-read / found-nothing
+      distinction
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_opencode.py
+      - super-fr:tests/unit/test_run_observed_claude_code.py
+    status: ci
+    notes: 'R4: both backends behind one protocol, three-valued contract pinned on fixtures
+      (phase 1)'
+  - id: review-phase-findings-block
+    capability: review-phase
+    acceptance: A review-phase resolve is refused when a reviewer's returned findings
+      block is missing, ambiguous, or names a finding the plan journal lacks, and the
+      PR body lists every review-phase finding with its resolution
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_review_return_resolve.py
+      - super-fr:tests/unit/test_run_review_return.py
+    status: ci
+    notes: 'R7/R8: review-findings returns checked against the plan journal on OpenCode
+      and Claude Code; PR body renders them (phase 2); first live use: this run''s own
+      phase 2/3 reviews'
+  - id: opencode-operator-answers
+    capability: operator gate
+    acceptance: On OpenCode, fr reads answered question-tool rounds from opencode.db
+      and verifies the operator gate as on Claude Code; the fr-goal skill and parity.yaml
+      describe the tool
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_gate_opencode.py
+      - super-fr:tests/unit/test_fr_goal_opencode_prose.py
+    status: ci
+    notes: 'R9: fixture-backed resolve tests read answered question rounds from the
+      OpenCode run session; skill and parity.yaml updated in phase 3'
+  - id: answered-by-no-default
+    capability: operator gate
+    acceptance: An operator gate fr cannot observe, resolved without answered_by, is
+      refused naming both values, and fr run gates/check say claimed-and-unobserved
+      instead of 'no operator answered it'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_answered_by_no_default.py
+    status: ci
+    notes: 'R10/R11: no default at the record form, the flag form and the in-process
+      body; gates/check wording distinguishes observed from claimed'
+  - id: opencode-visual-reads
+    capability: visual evidence
+    acceptance: On OpenCode, the visual witness observes screenshot reads and capture-script
+      runs in the owing session only
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_visual.py
+    status: ci
+    notes: 'R12: witness reads OpenCode read/bash parts of the owing session (fixture)'
+  - id: parity-observe-declarations
+    capability: harness parity
+    acceptance: parity.yaml declares the OpenCode observation cells partial with a run-session-identity
+      row, and the Hermes edit gate partial for its shell-write gap, and fr harness
+      parity --check passes
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_harness_matrix.py
+    status: ci
+    notes: 'R13/R14: OpenCode observation rows partial, run-session-identity row, Hermes
+      edit gate partial; parity --check passes'
   - id: batch-waves-and-deps
     capability: triage-batch-drive
     acceptance: An operator can give a triage batch a wave and prerequisite batches,
