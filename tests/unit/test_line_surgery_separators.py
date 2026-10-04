@@ -31,6 +31,9 @@ def test_the_stamp_writer_never_rewrites_a_comment_whose_tail_looks_like_the_sta
         comment = f"# was{sep}schema_version: 7\n"
         path.write_text(comment + "profiles: {}\n", newline="")
         artifact_kind("profiles").write_version(path, 2)
-        text = path.read_text(newline="")
+        # `open(newline="")`, not `read_text(newline=)`: that keyword is 3.13+,
+        # and the floor is 3.11. Untranslated, so a lone `\r` would show too.
+        with open(path, encoding="utf-8", newline="") as fh:
+            text = fh.read()
         assert text.startswith(comment), repr(sep)
         assert "schema_version: 2\n" in text, repr(sep)
