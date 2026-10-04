@@ -249,3 +249,41 @@ def test_staged_among_commits_nothing_when_git_cannot_answer(
     monkeypatch.setattr(fr.git, "git_answer", refuse)
 
     assert plan_cmd._staged_among(repo, [foreign, repo / "README.md"]) is None
+
+
+_FIXTURE_PLAN = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+
+
+@pytest.mark.parametrize("verb", ["self-review", "proportionality"])
+def test_a_parse_error_quoting_rich_markup_is_reported_not_raised(
+    verb: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gh#525: `self-review` exists to report a broken plan, and a parse error
+    quotes the broken fragment back. Printed as Rich markup, a `[/red]` in it
+    raised `MarkupError` — a traceback instead of the report."""
+    import shutil
+
+    repo = _git_repo(tmp_path)
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-05-09-fixture"
+    shutil.copytree(_FIXTURE_PLAN, plan_dir)
+    phase = plan_dir / "01.yaml"
+    phase.write_text(phase.read_text().replace("tag: agentic", 'tag: "[/red]"'))
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
+
+    res = CliRunner().invoke(app, ["plan", verb, str(plan_dir)])
+
+    assert res.exception is None or isinstance(res.exception, SystemExit), res.exception
+    assert res.exit_code != 0
+    assert "[/red]" in res.output
+
+
+def test_phases_file_help_says_the_skeleton_marker_is_owed_only_with_two_agentic_phases() -> None:
+    """gh#675: since #674 a one-agentic-phase plan needs no skeleton marker."""
+    import re
+
+    res = CliRunner().invoke(app, ["plan", "create", "--help"], env={"COLUMNS": "400"})
+
+    text = re.sub(r"\s+", " ", res.output)
+    assert "for the first agentic phase" not in text
+    assert "two or more agentic phases" in text

@@ -574,3 +574,91 @@ def test_bare_spec_plan_parses_to_spec_path_before_and_after_archive(tmp_path):
     (repo / "docs/superpowers/implemented/specs").mkdir(parents=True)
     shutil.move(str(spec), str(repo / "docs/superpowers/implemented/specs/x-design.md"))
     assert parse(plan_dir).spec_path == "docs/superpowers/implemented/specs/x-design.md"
+
+
+# --- gh#502: a writer rewrites the block it changes, not the whole file -----
+
+_HAND_STYLED_TASKS = (
+    "# a hand-written comment the dumper would drop\n"
+    "tasks:\n"
+    "  - number: 1\n"
+    "    title: 'Fixture task'\n"
+    "    steps:\n"
+    "      - id: P1.T1.S1\n"
+    '        text: "Fixture step,\\n  double-quoted the way safe_dump writes it"\n'
+)
+
+
+def _hand_styled(plan_dir: Path) -> tuple[Path, str, str]:
+    """Restyle the fixture's `tasks:` block the way a hand edit leaves it.
+    Returns the phase path and the text before / after the `state:` block."""
+    phase = plan_dir / "01.yaml"
+    text = phase.read_text()
+    head, _, rest = text.partition("tasks:\n")
+    _, _, state = rest.partition("state:\n")
+    phase.write_text(head + _HAND_STYLED_TASKS + "state:\n" + state)
+    new = phase.read_text()
+    return phase, new[: new.index("state:\n")], new[new.index("state:\n") :]
+
+
+def test_a_tick_leaves_everything_outside_the_state_block_byte_identical(tmp_path):
+    from fr import plan_ops
+
+    plan_dir = _setup_plan(tmp_path)
+    phase, before_state, _ = _hand_styled(plan_dir)
+
+    plan_ops.tick(plan_dir, "P1.T1.S1", note="done here")
+
+    after = phase.read_text()
+    assert after.startswith(before_state), "a tick re-serialised the hand-styled tasks block"
+    assert yaml.safe_load(after)["state"]["steps"]["P1.T1.S1"]["state"] == "x"
+
+
+def test_tracking_issue_rewrites_only_the_phase_block(tmp_path):
+    from fr import plan_ops
+
+    plan_dir = _setup_plan(tmp_path)
+    phase, before_state, state_block = _hand_styled(plan_dir)
+
+    plan_ops.set_tracking_issue(plan_dir, 1, URL)
+
+    after = phase.read_text()
+    assert _HAND_STYLED_TASKS in after
+    assert after.endswith(state_block)
+    assert yaml.safe_load(after)["phase"]["tracking_issue"] == URL
+
+
+def test_complete_phase_leaves_everything_outside_the_state_block_byte_identical(tmp_path):
+    from fr import plan_ops
+
+    plan_dir = _setup_plan(tmp_path)
+    plan_ops.tick(plan_dir, "P1.T1.S1")
+    phase, before_state, _ = _hand_styled(plan_dir)
+
+    plan_ops.complete_phase(plan_dir, 1)
+
+    after = phase.read_text()
+    assert after.startswith(before_state)
+    assert yaml.safe_load(after)["state"]["completion"]["at"] is not None
+
+
+def test_a_flow_style_state_block_is_replaced_whole_and_still_ticks(tmp_path):
+    """A one-line flow-style `state:` the dumper would never write: the block
+    ends at the next top-level key, so it is replaced whole and the file still
+    parses to exactly the intended document."""
+    from fr import plan_ops
+
+    plan_dir = _setup_plan(tmp_path)
+    phase = plan_dir / "01.yaml"
+    text = phase.read_text()
+    head = text[: text.index("state:\n")]
+    phase.write_text(
+        head + "state: {steps: {P1.T1.S1: {state: ' ', ticked_at: null, note: null}},"
+        " completion: {at: null, note: null, observed_prs: []}}\n"
+    )
+
+    plan_ops.tick(plan_dir, "P1.T1.S1")
+
+    raw = yaml.safe_load(phase.read_text())
+    assert raw["state"]["steps"]["P1.T1.S1"]["state"] == "x"
+    assert raw["tasks"][0]["steps"][0]["id"] == "P1.T1.S1"

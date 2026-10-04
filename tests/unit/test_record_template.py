@@ -198,3 +198,36 @@ def test_a_visual_steps_template_carries_a_commented_visual_hint() -> None:
     assert "#       - {path: <image>, shows:" in text
     assert "visual: <id>" not in text
     assert "visual" not in (yaml.safe_load(text) or {})
+
+
+def test_the_template_owes_nothing_the_resolve_gate_derives_itself() -> None:
+    """gh#653: the template kept its own copy of the derived set, and that copy
+    had already drifted (`single-phase` was missing). Every name the gate
+    derives — read from the gate, not restated here — must stay off `owed:`."""
+    from fr.commands.run_cmd import _DERIVED_EVIDENCE
+    from fr.record.template import render_template
+
+    text = render_template(
+        run="r1",
+        step="s",
+        item=None,
+        allowed=frozenset({"evidence"}),
+        tick_ids=[],
+        refactor_tasks=[],
+        evidence=["review", *sorted(_DERIVED_EVIDENCE)],
+        emitted=[],
+        resolve="fr run resolve r1 --step s",
+    )
+
+    owed = next(line for line in text.splitlines() if "owed:" in line)
+    assert owed == "#   owed: review: <id>"
+
+
+def test_a_plan_journal_template_says_an_entry_needs_phase_or_global(tmp_path: Path) -> None:
+    """gh#653: the apply engine refuses an untagged plan-scope entry, and the
+    template's `journal:` comment never said so."""
+    started_run(tmp_path)
+    text = LAST_BRIEF["record"]["template"]
+
+    assert "phase: <n>" in text
+    assert "global: true" in text

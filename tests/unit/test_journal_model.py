@@ -1071,3 +1071,27 @@ def test_a_journal_stamp_reads_as_local_time(monkeypatch) -> None:
     finally:
         monkeypatch.undo()
         time.tzset()
+
+
+@pytest.mark.parametrize(
+    ("token", "why"),
+    [
+        (" input=true", "`input` is only valid"),
+        (" tracked_by=#9", "`tracked_by` is only valid"),
+        (" out_of_scope=true", "`out_of_scope` is only valid"),
+        (" phase=two", "phase"),
+    ],
+)
+def test_a_hand_edited_token_invalid_for_its_entry_is_a_parse_error(token: str, why: str) -> None:
+    """gh#763: the writers check a token against its entry; a hand edit skips
+    them, and the validator's ValueError escaped `parse_journal` raw — a
+    traceback from every gate reading the journal instead of a named error."""
+    from fr.journal.model import JournalParseError, parse_journal, serialize_entry
+
+    text = serialize_entry(_entry(kind="discovery", scope="plan", id="hand-1", phase=None))
+    header, rest = text.split("\n", 1)
+    text = header.replace(" -->", f"{token} -->") + "\n" + rest
+
+    with pytest.raises(JournalParseError, match=why) as caught:
+        parse_journal(text)
+    assert "hand-1" in str(caught.value)
