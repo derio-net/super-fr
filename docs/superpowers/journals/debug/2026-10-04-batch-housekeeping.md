@@ -19,3 +19,8 @@ _update_profiles_yaml (fr/isolation/scaffold.py) rebuilt the file with yaml.safe
 ### fix-805 · finding [fixed] · #805 fixed by line surgery
 
 New _edit_profiles_text replaces/appends only the profile entry and the default: line, drops service/legacy keys by line, and verifies the result re-reads to the intended data, else falls back to the old dump. Tests: test_init_scaffold.py::test_adding_a_profile_keeps_every_comment, ::test_rescaffolding_a_profile_replaces_only_its_entry (red first).
+
+<!-- fr:journal kind=finding scope=debug id=fix-806 created=2026-10-04T05:12:18+00:00 state=fixed -->
+### fix-806 · finding [fixed] · #806 three #794 nits fixed
+
+registry.split_lines (re.split on newline only) replaces str.splitlines(keepends=True) in the stamp writer, journal stamp reader and the services migration (test_line_surgery_separators.py, red first). local.py uncommitted-profile hint now names --force and --tracking none (test_isolation.py::test_up_uncommitted_profile_raises_actionable_error). test_migration_trigger docstring corrected.
