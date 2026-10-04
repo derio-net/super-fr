@@ -5,6 +5,63 @@
 # PostToolUse hook hint.
 set -euo pipefail
 
+# One install per machine at a time (gh#938). Every release is followed by a
+# reinstall — by hand, by a watcher, by `fr triage batch drive`'s post_merge —
+# and two of them overlapping share the fixed `<file>.tmp` sidecars below and
+# rebuild the same fr env and plugin cache at once. A mkdir lock, because
+# flock(1) is not on a stock macOS. A lock whose holder is gone is reclaimed;
+# a live one is waited on for FR_INSTALL_LOCK_TIMEOUT seconds, then refused.
+INSTALL_LOCK="$HOME/.cache/fr/install.lock"
+INSTALL_LOCK_HELD=""
+acquire_install_lock() {
+  local timeout="${FR_INSTALL_LOCK_TIMEOUT:-900}" waited=0 holder announced=""
+  case "$timeout" in ''|*[!0-9]*) timeout=900 ;; esac
+  mkdir -p "$(dirname "$INSTALL_LOCK")"
+  while ! mkdir "$INSTALL_LOCK" 2>/dev/null; do
+    holder="$(cat "$INSTALL_LOCK/pid" 2>/dev/null || true)"
+    if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
+      echo "Reclaiming stale install lock $INSTALL_LOCK (holder pid $holder is gone)" >&2
+      rm -rf "$INSTALL_LOCK"
+      continue
+    fi
+    if [ -z "$announced" ]; then
+      echo "Another super-fr install is running (pid ${holder:-unknown}); waiting up to ${timeout}s for $INSTALL_LOCK" >&2
+      announced=1
+    fi
+    if [ "$waited" -ge "$timeout" ]; then
+      echo "ERROR: install lock $INSTALL_LOCK still held by pid ${holder:-unknown} after ${timeout}s." >&2
+      echo "  Wait for that install to finish, or remove the lock if no install is running." >&2
+      exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "$$" > "$INSTALL_LOCK/pid"
+  INSTALL_LOCK_HELD=1
+}
+release_install_lock() {
+  [ -n "$INSTALL_LOCK_HELD" ] || return 0
+  if [ "$(cat "$INSTALL_LOCK/pid" 2>/dev/null)" = "$$" ]; then
+    rm -rf "$INSTALL_LOCK"
+  fi
+  INSTALL_LOCK_HELD=""
+}
+
+# Repoint a live symlink with rename(2), never `ln -sfn` — that unlinks, then
+# creates, and a hook resolving the path in between exits 127 (gh#938). GNU mv
+# needs -T and BSD mv -h to replace a link to a directory instead of moving
+# into it.
+atomic_symlink() {
+  local target="$1" link="$2" tmp="$2.tmp.$$"
+  rm -f "$tmp"
+  ln -s "$target" "$tmp"
+  if mv --version >/dev/null 2>&1; then
+    mv -fT "$tmp" "$link"
+  else
+    mv -fh "$tmp" "$link"
+  fi
+}
+
 # Clean up any .tmp sidecar files on failure so a rerun starts clean.
 cleanup_tmps() {
   local rc=$?
@@ -13,9 +70,11 @@ cleanup_tmps() {
           "${KNOWN_MARKETPLACES:-}.tmp" "${INSTALLED_PLUGINS:-}.tmp" 2>/dev/null || true
     echo "install.sh failed (exit $rc). Rerun after fixing." >&2
   fi
+  release_install_lock
   exit "$rc"
 }
 trap cleanup_tmps EXIT
+acquire_install_lock
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -497,53 +556,56 @@ if command -v jq &>/dev/null && [ -f "$INSTALLED_PLUGINS" ]; then
     plugin_src="$PLUGIN_ROOT/plugins/$plugin_name"
     CURRENT_VERSION=$(jq -r '.version' "$plugin_src/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
     PLUGIN_CACHE="$CACHE_BASE/$plugin_name"
-    CACHE_VERSION_DIR="$PLUGIN_CACHE/$CURRENT_VERSION"
-    CACHE_CURRENT_LINK="$PLUGIN_CACHE/current"
-    mkdir -p "$CACHE_VERSION_DIR"
-    rsync -a --delete --exclude='__pycache__' \
-      "$plugin_src/" "$CACHE_VERSION_DIR/"
-    echo "  Synced $plugin_name v$CURRENT_VERSION to cache"
+    CACHE_CURRENT="$PLUGIN_CACHE/current"
+    mkdir -p "$PLUGIN_CACHE"
 
-    # Point a stable `current` symlink at the freshly-synced version, AFTER the
-    # sync completes (atomic-ish via -fn). installPath records this symlink, not
-    # the version dir — so a running Claude Code session, which keeps installPath
-    # literal and resolves it at exec time, picks up new hook/command code on the
-    # next fire without a restart. Relative target keeps the link path-independent.
-    ln -sfn "$CURRENT_VERSION" "$CACHE_CURRENT_LINK"
-    echo "  Pointed $plugin_name/current -> $CURRENT_VERSION"
+    # installPath is ONE real directory, `current`, synced in place — never a
+    # symlink to a version dir (gh#938). Claude Code resolves installPath when it
+    # loads the plugin and runs every hook of that session from the resolved
+    # path, so with `current -> <version>` a session held <version>, and the
+    # prune that kept only current + one previous deleted it under the session
+    # two releases later: "Plugin directory does not exist", on every Stop,
+    # PreToolUse and PostToolUse hook, the guards failing open. A path nothing
+    # ever deletes cannot go missing. --delay-updates moves the changed files
+    # into place together at the end, each by rename, and --delete-after drops
+    # removed ones only then. --checksum, because the quick check (size and
+    # mtime) skips a same-length edit made within the same second, and in
+    # place a skipped file stays stale for good.
+    if [ -L "$CACHE_CURRENT" ]; then
+      # One-time move off the versioned layout. Sessions started before it hold
+      # the version dir the link named; restart its 7-day clock (below).
+      legacy_target="$(readlink "$CACHE_CURRENT")"
+      [ -d "$PLUGIN_CACHE/$legacy_target" ] && touch "$PLUGIN_CACHE/$legacy_target"
+      cache_stage="$PLUGIN_CACHE/.current.new.$$"
+      rm -rf "$cache_stage"
+      mkdir -p "$cache_stage"
+      rsync -a --exclude='__pycache__' "$plugin_src/" "$cache_stage/"
+      rm "$CACHE_CURRENT"
+      mv "$cache_stage" "$CACHE_CURRENT"
+      echo "  Moved $plugin_name/current from a version symlink to a directory"
+    else
+      mkdir -p "$CACHE_CURRENT"
+      rsync -a --checksum --delete-after --delay-updates --exclude='__pycache__' \
+        "$plugin_src/" "$CACHE_CURRENT/"
+    fi
+    echo "  Synced $plugin_name v$CURRENT_VERSION to $CACHE_CURRENT"
 
-    INSTALL_ENTRY='[{"scope":"user","installPath":"'"$CACHE_CURRENT_LINK"'","version":"'"$CURRENT_VERSION"'","installedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'","lastUpdated":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'"}]'
+    INSTALL_ENTRY='[{"scope":"user","installPath":"'"$CACHE_CURRENT"'","version":"'"$CURRENT_VERSION"'","installedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'","lastUpdated":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'"}]'
     jq --argjson entry "$INSTALL_ENTRY" --arg id "$plugin_name@$MARKETPLACE_NAME" \
       '.plugins[$id] = $entry' \
       "$INSTALLED_PLUGINS" > "${INSTALLED_PLUGINS}.tmp" && mv "${INSTALLED_PLUGINS}.tmp" "$INSTALLED_PLUGINS"
     echo "  Registered $plugin_name@$MARKETPLACE_NAME v$CURRENT_VERSION in installed_plugins.json"
 
-    # Prune to current + the most-recent previous version dir (N-1 buffer): a
-    # session that somehow cached a realpath keeps working until restart. Never
-    # touch the `current` symlink — the `*/` glob matches it, so skip symlinks.
-    PREV_KEEP=""
-    while IFS= read -r prev_dir; do
-      [ -n "$prev_dir" ] || continue
-      PREV_KEEP="$(basename "$prev_dir")"
-      break
-    done < <(ls -dt "$PLUGIN_CACHE"/*/ 2>/dev/null | while IFS= read -r p; do
-               q="${p%/}"
-               [ -L "$q" ] && continue
-               [ "$(basename "$q")" = "$CURRENT_VERSION" ] && continue
-               echo "$q"
-             done)
-
+    # Version dirs are legacy: only sessions started before the move above can
+    # hold one. Remove each once it is 7 days old — no session lives that long —
+    # and never sooner, whatever number of releases landed meanwhile.
     for version_dir in "$PLUGIN_CACHE"/*/; do
       vd="${version_dir%/}"
-      [ -L "$vd" ] && continue   # leave the `current` symlink alone
-      version_name="$(basename "$vd")"
-      if [ "$version_name" = "$CURRENT_VERSION" ]; then
-        echo "  keeping cache: $plugin_name/$version_name (current)"
-      elif [ "$version_name" = "$PREV_KEEP" ]; then
-        echo "  keeping cache: $plugin_name/$version_name (previous)"
-      else
+      [ "$vd" = "$CACHE_CURRENT" ] && continue
+      [ -L "$vd" ] && continue
+      if [ -n "$(find "$vd" -maxdepth 0 -mtime +7 2>/dev/null)" ]; then
         rm -rf "$vd"
-        echo "  cleared stale cache: $plugin_name/$version_name"
+        echo "  cleared legacy cache: $plugin_name/$(basename "$vd")"
       fi
     done
   done
@@ -692,11 +754,52 @@ if command -v uv &>/dev/null; then
   # tool dir, an explicit uninstall clears the ENOTEMPTY before the next try.
   # See docs/superpowers/debugging/2026-07-05-install-uv-tool-flaky.md.
   fr_install_retry_sleep="${FR_INSTALL_RETRY_SLEEP:-2}"
+  # That in-place rebuild must not take the `fr` on PATH with it: every
+  # session's hooks and commands call it (gh#938). uv's --force deletes the
+  # entry point its receipt names before it rebuilds — whatever that path
+  # points at by then — and relinks it only at the end. So uv's entry point
+  # lives in a private bin dir, and the PATH entry is ours: a symlink this
+  # script repoints by rename, onto a copy staged aside for the rebuild and
+  # back onto uv's env after it. A call sees the old, the staged or the new fr,
+  # never none. (A receipt written before this change still names the PATH
+  # entry, so the first install after it loses fr once, for the rebuild.)
+  # Only a PATH entry that is absent or a symlink is ours to manage.
+  fr_path_dir="$(uv tool dir --bin 2>/dev/null || true)"
+  fr_path_link="$fr_path_dir/fr"
+  fr_uv_bin="$HOME/.local/share/fr/uv-bin"
+  fr_stage_root="$HOME/.cache/fr/install-stage"
+  fr_stage=""
+  fr_manage_path=""
+  if [ -n "$fr_path_dir" ] && { [ -L "$fr_path_link" ] || [ ! -e "$fr_path_link" ]; }; then
+    fr_manage_path=1
+    mkdir -p "$fr_uv_bin"
+  fi
+  if [ -n "$fr_manage_path" ] && [ -e "$fr_path_link" ]; then
+    fr_stage="$fr_stage_root/$$"
+    rm -rf "$fr_stage"
+    mkdir -p "$fr_stage"
+    if UV_TOOL_DIR="$fr_stage/tools" UV_TOOL_BIN_DIR="$fr_stage/bin" \
+         uv tool install --force "${FR_RUNNER_WITH[@]}" "$PLUGIN_ROOT/packages/fr" \
+         >/dev/null 2>&1 \
+       && "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1; then
+      atomic_symlink "$fr_stage/tools/fr/bin/fr" "$fr_path_link"
+      echo "  fr on PATH points at a staged copy while the tool env is rebuilt"
+      # Let an fr that started on the old env just before the swap finish
+      # loading it before that env is deleted.
+      sleep "${FR_INSTALL_DRAIN_SECONDS:-2}"
+    else
+      echo "  WARNING: could not stage fr aside; rebuilding it in place" >&2
+      rm -rf "$fr_stage"
+      fr_stage=""
+    fi
+  fi
+  fr_install_bin="$fr_path_dir"
+  [ -z "$fr_manage_path" ] || fr_install_bin="$fr_uv_bin"
   fr_installed=""
   for attempt in 1 2 3; do
     # Pipeline lives in the `if` condition so a `uv` failure (propagated by
     # `pipefail` through `sed`) is caught here instead of tripping `set -e`.
-    if uv tool install --force \
+    if UV_TOOL_BIN_DIR="$fr_install_bin" uv tool install --force \
       "${FR_RUNNER_WITH[@]}" \
       "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'; then
       fr_installed=1
@@ -706,6 +809,11 @@ if command -v uv &>/dev/null; then
       echo "  uv tool install attempt $attempt failed; clearing tool env and retrying..." >&2
       uv tool uninstall fr >/dev/null 2>&1 || true
       rm -rf "$(uv tool dir 2>/dev/null)/fr" 2>/dev/null || true
+      # An old receipt's uninstall takes the PATH entry with it; keep fr
+      # runnable meanwhile.
+      if [ -n "$fr_stage" ]; then
+        atomic_symlink "$fr_stage/tools/fr/bin/fr" "$fr_path_link"
+      fi
       sleep "$fr_install_retry_sleep"
     fi
   done
@@ -728,6 +836,20 @@ if command -v uv &>/dev/null; then
     if [ -z "$fr_runs" ]; then
       echo "  ERROR: fr CLI installed but does not run" >&2
       exit 1
+    fi
+    # Back onto uv's own env. This install's stage is NOT removed now: an fr
+    # started on it moments ago is still loading from it. It goes at the end of
+    # the next install, as older stages go now — never one the PATH entry still
+    # names (an install that failed above leaves fr on its stage).
+    if [ -n "$fr_manage_path" ] && { [ -L "$fr_path_link" ] || [ ! -e "$fr_path_link" ]; }; then
+      mkdir -p "$(dirname "$fr_path_link")"
+      atomic_symlink "$fr_bin" "$fr_path_link"
+      for old_stage in "$fr_stage_root"/*/; do
+        old_stage="${old_stage%/}"
+        [ -d "$old_stage" ] && [ "$old_stage" != "$fr_stage" ] || continue
+        case "$(readlink "$fr_path_link")" in "$old_stage"/*) continue ;; esac
+        rm -rf "$old_stage"
+      done
     fi
   else
     echo "  WARNING: fr entry point not found at $fr_bin (uv stub or unusual layout?)" >&2

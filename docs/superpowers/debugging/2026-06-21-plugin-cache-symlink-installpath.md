@@ -1,5 +1,12 @@
 # Plugin cache: running sessions break after a super-fr reinstall
 
+> **Superseded (2026-10-04, gh#938).** The conclusion below — the harness keeps
+> `installPath` literal — no longer holds: on Claude Code 2.1.280–2.1.287 every
+> hook of a session ran from the RESOLVED version dir, and the current + one
+> previous prune deleted it two releases later ("Plugin directory does not
+> exist"). `current` is now one real directory synced in place; see
+> `docs/superpowers/journals/debug/2026-10-04-post-merge-install-lock.md`.
+
 ## Symptom & reproduction
 
 A live Claude Code session, after `scripts/install.sh` is re-run for a new

@@ -19,8 +19,8 @@ import json
 import os
 import shutil
 import signal
-import sys
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -43,20 +43,26 @@ case "$1 $2" in
   if [ "$3" = "--bin" ]; then printf '%s\n' "$bindir"; else printf '%s\n' "$tooldir"; fi
   ;;
 "tool install")
-  [ -z "$UV_TOOL_DIR" ] && echo "start $$ $(date +%s.%N 2>/dev/null || date +%s)" >> "$UV_STUB_STATE/installs"
+  log="$UV_STUB_STATE/installs"
+  [ -z "$UV_TOOL_DIR" ] && echo "start $$ $(date +%s.%N)" >> "$log"
+  # Like uv: --force first removes the entry point its receipt recorded —
+  # whatever that path points at by now — and links the new one at the end.
+  [ -f "$tooldir/fr/receipt" ] && rm -f "$(cat "$tooldir/fr/receipt")"
   rm -rf "$tooldir/fr"
   sleep "${UV_STUB_BUILD_SECONDS:-0}"
   mkdir -p "$tooldir/fr/bin" "$bindir"
   printf '#!/bin/sh\necho "fr 9.9.9"\n' > "$tooldir/fr/bin/fr"
   chmod +x "$tooldir/fr/bin/fr"
+  printf '%s\n' "$bindir/fr" > "$tooldir/fr/receipt"
   ln -s "$tooldir/fr/bin/fr" "$bindir/.fr.uvtmp.$$"
   mv -f "$bindir/.fr.uvtmp.$$" "$bindir/fr" 2>/dev/null \
     || { rm -f "$bindir/fr"; mv "$bindir/.fr.uvtmp.$$" "$bindir/fr"; }
-  [ -z "$UV_TOOL_DIR" ] && echo "end $$ $(date +%s.%N 2>/dev/null || date +%s)" >> "$UV_STUB_STATE/installs"
+  [ -z "$UV_TOOL_DIR" ] && echo "end $$ $(date +%s.%N)" >> "$log"
   echo "Installed 1 executable: fr"
   ;;
 "tool uninstall")
-  rm -rf "$tooldir/fr" "$bindir/fr"
+  [ -f "$tooldir/fr/receipt" ] && rm -f "$(cat "$tooldir/fr/receipt")"
+  rm -rf "$tooldir/fr"
   ;;
 *)
   exit 0
@@ -97,6 +103,7 @@ def _env(sb: dict[str, Path], **extra: str) -> dict[str, str]:
         "UV_STUB_BINDIR": str(sb["bindir"]),
         "UV_STUB_STATE": str(sb["state"]),
         "FR_INSTALL_RETRY_SLEEP": "0",
+        "FR_INSTALL_DRAIN_SECONDS": "0",
         **extra,
     }
 
@@ -249,7 +256,9 @@ class TestSessionHeldPluginPath:
         live = cache / "super-fr" / "current"
         assert live.is_dir() and not live.is_symlink()
         assert (live / "hooks" / "fr-run-idle-guard.sh").is_file()
-        assert (cache / "super-fr" / "0.9.0").is_dir(), "the dir `current` named must outlive the move"
+        assert (cache / "super-fr" / "0.9.0").is_dir(), (
+            "the dir `current` named must outlive the move"
+        )
         assert not (cache / "super-fr" / "0.8.0").exists(), "a legacy dir over 7 days old goes"
 
         os.utime(cache / "super-fr" / "0.9.0", (1, 1))  # a week on
@@ -289,8 +298,11 @@ class TestAtomicReplacement:
         t = threading.Thread(target=watch)
         t.start()
         try:
-            flips = "for i in $(seq 1 200); do atomic_symlink 2.0.0 \"$L\"; atomic_symlink 1.0.0 \"$L\"; done"
-            fn = "eval \"$(sed -n '/^atomic_symlink() {/,/^}/p' \"$S\")\""
+            flips = (
+                'for i in $(seq 1 200); do atomic_symlink 2.0.0 "$L"; '
+                'atomic_symlink 1.0.0 "$L"; done'
+            )
+            fn = 'eval "$(sed -n \'/^atomic_symlink() {/,/^}/p\' "$S")"'
             subprocess.run(
                 ["bash", "-c", f"set -euo pipefail; {fn}; {flips}"],
                 env={"S": str(INSTALL_SH), "L": str(link), "PATH": "/usr/bin:/bin"},
@@ -338,8 +350,13 @@ class TestAtomicReplacement:
             t.join()
         assert p.returncode == 0, err
         assert len(calls) > 20, "the probe must have run across the install"
-        assert not failures, f"{len(failures)}/{len(calls)} fr calls failed mid-install: {failures[:3]}"
+        assert not failures, (
+            f"{len(failures)}/{len(calls)} fr calls failed mid-install: {failures[:3]}"
+        )
         assert os.readlink(fr) == str(sandbox["tooldir"] / "fr" / "bin" / "fr"), (
             "after the install, fr must be uv's own env again, not the staged copy"
         )
-        assert not (sandbox["home"] / ".cache" / "fr" / "install-stage").exists()
+        # The stage outlives its install (an fr may still be loading from it)
+        # and goes at the end of the next one: never more than one is left.
+        stages = sandbox["home"] / ".cache" / "fr" / "install-stage"
+        assert len(list(stages.iterdir())) <= 1
