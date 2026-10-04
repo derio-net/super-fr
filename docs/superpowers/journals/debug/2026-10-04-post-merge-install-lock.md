@@ -17,3 +17,8 @@ Once bash has the script open, `trap 'exit 0' EXIT` + fail-open checks make ever
 ### fccccb18e375 · ruled-out · Hook timeout while fr starts slowly mid-build
 
 The hook bounds fr with its own 20 s watchdog (FR_IDLE_GUARD_TIMEOUT); probes during installs ran 1-2 s. Not the cause.
+
+<!-- fr:journal kind=root-cause scope=debug id=e31b3a4386ca created=2026-10-04T06:33:58+00:00 -->
+### e31b3a4386ca · root-cause · install.sh mutates live, shared install state without atomic swaps or a machine lock
+
+Every surface a running session executes is replaced in place: the plugin's `current` link via non-atomic `ln -sfn` (a hook fired in the gap exits 127/126 — the only route to a Stop hook *error*, since the script cannot fail once running), the `fr` tool env via `uv tool install --force` (fr absent ~30 ms), and fixed `.tmp` sidecars that two concurrent installs share. A day of ~12 releases with a hand/watcher/post_merge install per release multiplies both the windows and the overlaps. One cause — no serialisation, no atomic replacement — with three surfaces.
