@@ -1,0 +1,2 @@
+bump: patch
+summary: triage batch drive no longer re-views every settled judged issue each pass; known-closed facts are carried over and each pass prints a collect cost line (gh#911)
