@@ -581,12 +581,17 @@ structured question prompt, that prompt call is itself what pauses the run.
 Elsewhere `fr-goal` cannot force a pause the same way: it puts the numbered
 round in its reply and ends the turn, and `fr run advance` says so loudly
 there rather than behaving as though the gate had fired silently. Either way
-the record travels with the run: resolving the gate types who actually
-answered it — `agent` by default, `operator` only when typed deliberately
-once the operator genuinely answered — and `fr run gates <run-id>` prints
-that provenance, so a reviewer reading the delivered pull request can tell a
-human-answered round from one the agent had to clear on its own, rather than
-trust silence.
+the record travels with the run, and who answered is observed rather than
+claimed wherever fr can see it. Where fr can read the session transcript,
+resolving the gate looks for an answered question since the gate blocked:
+one found records `operator`, whatever the agent typed. None found refuses
+the resolve, unless the agent clears the gate on the record, saying why no
+decision was needed (`--no-questions --reason`). That records `agent` and
+writes the reason to the spec journal. Only where fr cannot observe the
+session does the typed claim stand (`agent` unless stated), and it is marked
+unverified. `fr run gates <run-id>` prints that provenance, so a reviewer
+reading the delivered pull request can tell a human-answered round from one
+the agent cleared on its own, rather than trust silence.
 
 ### 3. Define how success will be proved (`spec-review` and acceptance tests)
 
