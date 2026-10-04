@@ -59,3 +59,8 @@ fr.workflow.artifacts.DERIVED_EVIDENCE shared by gate, brief and template; brief
 ### fx-763 · finding [fixed] · #763 fixed: hand-edited token is a named JournalParseError
 
 parse_journal converts ValueError (and a non-numeric phase=) to JournalParseError naming the entry. Pinned by test_journal_model.py::test_a_hand_edited_token_invalid_for_its_entry_is_a_parse_error.
+
+<!-- fr:journal kind=finding scope=debug id=fx-639 created=2026-10-04T05:44:42+00:00 state=fixed -->
+### fx-639 · finding [fixed] · #639 fixed: journal add refuses an orphan spec/plan slug
+
+_orphan_refusal: debug, an existing journal, and a spec --input brief are admitted. Orphan journal deleted. Three older spec journals with no spec (scaffold-batch-574-576-569, triage-open-prs, uninstall-installed-rules) left in place: outside the brief's authorised deletion. Pinned by test_journal_cmd.py::TestAddRefusesAnOrphanSlug.
