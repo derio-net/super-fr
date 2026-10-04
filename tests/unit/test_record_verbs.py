@@ -155,6 +155,25 @@ def test_plan_edit_tick_and_complete_are_one_entry_records(repo: Path, spy) -> N
     assert unknown.exit_code == 2
 
 
+def test_plan_edit_rewrites_only_the_state_block_it_changes(repo: Path) -> None:
+    """gh#502: a tick re-dumped the whole phase file, so a hand-styled scalar
+    elsewhere was restyled and one flipped state became a whole-file diff."""
+    phase = repo / PLAN_REL / "01.yaml"
+    text = phase.read_text()
+    styled = text.replace("text: |-\n      do\n", 'text: "do,\\n  styled by hand"\n')
+    assert styled != text, "fixture shape moved; restyle a scalar it still has"
+    phase.write_text("# kept: a comment the dumper would drop\n" + styled)
+    _git(repo, "commit", "-qam", "hand edit")
+    head = phase.read_text()[: phase.read_text().index("state:\n")]
+
+    for argv in (["--tick", "P1.T1.S1"], ["--complete-phase", "1"]):
+        assert _fr(repo, ["plan", "edit", str(repo / PLAN_REL), *argv]).exit_code == 0
+        assert phase.read_text().startswith(head), f"{argv[0]} rewrote outside `state:`"
+
+    changed = _git(repo, "diff", "--numstat", "HEAD~2", "--", str(phase)).split()
+    assert int(changed[0]) + int(changed[1]) <= 6, changed
+
+
 def test_acceptance_add_and_set_status_are_one_entry_records(repo: Path, spy) -> None:
     add = [
         "acceptance", "add", "--id", "row-a", "--capability", "c", "--acceptance", "a",

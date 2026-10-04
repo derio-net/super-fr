@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, cast
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.archive import (
     ArchiveError,
@@ -45,6 +46,7 @@ from fr.commands.common import build_plan_report, require_migrated_layout, resol
 from fr.isolation.local import (
     branch_changed_paths,
     branch_changes_present,
+    recorded_start,
     resolve_branch_refs,
     subprocess_runner,
 )
@@ -134,7 +136,7 @@ def _refuse_on_isolation_error() -> Iterator[None]:
     try:
         yield
     except IsolationError as e:
-        err_console.print(f"refusing to archive — {e}", soft_wrap=True)
+        err_console.print(f"refusing to archive — {escape(str(e))}", soft_wrap=True)
         raise typer.Exit(2) from e
 
 
@@ -142,9 +144,10 @@ def _require_landed(repo_root: Path, branch: str, refs: list[str], base_ref: str
     """The mutating step's own guard (§B.3): every resolved ref's changes must
     be present on `base_ref`, or exit 2 naming the missing paths."""
     missing: list[str] = []
+    start = recorded_start(repo_root, branch)
     for ref in refs:
         with _refuse_on_isolation_error():
-            verdict = branch_changes_present(subprocess_runner, repo_root, ref, base_ref)
+            verdict = branch_changes_present(subprocess_runner, repo_root, ref, base_ref, start)
         missing.extend(p for p in verdict.missing if p not in missing)
     if missing:
         err_console.print(
@@ -177,7 +180,9 @@ def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> Non
             {
                 p
                 for ref in refs
-                for p in branch_changed_paths(subprocess_runner, repo_root, ref, base_ref)
+                for p in branch_changed_paths(
+                    subprocess_runner, repo_root, ref, base_ref, recorded_start(repo_root, branch)
+                )
             }
         )
     artifacts = branch_artifacts(repo_root, changed)
@@ -487,7 +492,7 @@ def archive_command(
             report = build_plan_report(target, gh)
         except PlanSchemaError as e:
             if not all_plans:
-                err_console.print(f"parse error: {e}")
+                err_console.print(f"parse error: {escape(str(e))}")
                 raise typer.Exit(5) from e
             skipped.append(f"{target.name}: parse error: {e}")
             continue
