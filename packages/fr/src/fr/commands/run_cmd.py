@@ -91,7 +91,7 @@ from fr.run.provenance import agent_cleared_gates, gates
 from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.types import PHASE_TIERS
-from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS, emitted_artifacts
+from fr.workflow.artifacts import DERIVED_EVIDENCE, REPO_TRACKED_ARTIFACTS, emitted_artifacts
 from fr.workflow.check import check_workflow
 from fr.workflow.model import Step, WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
@@ -1482,14 +1482,7 @@ _VERIFIABLE_EVIDENCE = (
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
-_DERIVED_EVIDENCE = frozenset(
-    {
-        "findings",
-        "proportionality",
-        "visual",
-        "single-phase",
-    }
-)
+_DERIVED_EVIDENCE = DERIVED_EVIDENCE
 # `single-phase` (2026-09-29-fr-goal-light-path §A, R2) is the light shape's
 # `plan` witness: the emitted plan has exactly one phase that is not `[manual]`.
 # `visual` (2026-09-28-ui-visual-evidence §C) is derived from the step record's
@@ -2846,7 +2839,7 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         "emits": list(step.emits),
         "gate": step.gate,
         "tier": step.tier,
-        "evidence": list(step.evidence),
+        "evidence": _caller_evidence(step),
         "for_each": step.for_each,
         "steps": [m.model_dump(exclude_none=True) for m in step.steps],
         # spec 2026-09-25 §5.C.3: the pre-filled step record — for a flat
@@ -2855,14 +2848,28 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
     }
 
 
+def _caller_evidence(step: Step) -> list[str]:
+    """The evidence a brief lists: what the caller passes. A derived name is
+    refused from the caller ("not yours to pass"), so listing it sent agents
+    straight into that refusal (gh#653)."""
+    return [n for n in step.evidence if n not in DERIVED_EVIDENCE]
+
+
 def _record_brief(
     state: RunState, step: Step, group: Step | None = None, item: str | None = None
 ) -> dict[str, Any] | None:
-    """The brief's `record` key — never the reason a brief fails to print."""
+    """The brief's `record` key — never the reason a brief fails to print.
+
+    It also makes the records directory the brief points into: an agent
+    writing the record with a shell heredoc found no directory there, because
+    only the apply engine ever made one (gh#653)."""
+    from fr.record.model import records_dir
     from fr.record.template import record_brief
 
     try:
-        return record_brief(resolve_repo_root(), state, step, group, item).as_dict()
+        repo_root = resolve_repo_root()
+        records_dir(repo_root, state.run).mkdir(parents=True, exist_ok=True)
+        return record_brief(repo_root, state, step, group, item).as_dict()
     except Exception:  # noqa: BLE001 — a brief without a template still dispatches
         return None
 
@@ -3270,7 +3277,7 @@ def _build_member_brief(
         # The member's OWN, never the group's: an obligation is a property of
         # the step that carries it, and inheriting it would make every member
         # of the loop owe the review member's evidence.
-        "evidence": list(member.evidence),
+        "evidence": _caller_evidence(member),
         "resolved_tier": resolved_tier,
         "for_each": group.for_each,
         "steps": [],
@@ -4213,7 +4220,8 @@ def cost_cmd(
             usage = load_run_usage(repo_root, run_id)
         except (OSError, UsageFileError) as e:
             err_console.print(
-                f"[red]fr run cost: the usage file of {run_id} is unreadable: {escape(str(e))}[/red]"
+                f"[red]fr run cost: the usage file of {run_id} is unreadable: "
+                f"{escape(str(e))}[/red]"
             )
             raise typer.Exit(2) from e
         if usage is None:
