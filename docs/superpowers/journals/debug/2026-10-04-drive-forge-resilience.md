@@ -19,3 +19,8 @@ One missing contract, two places it shows. (1) `fr.gh._run_gh` — the one funne
 ### fe16683779c4 · finding [fixed] · Review r1: act-time forge reads in a merge still crashed the loop
 
 Independent review: `_Driver._merge_batch` caught only UnsupportedForgeOperation/MergeStopError/TriageError, so a `GhError` from `plan_queue`/`merge_ready`'s re-reads (`pr_view`, `pr_required_checks`, batch_merge.py:148/191/209/277/283) escaped as a traceback. Fixed: `except FORGE_ERRORS` → `ForgeReadError(code=1)` (the merge write itself is already a MergeStopError at batch_merge.py:307, so no write failure is swallowed). Pinned failing-first by `tests/unit/test_triage_batch_drive_cmd.py#test_a_failed_read_while_acting_on_a_merge_does_not_end_the_loop`.
+
+<!-- fr:journal kind=review scope=debug id=b48c740b49bf created=2026-10-04T04:43:52+00:00 -->
+### b48c740b49bf · review · Independent review: 1 fixed in scope, 3 deferred to #921
+
+feature-dev:code-reviewer, separate context, over the full diff. r1 (act-time merge re-reads crash the loop) — in scope, fixed. Deferred to derio-net/super-fr#921: r2 org/group scope swallows a failed repo read into `facts.skipped` and the drive plans on partial facts (needs a design decision: `skipped` also records broken configs, so skipping the pass on it could stall every repo); r3 git reads (`_archived`/`_released`/`_fresh_config`, unbounded `gitseam` fetch) and the archive-PR merge still `_fail`; r4 (low) 120s may be tight for very large paginated lists. Checked and fine: no `_merge` cache poisoning, no half-done pass beyond existing windows, dedupe key per cause, --once/plan exit codes unchanged.
