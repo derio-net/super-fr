@@ -1,0 +1,2 @@
+bump: patch
+summary: "triage: `batch drive` and `batch merge` attribute a batch PR only when it comes from the repository itself and an allowed author (`pr_authors` in `.fr/triage.yaml`, default the authenticated user); a fork or foreign-author PR on a batch branch is never merged, is reported once and is listed under Needs you now"

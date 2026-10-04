@@ -66,6 +66,6 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
   report` (no flag) writes it git-stamped honoring `--link-mode` (github in CI,
   local otherwise); links resolve relative to sibling checkouts
   (`--sibling-root`, default `..`).
-- CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
-  writes a Markdown summary to each Actions run (branch, PR, main), uploads the
+- CI: `.github/workflows/acceptance-report.yml` gates every PR and every push to main,
+  writes a Markdown summary to each Actions run (PR, main), uploads the
   GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.

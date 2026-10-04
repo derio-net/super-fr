@@ -36,6 +36,7 @@ DISPATCHED = """\
 
 def _facts(*, closed: tuple[int, ...] = (), prs: list[PullRequest] | None = None) -> Facts:
     return Facts(
+        viewer="operator",
         schema=3,
         scope="derio-net--super-fr",
         kind="repo",
@@ -58,6 +59,8 @@ def _facts(*, closed: tuple[int, ...] = (), prs: list[PullRequest] | None = None
 
 def _pr(batch: str, state: str, number: int = 700) -> PullRequest:
     return PullRequest(
+        author="operator",
+        cross_repo=False,
         repo=REPO,
         number=number,
         title="batch PR",
