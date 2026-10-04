@@ -1,0 +1,53 @@
+schema_version: 7
+run: 2026-10-04-feat-batch-drive-merge-train
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: rv-stops-api
+    phase: 1
+    review_scope: in
+    title: _stops_train took two optional keywords and silently returned False when given neither
+    body: triage_batch_cmd.py _stops_train(*, attempt=None, error=None). The signature allowed a call that meant nothing.
+  - kind: finding
+    id: rv-merge-batch-tuple
+    phase: 1
+    review_scope: in
+    title: _merge_batch returned a positional 4-tuple across ten return sites
+    body: The trailing `stops` flag was easy to get wrong when a return site is edited.
+  - kind: finding
+    id: rv-queued-failing-unwarned
+    phase: 1
+    review_scope: in
+    title: A failing PR behind a stopped train was queued silently, so its failure was reported only once it led
+    body: _walk_train checked the stop before checking failing. Before this change every failing PR was warned on the first pass.
+  - kind: finding
+    id: rv-race-refusal
+    phase: 1
+    review_scope: out
+    title: A head moving between _open_head and pr_merge surfaces as a plain forge refusal and is stepped over
+    body: batch_merge.py _merge's pr_merge(head_sha=...) refusal path behaved the same before this change. It is harmless, because the next candidate is re-checked and updated, which stops the train.
+  - kind: review
+    id: rv-review-phase1
+    phase: 1
+    title: "Independent code review of phase 1: approve, 4 Minor findings (3 in scope, fixed; 1 out of scope)"
+    body: |
+      A dispatched reviewer read the full diff (8cec6f9d7..bd9cacc1d) of packages, plugins, tests and .changes against spec R1–R9 and the §B table, and ran the three touched test files (176 passed). It confirmed the walk order and repo independence, warn-once, the stop table, HeadMovedError compatibility with merge_one and batch merge (R8), the _unlanded/settle/rg-1 interplay without double counting, the output, the mirrors, the fragment and the name-anchored acceptance refs. Findings: rv-stops-api, rv-merge-batch-tuple, rv-queued-failing-unwarned (in scope, fixed in 4bd3d39f9 with a new failing-first test), and rv-race-refusal (out of scope).
+resolves:
+  - id: rv-stops-api
+    state: fixed
+    body: _stops_train now takes one argument, MergeAttempt | MergeStopError.
+  - id: rv-merge-batch-tuple
+    state: fixed
+    body: _merge_batch returns a _MergeOutcome NamedTuple (line, acted, in_flight, stops).
+  - id: rv-queued-failing-unwarned
+    state: fixed
+    body: A failing member is stepped over and warned wherever it sits. Pinned by test_a_failing_member_behind_the_stop_is_warned_and_stepped_over (red first). Spec §A step 3 is updated to match.
+  - id: rv-race-refusal
+    state: out-of-scope
+    body: The pr_merge race predates this change and is self-correcting, because the next candidate is updated, which stops the train.
+evidence:
+  review: rv-review-phase1
+  reviewer: a05c32ca4b3c835f4
+  model: claude-opus-5-5
