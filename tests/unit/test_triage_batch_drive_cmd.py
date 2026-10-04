@@ -20,6 +20,7 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd
 from fr.gh import GhError
+from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
@@ -806,6 +807,79 @@ def test_recollect_goes_through_the_forge_seam(
     assert load_facts(tmp_path / "facts.json").repos == [REPO]
 
 
+def _closed_world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    from tests.unit.triage_fixtures import FakeForge
+
+    (tmp_path / "judgements.yaml").write_text(
+        'schema: 1\ntiers: [{n: 1, title: T}]\nissues:\n  "super-fr#5": {tier: 1}\n',
+        encoding="utf-8",
+    )
+    forge = FakeForge(
+        issues={REPO: []},
+        prs={REPO: []},
+        closed={
+            (REPO, 5): {
+                "number": 5,
+                "title": "done",
+                "body": "",
+                "labels": [],
+                "state": "CLOSED",
+                "url": f"https://github.com/{REPO}/issues/5",
+                "closedAt": "2026-09-20T10:00:00Z",
+            }
+        },
+    )
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    return forge
+
+
+def test_recollect_carries_a_known_closed_issue_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.triage.model import Scope, load_facts
+
+    forge = _closed_world(tmp_path, monkeypatch)
+    scope = Scope(kind="repo", target=REPO)
+    triage_batch_cmd.recollect(scope, tmp_path)
+    assert len(forge.called("view_issue")) == 1
+    assert "collect: 1 issue viewed, 0 carried over" in capsys.readouterr().out
+
+    triage_batch_cmd.recollect(scope, tmp_path)
+    assert len(forge.called("view_issue")) == 1  # no second view
+    assert "collect: 0 issues viewed, 1 carried over" in capsys.readouterr().out
+    assert [i.state for i in load_facts(tmp_path / "facts.json").issues] == ["closed"]
+
+
+def test_a_merged_batch_stays_merged_after_its_members_are_carried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.batch import derive_batch_stage
+    from fr.triage.model import Batch, DispatchEvent, Scope, load_facts
+
+    _closed_world(tmp_path, monkeypatch)
+    scope = Scope(kind="repo", target=REPO)
+    triage_batch_cmd.recollect(scope, tmp_path)
+    triage_batch_cmd.recollect(scope, tmp_path)  # the member is now carried
+    facts = load_facts(tmp_path / "facts.json")
+    merged_pr = PullRequest(
+        repo=REPO,
+        number=9,
+        title="b",
+        state="MERGED",
+        is_draft=False,
+        url=f"https://github.com/{REPO}/pull/9",
+        head_ref="batch/b1",
+        merged_at=NOW.isoformat(),
+    )
+    facts = facts.model_copy(update={"batch_prs": [merged_pr]})
+    dispatch = DispatchEvent(
+        kind="dispatch", at=NOW - timedelta(days=1), runner="r", handle="h", branch="batch/b1"
+    )
+    batch = Batch(id="b1", title="t", ids=["super-fr#5"], events=[dispatch])
+
+    assert derive_batch_stage(batch, facts) == "merged"
+
+
 # ------------------------------------------------- kill-safety (R6, Test Plan 5)
 
 
@@ -1256,11 +1330,12 @@ def _flaky_collect(
     as a stalled-then-dropped `gh` read does; later calls write the world's facts."""
     calls: list[int] = []
 
-    def _collect_into(scope: Any, target: Path) -> None:
+    def _collect_into(scope: Any, target: Path, **_: Any) -> Any:
         calls.append(1)
         if len(calls) <= failures:
             raise ForgeError(message)
         (target / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+        return None, target / "facts.json", CollectStats()
 
     monkeypatch.setattr(triage_batch_cmd, "recollect", REAL_RECOLLECT)
     monkeypatch.setattr(triage_batch_cmd, "collect_into", _collect_into)

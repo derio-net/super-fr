@@ -1189,13 +1189,17 @@ class ForgeReadError(Exception):
 def recollect(scope: Scope, target: Path) -> None:
     """Re-collect facts.json through the `Forge` seam, as `fr triage collect` does:
     every stage is derived from facts, so each pass starts here (wave-driver §B).
-    A forge that fails to answer raises `ForgeReadError`; any other refusal exits."""
+    Unlike `fr triage collect` it carries known-closed facts over from the
+    previous pass instead of viewing every settled judged issue again (gh#911),
+    and says what the pass cost. A forge that fails to answer raises
+    `ForgeReadError`; any other refusal exits."""
     try:
-        collect_into(scope, target)
+        _, _, stats = collect_into(scope, target, carry=True)
     except ForgeError as exc:
         raise ForgeReadError(str(exc), code=2) from exc
     except TriageError as exc:
         _fail(str(exc))
+    _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
 
 
 def ci_is_none(path: Path) -> bool:
