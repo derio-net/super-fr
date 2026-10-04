@@ -1,0 +1,70 @@
+schema_version: 1
+run: 2026-09-23-fix-lifecycle-container-vs-worktree
+captures:
+- host: h-457ff627
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:22+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 1716
+        cache_write: 6789095
+        cache_read: 128434118
+        output: 161013
+        usd: 86.01413839999996
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001321
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 32.24437576014879
+        turns: 398
+      other:
+        usd: 26.3085149837733
+        turns: 213
+      paperwork:
+        usd: 27.462568656077842
+        turns: 230
+    steps:
+      (outside run):
+        usd: 10.73739983363583
+        turns: 48
+      brainstorm:
+        usd: 2.119634748558301
+        turns: 23
+      spec-review:
+        usd: 3.47667079269996
+        turns: 44
+      plan:
+        usd: 0.8381277779288927
+        turns: 7
+      implement:
+        usd: 66.91083417484978
+        turns: 693
+      deliver:
+        usd: 1.9327920723271867
+        turns: 12
+    briefs:
+      a39bcc43fffaef02e: 2869
+      phase/1/implement-phase: 1781
+      phase/1/review-phase: 1452
+      phase/2/implement-phase: 2053
+      phase/2/review-phase: 2113
+      phase/3/implement-phase: 1959
+      phase/3/review-phase: 2057
+      phase/4/implement-phase: 3063
+      phase/4/review-phase: 2900
+      phase/5/implement-phase: 2771
+      phase/5/review-phase: 2155
+      phase/6/implement-phase: 5136
+      phase/6/review-phase: 2276

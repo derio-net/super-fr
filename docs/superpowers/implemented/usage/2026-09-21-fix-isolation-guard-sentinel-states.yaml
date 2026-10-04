@@ -1,0 +1,73 @@
+schema_version: 1
+run: 2026-09-21-fix-isolation-guard-sentinel-states
+captures:
+- host: h-450851eb
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: e50c7ff5-b51f-415b-bc3c-dbc90e454a47
+    role: main
+    models:
+      claude-sonnet-5:
+        input: 164
+        cache_write: 259291
+        cache_read: 8036000
+        output: 40075
+        usd: 3.071871100000002
+        usd_source: exact
+      claude-opus-5:
+        input: 1036
+        cache_write: 2995933
+        cache_read: 143540179
+        output: 335361
+        usd: 116.18894424999995
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 564
+        cache_write: 173668
+        cache_read: 4714648
+        output: 661
+        usd: 0.8481309999999997
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 35.313747438576094
+        turns: 258
+      other:
+        usd: 58.47685892388553
+        turns: 233
+      paperwork:
+        usd: 26.318339987538266
+        turns: 163
+    steps:
+      (outside run):
+        usd: 109.99840700706046
+        turns: 406
+      brainstorm:
+        usd: 0.4863726203769366
+        turns: 11
+      spec-review:
+        usd: 0.0370845994311217
+        turns: 1
+      plan:
+        usd: 0.26975060437629433
+        turns: 5
+      implement:
+        usd: 9.149690890998832
+        turns: 218
+      deliver:
+        usd: 0.16764062775625915
+        turns: 3
+    briefs:
+      phase/1/implement-phase: 1491
+      phase/2/implement-phase: 2253
+      phase/3/implement-phase: 2183
+      phase/4/implement-phase: 2490
+      a1238fbf3b09187a8: 2837
+      a36868a120394bf3a: 4110
+      a4eb44a1511256cd2: 3057
+      a14135e4c77e08823: 4680
+      ac77a5b0ae34c4181: 3485
