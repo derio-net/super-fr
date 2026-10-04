@@ -16,5 +16,4 @@ journal:
     body: |
       The full suite on this host fails 4-7 tests (test_run_evidence_visual.py transcript-witness tests; once also test_records_commit stuck-lock, test_statusline_segment budget, test_sentinel_liveness) in two consecutive runs, yet all pass when run as those files alone (113 passed). They depend on harness transcripts/wall-clock and the host was loaded (suite took ~35 min). None touch the files this phase changed.
     phase: 1
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f396c9d6-799d-4d9b-95d6-7cee134b0041/scratchpad/phase1-suite2.log
+evidence: {}
