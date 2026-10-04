@@ -4780,9 +4780,11 @@ rows:
       that is not open.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_the_collect_command_views_on_a_second_run_too
+    status: ci
+    notes: fr triage collect never carries
   - id: drive-collect-cost-line
     capability: Backlog triage
     acceptance: Each drive pass prints one line naming the issues its collect viewed
