@@ -1,0 +1,90 @@
+schema_version: 1
+run: 2026-09-22-feat-gh-558-triage-prs
+captures:
+- host: h-cb721b53
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:22+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: ses_f36cb1e1affeVRk7Zkmx1P59In
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 635
+  - session: phase/1/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 1872
+  - session: ses_f36aa159cffeBJPfdTg6rJGZp8
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/implement-phase: 2872
+  - session: phase/2/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/review-phase: 3126
+  - session: ses_f36a48f34ffeAz6hdJjuso2NC0
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/implement-phase: 2179
+  - session: phase/3/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/review-phase: 2448
+  - session: ses_f36a1583dffeaGTG1EyIVmU2U6
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/4/implement-phase: 2290
+  - session: phase/4/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/4/review-phase: 3585

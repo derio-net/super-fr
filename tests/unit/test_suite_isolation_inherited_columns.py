@@ -26,6 +26,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.conftest import subprocess_timeout
+
 CONFTEST = Path(__file__).resolve().parents[1] / "conftest.py"
 
 PROBE = """
@@ -65,7 +67,7 @@ def test_an_inherited_columns_does_not_freeze_module_consoles(tmp_path: Path) ->
         env=env,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=subprocess_timeout(120),
     )
 
     assert result.returncode == 0, result.stdout + result.stderr

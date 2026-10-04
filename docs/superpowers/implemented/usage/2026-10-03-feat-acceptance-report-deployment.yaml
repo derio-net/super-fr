@@ -1,0 +1,101 @@
+schema_version: 1
+run: 2026-10-03-feat-acceptance-report-deployment
+captures:
+- host: h-0480f612
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-04T05:17:13+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  - backfill
+  sessions:
+  - session: 2ccd0163-4fdd-4eb8-9775-3aecca86940b
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 170
+        cache_write: 533591
+        cache_read: 9295397
+        output: 42657
+        usd: 7.264680999999993
+        usd_source: exact
+      claude-sonnet-5-5:
+        input: 34
+        cache_write: 209501
+        cache_read: 835690
+        output: 167
+        usd: 0.8908221000000001
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.000992
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 2.057095267592083
+        turns: 33
+      other:
+        usd: 3.4459893428815653
+        turns: 37
+      paperwork:
+        usd: 2.653410489526348
+        turns: 38
+    steps:
+      (outside run):
+        usd: 3.367114222993415
+        turns: 14
+      brainstorm:
+        usd: 0.8756740459282373
+        turns: 14
+      spec-review:
+        usd: 1.0917963658519843
+        turns: 26
+      plan:
+        usd: 0.6295545137173953
+        turns: 8
+      implement:
+        usd: 1.7543846033498913
+        turns: 29
+      deliver:
+        usd: 0.43797134815907435
+        turns: 6
+    briefs:
+      afecb656c373efcf9: 1609
+      phase/1/implement-phase: 2497
+      a14cdcebe29974efe: 2006
+  - session: 5482b5da-3106-4480-9fc4-890187cf1fb8
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 44
+        cache_write: 74081
+        cache_read: 1981323
+        output: 9402
+        usd: 1.2823352
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.0009739999999999999
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 0.04095470651206576
+        turns: 1
+      other:
+        usd: 0.5591793537671322
+        turns: 13
+      paperwork:
+        usd: 0.6831751397208019
+        turns: 8
+    steps:
+      (outside run):
+        usd: 1.2833092
+        turns: 22

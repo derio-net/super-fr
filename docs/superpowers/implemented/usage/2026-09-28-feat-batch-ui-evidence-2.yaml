@@ -4,11 +4,12 @@ captures:
 - host: h-c7991db3
   harness: claude-code
   mode: host-worktree
-  captured_at: '2026-09-28T22:19:56+00:00'
+  captured_at: '2026-10-04T05:15:24+00:00'
   at:
   - resolve:brainstorm
   - deliver
   - closeout
+  - backfill
   sessions:
   - session: 73b7844b-eec2-42cb-bf0d-d0f4e47b042c
     role: main
@@ -76,23 +77,23 @@ captures:
     role: main
     models:
       claude-opus-5-5:
-        input: 18
-        cache_write: 72369
-        cache_read: 798624
-        output: 2918
-        usd: null
-        usd_source: none
+        input: 36
+        cache_write: 79267
+        cache_read: 1625273
+        output: 5817
+        usd: 1.1006788
+        usd_source: exact
     activity:
       implementation:
-        usd: null
+        usd: 0.040533241118011966
         turns: 1
       other:
-        usd: null
-        turns: 3
+        usd: 0.3713190256768547
+        turns: 9
       paperwork:
-        usd: null
-        turns: 5
+        usd: 0.6888265332051335
+        turns: 7
     steps:
       (outside run):
-        usd: null
-        turns: 9
+        usd: 1.1006788000000003
+        turns: 17

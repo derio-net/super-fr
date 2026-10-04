@@ -7,6 +7,7 @@ we leverage gh's existing auth.
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import time
 from collections.abc import Callable
@@ -33,15 +34,28 @@ class GhError(Exception):
         self.stdout = stdout
 
 
+GH_TIMEOUT_SECONDS = 120.0
+"""How long one `gh` call may take before it is killed and fails as a transient
+error. A stalled GraphQL call otherwise blocks its caller indefinitely: the wave
+driver's loop once sat 16 minutes on a single `gh issue list` (gh#909)."""
+
+
 def _run_gh(args: list[str]) -> str:
-    """Run a gh command and return stdout.  Raises GhError on failure."""
+    """Run a gh command and return stdout.  Raises GhError on failure, and on a
+    call that outlives `GH_TIMEOUT_SECONDS` (transient: `is_transient` is true)."""
     try:
         result = subprocess.run(
             ["gh", *args],
             capture_output=True,
             text=True,
             check=True,
+            timeout=GH_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise GhError(
+            f"`{shlex.join(['gh', *args])}` timed out after {GH_TIMEOUT_SECONDS:g}s",
+            stderr=f"timeout after {GH_TIMEOUT_SECONDS:g}s",
+        ) from exc
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
         raise GhError(

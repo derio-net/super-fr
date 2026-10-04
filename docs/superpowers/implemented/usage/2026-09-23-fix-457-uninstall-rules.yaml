@@ -1,0 +1,50 @@
+schema_version: 1
+run: 2026-09-23-fix-457-uninstall-rules
+captures:
+- host: h-cff4b6b3
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:22+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: ses_f31b2016fffeh1ZP3pg5LLd1GK
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 127
+  - session: phase/1/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 678
+  - session: ses_f31ad3206ffePb4mr1jJwwNWOS
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/implement-phase: 1350
+  - session: phase/2/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/review-phase: 2252

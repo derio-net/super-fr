@@ -1,0 +1,127 @@
+schema_version: 1
+run: 2026-09-20-feat-phase-holder-identity
+captures:
+- host: h-0c6286d9
+  harness: unknown
+  mode: host-worktree
+  captured_at: '2026-10-04T05:15:21+00:00'
+  at:
+  - backfill
+  sessions:
+  - session: phase/1/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 967
+  - session: phase/1/review-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 1966
+  - session: phase/2/implement-phase#1
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/implement-phase: 8810
+  - session: phase/2/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/review-phase: 13536
+  - session: a5dbd5f0e9bdf3362
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/implement-phase: 6107
+  - session: phase/3/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/review-phase: 13623
+  - session: a5b15f633d8225e2c
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/4/implement-phase: 9309
+  - session: phase/4/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/4/review-phase: 24427
+  - session: a182c94fe152e508c
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/5/implement-phase: 17787
+  - session: phase/5/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/5/review-phase: 23347
+  - session: a752dda378d1adbfb
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/6/implement-phase: 10817
+  - session: phase/6/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/6/review-phase: 24101
