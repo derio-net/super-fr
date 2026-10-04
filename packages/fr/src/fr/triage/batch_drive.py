@@ -25,7 +25,6 @@ from fr.triage.batch import (
     BatchStage,
     QueueEntry,
     batch_branch,
-    merge_order,
 )
 from fr.triage.model import Batch, CloseoutEvent
 
@@ -102,6 +101,7 @@ class Action:
     head: str = ""
     recorded: bool = False  # closeout: the runner holds the tab; record the event only
     post_merge: bool = False  # closeout: run the repo's post_merge first
+    train: str = ""  # merge: the repo whose train this candidate belongs to
 
 
 @dataclass(frozen=True)
@@ -113,6 +113,7 @@ class Summary:
     pending: int
     closing: int
     blocked: int = 0
+    queued: int = 0  # merge-train members not attempted this pass (the head excluded)
 
     @property
     def idle(self) -> bool:
@@ -130,7 +131,7 @@ class Summary:
         return self.idle and self.blocked > 0
 
 
-def settle(summary: Summary, *, unlanded: int = 0, held: int = 0) -> Summary:
+def settle(summary: Summary, *, unlanded: int = 0, held: int = 0, queued: int = 0) -> Summary:
     """The pass's summary once its actions ran: *unlanded* planned merges did not
     land (held, updated, refused), so they are still in flight and not closing, and
     *held* planned dispatches did not start, so they are still pending (review rg-1)."""
@@ -140,13 +141,27 @@ def settle(summary: Summary, *, unlanded: int = 0, held: int = 0) -> Summary:
         merged=summary.merged - unlanded,
         closing=summary.closing - unlanded,
         pending=summary.pending + held,
+        queued=summary.queued + queued,
     )
+
+
+@dataclass(frozen=True)
+class Train:
+    """One repo's merge train for a pass (drive-merge-train spec §A)."""
+
+    repo: str
+    head: str | None  # the first candidate, or the waiting head; None: all stepped over
+    candidates: tuple[str, ...]  # batches with a merge action, in order
+    queued: tuple[str, ...]  # the member that stopped the walk (not the head), then the rest
+    stepped: tuple[str, ...]  # batches stepped over (failing)
+    numbers: Mapping[str, int]  # batch id -> PR number, for train_line
 
 
 @dataclass(frozen=True)
 class Pass:
     actions: tuple[Action, ...]
     summary: Summary
+    trains: tuple[Train, ...] = ()
 
 
 # ------------------------------------------------------------------ checks (R4)
@@ -292,6 +307,54 @@ def _dispatch_key(batch: Batch) -> tuple[int, int, int, int, str]:
     return (wave is None, wave or 0, order is None, order or 0, batch.id)
 
 
+def _walk_train(
+    repo: str, entries: Sequence[QueueEntry], snap: Snapshot
+) -> tuple[Train | None, list[Action]]:
+    """§A: walk one repo's *entries* (already in train order). A green member becomes
+    a merge candidate and the walk goes on; a failing one is stepped over; a moved
+    head or a pending one stops it, and every member after the stop is queued."""
+    merges: list[Action] = []
+    candidates: list[str] = []
+    stepped: list[str] = []
+    numbers: dict[str, int] = {}
+    waiting: str | None = None
+    queued: list[str] = []
+    members = 0
+    for entry in entries:
+        bid = entry.batch.id
+        pr = snap.live.get(bid)
+        if pr is None or pr.state != "OPEN" or pr.draft:
+            continue  # not a member
+        members += 1
+        numbers[bid] = pr.number
+        if waiting is not None or queued:
+            queued.append(bid)
+            continue
+        if pr.checks == "failing":
+            stepped.append(bid)
+            if pr.head not in snap.warned:
+                merges.append(
+                    Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
+                           f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head)
+                )  # fmt: skip
+            continue
+        if pr.head != entry.pr.head_oid or pr.checks == "pending":
+            if candidates:
+                queued.append(bid)
+            else:
+                waiting = bid
+            continue
+        candidates.append(bid)
+        merges.append(
+            Action("merge", bid, f"PR #{pr.number} at {pr.head[:12]}", pr=pr.number,
+                   head=pr.head, train=repo)
+        )  # fmt: skip
+    if not members:
+        return None, merges
+    head = candidates[0] if candidates else waiting
+    return Train(repo, head, tuple(candidates), tuple(queued), tuple(stepped), numbers), merges
+
+
 def drive_pass(snap: Snapshot) -> Pass:
     """One pass: merge, close out, archive, dispatch — in that order, so a slot a
     merge frees is used in the same pass."""
@@ -300,27 +363,20 @@ def drive_pass(snap: Snapshot) -> Pass:
     merging: set[str] = set()
     chosen = tuple(b for b in snap.batches if snap.selected is None or b.id in snap.selected)
 
-    # 1. Merge.
-    for entry in merge_order(list(snap.queue)):
+    # 1. Merge: one train per repo, walked in the stable dispatch order.
+    by_repo: dict[str, list[QueueEntry]] = {}
+    for entry in sorted(snap.queue, key=lambda e: _dispatch_key(e.batch)):
         bid = entry.batch.id
         if snap.selected is not None and bid not in snap.selected:
             continue
-        pr = snap.live.get(bid)
-        if pr is None or pr.state != "OPEN" or pr.draft or pr.head != entry.pr.head_oid:
-            continue
-        if pr.checks == "failing":
-            if pr.head not in snap.warned:
-                actions.append(
-                    Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
-                           f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head)
-                )  # fmt: skip
-            continue
-        if pr.checks == "pending":
-            continue
-        actions.append(
-            Action("merge", bid, f"PR #{pr.number} at {pr.head[:12]}", pr=pr.number, head=pr.head)
-        )
-        merging.add(bid)
+        by_repo.setdefault(snap.repos.get(bid, ""), []).append(entry)
+    trains: list[Train] = []
+    for repo in sorted(by_repo):
+        train, merges = _walk_train(repo, by_repo[repo], snap)
+        actions.extend(merges)
+        merging.update(a.batch for a in merges if a.kind == "merge")
+        if train is not None:
+            trains.append(train)
 
     # 2. Close out.
     closing = 0
@@ -416,8 +472,14 @@ def drive_pass(snap: Snapshot) -> Pass:
     return Pass(
         actions=tuple(actions),
         summary=Summary(
-            in_flight=in_flight, merged=merged, pending=pending, closing=closing, blocked=blocked
+            in_flight=in_flight,
+            merged=merged,
+            pending=pending,
+            closing=closing,
+            blocked=blocked,
+            queued=sum(len(t.queued) for t in trains),
         ),
+        trains=tuple(trains),
     )
 
 
@@ -435,4 +497,29 @@ def summary_line(summary: Summary) -> str:
         f"in flight {summary.in_flight}, merged {summary.merged}, "
         f"pending {summary.pending}, closing {summary.closing}"
     )
+    if summary.queued:
+        line += f", queued {summary.queued}"
     return line + (f", blocked {summary.blocked}" if summary.blocked else "")
+
+
+def train_line(train: Train) -> str:
+    """R6: `train <repo>: head a (PR #12) · then b (#13) · queued c (#14) · stepped over d (#15)`."""
+
+    def ref(bid: str) -> str:
+        return f"{bid} (#{train.numbers[bid]})" if bid in train.numbers else bid
+
+    head = train.head
+    parts = []
+    if head is None:
+        parts.append("no head")
+    else:
+        parts.append(f"head {head} (PR #{train.numbers[head]})" if head in train.numbers
+                     else f"head {head}")  # fmt: skip
+    then = train.candidates[1:]
+    if then:
+        parts.append("then " + ", ".join(ref(b) for b in then))
+    if train.queued:
+        parts.append("queued " + ", ".join(ref(b) for b in train.queued))
+    if train.stepped:
+        parts.append("stepped over " + ", ".join(ref(b) for b in train.stepped))
+    return f"train {train.repo}: " + " · ".join(parts)
