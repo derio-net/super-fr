@@ -19,8 +19,22 @@ mimic_default() {
   mkdir -p "$root/.claude/worktrees"
   base=$(git -C "$root" rev-parse --verify -q origin/HEAD 2>/dev/null || git -C "$root" rev-parse HEAD)
   git -C "$root" worktree add --detach "$dir" "$base" >&2
+  copy_worktreeinclude "$dir"
   printf '%s\n' "$dir"
   exit 0
+}
+copy_worktreeinclude() {
+  # Best effort, like Claude's native path (super-fr#455): copy every file that
+  # is git-ignored AND named by a `.worktreeinclude` pattern (gitignore syntax).
+  # `ls-files -o -i --exclude-from` lists untracked files matching the include
+  # patterns; `check-ignore` keeps those the repo's own ignore rules ignore.
+  [ -f "$root/.worktreeinclude" ] || return 0
+  git -C "$root" ls-files -z --others --ignored --exclude-from="$root/.worktreeinclude" 2>/dev/null \
+    | git -C "$root" check-ignore -z --stdin 2>/dev/null \
+    | while IFS= read -r -d '' rel; do
+        mkdir -p "$1/$(dirname "$rel")" && cp -p "$root/$rel" "$1/$rel" \
+          || echo "fr-worktree-create: could not copy $rel" >&2
+      done || true
 }
 has_profile() { ls -d "$root"/.devcontainer/*/ >/dev/null 2>&1; }
 fr_enabled() { [ -d "$root/docs/superpowers/plans" ] || has_profile; }

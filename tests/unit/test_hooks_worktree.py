@@ -188,6 +188,43 @@ class TestWorktreeCreate:
         assert last_line(again.stdout) == str(expected)
         assert logged(stub_fr) == []
 
+    # (c2) super-fr#455: agent-* also copies `.worktreeinclude` matches — the
+    # files that are BOTH git-ignored and named by an include pattern, as
+    # Claude's native path does (spec 2026-09-04 §5.B.3).
+    def test_agent_worktree_copies_worktreeinclude_matches(
+        self, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        (repo / ".gitignore").write_text(".env\nbuild/\nsecrets/\n")
+        (repo / ".worktreeinclude").write_text(".env\nsecrets/\nnotes.txt\n")
+        _git(repo, "add", ".gitignore", ".worktreeinclude")
+        _git(repo, "commit", "-qm", "include")
+        (repo / ".env").write_text("TOKEN=x\n")  # ignored + included -> copied
+        (repo / "secrets").mkdir()
+        (repo / "secrets" / "k.pem").write_text("k\n")  # nested, ignored + included
+        (repo / "build").mkdir()
+        (repo / "build" / "out.o").write_text("o\n")  # ignored, not included
+        (repo / "notes.txt").write_text("n\n")  # included, NOT ignored -> not copied
+
+        result = run_hook(CREATE, create_payload("agent-inc1", repo), stub_fr)
+        assert result.returncode == 0, result.stderr
+        wt = repo / ".claude" / "worktrees" / "agent-inc1"
+        assert last_line(result.stdout) == str(wt)
+        assert (wt / ".env").read_text() == "TOKEN=x\n"
+        assert (wt / "secrets" / "k.pem").read_text() == "k\n"
+        assert not (wt / "build").exists()
+        assert not (wt / "notes.txt").exists()
+
+    def test_agent_worktree_without_worktreeinclude_copies_nothing(
+        self, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        (repo / ".gitignore").write_text(".env\n")
+        _git(repo, "add", ".gitignore")
+        _git(repo, "commit", "-qm", "ignore")
+        (repo / ".env").write_text("TOKEN=x\n")
+        result = run_hook(CREATE, create_payload("agent-inc2", repo), stub_fr)
+        assert result.returncode == 0, result.stderr
+        assert not (repo / ".claude" / "worktrees" / "agent-inc2" / ".env").exists()
+
     # (d) non-fr repo -> default shape even for a session worktree name
     def test_non_fr_repo_mimics_default(self, plain_repo: Path, stub_fr: dict[str, str]) -> None:
         result = run_hook(CREATE, create_payload("feature-auth", plain_repo), stub_fr)
