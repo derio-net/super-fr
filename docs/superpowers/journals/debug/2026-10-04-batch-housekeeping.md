@@ -54,3 +54,8 @@ Background commit security review flagged symlink-following writes in copy_workt
 ### fix-456 · finding [fixed] · #456: statusline within the 60 ms budget
 
 Re-measured first (the script was rewritten after #456: one rev-parse, no worktree list). Component profile on the operator Mac: bash 16 ms, jq stdin 15, git rev-parse 16, jq over 13 state files 16, and 13 (cd && pwd -P) subshells ~34 ms on top: the remaining over-budget cost. Fix: [ "$wt" -ef "$toplevel" ] (builtin inode compare). Interleaved warm medians: base clone 47-59 -> 31-37 ms; fr worktree 40-49 -> 30-33 ms (machine load is noisy; a first unloaded-vs-loaded read showed 85-113 ms before). Neither of the issue's heavier options (cache, pure-bash git walk) is needed. Guard: test_statusline_segment.py::test_a_state_file_naming_the_worktree_through_a_symlink_still_matches pins the physical-path semantics; CI timing guard stays 0.5 s.
+
+<!-- fr:journal kind=finding scope=debug id=fix-691 created=2026-10-04T05:23:44+00:00 state=fixed -->
+### fix-691 · finding [fixed] · #691: explainer gate provenance rewritten
+
+Root cause: 01-fr-goal.md paragraph predated the transcript-observed provenance in run_cmd._gate_provenance (operator observed; refusal unless --no-questions --reason -> agent + journal; typed claim only where unobservable, marked unverified). Rewrote the paragraph; re-rendered .html with the blog-craft renderer from / with --isolated after confirming the unmodified render was byte-identical to the committed page; page diff is exactly that paragraph. No test (prose); test_tripwire_explainers_fresh covers heading/title survival.
