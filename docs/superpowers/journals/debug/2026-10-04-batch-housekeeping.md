@@ -74,3 +74,8 @@ safe_load keeps the last duplicate, so an entry appended beside a quoted "dev": 
 ### review · review · Milestone review
 
 Independent code review of the branch diff (feature-dev code-reviewer, read-only). Raised two findings, both in scope and fixed: review-r1-crlf, review-r2-dupkey. Checked clean: hook set -eu/pipeline/newline handling, PullRequest None consumers, statusline -ef, deleted-script references. Separately, a background commit security review raised symlink-following writes in the #455 hook (sec-455-symlink, fixed).
+
+<!-- fr:journal kind=finding scope=debug id=ci-py311-read-text created=2026-10-04T06:24:50+00:00 state=fixed -->
+### ci-py311-read-text · finding [fixed] · CI: 3.13-only read_text(newline=) in a test
+
+CI (Python 3.12; floor 3.11) failed test_line_surgery_separators.py: Path.read_text(newline=) is 3.13+. Replaced with open(path, encoding='utf-8', newline='').read(). Scanned the branch diff for other 3.13+ APIs: none (write_text(newline=) is 3.10+). Verified: uv run --python 3.11 pytest tests/unit/test_line_surgery_separators.py -> 2 passed; every test file the branch touches under 3.11 -> 500 passed.
