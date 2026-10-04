@@ -4751,9 +4751,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R3
     - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_carried_closed_key_is_not_viewed
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_carried_key_that_reads_open_is_the_open_one_and_not_counted
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_merged_batch_stays_merged_after_its_members_are_carried
+    status: ci
+    notes: carried closed issues are not viewed; PR links recomputed; reopened reads
+      open; merged batch stays merged
   - id: drive-collect-views-what-changed
     capability: Backlog triage
     acceptance: A drive pass views every judged issue that just left the open list,
