@@ -662,3 +662,17 @@ def test_a_flow_style_state_block_is_replaced_whole_and_still_ticks(tmp_path):
     raw = yaml.safe_load(phase.read_text())
     assert raw["state"]["steps"]["P1.T1.S1"]["state"] == "x"
     assert raw["tasks"][0]["steps"][0]["id"] == "P1.T1.S1"
+
+
+def test_an_alias_into_the_replaced_block_falls_back_instead_of_raising(tmp_path):
+    """Review low (gh#502): an anchor inside `state:` that a later key aliases
+    is dropped by the splice; the check must fall back, not raise."""
+    from fr.plan_ops import rewrite_phase_text
+
+    original = "state:\n  steps: &s\n    a: 1\nlater: *s\n"
+    raw = yaml.safe_load(original)
+    raw["state"]["steps"]["a"] = 2
+
+    out = rewrite_phase_text(original, raw, "state")
+
+    assert yaml.safe_load(out) == raw

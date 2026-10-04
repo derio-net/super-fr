@@ -141,9 +141,11 @@ def rewrite_phase_text(original: str, raw: dict[str, Any], *keys: str) -> str:
     text: str | None = original
     for key in keys:
         text = _splice_block(text, key, raw[key]) if text is not None else None
-    if text is None or yaml.safe_load(text) != raw:
-        return _yaml_dump(raw)
-    return text
+    try:
+        faithful = text is not None and yaml.safe_load(text) == raw
+    except yaml.YAMLError:  # e.g. an alias whose anchor sat in the replaced block
+        faithful = False
+    return text if faithful and text is not None else _yaml_dump(raw)
 
 
 # ---------------------------------------------------------------------------

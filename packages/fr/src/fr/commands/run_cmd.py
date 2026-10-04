@@ -2858,18 +2858,11 @@ def _caller_evidence(step: Step) -> list[str]:
 def _record_brief(
     state: RunState, step: Step, group: Step | None = None, item: str | None = None
 ) -> dict[str, Any] | None:
-    """The brief's `record` key — never the reason a brief fails to print.
-
-    It also makes the records directory the brief points into: an agent
-    writing the record with a shell heredoc found no directory there, because
-    only the apply engine ever made one (gh#653)."""
-    from fr.record.model import records_dir
+    """The brief's `record` key — never the reason a brief fails to print."""
     from fr.record.template import record_brief
 
     try:
-        repo_root = resolve_repo_root()
-        records_dir(repo_root, state.run).mkdir(parents=True, exist_ok=True)
-        return record_brief(repo_root, state, step, group, item).as_dict()
+        return record_brief(resolve_repo_root(), state, step, group, item).as_dict()
     except Exception:  # noqa: BLE001 — a brief without a template still dispatches
         return None
 

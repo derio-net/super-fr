@@ -231,3 +231,17 @@ def test_a_plan_journal_template_says_an_entry_needs_phase_or_global(tmp_path: P
 
     assert "phase: <n>" in text
     assert "global: true" in text
+
+
+def test_pickup_makes_the_records_dir_its_template_points_into(tmp_path: Path) -> None:
+    """gh#653 on the executor's own path: phase executors read their record
+    from `fr pickup`, not the advance brief, and a heredoc into the printed
+    path failed when nothing had made the directory."""
+    import shutil
+
+    root = started_run(tmp_path)
+    records = root / "docs/superpowers/runs/r1.records"
+    shutil.rmtree(records, ignore_errors=True)
+
+    assert _pickup(root).exit_code == 0
+    assert records.is_dir()

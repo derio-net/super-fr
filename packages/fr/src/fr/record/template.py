@@ -177,8 +177,18 @@ def record_brief(
     group: Step | None = None,
     item: str | None = None,
 ) -> RecordBrief:
-    """The record a unit of `state` is handed, or its in-progress form."""
+    """The record a unit of `state` is handed, or its in-progress form.
+
+    It also makes the directory the record's path points into: an agent
+    writing the record with a shell heredoc found none there, because only the
+    apply engine ever made one (gh#653). Both callers, `fr run advance`'s brief
+    and `fr pickup`, come through here. A failure to make it costs the agent
+    nothing it had before, so it never costs the template."""
     path = record_path(repo_root, state.run, step.id, item)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     rel = path.relative_to(repo_root).as_posix()
     plan_rel = next(
         (r.emitted["plan"] for r in state.steps.values() if r.emitted and "plan" in r.emitted),
