@@ -4794,6 +4794,16 @@ rows:
     status: not-implemented
     notes: ''
     verify: post-merge
+  - id: drive-carry-keeps-settled-set
+    capability: Backlog triage
+    acceptance: After drive passes that carried facts over, fr triage check reports
+      the same settled set as right after a full fr triage collect.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity

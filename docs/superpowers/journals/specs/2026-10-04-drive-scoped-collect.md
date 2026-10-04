@@ -40,3 +40,58 @@ Operator chose every pass with a readable same-scope facts.json; none readable f
 ### d4-cost-line · decision · One line per pass naming issues viewed vs carried over
 
 Operator chose a per-pass report line, e.g. "collect - 3 issues viewed, 214 carried over".
+
+<!-- fr:journal kind=finding scope=spec id=sr-truncated-issue-list created=2026-10-04T06:04:21+00:00 state=open review_scope=in -->
+### sr-truncated-issue-list · finding [open] (reviewer: in scope) · Carry-over breaks R3 when a repo's open-issue list hit its limit
+
+A judged issue reopened past a truncated open list (len == ISSUE_LIMIT) would stay carried as closed and could stage its batch merged instead of partial. collect.py:376,393-394,431-447. Fix: carry nothing in a repo whose issue list was truncated this pass.
+
+<!-- fr:journal kind=finding scope=spec id=sr-older-schema-not-refused created=2026-10-04T06:04:21+00:00 state=open review_scope=in -->
+### sr-older-schema-not-refused · finding [open] (reviewer: in scope) · §B says an older-schema facts.json carries nothing, but load_facts accepts schema 3
+
+model.py:41 FACTS_READS = (3, 4); load_facts refuses only outside it. The spec must say which schemas are carried.
+
+<!-- fr:journal kind=finding scope=spec id=sr-viewed-count-definition created=2026-10-04T06:04:21+00:00 state=open review_scope=in -->
+### sr-viewed-count-definition · finding [open] (reviewer: in scope) · R6 'issues viewed' is undefined for failed or PR views, and the counts have no path from collect_into to recollect
+
+Count view_issue calls, failures included. collect_into must return the stats, because recollect only sees collect_into (triage_cmd.py:178, triage_batch_cmd.py:1189).
+
+<!-- fr:journal kind=finding scope=spec id=sr-test-plan-2-no-row created=2026-10-04T06:04:21+00:00 state=open review_scope=in -->
+### sr-test-plan-2-no-row · finding [open] (reviewer: in scope) · Test Plan item 2 (check's settled count) has no acceptance row
+
+No row cites Test Plan 2; add a verify: post-merge row.
+
+<!-- fr:journal kind=finding scope=spec id=sr-group-scope-name-collision created=2026-10-04T06:04:21+00:00 state=open review_scope=out -->
+### sr-group-scope-name-collision · finding [open] (reviewer: out of scope) · Judgement keys are owner-blind, so two repos with the same name in a group scope collide
+
+collect.py:324 _judged_elsewhere keys by repo name only; model.py:154-156 issue_key drops the owner. This predates the change, and the carried lookup only inherits it.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-10-04T06:04:21+00:00 -->
+### spec-review-1 · review · independent spec review: 5 findings (4 in scope, 1 out)
+
+fr-spec-reviewer checked decisions d1-d4 (all honoured), the §2 safety argument against batch.py:163-179, stage.py, check.py:195 and render/views, skipped-repo handling (collect.py:324-331), unviewed handling and the scope/kind match (model.py:314-315). Findings: sr-truncated-issue-list, sr-older-schema-not-refused, sr-viewed-count-definition, sr-test-plan-2-no-row (in); sr-group-scope-name-collision (out).
+
+<!-- fr:journal kind=finding scope=spec id=sr-truncated-issue-list-resolved created=2026-10-04T06:04:21+00:00 state=fixed resolves=sr-truncated-issue-list -->
+### sr-truncated-issue-list-resolved · finding [fixed] · resolves sr-truncated-issue-list: Carry-over breaks R3 when a repo's open-issue list hit its limit
+
+Spec §2 and §A now say a repo whose open-issue list was truncated this pass carries nothing; R1 and R3 are reworded, and an engine test is named in §D.
+
+<!-- fr:journal kind=finding scope=spec id=sr-older-schema-not-refused-resolved created=2026-10-04T06:04:21+00:00 state=fixed resolves=sr-older-schema-not-refused -->
+### sr-older-schema-not-refused-resolved · finding [fixed] · resolves sr-older-schema-not-refused: §B says an older-schema facts.json carries nothing, but load_facts accepts schema 3
+
+§B now says both readable schemas (FACTS_READS 3 and 4) are carried, since Issue has the same shape; anything load_facts refuses carries nothing.
+
+<!-- fr:journal kind=finding scope=spec id=sr-viewed-count-definition-resolved created=2026-10-04T06:04:21+00:00 state=fixed resolves=sr-viewed-count-definition -->
+### sr-viewed-count-definition-resolved · finding [fixed] · resolves sr-viewed-count-definition: R6 'issues viewed' is undefined for failed or PR views, and the counts have no path from collect_into to recollect
+
+R6 and §A now define viewed as view_issue calls, failures and PR answers included. CollectStats comes from collect_facts_counted, and collect_into returns it to recollect (§B).
+
+<!-- fr:journal kind=finding scope=spec id=sr-test-plan-2-no-row-resolved created=2026-10-04T06:04:21+00:00 state=fixed resolves=sr-test-plan-2-no-row -->
+### sr-test-plan-2-no-row-resolved · finding [fixed] · resolves sr-test-plan-2-no-row: Test Plan item 2 (check's settled count) has no acceptance row
+
+Added the drive-carry-keeps-settled-set row (verify: post-merge) for Test Plan 2.
+
+<!-- fr:journal kind=finding scope=spec id=sr-group-scope-name-collision-resolved created=2026-10-04T06:04:21+00:00 state=open resolves=sr-group-scope-name-collision out_of_scope=true -->
+### sr-group-scope-name-collision-resolved · finding [out-of-scope] · resolves sr-group-scope-name-collision: Judgement keys are owner-blind, so two repos with the same name in a group scope collide
+
+Pre-existing: the judgement key grammar has no owner, and this change did not cause that. To avoid adding a new cross-carry, the spec keys the carried map by (repo.lower(), number), checked against the loop's repo.
