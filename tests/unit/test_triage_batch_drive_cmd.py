@@ -20,12 +20,14 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd
 from fr.gh import GhError
+from fr.triage.errors import ForgeError
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
 
 from tests.unit.test_triage_batch_dispatch import FakeRunner
 
 REAL_CI_IS_NONE = triage_batch_cmd.ci_is_none
+REAL_RECOLLECT = triage_batch_cmd.recollect
 
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
@@ -1240,3 +1242,92 @@ def test_required_checks_when_there_are_any_else_all_checks(
     world.all_checks[101] = all_checks
     code, out = _drive(tmp_path, "--once", "--yes")
     assert bool(world.merged) is merged, out
+
+
+# ------------------------------------------- a degraded forge (gh#909, gh#910)
+
+
+def _flaky_collect(
+    monkeypatch: pytest.MonkeyPatch, world: World, failures: int, message: str
+) -> list[int]:
+    """The real `recollect` over a `collect_into` whose first *failures* calls fail
+    as a stalled-then-dropped `gh` read does; later calls write the world's facts."""
+    calls: list[int] = []
+
+    def _collect_into(scope: Any, target: Path) -> None:
+        calls.append(1)
+        if len(calls) <= failures:
+            raise ForgeError(message)
+        (target / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+
+    monkeypatch.setattr(triage_batch_cmd, "recollect", REAL_RECOLLECT)
+    monkeypatch.setattr(triage_batch_cmd, "collect_into", _collect_into)
+    return calls
+
+
+def _naps_until(monkeypatch: pytest.MonkeyPatch, n: int) -> list[float]:
+    naps: list[float] = []
+
+    def _nap(seconds: float) -> None:
+        naps.append(seconds)
+        if len(naps) == n:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    return naps
+
+
+EOF_MSG = "Post https://api.github.com/graphql: unexpected EOF"
+
+
+def test_a_failed_recollect_does_not_end_the_loop_and_is_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#910: loop mode skips the pass, waits --interval and reads again; the same
+    cause twice in a row is reported once; the merge lands once the forge answers."""
+    _pr_open(world, tmp_path)
+    calls = _flaky_collect(monkeypatch, world, failures=2, message=EOF_MSG)
+    naps = _naps_until(monkeypatch, 3)
+    result = _drive_named(tmp_path, "--yes", "--interval", "7")
+    assert isinstance(result.exception, _StopError), result.output
+    assert len(calls) == 3
+    assert naps[:2] == [7, 7]
+    assert result.output.count("unexpected EOF") == 1
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_a_failed_snapshot_read_does_not_end_the_loop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#910: a forge read inside the pass (the PR's live view) fails like the
+    re-collect can; the pass is skipped and the next one merges."""
+    _pr_open(world, tmp_path)
+    real_view = world.pr_view
+    failed: list[int] = []
+
+    def _view(repo: str, number: int) -> dict[str, Any]:
+        if not failed:
+            failed.append(number)
+            raise GhError(EOF_MSG, returncode=1)
+        return real_view(repo, number)
+
+    monkeypatch.setattr(world, "pr_view", _view)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("unexpected EOF") == 1
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_once_still_exits_non_zero_on_a_failed_forge_read(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    _flaky_collect(monkeypatch, world, failures=1, message=EOF_MSG)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 2, out
+    assert "unexpected EOF" in out
+    assert world.merged == []
