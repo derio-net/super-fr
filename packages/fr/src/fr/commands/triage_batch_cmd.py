@@ -1701,7 +1701,7 @@ class _Driver:
         judgements = load_judgements(self.target / "judgements.yaml")
         batch = _find(judgements.batches, action.batch)
         repo = batch_repo(batch, facts)
-        if action.kind in ("blocked",) or repo is None:
+        if action.kind in ("blocked", "held") or repo is None:
             return action.detail, False, in_flight
         if action.kind == "warn":
             self.warned.add(action.head)

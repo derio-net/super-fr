@@ -121,6 +121,8 @@ def test_the_in_flight_cap_holds_and_waves_go_in_order() -> None:
         ("dispatch", "w1-a"),
         ("dispatch", "w1-c"),
         ("dispatch", "w1-d"),
+        ("held", "w2-a"),
+        ("held", "w2-b"),
     ]
     assert got.summary.in_flight == 4 and got.summary.pending == 2
 
@@ -129,7 +131,23 @@ def test_in_flight_batches_count_against_the_cap() -> None:
     batches = [_dispatched("old", 1), _batch("new", 2), _batch("newer", 3)]
     stages = {"old": "dispatched", "new": "proposed", "newer": "proposed"}
     got = drive_pass(_snap(batches, stages, max_inflight=2))
-    assert _kinds(got.actions) == [("dispatch", "new")]
+    assert _kinds(got.actions) == [("dispatch", "new"), ("held", "newer")]
+    # a slot this pass's own dispatch took is named with the rest
+    assert got.actions[-1].detail == "the in-flight cap (2) is full: new, old"
+
+
+def test_a_batch_the_cap_holds_says_so_and_names_the_occupants() -> None:
+    """gh#913: with the cap full of unselected batches, the selection's summary reads
+    idle (in flight 0, pending 2); the plan must say what holds it."""
+    others = [_dispatched(f"o{n}", n) for n in range(1, 5)]
+    batches = [*others, _batch("new-a", 5), _batch("new-b", 6)]
+    stages = {**{b.id: "dispatched" for b in others}, "new-a": "proposed", "new-b": "proposed"}
+    got = drive_pass(_snap(batches, stages, selected=frozenset({"new-a", "new-b"})))
+    assert [action_line(a) for a in got.actions] == [
+        "held new-a: the in-flight cap (4) is full: o1, o2, o3, o4",
+        "held new-b: the in-flight cap (4) is full: o1, o2, o3, o4",
+    ]
+    assert got.summary.in_flight == 0 and got.summary.pending == 2
 
 
 def test_a_batch_waiting_on_an_unmerged_dependency_is_skipped() -> None:
@@ -484,7 +502,7 @@ def test_the_cap_counts_in_flight_batches_outside_the_selection() -> None:
     b5 = _batch("b5", 5)
     stages = {**{b.id: "dispatched" for b in others}, "b5": "proposed"}
     got = drive_pass(_snap([*others, b5], stages, selected=frozenset({"b5"}), max_inflight=4))
-    assert got.actions == ()
+    assert _kinds(got.actions) == [("held", "b5")]  # held, and says so (gh#913)
     assert got.summary.pending == 1 and not got.summary.done
 
 

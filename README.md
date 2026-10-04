@@ -3,6 +3,7 @@
 [![GitHub Release](https://badgen.net/github/release/derio-net/super-fr/stable)](https://github.com/derio-net/super-fr/releases)
 [![CI](https://github.com/derio-net/super-fr/actions/workflows/ci.yml/badge.svg)](https://github.com/derio-net/super-fr/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Acceptance](https://img.shields.io/badge/acceptance-report-blue)](https://derio-net.github.io/super-fr/acceptance/)
 
 **Describe a feature, get back a reviewed pull request.** Tell super-fr what you
 want, answer a question round sized to the feature (rarely two), and an agent designs it, writes it

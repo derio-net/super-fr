@@ -47,7 +47,7 @@ RUN_ARTIFACT_DIRS = tuple(
 `docs/superpowers/implemented/` (`fr archive --branch`)."""
 
 ChecksVerdict = Literal["green", "pending", "failing"]
-ActionKind = Literal["merge", "closeout", "archive", "dispatch", "blocked", "warn"]
+ActionKind = Literal["merge", "closeout", "archive", "dispatch", "blocked", "held", "warn"]
 
 _FAILING_BUCKETS = frozenset({"fail", "cancel"})
 
@@ -374,7 +374,9 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 4. Dispatch.
     # The cap counts every batch in flight, selected or not (review rg-3); the
     # summary's own figure is the selection's, which is what this drive waits on.
-    cap_used = sum(1 for b in snap.batches if stages.get(b.id) in IN_FLIGHT) - len(merging)
+    occupants = {
+        b.id for b in snap.batches if stages.get(b.id) in IN_FLIGHT and b.id not in merging
+    }
     driven = {b.id for b in chosen}
     in_flight = sum(1 for b in driven if stages.get(b) in IN_FLIGHT) - len(merging)
     for bid in merging:
@@ -396,10 +398,14 @@ def drive_pass(snap: Snapshot) -> Pass:
         if any(stages.get(d) != "merged" for d in batch.after):
             pending += 1
             continue
-        if cap_used >= snap.max_inflight:
+        if len(occupants) >= snap.max_inflight:
+            # The summary counts only the selection, so a cap held by batches
+            # outside it would otherwise read as idle (gh#913).
             pending += 1
+            actions.append(Action("held", batch.id, f"the in-flight cap ({snap.max_inflight}) "
+                                  f"is full: {', '.join(sorted(occupants))}"))  # fmt: skip
             continue
-        cap_used += 1
+        occupants.add(batch.id)
         in_flight += 1
         actions.append(
             Action("dispatch", batch.id, f"wave {batch.wave if batch.wave is not None else '-'}")
