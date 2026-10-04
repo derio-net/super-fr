@@ -611,3 +611,11 @@ def test_settle_moves_a_merge_that_did_not_land_back_in_flight() -> None:
     assert got.summary.merged == 1
     settled = settle(got.summary, unlanded=1, held=1)
     assert (settled.in_flight, settled.merged, settled.pending, settled.closing) == (1, 0, 1, 0)
+
+
+def test_archived_evidence_wins_over_a_hand_pr_and_only_the_selection_is_adopted() -> None:
+    hand = _live(895, "h895", head_ref="chore/closeout-feat-batch-x")
+    x, y = _merged("x", 1), _merged("y", 2)
+    snap = _snap([x, y], {"x": "merged", "y": "merged"}, archived=frozenset({"x", "y"}),
+                 adopted={"x": hand}, selected=frozenset({"x"}))  # fmt: skip
+    assert [(a.kind, a.batch, a.archived) for a in drive_pass(snap).actions] == [("adopt", "x", 0)]

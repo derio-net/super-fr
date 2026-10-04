@@ -637,14 +637,14 @@ def test_a_named_batch_already_archived_by_hand_is_not_closed_out(
     world.prs[101]["merge_commit"] = "m101"
     checkout.added["m101"] = (journal, "packages/x.py")
     checkout.released = True
+    checkout.live.add(journal)  # not archived yet: the close-out is owed
+    code, out = _drive(tmp_path, "--once", "b1")
+    assert _lines(out, "closeout") == [f"closeout b1: start {REPO}/run/closeout-b1"], out
+    checkout.live.discard(journal)  # archived by hand
     code, out = _drive(tmp_path, "--once", "--yes", "b1")
     assert code == 0, out
     assert _lines(out, "closeout") == [] and runner.dispatched == []
     assert "closing 0" in out
-    checkout.live.add(journal)  # not archived yet: the close-out is owed
-    code, out = _drive(tmp_path, "--once", "--yes", "b1")
-    assert code == 0, out
-    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
 
 
 def test_an_archived_batch_is_recorded_once_and_never_probed_again(
@@ -729,6 +729,20 @@ def test_a_merged_hand_opened_closeout_pr_finishes_the_batch(
     assert _lines(out, "adopt") == ["adopt b1: close-out PR #895 merged"]
     event = load_judgements(tmp_path / "judgements.yaml").batches[0].events[-1]
     assert event.archived == 895  # type: ignore[union-attr]
+
+
+def test_a_closed_hand_closeout_pr_leaves_the_closeout_owed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """An abandoned (closed, unmerged) close-out PR is no evidence of anything."""
+    _merged(world, tmp_path)
+    checkout.released = True
+    world.pr(895, "chore/closeout-feat-batch-b1", [], state="CLOSED")
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "adopt") == []
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
 
 
 def test_plan_mode_reports_an_adoption_and_writes_nothing(
