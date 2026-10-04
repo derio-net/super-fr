@@ -3,7 +3,7 @@ run: 2026-10-04-feat-batch-drive-merge-train
 workflow: fr-goal-light@1
 branch: feat/batch-drive-merge-train
 started: '2026-10-04T07:03:44+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -86,6 +86,10 @@ steps:
           visual: none
           findings: rv-stops-api,rv-merge-batch-tuple,rv-queued-failing-unwarned,rv-race-refusal
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-04T09:02:21+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): rv-race-refusal
   deliver:
     state: pending
