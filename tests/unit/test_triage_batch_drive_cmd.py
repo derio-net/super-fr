@@ -931,9 +931,11 @@ def test_a_merged_batch_stays_merged_after_its_members_are_carried(
 
     forge = _closed_world(tmp_path, monkeypatch)
     merged = _pr_closing(owner="derio-net", name="super-fr", number=5, pr_number=9)
+    # A batch PR is attributed only from the repo itself by an allowed author
+    # (gh#936): the captured record carries neither, so give it the collector's.
     merged.update(
         state="MERGED", headRefName="batch/b1", createdAt=NOW.isoformat(),
-        mergedAt=NOW.isoformat(),
+        mergedAt=NOW.isoformat(), author={"login": forge.viewer}, isCrossRepository=False,
     )  # fmt: skip
     forge.prs[REPO] = [merged]
     scope = Scope(kind="repo", target=REPO)
