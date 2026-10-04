@@ -124,8 +124,42 @@ def test_the_scratch_merge_disables_rerere(tmp_path: Path, monkeypatch: pytest.M
     gitseam.Worktree(tmp_path).merge("origin/main")
 
     merge = next(a for a in seen if "merge" in a)
-    assert merge[:5] == ["git", "-c", "rerere.enabled=false", "merge", "--no-ff"]
+    assert merge[0] == "git"
+    assert merge[1:3] == ["-c", "rerere.enabled=false"]
     assert merge[-1] == "origin/main"
+
+
+def test_an_archive_that_empties_a_live_directory_is_not_a_rename(tmp_path: Path) -> None:
+    """gh#800: a close-out archive moves the LAST file out of `runs/` into
+    `implemented/runs/`; git's directory-rename detection then calls the live
+    directory renamed and moves the PR's new cursor after it — a conflict on
+    paths that exist on neither side. fr's artifact directories are never
+    renamed as a whole, so the scratch merge must not infer it, whatever the
+    operator's own `merge.directoryRenames` says."""
+    checkout = _repo(tmp_path)
+    clone = checkout.path
+    _git(clone, "config", "merge.directoryRenames", "conflict")  # git's own default
+    live = clone / "docs" / "runs"
+    live.mkdir(parents=True)
+    (live / "old.yaml").write_text("old\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "a live cursor")
+    _git(clone, "push", "--quiet", "origin", "main")
+    # The PR adds a new cursor to the live directory ...
+    wt = checkout.add_worktree(tmp_path / "scratch", "HEAD")
+    (wt.path / "docs" / "runs" / "new.yaml").write_text("new\n")
+    _git(wt.path, "add", ".")
+    _git(wt.path, "commit", "--quiet", "-m", "pr cursor")
+    # ... while main archives the last one, emptying it.
+    (clone / "docs" / "implemented").mkdir(parents=True)
+    _git(clone, "mv", "docs/runs", "docs/implemented/runs")
+    _git(clone, "commit", "--quiet", "-m", "close-out")
+    _git(clone, "push", "--quiet", "origin", "main")
+    _git(wt.path, "fetch", "--quiet", "origin")
+
+    assert wt.merge("origin/main") == []
+    assert (wt.path / "docs" / "runs" / "new.yaml").read_text() == "new\n"
+    assert not (wt.path / "docs" / "implemented" / "runs" / "new.yaml").exists()
 
 
 def test_merge_base_and_show_read_the_pr_side(tmp_path: Path) -> None:
@@ -139,3 +173,131 @@ def test_merge_base_and_show_read_the_pr_side(tmp_path: Path) -> None:
     assert wt.show("HEAD", "a.txt") == "pr\n"
     assert wt.show(seed, "a.txt") == "a\n"
     assert wt.show(seed, "absent.txt") is None
+
+
+# ------------------------------------------------- the wave driver (§B, R14)
+
+
+def _pushed_elsewhere(tmp_path: Path, checkout: Checkout, message: str) -> None:
+    """A second clone pushes a commit to main, as a merge or a release would."""
+    other = tmp_path / "other"
+    _git(tmp_path, "clone", "--quiet", str(tmp_path / "origin.git"), str(other))
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(other, "config", k, v)
+    (other / "b.txt").write_text(message + "\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "--quiet", "-m", message)
+    _git(other, "push", "--quiet", "origin", "main")
+
+
+def test_fast_forward_brings_the_default_branch_up_to_origin(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _pushed_elsewhere(tmp_path, checkout, "merged batch")
+    checkout.fast_forward()
+    assert (checkout.path / "b.txt").read_text() == "merged batch\n"
+
+
+def test_fast_forward_refuses_a_checkout_on_another_branch(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _git(checkout.path, "checkout", "--quiet", "-b", "work")
+    with pytest.raises(GitError, match="work"):
+        checkout.fast_forward()
+
+
+def _head(tmp_path: Path) -> str:
+    return _git(tmp_path / "other", "rev-parse", "HEAD").strip()
+
+
+def _push_more(tmp_path: Path, message: str) -> str:
+    other = tmp_path / "other"
+    _git(other, "pull", "--quiet", "--ff-only", "origin", "main")
+    (other / "c.txt").write_text(message + "\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "--quiet", "-m", message)
+    _git(other, "push", "--quiet", "origin", "main")
+    return _head(tmp_path)
+
+
+def test_released_after_reads_a_release_commit_that_follows_the_merge(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _pushed_elsewhere(tmp_path, checkout, "feat: the batch (#7)")
+    merge = _head(tmp_path)
+    checkout.fetch()
+    assert not checkout.released_after(merge)
+    _push_more(tmp_path, "release: v9.9.9")
+    checkout.fetch()
+    assert checkout.released_after(merge)
+
+
+def test_an_earlier_release_does_not_release_a_later_merge(tmp_path: Path) -> None:
+    """rg-9: a release cut before the batch merged is not its release, however
+    recent its commit time."""
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _pushed_elsewhere(tmp_path, checkout, "release: v9.9.8")
+    merge = _push_more(tmp_path, "feat: the batch (#7)")
+    checkout.fetch()
+    assert not checkout.released_after(merge)
+
+
+def test_an_unknown_merge_commit_is_not_released(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _pushed_elsewhere(tmp_path, checkout, "release: v9.9.8")
+    checkout.fetch()
+    assert not checkout.released_after("")
+    assert not checkout.released_after("0" * 40)
+
+
+def test_snapshot_paths_copies_the_default_branch_not_the_working_tree(tmp_path: Path) -> None:
+    """rg-5: the services declaration is read from origin/<default>."""
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _pushed_elsewhere(tmp_path, checkout, "ci")  # b.txt on origin/main
+    checkout.fetch()
+    (checkout.path / ".devcontainer").mkdir()
+    (checkout.path / ".devcontainer" / "fr-profiles.yaml").write_text("ci: {type: none}\n")
+    dest = tmp_path / "snap"
+    dest.mkdir()
+    checkout.snapshot_paths("origin/main", (".devcontainer/fr-profiles.yaml", "b.txt"), dest)
+    assert (dest / "b.txt").read_text() == "ci\n"
+    assert not (dest / ".devcontainer").exists()
+    assert _git(dest, "remote", "get-url", "origin").strip() == str(tmp_path / "origin.git")
+
+
+def test_run_command_runs_an_argument_list_in_the_checkout(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    checkout.run_command(["git", "tag", "post-merge-ran"])
+    assert "post-merge-ran" in _git(checkout.path, "tag")
+    with pytest.raises(GitError, match="exit|failed"):
+        checkout.run_command(["git", "no-such-subcommand"])
+    with pytest.raises(GitError, match="empty"):
+        checkout.run_command([])
+
+
+def test_added_paths_lists_what_a_merge_commit_added_and_exists_at_reads_origin(
+    tmp_path: Path,
+) -> None:
+    """The driver's "already archived" evidence (debug 2026-10-03): the paths a
+    batch's merge commit added, and whether each is still on origin/<default>."""
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _pushed_elsewhere(tmp_path, checkout, "feat: the batch (#7)")  # adds b.txt
+    merge = _head(tmp_path)
+    other = tmp_path / "other"
+    _git(other, "rm", "--quiet", "b.txt")
+    _git(other, "commit", "--quiet", "-m", "chore: archive")
+    _git(other, "push", "--quiet", "origin", "main")
+    checkout.fetch()
+    assert checkout.added_paths(merge) == ("b.txt",)
+    assert not checkout.exists_at("origin/main", "b.txt")
+    assert checkout.exists_at("origin/main", "a.txt")
+
+
+def test_an_unknown_merge_commit_added_nothing(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    assert checkout.added_paths("") == ()
+    assert checkout.added_paths("0" * 40) == ()

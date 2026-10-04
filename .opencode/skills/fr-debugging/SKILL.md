@@ -105,7 +105,7 @@ passes, no others broken). Open ONE PR via
 `superpowers:finishing-a-development-branch`; the body is derived from
 `fr journal render --scope debug` (root cause + fix + the failing-test-first narrative).
 Record the review — `fr journal add --scope debug --slug <s> --kind review` naming the findings raised, or that none were. There is no cursor here to enforce it as fr-goal's `journal-check` does, so nothing fails if you skip it; that is precisely why it is written down rather than assumed.
-Once the PR is open, relay `closeout: fr pickup --branch <branch>` to the operator verbatim, as the last line of your final message with nothing after it — after merge, a NEW session runs it from the base clone. The PR stays a draft: review approval and the ready transition are the operator's.
+Once the PR is open, relay `closeout: fr pickup --branch <branch>` to the operator verbatim, as the last line of your final message with nothing after it — after merge, a NEW session runs it from the base clone (for a triage batch, the batch's driver, `fr triage batch drive`, starts that session through the batch's runner). The PR stays a draft: review approval and the ready transition are the operator's.
 Stop — the operator merges. Cleanup: that close-out brief is the route, ending in `fr isolation down` — immediate teardown when this skill brought the
 workspace up cold, otherwise `fr isolation gc` reaps the merged workspace automatically (fired on any up/down), so a missed `down` no longer leaks it.
 

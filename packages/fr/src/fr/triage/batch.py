@@ -197,6 +197,70 @@ def check_open_membership(batches: Sequence[Batch], facts: Facts) -> None:
         raise BatchConflictError(f"an issue may be in only one open batch: {detail}")
 
 
+DependencyState = Literal["satisfied", "waiting", "unsatisfiable", "unknown"]
+
+UNSATISFIABLE: frozenset[BatchStage] = frozenset({"cancelled", "abandoned", "partial"})
+"""A dependency that can never become `merged`: withdrawn, closed unmerged, or merged
+with members still open (wave-driver §A). The dependent is blocked, never dispatched."""
+
+
+def check_dependencies(batches: Sequence[Batch]) -> None:
+    """Refuse an `after` that names an unknown batch, the batch itself, or closes a cycle."""
+    ids = {b.id for b in batches}
+    for batch in batches:
+        if batch.id in batch.after:
+            raise BatchConflictError(f"batch {batch.id!r} cannot come after itself")
+        unknown = [a for a in batch.after if a not in ids]
+        if unknown:
+            raise BatchConflictError(
+                f"batch {batch.id!r} comes after unknown batch(es) {', '.join(unknown)}"
+            )
+    graph = {b.id: list(b.after) for b in batches}
+    done: set[str] = set()
+
+    def visit(node: str, path: list[str]) -> None:
+        if node in path:
+            ring = [*path[path.index(node) :], node]
+            raise BatchConflictError(f"batch dependencies form a cycle: {' -> '.join(ring)}")
+        if node in done:
+            return
+        for dep in graph[node]:
+            visit(dep, [*path, node])
+        done.add(node)
+
+    for node in graph:
+        visit(node, [])
+
+
+def dependency_state(dep_id: str, batches: Sequence[Batch], facts: Facts) -> DependencyState:
+    """What waiting on batch *dep_id* means now: only stage `merged` satisfies it."""
+    dep = next((b for b in batches if b.id == dep_id), None)
+    if dep is None:
+        return "unknown"
+    stage = derive_batch_stage(dep, facts)
+    if stage == "merged":
+        return "satisfied"
+    return "unsatisfiable" if stage in UNSATISFIABLE else "waiting"
+
+
+CloseoutState = Literal["none", "started", "archived"]
+
+
+def closeout_state(batch: Batch, facts: Facts) -> CloseoutState:
+    """The close-out column of `batch list`: not a stage. `started` once a `closeout`
+    event exists, `archived` once the archive PR for the batch branch is merged (or
+    the driver recorded the archive PR it merged)."""
+    if not any(e.kind == "closeout" for e in batch.events):
+        return "none"
+    if any(getattr(e, "archived", None) is not None for e in batch.events):
+        return "archived"
+    last = last_dispatch(batch)
+    head = "chore/closeout-" + (last.branch if last else "").replace("/", "-")
+    if any(p.state == "MERGED" and p.head_ref == head for p in facts.prs):
+        return "archived"
+    return "started"
+
+
 # ------------------------------------------------------------------ writer
 
 # A top-level key, plain or quoted (`batches:`, `"batches":`, `'batches':`) —
@@ -271,7 +335,7 @@ def _replace_top_level(text: str, key: str, block: str, *, prepend: bool) -> str
 def save_batches(
     path: Path, batches: Sequence[Batch], *, read: Sequence[Batch], dry_run: bool = False
 ) -> Judgements:
-    """Write *batches* as `path`'s `batches:` section and stamp schema 2.
+    """Write *batches* as `path`'s `batches:` section and stamp schema 3.
 
     Only the `schema:` line and the `batches:` section change: the rest of the
     agent-owned file (its comments and layout included) is kept byte for byte.

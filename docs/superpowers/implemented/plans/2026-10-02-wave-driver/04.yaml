@@ -1,0 +1,76 @@
+schema_version: 2
+phase:
+  number: 4
+  title: 'Decision views: closing order, since last report, needs you now, next up,
+    wave tabs'
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - board-decision-views
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/snapshot.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - tests/unit/test_triage_*.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  estimate_lines: 1400
+tasks:
+- number: 1
+  title: Red — kind, features, unplaced, snapshots
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Write failing tests: `kind` and `features` load and round-trip on any schema; `check` reports unplaced issues as R9 defines them, cancelled batches' open members included; a first render says there is no earlier snapshot, a corrupt snapshot is treated as absent, retention keeps the latest 30, and a second render after a fixture change lists exactly the changed items under merged or closed, filed, stage changes, acceptance rows moved and figures changed
+- number: 2
+  title: Red — needs you now, next up, tabs, order
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Write failing tests: Needs you now lists each of its six kinds and unplaced issues from the same facts the driver reads and nothing for a healthy fixture; Next up equals the order a `drive` plan prints; the wave tabs preselect the most recent wave, switch by keyboard and show every wave with scripts disabled; every section the board showed before is still present and the order is Since last report, Needs you now, Next up, Waves, Backlog by tier
+- number: 3
+  title: Green — the board
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Add `kind` and `features` to the model, the unplaced set to `check`, `snapshot.py` with write, retain and diff, and the four new sections plus the shared tab component to `render.py`, reusing the driver's pure functions
+  - id: P4.T3.S2
+    text: |-
+      Emit the real title, the light, dark and explicit-theme tokens and the 16px gutter from the renderer so no hand patch is needed; REFACTOR + quality gate; refactor: one tab component for the board and the later architecture page
+- number: 4
+  title: Ship it
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      Move the `board-decision-views` row with `fr acceptance set-status`; document `kind`, `features`, snapshots and the new sections in the fr-triage skill and regenerate the mirrors
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-10-02T21:13:37+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-10-02T21:13:37+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-10-02T21:13:37+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-10-02T21:13:37+00:00'
+      note: null
+    P4.T4.S1:
+      state: x
+      ticked_at: '2026-10-02T21:13:37+00:00'
+      note: null
+  completion:
+    at: '2026-10-02T21:13:37+00:00'
+    note: null
+    observed_prs: []

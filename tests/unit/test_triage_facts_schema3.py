@@ -88,10 +88,10 @@ class _Forge(FakeForge):
         return self.open_prs
 
 
-def test_facts_are_written_at_schema_3() -> None:
+def test_facts_are_written_at_the_current_schema() -> None:
     forge = _Forge(issues={REPO: []}, prs={REPO: []}, open_prs=[])
-    assert FACTS_SCHEMA == 3
-    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 3
+    assert FACTS_SCHEMA == 4
+    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 4
 
 
 def test_a_linked_open_pr_gains_files_head_oid_checks_and_merge_state_from_the_join() -> None:

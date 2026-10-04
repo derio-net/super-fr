@@ -120,13 +120,19 @@ class Repair:
     `applies(path)` answers "does this artifact still need it?"; applying `fn`
     must make that answer False, which is where idempotence comes from. The
     stamp is not touched: a repair changes a constraint, not a shape.
+
+    Like `SchemaMigration.fn`, `fn` may return the companion files it rewrote
+    beside the artifact (the matrix repair regenerates the committed reports
+    that render it), and then declares them up front in `companions` so the
+    uncommitted-changes veto covers them too.
     """
 
     kind: str
     name: str
     applies: Callable[[Path], bool]
-    fn: Callable[[Path], None]
+    fn: Callable[[Path], Iterable[Path] | None]
     description: str = ""
+    companions: Callable[[Path], Iterable[Path]] | None = None
 
     @property
     def summary(self) -> str:
@@ -433,14 +439,20 @@ def _held(
     actions: list[PlannedAction],
     veto: Callable[[Path], str | None],
 ) -> str | None:
-    """`veto`'s reason for `path`, or for any companion its planned schema
-    steps declare (`SchemaMigration.companions`); `None` when all are clear."""
+    """`veto`'s reason for `path`, or for any companion its planned steps
+    declare (`SchemaMigration.companions`, `Repair.companions`); `None` when
+    all are clear."""
     reason = veto(path)
     if reason is not None:
         return reason
     steps = {(m.from_version, m.to_version): m for m in reg.schema_migrations(name)}
+    repairs = {r.name: r for r in reg.repairs(name)}
     for action in actions:
-        step = steps.get((action.from_version, action.to_version))  # type: ignore[arg-type]
+        step: SchemaMigration | Repair | None = (
+            repairs.get(action.repair)
+            if action.repair is not None
+            else steps.get((action.from_version, action.to_version))  # type: ignore[arg-type]
+        )
         if step is None or step.companions is None:
             continue
         try:
@@ -639,10 +651,12 @@ def _apply_to_one(
         try:
             if not r.applies(path):
                 continue
-            r.fn(path)
+            wrote = tuple(r.fn(path) or ())
         except Exception as e:
             failed.append(FailedAction(name, path, r.summary, f"{type(e).__name__}: {e}"))
             continue
-        applied.append(PlannedAction(kind=name, path=path, summary=r.summary, repair=r.name))
+        applied.append(
+            PlannedAction(kind=name, path=path, summary=r.summary, repair=r.name, also_wrote=wrote)
+        )
 
     return applied, failed
