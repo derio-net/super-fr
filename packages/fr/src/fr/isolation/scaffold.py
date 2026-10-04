@@ -678,11 +678,12 @@ def _update_profiles_yaml(
     default: bool,
     services: dict[str, dict[str, str]],
 ) -> None:
-    from fr.artifacts.registry import artifact_kind
+    from fr.artifacts.registry import artifact_kind, read_verbatim
     from fr.services.render import SERVICE_ORDER, render_services
 
     path = repo_root / ".devcontainer" / "fr-profiles.yaml"
-    text = path.read_text() if path.is_file() else ""
+    # Verbatim: `read_text` would turn CRLF into LF before the surgery saw it.
+    bom, text = read_verbatim(path) if path.is_file() else ("", "")
     data = (yaml.safe_load(text) if text else {}) or {}
     data.setdefault("profiles", {})
     entry: dict[str, object] = {"purpose": purpose, "secrets": secrets}
@@ -701,7 +702,9 @@ def _update_profiles_yaml(
         # dump, which says the right thing but drops the operator's comments.
         edited = yaml.safe_dump(data, sort_keys=False)
     newline = "\r\n" if "\r\n" in text else "\n"
-    path.write_text(edited + render_services(services, newline=newline))
+    if newline != "\n":
+        edited = edited.replace("\r\n", "\n").replace("\n", newline)
+    path.write_text(bom + edited + render_services(services, newline=newline), newline="")
     artifact_kind("profiles").write_version(path, artifact_kind("profiles").current_version)
 
 
@@ -778,8 +781,12 @@ def _edit_profiles_text(
     # Split on `\n` alone (never `splitlines`, which also breaks on `\x0c` and
     # U+2028 inside a comment); a kept `\r` is stripped here and re-added.
     out = newline.join(ln.rstrip("\r") for ln in lines) + newline
+    # The strict loader refuses a duplicate key: `safe_load` keeps the last,
+    # so an appended `dev:` beside an unmatched `"dev":` would read as intended.
+    from fr.artifacts.structure import _StrictLoader
+
     try:
-        reread = yaml.safe_load(out) or {}
+        reread = yaml.load(out, Loader=_StrictLoader) or {}  # noqa: S506
     except yaml.YAMLError:
         return None
     reread.pop("schema_version", None)

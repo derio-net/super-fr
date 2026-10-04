@@ -1130,3 +1130,67 @@ def test_rescaffolding_a_profile_replaces_only_its_entry(repo: Path) -> None:
     assert data["profiles"]["dev"] == {"purpose": "new purpose", "secrets": []}
     assert list(data["profiles"]) == ["dev", "admin"]
     assert data["default"] == "dev"
+
+
+def test_a_crlf_profiles_file_stays_crlf_and_keeps_its_comments(repo: Path) -> None:
+    """Review of #805: `read_text` turned CRLF into LF before the line surgery
+    saw it, so the whole file came back with new line endings."""
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_bytes(_COMMENTED_PROFILES.replace("\n", "\r\n").encode())
+    res = runner.invoke(
+        app,
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "readonly",
+            "--purpose",
+            "read-only review",
+            "--tracking",
+            "none",
+            "--backend",
+            "github",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    raw = (repo / PROFILES).read_bytes().decode()
+    assert "# the everyday one\r\n" in raw
+    assert "\n" not in raw.replace("\r\n", "")  # no bare LF anywhere
+    assert list(_profiles(repo)["profiles"]) == ["dev", "admin", "readonly"]
+
+
+def test_a_quoted_profile_key_never_ends_up_duplicated(repo: Path) -> None:
+    """Review of #805: `safe_load` keeps the last of two equal keys, so a
+    surgery that appended a second `dev:` beside a quoted `"dev":` read back
+    as intended. The re-read must refuse duplicates and fall back instead."""
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_text(
+        'schema_version: 2\nprofiles:\n  "dev":\n    purpose: old\n    secrets: []\ndefault: dev\n'
+    )
+    res = runner.invoke(
+        app,
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "dev",
+            "--purpose",
+            "new",
+            "--tracking",
+            "none",
+            "--backend",
+            "github",
+            "--force",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    from fr.artifacts.structure import _StrictLoader
+
+    data = yaml.load((repo / PROFILES).read_text(), Loader=_StrictLoader)  # noqa: S506
+    assert data["profiles"] == {"dev": {"purpose": "new", "secrets": []}}
