@@ -5848,9 +5848,13 @@ rows:
       over) and the summary counts queued PRs
     origin:
     - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_train_line_names_head_then_queued_and_stepped
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_summary_line_adds_queued_between_closing_and_blocked
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_train_line_comes_before_the_actions_in_plan_mode_and_with_yes
+    status: ci
+    notes: Train line and queued count printed in plan mode and with --yes
   - id: drive-merge-train-live-wave
     capability: triage-batch-drive
     acceptance: In a live wave of several ready PRs in one repo, each PR is updated
