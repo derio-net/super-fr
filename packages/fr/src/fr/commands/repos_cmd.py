@@ -16,6 +16,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.repos import (
     DEFAULT_MANIFEST,
@@ -84,7 +85,7 @@ def sync(
     try:
         entries = _collection(mpath, args)
     except ManifestError as err:
-        err_console.print(f"[red]error:[/red] {err}")
+        err_console.print(f"[red]error:[/red] {escape(str(err))}")
         raise typer.Exit(2) from err
 
     if not entries:

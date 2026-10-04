@@ -20,6 +20,7 @@ from typing import get_args
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.commands.common import resolve_repo_root
 from fr.journal.model import (
@@ -231,7 +232,7 @@ def add(
             input=is_input,
         )
     except ValueError as e:
-        err_console.print(f"[red]invalid entry:[/red] {e}")
+        err_console.print(f"[red]invalid entry:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
 
     existing = _load(path)
@@ -296,7 +297,7 @@ def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, mes
             ),
         )
     except engine.RecordRefusedError as e:
-        err_console.print(f"[red]{e}[/red] — nothing written", soft_wrap=True)
+        err_console.print(f"[red]{escape(str(e))}[/red] — nothing written", soft_wrap=True)
         raise typer.Exit(2) from e
     for notice in outcome.notices:  # an unverifiable operator claim says so (p3-r1)
         err_console.print(notice, markup=False, soft_wrap=True)
@@ -399,7 +400,7 @@ def resolve(
     try:
         entries = _load(path)
     except JournalParseError as e:
-        err_console.print(f"[red]journal parse error:[/red] {e}")
+        err_console.print(f"[red]journal parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     target = next((e for e in entries if e.id == entry_id), None)
     if target is None:
@@ -583,7 +584,7 @@ def check(
     try:
         entries = _load(path)
     except JournalParseError as e:
-        err_console.print(f"[red]journal parse error:[/red] {e}")
+        err_console.print(f"[red]journal parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     failed = False
     # Deferrals pass the gate, but are SAID, never silent: each names the
@@ -737,7 +738,7 @@ def handoff(
     try:
         entries = _load(path)
     except JournalParseError as e:
-        err_console.print(f"[red]journal parse error:[/red] {e}")
+        err_console.print(f"[red]journal parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     plan_path = root / plan_dir if plan_dir else root / "docs" / "superpowers" / "plans" / slug
     try:
@@ -745,7 +746,7 @@ def handoff(
     except (PlanSchemaError, OSError) as e:
         err_console.print(
             f"[red]cannot compose a dependency-scoped handoff: plan {plan_path} "
-            f"is not parseable ({e})[/red]"
+            f"is not parseable ({escape(str(e))})[/red]"
         )
         raise typer.Exit(2) from e
     headers = [p.phase for p in plan.phases if p.phase.number == phase]
