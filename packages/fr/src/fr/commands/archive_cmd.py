@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, cast
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.archive import (
     ArchiveError,
@@ -134,7 +135,7 @@ def _refuse_on_isolation_error() -> Iterator[None]:
     try:
         yield
     except IsolationError as e:
-        err_console.print(f"refusing to archive — {e}", soft_wrap=True)
+        err_console.print(f"refusing to archive — {escape(str(e))}", soft_wrap=True)
         raise typer.Exit(2) from e
 
 
@@ -487,7 +488,7 @@ def archive_command(
             report = build_plan_report(target, gh)
         except PlanSchemaError as e:
             if not all_plans:
-                err_console.print(f"parse error: {e}")
+                err_console.print(f"parse error: {escape(str(e))}")
                 raise typer.Exit(5) from e
             skipped.append(f"{target.name}: parse error: {e}")
             continue
