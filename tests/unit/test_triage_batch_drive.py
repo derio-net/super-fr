@@ -332,8 +332,37 @@ def test_an_archived_batch_is_not_closed_out() -> None:
     snap = _snap([b], {"old": "merged"}, released=frozenset({"old"}),
                  archived=frozenset({"old"}))  # fmt: skip
     got = drive_pass(snap)
-    assert got.actions == ()
+    # recorded once, so no later pass re-probes it and the board sees it (gh#899, gh#900)
+    assert [(a.kind, a.batch, a.pr, a.archived) for a in got.actions] == [("adopt", "old", None, 0)]
     assert got.summary.closing == 0 and got.summary.done
+
+
+def test_an_open_hand_opened_closeout_pr_is_adopted_not_doubled() -> None:
+    """gh#912: a close-out started by hand left its PR open on
+    `chore/closeout-<batch branch>`; the driver records it instead of starting a
+    second session, due or not, and the batch is still closing."""
+    b = _merged("x", 1)
+    hand = _live(895, "h895", head_ref="chore/closeout-feat-batch-x")
+    for released in (frozenset(), frozenset({"x"})):
+        got = drive_pass(_snap([b], {"x": "merged"}, released=released, adopted={"x": hand}))
+        assert [(a.kind, a.pr, a.archived) for a in got.actions] == [("adopt", 895, None)]
+        assert got.summary.closing == 1
+
+
+def test_a_merged_hand_opened_closeout_pr_finishes_the_batch() -> None:
+    b = _merged("x", 1)
+    hand = _live(895, "", state="MERGED", head_ref="chore/closeout-feat-batch-x")
+    got = drive_pass(_snap([b], {"x": "merged"}, adopted={"x": hand}))
+    assert [(a.kind, a.pr, a.archived) for a in got.actions] == [("adopt", 895, 895)]
+    assert got.summary.closing == 0 and got.summary.done
+
+
+def test_a_recorded_closeout_is_never_adopted() -> None:
+    event = {"kind": "closeout", "at": "2026-10-02T11:00:00Z", "runner": "fake", "handle": "h"}
+    b = _merged("x", 1, events=[event])
+    hand = _live(895, "h895", head_ref="chore/closeout-feat-batch-x")
+    snap = _snap([b], {"x": "merged"}, adopted={"x": hand}, archived=frozenset({"x"}))
+    assert all(a.kind != "adopt" for a in drive_pass(snap).actions)
 
 
 def test_a_merged_batch_without_a_wave_is_still_closed_out() -> None:
