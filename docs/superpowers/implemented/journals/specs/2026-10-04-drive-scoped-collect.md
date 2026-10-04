@@ -95,3 +95,8 @@ Added the drive-carry-keeps-settled-set row (verify: post-merge) for Test Plan 2
 ### sr-group-scope-name-collision-resolved · finding [out-of-scope] · resolves sr-group-scope-name-collision: Judgement keys are owner-blind, so two repos with the same name in a group scope collide
 
 Pre-existing: the judgement key grammar has no owner, and this change did not cause that. To avoid adding a new cross-carry, the spec keys the carried map by (repo.lower(), number), checked against the loop's repo.
+
+<!-- fr:journal kind=finding scope=spec id=sr-group-scope-name-collision-resolved-2 created=2026-10-04T09:04:08+00:00 state=open resolves=sr-group-scope-name-collision tracked_by=#954 -->
+### sr-group-scope-name-collision-resolved-2 · finding [deferred → #954] · resolves sr-group-scope-name-collision: Judgement keys are owner-blind, so two repos with the same name in a group scope collide
+
+Filed at closeout as #954.
