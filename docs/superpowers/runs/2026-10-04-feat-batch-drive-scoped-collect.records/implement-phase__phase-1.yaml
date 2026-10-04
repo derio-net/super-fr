@@ -11,5 +11,4 @@ journal:
     id: d-prev-facts-scope-check
     title: previous facts are scope-checked for batch_prs too
     body: "_previous_facts replaces _previous_batch_prs; known_batch_prs now also comes only from a same-scope facts.json (it always did live in the scope dir, so no practical change)."
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/5a61e23e-3e96-437f-bd16-01a8661a14b8/scratchpad/p1-suite.log
+evidence: {}
