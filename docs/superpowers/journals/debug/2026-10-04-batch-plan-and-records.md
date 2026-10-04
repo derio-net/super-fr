@@ -54,3 +54,8 @@ plan_ops.rewrite_phase_text splices the changed top-level block, trusted only if
 ### fx-653 · finding [fixed] · #653 fixed: brief/template read one derived set; advance makes .records/
 
 fr.workflow.artifacts.DERIVED_EVIDENCE shared by gate, brief and template; brief lists caller evidence only; _record_brief mkdirs the records dir; plan-journal template names phase|global. Pinned in test_run_cli.py and test_record_template.py.
+
+<!-- fr:journal kind=finding scope=debug id=fx-763 created=2026-10-04T05:44:39+00:00 state=fixed -->
+### fx-763 · finding [fixed] · #763 fixed: hand-edited token is a named JournalParseError
+
+parse_journal converts ValueError (and a non-numeric phase=) to JournalParseError naming the entry. Pinned by test_journal_model.py::test_a_hand_edited_token_invalid_for_its_entry_is_a_parse_error.
