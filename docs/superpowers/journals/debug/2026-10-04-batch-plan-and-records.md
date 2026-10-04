@@ -24,3 +24,8 @@ tick/complete_phase/set_tracking_issue/clear_tracking_issue: yaml.safe_load -> m
 ### rc-763 · root-cause · #763: parse_journal catches KeyError only
 
 JournalEntry's model_validator raises ValueError (pydantic ValidationError) for a scope-invalid token; parse_journal (journal/model.py:356) converts only KeyError to JournalParseError. int(phase) on a hand-typed phase= has the same escape.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-639 created=2026-10-04T05:04:04+00:00 -->
+### rc-639 · root-cause · #639: journal add never checks the slug names an artifact
+
+commands/journal_cmd.py add writes journal_path(root, scope, slug) unconditionally. Constraint found: standalone fr-brainstorming records the --input brief BEFORE the spec exists, so the check must admit that entry and any already-existing journal.
