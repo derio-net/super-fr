@@ -1,0 +1,199 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Drive carries known-closed facts over; one cost line per pass
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - drive-collect-carries-closed
+  - drive-collect-views-what-changed
+  - collect-stays-full
+  - drive-collect-cost-line
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_collect_carry.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - tests/unit/triage_fixtures.py
+  - docs/acceptance/*
+  - .changes/feat-batch-drive-scoped-collect.yaml
+  estimate_lines: 380
+tasks:
+- number: 1
+  title: Engine — collect_facts_counted with a carried set (spec §A, R1-R3, R5, R6)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_triage_collect_carry.py using tests.unit.triage_fixtures.FakeForge
+      (it records calls; count `view_issue` with `[c for c in forge.calls if c[0] == "view_issue"]`).
+      Build carried issues as fr.triage.model.Issue(repo=REPO, number=N, title="old", state="closed",
+      url=f"https://github.com/{REPO}/issues/{N}"). Tests, each calling
+      `collect_facts_counted(forge, Scope(kind="repo", target=REPO), now=..., judged=[...], carried=[...])`:
+      (a) a judged key carried closed and absent from the open list is NOT viewed, appears in
+          facts.issues closed with title "old", and stats == CollectStats(viewed=0, carried=1);
+      (b) its `prs` are recomputed: a PR in this pass's list_prs closing it is attached, and a stale
+          `prs` on the carried Issue is replaced;
+      (c) a judged key carried closed but present in the open-issue list reads open, appears once, and
+          is not counted carried (R3);
+      (d) a judged key not carried (unseen) is viewed (viewed=1), and so is a carried issue whose
+          state is "open" (R2);
+      (e) when list_issues returns exactly issue_limit items (pass issue_limit=1 with one open issue),
+          the carried closed key IS viewed and carried == 0 (sr-truncated-issue-list);
+      (f) viewed counts failed views (ending in Unviewed) and a view answered by a /pull/ URL
+          (PR_PAST_LIMIT);
+      (g) a carried issue whose repo differs from the collected repo by owner (group scope a/x vs b/x)
+          is not carried into the other repo;
+      (h) `collect_facts(...)` (no carried) returns a Facts equal to collect_facts_counted(...)[0]
+          and views every not-open judged key (R5).
+      Run `uv run pytest tests/unit/test_triage_collect_carry.py -q --no-cov` — fails on import.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/triage/collect.py add a frozen dataclass
+      `CollectStats(viewed: int = 0, carried: int = 0)`, move the body of `collect_facts` into
+      `collect_facts_counted(..., carried: Iterable[Issue] = ()) -> tuple[Facts, CollectStats]`,
+      and keep `collect_facts` as a wrapper with the SAME explicit keyword signature returning
+      `collect_facts_counted(...)[0]` (mypy-clean: spell the parameters out). Build
+      `carry = {(i.repo.lower(), i.number): i for i in carried if i.state == "closed"}` and
+      `truncated = {w.target for w in warnings if w.source == "issues"}` after the repo loop. In the
+      judged-elsewhere loop, after the `listed_prs` check and before `forge.view_issue`:
+      if repo not in truncated and (hit := carry.get((repo.lower(), number))) is not None: append
+      `hit.model_copy(update={"prs": linked(repo, number), "dispatch_marker_at": None})`, count it
+      carried, continue. Count viewed immediately before every forge.view_issue call. Update the
+      docstrings to say what carried means and why truncation disables it.
+      Run the new tests and tests/unit/test_triage_collect.py — green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: reread collect_facts_counted for duplication between the carried and viewed branches;
+      keep the loop readable (extract a small helper only if it reduces nesting). Run
+      `uv run ruff check packages/fr/src/fr/triage/collect.py tests/unit/test_triage_collect_carry.py`
+      and `uv run mypy packages/fr/src` — clean.
+- number: 2
+  title: Command layer — collect_into(carry=...) returns the stats (spec §B, R4, R5)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_collect_carry.py add command tests with monkeypatched
+      `triage_cmd.make_forge`: (a) collect_into(scope, tmp_path, carry=True) after a first collect that
+      recorded a judged closed issue (judgements.yaml naming it; FakeForge `closed` answering the view)
+      makes zero view_issue calls on the second call and returns CollectStats(viewed=0, carried=1);
+      (b) carry=True with no facts.json, with a corrupt facts.json ("{"), and with a facts.json whose
+      scope is another repo, views the key (R4); (c) carry=False (the default) views it every time (R5);
+      (d) `fr triage collect` through the Typer app (CliRunner, as the existing collect command tests do)
+      views it on a second run too (R5). Run — fails (collect_into has no carry, returns a 2-tuple).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/triage_cmd.py: `collect_into(scope, target_dir, *,
+      pr_limit=PR_LIMIT, carry=False) -> tuple[Facts, Path, CollectStats]`. Add
+      `_previous_closed(path, scope) -> list[Issue]` beside `_previous_batch_prs`: [] when the file is
+      missing or load_facts raises TriageError, or when facts.scope != scope.name or
+      facts.kind != scope.kind; else [i for i in facts.issues if i.state == "closed"]. Call
+      collect_facts_counted with carried=_previous_closed(...) if carry else (). Update collect_command
+      (and any other collect_into caller) to unpack and ignore the stats. Run the tests plus
+      tests/unit/test_triage_*.py — green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: load the previous facts.json once (one helper returning the loaded Facts or None)
+      shared by _previous_batch_prs and _previous_closed, so a pass parses the file once; rerun the
+      triage tests.
+- number: 3
+  title: Driver — recollect carries and prints the cost line (spec §B-§C, R1, R6,
+    R7)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_drive_cmd.py next to test_recollect_goes_through_the_forge_seam:
+      (a) recollect twice over a FakeForge with one judged closed issue: the second call makes no
+      view_issue call; (b) recollect prints `collect: 1 issue viewed, 0 carried over` on the first call
+      and `collect: 0 issues viewed, 1 carried over` on the second (capture with capsys or the module's
+      console, as the existing drive output tests do); (c) a merged batch whose members are all closed
+      stays `merged` (derive_batch_stage over the re-loaded facts) after a recollect where they were
+      carried (R7). Run — fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/triage_batch_cmd.py, recollect calls
+      `collect_into(scope, target, carry=True)` and prints
+      `collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over` through `_say`
+      (plural from fr.triage.render). Update recollect's docstring: it carries known-closed facts over
+      (gh#911); `fr triage collect` does not. Adjust any existing drive test that asserts exact output
+      and now also sees the collect line. Run
+      `uv run pytest tests/unit/test_triage_batch_drive_cmd.py tests/unit/test_triage_scope_groups.py -q --no-cov` — green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: none expected beyond docstrings; if the drive tests needed a view counter, keep it in
+      the fixture rather than per test.
+- number: 4
+  title: Acceptance, change fragment, full suite
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Move the four unit rows (drive-collect-carries-closed, drive-collect-views-what-changed,
+      collect-stays-full, drive-collect-cost-line) to `ci` with the phase's step record
+      `acceptance` section (or `uv run fr acceptance set-status --id <row> --status ci --notes "<why>"
+      --level unit=super-fr:tests/unit/<file>.py#<test_name>`). Anchor refs on test names, never lines.
+  - id: P1.T4.S2
+    text: |-
+      Add .changes/feat-batch-drive-scoped-collect.yaml with `bump: patch` and
+      `summary: triage batch drive no longer re-views every settled judged issue each pass; known-closed
+      facts are carried over and each pass prints a collect cost line (gh#911)`.
+  - id: P1.T4.S3
+    text: |-
+      Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the mypy command
+      from AGENTS.md; commit everything; then run the full suite LAST, after the final code commit, into a
+      host-visible log outside the records dir: `uv run pytest -q --no-cov -n auto > $TMPDIR/p1-suite.log 2>&1`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

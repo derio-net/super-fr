@@ -180,3 +180,9 @@ need no count (decision `d4`).
 - `drive-collect-cost-line` (R6), unit
 - `drive-pass-fast-on-settled-backlog` (Test Plan 1), `verify: post-merge`
 - `drive-carry-keeps-settled-set` (Test Plan 2), `verify: post-merge`
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-04-drive-scoped-collect | `derio-net/super-fr` | `2026-10-04-drive-scoped-collect` | — |
