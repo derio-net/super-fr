@@ -39,3 +39,8 @@ Root cause: live_reservations walks only the dispatching scope batches, yet the 
 ### fix-619 · finding [fixed] · #619: retired installer deleted
 
 Root cause: the script outlived its caller (install.sh dropped it; fr init validator-wrapper replaced it) and stayed shipped as a hand-copied WRAPPER_TEXT duplicate. Pure deletion: script, tests/integration/test_install_validator_wrapper.py, test_closeout_run_clean byte-pin test, check-change-fragment VERSION_REQUIRED_EXACT entry, AGENTS.md/HERMES.md mentions. No red-first test: a deletion has no behaviour to pin; test_install_sh.py already pins install.sh not naming it. Historical comments naming it as retired (plan_validator_wrapper.py, test_init_cmd.py) kept.
+
+<!-- fr:journal kind=finding scope=debug id=fix-455 created=2026-10-04T05:19:10+00:00 state=fixed -->
+### fix-455 · finding [fixed] · #455: agent-* mimic copies .worktreeinclude matches
+
+Root cause: mimic_default in plugins/super-fr/hooks/fr-worktree-create.sh ran only git worktree add, never the .worktreeinclude step spec 2026-09-04 §5.B.3 asks for. Fix: copy_worktreeinclude pipes git ls-files -o -i --exclude-from=.worktreeinclude through git check-ignore --stdin (ignored AND included), copying each best effort. Tests: test_hooks_worktree.py::TestWorktreeCreate::test_agent_worktree_copies_worktreeinclude_matches (red first), ::test_agent_worktree_without_worktreeinclude_copies_nothing.
