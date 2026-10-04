@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from fr.run.model import AnsweredBy
 
@@ -338,7 +338,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 scope=fields["scope"],  # type: ignore[arg-type]
                 id=fields["id"],
                 created=fields["created"],
-                phase=int(fields["phase"]) if "phase" in fields else None,
+                phase=_phase_token(fields.get("phase")),
                 title=_title_from_heading(text, fields["id"]),
                 body="\n".join(block),
                 state=fields.get("state"),  # type: ignore[arg-type]
@@ -355,8 +355,30 @@ def parse_journal(text: str) -> list[JournalEntry]:
             entries.append(entry)
         except KeyError as e:
             raise JournalParseError(f"journal entry missing required field: {e}") from e
+        except ValueError as e:
+            # A hand edit bypasses the writers' checks, so a token invalid for
+            # its entry (`input=` on a plan entry, `phase=two`, ...) reaches the
+            # validator here; name the entry rather than let it escape raw (gh#763).
+            raise JournalParseError(
+                f"journal entry {fields.get('id', '?')!r}: {_validation_text(e)}"
+            ) from e
         i = j
     return entries
+
+
+def _phase_token(value: str | None) -> int | None:
+    if value is None:
+        return None
+    if not value.isdigit():
+        raise ValueError(f"`phase` must be a phase number, got {value!r}")
+    return int(value)
+
+
+def _validation_text(e: ValueError) -> str:
+    """The validator's own sentence(s), without pydantic's envelope."""
+    if isinstance(e, ValidationError):
+        return "; ".join(err["msg"].removeprefix("Value error, ") for err in e.errors())
+    return str(e)
 
 
 def _review_scope_token(value: str | None) -> ReviewScope | None:

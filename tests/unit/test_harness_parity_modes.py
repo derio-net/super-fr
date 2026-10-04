@@ -117,14 +117,16 @@ def test_the_parity_check_passes() -> None:
 def test_visual_evidence_row_follows_spec_section_f() -> None:
     """Spec 2026-09-28-ui-visual-evidence §F: an evidence gate like
     deliver-tests-provenance — enforced per mode on Claude Code, advisory on
-    OpenCode and Hermes (checks 4–5 recorded unobserved), unsupported elsewhere."""
+    Hermes (checks 4–5 recorded unobserved), unsupported elsewhere. OpenCode
+    moved to `partial` with spec 2026-10-02-opencode-observe-2 §G/§H: its
+    reads are witnessed in fixture tests, not yet live."""
     row = _shipped("visual-evidence")
     assert row.kind == "interaction"
     claude = row.harnesses["claude-code"]
     assert claude.modes is not None and set(claude.modes) == set(MODES)
     assert {claude.state_in(m) for m in MODES} == {"enforced"}
     assert "host" in (claude.modes["devcontainer"].scope_note or "")
-    for harness in ("opencode", "hermes"):
-        assert row.harnesses[harness].state == "advisory", harness
+    assert row.harnesses["opencode"].state == "partial"
+    assert row.harnesses["hermes"].state == "advisory"
     for harness in ("codex", "copilot-cli"):
         assert row.harnesses[harness].state == "unsupported", harness

@@ -448,7 +448,7 @@ def _plan_writes(ctx: _Context, record: StepRecord, overlay: _Overlay) -> dict[s
     if ctx.plan_dir is None:
         raise RecordRefusedError("record ticks plan steps but no plan is recorded for this run")
     from fr.parser import PlanSchemaError, parse
-    from fr.plan_ops import _yaml_dump
+    from fr.plan_ops import rewrite_phase_text
 
     try:
         plan = parse(ctx.plan_dir)
@@ -460,11 +460,12 @@ def _plan_writes(ctx: _Context, record: StepRecord, overlay: _Overlay) -> dict[s
             for step in task.steps:
                 owner[step.id] = ph.phase.number
     raws: dict[int, dict[str, Any]] = {}
+    texts: dict[int, str] = {}
 
     def raw(n: int) -> dict[str, Any]:
         if n not in raws:
-            text = overlay.read(ctx.plan_dir / f"{n:02d}.yaml")  # type: ignore[operator]
-            raws[n] = yaml.safe_load(text or "") or {}
+            texts[n] = overlay.read(ctx.plan_dir / f"{n:02d}.yaml") or ""  # type: ignore[operator]
+            raws[n] = yaml.safe_load(texts[n]) or {}
         return raws[n]
 
     counts: dict[str, int] = {}
@@ -519,7 +520,8 @@ def _plan_writes(ctx: _Context, record: StepRecord, overlay: _Overlay) -> dict[s
         counts["completed"] = counts.get("completed", 0) + 1
 
     for n, data in raws.items():
-        overlay.put(ctx.plan_dir / f"{n:02d}.yaml", _yaml_dump(data))
+        # Ticks and completion live under `state:`; nothing else is rewritten (gh#502).
+        overlay.put(ctx.plan_dir / f"{n:02d}.yaml", rewrite_phase_text(texts[n], data, "state"))
     _check_plan_parses(ctx.plan_dir, overlay)
     return counts
 

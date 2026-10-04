@@ -77,6 +77,7 @@ class FakeForge:
         file_bodies: dict[tuple[str, str, str], str | Exception] | None = None,
         comments: dict[tuple[str, int], list[dict[str, Any]]] | None = None,
         head_prs: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
+        viewer: str = "operator",
     ) -> None:
         self.issues = issues
         self.prs = prs
@@ -86,6 +87,7 @@ class FakeForge:
         self.file_bodies = file_bodies or {}
         self.comments = comments or {}
         self.head_prs = head_prs or {}
+        self.viewer = viewer
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
@@ -128,6 +130,10 @@ class FakeForge:
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
         self.calls.append(("list_prs_by_head", {"repo": repo, "branch": branch}))
         return self.head_prs.get((repo, branch), [])
+
+    def viewer_login(self) -> str:
+        self.calls.append(("viewer_login", {}))
+        return self.viewer
 
     def anchor_reads(self) -> list[dict[str, Any]]:
         """`read_file_at_ref` calls other than collect's one config read per repo."""

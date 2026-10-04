@@ -64,6 +64,8 @@ class World:
             "files": [],
             "created_at": "2026-10-01T11:00:00+00:00",
             "merged_at": None,
+            "author": "operator",
+            "cross_repo": False,
             **kw,
         }
 
@@ -89,6 +91,7 @@ class World:
             ],  # fmt: skip
             prs=[prs[n] for n, p in self.prs.items() if not p["closes"] and p["state"] == "OPEN"],
             config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
+            viewer="operator",
         )
 
     def _pr(self, n: int) -> PullRequest:
@@ -106,6 +109,8 @@ class World:
             head_oid=p["head_oid"] if p["state"] == "OPEN" else "",
             files=p["files"] if p["state"] == "OPEN" else [],
             checks=self.all_checks.get(n, {"pass": 1, "fail": 0, "pending": 0}),
+            author=p["author"],
+            cross_repo=p["cross_repo"],
         )
 
     # -- the GhClient adapter
@@ -137,7 +142,8 @@ class World:
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         return [
             {"number": n, "state": p["state"], "isDraft": p["draft"], "headRefName": branch,
-             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]]}
+             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]],
+             "author": {"login": p["author"]}, "isCrossRepository": p["cross_repo"]}
             for n, p in self.prs.items() if p["head_ref"] == branch
         ]  # fmt: skip
 
@@ -192,6 +198,14 @@ class DriveCheckout:
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return descendant not in self.behind
+
+    def commits_behind(
+        self, head: str, ref: str
+    ) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
+        return (("code", (("M", "packages/x.py"),)),)
+
+    def changed_paths(self, ref: str, head: str) -> frozenset[str]:
+        return frozenset()
 
     def add_worktree(self, where: Path, ref: str) -> Any:
         return _Worktree(self, where)
@@ -530,6 +544,63 @@ def test_a_failing_check_warns_once_per_head_across_loop_passes(
     assert _lines(out, "warn") == ["warn b1: PR #101 CI failing at sha-101: lint"]
     assert world.merged == [(101, "sha-101", "squash")]
     assert sleeps[:2] == [5, 5]
+
+
+@pytest.mark.parametrize(
+    ("kw", "reason"),
+    [
+        (dict(cross_repo=True), "opened from a fork"),
+        (dict(author="mallory"), "by mallory, not an allowed author"),
+    ],
+    ids=["fork", "foreign-author"],
+)
+def test_a_foreign_pr_on_the_batch_branch_is_never_merged_and_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, kw: dict[str, Any], reason: str,
+) -> None:  # fmt: skip
+    """gh#936: green, not a draft, on `feat/batch-b1` after the dispatch — and still
+    never merged, because a branch name is not an identity."""
+    _pr_open(world, tmp_path, **kw)
+    sleeps: list[float] = []
+
+    def _stop_after_three(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop_after_three)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    assert isinstance(result.exception, _StopError), result.output
+    assert len(world.passes) >= 3  # type: ignore[attr-defined]
+    assert world.merged == [] and not [c for c in world.calls if c.startswith("pr_merge")]
+    assert _lines(result.output, "foreign") == [
+        f"foreign b1: PR #101 on feat/batch-b1 is not this batch's: {reason}; it is never merged"
+    ]
+
+
+def test_an_allow_listed_author_in_triage_yaml_is_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.config = {"pr_authors": ["fr-bot"]}
+    _pr_open(world, tmp_path, author="fr-bot")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_an_untrusted_archive_pr_is_never_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _merged(world, tmp_path, events=closeout)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"], cross_repo=True)
+    world.pr(202, "chore/closeout-feat-batch-b1", [], author="mallory")
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    _drive(tmp_path, "--once", "--yes")
+    assert world.merged == []
 
 
 def test_a_pr_behind_its_base_is_updated_then_merged_on_a_later_pass(

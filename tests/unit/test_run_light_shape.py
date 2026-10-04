@@ -120,6 +120,7 @@ def _brainstorm_record(root: Path, **overrides: object) -> Path:
         "step": "brainstorm",
         "outcome": "done",
         "emitted": {"spec": SPEC_REL},
+        "evidence": {"answered_by": "agent"},
     }
     data.update(overrides)
     path = write_record(root, data)
@@ -212,7 +213,7 @@ def test_a_rebind_after_the_first_step_is_refused(tmp_path: Path) -> None:
     root = _at_brainstorm(tmp_path)
     _ok(
         root,
-        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done",
+        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done", "--answered-by", "agent",
          "--emitted", f"spec={SPEC_REL}"],
     )  # fmt: skip
     _ok(root, ["run", "advance", RUN])  # spec-review: running
@@ -285,7 +286,7 @@ def _at_light_plan(tmp_path: Path) -> Path:
     root = _at_brainstorm(tmp_path, shape="fr-goal-light")
     _ok(
         root,
-        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done",
+        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done", "--answered-by", "agent",
          "--emitted", f"spec={SPEC_REL}"],
     )  # fmt: skip
     _ok(root, ["run", "advance", RUN])  # plan: running

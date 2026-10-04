@@ -105,6 +105,49 @@ def _yaml_dump(d: dict[str, Any]) -> str:
     return dump_plan_yaml(_coerce_step_texts(d))
 
 
+_TOP_LEVEL_KEY = re.compile(r"^([A-Za-z_][\w-]*):(?:\s|$)")
+
+
+def _splice_block(text: str, key: str, value: Any) -> str | None:
+    """`text` with the top-level `key:` block re-serialised, every other byte
+    kept — or None when the block cannot be found exactly once."""
+    lines = text.splitlines(keepends=True)
+    starts = [i for i, line in enumerate(lines) if _TOP_LEVEL_KEY.match(line)]
+    owned = [i for i in starts if _TOP_LEVEL_KEY.match(lines[i]).group(1) == key]  # type: ignore[union-attr]
+    if len(owned) != 1:
+        return None
+    start = owned[0]
+    end = next((i for i in starts if i > start), len(lines))
+    # A blank or column-0 comment line just above the next key belongs to it.
+    while end > start + 1 and (not lines[end - 1].strip() or lines[end - 1].startswith("#")):
+        end -= 1
+    block = _yaml_dump({key: value})
+    if end < len(lines) and not block.endswith("\n"):
+        block += "\n"
+    return "".join(lines[:start]) + block + "".join(lines[end:])
+
+
+def rewrite_phase_text(original: str, raw: dict[str, Any], *keys: str) -> str:
+    """The phase-file text for `raw`, re-serialising only the top-level
+    `keys` blocks the caller changed and keeping every other byte of
+    `original` (gh#502).
+
+    A phase file is a review artifact: a tick that re-dumps the whole file
+    restyles every hand-edited scalar and buries the one-line change in the
+    PR's plan diff. The splice is trusted only when the result parses back to
+    exactly `raw`; anything else (a duplicated key, a shape the line scan
+    misreads) falls back to the whole-file dump this replaced.
+    """
+    text: str | None = original
+    for key in keys:
+        text = _splice_block(text, key, raw[key]) if text is not None else None
+    try:
+        faithful = text is not None and yaml.safe_load(text) == raw
+    except yaml.YAMLError:  # e.g. an alias whose anchor sat in the replaced block
+        faithful = False
+    return text if faithful and text is not None else _yaml_dump(raw)
+
+
 # ---------------------------------------------------------------------------
 # vk.plan.create
 
@@ -638,7 +681,8 @@ def tick(
         raise PlanEditError(f"step id {step_id!r} not found in any phase")
 
     phase_path = plan_dir / f"{target_phase_n:02d}.yaml"
-    raw = yaml.safe_load(phase_path.read_text())
+    text = phase_path.read_text()
+    raw = yaml.safe_load(text)
 
     current = raw["state"]["steps"][step_id]
     if current.get("state") == state and (note is None or current.get("note") == note):
@@ -649,7 +693,7 @@ def tick(
         "ticked_at": _now_iso(),
         "note": note,
     }
-    phase_path.write_text(_yaml_dump(raw))
+    phase_path.write_text(rewrite_phase_text(text, raw, "state"))
 
     # Re-parse to validate schema still holds
     parse(plan_dir)
@@ -675,11 +719,12 @@ def complete_phase(plan_dir: Path, phase_n: int, *, note: str | None = None) -> 
             )
 
     phase_path = plan_dir / f"{phase_n:02d}.yaml"
-    raw = yaml.safe_load(phase_path.read_text())
+    text = phase_path.read_text()
+    raw = yaml.safe_load(text)
     raw["state"]["completion"]["at"] = _now_iso()
     if note is not None:
         raw["state"]["completion"]["note"] = note
-    phase_path.write_text(_yaml_dump(raw))
+    phase_path.write_text(rewrite_phase_text(text, raw, "state"))
     parse(plan_dir)
     _stage(plan.repo_root, [phase_path])
 
@@ -694,11 +739,12 @@ def set_tracking_issue(plan_dir: Path, phase_n: int, url: str) -> None:
     phase_path = plan_dir / f"{phase_n:02d}.yaml"
     if not phase_path.exists():
         raise PlanEditError(f"phase {phase_n} yaml not found: {phase_path}")
-    raw = yaml.safe_load(phase_path.read_text())
+    text = phase_path.read_text()
+    raw = yaml.safe_load(text)
     if raw["phase"].get("tracking_issue") == url:
         return
     raw["phase"]["tracking_issue"] = url
-    phase_path.write_text(_yaml_dump(raw))
+    phase_path.write_text(rewrite_phase_text(text, raw, "phase"))
     try:
         parse(plan_dir)
     except PlanSchemaError as e:
@@ -718,11 +764,12 @@ def clear_tracking_issue(plan_dir: Path, phase_n: int) -> bool:
     phase_path = plan_dir / f"{phase_n:02d}.yaml"
     if not phase_path.exists():
         raise PlanEditError(f"phase {phase_n} yaml not found: {phase_path}")
-    raw = yaml.safe_load(phase_path.read_text())
+    text = phase_path.read_text()
+    raw = yaml.safe_load(text)
     if raw["phase"].get("tracking_issue") is None:
         return False
     raw["phase"]["tracking_issue"] = None
-    phase_path.write_text(_yaml_dump(raw))
+    phase_path.write_text(rewrite_phase_text(text, raw, "phase"))
     try:
         parse(plan_dir)
     except PlanSchemaError as e:

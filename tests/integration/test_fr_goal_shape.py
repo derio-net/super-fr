@@ -289,6 +289,8 @@ def test_the_shipped_shape_walks_from_start_past_the_gated_brainstorm(tmp_path: 
             "brainstorm",
             "--state",
             "done",
+            "--answered-by",
+            "agent",
             "--emitted",
             "spec=docs/superpowers/specs/2026-08-27-x-design.md",
         ],
@@ -323,6 +325,8 @@ def test_the_implement_steps_brief_tells_a_harness_to_fan_out_per_phase(tmp_path
     ):
         _fr(root, ["run", "advance", "r1"])
         argv = ["run", "resolve", "r1", "--step", step, "--state", "done"]
+        if step == "brainstorm":
+            argv += ["--answered-by", "agent"]
         if emitted:
             argv += ["--emitted", emitted]
         if step == "spec-review":
@@ -415,6 +419,8 @@ def _drive_to_implement(root: Path, run_id: str, branch: str, spec_rel: str, pla
                 "brainstorm",
                 "--state",
                 "done",
+                "--answered-by",
+                "agent",
                 "--emitted",
                 f"spec={spec_rel}",
             ],
@@ -488,7 +494,7 @@ def test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed(
     _fr(root, ["run", "start", "fr-goal", "--branch", "feat/gate", "--run-id", "g1"])
     _fr(root, ["run", "advance", "g1"])
     _fr(root, ["run", "resolve", "g1", "--step", "brainstorm", "--state", "done",
-               "--emitted", "spec=docs/spec.md"])  # fmt: skip
+               "--answered-by", "agent", "--emitted", "spec=docs/spec.md"])  # fmt: skip
     _fr(root, ["run", "advance", "g1"])
     _fr(root, ["run", "resolve", "g1", "--step", "spec-review", "--state", "done",
                *spec_review_evidence(root, "docs/spec.md")])  # fmt: skip

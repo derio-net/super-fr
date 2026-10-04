@@ -155,7 +155,18 @@ def test_capture_records_each_dispatch_brief_under_the_unit_that_claimed_it(
     resolved = _invoke(
         repo,
         shipped,
-        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done", *EMITS["brainstorm"]],
+        [
+            "run",
+            "resolve",
+            RUN,
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--answered-by",
+            "agent",
+            *EMITS["brainstorm"],
+        ],
     )
     assert resolved.exit_code == 0, resolved.output
     (unit,) = [
@@ -286,7 +297,7 @@ def test_a_corrupt_usage_file_never_fails_the_resolve(tmp_path: Path, transcript
 
 
 @pytest.mark.usefixtures("complete_live_pr")
-def test_archive_captures_the_closeout_session_and_moves_the_file(
+def test_archive_never_captures_the_closeout_session_and_moves_the_file(
     tmp_path: Path, transcripts: Path
 ) -> None:
     from fr.archive import _archive_run
@@ -304,7 +315,9 @@ def test_archive_captures_the_closeout_session_and_moves_the_file(
     # p2-r29: closeout merges into the host's capture, never erasing deliver
     assert capture.at == ("resolve:brainstorm", "deliver", "closeout")
     by_id = {s.session: s for s in capture.sessions}
-    assert by_id[CC_SESSION].unavailable is None, "the closeout session is captured"
+    # #848 (spec 2026-10-02-opencode-observe-2 §C): whoever closes the run out
+    # is not evidence it ran in their session.
+    assert CC_SESSION not in by_id, "the closeout session is never captured"
     assert "deliver-session" in by_id, "the delivering session is kept"
     staged = _git(repo, "diff", "--cached", "--name-only").split()
     assert f"docs/superpowers/implemented/usage/{RUN}.yaml" in staged
@@ -323,6 +336,7 @@ def _direct_capture(repo: Path, at: str, env: dict[str, str], **kw):
     from fr.run.model import load_run_state
     from fr.usage.capture import capture
 
+    kw.setdefault("ambient", True)  # these stand in for a step resolve's capture
     return capture(repo, load_run_state(repo, RUN), at, env, **kw)
 
 

@@ -75,6 +75,8 @@ class Forge(Protocol):
 
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]: ...
 
+    def viewer_login(self) -> str: ...
+
 
 GH_MISSING = (
     "gh (the GitHub CLI) was not found on PATH: install it from https://cli.github.com "
@@ -138,6 +140,10 @@ class GhForge:
         with _forge_errors():
             return RealGhClient().list_prs_by_head(repo, branch)
 
+    def viewer_login(self) -> str:
+        with _forge_errors():
+            return gh.viewer_login()
+
 
 def scope_repos(
     forge: Forge, scope: Scope, *, repo_limit: int = REPO_LIMIT
@@ -186,6 +192,8 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             mergeable=r.get("mergeable") or "UNKNOWN",
             merge_state=r.get("mergeStateStatus") or "UNKNOWN",
             review=r.get("reviewDecision") or None,
+            author=_login(r),
+            cross_repo=r.get("isCrossRepository"),
         )
         refs = [
             _ref(ref["repository"]["owner"]["login"], ref["repository"]["name"], ref["number"])
@@ -193,6 +201,14 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
         ]
         out.append((pr, refs))
     return out
+
+
+def _login(raw: dict[str, Any]) -> str | None:
+    """The PR author's login; None when the record carries none (never read, or a
+    deleted account), which no batch attribution trusts."""
+    author = raw.get("author")
+    login = author.get("login") if isinstance(author, dict) else None
+    return str(login) if login else None
 
 
 def _checks(raw: Iterable[dict[str, Any]]) -> dict[str, int]:
@@ -408,6 +424,7 @@ def collect_facts_counted(
     r2p-f3), so a finished batch costs nothing on later collects.
     """
     repos, warnings = scope_repos(forge, scope, repo_limit=repo_limit)
+    viewer = forge.viewer_login() or None
     skipped: list[Skipped] = []
     collected: list[str] = []
     raw_issues: list[tuple[str, dict[str, Any]]] = []
@@ -531,6 +548,7 @@ def collect_facts_counted(
         batch_prs=batch_prs,
         judged_prs=judged_prs,
         config=config,
+        viewer=viewer,
     )
     return facts, CollectStats(viewed=viewed, carried=carried_n)
 
@@ -630,8 +648,9 @@ def _batch_prs(
     Skipped when a collected PR (*seen*) of THIS dispatch is already on the
     branch — a PR opened before the last dispatch belongs to an earlier one and
     must not hide the redispatch's PR (review r2p-f1) — or when *known* (the
-    previous facts) holds a merged or closed PR of this dispatch: that batch is
-    terminal, and its PR is carried over instead (review r2p-f3).
+    previous facts) holds a merged or closed PR of this dispatch whose identity
+    was read: that batch is terminal, and its PR is carried over instead (review
+    r2p-f3).
     """
     by_name = {repo.split("/", 1)[1].lower(): repo for repo in collected}
     found: list[PullRequest] = []
@@ -646,7 +665,16 @@ def _batch_prs(
         ]
         if any(p in seen for p in ours):
             continue
-        terminal = [p for p in ours if p in known and p.state in {"MERGED", "CLOSED"}]
+        # A known PR whose author and origin were never read (facts from before gh#936)
+        # is not carried over: no attribution would trust it, so it is read again.
+        terminal = [
+            p
+            for p in ours
+            if p in known
+            and p.state in {"MERGED", "CLOSED"}
+            and p.author is not None
+            and p.cross_repo is not None
+        ]
         if terminal:
             found.extend(terminal)
             continue

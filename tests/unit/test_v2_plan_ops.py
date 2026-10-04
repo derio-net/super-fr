@@ -241,6 +241,10 @@ def test_create_rejects_spec_with_mislabeled_table_header(tmp_path):
     assert slug not in spec_path.read_text()
 
 
+# Deliberately a literal, NOT an import of `_CANONICAL_HEADER_LINE` (gh#661):
+# a test that reads the expected header from the code under test passes for
+# any header the code emits. Changing the canonical header means changing this
+# pin too, which is the point.
 _HEADER = "| Plan | Repo | File | Depends on |"
 
 
@@ -707,21 +711,26 @@ def test_rework_list_filters_by_parent_plan(tmp_path):
 
 
 def test_yaml_dump_coerces_step_text_to_literal_block(tmp_path):
-    """After any write (tick, complete, create), step text must use `|-`.
+    """A written phase file's step text uses `|-`, and a tick keeps it.
 
-    yaml.safe_load returns plain str, so round-tripped phase files would
-    regress to plain/quoted scalars without _coerce_step_texts in _yaml_dump.
+    yaml.safe_load returns plain str, so `_yaml_dump` needs _coerce_step_texts
+    to emit `|-` on any whole-file write. Since gh#502 a tick rewrites only
+    `state:` — so the style `create` wrote survives it untouched, rather than
+    being re-imposed on every write.
     """
+    import yaml
+    from fr.plan_ops import _yaml_dump, tick
+
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
     shutil.copytree(fixture, dest)
-
-    from fr.plan_ops import tick
+    phase = dest / "01.yaml"
+    phase.write_text(_yaml_dump(yaml.safe_load(phase.read_text())))
+    assert "text: |-" in phase.read_text()
 
     tick(dest, "P1.T1.S1")
 
-    phase_text = (dest / "01.yaml").read_text()
-    assert "text: |-" in phase_text, "step text must use `|-` after round-trip write"
+    assert "text: |-" in phase.read_text(), "step text must keep `|-` across a tick"
 
 
 def test_self_review_minimal_plan_has_no_issues(tmp_path):

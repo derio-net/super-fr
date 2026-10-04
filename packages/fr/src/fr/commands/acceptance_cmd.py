@@ -9,6 +9,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.acceptance.model import AcceptanceError, Matrix, Row, load_matrix
 from fr.commands.common import resolve_repo_root
@@ -32,7 +33,7 @@ def _load(root: Path) -> Matrix:
     try:
         return load_matrix(matrix_path)
     except AcceptanceError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(1) from e
 
 
@@ -88,7 +89,7 @@ def check_cmd(
         result = check(matrix, root, sibling_root)
         added = _added_since(root, added_since, matrix) if added_since else []
     except AcceptanceError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(1) from e
     if added_since is not None:
         typer.echo(f"added since {added_since}:")
@@ -176,7 +177,7 @@ def report_cmd(
             else:
                 expected = render_committed_set(matrix, root)
         except AcceptanceError as e:
-            err_console.print(f"[red]error:[/red] {e}")
+            err_console.print(f"[red]error:[/red] {escape(str(e))}")
             raise typer.Exit(1) from e
         stale = []
         for rel, want in expected.items():
@@ -218,7 +219,7 @@ def report_cmd(
                 )
             }
     except AcceptanceError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(1) from e
     for path_str, html in files.items():
         p = Path(path_str)
@@ -325,7 +326,7 @@ def _validate_refs(row: Row) -> None:
         try:
             split_ref(ref)
         except AcceptanceError as e:
-            err_console.print(f"[red]error:[/red] {e}")
+            err_console.print(f"[red]error:[/red] {escape(str(e))}")
             raise typer.Exit(2) from e
 
 
@@ -351,7 +352,7 @@ def _apply_rows(
             target=engine.RecordTarget(message=message, acceptance_drops=drops or {}),
         )
     except engine.RecordRefusedError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     for notice in outcome.notices:
         if notice.startswith("warning"):
@@ -452,7 +453,7 @@ def set_status_cmd(
     try:
         merged = merge_levels(drop_levels(target.levels, drops), additions)
     except AcceptanceError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     new_verify = verify if verify is not None else target.verify
     try:
@@ -468,7 +469,7 @@ def set_status_cmd(
             visual=target.visual,  # set-status never touches `visual` (spec 2026-09-28 §A)
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     _validate_refs(new_row)
 
@@ -552,7 +553,7 @@ def add_cmd(
             visual=visual,
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     if any(r.id == new_row.id for r in matrix.rows):
         err_console.print(
@@ -605,7 +606,7 @@ def init_cmd(
     try:
         org, repo = resolve_identity(Matrix(), root)
     except AcceptanceError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(1) from e
     backend = detect_backend(root)
     from fr.services.model import CI_FOR_FORGE, ServicesError
@@ -614,7 +615,7 @@ def init_cmd(
     try:
         services = resolve_services(root)
     except ServicesError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     ci = services.ci
     if ci.source == "declared" and ci.type == "none":
