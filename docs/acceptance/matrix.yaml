@@ -5753,7 +5753,13 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: 'Live run 2026-10-03 (Test Plan 16, fr 5.2.1/5.2.2): batches arch-card-clip
+      (#905, archive #907) and unplaced-prs (#906, archive #908) each ran dispatch ->
+      merge -> release -> post_merge -> close-out -> archive merge, with the operator
+      readying the batch PRs. Not counted as passing: during a GitHub API degradation
+      the driver needed one manual restart (a hung forge read, then exit 2 on its failure)
+      and #907''s CI one re-run (a setup-bun 503). Rerun owed after #909 (read timeouts)
+      and #910 (retry failed reads in loop mode); see also #911, #912, #913.'
     verify: post-merge
   - id: triage-scope-groups
     capability: triage-scope
