@@ -934,6 +934,8 @@ def test_the_cap_counts_batches_outside_the_selection(
     code, out = _drive(tmp_path, "--once", "--yes", "b5")
     assert code == 3, out
     assert runner.dispatched == []
+    # gh#913: the summary counts only the selection, so the held line says why
+    assert _lines(out, "held") == ["held b5: the in-flight cap (4) is full: o1, o2, o3, o4"]
 
 
 def test_a_merged_dependency_outside_the_selection_is_not_blocking(
