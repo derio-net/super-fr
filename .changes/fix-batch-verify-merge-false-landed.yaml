@@ -1,0 +1,2 @@
+bump: patch
+summary: "verify-merge, gc and archive: a fast-forward landing that was later reverted now reads as missing (using the start commit fr recorded at up), a squash that combined a concurrent base edit is no longer reported missing after a later rewrite, and every fr git call trusts only the repository it runs in"
