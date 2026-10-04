@@ -121,6 +121,8 @@ def test_the_in_flight_cap_holds_and_waves_go_in_order() -> None:
         ("dispatch", "w1-a"),
         ("dispatch", "w1-c"),
         ("dispatch", "w1-d"),
+        ("held", "w2-a"),
+        ("held", "w2-b"),
     ]
     assert got.summary.in_flight == 4 and got.summary.pending == 2
 
@@ -500,7 +502,7 @@ def test_the_cap_counts_in_flight_batches_outside_the_selection() -> None:
     b5 = _batch("b5", 5)
     stages = {**{b.id: "dispatched" for b in others}, "b5": "proposed"}
     got = drive_pass(_snap([*others, b5], stages, selected=frozenset({"b5"}), max_inflight=4))
-    assert got.actions == ()
+    assert _kinds(got.actions) == [("held", "b5")]  # held, and says so (gh#913)
     assert got.summary.pending == 1 and not got.summary.done
 
 
