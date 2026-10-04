@@ -29,6 +29,7 @@ HTML-escape anything that came from an issue title or any other outside source.
 from __future__ import annotations
 
 import fnmatch
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -38,7 +39,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from fr.triage.batch import derive_batch_stage
+from fr.triage.batch import BATCH_STAGES, derive_batch_stage
 from fr.triage.components import GUTTER_CSS, TABS_CSS, TABS_SCRIPT, TOKENS_CSS, tabs
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
@@ -333,7 +334,9 @@ article.subsystem ul { margin: 6px 0 0; padding-left: 18px; font-size: .85rem; }
 .bar-row .fill { background: var(--accent); height: 10px; border-radius: 3px; }
 .bar-row .fill.then { background: var(--sev-4); }
 .bar-row .v { font-family: var(--mono); text-align: right; }
-.stages { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .85rem; }
+.stages summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.stage-list { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .85rem;
+  margin-top: 6px; }
 .fragment { margin-top: 28px; }
 """
     + TABS_CSS
@@ -357,6 +360,27 @@ def _list(items: Sequence[str]) -> str:
     return "<ul>" + "".join(f"<li>{esc(i)}</li>" for i in items) + "</ul>"
 
 
+def _stage_counts(batches: Mapping[str, str]) -> str:
+    """Batches per stage, with the per-batch list folded away (gh#917).
+
+    A stage an older fr stored that `BATCH_STAGES` no longer names still counts, last.
+    """
+    if not batches:
+        return '<p class="quiet">no batches</p>'
+    counts = Counter(batches.values())
+    order: list[str] = [s for s in BATCH_STAGES if s in counts]
+    order += sorted(s for s in counts if s not in BATCH_STAGES)
+    chips = "".join(f'<span class="chip">{esc(s)} <b>{counts[s]}</b></span>' for s in order)
+    listing = "".join(
+        f"<span><code>{esc(b)}</code> {esc(s)}</span>" for b, s in sorted(batches.items())
+    )
+    return (
+        f'<div class="chips">{chips}</div><details class="stages">'
+        f"<summary>All {len(batches)} {'batch' if len(batches) == 1 else 'batches'}</summary>"
+        f'<div class="stage-list">{listing}</div></details>'
+    )
+
+
 def _snapshot_panel(snap: Snapshot, previous: Snapshot | None) -> str:
     rows = []
     for name, value in snap.figures.items():
@@ -369,13 +393,10 @@ def _snapshot_panel(snap: Snapshot, previous: Snapshot | None) -> str:
         '<div class="scroll"><table><thead><tr><th>Figure</th><th class="n">Then</th>'
         f'<th class="n">Change</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
     )
-    stages = "".join(
-        f"<span><code>{esc(b)}</code> {esc(s)}</span>" for b, s in sorted(snap.batches.items())
-    )
     diff = diff_snapshots(previous, snap)
     parts = ['<p class="src">Measured then: the figures and batch stages this snapshot stored.</p>']
     parts.append(table)
-    parts.append(f'<div class="stages">{stages or "no batches"}</div>')
+    parts.append(_stage_counts(snap.batches))
     if diff is None:
         parts.append('<p class="lede">The earliest snapshot: nothing earlier to compare.</p>')
     elif diff.empty:
