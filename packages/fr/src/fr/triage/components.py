@@ -81,6 +81,22 @@ TOKENS_CSS = f"""
 :root[data-theme="dark"] {{ {_vars(DARK)} color-scheme: dark; }}
 """
 
+CHROME_CSS = """
+nav.pages { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 10px 0 0; font-size: .9rem; }
+nav.pages a { color: var(--muted); text-decoration: none; padding: 2px 0;
+  border-bottom: 2px solid transparent; }
+nav.pages a[aria-current="page"] { color: var(--ink); font-weight: 600;
+  border-bottom-color: var(--accent); }
+.goal { margin: 8px 0 0; font-size: 1.05rem; color: var(--ink); }
+details.fold { margin-top: 20px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 0 14px; }
+details.fold > summary { cursor: pointer; padding: 10px 0; font-weight: 600; font-size: 1.05rem; }
+details.fold > summary .count { font: 500 .8rem var(--mono); color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; margin-left: 6px; }
+details.fold[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+"""
+"""The page chrome every page's CSS includes: nav bar, goal sentence, collapsed sections."""
+
 GUTTER_CSS = """
 @media (max-width: 480px) {
   main { padding-left: 16px; padding-right: 16px; }
@@ -171,4 +187,29 @@ def tabs(group: str, label: str, panels: Sequence[tuple[str, str, str]], selecte
         f'<div class="tabs" data-tabs>'
         f'<div role="tablist" aria-label="{_esc(label)}" hidden>{"".join(tab_html)}</div>'
         f"{''.join(panel_html)}</div>"
+    )
+
+
+def page_header(current: str) -> str:
+    """The nav bar linking the four pages, *current* marked `aria-current="page"`, then
+    the goal sentence of *current* (spec §A). Every renderer calls it after its masthead."""
+    links = "".join(
+        f'<a href="{_esc(p.file)}"{" aria-current=\"page\"" if p.key == current else ""}>'
+        f"{_esc(p.title)}</a>"
+        for p in PAGES
+    )
+    goal = next(p.goal for p in PAGES if p.key == current)
+    return (
+        f'<nav class="pages" aria-label="Triage pages">{links}</nav>'
+        f'<p class="goal">{_esc(goal)}</p>'
+    )
+
+
+def collapsed(id_: str, title: str, count: int | None, body: str) -> str:
+    """A closed-by-default section: the title and, when known, an item count show on the
+    summary line. *title* is escaped here; *body* is the caller's and must be safe."""
+    n = "" if count is None else f' <span class="count">{count}</span>'
+    return (
+        f'<details id="{_esc(id_)}" class="fold"><summary>{_esc(title)}{n}</summary>'
+        f"{body}</details>"
     )
