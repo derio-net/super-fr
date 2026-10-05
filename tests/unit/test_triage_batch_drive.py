@@ -19,6 +19,7 @@ from fr.triage.batch_drive import (
     Action,
     LivePr,
     Snapshot,
+    Train,
     action_line,
     attributed,
     checks_verdict,
@@ -30,6 +31,7 @@ from fr.triage.batch_drive import (
     is_archived,
     is_finished,
     summary_line,
+    train_line,
     wave_group,
 )
 from fr.triage.model import Batch, PullRequest
@@ -79,6 +81,7 @@ def _snap(
     stages: dict[str, str],
     *,
     live: dict[str, LivePr] | None = None,
+    repos: dict[str, str] | None = None,
     **kw: Any,
 ) -> Snapshot:
     queue = tuple(
@@ -93,7 +96,7 @@ def _snap(
         stages=stages,  # type: ignore[arg-type]
         queue=queue,
         live=live,
-        repos={b.id: REPO for b in batches},
+        repos=repos if repos is not None else {b.id: REPO for b in batches},
         now=kw.pop("now", NOW),
         **kw,
     )
@@ -759,3 +762,148 @@ def test_an_unfinished_batch_is_not_closed() -> None:
     b = _merged("x", 1, events=[_CLOSEOUT])
     snap = _snap([b], {"x": "merged"}, close_sessions=True, sessions=_sessions())
     assert not any(a.kind == "close" for a in drive_pass(snap).actions)
+
+
+# ------------------------------------------------------- the merge train (§A, §C)
+
+
+def _ids(*names: str) -> tuple[list[Batch], dict[str, str]]:
+    return [_dispatched(n, i + 1) for i, n in enumerate(names)], {n: "pr-open" for n in names}
+
+
+def _train_snap(names: tuple[str, ...], live: dict[str, Any] | None = None, **kw: Any) -> Snapshot:
+    batches, stages = _ids(*names)
+    snap = _snap(batches, stages, **kw)
+    if live:
+        snap = Snapshot(**{**snap.__dict__, "live": {**snap.live, **{
+            k: _live(snap.live[k].number, v.pop("head", snap.live[k].head), **v)
+            for k, v in live.items()}}})  # fmt: skip
+    return snap
+
+
+def test_ready_green_prs_form_one_train_in_order() -> None:
+    got = drive_pass(_train_snap(("c", "a", "b")))
+    assert _kinds(got.actions) == [("merge", "a"), ("merge", "b"), ("merge", "c")]
+    assert {a.train for a in got.actions} == {REPO}
+    assert got.trains == (
+        Train(repo=REPO, head="a", candidates=("a", "b", "c"), queued=(), stepped=(),
+              numbers={"a": 1001, "b": 1002, "c": 1000}),
+    )  # fmt: skip
+
+
+def test_a_pending_head_waits_and_the_rest_are_queued() -> None:
+    got = drive_pass(_train_snap(("a", "b", "c"), {"a": {"checks": "pending"}}))
+    assert "merge" not in [a.kind for a in got.actions]
+    (train,) = got.trains
+    assert (train.head, train.candidates, train.queued) == ("a", (), ("b", "c"))
+    assert got.summary.queued == 2
+
+
+def test_a_moved_head_waits_the_train() -> None:
+    got = drive_pass(_train_snap(("a", "b", "c"), {"a": {"head": "elsewhere"}}))
+    assert got.actions == ()
+    (train,) = got.trains
+    assert (train.head, train.queued) == ("a", ("b", "c"))
+
+
+def test_a_failing_head_is_stepped_over_and_the_next_leads() -> None:
+    live = {"a": {"checks": "failing", "failing": ("lint",)}}
+    got = drive_pass(_train_snap(("a", "b", "c"), live))
+    assert _kinds(got.actions) == [("warn", "a"), ("merge", "b"), ("merge", "c")]
+    (train,) = got.trains
+    assert (train.head, train.stepped, train.candidates) == ("b", ("a",), ("b", "c"))
+
+
+def test_green_pending_green_merges_one_and_queues_the_rest() -> None:
+    got = drive_pass(_train_snap(("a", "b", "c"), {"b": {"checks": "pending"}}))
+    assert _kinds(got.actions) == [("merge", "a")]
+    (train,) = got.trains
+    assert (train.head, train.candidates, train.queued) == ("a", ("a",), ("b", "c"))
+    assert got.summary.queued == 2
+
+
+def test_a_failing_member_behind_the_stop_is_warned_and_stepped_over() -> None:
+    live = {"a": {"checks": "pending"}, "b": {"checks": "failing", "failing": ("lint",)}}
+    got = drive_pass(_train_snap(("a", "b", "c"), live))
+    assert _kinds(got.actions) == [("warn", "b")]
+    (train,) = got.trains
+    assert (train.head, train.queued, train.stepped) == ("a", ("c",), ("b",))
+    assert got.summary.queued == 1
+
+
+def test_each_repo_has_its_own_train() -> None:
+    other = "derio-net/other"
+    got = drive_pass(
+        _train_snap(
+            ("a", "b", "c"),
+            repos={"a": other, "b": REPO, "c": REPO},
+        )
+    )
+    assert [(t.repo, t.head, t.candidates) for t in got.trains] == [
+        (other, "a", ("a",)),
+        (REPO, "b", ("b", "c")),
+    ]
+
+
+def test_the_train_order_survives_a_member_leaving() -> None:
+    """merge_order would rearrange b and c once a leaves (shared files); the train does not."""
+    batches, stages = _ids("a", "b", "c")
+    entries = tuple(
+        QueueEntry(batch=b, pr=_pr(b.id, 1000 + i, files=["x.py"])) for i, b in enumerate(batches)
+    )
+    snap = _snap(batches, stages)
+    first = drive_pass(Snapshot(**{**snap.__dict__, "queue": entries}))
+    assert [a.batch for a in first.actions] == ["a", "b", "c"]
+    rest = Snapshot(**{**snap.__dict__, "queue": entries[1:]})
+    assert drive_pass(rest).trains[0].head == "b"
+
+
+def test_a_green_member_ahead_is_the_head_with_no_stored_state() -> None:
+    """R5: a stepped-over PR that is green again takes back its place."""
+    got = drive_pass(_train_snap(("a", "b"), {"b": {"checks": "pending"}}))
+    assert _kinds(got.actions) == [("merge", "a")] and got.trains[0].head == "a"
+
+
+def test_a_waiting_head_is_not_counted_as_queued() -> None:
+    got = drive_pass(_train_snap(("a", "b"), {"a": {"checks": "pending"}}))
+    assert got.summary.queued == 1
+
+
+# ------------------------------------------------------------- lines (C)
+
+
+def _train(**kw: Any) -> Train:
+    base: dict[str, Any] = {
+        "repo": "derio-net/super-fr",
+        "head": "a",
+        "candidates": ("a", "b", "c"),
+        "queued": ("d",),
+        "stepped": ("e",),
+        "numbers": {"a": 12, "b": 13, "c": 14, "d": 15, "e": 16},
+    }
+    return Train(**{**base, **kw})
+
+
+def test_train_line_names_head_then_queued_and_stepped() -> None:
+    assert train_line(_train()) == (
+        "train derio-net/super-fr: head a (PR #12) · then b (#13), c (#14) · "
+        "queued d (#15) · stepped over e (#16)"
+    )
+
+
+def test_train_line_leaves_empty_parts_out() -> None:
+    line = train_line(_train(candidates=("a",), queued=(), stepped=()))
+    assert line == "train derio-net/super-fr: head a (PR #12)"
+
+
+def test_train_line_without_a_head() -> None:
+    line = train_line(_train(head=None, candidates=(), queued=()))
+    assert line == "train derio-net/super-fr: no head · stepped over e (#16)"
+
+
+def test_summary_line_adds_queued_between_closing_and_blocked() -> None:
+    from fr.triage.batch_drive import Summary
+
+    s = Summary(in_flight=1, merged=0, pending=0, closing=2, blocked=3, queued=4)
+    assert summary_line(s) == ("in flight 1, merged 0, pending 0, closing 2, queued 4, blocked 3")
+    assert "queued" not in summary_line(Summary(1, 0, 0, 0))

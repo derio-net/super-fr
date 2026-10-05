@@ -1,0 +1,111 @@
+schema_version: 8
+run: 2026-10-04-feat-batch-drive-merge-train
+workflow: fr-goal-light@1
+branch: feat/batch-drive-merge-train
+started: '2026-10-04T07:03:44+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-10-04T07:29:38+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-04-drive-merge-train-design.md
+  plan:
+    state: done
+    at: '2026-10-04T07:31:05+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-10-04-drive-merge-train
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-10-04T07:29:38+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: f396c9d6-799d-4d9b-95d6-7cee134b0041
+          returned: '2026-10-04T07:31:05+00:00'
+          outcome: done
+        evidence:
+          single-phase: phase 1
+  spec-plan-review:
+    state: done
+    at: '2026-10-04T07:36:19+00:00'
+    units:
+      step/spec-plan-review:
+        attempts:
+        - dispatched: '2026-10-04T07:31:05+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          session: f396c9d6-799d-4d9b-95d6-7cee134b0041
+          returned: '2026-10-04T07:36:19+00:00'
+          outcome: done
+        evidence:
+          review: spr-review
+          reviewer: a76c3c305ca82e198
+          findings: spr-order-unstable,spr-stop-member-unplaced,spr-train-line-fields,spr-mergestop-head-moved,spr-skill-prose-stale,spr-snap-helper-repos
+  plan-review:
+    state: done
+    at: '2026-10-04T07:36:23+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-10-04T09:02:20+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-04T07:36:23+00:00'
+          agent: abd5c4a4dae75984f
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5-5
+          session: f396c9d6-799d-4d9b-95d6-7cee134b0041
+          returned: '2026-10-04T08:58:54+00:00'
+          outcome: done
+        evidence:
+          visual: none
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-04T08:58:55+00:00'
+          agent: a05c32ca4b3c835f4
+          harness: claude-code
+          model: claude-opus-5-5
+          session: f396c9d6-799d-4d9b-95d6-7cee134b0041
+          returned: '2026-10-04T09:02:20+00:00'
+          outcome: done
+        evidence:
+          review: rv-review-phase1
+          reviewer: a05c32ca4b3c835f4
+          visual: none
+          findings: rv-stops-api,rv-merge-batch-tuple,rv-queued-failing-unwarned,rv-race-refusal
+  journal-check:
+    state: done
+    at: '2026-10-04T09:02:21+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): rv-race-refusal
+  deliver:
+    state: done
+    at: '2026-10-04T09:14:02+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/951
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-04T09:02:21+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: f396c9d6-799d-4d9b-95d6-7cee134b0041
+          returned: '2026-10-04T09:14:00+00:00'
+          outcome: done
+        evidence:
+          tests: full-suite.log@aff27780032e
+          proportionality: 8cec6f9d7774729282f5f452f5400d2f58905f99:0d415bf1b501f0bad7b4c24db5dacefc06b9deaa0b29fb047100d726566f25b0
+          visual: none

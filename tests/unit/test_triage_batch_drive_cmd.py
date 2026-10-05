@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd
 from fr.gh import GhError
+from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
@@ -1989,3 +1991,173 @@ def test_a_failed_close_is_reported_once_whatever_its_message(
     closer.close_raises = RuntimeError("socket timeout after 3.4s")
     assert driver._close_sessions(action) == ""
     assert driver.failed_write is False
+
+
+# ------------------------------------------------ the merge train (spec §B, §C)
+
+
+class ScriptedMerge:
+    """A `merge_ready` that answers per PR number: an attempt, or an exception."""
+
+    def __init__(self) -> None:
+        self.script: dict[int, Any] = {}
+        self.calls: list[int] = []
+
+    def __call__(self, ctx: Any, slot: Any, previous: Any) -> Any:
+        number = slot.step.pr.number
+        self.calls.append(number)
+        answer = self.script.get(number, MergeAttempt("merged", head=f"sha-{number}"))
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
+@pytest.fixture
+def train(monkeypatch: pytest.MonkeyPatch) -> ScriptedMerge:
+    fake = ScriptedMerge()
+    monkeypatch.setattr(triage_batch_cmd, "merge_ready", fake)
+    return fake
+
+
+def _three_ready(world: World, tmp_path: Path) -> None:
+    batches = []
+    for i in (1, 2, 3):
+        world.issues[i] = "open"
+        world.pr(100 + i, f"feat/batch-b{i}", [i])
+        batches.append(_batch(f"b{i}", i, events=_dispatch_event(f"b{i}")))
+    _state(tmp_path, world, *batches)
+
+
+def test_an_updated_head_queues_the_rest_without_attempting_them(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    _three_ready(world, tmp_path)
+    train.script[101] = MergeAttempt("updated", head="sha-new")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert train.calls == [101], out
+    assert _lines(out, "merge")[1:] == [
+        "merge b2: queued: behind b1",
+        "merge b3: queued: behind b1",
+    ]
+    assert "queued 2" in out
+
+
+def test_a_merged_head_lets_the_next_candidate_go_in_the_same_pass(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    _three_ready(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert train.calls == [101, 102, 103], out
+
+
+def test_a_refused_head_is_reported_and_stepped_over(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    _three_ready(world, tmp_path)
+    train.script[101] = MergeStopError("PR #101: the forge refused the merge")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert train.calls == [101, 102, 103]
+    assert _lines(out, "merge")[0].startswith("merge b1: stopped: PR #101")
+    assert code == 1
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        HeadMovedError("PR #101: head moved since the plan was printed"),
+        MergeAttempt("pending", head="sha-101", checks=("test",)),
+    ],
+    ids=["head-moved-error", "pending"],
+)
+def test_a_head_that_cannot_proceed_stops_the_train(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge,
+    answer: Any,
+) -> None:  # fmt: skip
+    _three_ready(world, tmp_path)
+    train.script[101] = answer
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert train.calls == [101], out
+    assert _lines(out, "merge")[1:] == [
+        "merge b2: queued: behind b1",
+        "merge b3: queued: behind b1",
+    ]
+
+
+def test_a_head_moved_since_the_checks_were_judged_stops_the_train(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge, monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _three_ready(world, tmp_path)
+    seen: list[int] = []
+    real_view = world.pr_view
+
+    def _view(repo: str, number: int) -> dict[str, Any]:
+        seen.append(number)
+        if number == 101 and seen.count(101) == 2:
+            world.prs[101]["head_oid"] = "sha-pushed"
+        return real_view(repo, number)
+
+    monkeypatch.setattr(world, "pr_view", _view)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert train.calls == [], out
+    assert _lines(out, "merge")[0].startswith("merge b1: held: PR #101 head moved")
+    assert _lines(out, "merge")[1:] == [
+        "merge b2: queued: behind b1",
+        "merge b3: queued: behind b1",
+    ]
+
+
+@pytest.mark.parametrize("outcome", ["failing", "draft"])
+def test_a_head_that_is_failing_or_draft_at_merge_time_is_stepped_over(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge,
+    outcome: str,
+) -> None:  # fmt: skip
+    _three_ready(world, tmp_path)
+    train.script[101] = MergeAttempt(outcome, head="sha-101")  # type: ignore[arg-type]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert train.calls == [101, 102, 103], out
+
+
+def test_a_stop_in_one_repo_does_not_stop_another(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge, monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _three_ready(world, tmp_path)
+    real = triage_batch_cmd.drive_pass
+
+    def _two_repos(snap: Any) -> Any:
+        got = real(snap)
+        actions = tuple(
+            replace(a, train="other/repo") if a.batch == "b3" else a for a in got.actions
+        )
+        return replace(got, actions=actions)
+
+    monkeypatch.setattr(triage_batch_cmd, "drive_pass", _two_repos)
+    train.script[101] = MergeAttempt("updated", head="sha-new")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert train.calls == [101, 103], out
+    assert _lines(out, "merge")[1] == "merge b2: queued: behind b1"
+
+
+# ---------------------------------------------------- the train line (§C, R6)
+
+
+def test_the_train_line_comes_before_the_actions_in_plan_mode_and_with_yes(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    _three_ready(world, tmp_path)
+    for args in ((), ("--once", "--yes")):
+        code, out = _drive(tmp_path, *args)
+        lines = out.splitlines()
+        first_action = next(i for i, ln in enumerate(lines) if ln.startswith("merge "))
+        trains = [i for i, ln in enumerate(lines) if ln.startswith(f"train {REPO}: head b1")]
+        assert trains and trains[0] < first_action, out
+        assert "then b2 (#102), b3 (#103)" in lines[trains[0]]
+
+
+def test_no_train_line_without_a_ready_pr(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path)
+    code, out = _drive(tmp_path)
+    assert "train " not in out

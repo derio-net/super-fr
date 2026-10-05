@@ -1,0 +1,62 @@
+schema_version: 1
+run: 2026-10-04-feat-batch-drive-merge-train
+captures:
+- host: h-3767742d
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-05T10:50:00+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: f396c9d6-799d-4d9b-95d6-7cee134b0041
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 238
+        cache_write: 781282
+        cache_read: 20259299
+        output: 71156
+        usd: null
+        usd_source: none
+      claude-sonnet-5-5:
+        input: 102
+        cache_write: 1229882
+        cache_read: 4104893
+        output: 708
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 62
+      other:
+        usd: null
+        turns: 63
+      paperwork:
+        usd: null
+        turns: 44
+    steps:
+      (outside run):
+        usd: null
+        turns: 23
+      brainstorm:
+        usd: null
+        turns: 24
+      plan:
+        usd: null
+        turns: 8
+      spec-plan-review:
+        usd: null
+        turns: 28
+      implement:
+        usd: null
+        turns: 73
+      deliver:
+        usd: null
+        turns: 9
+    briefs:
+      a76c3c305ca82e198: 1995
+      phase/1/implement-phase: 3491
+      phase/1/review-phase: 3323

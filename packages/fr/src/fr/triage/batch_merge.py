@@ -48,6 +48,11 @@ class MergeStopError(TriageError):
     """The queue stops here (exit 1): the message says why and what to do."""
 
 
+class HeadMovedError(MergeStopError):
+    """The PR's head moved since the plan was made. A driver stops a merge train on
+    it (R3); any other `MergeStopError` is a refusal it steps over (R4)."""
+
+
 class WorktreeSeam(Protocol):
     path: Path
 
@@ -242,7 +247,7 @@ def _open_head(ctx: MergeContext, slot: Slot, view: dict[str, Any], expected: st
         raise MergeStopError(f"PR #{pr.number} (batch {batch.id}) is a draft; mark it ready")
     head = str(view.get("head_oid"))
     if head != expected:
-        raise MergeStopError(
+        raise HeadMovedError(
             f"PR #{pr.number} (batch {batch.id}): head moved since the plan was printed "
             f"({expected[:12]} -> {head[:12]}); re-run to re-plan"
         )
