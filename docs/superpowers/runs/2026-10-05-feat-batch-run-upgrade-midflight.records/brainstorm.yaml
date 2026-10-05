@@ -1,0 +1,128 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-run-upgrade-midflight
+step: brainstorm
+outcome: done
+questions:
+  rounds: 1
+journal:
+- kind: discovery
+  input: true
+  id: operator-brief
+  title: 'Operator brief: batch run-upgrade-midflight (super-fr#891)'
+  body: "Batch `run-upgrade-midflight` of derio-net/super-fr (goal: A run started on an older fr can be\
+    \ finished after an upgrade). Delivered as ONE PR on branch feat/batch-run-upgrade-midflight; draft\
+    \ PR body carries `Closes derio-net/super-fr#891`; no member issue as a phase tracking_issue.\n\n\
+    ## super-fr#891: An fr upgrade mid-run strands the cursor: shape-version refusal, adopt won't supersede,\
+    \ and the evidence gate can't accept a historical review\n\n## Symptom\n\nA long-running `fr-goal`\
+    \ run spanning an `fr` upgrade cannot be finished, and there is no\ndocumented way out. Three gates\
+    \ close in sequence.\n\nSetup: a six-phase run started on `fr 4.5.2`, all six phases implemented and\
+    \ reviewed,\ncursor sitting on the last phase. Two weeks pass; `fr` is now `5.1.1`. `fr migrate\n\
+    artifacts --yes` runs cleanly and the cursor survives it intact.\n\n**1. The shape gained a step,\
+    \ so every cursor operation refuses.**\n\n```\n$ fr run resolve <run> --step review-phase --item phase/6\
+    \ --state done\nrun '<run>' was started against a different version of 'fr-goal@1'\n(added: journal-check).\
+    \ A run's cursor is a position in a step list;\nstart a new run rather than advancing this one against\
+    \ a list it was\nnever computed for.\n```\n\n`advance` and `gates` refuse identically. The refusal\
+    \ is correct in principle — but\n`gates` is read-only, and it is the source `fr-goal`'s `deliver`\
+    \ step requires verbatim\nfor the PR body's \"Operator gates\" section. A read of recorded history\
+    \ should not be\ngated on shape currency.\n\n**2. `adopt` is the documented escape, and it will not\
+    \ run.**\n\nThe `fr-goal` skill says: *\"Work already in flight when your `fr` changed under it? `fr\
+    \ run\nadopt <plan-dir|spec>` rebuilds a cursor from disk, completed phases included, so the plan\n\
+    joins the run model instead of being stranded.\"* But:\n\n```\n$ fr run adopt docs/superpowers/plans/<slug>\n\
+    docs/superpowers/plans/<slug> already has a run: <run>.\nInspect it with `fr run status <run>`, or\
+    \ advance it with `fr run advance <run>`.\n```\n\nIt points at the two commands that just refused.\
+    \ There is no `fr run retire` / `reset` /\n`--force`, so the only way through is to delete the run\
+    \ file by hand and re-adopt — which\nis what I did, and which silently loses recorded state (below).\n\
+    \n**3. The evidence gate cannot accept a review done before the cursor existed.**\n\nAfter re-adopting,\
+    \ every `review-phase` unit demands evidence, and:\n\n```\n$ fr run resolve <run> --step review-phase\
+    \ --item phase/1 --record <record>\nphase/1/review-phase: --evidence reviewer=... names no subagent\
+    \ this session\ndispatched since the review opened at 2026-10-03T18:47:04+00:00. The review\nmust\
+    \ be done by a dispatched reviewer (a separate context), and named by the\nid its dispatch returned.\n\
+    ```\n\nThe six reviews genuinely happened — six dispatched reviewers, ~48 findings recorded in\nthe\
+    \ plan journal with ids, every one closed or deliberately deferred. But they happened\n*before* the\
+    \ adopted cursor opened its units, so no honest record can satisfy the gate.\nThe only states available\
+    \ are a false `failed`, fabricated evidence, or re-running six\nreviews of already-reviewed-and-fixed\
+    \ code purely for bookkeeping.\n\nNote this is not only an upgrade problem: `adopt` exists precisely\
+    \ to take on work whose\nphases are *already complete*, so for any adopted run the review evidence\
+    \ is necessarily\nhistorical. The evidence gate and `adopt` are in direct tension by construction.\n\
+    \n## What re-adopting silently lost\n\nThe pre-upgrade run recorded the operator's batched-Q&A gate:\n\
+    \n```yaml\n  brainstorm:\n    state: done\n    answered_by: operator\n```\n\nAfter `adopt`, `fr run\
+    \ gates` says:\n\n```\nbrainstorm: cleared, but provenance not recorded (this cursor predates `answered_by`)\n\
+    ```\n\nSo the PR body's \"Operator gates\" section would *understate* what happened — the operator\n\
+    did answer, and the derived record now says it is unknown. `adopt` reads phase completion\nfrom disk;\
+    \ it does not read the superseded run file sitting next to it, which still has the\nanswer. (Worked\
+    \ around by citing the old run file's git blob and the spec journal's\n`decision` entries in the PR\
+    \ body instead.)\n\n## Suggested fixes, roughly in order of value\n\n1. **Let `adopt` supersede a\
+    \ stale run** — `fr run adopt --supersede` (or have it offer,\n   as `migrate artifacts` does), carrying\
+    \ forward what the old cursor recorded:\n   `answered_by`, dispatch holders, per-step notes. The data\
+    \ is in the file it replaces.\n2. **Ungate read-only commands.** `fr run gates` and `fr run status`\
+    \ should answer from a\n   stale cursor, with a warning. `status` already does; `gates` does not,\
+    \ and `gates` is\n   the one `deliver` needs.\n3. **Give the evidence gate a documented honest escape\
+    \ for adopted units** — e.g.\n   `--evidence historical=<journal ref>` recorded as such, or a `review-phase`\
+    \ state\n   meaning \"done before this cursor existed, evidence in the journal\". Anything other than\n\
+    \   `failed`, which is false, or re-running the work, which is waste.\n4. **Shape-version pinning\
+    \ on the run**: a run could record the shape it was computed\n   against and keep operating on it,\
+    \ with `advance` warning that a newer shape exists.\n   That would make case 1 unnecessary for in-flight\
+    \ work.\n\n## Version\n\nStarted on `fr 4.5.2`, hit on `fr 5.1.1`. `fr-goal@1`, Claude Code harness.\
+    \ The run's\nartifacts migrated cleanly — this is purely about the cursor.\n\n"
+- kind: decision
+  id: shape-drift-explicit-reshape
+  title: 'Shape drift: explicit `fr run reshape`'
+  body: 'Operator chose an explicit `fr run reshape <run>` (preview, `--yes` applies) that rebases the
+    cursor onto the current shape keeping every recorded step/unit; added steps ahead of the cursor go
+    in pending; refuses when an added step lands at/behind the cursor or a removed step had left pending.
+    Rejected: auto-reshape inside advance/resolve (side-effect mutation), shape pinning (schema change,
+    no rescue for stranded runs).'
+- kind: decision
+  id: adopt-supersede-carry-forward
+  title: 'Adopt: `--supersede` with carry-forward, old file removed'
+  body: 'Operator chose `fr run adopt --supersede`: replaces the old cursor (git history keeps it; commit
+    names the superseded run), carrying forward gate provenance (answered_by), attempts and evidence of
+    steps/units still in the current shape. Rejected: keeping a `.superseded.yaml` beside it; no supersede
+    at all.'
+- kind: decision
+  id: historical-review-adopt-infers
+  title: 'Historical reviews: adopt infers + manual `reviewer=historical`'
+  body: 'Operator chose both: adopt marks a complete phase''s review member done when the plan journal
+    has a kind=review entry for it and no open finding, with evidence review=<id>, reviewer=historical;
+    and by hand `reviewer=historical` is accepted iff the review entry predates the run''s start. Rendered
+    as a historical review in status/check and the PR body. Rejected: manual-only; unverified claimed
+    reviewer ids.'
+acceptance:
+- id: run-reshape-drifted-cursor
+  capability: run-cursor
+  acceptance: An in-flight run whose shape gained a step ahead of its cursor can be moved onto the current
+    shape with every recorded step kept, and a reshape that would skip or lose recorded work is refused
+    with nothing changed
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R1
+  - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R2
+  - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R3
+  status: not-implemented
+- id: run-read-drifted-cursor
+  capability: run-cursor
+  acceptance: '`fr run gates` and the other read-only run commands answer from a drifted cursor with a
+    warning instead of refusing'
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R4
+  status: not-implemented
+- id: adopt-supersede-carries-provenance
+  capability: run-adoption
+  acceptance: Adopting a plan that already has a run supersedes it on request, and the operator's gate
+    answers, dispatch history and evidence recorded by the old cursor survive into the new one
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R5
+  - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R6
+  status: not-implemented
+- id: historical-review-evidence
+  capability: run-evidence
+  acceptance: A phase reviewed before its run's cursor existed can be closed honestly as a historical
+    review — inferred by adoption from the plan journal or resolved by hand — and is reported as historical,
+    never as debt or failure
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R7
+  - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R8
+  - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R9
+  status: not-implemented
+emitted:
+  spec: docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md
+evidence: {}
