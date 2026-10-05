@@ -1,0 +1,120 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Historical review evidence — by hand, by adoption, and reported (R7-R9)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - historical-review-evidence
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/*
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/pr_body.py
+  - tests/unit/test_run_evidence_historical.py
+  - tests/unit/test_run_adopt.py
+  - tests/unit/test_deliver_pr_body.py
+  - docs/acceptance/*
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: The historical bound, by hand (R7)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: create tests/unit/test_run_evidence_historical.py, modelled on
+      tests/unit/test_run_evidence_separate_context.py's fixtures. Resolving
+      review-phase phase/N with `reviewer=historical` and a `kind=review` phase=N entry:
+      accepted when the entry's created is before state.started and after the phase's
+      implement member's last `returned`; refused (exit 2, message names the clause) when
+      after started, when before that return, when phase N links an acceptance row carrying
+      `visual`, and on a flat spec-review unit; an accepted resolve writes no
+      `unobserved=reviewer-return` note and stores `reviewer: historical`. Run — red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `HISTORICAL_REVIEWER = "historical"` and a pure
+      `historical_review_refusal(state, phase, entry, *, owes_visual) -> str | None` (the
+      spec §D bound, clauses 1-3; None = accepted) in a module both run_cmd and adopt can
+      import without a cycle (a new fr/run/historical.py). In the resolve path at
+      run_cmd.py's `_verify_reviewer` call site, branch on it: skip `_verify_reviewer` and
+      `_check_returned_findings`, keep `_verify_review_entry` and the findings gate.
+      Tests green.
+- number: 2
+  title: Adoption infers historical reviews (R8)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in tests/unit/test_run_adopt.py add: a plan with phases 1-2 complete and a plan
+      journal holding a `kind=review` entry per phase (created before now) with all findings
+      fixed -> both review members `done` with evidence {review, reviewer: historical,
+      findings} and the cursor on `journal-check`; open finding on phase 2 -> phase/2 review
+      stays pending, note names the ids, cursor `implement`; an unauthorized
+      out-of-scope->fixed finding -> pending; no review entry -> pending with note; a phase
+      linking a `visual` row -> pending with note. Run — red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: in adopt_run read the plan journal entries (the fr.journal reader run_cmd's
+      evidence gate uses) and pass them to build_run_state; per complete non-manual phase
+      apply `reviews_phase`, the bound helper from P2.T1.S2, `phase_finding_states` and
+      `unauthorized_fixes`; build the same findings witness string
+      `_closed_findings_witness` writes (extract a pure helper both use rather than copy
+      it); mark the group step done and move the cursor past it when every unit is done.
+      Tests green.
+- number: 3
+  title: Reporting (R9)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests — `fr run status` and `fr run check` print "reviewed before this cursor
+      existed (journal <id>) — reviewer not observed" for a historical unit and count no
+      debt for it (test_run_evidence_historical.py); in tests/unit/test_deliver_pr_body.py,
+      render_pr_body emits `## Historical reviews` listing `phase N — journal <id>` when a
+      unit carries it and omits it otherwise, and `missing_sections(body, required=...)`
+      reports it missing when required; the deliver resolve refuses a live PR body lacking
+      it (use the existing live-PR-body fake those tests use). Run — red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: render the sentence in status/check (`_debt_phrase` neighbourhood) and exclude
+      historical units from `_unevidenced_units`; add the PR-body section and the
+      `required` argument to `missing_sections`, passing the extra heading from
+      run_cmd's deliver call site when the state has a historical unit. Tests green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR + quality gate: full suite, ruff, mypy; move historical-review-evidence to
+      `ci` via the step record's `acceptance` section with the new tests as unit levels.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

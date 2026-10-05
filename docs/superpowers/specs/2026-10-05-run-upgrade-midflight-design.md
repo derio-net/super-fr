@@ -297,3 +297,9 @@ Unit/CLI tests (CI), per requirement:
 
 Post-merge — operator-driven: none required beyond CI; the next real upgrade-spanning
 run exercises it live.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-05-run-upgrade-midflight | `derio-net/super-fr` | `2026-10-05-run-upgrade-midflight` | — |

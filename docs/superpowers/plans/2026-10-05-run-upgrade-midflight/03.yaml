@@ -1,0 +1,106 @@
+schema_version: 2
+phase:
+  number: 3
+  title: adopt --supersede with carry-forward, and the prose (R5, R6, R10)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - adopt-supersede-carries-provenance
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/adopt.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - tests/unit/test_run_adopt_supersede.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/workflows/fr-goal.yaml
+  - .opencode/*
+  - .hermes/*
+  - docs/explainers/01-fr-goal.*
+  - README.md
+  - docs/acceptance/*
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: carry_forward (pure)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: create tests/unit/test_run_adopt_supersede.py for a pure
+      `fr.run.adopt.carry_forward(old, new, *, now) -> RunState`: copies gate/answered_by
+      and emitted keys the new lacks; carries EVERY old unit whose step and member exist in
+      the new shape (review-phase members and step/<id> units adoption never builds), with
+      attempts and evidence, `done` kept; drops units of removed steps/members; an open
+      attempt arrives with returned=now and outcome=abandoned; driver and the `at` of
+      carried-done steps kept; result passes fr.artifacts.structure.validate_run. Red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement carry_forward per spec §C. Carried units are applied after the
+      historical inference (P2), so a review the old cursor resolved keeps its real
+      evidence. Tests green.
+- number: 2
+  title: adopt --supersede (R5, R6)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED (CLI, tmp git repo): without the flag the existing-run refusal names
+      `fr run reshape <existing>` and `fr run adopt --supersede`; with it and no run, plain
+      adopt; with a run: preview lists closed holds (agent, session) and writes nothing;
+      `--yes` deletes the old file, writes the new, renames usage/<old>.yaml to <new>.yaml,
+      one commit whose subject contains `supersedes <old>`; `fr run gates <new>` reports the
+      carried operator answer; refusals for an old cursor that does not parse (suggests
+      `fr migrate artifacts --yes`) and for a step record under <old>.records/ (pr-body.md
+      alone does not refuse); same-day id overwrites in place. Red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: add `supersede: bool` to adopt_run and `--supersede`/`--yes` handling to
+      adopt_cmd per spec §C (usage path via fr.usage.file.usage_path; same-day path bypasses
+      only the matching existing-path refusal). Tests green.
+- number: 3
+  title: Prose and mirrors (R10)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Update plugins/super-fr/skills/fr-goal/SKILL.md (the "Work already in flight"
+      paragraph and §7's stranded-run recovery: reshape first; --supersede when reshape
+      refuses or a review ran in an earlier session; historical review for phases reviewed
+      before the cursor), the stranded-run comment in plugins/super-fr/workflows/fr-goal.yaml,
+      README's `fr run` row (add reshape) and command list, and docs/explainers/01-fr-goal.md
+      near the adopt paragraph; regenerate its .html per .claude/rules/explainers-currency.md
+      (byte-identical check of the unmodified render first, `--isolated`, from `/`). Run
+      `uv run python scripts/sync-opencode.py` and `uv run python scripts/sync-hermes.py`.
+  - id: P3.T3.S2
+    text: |-
+      Quality gate: full suite, ruff, mypy, `uv run fr harness parity --check`; move
+      adopt-supersede-carries-provenance to `ci` via the step record's `acceptance` section.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
