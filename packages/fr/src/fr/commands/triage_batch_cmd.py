@@ -2428,7 +2428,7 @@ class _Driver:
                         f"exported under `{rel}/` by `fr triage batch drive` "
                         "(`fr triage state import` reads it back).\n\n"
                         "Facts and rendered pages are not exported; they are rebuilt."
-                        + (f"\n\n{note}" if left else "")
+                        + (f"\n\n{_ignored_count(left)}" if left else "")
                     ),
                 )
             except UnsupportedForgeOperation as exc:

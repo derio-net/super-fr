@@ -2731,7 +2731,8 @@ def test_files_the_target_repo_ignores_are_reported_never_force_added(
     (warn,) = _lines(out, "warn")
     assert warn.startswith(f"warn wave 1 {REPO}: 1 durable file is ignored by the target repo")
     assert snap in warn
-    assert snap in bodies[0]
+    assert snap not in bodies[0]  # p4-r14: file names never reach the public PR body
+    assert "1 durable file is ignored by this repo and was not exported." in bodies[0]
 
 
 def test_a_leftover_export_worktree_with_changes_is_replaced(
