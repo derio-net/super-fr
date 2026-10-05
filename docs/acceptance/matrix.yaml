@@ -6227,9 +6227,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R3
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R13
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R15
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+    status: ci
+    notes: board model, page and command unit-tested; browser-checked light, dark, 375px
+      (phase 2). triage.html link lands in phase 3
     visual:
       states:
       - empty board
