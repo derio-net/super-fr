@@ -5097,10 +5097,12 @@ rows:
       - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_refuses_a_new_line_anchor_into_python
       - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_line_anchors_that_land_in_a_test
       - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_leaves_what_it_cannot_convert
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_accepts_a_unittest_dotted_anchor
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_a_line_anchor_inside_a_testcase_subclass
     status: ci
-    notes: 'gh#531. Measured at fix time: 27 of 78 line anchors had slid onto another
-      test or none; all re-pointed to the test git blame shows each was recorded for,
-      the other 48 converted by the repair.'
+    notes: 'gh#965/gh#893: unittest''s spelling of a test identity is read too — a Class.test
+      anchor resolves, and the line-anchor repair converts a line inside a TestCase
+      subclass not named Test*.'
   - id: acceptance-add-flush-left-rows
     capability: Acceptance matrix
     acceptance: 'fr acceptance add and set-status edit a matrix whose rows are flush-left
