@@ -6251,9 +6251,12 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: hints and card sections unit-tested; expand/collapse browser-checked
     visual:
       states:
       - expanded card with PR and close-out
