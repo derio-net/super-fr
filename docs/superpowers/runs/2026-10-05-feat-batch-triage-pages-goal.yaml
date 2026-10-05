@@ -51,7 +51,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-10-05T21:51:57+00:00'
+    at: '2026-10-05T22:13:20+00:00'
     members:
     - implement-phase
     - review-phase
@@ -105,6 +105,13 @@ steps:
           outcome: done
         evidence:
           visual: triage-board-first-screen:15:0570d99991b9,triage-board-batch-filter:6:e44bb66dc450
+      phase/2/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-10-05T22:13:20+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: a95011be-df46-40a9-a07a-e24ccd3c8a59
   journal-check:
     state: pending
   deliver:
