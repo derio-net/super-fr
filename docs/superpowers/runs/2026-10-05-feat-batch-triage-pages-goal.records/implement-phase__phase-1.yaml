@@ -3,36 +3,111 @@ run: 2026-10-05-feat-batch-triage-pages-goal
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1, P1.T6.S2, P1.T6.S3, P1.T7.S1, P1.T7.S2, P1.T7.S3, P1.T8.S1, P1.T8.S2, P1.T8.S3]
+ticks:
+- P1.T1.S1
+- P1.T1.S2
+- P1.T1.S3
+- P1.T2.S1
+- P1.T2.S2
+- P1.T2.S3
+- P1.T3.S1
+- P1.T3.S2
+- P1.T3.S3
+- P1.T4.S1
+- P1.T4.S2
+- P1.T4.S3
+- P1.T5.S1
+- P1.T5.S2
+- P1.T5.S3
+- P1.T6.S1
+- P1.T6.S2
+- P1.T6.S3
+- P1.T7.S1
+- P1.T7.S2
+- P1.T7.S3
+- P1.T8.S1
+- P1.T8.S2
+- P1.T8.S3
 refactor:
-  P1.T1: "constant + smoke test only"
-  P1.T4: "nothing to clean beyond the views re-export"
-  P1.T6: "no refactor needed beyond ordering"
-  P1.T8: "board change is a filter plus a header call; nothing to clean"
-  P1.T2: "the board/origins/architecture CSS preludes differ in table width, code styling and tab rules, so only the architecture/history shared prelude moved (BASE_CSS); folding origins and board in would change their rendering"
+  P1.T1: constant + smoke test only
+  P1.T4: nothing to clean beyond the views re-export
+  P1.T6: no refactor needed beyond ordering
+  P1.T8: board change is a filter plus a header call; nothing to clean
+  P1.T2: the board/origins/architecture CSS preludes differ in table width, code styling and tab rules, so only
+    the architecture/history shared prelude moved (BASE_CSS); folding origins and board in would change their rendering
 journal:
-  - {kind: discovery, id: p1-preselected-wave-signature, title: "preselected_wave keeps facts as its first argument", body: "The plan wrote preselected_wave(judgements, among=...) but the real signature is (facts, judgements); stage derivation needs facts. Added among as a keyword only. Wave keys are strings.", phase: 1}
-  - {kind: discovery, id: p1-board-https-href-test, title: "page chrome adds relative hrefs to the board", body: "test_a_non_https_url_produces_no_href asserted every anchor on the board is https; the nav bar links triage.html/origins.html/architecture.html/history.html. The test now allows exactly the PAGES file names (constants, never untrusted).", phase: 1}
-  - {kind: discovery, id: p1-architecture-drops-kind-counts, title: "architecture summary loses open/defect counts", body: "Spec background lists kind counts as a fact on the board and the architecture summary. R6's summary is lines then/now plus Where it hurts, so the open-issues and defects figures (and issues filed, batches merged) left the architecture page: one home per fact. History also got a small MOVED map {waves: board} so an old manifest naming it is noted, not reported missing; architecture render_architecture lost its snapshots parameter since the timeline moved.", phase: 1}
-  - {kind: discovery, id: p1-files-outside-list, title: "touched beyond the obvious files", body: "components.py gained BASE_CSS (shared prelude for architecture and history); origins.py lost the origin_counts/filings_chart re-exports (dead); triage_cmd.py registers the history command; tests/unit/test_triage_render.py and test_triage_board_views.py hold the board and finished-wave tests.", phase: 1}
-evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p1-suite.log}
+- kind: discovery
+  id: p1-preselected-wave-signature
+  title: preselected_wave keeps facts as its first argument
+  body: The plan wrote preselected_wave(judgements, among=...) but the real signature is (facts, judgements); stage
+    derivation needs facts. Added among as a keyword only. Wave keys are strings.
+  phase: 1
+- kind: discovery
+  id: p1-board-https-href-test
+  title: page chrome adds relative hrefs to the board
+  body: test_a_non_https_url_produces_no_href asserted every anchor on the board is https; the nav bar links triage.html/origins.html/architecture.html/history.html.
+    The test now allows exactly the PAGES file names (constants, never untrusted).
+  phase: 1
+- kind: discovery
+  id: p1-architecture-drops-kind-counts
+  title: architecture summary loses open/defect counts
+  body: 'Spec background lists kind counts as a fact on the board and the architecture summary. R6''s summary is
+    lines then/now plus Where it hurts, so the open-issues and defects figures (and issues filed, batches merged)
+    left the architecture page: one home per fact. History also got a small MOVED map {waves: board} so an old manifest
+    naming it is noted, not reported missing; architecture render_architecture lost its snapshots parameter since
+    the timeline moved.'
+  phase: 1
+- kind: discovery
+  id: p1-files-outside-list
+  title: touched beyond the obvious files
+  body: components.py gained BASE_CSS (shared prelude for architecture and history); origins.py lost the origin_counts/filings_chart
+    re-exports (dead); triage_cmd.py registers the history command; tests/unit/test_triage_render.py and test_triage_board_views.py
+    hold the board and finished-wave tests.
+  phase: 1
+evidence: {}
 visual:
-  - row: triage-page-goals
-    script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots.py
-    shots:
-      - {path: .shots/png/triage-1280-light.png, shows: [board-page]}
-      - {path: .shots/png/origins-1280-light.png, shows: [origins-page]}
-      - {path: .shots/png/architecture-1280-light.png, shows: [architecture-page]}
-      - {path: .shots/png/history-1280-light.png, shows: [history-page]}
-      - {path: .shots/png/origins-390-light.png, shows: [phone-width]}
-      - {path: .shots/png/architecture-390-light.png, shows: [phone-width]}
-      - {path: .shots/png/triage-1280-dark.png, shows: [dark-theme]}
-      - {path: .shots/png/architecture-1280-dark.png, shows: [dark-theme]}
-      - {path: .shots/png/interaction-follow-nav-link-history.png, shows: [follow-nav-link]}
-  - row: triage-history-page
-    script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots.py
-    shots:
-      - {path: .shots/png/history-1280-light.png, shows: [finished-waves]}
-      - {path: .shots/png/history-none-1280-light.png, shows: [no-finished-waves]}
-      - {path: .shots/png/interaction-switch-wave-tab.png, shows: [switch-wave-tab]}
-      - {path: .shots/png/interaction-follow-batch-link-board.png, shows: [follow-batch-link]}
+- row: triage-page-goals
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots.py
+  shots:
+  - path: .shots/png/triage-1280-light.png
+    shows:
+    - board-page
+  - path: .shots/png/origins-1280-light.png
+    shows:
+    - origins-page
+  - path: .shots/png/architecture-1280-light.png
+    shows:
+    - architecture-page
+  - path: .shots/png/history-1280-light.png
+    shows:
+    - history-page
+  - path: .shots/png/origins-390-light.png
+    shows:
+    - phone-width
+  - path: .shots/png/architecture-390-light.png
+    shows:
+    - phone-width
+  - path: .shots/png/triage-1280-dark.png
+    shows:
+    - dark-theme
+  - path: .shots/png/architecture-1280-dark.png
+    shows:
+    - dark-theme
+  - path: .shots/png/interaction-follow-nav-link-history.png
+    shows:
+    - follow-nav-link
+- row: triage-history-page
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots.py
+  shots:
+  - path: .shots/png/history-1280-light.png
+    shows:
+    - finished-waves
+  - path: .shots/png/history-none-1280-light.png
+    shows:
+    - no-finished-waves
+  - path: .shots/png/interaction-switch-wave-tab.png
+    shows:
+    - switch-wave-tab
+  - path: .shots/png/interaction-follow-batch-link-board.png
+    shows:
+    - follow-batch-link
