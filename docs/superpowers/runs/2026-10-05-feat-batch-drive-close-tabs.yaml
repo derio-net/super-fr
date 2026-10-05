@@ -3,7 +3,7 @@ run: 2026-10-05-feat-batch-drive-close-tabs
 workflow: fr-goal@1
 branch: feat/batch-drive-close-tabs
 started: '2026-10-05T10:02:21+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -120,6 +120,9 @@ steps:
           visual: none
           findings: p2-r1,p2-r2
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-05T12:39:27+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending
