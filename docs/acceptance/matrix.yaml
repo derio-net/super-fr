@@ -6239,9 +6239,14 @@ rows:
       cursor with a warning instead of refusing'
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_gates_answers_a_drifted_cursor_with_one_warning
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_status_answers_a_drifted_cursor_with_one_warning
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_a_schema_mismatch_still_refuses_gates
+    status: ci
+    notes: gates/status/check answer a drifted cursor with one warning; schema mismatch
+      still refuses gates
   - id: adopt-supersede-carries-provenance
     capability: run-adoption
     acceptance: Adopting a plan that already has a run supersedes it on request, and
