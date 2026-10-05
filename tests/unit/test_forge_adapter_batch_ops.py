@@ -291,8 +291,11 @@ def test_pr_create_opens_a_ready_pr_and_returns_its_number(
 
 
 def test_pr_create_refuses_an_answer_with_no_pr_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """p4-r4: a forge write failure every caller already handles, never a traceback."""
+    from fr.hostclient import FORGE_ERRORS
+
     _fake(monkeypatch, {("pr", "create"): "something else\n"})
-    with pytest.raises(ValueError, match="PR"):
+    with pytest.raises(FORGE_ERRORS, match="PR URL"):
         RealGhClient().pr_create(REPO, head="h", base="main", title="t", body="b")
 
 

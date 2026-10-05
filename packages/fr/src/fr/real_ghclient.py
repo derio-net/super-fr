@@ -363,7 +363,8 @@ class RealGhClient:
         )  # fmt: skip
         found = _PR_URL.search(out)
         if found is None:
-            raise ValueError(f"`gh pr create` printed no PR URL: {out.strip()!r}")
+            # a forge write failure (p4-r4): every caller catches FORGE_ERRORS
+            raise _gh.GhError(f"`gh pr create` printed no PR URL: {out.strip()!r}", stdout=out)
         return int(found.group(1))
 
     def closing_ref(self, repo: str, number: int) -> str:
