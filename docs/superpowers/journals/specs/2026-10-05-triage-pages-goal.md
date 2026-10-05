@@ -284,3 +284,8 @@ State sync verbs and the driver's per-wave export PR.
 ### phase-split-2026-10-05-triage-pages-goal-p5 · decision · tier: skills docs, mirrors and this repo's state (R14, R15) are mechanical and wait on #969
 
 Prose and file moves; R15 depends on #969 merging.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-05-triage-pages-goal-p4 created=2026-10-05T21:12:51+00:00 -->
+### tier-2026-10-05-triage-pages-goal-p4 · decision · hard: phase 4 adds a forge write path and changes the driver's decision table, crash recovery and loop termination
+
+Every drive run relies on drive_pass and Summary.done; an error there strands waves or double-opens PRs.
