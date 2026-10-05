@@ -1,0 +1,22 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-run-upgrade-midflight
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T3.S1, P3.T3.S2]
+refactor:
+  P3.T1: "carry_forward is new pure code built on two small accessors added to fr.run.units (unit_record, with_unit_record); nothing duplicated or left to clean"
+  P3.T2: "adopt_run's existing-run branch was rewritten in place around the new refusals; the CLI preview/commit helpers are new and no old path was left behind"
+  P3.T3: "prose and mirrors only; the in-flight paragraph was rewrapped to fit the 120-line cap, nothing else to clean"
+journal:
+  - {kind: decision, id: p3-prior-seen-by-clause-2, phase: 3, title: "Supersede inference sees the old cursor's attempts through a merged read-only view, and review_key is now passed", body: "build_run_state takes `prior`; clause 2 reads a copy of the new state whose steps are overlaid with the old cursor's, with review_key=<phase>/<review member> so the old review unit's own attempts never count as implementation (p2-r5). Carried units are applied after inference by carry_forward, which keeps an old done unit's real evidence over an inferred historical one."}
+  - {kind: decision, id: p3-supersede-preview-default, phase: 3, title: "adopt_run previews (dry_run) unless --yes, but only when there is an existing run to replace", body: "A plain adopt (no run, or no --supersede) keeps writing immediately as before. Superseded is an outparam (old id, closed holds, removed and moved paths); the CLI previews from it and notes only git-tracked removed paths for the one commit, since `git add` of an untracked missing path would refuse the whole commit."}
+  - {kind: discovery, id: p3-usage-run-field, phase: 3, title: "A moved usage file keeps its inner `run:` as the old id", body: "The usage file is renamed byte for byte (spec: renamed). Its host labels are hashes of that inner run id and backfill reads them via usage.run, so rewriting the field would orphan every capture; capture.py already builds on the existing file's run. New captures under the new run id append a new host label."}
+  - {kind: discovery, id: p3-find-run-sees-legacy, phase: 3, title: "find_run_for_plan recognises legacy-shaped cursors, so a v4 cursor reaches the supersede parse check", body: "The parse-refusal test uses a v4-shaped file (items, stamp 4): find_run_for_plan still matches it via the frozen readers, the current model rejects it, and the refusal names `fr migrate artifacts --yes`. A file no reader can parse is not found at all and falls through to a plain adopt (unchanged behaviour)."}
+  - {kind: discovery, id: p3-explainer-render, phase: 3, title: "Explainer renderer reproduced the committed 01-fr-goal.html byte for byte", body: "Unmodified .md re-rendered from `/` with --isolated matched the committed html exactly before the edit was rendered; the regenerated page differs only by the new paragraph."}
+  - {kind: discovery, id: no-refactor-p3-t1, phase: 3, title: "no-refactor-because P3.T1", body: "carry_forward is new pure code; nothing left duplicated to clean"}
+  - {kind: discovery, id: no-refactor-p3-t2, phase: 3, title: "no-refactor-because P3.T2", body: "adopt_run's branch was rewritten in place; no old path left"}
+  - {kind: discovery, id: no-refactor-p3-t3, phase: 3, title: "no-refactor-because P3.T3", body: "prose and mirrors only"}
+resolves:
+  - {id: p2-r5, state: fixed, body: "adopt --supersede passes the old cursor to the inference (clause 2 sees its implement attempts, review_key excluded) and applies carried units after it; two tests pin it: an older journal review stays pending with a note, and a review the old cursor resolved keeps its real evidence."}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/eb6807d8-033c-4096-8b10-e6487f0bf0be/scratchpad/p3-suite.log}
