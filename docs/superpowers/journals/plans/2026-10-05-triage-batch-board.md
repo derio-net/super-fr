@@ -269,3 +269,48 @@ the seams are named recollect and _sleep like the drive's; nothing else repeats
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 triage.html link is one keyword threaded through render/_batches; nothing repeated to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-10-05T21:44:44+00:00 phase=3 -->
+### review-p3 · review · phase 3 code + visual review: 4 low in-scope findings (phase 3)
+
+Independent reviewer approved; p3-r1..p3-r3 verified and fixed. It drove a real timer reload, refresh 0 and a phone-width reload itself and opened every fresh shot.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-05T21:44:44+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · live_driver and the drive disagreed on an unreadable lock (phase 3)
+
+live_driver and the drive disagreed on an unreadable lock
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-05T21:44:44+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · --watch ended on non-forge collect errors and unguarded render failures (phase 3)
+
+--watch ended on non-forge collect errors and unguarded render failures
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-05T21:44:44+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · opened = webbrowser.open(...) or True (phase 3)
+
+opened = webbrowser.open(...) or True
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-05T21:44:44+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · drive_lock decided lock liveness inline, duplicating live_driver (phase 3)
+
+triage_batch_cmd.drive_lock re-implemented pid / grace-by-age / pid-alive instead of sharing live_driver's rule.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-05T21:44:44+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: live_driver and the drive disagreed on an unreadable lock (phase 3)
+
+LOCK_GRACE moved into fr.triage.drive_lock; live_driver returns 'a driver starting up' for a young unreadable lock and None once older than LOCK_GRACE, the drive's own rule. Tests: young lock refuses, old lock ignored.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-05T21:44:44+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: --watch ended on non-forge collect errors and unguarded render failures (phase 3)
+
+Collect and render each guarded against any exception (and the render's typer.Exit refusal, captured), one warning per kind+cause, cleared only by that kind's own success. Tests: OSError collect, failing and refusing render, resume after the lock goes with the skip message re-armed. A regression where a good render cleared collect warnings was caught by these tests and fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-05T21:44:44+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: opened = webbrowser.open(...) or True (phase 3)
+
+Plain assignment after the call.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-05T21:44:44+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: drive_lock decided lock liveness inline, duplicating live_driver (phase 3)
+
+fr.triage.drive_lock.lock_holder(path, text) is the one rule; live_driver and the drive's compare-and-swap both call it on the same snapshot; the drive tests' pid seam moved to drive_lock.pid_alive.
