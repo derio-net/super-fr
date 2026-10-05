@@ -14,3 +14,8 @@ The one module that defines what a .py fragment names knows pytest's node-id gra
 ### 9b2bb2538f9c · hypothesis · Fix: accept '.' as a part separator; recognise TestCase subclasses from the AST
 
 '.' cannot occur in a Python identifier, so 'A.b' is unambiguous: node_line splits on '::' or '.'. That resolves the anchor in check and in the probing report. The repair keeps writing the canonical '::' form. Collection: a class counts as a test class when its name starts with 'Test' OR it subclasses a *TestCase base (unittest.TestCase, IsolatedAsyncioTestCase, ...), directly or through a class defined in the same module. Inside a TestCase class only 'test*' methods count (the unittest loader prefix). A cross-module base is still not followed: resolution stays ast-only, and check never imports repo code.
+
+<!-- fr:journal kind=finding scope=debug id=9a52594f6f8d created=2026-10-05T20:50:20+00:00 state=fixed -->
+### 9a52594f6f8d · finding [fixed] · anchors.py reads unittest's spelling: Class.test resolves, TestCase subclasses are collected
+
+node_line splits parts on '::' or '.'; collected_node_at judges each enclosing class by name (Test*) or by subclassing a *TestCase base (direct, or via a module-level class — Python's own resolution scope for a base name). Pinned by test_node_line_resolves_unittest_dotted_ids, test_check_accepts_a_unittest_dotted_anchor, test_collection_recognises_unittest_testcase_subclasses, test_the_repair_converts_a_line_anchor_inside_a_testcase_subclass, all red first (commit 29d4d37b6).
