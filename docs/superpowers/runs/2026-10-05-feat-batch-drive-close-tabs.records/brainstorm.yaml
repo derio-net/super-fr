@@ -1,0 +1,94 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-drive-close-tabs
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: Batch drive-close-tabs brief (super-fr#918, super-fr#919)
+    body: |
+      /fr-goal Drive manages its herdr sessions: one workspace per wave, finished sessions closed
+
+      Batch `drive-close-tabs` of derio-net/super-fr: 2 issues, delivered as ONE pull request.
+
+      ## super-fr#918: Drive leaves a finished batch's runner sessions open (batch and close-out tabs)
+      drive leaves a finished batch's batch and close-out runner sessions open
+
+      ## super-fr#919: Drive: open each wave's sessions in a herdr workspace of its own (<prefix>-wave-<n>)
+      drive should open each wave's sessions in a herdr workspace of its own
+
+      ## Why these belong together
+      #918 and #919 are the same runner-protocol extension (a wave/group hint and a close operation on the work item); one design covers both. Shares the close-out/archive path with drive-closeout-recognition.
+
+      ## Delivery rules
+      - Work on branch `feat/batch-drive-close-tabs`.
+      - Open a draft PR as soon as the spec is committed. Its body contains these lines, one per member, so every member closes when it merges:
+        Closes derio-net/super-fr#918
+        Closes derio-net/super-fr#919
+      - Do not name any member issue as a phase `tracking_issue` in the plan: the bridge would then own that issue's `fr:` labels.
+  - kind: discovery
+    id: herdr-sees-status
+    title: herdr reports per-tab agent status and lists tabs across workspaces
+    body: |
+      `herdr tab list` carries `agent_status` (idle|working|blocked|done|unknown, AgentStatus
+      enum, protocol 22); without `--workspace` it lists every workspace's tabs.
+      `workspace create` returns workspace, first tab and root pane. The wave-driver premise
+      "the runner cannot see whether a session ended" no longer holds.
+  - kind: discovery
+    id: isolation-host-worktree
+    title: Run isolated in host-worktree mode
+    body: Docker (colima) was unreachable at start, so the devcontainer up failed; the run
+      was started with FR_ISOLATION_TARGET=worktree, as other recent runs on this repo were.
+  - {kind: decision, id: q1-default-prefix, title: "Default prefix is `drive` (drive-wave-<n>, drive-no-wave)", body: "Operator chose the fixed neutral default over a scope-derived one or opt-in grouping."}
+  - {kind: decision, id: q2-closable-status, title: "Close idle, done and unknown; skip working and blocked", body: "Operator chose: all but working/blocked are closable; busy ones retried next pass."}
+  - {kind: decision, id: q3-close-default, title: "Closing is on by default; --keep-sessions opts out", body: "Operator chose default-on with an opt-out flag."}
+  - {kind: decision, id: q4-empty-workspace, title: "An emptied wave workspace is closed; the driver's own never", body: "Operator chose to close a workspace whose last tab the driver closes."}
+  - {kind: decision, id: q5-batch-tab-timing, title: "Batch tab closes with the close-out tab, at archive merge", body: "Operator chose the #918 trigger for both tabs over closing the batch tab at its PR merge."}
+  - {kind: decision, id: q6-test-plan, title: "Post-merge Test Plan: a live two-wave drive", body: "Operator chose a live two-wave drive inside herdr as the owed post-merge run."}
+resolves: []
+acceptance:
+  - id: drive-wave-workspaces
+    capability: triage-batch-drive
+    acceptance: The driver opens each batch's session, and its close-out, in a herdr workspace
+      of the batch's wave (<prefix>-wave-<n>, <prefix>-no-wave; prefix default drive), created
+      once and reused, while a batch dispatched by hand opens where it always did
+    origin:
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R1
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R2
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R3
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R4
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R5
+    status: not-implemented
+  - id: runner-close-optional
+    capability: runner-protocol
+    acceptance: A runner may offer to close an item's sessions; one that does not is never
+      asked and behaves as before
+    origin:
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R6
+    status: not-implemented
+  - id: drive-closes-finished-sessions
+    capability: triage-batch-drive
+    acceptance: Once a batch is finished the driver closes its batch and close-out sessions,
+      never a working or blocked one and never a session that is not its own, closes an emptied
+      wave workspace, and never holds or fails the drive over it; --keep-sessions turns it off
+    origin:
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R7
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R8
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R9
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R10
+    status: not-implemented
+  - id: drive-herdr-sessions-live
+    capability: triage-batch-drive
+    acceptance: A live two-wave drive inside herdr groups each wave's sessions in its own
+      workspace and leaves no finished batch's tab or emptied wave workspace open
+    origin:
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R1
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R7
+      - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R9
+    status: not-implemented
+    verify: post-merge
+emitted:
+  spec: docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md
+evidence: {}
