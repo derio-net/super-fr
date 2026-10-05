@@ -1701,7 +1701,7 @@ class _Driver:
         """(repo -> export directory `<path>/<scope>`) for a single-repo scope that opts
         in (R13), and the repos of a group or org scope that opt in, which never export."""
         opted = {
-            r: f"{c.path.rstrip('/')}/{self.scope.name}"
+            r: f"{c.path}/{self.scope.name}"  # normalised at load (p4-r2)
             for r in facts.repos
             if (c := facts.config_for(r).export) is not None
         }

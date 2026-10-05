@@ -124,3 +124,20 @@ def test_the_export_config_key_loads() -> None:
 def test_an_export_path_outside_the_repo_is_refused(bad: str) -> None:
     with pytest.raises(ValidationError, match="export path"):
         TriageConfig.model_validate({"export": {"path": bad}})
+
+
+@pytest.mark.parametrize(
+    ("given", "normal"), [("docs/triage/", "docs/triage"), ("docs/triage", "docs/triage")]
+)
+def test_the_export_path_is_normalised_once_at_load(given: str, normal: str) -> None:
+    """p4-r2: every reader uses the one normalised value."""
+    assert TriageConfig.model_validate({"export": {"path": given}}).export == ExportConfig(
+        path=normal
+    )
+
+
+@pytest.mark.parametrize("bad", ["./docs", "docs//t", "a/./b", "docs/.", "/", "docs/triage//"])
+def test_an_export_path_contained_would_refuse_is_refused_at_load(bad: str) -> None:
+    """p4-r2: refused at load, never by `contained()` on every pass."""
+    with pytest.raises(ValidationError, match="export path"):
+        TriageConfig.model_validate({"export": {"path": bad}})

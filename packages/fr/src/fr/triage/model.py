@@ -303,13 +303,21 @@ class ExportConfig(_Strict):
     @field_validator("path")
     @classmethod
     def _inside_the_repo(cls, v: str) -> str:
-        """Relative, non-empty and without `..`: the export never leaves the repo."""
-        parts = v.replace("\\", "/").split("/")
-        if not v.strip() or v.startswith(("/", "\\")) or ".." in parts or ":" in parts[0]:
+        """Normalised once, here (p4-r2): one trailing `/` is stripped, and a path
+        `contained()` would refuse later (absolute, or with a `..`, `.` or empty part)
+        is refused now, so every reader uses the one value and none fails per pass."""
+        norm = v.removesuffix("/")
+        parts = norm.replace("\\", "/").split("/")
+        if (
+            norm.startswith(("/", "\\"))
+            or (parts[0][1:2] == ":")
+            or any(p in ("", ".", "..") for p in parts)
+        ):
             raise ValueError(
-                f"export path must be a repo-relative directory with no `..`, got {v!r}"
+                "export path must be a repo-relative directory with no `..`, `.` or empty "
+                f"part, got {v!r}"
             )
-        return v
+        return norm
 
 
 class TriageConfig(_Strict):
