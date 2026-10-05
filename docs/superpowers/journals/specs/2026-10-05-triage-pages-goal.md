@@ -279,3 +279,8 @@ Schema changes to origins.yaml and judgements plus their display; reviewable apa
 ### phase-split-2026-10-05-triage-pages-goal-p4 · decision · ask: the driver export (R12, R13) is its own ask
 
 State sync verbs and the driver's per-wave export PR.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-triage-pages-goal-p5 created=2026-10-05T21:12:50+00:00 -->
+### phase-split-2026-10-05-triage-pages-goal-p5 · decision · tier: skills docs, mirrors and this repo's state (R14, R15) are mechanical and wait on #969
+
+Prose and file moves; R15 depends on #969 merging.
