@@ -3,40 +3,47 @@ run: 2026-10-05-feat-batch-run-upgrade-midflight
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3]
+ticks:
+- P1.T1.S1
+- P1.T1.S2
+- P1.T2.S1
+- P1.T2.S2
+- P1.T2.S3
+- P1.T3.S1
+- P1.T3.S2
+- P1.T4.S1
+- P1.T4.S2
+- P1.T4.S3
 refactor:
-  P1.T1: "skeleton only: a stub returning its input, nothing to clean"
-  P1.T3: "the command is a thin wrapper over the pure reshape; the shared diff helper was already extracted in P1.T2.S3"
-  P1.T4: "added one small lenient resolver beside the strict one; nothing duplicated to clean"
+  P1.T1: 'skeleton only: a stub returning its input, nothing to clean'
+  P1.T3: the command is a thin wrapper over the pure reshape; the shared diff helper was already extracted
+    in P1.T2.S3
+  P1.T4: added one small lenient resolver beside the strict one; nothing duplicated to clean
 journal:
-  - kind: discovery
-    id: p1-read-callsite-audit
-    phase: 1
-    title: Audit of _resolve_manifest_for_state call sites (R4)
-    body: |
-      Call sites of `_resolve_manifest_for_state`: `_unevidenced_units` (read-only report, used by status and check), `_advance_chain`, `_advance_step`, `_resolve_body`, `_next_unit`, `_advance_after_record`, `claim_cmd` (all mutating, kept strict), `_idle_reading` (kept strict: a drifted cursor is `not-advanceable`, which is the liveness answer), and `gates_cmd` (switched to `_resolve_manifest_for_read`). `status` and `cost` never resolved the manifest: `status` now calls the lenient resolver for its single warning (and prints a refusal such as a schema mismatch as a warning, still exit 0, since it is how an operator finds out); `check` calls it likewise, exit codes unchanged. `_unevidenced_units` now uses a schema-checked-only resolve (`_resolve_manifest_checked_schema`) so the evidence report survives a step-list drift instead of silently going empty. `cost` needs no change.
-  - kind: decision
-    id: p1-drift-error-subclass
-    phase: 1
-    title: StepDriftError subclass distinguishes drift from schema mismatch
-    body: |
-      `_StepDriftError(RunStateError)` is raised by `_check_step_drift`, so the read resolver downgrades exactly the drift refusal and still raises on a schema-version mismatch. Shared added/removed computation is `fr.run.reshape.diff_ids`, used by reshape, `_check_step_drift` (top-level and member diffs) and the reshape command.
-acceptance:
-  - id: run-reshape-drifted-cursor
-    status: ci
-    levels:
-      unit:
-        - super-fr:tests/unit/test_run_reshape.py#test_a_step_added_after_the_cursor_is_inserted_pending_in_manifest_order
-        - super-fr:tests/unit/test_run_reshape.py#test_a_step_added_at_or_behind_the_cursor_refuses
-        - super-fr:tests/unit/test_run_reshape_cmd.py#test_yes_rewrites_the_cursor_in_one_chore_commit
-        - super-fr:tests/unit/test_run_reshape_cmd.py#test_a_refusal_exits_2_and_writes_nothing
-    notes: "fr run reshape implemented (preview, --yes, refusals, advance message names it); unit and CLI tests in CI."
-  - id: run-read-drifted-cursor
-    status: ci
-    levels:
-      unit:
-        - super-fr:tests/unit/test_run_reshape_cmd.py#test_gates_answers_a_drifted_cursor_with_one_warning
-        - super-fr:tests/unit/test_run_reshape_cmd.py#test_status_answers_a_drifted_cursor_with_one_warning
-        - super-fr:tests/unit/test_run_reshape_cmd.py#test_a_schema_mismatch_still_refuses_gates
-    notes: "gates/status/check answer a drifted cursor with one warning; schema mismatch still refuses gates."
-evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/eb6807d8-033c-4096-8b10-e6487f0bf0be/scratchpad/p1-suite.log}
+- kind: discovery
+  id: p1-read-callsite-audit
+  phase: 1
+  title: Audit of _resolve_manifest_for_state call sites (R4)
+  body: 'Call sites of `_resolve_manifest_for_state`: `_unevidenced_units` (read-only report, used by
+    status and check), `_advance_chain`, `_advance_step`, `_resolve_body`, `_next_unit`, `_advance_after_record`,
+    `claim_cmd` (all mutating, kept strict), `_idle_reading` (kept strict: a drifted cursor is `not-advanceable`,
+    which is the liveness answer), and `gates_cmd` (switched to `_resolve_manifest_for_read`). `status`
+    and `cost` never resolved the manifest: `status` now calls the lenient resolver for its single warning
+    (and prints a refusal such as a schema mismatch as a warning, still exit 0, since it is how an operator
+    finds out); `check` calls it likewise, exit codes unchanged. `_unevidenced_units` now uses a schema-checked-only
+    resolve (`_resolve_manifest_checked_schema`) so the evidence report survives a step-list drift instead
+    of silently going empty. `cost` needs no change.
+
+    '
+- kind: decision
+  id: p1-drift-error-subclass
+  phase: 1
+  title: StepDriftError subclass distinguishes drift from schema mismatch
+  body: '`_StepDriftError(RunStateError)` is raised by `_check_step_drift`, so the read resolver downgrades
+    exactly the drift refusal and still raises on a schema-version mismatch. Shared added/removed computation
+    is `fr.run.reshape.diff_ids`, used by reshape, `_check_step_drift` (top-level and member diffs) and
+    the reshape command.
+
+    '
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/eb6807d8-033c-4096-8b10-e6487f0bf0be/scratchpad/p1-suite.log
