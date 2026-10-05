@@ -2515,17 +2515,47 @@ def test_a_refused_pr_create_exits_1_and_records_nothing(
     assert _exports(state) == []
 
 
-def test_a_recorded_export_pr_closed_unmerged_warns_every_pass_and_waits_on_the_operator(
-    tmp_path: Path, world: World, git_checkout: GitDriveCheckout, sleeps: list[float]
+def test_a_closed_unmerged_export_pr_is_recorded_once_then_re_exported(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
+    """p4-r6: a closed export PR never blocks the repo; its waves are exported again."""
     sha = _export_pr(world, git_checkout.path, state="CLOSED")
     state = _finished_wave(tmp_path, world, exports=_recorded(sha))
 
-    code, out = _export_drive(state, "--yes")
+    code, out = _export_drive(state, "--once", "--yes")
 
-    assert code == 3, out
-    assert f"warn wave 1 {REPO}: export PR #40 is closed without a merge" in out
-    assert f"export wave 1 {REPO}" in out.split("stopped:")[1]
+    assert code == 0, out
+    assert f"export-closed wave 1 {REPO}: recorded export PR #40 as closed" in out
+    assert "warning:" in out and "closed without a merge" in out
+    assert [e.closed for e in load_judgements(state / "judgements.yaml").exports] == [True]
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert "closed without a merge" not in out  # said once
+    (new,) = [n for n, p in world.prs.items() if p["head_ref"] == EXPORT_HEAD and n != 40]
+    assert _exports(state) == [("1", new, False)]  # force-pushed onto the same branch
+
+
+def test_an_export_pr_merged_outside_the_driver_is_recorded_and_the_next_wave_exports(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """p4-r1: a hand merge (or a crash after pr_merge) never pins the repo forever."""
+    sha = _export_pr(world, git_checkout.path, state="MERGED")
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha), waves=(1,), live=(2,))
+    _finish(state, 2)
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert f"export-reconcile wave 1 {REPO}: recorded export PR #40 as merged" in out
+    assert world.merged == []  # nothing merged by the driver
+    assert _exports(state) == [("1", 40, True)]
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert [w for w, pr, _ in _exports(state) if pr not in (40,)] == ["2"]
 
 
 def test_a_drive_loop_is_not_done_while_its_export_pr_is_open(

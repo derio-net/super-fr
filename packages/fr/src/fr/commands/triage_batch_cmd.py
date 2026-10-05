@@ -2299,6 +2299,15 @@ class _Driver:
             # pinned to the head adopted: a later commit on the branch never merges
             self._record_export(action.batch, _covers(action), pr=action.pr, head=action.head)
             return f"recorded the open PR #{action.pr} at {action.head[:12]}; nothing pushed"
+        if action.kind == "export-reconcile":  # merged outside the driver (p4-r1)
+            assert action.pr is not None
+            self._mark(action.batch, action.pr, merged=True)
+            return f"recorded export PR #{action.pr} as merged"
+        if action.kind == "export-closed":  # closed unmerged: said once (p4-r6)
+            assert action.pr is not None
+            self._mark(action.batch, action.pr, closed=True)
+            err_console.print(f"[yellow]warning:[/yellow] {escape(action.detail)}", soft_wrap=True)
+            return f"recorded export PR #{action.pr} as closed; its waves are owed again"
         return self._export_merge(action, facts, action.batch, action.wave)
 
     def _record_export(
@@ -2313,15 +2322,14 @@ class _Driver:
         kept = [e for e in read if not (e.repo == repo and e.wave in waves)]
         self._save_exports(path, [*kept, *new], read)
 
-    def _mark_merged(self, repo: str, pr: int) -> None:
-        """Every entry carrying export PR *pr* is merged: a PR covers all its waves."""
+    def _mark(self, repo: str, pr: int, *, merged: bool = False, closed: bool = False) -> None:
+        """Mark every entry carrying export PR *pr* merged (or closed): a PR covers all
+        its waves, so all of them move together."""
         path = self.target / "judgements.yaml"
         read = load_judgements(path).exports
-        merged = [
-            e.model_copy(update={"merged": True}) if (e.repo, e.pr) == (repo, pr) else e
-            for e in read
-        ]
-        self._save_exports(path, merged, read)
+        update = {"merged": True} if merged else {"closed": True}
+        marked = [e.model_copy(update=update) if (e.repo, e.pr) == (repo, pr) else e for e in read]
+        self._save_exports(path, marked, read)
 
     @staticmethod
     def _save_exports(path: Path, exports: list[Export], read: list[Export]) -> None:
@@ -2409,7 +2417,7 @@ class _Driver:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             _fail(f"export PR #{action.pr}: the forge refused the merge: {exc}", code=1)
-        self._mark_merged(repo, action.pr)
+        self._mark(repo, action.pr, merged=True)
         return f"merged export PR #{action.pr} at {action.head[:12]}"
 
 

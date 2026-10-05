@@ -66,8 +66,12 @@ ActionKind = Literal[
     "export",
     "export-adopt",
     "export-merge",
+    "export-reconcile",
+    "export-closed",
 ]
-EXPORT_KINDS: frozenset[str] = frozenset({"export", "export-adopt", "export-merge"})
+EXPORT_KINDS: frozenset[str] = frozenset(
+    {"export", "export-adopt", "export-merge", "export-reconcile", "export-closed"}
+)
 
 ARCHIVED_BY_UNKNOWN_PR = 0
 """`CloseoutEvent.archived` for a close-out found archived on the default branch with
@@ -428,7 +432,7 @@ def export_target(
     """One export PR per repo covers every unexported finished wave. While one is
     unmerged, it is the target and a wave that finished since waits for a later pass,
     so no second PR is opened. None: nothing is owed."""
-    mine = [e for e in exports if e.repo == repo]
+    mine = [e for e in exports if e.repo == repo and not e.closed]  # closed: owed again
     unmerged = [e for e in mine if e.pr is not None and not e.merged]
     if unmerged:
         newest = unmerged[-1]
@@ -465,12 +469,15 @@ def _export_row(
         ), "closing"
     if live is None:
         return None, "closing"  # not read this pass: still owed
-    if live.state == "MERGED":
-        return None, None
+    if live.state == "MERGED":  # merged by hand, or a pass died before recording (p4-r1)
+        merged = f"export PR #{live.number} was merged outside the driver; recording it"
+        return Action("export-reconcile", repo, merged, pr=live.number, wave=wave), "closing"
+    if live.state != "OPEN":  # closed unmerged: recorded once, its waves owed again (p4-r6)
+        return Action("export-closed", repo, f"export PR #{live.number} was closed without "
+                      "a merge; its waves are owed again and re-exported next pass",
+                      pr=live.number, wave=wave), "closing"  # fmt: skip
     why = ""
-    if live.state != "OPEN":
-        why = "is closed without a merge"
-    elif not live.trusted:
+    if not live.trusted:
         why = "is not trusted (not from this repo by an allowed author)"
     elif live.head != done.head or not done.head:
         why = (f"head is {live.head[:12] or 'unknown'}, not the recorded "

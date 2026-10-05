@@ -610,6 +610,9 @@ class Export(_Strict):
     # PR it adopted. A commit anyone else pushes to the branch never merges (R13).
     head: str | None = None
     merged: bool = False
+    # The PR was closed without a merge (p4-r6): the entry no longer covers its wave,
+    # which is owed again and re-exported on a fresh PR.
+    closed: bool = False
 
     @field_validator("wave", mode="before")
     @classmethod

@@ -1003,9 +1003,8 @@ def test_a_recorded_pr_with_pending_checks_waits_and_counts_closing() -> None:
         ({"checks": "failing", "failing": ("lint",)}, "failing"),
         ({"trusted": False}, "not trusted"),
         ({"draft": True}, "draft"),
-        ({"state": "CLOSED"}, "closed without a merge"),
     ],
-    ids=["failing", "untrusted", "draft", "closed"],
+    ids=["failing", "untrusted", "draft"],
 )
 def test_a_recorded_pr_that_cannot_merge_warns_every_pass_and_blocks(
     live: dict[str, Any], why: str
@@ -1185,3 +1184,42 @@ def test_a_file_outside_the_export_dir_blocks_adopt_and_merge(files: tuple[str, 
     )
     assert _exports(merge) == [("warn", REPO, "1", 40)]
     assert merge.summary.blocked == 1
+
+
+# ------------------------------------- out-of-band merges and closes (p4-r1, p4-r6)
+
+
+def test_a_recorded_pr_merged_outside_the_driver_is_reconciled() -> None:
+    """p4-r1: merged by hand, or a pass died between the merge and its record."""
+    got = drive_pass(
+        _three_waves(exports=_covering(40), export_prs={(REPO, "10"): _trusted(40, state="MERGED")})
+    )
+    exports = [a for a in got.actions if a.wave is not None]
+    assert [(a.kind, a.wave, a.pr) for a in exports] == [("export-reconcile", "10", 40)]
+    assert "merged outside the driver" in exports[0].detail
+    assert not got.summary.done  # recorded this pass; the next one exports what is owed
+
+
+def test_after_a_reconciled_merge_the_next_wave_exports() -> None:
+    finished = frozenset({"1", "2", "10", "11"})
+    after = drive_pass(_three_waves(finished=finished, exports=_covering(40, merged=True)))
+    (export,) = [a for a in after.actions if a.wave is not None]
+    assert (export.kind, export.covers) == ("export", ("11",))
+
+
+def test_a_recorded_pr_closed_unmerged_is_recorded_closed_once() -> None:
+    """p4-r6: never a block forever; its waves are owed again."""
+    got = drive_pass(
+        _three_waves(exports=_covering(40), export_prs={(REPO, "10"): _trusted(40, state="CLOSED")})
+    )
+    exports = [a for a in got.actions if a.wave is not None]
+    assert [(a.kind, a.wave, a.pr) for a in exports] == [("export-closed", "10", 40)]
+    assert "closed without a merge" in exports[0].detail
+    assert got.summary.blocked == 0 and not got.summary.done
+
+
+def test_waves_of_a_closed_export_are_owed_again() -> None:
+    closed = [e.model_copy(update={"closed": True}) for e in _covering(40)]
+    got = drive_pass(_three_waves(exports=closed))
+    (export,) = [a for a in got.actions if a.wave is not None]
+    assert (export.kind, export.wave, export.covers) == ("export", "10", ("1", "2", "10"))
