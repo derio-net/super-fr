@@ -1,0 +1,86 @@
+{
+  "id": "cli:workspace:list",
+  "result": {
+    "type": "workspace_list",
+    "workspaces": [
+      {
+        "active_tab_id": "w2:t1W",
+        "agent_status": "idle",
+        "focused": true,
+        "label": "super-fr",
+        "number": 1,
+        "pane_count": 6,
+        "tab_count": 6,
+        "tokens": {
+          "usage": "cpu 0% \u00b7 ram 1%"
+        },
+        "workspace_id": "w2"
+      },
+      {
+        "active_tab_id": "w6:t1",
+        "agent_status": "idle",
+        "focused": false,
+        "label": "example-ws-1",
+        "number": 2,
+        "pane_count": 2,
+        "tab_count": 2,
+        "tokens": {
+          "usage": "cpu 0% \u00b7 ram 1%"
+        },
+        "workspace_id": "w6"
+      },
+      {
+        "active_tab_id": "w8:t3",
+        "agent_status": "idle",
+        "focused": false,
+        "label": "example-ws-2",
+        "number": 3,
+        "pane_count": 2,
+        "tab_count": 2,
+        "tokens": {
+          "usage": "cpu 0% \u00b7 ram 1%"
+        },
+        "workspace_id": "w8"
+      },
+      {
+        "active_tab_id": "wQ:t4",
+        "agent_status": "idle",
+        "focused": false,
+        "label": "example-ws-3",
+        "number": 4,
+        "pane_count": 1,
+        "tab_count": 1,
+        "tokens": {
+          "usage": "cpu 0% \u00b7 ram 1%"
+        },
+        "workspace_id": "wQ"
+      },
+      {
+        "active_tab_id": "w2D:tJ",
+        "agent_status": "working",
+        "focused": false,
+        "label": "example-ws-4",
+        "number": 5,
+        "pane_count": 1,
+        "tab_count": 1,
+        "tokens": {
+          "usage": "cpu 0% \u00b7 ram 1%"
+        },
+        "workspace_id": "w2D"
+      },
+      {
+        "active_tab_id": "w2G:t1",
+        "agent_status": "idle",
+        "focused": false,
+        "label": "example-ws-5",
+        "number": 6,
+        "pane_count": 1,
+        "tab_count": 1,
+        "tokens": {
+          "usage": "cpu 0% \u00b7 ram 1%"
+        },
+        "workspace_id": "w2G"
+      }
+    ]
+  }
+}

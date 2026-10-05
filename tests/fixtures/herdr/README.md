@@ -10,3 +10,12 @@
   object shaped as captured by `herdr pane list`. `fr_herdr` reads only
   `.result.root_pane.pane_id` from it. Replace it with a real capture when one is
   taken (plan phase 4's live walk).
+- `workspace-list.json`, `tab-list-all.json`, `workspace-create.json`,
+  `tab-rename.json`, `workspace-close.json` — captured live 2026-10-05
+  (herdr protocol 22) from `herdr workspace list`, `herdr tab list` (no
+  `--workspace`: every workspace), `herdr workspace create --label
+  fr-fixture-capture --cwd /tmp --no-focus`, `herdr tab rename <tab_id>
+  fr-fixture-capture-tab` and `herdr workspace close <workspace_id>` (the
+  scratch workspace was closed again). Redaction: every workspace label other
+  than `super-fr` became `example-ws-<n>`, every tab label that was not a
+  batch item id or a bare `|` became `example-tab-<n>`; shape unchanged.

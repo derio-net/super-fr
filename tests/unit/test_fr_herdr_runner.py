@@ -32,13 +32,23 @@ class _Herdr:
 
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
+        self.workspaces: dict[str, Any] = {}
+        self.listing: dict[str, Any] = {}
 
     def __call__(self, args: list[str]) -> dict[str, Any]:
         self.calls.append(list(args))
         if args[:2] == ["tab", "create"]:
             return _fixture("tab-create.json")
         if args[:2] == ["tab", "list"]:
+            if self.listing:
+                return self.listing
             return _fixture("tab-list.json")
+        if args[:2] == ["workspace", "list"]:
+            return self.workspaces or _fixture("workspace-list.json")
+        if args[:2] == ["workspace", "create"]:
+            return _fixture("workspace-create.json")
+        if args[:2] == ["tab", "rename"]:
+            return _fixture("tab-rename.json")
         return {}
 
     def text(self) -> str:
@@ -57,6 +67,17 @@ def herdr(monkeypatch: pytest.MonkeyPatch) -> _Herdr:
 
 def _item(**kw: Any) -> Any:
     return run_item("example-org/alpha", "batch-lifecycle", checkout="/work/alpha", **kw)
+
+
+# ------------------------------------------------------------ live fixtures
+
+
+def test_the_live_captured_fixtures_have_herdrs_result_types() -> None:
+    assert _fixture("workspace-list.json")["result"]["type"] == "workspace_list"
+    assert _fixture("tab-list-all.json")["result"]["type"] == "tab_list"
+    assert _fixture("workspace-create.json")["result"]["type"] == "workspace_created"
+    tabs = _fixture("tab-list-all.json")["result"]["tabs"]
+    assert len({t["workspace_id"] for t in tabs}) > 1
 
 
 # -------------------------------------------------------------- construction
@@ -217,7 +238,82 @@ def test_existing_dispatches_matches_live_tabs_by_label(herdr: _Herdr) -> None:
     held = HerdrRunner.from_env().existing_dispatches([live, idle])
 
     assert held == {live.id}
-    assert herdr.calls == [["tab", "list", "--workspace", "w2"]]
+    assert herdr.calls == [["tab", "list"]]
+
+
+def test_existing_dispatches_finds_a_tab_in_any_workspace(herdr: _Herdr) -> None:
+    tabs = _fixture("tab-list-all.json")["result"]["tabs"]
+    elsewhere = next(t for t in tabs if t["workspace_id"] != "w2")
+    item = _item()
+    relabelled = {"result": {"type": "tab_list", "tabs": [{**elsewhere, "label": item.id}]}}
+    herdr.listing = relabelled
+    assert HerdrRunner.from_env().existing_dispatches([item]) == {item.id}
+
+
+# --------------------------------------------------------------------- groups
+
+
+def _grouped(**kw: Any) -> Any:
+    return _item(group="drive-wave-1", **kw)
+
+
+def _ws(label: str, wid: str) -> dict[str, Any]:
+    return {
+        "result": {"type": "workspace_list", "workspaces": [{"label": label, "workspace_id": wid}]}
+    }
+
+
+def test_a_group_naming_an_existing_workspace_opens_a_tab_in_it(herdr: _Herdr) -> None:
+    herdr.workspaces = _ws("drive-wave-1", "w9")
+    HerdrRunner.from_env().dispatch(_grouped(model="m", brief="b"))
+    text = herdr.text()
+    assert "tab create --workspace w9 --cwd /work/alpha" in text
+    assert "workspace create" not in text
+
+
+def test_a_group_with_no_workspace_creates_one_and_uses_its_root_pane(herdr: _Herdr) -> None:
+    item = _grouped(model="m", brief="b")
+    handle = HerdrRunner.from_env().dispatch(item)
+    assert [
+        "workspace", "create", "--label", "drive-wave-1", "--cwd", "/work/alpha", "--no-focus",
+    ] in herdr.calls  # fmt: skip
+    assert ["tab", "rename", "w2H:t1", item.id] in herdr.calls
+    assert not any(c[:2] == ["tab", "create"] for c in herdr.calls)
+    start = next(c for c in herdr.calls if c[:2] == ["agent", "start"])
+    assert start[start.index("--pane") + 1] == "w2H:p1"
+    assert handle == "w2H:p1"
+
+
+@pytest.mark.parametrize("failing", [["agent", "start"], ["tab", "rename"]])
+def test_a_failure_after_workspace_create_closes_the_workspace(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch, failing: list[str]
+) -> None:
+    def flaky(args: list[str]) -> dict[str, Any]:
+        if args[:2] == failing:
+            herdr.calls.append(list(args))
+            raise herdr_runner.HerdrError("boom")
+        return herdr(args)
+
+    monkeypatch.setattr(herdr_runner, "_run_herdr", flaky)
+    with pytest.raises(herdr_runner.HerdrError, match="boom"):
+        HerdrRunner.from_env().dispatch(_grouped(model="m", brief="b"))
+    assert herdr.calls[-1] == ["workspace", "close", "w2H"]
+
+
+def test_without_a_group_the_runners_own_workspace_is_used(herdr: _Herdr) -> None:
+    HerdrRunner.from_env().dispatch(_item(model="m", brief="b"))
+    assert herdr.calls[0][:4] == ["tab", "create", "--workspace", "w2"]
+    assert not any(c[0] == "workspace" for c in herdr.calls)
+
+
+def test_preflight_needs_no_workspace_id_when_every_item_has_a_group(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HERDR_WORKSPACE_ID")
+    runner = HerdrRunner.from_env()
+    assert runner.preflight([_grouped()]) is None
+    message = runner.preflight([_grouped(), _item()])
+    assert message is not None and "HERDR_WORKSPACE_ID" in message
 
 
 # ------------------------------------------------------------------ contract

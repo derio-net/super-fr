@@ -17,6 +17,11 @@ prompt is in.
   unique across repos), so `existing_dispatches` matches live tabs by label.
   The agent name only has to satisfy herdr's `[a-z][a-z0-9_-]{0,31}`:
   `b-<first 20 chars of the batch id>-<4 hex of sha1(item id)>`.
+- **Groups.** An item whose payload carries `group` is opened in the herdr
+  workspace of that label (created, with the tab renamed to the item id, when
+  none exists); an item without one goes to the runner's own workspace.
+  Because a group's workspace is not the runner's, `existing_dispatches` lists
+  the tabs of EVERY workspace and matches the item id wherever it is.
 - **Inside herdr only.** `preflight` refuses unless `HERDR_ENV=1` and `herdr`
   is on PATH: herdr's own rule is never to drive a session from outside it.
 
@@ -35,7 +40,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from fr_dispatch.work_item import WorkItem
 
@@ -111,7 +116,7 @@ class HerdrRunner:
                 "not inside a herdr session (HERDR_ENV=1 is unset): herdr is never "
                 "driven from outside it"
             )
-        if not self.workspace_id:
+        if not self.workspace_id and any(not i.payload.get("group") for i in items):
             return "HERDR_WORKSPACE_ID is unset, so there is no workspace to open a tab in"
         return None
 
@@ -124,7 +129,7 @@ class HerdrRunner:
         return 1
 
     def existing_dispatches(self, items: Sequence[WorkItem]) -> set[str]:
-        listing = _run_herdr(["tab", "list", "--workspace", str(self.workspace_id)])
+        listing = _run_herdr(["tab", "list"])
         labels = {t.get("label") for t in listing.get("result", {}).get("tabs", [])}
         return {item.id for item in items if item.id in labels}
 
@@ -142,25 +147,8 @@ class HerdrRunner:
         payload = item.payload
         harness = HARNESSES[str(payload["harness"])]
         checkout = str(payload.get("checkout") or os.getcwd())
-        created = _run_herdr(
-            [
-                "tab",
-                "create",
-                "--workspace",
-                str(self.workspace_id),
-                "--cwd",
-                checkout,
-                "--label",
-                item.id,
-                "--no-focus",
-            ]
-        )
-        tab = _created_tab_id(created)
+        pane, cleanup = self._open_tab(item, checkout)
         try:
-            try:
-                pane = str(created["result"]["root_pane"]["pane_id"])
-            except (KeyError, TypeError) as exc:
-                raise HerdrError(f"herdr tab create returned no root pane: {created!r}") from exc
             name = agent_name(item.id)
             _run_herdr(
                 [
@@ -177,9 +165,84 @@ class HerdrRunner:
             )
             _run_herdr(["agent", "prompt", name, str(payload["brief"])])
         except BaseException:
-            _close_tab(tab)
+            cleanup()
             raise
         return pane
+
+    def _open_tab(self, item: WorkItem, checkout: str) -> tuple[str, Callable[[], None]]:
+        """Open the item's tab: `(root pane id, cleanup to undo what this opened)`."""
+        group = item.payload.get("group")
+        if group:
+            workspace = _group_workspace(str(group))
+            if workspace is None:
+                return self._create_group_workspace(item, str(group), checkout)
+        else:
+            workspace = str(self.workspace_id)
+        created = _run_herdr(
+            [
+                "tab",
+                "create",
+                "--workspace",
+                workspace,
+                "--cwd",
+                checkout,
+                "--label",
+                item.id,
+                "--no-focus",
+            ]
+        )
+        tab = _created_tab_id(created)
+        try:
+            return _root_pane(created, "tab create"), lambda: _close_tab(tab)
+        except HerdrError:
+            _close_tab(tab)
+            raise
+
+    def _create_group_workspace(
+        self, item: WorkItem, group: str, checkout: str
+    ) -> tuple[str, Callable[[], None]]:
+        """Create the group's workspace; its first tab is renamed to the item id."""
+        created = _run_herdr(
+            ["workspace", "create", "--label", group, "--cwd", checkout, "--no-focus"]
+        )
+        result = created.get("result")
+        workspace = None
+        if isinstance(result, dict):
+            holder = result.get("workspace")
+            if isinstance(holder, dict) and holder.get("workspace_id"):
+                workspace = str(holder["workspace_id"])
+
+        def cleanup() -> None:
+            _close_workspace(workspace)
+
+        try:
+            pane = _root_pane(created, "workspace create")
+            tab = _created_tab_id(created)
+            if tab is None:
+                raise HerdrError(f"herdr workspace create returned no tab: {created!r}")
+            _run_herdr(["tab", "rename", tab, item.id])
+        except BaseException:
+            cleanup()
+            raise
+        return pane, cleanup
+
+
+def _root_pane(created: dict[str, Any], what: str) -> str:
+    try:
+        return str(created["result"]["root_pane"]["pane_id"])
+    except (KeyError, TypeError) as exc:
+        raise HerdrError(f"herdr {what} returned no root pane: {created!r}") from exc
+
+
+def _group_workspace(label: str) -> str | None:
+    """The id of the first workspace labelled *label*, if any."""
+    listing = _run_herdr(["workspace", "list"])
+    result = listing.get("result")
+    workspaces = result.get("workspaces", []) if isinstance(result, dict) else []
+    for ws in workspaces:
+        if isinstance(ws, dict) and ws.get("label") == label and ws.get("workspace_id"):
+            return str(ws["workspace_id"])
+    return None
 
 
 def _created_tab_id(created: dict[str, Any]) -> str | None:
@@ -199,6 +262,16 @@ def _close_tab(tab: str | None) -> None:
         return
     try:
         _run_herdr(["tab", "close", tab])
+    except HerdrError:
+        pass
+
+
+def _close_workspace(workspace: str | None) -> None:
+    """Best-effort close of a workspace this dispatch created."""
+    if workspace is None:
+        return
+    try:
+        _run_herdr(["workspace", "close", workspace])
     except HerdrError:
         pass
 
