@@ -1,0 +1,43 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-run-upgrade-midflight
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-r1
+    phase: 1
+    review_scope: in
+    title: "fr run reshape's schema-mismatch refusal never names fr run adopt --supersede (R2)"
+    body: "reshape_cmd pre-checked the schema with _resolve_manifest_checked_schema, whose refusal says 'start a new run', so reshape()'s rule 1 was unreachable from the CLI and its message lacked --supersede too."
+  - kind: finding
+    id: p1-r2
+    phase: 1
+    review_scope: in
+    title: "fr run check's drift warning (R4) is untested though the row's notes claim it"
+    body: "Only gates and status had tests; a regression in check (refusing, or warning twice) would go unseen."
+  - kind: finding
+    id: p1-r3
+    phase: 1
+    review_scope: out
+    title: "fr pickup's _run_unit_record uses the strict resolver and swallows the error on a drifted cursor"
+    body: "pickup_cmd.py:247 drops the record brief silently on a drifted cursor. Pre-existing; R4 covers fr run read-only commands only (spec Non-goals)."
+  - kind: review
+    id: p1-review-1
+    phase: 1
+    title: "phase 1 review: p1-r1, p1-r2 (in), p1-r3 (out)"
+    body: "Independent reviewer checked reshape rules 1-5, the write path, the resolver call-site audit (no mutating command lenient), single warnings, artifact shape unchanged. Raised p1-r1, p1-r2 (in scope) and p1-r3 (out of scope)."
+resolves:
+  - id: p1-r1
+    state: fixed
+    body: "reshape_cmd now resolves the shape by name and lets reshape() own rule 1, whose message names `fr run adopt <plan-dir> --supersede`; unit test tightened, CLI test test_reshape_across_a_schema_change_refuses_naming_supersede added (exit 2, bytes and commit count unchanged)."
+  - id: p1-r2
+    state: fixed
+    body: "Added test_check_answers_a_drifted_cursor_with_one_warning and cited it on run-read-drifted-cursor."
+  - id: p1-r3
+    state: out-of-scope
+    body: "Not caused by this change: fr pickup predates it and is not an `fr run` read-only command; listed in the spec's Non-goals. Reshape removes the drift it trips on."
+evidence:
+  review: p1-review-1
+  reviewer: ad5250828177f6456
+  model: claude-opus-5-5
