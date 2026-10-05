@@ -1,0 +1,134 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-triage-pages-goal
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+- kind: finding
+  id: p2-r1
+  review_scope: in
+  title: Batch stage filter with every box off shows no "no batches match" message
+  body: Raised by the phase 2 reviewer (separate dispatched context).
+- kind: finding
+  id: p2-r2
+  review_scope: in
+  title: Wave table's "Why" column is clipped at 390px with no scroll affordance
+  body: Raised by the phase 2 reviewer (separate dispatched context).
+- kind: finding
+  id: p2-r3
+  review_scope: in
+  title: Planned merge-order list is not tied to the stage filter, so it can list batches the cards hide
+  body: Raised by the phase 2 reviewer (separate dispatched context).
+- kind: finding
+  id: p2-r4
+  review_scope: in
+  title: FOLD_SCRIPT calls reveal twice (click handler and hashchange); harmless but redundant
+  body: Raised by the phase 2 reviewer (separate dispatched context).
+- kind: finding
+  id: p2-r5
+  review_scope: in
+  title: With every stage off the "Planned merge order" intro paragraph stays above an empty list
+  body: Raised by the phase 2 reviewer (separate dispatched context).
+- kind: review
+  id: p2-review-1
+  title: 'phase 2 review: 5 findings (all in, all minor)'
+  body: Dispatched reviewer read 18c6cc849..6666d74e2 against R2-R5 and plan phase 2, ran the triage tests (1054
+    passed), re-ran shots-p2.py as a command word and opened all 21 screenshots; after fixes it re-ran the capture,
+    opened all 21 again, verified p2-r1..r4 and raised p2-r5, fixed in 3468e4a41.
+resolves:
+- id: p2-r1
+  state: fixed
+  body: filter-empty message shown by apply() when no card is visible (0f9b51a88); test test_an_empty_filter_says_so_and_the_merge_order_follows_it;
+    reviewer saw it in p2-batch-filter-every-stage-off.
+- id: p2-r2
+  state: fixed
+  body: scroll shadows on .tablewrap (0f9b51a88, 9d979a21a); test test_wide_tables_show_that_they_scroll; reviewer
+    saw the edge shadow.
+- id: p2-r3
+  state: fixed
+  body: merge-order rows hide with their batch's card (0f9b51a88); reviewer verified.
+- id: p2-r4
+  state: fixed
+  body: click path only for a link to the hash already shown (0f9b51a88); test test_a_link_reveals_once_and_only_the_same_hash_needs_the_click_path.
+- id: p2-r5
+  state: fixed
+  body: intro and list wrapped in div.merge-plan hidden when no step is visible (3468e4a41); test test_the_merge_plan_hides_whole_when_no_step_is_shown.
+- id: p2-suite-log-background-unwitnessed
+  state: out-of-scope
+  body: A conflict between fr's suite-log witness and the brief's long_commands rule, not caused by this change;
+    deliver re-runs the suite on the final tree.
+visual:
+- row: triage-board-first-screen
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots-p2.py
+  shots:
+  - path: .shots/png/p2-since-table-with-changes-1280-light.png
+    shows:
+    - since-table-with-changes
+  - path: .shots/png/p2-since-table-with-changes-1280-dark.png
+    shows:
+    - since-table-with-changes
+  - path: .shots/png/p2-since-table-with-changes-390-light.png
+    shows:
+    - since-table-with-changes
+  - path: .shots/png/p2-since-table-empty-1280-light.png
+    shows:
+    - since-table-empty
+  - path: .shots/png/p2-since-table-empty-1280-dark.png
+    shows:
+    - since-table-empty
+  - path: .shots/png/p2-since-table-empty-390-light.png
+    shows:
+    - since-table-empty
+  - path: .shots/png/p2-every-wave-finished-1280-light.png
+    shows:
+    - every-wave-finished
+  - path: .shots/png/p2-every-wave-finished-1280-dark.png
+    shows:
+    - every-wave-finished
+  - path: .shots/png/p2-every-wave-finished-390-light.png
+    shows:
+    - every-wave-finished
+  - path: .shots/png/p2-sections-collapsed-1280-light.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-sections-collapsed-1280-dark.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-sections-collapsed-390-light.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-wave-table-390-light.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-interaction-switch-wave-tab.png
+    shows:
+    - switch-wave-tab
+  - path: .shots/png/p2-interaction-expand-collapsed-section.png
+    shows:
+    - expand-collapsed-section
+- row: triage-board-batch-filter
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots-p2.py
+  shots:
+  - path: .shots/png/p2-batch-filter-all-stages-on.png
+    shows:
+    - all-stages-on
+  - path: .shots/png/p2-batch-filter-merged-and-cancelled-off.png
+    shows:
+    - merged-and-cancelled-off
+    - toggle-stage
+  - path: .shots/png/p2-batch-filter-every-stage-off.png
+    shows:
+    - every-stage-off
+  - path: .shots/png/p2-batch-filter-no-javascript.png
+    shows:
+    - no-javascript
+  - path: .shots/png/p2-interaction-follow-batch-link.png
+    shows:
+    - follow-batch-link
+  - path: .shots/png/p2-interaction-open-card.png
+    shows:
+    - open-card
+evidence:
+  review: p2-review-1
+  reviewer: a8cdf3716a9c83d75
+  model: claude-opus-5-5
