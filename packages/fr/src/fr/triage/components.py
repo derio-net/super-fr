@@ -134,7 +134,13 @@ svg.chart text { font-family: var(--mono); font-size: 10px; }
 sections, tables); a page adds its own pieces after it."""
 
 GRID_CSS = """
-.tablewrap { overflow-x: auto; }
+.tablewrap { overflow-x: auto;
+  /* scroll shadows: an edge with more table beyond it is shaded (review p2-r2) */
+  background:
+    linear-gradient(to right, var(--ground) 30%, transparent) left / 32px 100% no-repeat local,
+    linear-gradient(to left, var(--ground) 30%, transparent) right / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.25), transparent) left / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.25), transparent) right / 12px 100% no-repeat scroll; }
 table.grid { border-collapse: collapse; width: 100%; min-width: 720px; font-size: .88rem; }
 table.grid th, table.grid td { text-align: left; vertical-align: top;
   border-bottom: 1px solid var(--line); padding: 4px 8px; }

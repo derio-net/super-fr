@@ -288,10 +288,18 @@ FOLD_SCRIPT = """
   var boxes = Array.prototype.slice.call(document.querySelectorAll("input[data-stage-filter]"));
   var cards = Array.prototype.slice.call(document.querySelectorAll("details.batch"));
   var filter = document.querySelector("fieldset.stage-filter");
+  var empty = document.querySelector("p.filter-empty");
+  var steps = Array.prototype.slice.call(document.querySelectorAll("ol.merge-order li"));
   function apply() {
-    var on = {};
+    var on = {}, shown = {}, any = false;
     boxes.forEach(function (b) { on[b.value] = b.checked; });
-    cards.forEach(function (c) { c.hidden = !on[c.dataset.stage]; });
+    cards.forEach(function (c) {
+      c.hidden = !on[c.dataset.stage];
+      if (!c.hidden) { any = true; shown[c.id.slice(6)] = true; }
+    });
+    // A merge step follows its batch's card; an empty selection says so (review p2-r1, p2-r3).
+    steps.forEach(function (li) { li.hidden = !shown[li.dataset.batch]; });
+    if (empty) { empty.hidden = any || !cards.length; }
   }
   function reveal() {
     var id = "";
@@ -310,7 +318,9 @@ FOLD_SCRIPT = """
   boxes.forEach(function (b) { b.addEventListener("change", apply); });
   document.addEventListener("click", function (e) {
     var a = e.target.closest ? e.target.closest('a[href^="#batch-"]') : null;
-    if (a) { setTimeout(reveal, 0); }
+    // A new hash fires `hashchange`, which reveals; only a link to the hash already shown
+    // fires nothing, so the click covers that case alone (review p2-r4).
+    if (a && a.hash === location.hash) { reveal(); }
   });
   window.addEventListener("hashchange", reveal);
   if (filter) { filter.hidden = false; }
@@ -637,6 +647,7 @@ def _batches(judgements: Judgements, facts: Facts) -> str:
     if not judgements.batches:
         return ""
     cards = "".join(_batch_card(b, facts) for b in judgements.batches)
+    cards += '<p class="filter-empty" hidden>No batches match the selected stages.</p>'
     steps = planned_merge_order(judgements.batches, facts, judgements.issues)
     order = (
         '<p class="tier-desc">Planned merge order of the open batch PRs, with the files '

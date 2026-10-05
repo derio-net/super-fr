@@ -214,3 +214,32 @@ def test_the_fold_script_toggles_by_stage_and_opens_every_ancestor_then_scrolls(
     assert "hashchange" in FOLD_SCRIPT and "location.hash" in FOLD_SCRIPT
     assert 'tagName === "DETAILS"' in FOLD_SCRIPT and "parentElement" in FOLD_SCRIPT
     assert "scrollIntoView" in FOLD_SCRIPT
+
+
+def test_an_empty_filter_says_so_and_the_merge_order_follows_it() -> None:
+    """Review p2-r1, p2-r3: with every stage off the fold says nothing matches, and the
+    merge-order rows hide with their batch's card."""
+    from fr.triage.render import FOLD_SCRIPT
+
+    section = _section(render(FACTS, JUDGEMENTS))
+    empty = re.search(r'<p class="filter-empty"[^>]*>([^<]*)</p>', section)
+    assert empty and " hidden" in empty.group(0) and "No batches match" in empty.group(1)
+    assert ".filter-empty" in FOLD_SCRIPT
+    assert "ol.merge-order li" in FOLD_SCRIPT and "dataset.batch" in FOLD_SCRIPT
+
+
+def test_a_link_reveals_once_and_only_the_same_hash_needs_the_click_path() -> None:
+    """Review p2-r4: `hashchange` reveals a new hash; the click handler only covers a link
+    to the hash already shown, which fires no `hashchange`."""
+    from fr.triage.render import FOLD_SCRIPT
+
+    assert "a.hash === location.hash" in FOLD_SCRIPT
+
+
+def test_wide_tables_show_that_they_scroll() -> None:
+    """Review p2-r2: a `.tablewrap` carries scroll shadows, so a clipped column reads as
+    'scroll sideways', not as cut off."""
+    from fr.triage.components import GRID_CSS
+
+    wrap = re.search(r"\.tablewrap \{[^}]*\}", GRID_CSS)
+    assert wrap and "local" in wrap.group(0) and "scroll" in wrap.group(0)
