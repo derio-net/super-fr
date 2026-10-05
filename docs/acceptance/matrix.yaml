@@ -6041,9 +6041,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R3
     - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_a_group_with_no_workspace_creates_one_and_uses_its_root_pane
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_driven_dispatch_carries_its_waves_group
+    status: ci
+    notes: 'Phase 1 shipped: group payload hint, herdr group workspaces (reuse by label,
+      create with tab rename), drive --workspace-prefix; manual dispatch carries no
+      group.'
   - id: drive-closes-finished-sessions
     capability: triage-batch-drive
     acceptance: Once a batch is finished the driver closes its batch and close-out sessions,
