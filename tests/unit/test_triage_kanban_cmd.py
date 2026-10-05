@@ -5,6 +5,8 @@ The runner is a fake; nothing here reaches herdr, a forge or a browser.
 
 from __future__ import annotations
 
+import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -13,6 +15,7 @@ import pytest
 from fr.cli import app
 from fr.commands import triage_kanban_cmd
 from fr.commands.triage_kanban_cmd import scope_args, session_statuses, write_board
+from fr.triage.errors import ForgeError
 from fr.triage.model import Scope, load_facts, load_judgements
 from typer.testing import CliRunner
 
@@ -291,3 +294,108 @@ def test_write_board_is_atomic_and_reloads_judgements_from_disk(
     assert 'id="card-b1"' in _column(page, "running")
     assert 'id="card-b1"' not in _column(page, "proposed")
     assert [p.name for p in tmp_path.iterdir() if p.suffix == ".tmp" or ".tmp" in p.name] == []
+
+
+# ---------------------------------------------------------------- --watch (R12)
+
+
+class _Watch:
+    """The loop's seams: collect, write and sleep recorded in order; a stop after *stop* sleeps."""
+
+    def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop: int = 3) -> None:
+        self.calls: list[str] = []
+        self.sleeps: list[float] = []
+        self.tmp_path, self.stop = tmp_path, stop
+        self.on_sleep: Any = None
+        monkeypatch.setattr(
+            triage_kanban_cmd, "recollect", lambda s, t: self.calls.append("collect")
+        )
+        real = triage_kanban_cmd.write_board
+
+        def _write(*a: Any, **kw: Any) -> Any:
+            self.calls.append("write")
+            return real(*a, **kw)
+
+        monkeypatch.setattr(triage_kanban_cmd, "write_board", _write)
+        monkeypatch.setattr(triage_kanban_cmd, "_sleep", self._sleep)
+        _use(monkeypatch, _Inspector())
+
+    def _sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        if self.on_sleep:
+            self.on_sleep(len(self.sleeps))
+        if len(self.sleeps) >= self.stop:
+            raise KeyboardInterrupt
+
+
+def _lock(tmp_path: Path, pid: int) -> None:
+    (tmp_path / "drive.lock").write_text(json.dumps({"pid": pid, "started": "x"}))
+
+
+def test_watch_collects_then_writes_every_interval_until_interrupted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch)
+    code, out = _board(tmp_path, "--watch")
+    assert code == 0, out
+    assert w.calls == ["collect", "write"] * 3
+    assert w.sleeps == [60, 60, 60]  # the default interval
+    assert (tmp_path / "board.html").exists()
+
+
+def test_watch_takes_the_interval_and_refuses_less_than_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch, stop=1)
+    assert _board(tmp_path, "--watch", "--interval", "7")[0] == 0
+    assert w.sleeps == [7]
+    assert _board(tmp_path, "--watch", "--interval", "0")[0] == 2
+
+
+def test_watch_refuses_while_a_live_drive_holds_the_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch)
+    _lock(tmp_path, os.getpid())
+    code, out = _board(tmp_path, "--watch")
+    assert code == 2 and "drive" in out and str(os.getpid()) in out
+    assert w.calls == [] and w.sleeps == []
+
+
+def test_watch_ignores_a_stale_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch, stop=1)
+    _lock(tmp_path, 999_999_999)
+    code, out = _board(tmp_path, "--watch")
+    assert code == 0, out
+    assert w.calls == ["collect", "write"]
+
+
+def test_an_iteration_that_finds_the_lock_held_skips_and_says_so_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch, stop=4)
+    w.on_sleep = lambda n: _lock(tmp_path, os.getpid()) if n == 1 else None
+    code, out = _board(tmp_path, "--watch")
+    assert code == 0, out
+    assert w.calls == ["collect", "write"]  # the drive owns the board from the second iteration
+    assert out.count("skipping") == 1
+
+
+def test_a_collect_that_fails_warns_once_and_the_loop_goes_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch, stop=3)
+
+    def _boom(scope: Any, target: Path) -> None:
+        raise ForgeError("forge said no")
+
+    monkeypatch.setattr(triage_kanban_cmd, "recollect", _boom)
+    code, out = _board(tmp_path, "--watch")
+    assert code == 0, out
+    assert out.count("forge said no") == 1 and w.calls == ["write"] * 3

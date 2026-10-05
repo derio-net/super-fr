@@ -14,6 +14,7 @@ statuses never refuses: whatever goes wrong is `unknown` plus one page note (R7)
 from __future__ import annotations
 
 import importlib.util
+import time
 import webbrowser
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
@@ -32,6 +33,7 @@ from fr.commands.triage_cmd import (
     _load_state,
     _scope,
     batch_app,
+    collect_into,
     console,
     err_console,
     triage_app,
@@ -43,6 +45,8 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     wave_group,
 )
+from fr.triage.drive_lock import live_driver
+from fr.triage.errors import TriageError
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.model import Facts, Judgements, Scope, state_dir
@@ -56,6 +60,7 @@ if TYPE_CHECKING:
 
 BOARD_FILE = "board.html"
 DEFAULT_REFRESH = 30
+DEFAULT_WATCH_INTERVAL = 60
 _STATUSES = frozenset(get_args(BoardStatus))
 
 DISPATCH_INSTALL_HINT = (
@@ -294,6 +299,60 @@ def write_board(
     return out, len(judgements.batches)
 
 
+def recollect(scope: Scope, target: Path) -> None:
+    """Collect facts.json as `fr triage collect` does (no carry-over); tests replace this."""
+    collect_into(scope, target)
+
+
+def _sleep(seconds: float) -> None:
+    """The watch loop's wait between iterations; tests replace it."""
+    time.sleep(seconds)
+
+
+def _watch(
+    scope: Scope, target: Path, args: Sequence[str], refresh: int, interval: int, open_: bool
+) -> None:
+    """Re-collect and re-render every *interval* seconds until interrupted (R12). A live
+    drive keeps the board fresh itself, so an iteration that finds its lock held skips."""
+    if (pid := live_driver(target)) is not None:
+        _fail(f"a drive (pid {pid}) holds {target / 'drive.lock'}; it keeps the board fresh")
+    skipping, failures, opened = False, set[str](), False
+    try:
+        while True:
+            if (pid := live_driver(target)) is not None:
+                if not skipping:
+                    skipping = True
+                    console.print(
+                        f"a drive (pid {pid}) now holds the lock: skipping collect and render "
+                        "until it is gone",
+                        markup=False,
+                        soft_wrap=True,
+                    )
+            else:
+                skipping = False
+                try:
+                    recollect(scope, target)
+                except TriageError as exc:  # a degraded forge never ends the watch
+                    if str(exc) not in failures:
+                        failures.add(str(exc))
+                        err_console.print(
+                            f"[yellow]warning:[/yellow] collect failed: {escape(str(exc))}; "
+                            f"rendering what is on disk, retrying every {interval}s",
+                            soft_wrap=True,
+                        )
+                else:
+                    failures.clear()
+                out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
+                console.print(
+                    f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True
+                )
+                if open_ and not opened:
+                    opened = webbrowser.open(out.resolve().as_uri()) or True
+            _sleep(interval)
+    except KeyboardInterrupt:
+        console.print("stopped", markup=False)
+
+
 @triage_app.command("board")
 def board_command(
     repo: RepoOpt = None,
@@ -304,14 +363,25 @@ def board_command(
         typer.Option("--refresh", min=0, help="Reload the page every N seconds (0: never)."),
     ] = DEFAULT_REFRESH,
     open_: Annotated[bool, typer.Option("--open", help="Open the board in a browser.")] = False,
+    watch: Annotated[
+        bool,
+        typer.Option(
+            "--watch", help="Re-collect and re-render every --interval seconds until interrupted."
+        ),
+    ] = False,
+    interval: Annotated[
+        int, typer.Option("--interval", min=1, help="Seconds between --watch iterations.")
+    ] = DEFAULT_WATCH_INTERVAL,
 ) -> None:
     """Write board.html: one card per batch in six lifecycle columns, with live session
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
     scope = _scope(repo, org)
     target = state_dir(scope, dir_override)
-    out, cards = write_board(
-        scope, target, scope_args=scope_args(repo, org, dir_override), refresh=refresh
-    )
+    args = scope_args(repo, org, dir_override)
+    if watch:
+        _watch(scope, target, args, refresh, interval, open_)
+        return
+    out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
     console.print(f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True)
     if open_:
         webbrowser.open(out.resolve().as_uri())
