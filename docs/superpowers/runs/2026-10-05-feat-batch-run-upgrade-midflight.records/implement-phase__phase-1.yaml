@@ -45,5 +45,4 @@ journal:
     the reshape command.
 
     '
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/eb6807d8-033c-4096-8b10-e6487f0bf0be/scratchpad/p1-suite.log
+evidence: {}
