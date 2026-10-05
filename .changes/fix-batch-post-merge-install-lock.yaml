@@ -1,0 +1,2 @@
+bump: patch
+summary: "install.sh: the plugin cache is one directory updated in place, so a release no longer deletes the path a running session runs its hooks from; installs are serialised under a machine lock, and fr stays runnable while it is reinstalled"
