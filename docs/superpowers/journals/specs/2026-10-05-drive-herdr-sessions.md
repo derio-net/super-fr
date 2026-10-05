@@ -153,3 +153,6 @@ R3 reworded to the built rule: the close-out opens in the group of the batch's C
 ### sr-8-resolved · finding [fixed] · resolves sr-8: R1 'reused by every later one' conflicts with R9 closing an emptied wave workspace
 
 R1 reworded: created when no workspace carries the label, reused while one does, recreated after R9 closes it.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-drive-herdr-sessions-p2 created=2026-10-05T11:59:22+00:00 -->
+### phase-split-2026-10-05-drive-herdr-sessions-p2 · decision · ask: phase 2 serves #918 (closing finished sessions, R6-R10), an ask of its own beside #919
