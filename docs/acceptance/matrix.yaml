@@ -6029,6 +6029,47 @@ rows:
       and #907''s CI one re-run (a setup-bun 503). Rerun owed after #909 (read timeouts)
       and #910 (retry failed reads in loop mode); see also #911, #912, #913.'
     verify: post-merge
+  - id: drive-wave-workspaces
+    capability: triage-batch-drive
+    acceptance: The driver opens each batch's session, and its close-out, in a herdr
+      workspace of the batch's wave (<prefix>-wave-<n>, <prefix>-no-wave; prefix default
+      drive), created once and reused, while a batch dispatched by hand opens where
+      it always did
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: drive-closes-finished-sessions
+    capability: triage-batch-drive
+    acceptance: Once a batch is finished the driver closes its batch and close-out sessions,
+      never a working or blocked one and never a session that is not its own, closes
+      an emptied wave workspace, and never holds or fails the drive over it; --keep-sessions
+      turns it off
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: drive-herdr-sessions-live
+    capability: triage-batch-drive
+    acceptance: A live two-wave drive inside herdr groups each wave's sessions in its
+      own workspace and leaves no finished batch's tab or emptied wave workspace open
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
@@ -6093,3 +6134,12 @@ rows:
     notes: 'fr triage architecture render now builds the page: measured sections from
       git ls-tree/show at two refs, authored fragments in manifest order, snapshot timeline,
       wave tabs; covered by unit tests over a real two-ref fixture repo'
+  - id: runner-close-optional
+    capability: runner-protocol
+    acceptance: A runner may offer to close an item's sessions; one that does not is
+      never asked and behaves as before
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''

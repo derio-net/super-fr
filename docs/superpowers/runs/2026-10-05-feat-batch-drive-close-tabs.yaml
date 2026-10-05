@@ -3,11 +3,14 @@ run: 2026-10-05-feat-batch-drive-close-tabs
 workflow: fr-goal@1
 branch: feat/batch-drive-close-tabs
 started: '2026-10-05T10:02:21+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-05T10:02:28+00:00'
+    state: done
+    at: '2026-10-05T11:52:12+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md
   spec-review:
     state: pending
   plan:
