@@ -21,6 +21,7 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd, triage_kanban_cmd
 from fr.gh import GhError
+from fr.triage import drive_lock
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
@@ -1106,7 +1107,7 @@ def test_a_stale_lock_is_taken_over_and_released(
 ) -> None:  # fmt: skip
     _proposed(world, tmp_path, 1)
     (tmp_path / "drive.lock").write_text(json.dumps({"pid": 999_999_999, "started": "x"}))
-    monkeypatch.setattr(triage_batch_cmd, "_pid_alive", lambda pid: pid == os.getpid())
+    monkeypatch.setattr(drive_lock, "pid_alive", lambda pid: pid == os.getpid())
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert not (tmp_path / "drive.lock").exists()
@@ -1518,7 +1519,7 @@ def test_a_stale_lock_retaken_by_another_starter_is_not_removed(
             return False
         return pid == 4242
 
-    monkeypatch.setattr(triage_batch_cmd, "_pid_alive", _alive)
+    monkeypatch.setattr(drive_lock, "pid_alive", _alive)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 2, out
     assert lock.read_text() == rival

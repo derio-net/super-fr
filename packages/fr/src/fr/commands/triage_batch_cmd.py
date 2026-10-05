@@ -141,10 +141,8 @@ from fr.triage.batch_merge import (
     run_queue,
 )
 from fr.triage.batch_version import read_source, reserve
-from fr.triage.drive_lock import DRIVE_LOCK, LOCK_GRACE
-from fr.triage.drive_lock import lock_pid as _lock_pid
+from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
-from fr.triage.drive_lock import pid_alive as _pid_alive
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.model import (
@@ -1254,19 +1252,10 @@ def drive_lock(target: Path) -> Iterator[None]:
         held = _lock_text(path)
         if held is None:
             continue  # released meanwhile: try again
-        pid = _lock_pid(held)
-        if pid is None:
-            try:
-                age = time.time() - path.stat().st_mtime
-            except FileNotFoundError:
-                continue
-            if age < LOCK_GRACE:
-                _fail(f"another driver is taking {path}; wait for it, or stop it first")
-        elif _pid_alive(pid):
-            started = json.loads(held).get("started")
+        holder = lock_holder(path, held)  # the one rule `--watch` reads too
+        if holder is not None:
             _fail(
-                f"another driver holds {path} (pid {pid}, started {started}); "
-                "stop it first, or wait for it to finish"
+                f"another driver holds {path} ({holder}); stop it first, or wait for it to finish"
             )
         aside = target / f".{DRIVE_LOCK}.stale.{uuid.uuid4().hex}"
         try:

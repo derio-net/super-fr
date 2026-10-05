@@ -44,21 +44,26 @@ def lock_pid(text: str) -> int | None:
         return None
 
 
-def live_driver(target: Path) -> str | None:
-    """Who holds `<target>/drive.lock`, as `pid <n>` or `a driver starting up`, else
-    None (no lock, or one whose pid is gone).
-
-    The drive's own rule (`triage_batch_cmd.drive_lock`): a lock not yet whole is held
-    for `LOCK_GRACE` seconds after it was written, then counts as stale (review p3-r1)."""
-    path = target / DRIVE_LOCK
-    held = lock_text(path)
-    if held is None:
-        return None
-    pid = lock_pid(held)
+def lock_holder(path: Path, text: str) -> str | None:
+    """THE liveness rule: who holds the lock at *path* whose content is *text*, or None
+    when it is stale. A whole lock is held while its pid lives (`pid <n>, started <t>`);
+    one not yet whole is held for `LOCK_GRACE` seconds after it was written (`a driver
+    starting up`). The drive and `--watch` both decide through this (review p3-r4)."""
+    pid = lock_pid(text)
     if pid is None:
         try:
             age = time.time() - path.stat().st_mtime
         except FileNotFoundError:
             return None
         return "a driver starting up" if age < LOCK_GRACE else None
-    return f"pid {pid}" if pid_alive(pid) else None
+    if not pid_alive(pid):
+        return None
+    return f"pid {pid}, started {json.loads(text).get('started')}"
+
+
+def live_driver(target: Path) -> str | None:
+    """Who holds `<target>/drive.lock` (see `lock_holder`), else None: no lock, or a
+    stale one."""
+    path = target / DRIVE_LOCK
+    held = lock_text(path)
+    return lock_holder(path, held) if held is not None else None
