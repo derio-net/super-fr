@@ -1,0 +1,202 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Wave workspaces — the group hint, herdr groups, drive --workspace-prefix
+    (#919)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - drive-wave-workspaces
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr-dispatch/src/fr_dispatch/work_item.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/fixtures/herdr/*
+  - tests/unit/test_fr_herdr_runner.py
+  - tests/unit/test_triage_batch_drive.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - docs/acceptance/*
+  - .changes/feat-batch-drive-close-tabs.yaml
+  estimate_lines: 420
+tasks:
+- number: 1
+  title: Smoke — live herdr fixtures and a trivial green test
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Capture herdr fixtures LIVE (never construct them), inside herdr (HERDR_ENV=1):
+      `herdr workspace list > tests/fixtures/herdr/workspace-list.json`;
+      `herdr tab list > tests/fixtures/herdr/tab-list-all.json` (no --workspace: every workspace);
+      create a scratch workspace `herdr workspace create --label fr-fixture-capture --cwd /tmp --no-focus
+      > tests/fixtures/herdr/workspace-create.json`, then `herdr tab rename <its tab_id> fr-fixture-capture-tab`
+      and `herdr workspace close <its workspace_id>` (capture both outputs as tab-rename.json /
+      workspace-close.json if non-empty). Redact per .claude/rules/third-party-privacy.md: replace any
+      label, cwd or terminal title that is not super-fr's own with a neutral one (e.g. `example-ws`) and
+      any absolute home path with `/work/...`, keeping the JSON shape. Record each new file in
+      tests/fixtures/herdr/README.md with its capture date, herdr protocol (22) and the redaction.
+      If herdr is not reachable, STOP and report blocked — do not hand-write them.
+  - id: P1.T1.S2
+    text: |-
+      Add a trivial test in tests/unit/test_fr_herdr_runner.py that loads each new fixture with
+      `_fixture(...)` and asserts its `result.type` (workspace_list, tab_list, workspace_created) and,
+      for tab-list-all.json, that tabs come from more than one `workspace_id`. Run
+      `uv run pytest tests/unit/test_fr_herdr_runner.py -q --no-cov` — green.
+  - id: P1.T1.S3
+    text: |-
+      No refactor: fixtures and one assertion test only (record `refactor: {P1.T1: "fixture capture,
+      nothing to refactor"}`). Commit.
+- number: 2
+  title: Group hint in the protocol docs and wave_group in the pure driver (spec §A,
+    §C; R1, R2, R4)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_drive.py test `wave_group("drive", 2) == "drive-wave-2"`,
+      `wave_group("bugfix", None) == "bugfix-no-wave"`, and that `wave_group("", 1)` raises ValueError.
+      Run `uv run pytest tests/unit/test_triage_batch_drive.py -q --no-cov` — fails on import.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add `DEFAULT_WORKSPACE_PREFIX = "drive"` and `wave_group(prefix: str, wave: int | None) -> str`
+      to packages/fr/src/fr/triage/batch_drive.py (empty/blank prefix -> ValueError). In
+      packages/fr-dispatch/src/fr_dispatch/work_item.py's module docstring document the optional
+      `group` payload key beside `checkout`: "the runner group (a herdr workspace) the item's session
+      belongs to; a runner without groups ignores it" — RUN_PAYLOAD_KEYS unchanged. Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep wave_group next to closeout_item_id and reuse it nowhere else yet; ruff format.
+- number: 3
+  title: herdr dispatches into a group workspace; finds live tabs in any workspace
+    (spec §B; R1, R4, R5)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED in tests/unit/test_fr_herdr_runner.py (extend `_Herdr` to answer `workspace list`,
+      `workspace create`, `tab rename` from the new fixtures, with a settable workspace list):
+      (a) `existing_dispatches` calls `tab list` with NO `--workspace` and finds an item whose tab is in
+          a workspace other than HERDR_WORKSPACE_ID (use tab-list-all.json, relabelling one tab to the
+          item id in the test);
+      (b) dispatch with `payload["group"]` naming an existing workspace label runs
+          `tab create --workspace <that id>` and no `workspace create`;
+      (c) with no workspace of that label: `workspace create --label <group> --cwd <checkout> --no-focus`,
+          then `tab rename <created tab_id> <item.id>`, the agent starts in the created root pane, and no
+          `tab create` runs;
+      (d) a failure after `workspace create` (agent start raises HerdrError) runs `workspace close <id>`
+          and re-raises; a failed `tab rename` likewise;
+      (e) without a group, today's `tab create --workspace w2` path is unchanged;
+      (f) preflight with HERDR_WORKSPACE_ID unset passes when every item has a group and refuses when one
+          has none.
+      Run the file — the new tests fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN in packages/fr-herdr/src/fr_herdr/runner.py: `existing_dispatches` lists `["tab", "list"]`;
+      a `_group_workspace(label) -> str | None` helper over `workspace list` (first matching `label`);
+      `dispatch` branches on `payload.get("group")` per spec §B, using `_close_workspace` (best effort,
+      like `_close_tab`) on failure after a create; preflight requires workspace_id only for an item
+      without a group. Update the module docstring (groups, cross-workspace identity). Keep the
+      `_conforms: Runner` check. Tests green; `uv run mypy packages/fr-herdr/src` clean.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: dispatch now has two tab-acquisition paths — extract `_open_tab(item, checkout) ->
+      (tab_id, pane_id, cleanup)` if it removes duplication; tests stay green.
+- number: 4
+  title: Drive passes the group; --workspace-prefix (spec §D; R1-R4)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED in tests/unit/test_triage_batch_drive_cmd.py (its fake runner via `load_runner` records
+      dispatched items): a driven dispatch of a batch with wave 1 carries `payload["group"] ==
+      "drive-wave-1"`; with `--workspace-prefix bugfix` and no wave, `"bugfix-no-wave"`; the driver's
+      close-out item carries the group of the batch's CURRENT wave; `--workspace-prefix ""` exits 2;
+      and in the batch dispatch tests, `fr triage batch dispatch ... --yes` sends an item with no
+      `group` key. Run — fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN in packages/fr/src/fr/commands/triage_batch_cmd.py: `dispatch_batch(..., group: str | None = None)`
+      threads into `_work_item` (payload["group"] only when set); `_Driver` takes `workspace_prefix`
+      and passes `wave_group(prefix, batch.wave)` from `_act`'s dispatch and to `_closeout_item`;
+      `batch_drive_command` gains `--workspace-prefix` (default DEFAULT_WORKSPACE_PREFIX, blank ->
+      `_fail`). Tests green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: reread the threading for a single source of the group per batch; ruff format + ruff check.
+- number: 5
+  title: Fragment, acceptance row, full suite
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Add `.changes/feat-batch-drive-close-tabs.yaml` (`bump: minor`, summary: "fr triage batch drive opens
+      each wave's sessions in a herdr workspace of its own and closes a finished batch's sessions").
+      Move row drive-wave-workspaces to ci with `fr acceptance set-status --id drive-wave-workspaces
+      --status ci --notes "..." --level unit=super-fr:tests/unit/test_fr_herdr_runner.py#<test name>
+      --level unit=super-fr:tests/unit/test_triage_batch_drive_cmd.py#<test name>` (name anchors, never #L).
+  - id: P1.T5.S2
+    text: |-
+      Commit, then run the full suite LAST into a host-visible log outside the repo:
+      `uv run pytest -q --no-cov -n auto > $TMPDIR/p1-suite.log 2>&1` plus ruff check/format --check and
+      mypy (AGENTS.md dev commands). All green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,200 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Closing finished sessions — SessionCloser, herdr close, the drive's close
+    step (#918)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - runner-close-optional
+  - drive-closes-finished-sessions
+  - drive-herdr-sessions-live
+  tier: standard
+  files:
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - packages/fr-dispatch/src/fr_dispatch/testing.py
+  - packages/fr-dispatch/src/fr_dispatch/registry.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/fixtures/herdr/*
+  - tests/unit/test_fr_herdr_runner.py
+  - tests/unit/test_fr_dispatch_*.py
+  - tests/unit/test_triage_batch_drive.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - docs/acceptance/*
+  estimate_lines: 520
+tasks:
+- number: 1
+  title: SessionCloser protocol and contract (spec §A; R6)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: a test (beside the existing fr_dispatch protocol/testing tests — find them with
+      `grep -l "check_run_unit_contract\|protocols" tests/unit/*.py`) that `isinstance(obj, SessionCloser)`
+      is True for an object with `close(item)` and False for a plain Runner fake; and that
+      `check_close_contract` raises AssertionError for a closer returning "closed" for an unknown item.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in fr_dispatch/protocols.py add `CloseOutcome = Literal["closed", "busy", "absent"]` and a
+      `@runtime_checkable class SessionCloser(Protocol)` with `close(self, item: WorkItem) -> CloseOutcome`,
+      docstring per spec §A (Runner untouched). In testing.py add `check_close_contract(runner, item)`
+      (explicit `_require`, no bare assert): isinstance SessionCloser, and `close(item)` on an item the
+      runner does not hold returns "absent". Export it in `__all__`. Tests green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: none beyond docstrings unless duplication appears; record the reason if skipped.
+- number: 2
+  title: herdr close (spec §B; R8, R9)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED in tests/unit/test_fr_herdr_runner.py (statuses set per test on tab-list-all.json copies):
+      close returns "absent" with no tab labelled item.id and closes nothing; "busy" when a matching tab is
+      `working` or `blocked`, closing nothing; "closed" for idle/done/unknown, running `tab close <tab_id>`;
+      a lone tab whose workspace label == payload["group"] and != HERDR_WORKSPACE_ID -> `workspace close
+      <ws>` and no `tab close`; a lone tab in the runner's own workspace -> `tab close` only; a lone tab in a
+      workspace of another label -> `tab close` only; `check_close_contract(HerdrRunner(...), item)` passes.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement `HerdrRunner.close` per spec §B (one `tab list`, one `workspace list` only when a
+      lone tab needs its label). Keep `_conforms: Runner` and add `_closes: SessionCloser = HerdrRunner()`.
+      Tests and mypy green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: share the tab-listing parse between existing_dispatches and close.
+- number: 3
+  title: Pure driver — is_finished and the close step (spec §C; R7, R10)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED in tests/unit/test_triage_batch_drive.py: `is_finished` True for a landed batch whose close-out
+      event has `archived` set, True with an attributed MERGED archive PR and no `archived`, False otherwise;
+      drive_pass with `close_sessions=True` and a finished batch's item in `sessions` emits
+      Action("close", ...) after the dispatch actions, and its Summary equals the one without that
+      session; `close_sessions=False` emits none; an unselected batch emits none.
+  - id: P2.T3.S2
+    text: |-
+      GREEN in batch_drive.py: "close" in ActionKind; `is_finished(batch, stage, archives)` used by step 3
+      (replacing its two inline readings); Snapshot gains `close_sessions: bool = False` and
+      `sessions: frozenset[str] = frozenset()`; step 5 Close per spec §C, not counted in the summary.
+      Existing drive tests stay green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: reread step 3/5 for one reading of "finished"; ruff.
+- number: 4
+  title: Drive effects — probe, close, --keep-sessions (spec §D; R7, R8, R10)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED in tests/unit/test_triage_batch_drive_cmd.py with a fake runner that is a SessionCloser
+      (records close calls, configurable outcome) and one that is not: after the archive PR is recorded
+      merged, a pass with --yes closes the batch item (runner from its DispatchEvent) and the close-out
+      item (runner from its CloseoutEvent), each carrying payload group; a `hand` close-out is never
+      probed; `--keep-sessions` probes and closes nothing; a non-closer runner is never asked; a runner
+      whose load fails or whose preflight refuses is reported once and the drive does NOT exit 2; a
+      "busy" outcome or a raised close is printed once and leaves failed_write False; a `--once` pass
+      whose only action is a close exits as it would without it (3, or 0 when done); without --yes
+      nothing is probed.
+  - id: P2.T4.S2
+    text: |-
+      GREEN in triage_batch_cmd.py: a non-exiting runner load (`_try_runner(name) -> Runner | None`,
+      catching what `load_runner` fails on — or a `registry` helper if one is cleaner), `_sessions(...)`
+      building per-runner probes for finished selected batches and calling preflight +
+      existing_dispatches once per runner; Snapshot gets `close_sessions` and `sessions`; `_act("close")`
+      calls `runner.close(item)` for each live item and returns did=False; `--keep-sessions` on
+      batch_drive_command. Tests green.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR: `_sessions` and `_existing` both build per-runner probes — share the grouping helper if it
+      reads better; ruff + mypy.
+- number: 5
+  title: Skill prose, mirrors, rows, full suite (spec §E)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Update plugins/super-fr/skills/fr-triage/SKILL.md's driver paragraph (line ~96): sessions open in
+      `<prefix>-wave-<n>` / `<prefix>-no-wave` herdr workspaces (`--workspace-prefix`, default `drive`); a
+      finished batch's batch and close-out sessions are closed (never a working or blocked one; an emptied
+      wave workspace closes too); `--keep-sessions` keeps them. Run `uv run --no-project python
+      scripts/sync-opencode.py` AND `uv run --no-project python scripts/sync-hermes.py`; commit the mirrors.
+  - id: P2.T5.S2
+    text: |-
+      `fr acceptance set-status` runner-close-optional and drive-closes-finished-sessions to ci with
+      name-anchored unit levels and notes; leave drive-herdr-sessions-live not-implemented (post-merge).
+  - id: P2.T5.S3
+    text: |-
+      Commit, then run the full suite LAST into a host-visible log outside the repo:
+      `uv run pytest -q --no-cov -n auto > $TMPDIR/p2-suite.log 2>&1`, plus ruff check, ruff format --check,
+      mypy over the five packages. All green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

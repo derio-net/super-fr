@@ -182,4 +182,6 @@ never changes the exit code; `check_close_contract` passes for herdr.
 
 ## Implementation Plans
 
-(filled by fr-plan)
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-05-drive-herdr-sessions | `derio-net/super-fr` | `2026-10-05-drive-herdr-sessions` | — |
