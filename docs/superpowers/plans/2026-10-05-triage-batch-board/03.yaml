@@ -1,0 +1,129 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Freshness — drive hook, --watch, triage link, skill (R11–R13)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - triage-board-refresh
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/triage/render.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - tests/unit/test_triage_kanban_cmd.py
+  - tests/unit/test_triage_render.py
+  - tests/unit/test_triage_render_command.py
+  - docs/acceptance/*
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: Drive renders the board every pass (spec §F; R11)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED in tests/unit/test_triage_batch_drive_cmd.py with the file's existing fakes: board.html is
+      written after an acting `--yes --once` pass and after a non-acting one; a dispatch event the pass
+      wrote appears on the board (judgements reloaded); the copied command carries the drive's
+      `--repo` and `--dir` only when given; a `write_board` that raises prints one warning per distinct
+      cause across two passes and the pass result is unchanged; plan mode (no `--yes`) writes no board. Red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: `_Driver` takes `scope_args`; `batch_drive_command` builds them; at the end of each `--yes`
+      pass call `triage_kanban_cmd.write_board(...)` inside a guard keyed like `read_failures`. Green.
+  - id: P3.T1.S3
+    text: |-
+      Refactor the guard into a small helper on `_Driver` if run_pass grows past readability; else record why.
+- number: 2
+  title: --watch (spec §E; R12)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED in test_triage_kanban_cmd.py, monkeypatching the module's sleep/collect seams and a stop after
+      N iterations: `--watch` refuses exit 2 when drive.lock holds a live pid at start (message names
+      the drive); default interval 60; each iteration collects then writes; an iteration finding the
+      lock held later skips collect and write and says so once. Red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement `--watch` / `--interval` (min 1, default 60) using `collect_into` as
+      `fr triage collect` calls it and a lock check that reuses the drive lock's liveness rule (move
+      the pid-alive reading to a function `triage_kanban_cmd` can import without importing
+      triage_batch_cmd, e.g. into `fr/triage/` as pure path+pid logic). Green.
+  - id: P3.T2.S3
+    text: |-
+      Refactor sleep/collect seams to match the drive's naming; else record why.
+- number: 3
+  title: triage.html link and the skill (spec §G; R13)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED in tests/unit/test_triage_render.py: `render(..., board=True)` puts an `href="board.html"`
+      link in the Batches section; `board=False` (the default) does not; in
+      tests/unit/test_triage_render_command.py the render command passes True only when board.html
+      exists in the state dir. Red.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: add the keyword to `render` / `_batches` and the existence check in `render_command`. Edit
+      plugins/super-fr/skills/fr-triage/SKILL.md to name `fr triage board` (live Kanban of batches,
+      refreshed by drive / --watch) and `fr triage batch focus <id>` where batches and the driver are
+      described; run `uv run --no-project python scripts/sync-opencode.py` AND
+      `uv run --no-project python scripts/sync-hermes.py`. Check docs/explainers for any page describing
+      triage batches or the driver; if one exists, update it per .claude/rules/explainers-currency.md
+      (or record in the step record that none describes them). Green, including the mirror tripwires
+      and tests/unit/test_tripwire_skill_tool_neutrality.py.
+  - id: P3.T3.S3
+    text: |-
+      Move triage-board-refresh with `fr acceptance set-status --status ci --notes ... --level
+      unit=super-fr:tests/unit/test_triage_kanban_cmd.py --level
+      unit=super-fr:tests/unit/test_triage_batch_drive_cmd.py`. Run `uv run ruff format packages/ tests/`,
+      `uv run ruff check packages/ tests/`, the mypy line from AGENTS.md, then the full suite
+      `uv run pytest -q --no-cov -n auto` LAST, after the last code commit. Commit.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

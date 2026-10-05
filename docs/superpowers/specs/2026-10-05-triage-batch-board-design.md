@@ -104,7 +104,7 @@ live output is captured into `tests/fixtures/herdr/` (`tab-focus.json`,
 focused — harmless — matching the existing fixture discipline; the help text
 read 2026-10-05 is the argument evidence.
 
-### C. Board model (`fr.triage.board`, pure, no `fr_dispatch` import)
+### C. Board model (`fr.triage.kanban`, pure, no `fr_dispatch` import)
 
 ```python
 BoardStatus = Literal["working", "blocked", "idle", "done", "unknown", "absent"]
@@ -119,7 +119,7 @@ def build_board(facts, judgements, statuses: Mapping[str, BoardStatus], *, selec
 
 - `BoardStatus` is fr's own copy of `SessionStatus`; a test pins the two
   equal, the way `batch_item_id` is pinned to `run_item_id`. This keeps
-  `fr.triage.board` free of any `fr_dispatch` import.
+  `fr.triage.kanban` free of any `fr_dispatch` import.
 - `column_of` is R2's table: no events → `proposed` / `waiting` by
   `dependency_state` over `after`; else by `derive_batch_stage`, with
   `merged` split by `closeout_state(batch, facts) == "archived"`. A merged
@@ -133,7 +133,7 @@ def build_board(facts, judgements, statuses: Mapping[str, BoardStatus], *, selec
   keeps the first action per batch, then falls back per column.
 - No clock, no I/O: `statuses` is an input, keyed by item id.
 
-### D. Board page (`fr.triage.board_render`, pure)
+### D. Board page (`fr.triage.kanban_render`, pure)
 
 `render_board(board, *, scope_args, rendered_at, refresh, notes) -> str`,
 following `render.py`'s rules (module-constant CSS/JS, `html.escape`
@@ -148,10 +148,10 @@ access in `try/catch`. The refresh interval reaches the script as a
 `data-refresh` integer attribute on `<body>`. `rendered_at` is passed in by
 the command (the renderer reads no clock).
 
-### E. Commands (`fr.commands.triage_board_cmd`, new soft point)
+### E. Commands (`fr.commands.triage_kanban_cmd`, new soft point)
 
 All `fr_dispatch` contact for the board lives in ONE new module,
-`triage_board_cmd.py`, added to `_SOFT_POINTS` in
+`triage_kanban_cmd.py`, added to `_SOFT_POINTS` in
 `tests/unit/test_import_direction.py` (with the same `find_spec` guard as
 `triage_batch_cmd`). It imports from `triage_cmd` only (`triage_app`,
 `batch_app`, `_scope`, `_load_state`, `collect_into`, option types), never
@@ -232,7 +232,7 @@ and page from fixture facts/judgements:
 - `--watch`: refusal under a live lock at start; an iteration that finds the
   lock held skips; the default interval.
 - `triage.html`: the board link present only when `board.html` exists.
-- `test_import_direction`: `triage_board_cmd.py` is a soft point; nothing else
+- `test_import_direction`: `triage_kanban_cmd.py` is a soft point; nothing else
   new imports `fr_dispatch`.
 - A browser check of the page: collapsed and expanded cards in light and dark,
   phone-width stacking, copy confirmation and the clipboard fallback, expanded

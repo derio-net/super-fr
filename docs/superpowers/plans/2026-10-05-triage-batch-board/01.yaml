@@ -1,0 +1,180 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Session capabilities — protocols, herdr status and focus, `fr triage batch
+    focus` (R8, R9)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-board-jump-focus
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - tests/fixtures/herdr/*
+  - tests/unit/test_fr_herdr_runner.py
+  - tests/unit/test_fr_dispatch_session_protocols.py
+  - tests/unit/test_triage_kanban_focus.py
+  - tests/unit/test_import_direction.py
+  - docs/acceptance/*
+  - .changes/feat-triage-kanban-board.yaml
+  estimate_lines: 480
+tasks:
+- number: 1
+  title: Smoke — live herdr focus fixtures and a trivial green test (spec §B)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Capture LIVE (never construct), inside herdr (HERDR_ENV=1): run `herdr tab list`, take the tab
+      with `"focused": true` and its `workspace_id`, then
+      `herdr workspace focus <that workspace_id> > tests/fixtures/herdr/workspace-focus.json` and
+      `herdr tab focus <that tab_id> > tests/fixtures/herdr/tab-focus.json` (focusing what is already
+      focused changes nothing for the operator). Redact per .claude/rules/third-party-privacy.md
+      (labels/cwds/paths that are not super-fr's own → neutral names, keep the JSON shape). Record
+      both in tests/fixtures/herdr/README.md with capture date, herdr protocol and redaction. If herdr
+      is unreachable or HERDR_ENV is unset, STOP and report blocked — do not hand-write them.
+  - id: P1.T1.S2
+    text: |-
+      Add a trivial test in tests/unit/test_fr_herdr_runner.py loading both fixtures with the file's
+      existing `_fixture(...)` helper and asserting each parses to a dict with a `result` key (assert
+      the `result.type` value the capture shows). Run
+      `uv run pytest tests/unit/test_fr_herdr_runner.py -q --no-cov` — green. Add the change fragment
+      `.changes/feat-triage-kanban-board.yaml`: `bump: minor`, `summary: fr triage board — a live
+      Kanban board of triage batches with copy-to-jump herdr session commands`. Commit.
+  - id: P1.T1.S3
+    text: |-
+      No refactor: fixtures and one assertion only (record `refactor: {P1.T1: "fixture capture,
+      nothing to refactor"}`).
+- number: 2
+  title: SessionStatus, SessionInspector, SessionFocuser protocols (spec §A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_fr_dispatch_session_protocols.py — `SessionStatus` is exactly
+      `("working","blocked","idle","done","unknown","absent")` (via `typing.get_args`); a class with
+      `session_statuses(self, items)` is an instance of `SessionInspector` and one without is not; same
+      for `focus(self, item)` / `SessionFocuser`; neither is a member of `Runner`. Run
+      `uv run pytest tests/unit/test_fr_dispatch_session_protocols.py -q --no-cov` — fails on import.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in packages/fr-dispatch/src/fr_dispatch/protocols.py, beside `SessionCloser`, add
+      `SessionStatus = Literal[...]` and the two `@runtime_checkable` Protocols with the docstrings of
+      spec §A ("`absent` when none"; "False when there is none"; raising is a failed read/focus). Re-run — green.
+  - id: P1.T2.S3
+    text: |-
+      Refactor if the protocols' docstrings repeat SessionCloser's framing; otherwise record the reason.
+- number: 3
+  title: herdr runner implements both capabilities (spec §B; R9)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED in tests/unit/test_fr_herdr_runner.py, faking `_run_herdr` as the file already does with the
+      captured tab-list fixtures (edit labels/statuses in-memory, not on disk): one item with tabs
+      `idle` + `blocked` → `blocked`; `working` + `idle` → `working`; an item with no tab → `absent`;
+      an `agent_status` of `"weird"` → `unknown`; `session_statuses` calls `tab list` exactly once for
+      several items. `focus`: a matching tab → argv sequence `["workspace","focus",<ws>]` then
+      `["tab","focus",<tab>]`, returns True; no matching tab → False and no focus call. Conformance:
+      `_inspects: SessionInspector = HerdrRunner()` and `_focuses: SessionFocuser = HerdrRunner()` in
+      the TYPE_CHECKING block. Run the file — red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement `HerdrRunner.session_statuses` (one `_list_tabs()`; precedence tuple
+      `("blocked","working","idle","done","unknown")`; unknown values → `unknown`; no tab → `absent`)
+      and `HerdrRunner.focus` per spec §B, both through `_run_herdr`; update the module docstring.
+      Run `uv run pytest tests/unit/test_fr_herdr_runner.py tests/unit/test_fr_herdr_closeout.py -q --no-cov` — green.
+  - id: P1.T3.S3
+    text: |-
+      Refactor shared tab-matching between `close`, `existing_dispatches`, `session_statuses` and `focus` into one helper if it reads cleaner; otherwise record why not.
+- number: 4
+  title: The soft point and `fr triage batch focus` (spec §C BoardStatus, §E; R8)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_triage_kanban_focus.py with typer's CliRunner over `fr.cli:app` and a fake
+      runner injected by monkeypatching the new module's `load_runner` seam, judgements built with the
+      helpers in tests/unit/triage_fixtures.py: exit 2 + reason for an unknown batch, a batch with no
+      dispatch event, `--closeout` with no closeout event, `--closeout` on a `runner: hand` close-out
+      ("done by hand, no session"), an unloadable runner (no `error:` traceback, one line), a runner
+      without `focus`, a failing preflight, `focus` returning False ("no live session"); exit 0 when
+      it returns True, and the probe item's id is `batch_item_id(repo, id)` (or `closeout_item_id`)
+      with `unit="run"` and `payload.group == wave_group(DEFAULT_WORKSPACE_PREFIX, wave)`. Also in
+      tests/unit/test_import_direction.py: `triage_kanban_cmd.py` is in `_SOFT_POINTS`; and a test that
+      `fr.triage.kanban.BoardStatus` args equal `fr_dispatch.protocols.SessionStatus` args. Red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/triage/kanban.py holding (for now) only `BoardStatus` with a
+      module docstring per spec §C. Create packages/fr/src/fr/commands/triage_kanban_cmd.py: the
+      `find_spec`-guarded soft point (copy triage_batch_cmd's `load_runner` guard shape, importing only
+      from `fr.commands.triage_cmd` and `fr.triage.*`, never `triage_batch_cmd`), a `_try_load(name)`
+      that captures `err_console` and catches `typer.Exit`/`Exception` returning `(runner|None, reason)`,
+      a `probe_item(scope_repo, batch, *, closeout, prefix)` builder, and `batch focus` registered on
+      `batch_app` per R8. Import it LAST in triage_cmd.py beside the other triage command modules. Add
+      the file to `_SOFT_POINTS`. Run the new tests plus tests/unit/test_import_direction.py — green.
+  - id: P1.T4.S3
+    text: |-
+      Refactor: if probe-item construction duplicates `_Driver._sessions` in triage_batch_cmd.py
+      beyond a few lines, have both call one pure helper in `fr.triage.batch_drive` (pure, no
+      fr_dispatch import — return the id/payload, let callers build the WorkItem); else record why.
+      Run `uv run pytest tests/unit -q --no-cov -n auto -k "herdr or triage or import_direction"` —
+      green. Flip `triage-board-jump-focus` evidence: `fr acceptance set-status --id
+      triage-board-jump-focus --status skipped --notes "focus CLI + herdr focus unit-tested; copy button lands in phase 2" --level unit=super-fr:tests/unit/test_triage_kanban_focus.py`.
+      Commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
