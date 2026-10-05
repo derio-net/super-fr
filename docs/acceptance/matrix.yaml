@@ -6341,9 +6341,16 @@ rows:
       titled section, under the same refusals as before.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_fragments.py#test_a_fragment_between_two_generated_sections_renders_there
+      - super-fr:tests/unit/test_triage_fragments.py#test_a_collapsed_entry_renders_closed_with_its_title
+      - super-fr:tests/unit/test_triage_origins.py#test_a_manifest_fragment_survives_render_at_its_position
+      - super-fr:tests/unit/test_triage_history.py#test_the_command_reads_the_history_manifest
+    status: ci
+    notes: 'Phase 1: shared fr.triage.fragments serves board-less four-page manifests;
+      origins, architecture and history place fragments at their manifest position,
+      optionally collapsed'
   - id: triage-origins-schema-2
     capability: triage-views
     acceptance: origins.yaml schema 2 records duplicate_of, fixed_by and introduced_in;
