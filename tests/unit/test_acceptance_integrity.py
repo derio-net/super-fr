@@ -10,6 +10,8 @@
 - gh#654 / gh#656: the unknown-level refusal reads right for adds and drops, and
   `merge_levels` refuses an unknown level on its own.
 - gh#655: the record engine refuses a ref both dropped and added, as the CLI does.
+- gh#965 / gh#893: unittest spells the same test identity — `Class.test` ids,
+  any `TestCase` subclass collected — and both the resolver and the repair read it.
 """
 
 from __future__ import annotations
@@ -531,3 +533,75 @@ def test_the_repair_writes_nothing_when_the_reports_cannot_render(
     with pytest.raises(RuntimeError):
         _repair().fn(_matrix(root))
     assert _matrix(root).read_bytes() == before, "the repair retries next run, not half-done"
+
+
+# --- gh#965 / gh#893: unittest's spelling of a test identity ---------------
+
+UNITTEST_SOURCE = """\
+import unittest
+
+
+class FooTests(unittest.TestCase):
+    def setUp(self):
+        self.x = 1
+
+    def test_x(self):
+        assert self.x
+
+
+class Base(unittest.IsolatedAsyncioTestCase):
+    pass
+
+
+class BarChecks(Base):
+    async def test_y(self):
+        assert True
+
+
+class Plain:
+    def test_z(self):
+        assert True
+"""
+
+
+def test_node_line_resolves_unittest_dotted_ids() -> None:
+    from fr.acceptance.anchors import node_line
+
+    assert node_line(SOURCE, "TestGroup.test_inner") == 19, "unittest's '.' is '::'"
+    assert node_line(UNITTEST_SOURCE, "FooTests.test_x") == 8
+    assert node_line(SOURCE, "TestGroup.test_missing") is None
+    assert node_line(SOURCE, "TestGroup.") is None, "an empty part names nothing"
+
+
+def test_check_accepts_a_unittest_dotted_anchor(tmp_path: Path) -> None:
+    root = make_repo(tmp_path, row(unit='"own:tests/test_u.py#TestU.test_u"'))
+    (root / "tests" / "test_u.py").write_text("class TestU:\n    def test_u(self): pass\n")
+    assert _check_errors(root) == []
+
+
+@pytest.mark.parametrize(
+    ("line", "name"),
+    [
+        (9, "FooTests::test_x"),
+        (18, "BarChecks::test_y"),
+        (6, None),
+        (23, None),
+    ],
+)
+def test_collection_recognises_unittest_testcase_subclasses(line: int, name: str | None) -> None:
+    """A `TestCase` subclass is collected whatever its name — directly or via a
+    base in the same module; its `setUp` is still a helper, and a plain class
+    not named `Test*` still is not collected."""
+    from fr.acceptance.anchors import collected_node_at
+
+    assert collected_node_at(UNITTEST_SOURCE, line) == name
+
+
+def test_the_repair_converts_a_line_anchor_inside_a_testcase_subclass(tmp_path: Path) -> None:
+    root = make_repo(tmp_path, row(id="r1", unit='"own:tests/test_u.py#L9"'))
+    (root / "tests" / "test_u.py").write_text(UNITTEST_SOURCE)
+    path = _matrix(root)
+
+    _repair().fn(path)
+
+    assert _row(root, "r1").levels["unit"] == ("own:tests/test_u.py#FooTests::test_x",)
