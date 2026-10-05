@@ -26,7 +26,7 @@ Never write the facts yourself. The state is outside every repo and is never com
 
 ## The loop (a re-run of it is the sync)
 
-1. **Collect.** `fr triage origins collect --repo OWNER/REPO --since YYYY-MM-DD`. A window wider than one page of issues or PRs is refused (exit 2) with a `--since` it does cover: re-run with that date, and report the narrower window. A warning that the repo list hit its limit means repos may be missing; say so in your report.
+1. **Collect.** `fr triage origins collect --repo OWNER/REPO --since YYYY-MM-DD`. A window wider than one page of issues or PRs is refused (exit 2), naming a `--since` it does cover and the limit flag (`--issue-limit`, `--pr-limit`) to raise instead: narrow the window and report the narrower one, or raise the limit to keep it. A warning that the repo list hit its limit means repos may be missing; say so in your report.
 2. **Check.** `fr triage origins check --repo OWNER/REPO` lists **unclassified** issues (your work queue) and classifications for issues **not in the facts** (a typo, or a window that moved; never pruned for you; fix the key or leave it). It always exits 0.
 3. **Classify the unclassified**, from the issue body and the code, as below.
 4. **Render.** `fr triage origins render --repo OWNER/REPO` writes `origins.html`. A figure the data cannot support shows as an em dash, never a zero; do not paper over one.
