@@ -74,3 +74,8 @@ batch_drive step 3 emits adopt; executor repeats the started closeout event with
 ### fx-889 · finding [fixed] · #889 fixed: show() is UTF-8 text by contract, show_bytes() is exact, snapshots copy bytes
 
 gitseam show_text/show_bytes; GitError naming file+ref on non-UTF-8; snapshot_paths uses ls-tree -z + show_bytes. Tests: binary, CRLF, byte-for-byte snapshot incl. non-ASCII path. Commits 0d9e17fbe, 25545b911.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-10-05T21:57:19+00:00 -->
+### review-1 · review · Independent review: no high findings; four of five fixed, one declined
+
+Read-only reviewer in a separate context. Fixed: architecture render loaded origins facts unchecked (#886); origins refusal had no flag escape for busy repos (#888); undated/today-only full pages suggested a drifting or future --since (#888); snapshot_paths skipped C-quoted non-ASCII paths (#889). Declined: batch list refusing another scope's facts instead of falling back to none — that refusal is the #886 decision; Scope.name has been lowercased since r-p2-case, so old-casing facts are not a real case.
