@@ -119,3 +119,33 @@ The wave table markup predates this change; phase 2 (R2-R5) owns the board layou
 ### p1-visual-matcher-uv-with-resolved · finding [out-of-scope] · resolves p1-visual-matcher-uv-with: capture-script witness misreads uv run --with (phase 1)
 
 A defect in fr's capture-script witness (fr/run/telemetry.py _executes), not caused by this change; worked around with a shebang so the script is its own command word.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-files-outside-list created=2026-10-05T22:13:18+00:00 phase=2 -->
+### p2-files-outside-list · discovery · touched beyond the obvious files (phase 2)
+
+components.py gained GRID_CSS (shared by board and history so the wave tables scroll sideways at 390px instead of wrapping by the letter: min-width 720px inside .tablewrap, nowrap headers); history.py uses it; triage_cmd.py reads <state>/board/manifest.yaml (BOARD_DIR); the acceptance matrix and its reports moved (two rows to ci, board-decision-views re-pointed at the renamed ordering test).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-section-shapes created=2026-10-05T22:13:18+00:00 phase=2 -->
+### p2-section-shapes · discovery · fold bodies keep the old wrapper tags, ids are new (phase 2)
+
+PRs, Batches and Patterns keep a <section class=prs|batches|patterns> inside their fold so the existing tests still address them. Fold ids: backlog-by-tier, backlog-tier-<n|unranked>, ranked-features, parked, patterns, prs, batches. Empty features, parked, patterns and batches render no fold (as before); Backlog and PRs always render. The board ordering test replaced lives in test_triage_board_views.py, not test_triage_render.py as the plan says.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-link-opens-filtered-card created=2026-10-05T22:13:18+00:00 phase=2 -->
+### p2-link-opens-filtered-card · discovery · a link to a filtered-off card re-checks its stage (phase 2)
+
+FOLD_SCRIPT turns the target card's stage checkbox back on before opening the card and its ancestors, so a link never lands on a hidden card. A same-hash re-click is handled by a click listener, since hashchange does not fire.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-unreachable-no-judgement-tier-dash created=2026-10-05T22:13:18+00:00 phase=2 -->
+### p2-unreachable-no-judgement-tier-dash · discovery · the Tier dash cannot arise from a valid board (phase 2)
+
+Judgements validation requires every batch member to be judged, so the em-dash tier is reachable only through wave_table on a hand-built Batch; the test builds it that way.
+
+<!-- fr:journal kind=finding scope=plan id=p2-suite-log-background-unwitnessed created=2026-10-05T22:13:18+00:00 phase=2 state=open review_scope=out -->
+### p2-suite-log-background-unwitnessed · finding [open] (reviewer: out of scope) · fr cannot witness a suite log written by a run_in_background command, which the brief's own long_commands rule prescribes (phase 2)
+
+implement-phase refuses evidence.tests when the full suite ran via a background Bash call (the call returns at once, so the log's writes fall outside the command's window). The dispatch brief's long_commands rule tells executors to do exactly that for the suite. Not caused by this change; the deliver step re-runs the suite on the final tree.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-05T22:13:18+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+cards, filter and script are one small addition on the P2.T2 helpers; nothing to clean
