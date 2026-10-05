@@ -104,8 +104,12 @@ def _parse_time(text: str) -> datetime:
     return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(UTC)
 
 
+_UNDATED = date.min  # a full page with no creation date at all: no --since can be named
+
+
 def _short_of(rows: list[dict[str, Any]], limit: int, cutoff: datetime) -> date | None:
-    """The day of the oldest row read when a full page may stop short of *cutoff*, else None.
+    """The day of the oldest row read when a full page may stop short of *cutoff*, else None
+    (`_UNDATED` when no row in the page carries a creation date).
 
     `gh` lists issues and PRs newest first, so a page that came back below its limit is
     everything, and a full one is complete exactly when some row in it predates the
@@ -118,7 +122,7 @@ def _short_of(rows: list[dict[str, Any]], limit: int, cutoff: datetime) -> date 
     created = [_parse_time(r["createdAt"]) for r in rows if r.get("createdAt")]
     if any(c < cutoff for c in created):
         return None
-    return min(created).date() if created else cutoff.date()
+    return min(created).date() if created else _UNDATED
 
 
 def collect_origins(
@@ -138,13 +142,14 @@ def collect_origins(
     warning and the rest collect; in repo scope it is the error.
 
     Each list is one newest-first page. A window that page does not reach the start of
-    is refused (`TriageError`), naming a `--since` the page does cover, rather than
-    collected with its oldest rows silently missing (gh#888).
+    is refused (`TriageError`), naming a `--since` the page does cover and the limit
+    flags, rather than collected with its oldest rows silently missing (gh#888). One
+    short repo refuses the whole scope: a partial count is never written.
     """
     repos, truncations = scope_repos(forge, scope, repo_limit=repo_limit)
     cutoff = datetime(since.year, since.month, since.day, tzinfo=UTC)
     out: list[OriginIssue] = []
-    short: list[tuple[str, int, date]] = []  # (which list, its limit, oldest day it read)
+    short: list[tuple[str, str, int, date]] = []  # (list, its flag, limit, oldest day read)
     warnings: list[str] = [
         f"{t.target}: repo list hit its limit ({t.limit}); repos may be missing"
         for t in truncations
@@ -164,7 +169,7 @@ def collect_origins(
         collected += 1
         for what, rows, limit in (("issue", raw_issues, issue_limit), ("PR", raw_prs, pr_limit)):
             if (oldest := _short_of(rows, limit, cutoff)) is not None:
-                short.append((f"{repo}'s {what} list", limit, oldest))
+                short.append((f"{repo}'s {what} list", f"--{what.lower()}-limit", limit, oldest))
         closing: dict[int, list[ClosingPr]] = {}
         owner, name = repo.lower().split("/", 1)
         for pr, refs in parse_prs(repo, raw_prs):
@@ -183,14 +188,22 @@ def collect_origins(
     if not collected:
         raise ForgeError(f"no repo of {scope.target} could be read: " + "; ".join(warnings))
     if short:
-        covered = max(oldest for _, _, oldest in short) + timedelta(days=1)
+        read = "; ".join(
+            f"{what} returned its newest {limit}"
+            + ("" if oldest == _UNDATED else f", none created before {oldest.isoformat()}")
+            for what, _, limit, oldest in short
+        )
+        flags = " or ".join(sorted({flag for _, flag, _, _ in short}))
+        latest = max(oldest for *_, oldest in short)
+        covered = latest + timedelta(days=1)
+        narrower = (
+            f"re-run with --since {covered.isoformat()} or later, or raise {flags}"
+            if latest != _UNDATED and covered <= now.astimezone(UTC).date()
+            else f"raise {flags}"
+        )
         raise TriageError(
-            "the window is wider than one page of rows, so its counts would be partial: "
-            + "; ".join(
-                f"{what} returned its newest {limit}, none created before {oldest.isoformat()}"
-                for what, limit, oldest in short
-            )
-            + f". Re-run with --since {covered.isoformat()} or later."
+            f"the window is wider than one page of rows, so its counts would be partial: "
+            f"{read}. To read it whole, {narrower}."
         )
     out.sort(key=lambda i: (i.repo.lower(), i.number))
     return OriginsFacts(
@@ -248,6 +261,19 @@ def load_origins_facts(path: Path) -> OriginsFacts:
         raise TriageError(f"{path}: cannot read origins facts: {exc}") from exc
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid origins facts: {exc}") from exc
+
+
+def load_scope_origins_facts(path: Path, scope: Scope) -> OriginsFacts:
+    """`load_origins_facts`, refusing facts collected for any scope but *scope* (gh#886).
+
+    `scope` is the target as collect recorded it; repo names are case-insensitive."""
+    facts = load_origins_facts(path)
+    if facts.scope.lower() != scope.target.lower():
+        raise TriageError(
+            f"{path}: these origins facts are for {facts.scope}, not {scope.target}; "
+            "collect this scope, or point --dir at its own state directory"
+        )
+    return facts
 
 
 # ------------------------------------------------------- classification

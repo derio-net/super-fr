@@ -300,8 +300,9 @@ class Checkout:
         rg-5). Nothing in this clone changes."""
         git(["init", "--quiet", str(dest)], self.path)
         git(["remote", "add", "origin", self.origin_url()], dest)
-        listed = git(["ls-tree", "-r", "--name-only", ref, "--", *paths], self.path)
-        for name in listed.splitlines():
+        # `-z`: names unquoted, so a non-ASCII path is copied, not skipped as unknown.
+        listed = git_bytes(["ls-tree", "-r", "-z", "--name-only", ref, "--", *paths], self.path)
+        for name in (os.fsdecode(n) for n in listed.split(b"\0") if n):
             content = self.show_bytes(ref, name)  # any file, binary included (gh#889)
             if content is None:
                 continue

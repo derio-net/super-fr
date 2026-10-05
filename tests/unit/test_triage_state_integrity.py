@@ -9,7 +9,6 @@ window it did not read in full (gh#888), and `gitseam` says what `show()` return
 
 from __future__ import annotations
 
-import functools
 import json
 import subprocess
 from datetime import UTC, date, datetime
@@ -222,22 +221,47 @@ def test_a_full_page_that_reaches_past_the_window_is_complete_and_says_nothing()
 def test_a_refused_origins_collect_writes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.commands import triage_origins_cmd
-
     forge = _CappedForge(
         _issues("2026-09-09T10:00:00Z", "2026-09-05T10:00:00Z", "2026-09-03T10:00:00Z"), []
     )
     monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
-    monkeypatch.setattr(
-        triage_origins_cmd, "collect_origins", functools.partial(collect_origins, issue_limit=3)
-    )
-    result = _invoke(
-        "origins", "collect", "--repo", "example-org/widgets", "--since", "2026-09-01",
-        "--dir", str(tmp_path),
-    )  # fmt: skip
+    args = ["origins", "collect", "--repo", "example-org/widgets", "--since", "2026-09-01",
+            "--dir", str(tmp_path)]  # fmt: skip
+    result = _invoke(*args, "--issue-limit", "3")
     assert result.exit_code == 2, result.output
-    assert "--since 2026-09-04" in result.output
+    assert "--since 2026-09-04" in result.output and "--issue-limit" in result.output
     assert not (tmp_path / "origins-facts.json").exists()
+    # The limit flag is the other way through: a page below its limit is everything.
+    result = _invoke(*args, "--issue-limit", "4")
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "origins-facts.json").exists()
+
+
+def test_a_full_page_with_no_creation_date_names_no_since_only_the_limit() -> None:
+    """No date to count from: a suggested --since would move a day per re-run, forever."""
+    undated = [{k: v for k, v in r.items() if k != "createdAt"} for r in _prs("x", "y", "z")]
+    with pytest.raises(TriageError) as err:
+        _origins(_CappedForge(_issues("2026-09-02T10:00:00Z"), undated))
+    assert "--since" not in str(err.value) and "raise --pr-limit" in str(err.value)
+
+
+def test_a_full_page_of_rows_from_today_names_no_future_since() -> None:
+    forge = _CappedForge(_issues(*[f"2026-09-10T0{h}:00:00Z" for h in (3, 2, 1)]), [])
+    with pytest.raises(TriageError) as err:
+        _origins(forge)
+    assert "--since" not in str(err.value) and "raise --issue-limit" in str(err.value)
+
+
+def test_architecture_render_refuses_origins_facts_of_another_scope(tmp_path: Path) -> None:
+    _write_facts(tmp_path, Scope(kind="repo", target=ALPHA))
+    write_facts(
+        tmp_path / "origins-facts.json",
+        OriginsFacts(scope=BETA, since="2026-09-01", collected_at="x", issues=[]),
+    )
+    result = _invoke("architecture", "render", "--repo", ALPHA, "--dir", str(tmp_path))
+    assert result.exit_code == 2, result.output
+    assert BETA in result.output
+    assert not (tmp_path / "architecture.html").exists()
 
 
 # ------------------------------------------------ gh#889: what show() returns
@@ -282,7 +306,11 @@ def test_show_returns_the_blob_text_exactly_line_endings_included(tmp_path: Path
 
 
 def test_snapshot_paths_copies_every_file_byte_for_byte(tmp_path: Path) -> None:
-    files = {".github/workflows/ci.yml": b"on: push\r\n", ".github/logo.png": BINARY}
+    files = {
+        ".github/workflows/ci.yml": b"on: push\r\n",
+        ".github/logo.png": BINARY,
+        ".github/workflows/déploiement.yml": b"on: tag\n",  # git C-quotes it without -z
+    }
     checkout = _clone(tmp_path, files)
     dest = tmp_path / "snap"
     checkout.snapshot_paths("HEAD", (".github",), dest)
