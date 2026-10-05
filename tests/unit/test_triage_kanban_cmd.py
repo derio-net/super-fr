@@ -214,6 +214,7 @@ def test_board_writes_board_html_and_prints_its_path(
     page = (tmp_path / "board.html").read_text(encoding="utf-8")
     assert str(tmp_path / "board.html") in out.replace("\n", "")
     assert 'id="card-b1"' in page and "working" in page
+    assert "(1 batch)" in out.replace("\n", "")
 
 
 def test_board_with_no_batches_still_writes_a_page_that_says_so(tmp_path: Path) -> None:
@@ -399,3 +400,10 @@ def test_a_collect_that_fails_warns_once_and_the_loop_goes_on(
     code, out = _board(tmp_path, "--watch")
     assert code == 0, out
     assert out.count("forge said no") == 1 and w.calls == ["write"] * 3
+
+
+def test_a_count_of_batches_is_spelled_batches(tmp_path: Path) -> None:
+    from fr.triage.render import plural
+
+    assert plural(2, "batch") == "2 batches" and plural(1, "batch") == "1 batch"
+    assert plural(2, "repo") == "2 repos"

@@ -296,7 +296,9 @@ UNRANKED_DESC = (
 
 def noun(n: int, word: str) -> str:
     """*word* as a count of *n* needs it: `repo` for one, `repos` otherwise."""
-    return word if n == 1 else f"{word}s"
+    if n == 1:
+        return word
+    return f"{word}es" if word.endswith(("ch", "sh", "s", "x")) else f"{word}s"
 
 
 def plural(n: int, word: str) -> str:
