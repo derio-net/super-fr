@@ -24,3 +24,22 @@ fixture capture, nothing to refactor
 ### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
 
 fragment and matrix row only, nothing to refactor
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-05T12:24:09+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · _Driver._existing builds close-out probes without payload group, so herdr's preflight refuses them with HERDR_WORKSPACE_ID unset (phase 1)
+
+triage_batch_cmd.py `_existing`: the drive would exit 2 at close-out time although the grouped close-out item itself passes preflight (spec §D: probes carry the wave group).
+
+<!-- fr:journal kind=review scope=plan id=p1-review-r1 created=2026-10-05T12:24:09+00:00 phase=1 -->
+### p1-review-r1 · review · Phase 1 code review: 1 finding (p1-r1, in scope) (phase 1)
+
+Dispatched reviewer (separate context) checked R1-R5 against runner.py, batch_drive.py,
+triage_batch_cmd.py, work_item.py, fixtures and tests. Raised p1-r1 (in). Noted below-threshold
+observations: no driver-level no-wave test (added: test_a_driven_batch_with_no_wave_opens_in_the_no_wave_group),
+a malformed workspace-create response would skip cleanup (live capture has the field), and a
+prefix with surrounding spaces is not stripped (cosmetic).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-05T12:24:09+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: _Driver._existing builds close-out probes without payload group, so herdr's preflight refuses them with HERDR_WORKSPACE_ID unset (phase 1)
+
+The probe payload now carries group=self.group_of(b); test_the_closeout_probe_carries_the_same_group_as_the_closeout pins it (red before the fix, commit f28e1fcdf).
