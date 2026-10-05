@@ -12,7 +12,16 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-05-triage-batch-board-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-10-05T20:19:24+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-05T20:19:24+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 4d61f643-2b34-4f04-88a8-73bd26ee5bf6
   plan:
     state: pending
   plan-review:
