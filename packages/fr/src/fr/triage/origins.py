@@ -104,6 +104,23 @@ def _parse_time(text: str) -> datetime:
     return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(UTC)
 
 
+def _short_of(rows: list[dict[str, Any]], limit: int, cutoff: datetime) -> date | None:
+    """The day of the oldest row read when a full page may stop short of *cutoff*, else None.
+
+    `gh` lists issues and PRs newest first, so a page that came back below its limit is
+    everything, and a full one is complete exactly when some row in it predates the
+    window. Otherwise every row created after the oldest one read was read, but earlier
+    rows inside the window, that day's included, were not: the day after it is the
+    earliest `--since` the page covers.
+    """
+    if len(rows) < limit:
+        return None
+    created = [_parse_time(r["createdAt"]) for r in rows if r.get("createdAt")]
+    if any(c < cutoff for c in created):
+        return None
+    return min(created).date() if created else cutoff.date()
+
+
 def collect_origins(
     forge: Forge,
     scope: Scope,
@@ -119,10 +136,15 @@ def collect_origins(
     Closing PRs are the MERGED PRs whose closing references name the issue (a PR closed
     unmerged closed nothing). In org and group scope a repo that cannot be read is a
     warning and the rest collect; in repo scope it is the error.
+
+    Each list is one newest-first page. A window that page does not reach the start of
+    is refused (`TriageError`), naming a `--since` the page does cover, rather than
+    collected with its oldest rows silently missing (gh#888).
     """
     repos, truncations = scope_repos(forge, scope, repo_limit=repo_limit)
     cutoff = datetime(since.year, since.month, since.day, tzinfo=UTC)
     out: list[OriginIssue] = []
+    short: list[tuple[str, int, date]] = []  # (which list, its limit, oldest day it read)
     warnings: list[str] = [
         f"{t.target}: repo list hit its limit ({t.limit}); repos may be missing"
         for t in truncations
@@ -140,14 +162,9 @@ def collect_origins(
             warnings.append(f"skipped {repo}: {exc}")
             continue
         collected += 1
-        if len(raw_issues) == issue_limit:
-            warnings.append(
-                f"{repo}: issue list hit its limit ({issue_limit}); rows may be missing"
-            )
-        if len(raw_prs) == pr_limit:
-            warnings.append(
-                f"{repo}: PR list hit its limit ({pr_limit}); closing PRs may be missing"
-            )
+        for what, rows, limit in (("issue", raw_issues, issue_limit), ("PR", raw_prs, pr_limit)):
+            if (oldest := _short_of(rows, limit, cutoff)) is not None:
+                short.append((f"{repo}'s {what} list", limit, oldest))
         closing: dict[int, list[ClosingPr]] = {}
         owner, name = repo.lower().split("/", 1)
         for pr, refs in parse_prs(repo, raw_prs):
@@ -165,6 +182,16 @@ def collect_origins(
             out.append(_origin_issue(repo, raw, closing.get(raw["number"], [])))
     if not collected:
         raise ForgeError(f"no repo of {scope.target} could be read: " + "; ".join(warnings))
+    if short:
+        covered = max(oldest for _, _, oldest in short) + timedelta(days=1)
+        raise TriageError(
+            "the window is wider than one page of rows, so its counts would be partial: "
+            + "; ".join(
+                f"{what} returned its newest {limit}, none created before {oldest.isoformat()}"
+                for what, limit, oldest in short
+            )
+            + f". Re-run with --since {covered.isoformat()} or later."
+        )
     out.sort(key=lambda i: (i.repo.lower(), i.number))
     return OriginsFacts(
         scope=scope.target,
