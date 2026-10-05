@@ -1,0 +1,18 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-drive-close-tabs
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T4.S1, P2.T4.S2, P2.T4.S3, P2.T5.S1, P2.T5.S2, P2.T5.S3]
+refactor:
+  P2.T1: "docstrings only; protocol and contract are one small function each, nothing duplicated"
+  P2.T4: "_sessions and _existing build different probes (batch+closeout items vs due close-outs) and differ in failure policy (exit 2 vs skip); sharing a grouping helper would have blurred that"
+  P2.T5: "prose, mirrors and matrix rows only; no code to clean"
+journal:
+  - kind: discovery
+    id: p2-d1
+    title: closing is best effort, so a runner load failure is caught as typer.Exit
+    phase: 2
+    body: "load_runner _fails (prints, Exit 2) and tests replace it wholesale; _try_runner catches typer.Exit, caches the failure and prints one warning. A raised close or busy outcome is deduplicated per batch and cause via the driver's warned set; a repeat returns an empty outcome and run_pass stays quiet."
+resolves: []
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/08bef1b5-8ca7-4d19-93d3-d0d2343afbe9/scratchpad/p2-suite.log}
