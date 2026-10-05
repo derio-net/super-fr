@@ -44,3 +44,8 @@ batch_drive.py step 3 sees a started close-out whose attributed archive PR is ME
 ### rc-889 · root-cause · #889: gitseam show() decodes through subprocess text mode — locale encoding, universal newlines, UnicodeDecodeError on binary — and snapshot_paths uses it to copy whole trees
 
 Checkout.show/Worktree.show call git() (text=True): the decode is the locale's, not UTF-8; CRLF becomes LF; a binary blob raises UnicodeDecodeError, which is not a TriageError, so it escapes as a traceback. Every caller wants text (version manifests, .fr/triage.yaml) except Checkout.snapshot_paths, which copies SERVICE_PATHS trees byte-for-byte in intent. Fix: show_bytes() for raw content (snapshot_paths uses it with write_bytes); show() decodes those bytes as UTF-8 explicitly and refuses a non-UTF-8 blob with a GitError naming file and ref; contract documented.
+
+<!-- fr:journal kind=finding scope=debug id=fx-886 created=2026-10-05T21:57:12+00:00 state=fixed -->
+### fx-886 · finding [fixed] · #886 fixed: facts and origins facts of another scope are refused
+
+Facts.matches + load_scope_facts (model.py) in _load_state, batch list, _previous_facts; load_scope_origins_facts in origins and architecture render. Pinned by tests/unit/test_triage_state_integrity.py (state-directory, kind, origins, architecture tests). Commits 85e3ac01b, 25545b911.
