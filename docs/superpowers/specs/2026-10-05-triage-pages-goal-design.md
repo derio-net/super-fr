@@ -480,3 +480,9 @@ Post-merge, operator-driven:
 
 #969 (`chore/triage-state`) adds `docs/triage/`. R15 edits files it adds, so #969 merges
 first and this branch rebases onto it before the R15 work.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-05-triage-pages-goal | `derio-net/super-fr` | `2026-10-05-triage-pages-goal` | — |

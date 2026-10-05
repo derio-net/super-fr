@@ -1,0 +1,301 @@
+schema_version: 2
+phase:
+  number: 1
+  title: One goal per page — shared fragments, page chrome, slimmed architecture,
+    reordered origins, the history page (R1, R6–R9)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-page-goals
+  - triage-history-page
+  - triage-fragments-every-page
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/components.py
+  - packages/fr/src/fr/triage/fragments.py
+  - packages/fr/src/fr/triage/architecture.py
+  - packages/fr/src/fr/triage/origins.py
+  - packages/fr/src/fr/triage/history.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_architecture_cmd.py
+  - packages/fr/src/fr/commands/triage_origins_cmd.py
+  - packages/fr/src/fr/commands/triage_history_cmd.py
+  - tests/unit/test_triage_fragments.py
+  - tests/unit/test_triage_architecture.py
+  - tests/unit/test_triage_origins.py
+  - tests/unit/test_triage_history.py
+  - tests/unit/test_triage_board_views.py
+  - tests/unit/test_triage_render.py
+  - docs/acceptance/*
+  - .changes/feat-batch-triage-pages-goal.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke — the page registry and a trivial green test
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: new tests/unit/test_triage_fragments.py with `test_pages_registry_lists_the_four_pages`:
+      `from fr.triage.components import PAGES` and assert the keys are
+      ("board", "origins", "architecture", "history") and the files are
+      ("triage.html", "origins.html", "architecture.html", "history.html"), each with a non-empty goal
+      ending in "?". Run `uv run pytest tests/unit/test_triage_fragments.py -q --no-cov` — fails on import.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: add `PAGES` to components.py as spec §A states (key, file, title, goal; goals: "What do I do
+      next?", "Where do defects come from, and what process change stops them?", "What is the system, and
+      where does it hurt?", "How did we get here?"). Add the change fragment
+      `.changes/feat-batch-triage-pages-goal.yaml` (`bump: minor`, summary: triage pages get one goal each,
+      authored fragments on every page, a history page, severity and duplicates, and a driver that exports
+      the triage state). Test green; commit.
+  - id: P1.T1.S3
+    text: |-
+      No refactor: a constant and one test (record `refactor: {P1.T1: "constant + smoke test only"}`).
+- number: 2
+  title: page_header and collapsed in components (spec §A, R1)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in test_triage_fragments.py test `page_header("origins")`: contains a <nav> with four links
+      (href = each PAGES file), the origins link carries aria-current="page", the others do not, and the
+      goal sentence follows in an element with class "goal". Test `collapsed("x", "Title", 3, "<p>b</p>")`
+      renders `<details id="x" class="fold">` with no `open` attribute, a <summary> holding "Title" and a
+      count span "3", and the body. Fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement both in components.py (escape title; count rendered only when not None), plus the
+      nav/goal/fold CSS in a shared `CHROME_CSS` that every page's CSS includes. Green; commit.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: if the pages' CSS blocks now repeat the gutter/token prelude, fold the repetition into
+      CHROME_CSS; re-run the triage tests (`uv run pytest tests/unit -q --no-cov -k triage`). Commit.
+- number: 3
+  title: fragments.py — shared manifest, entries, moved names, interleaving splice
+    (spec §C, R9)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: move the manifest/fragment tests out of tests/unit/test_triage_architecture.py into
+      test_triage_fragments.py, rewritten against `fr.triage.fragments` (`validate_fragment`,
+      `resolve_manifest(page_dir, generated, moved)`, `splice`): every existing refusal unchanged;
+      `order` is a list of `Entry`; a mapping entry `{fragment: a.html, title: T, collapsed: true}`
+      parses; a mapping with an unknown key, or naming a generated section, raises TriageError; a moved
+      name lands in `resolved.moved`, not `missing`; missing generated names are appended. Add
+      `test_a_fragment_between_two_generated_sections_renders_there` (splice output order:
+      gen-a, frag, gen-b) and `test_a_collapsed_entry_renders_closed_with_its_title`. Fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: create fragments.py by moving `_Checker`, `validate_fragment`, `Resolved`, `resolve_manifest`
+      out of architecture.py, generalised per spec §C, plus `splice`. architecture.py keeps no aliases
+      (spec §C). Green; commit.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: keep fragments.py free of page knowledge (no GENERATED tuples in it); run
+      `uv run ruff check packages/fr/src/fr/triage` and the triage tests. Commit.
+- number: 4
+  title: finished_waves and preselection among (spec §D, R8)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_triage_board_views.py test `finished_waves(batches, stages)`: a wave with
+      one cancelled and one archived (closeout event archived=12) batch is finished; one with an
+      `abandoned` batch plus an archived one is finished; one with a merged-but-unarchived batch is not;
+      unwaved batches never yield a key. Test `preselected_wave(judgements, among={"1","2"})` never returns
+      "3" even when wave 3 is the highest, and with among=<finished keys> returns the highest finished.
+      Fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `finished_waves` to batch_drive.py beside `closeout_event`; re-export from views; add
+      `among` to `preselected_wave`; add a views helper deriving every batch's stage
+      (derive_batch_stage) for the pages. Green; commit.
+  - id: P1.T4.S3
+    text: |-
+      No refactor beyond the re-export (record the reason in the step record if none is done).
+- number: 5
+  title: Architecture slimmed to its goal (spec §E, R6)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: in test_triage_architecture.py: the rendered page has no ids snapshot-timeline, waves,
+      filings-per-day, origin-counts, operator-actions; it has page_header("architecture"); `_summary`
+      shows lines then/now summed over `measured` (— when unmeasured) and a "Where it hurts" list of the
+      three subsystems with most open kind=defect issues (ties: total open, then name) linking
+      `#subsystem-<slug>`, and each card carries that id; a manifest naming `waves` yields a note naming
+      the board page and no missing-fragment warning; the command no longer reads origins files. Update
+      existing tests that pass origins_facts/origins. Fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: implement per spec §E: GENERATED = (summary, subsystems, size-table), MOVED map, splice via
+      fragments.py, rewritten `_summary`, card anchors, `render_architecture` without origins params,
+      command updated (prints the moved note). Move `_timeline`/`_snapshot_panel` into a new history.py
+      unchanged. Green; commit.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: delete now-dead imports and helpers in architecture.py; ruff + triage tests. Commit.
+- number: 6
+  title: Origins reordered, fragments, collapsed issue table (spec §E, R7, R9)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: in tests/unit/test_triage_origins.py: section ids appear in the order origin-counts,
+      conclusion, filings-per-day, time-to-fix, pr-leaderboards, issue-table; the issue table sits inside
+      a closed `details.fold`; page_header("origins") present; a fragment listed in
+      `<state>/origins/manifest.yaml` survives `fr triage origins render` (CliRunner) at its position.
+      Fails.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: origins GENERATED tuple, splice, collapsed issue table, command reads
+      `<state>/origins/manifest.yaml`. Green; commit.
+  - id: P1.T6.S3
+    text: |-
+      No refactor needed beyond ordering (record reason if none).
+- number: 7
+  title: History page and `fr triage history render` (spec §F, R8)
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      RED: new tests/unit/test_triage_history.py: `render_history` shows page_header("history"), the
+      snapshot timeline (moved, same markup), finished waves as `tabs("history-wave", …)` with the highest
+      finished wave selected, each batch link `triage.html#batch-<id>`, and history manifest fragments;
+      with no finished wave it says so. CLI test: `fr triage history render --dir <tmp>` writes
+      history.html and prints the path. Fails.
+  - id: P1.T7.S2
+    text: |-
+      GREEN: history.py `render_history`; commands/triage_history_cmd.py registered on triage_app beside
+      origins/architecture. The finished-wave table calls the board's `_wave_table` with an href prefix
+      parameter (add it) so one table serves both. Green; commit.
+  - id: P1.T7.S3
+    text: |-
+      REFACTOR: make sure history.py and architecture.py share no copy of the timeline code; ruff;
+      triage tests. Commit.
+- number: 8
+  title: Board gains the page chrome and loses finished waves (R1, R8), and acceptance
+    linkage
+  steps:
+  - id: P1.T8.S1
+    text: |-
+      RED: in tests/unit/test_triage_render.py: the board carries page_header("board"); a wave whose every
+      batch is terminal is not a board tab and the preselected tab is always present (regression for the
+      `keys.index` ValueError); all waves finished → the "Every wave is finished" line linking
+      history.html. Fails.
+  - id: P1.T8.S2
+    text: |-
+      GREEN: render.py uses page_header, filters finished waves, passes `among` to preselected_wave.
+      Green. Then point the acceptance rows at their tests with `uv run fr acceptance set-status --id
+      <row> --status ci --notes "<why>" --level unit=super-fr:<test-file>#<test-name>` for
+      triage-fragments-every-page, and for triage-history-page and triage-page-goals once their visual
+      evidence is captured (else `skipped` with a note). Commit.
+  - id: P1.T8.S3
+    text: |-
+      Browser check for the visual rows triage-page-goals and triage-history-page: render the four pages
+      from a fixture state into a git-ignored dir, capture each state/interaction the rows name at 1280px
+      and 390px, light and dark, open every screenshot, fill the step record's `visual:` section. Full
+      suite `uv run pytest -q --no-cov -n auto > $TMPDIR/p1-suite.log 2>&1` after the last code commit;
+      ruff format + check; mypy on packages/fr/src. Fix anything red, commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

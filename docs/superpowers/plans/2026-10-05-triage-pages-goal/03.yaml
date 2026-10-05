@@ -1,0 +1,123 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Severity and duplicates — origins.yaml schema 2, judgement fields, check
+    sets, page display (R10, R11)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - triage-origins-schema-2
+  - triage-severity-and-duplicates
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/origins.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_origins_cmd.py
+  - tests/unit/test_triage_*.py
+  - docs/acceptance/*
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: origins.yaml schema 2 (spec §E, R10)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in test_triage_origins.py: origins-facts.json is still written and read as schema 1;
+      origins.yaml loads with schema 1 and 2; `duplicate_of` without category duplicate is refused;
+      `introduced_in` on a regression is refused; `duplicate_of` is normalised; `check` reports
+      "duplicate target outside the window" for a target not in the facts; each issue table row carries
+      `id="origin-<key>"`, a duplicate's category cell links its in-window original by anchor, an
+      out-of-window same-repo original by URL, otherwise plain text; Related PR shows "introduced in" and
+      "fixed by". Fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: FACTS_SCHEMA / CLASSIFICATION_SCHEMA split, Origin fields and validators, OriginsCheck
+      `duplicate_outside`, command prints the third set, table rendering. Green; commit.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: one helper builds an issue link for both the table and conclusion if they now duplicate
+      URL logic; tests. Commit.
+- number: 2
+  title: Judgement severity and duplicate_of, check sets, collect views targets (spec
+    §G, R11)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: in the existing triage check/collect test modules: a judgement with severity/duplicate_of loads
+      on schemas 1–3; a self-referencing duplicate_of is refused; `classify` yields `no_severity` (open,
+      judged, no severity) and `duplicate_unknown` (target not in facts); an issue with duplicate_of is not
+      unplaced; a duplicate_of target in a collected repo is among the keys collect views. Fails.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: model fields (Severity literal in model.py), check sets printed by `fr triage check`, collect
+      adds targets to the viewed keys. Green; commit.
+  - id: P3.T2.S3
+    text: |-
+      No refactor expected (record reason if none).
+- number: 3
+  title: Board shows severity and lists duplicates under Parked (spec §B, R11)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: in test_triage_render.py: backlog rows show a severity pill or —; a Next up row shows the most
+      severe member severity (high > med > low); an issue with duplicate_of is absent from the tier
+      sections and listed under Parked as "duplicate of" linking the original's facts URL, plain text when
+      unknown. Fails.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: implement in render.py and views.next_up rows (add `severity` to NextRow). Green; move rows
+      triage-origins-schema-2 and triage-severity-and-duplicates to ci with their test refs via
+      `uv run fr acceptance set-status`. Commit.
+  - id: P3.T3.S3
+    text: |-
+      Full suite into `$TMPDIR/p3-suite.log` after the last code commit; ruff format/check; mypy. Commit
+      any fixes.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

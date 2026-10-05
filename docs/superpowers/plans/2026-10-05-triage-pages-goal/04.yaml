@@ -1,0 +1,162 @@
+schema_version: 2
+phase:
+  number: 4
+  title: State export/import verbs and the driver's per-wave export PR (R12, R13)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-state-sync-verbs
+  - drive-exports-finished-wave
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/state_sync.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_state_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_*.py
+  - tests/unit/test_ghclient*.py
+  - docs/acceptance/*
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: state_sync engine and `fr triage state export|import` (spec §H, R12)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: new tests/unit/test_triage_state_sync.py: export copies judgements/origins/subsystems and the
+      board/origins/architecture/history/snapshots/authored-src dirs (skipping __pycache__) to
+      `<dest>/<scope>/`, never facts.json, origins-facts.json or root *.html; import skips a destination
+      file newer than the source unless force; SyncReport lists copied and skipped; CLI
+      `fr triage state export --to <d> --dir <state>` and `import --from <d>` print both lists. Fails.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: state_sync.py and commands/triage_state_cmd.py registered on triage_app. Green; commit.
+  - id: P4.T1.S3
+    text: |-
+      No refactor expected (record reason if none).
+- number: 2
+  title: Judgements schema 4, Export, save_exports, ExportConfig (spec §G, §I config)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: `exports:` requires schema 4 (refused on 3); JUDGEMENTS_READS includes 4; the writer writes
+      schema 4; `save_exports` replaces only the `exports:` section and leaves the file byte-identical on
+      refusal; `TriageConfig(export={"path": "docs/triage"})` loads and `..`/absolute paths are refused.
+      Fails.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: model.py (Export, ExportConfig, schema 4), batch.py save_exports with _replace_top_level.
+      Green; commit.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: share the refuse-or-restore wrapper between save_batches and save_exports; tests. Commit.
+- number: 3
+  title: Pure decision — step 3b, Action.wave, Summary accounting (spec §I, R13)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_drive.py, one test per step-3b table row (none/none → export;
+      none/open trusted → export-adopt; none/open untrusted → warn+blocked; merged → nothing; open green →
+      export-merge; pending → nothing, closing; failing/untrusted/draft → warn+blocked; closed unmerged →
+      warn+blocked; pr None → nothing); group and org scopes → one warn naming --repo; no config → no
+      action; `Summary.done` false while an export is owed; `action_line` prints
+      `export wave <N> <repo>`. Fails.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: Snapshot export_path/exports/export_prs/finished, ActionKind additions, Action.wave,
+      drive_pass step 3b, Summary counting. Green; commit.
+  - id: P4.T3.S3
+    text: |-
+      REFACTOR: keep step 3b a single helper like the other steps; tests. Commit.
+- number: 4
+  title: Execution — commit_paths, push force, pr_create, _export/_export_adopt/_export_merge
+    (spec §I)
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      RED: gitseam tests: `Worktree.commit_paths` stages untracked files under the given path only and
+      returns None when nothing changed; `push(branch, force=True)` overwrites a diverged remote branch
+      (real temporary git repos, as the existing gitseam tests do). ghclient tests: `pr_create` runs
+      `gh pr create` (not --draft) with head/base/title/body and returns the number; the GitLab and Gitea
+      adapters raise UnsupportedForgeOperation. Fails.
+  - id: P4.T4.S2
+    text: |-
+      GREEN: implement those three. Green; commit.
+  - id: P4.T4.S3
+    text: |-
+      RED then GREEN: in tests/unit/test_triage_batch_drive_cmd.py with a temp git repo and a fake
+      GhClient: `_export` commits only `<path>/<scope>/`, force-pushes `chore/triage-state-wave-<N>`,
+      records Export(pr=n); nothing changed → Export(pr=None) and no PR; export-adopt records the open PR
+      without pushing; `_export_merge` merges at the live head and records merged; a forge failure exits
+      1; the snapshot reader fills export_prs via list_prs_by_head/pr_view; a `--yes` loop does not
+      return done while the export PR is open. Implement in triage_batch_cmd.py. Green; commit.
+  - id: P4.T4.S4
+    text: |-
+      Move triage-state-sync-verbs and drive-exports-finished-wave to ci with their test refs via `uv run
+      fr acceptance set-status`. Full suite into `$TMPDIR/p4-suite.log` after the last code commit; ruff;
+      mypy. Commit.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

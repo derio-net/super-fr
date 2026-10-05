@@ -1,0 +1,128 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The board's first screen — transitions table, tier column, collapsed sections,
+    stage-filtered batch cards (R2–R5)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-board-first-screen
+  - triage-board-batch-filter
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/snapshot.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/components.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - tests/unit/test_triage_render.py
+  - tests/unit/test_triage_render_command.py
+  - tests/unit/test_triage_kind_features_snapshot.py
+  - tests/unit/test_triage_batch_board.py
+  - tests/unit/test_triage_board_views.py
+  - docs/acceptance/*
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: Structured transitions in SnapshotDiff (spec §B step 2, R3)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_triage_kind_features_snapshot.py: `diff_snapshots(prev, new).transitions`
+      holds one `Transition` per change the string groups list (same count per kind), with change in
+      {merged-or-closed, filed, batch-stage, acceptance, figure}; a batch-stage transition has
+      batch=<id>, before=<old stage>, after=<new stage>; acceptance transitions come from the moved rows,
+      and `acceptance_note` is unchanged. Fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `Transition` and `SnapshotDiff.transitions` built beside the strings in `diff_snapshots`.
+      Green; commit.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: derive each string group from the same comparison as its transition so the two cannot
+      drift (one loop per kind); triage tests. Commit.
+- number: 2
+  title: Board order, since table, tier column, collapsed sections (spec §B, R2–R4)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_render.py: replace
+      `test_the_board_is_ordered_since_needs_next_waves_backlog` with one asserting masthead → since table
+      → needs-you-now → next-up → waves, then closed `details.fold` sections backlog (one nested fold per
+      tier and Unranked; FILTER_BAR inside it), features, parked, patterns, prs, batches. The since table
+      has columns Change/Item/Before/After and a batch row links `#batch-<id>`; no transitions → "Nothing
+      changed since the last report." The wave table header is Batch, Tier, Skill, Issues, Why, Size,
+      Depends on, Stage, Tier = lowest member tier or —; kind chips still head Waves. A board fragment in
+      `<state>/board/manifest.yaml` survives render. Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement in render.py through `splice` with the board GENERATED tuple (spec §C),
+      `_since_table`, `views.batch_tier` (renamed `_tier`, callers updated), `collapsed(...)` sections.
+      The render command reads `<state>/board/manifest.yaml`. Green; commit.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: remove `_since_section`'s list markup if nothing calls it; ruff; triage tests. Commit.
+- number: 3
+  title: Batch cards collapsed and stage-filtered, links open them (spec §B step 6,
+    R5)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_board.py: each card is `<details id="batch-<id>"
+      data-stage="<stage>">` without `open`; the stage filter is a `hidden` fieldset with one checkbox per
+      stage present, all checked; FOLD_SCRIPT is present once. Fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement cards, filter and FOLD_SCRIPT (toggle `hidden` by data-stage; on load and
+      hashchange open the target details and every ancestor details, then scrollIntoView). Green; commit.
+  - id: P2.T3.S3
+    text: |-
+      Browser check (visual rows triage-board-first-screen, triage-board-batch-filter): render a board from
+      a fixture state into a git-ignored dir, open it headless at 1280px and 390px, light and dark, capture
+      every state and interaction the two rows name, open every screenshot, fill the step record's
+      `visual:` section. Move both rows with `uv run fr acceptance set-status ... --level unit=...`. Full
+      suite into `$TMPDIR/p2-suite.log` after the last code commit. Commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
