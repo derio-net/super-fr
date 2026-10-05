@@ -14,3 +14,8 @@ Hooks (command -v fr; fr ...) and fr-opencode-plugin (execFile("fr") in claim.ts
 ### mismatch-policy · decision · Operator: refuse a bare-PATH fr that disagrees with the session pin; warn for a venv fr
 
 Asked because a blanket refusal would block AGENTS.md's 'uv run fr in a worktree' convention. Operator chose: integrations pin the fr they resolved (Claude Code SessionStart -> CLAUDE_ENV_FILE; OpenCode plugin -> process.env); fr refuses (exit 2, naming both binaries) when it runs from no project venv and differs from the pin; an fr run from a venv (uv run fr, a uv-run wrapper) warns one line and continues; FR_SKIP_IDENTITY=1 bypasses.
+
+<!-- fr:journal kind=finding scope=debug id=fix-746 created=2026-10-05T21:19:23+00:00 state=fixed -->
+### fix-746 · finding [fixed] · Integrations pin their fr; fr refuses a PATH-skewed one
+
+fr/binary_identity.py (identity = version + package dir; judge/enforce at CLI entry before the migration gate), fr --identity, plugins/super-fr/hooks/fr-binary-pin.sh (SessionStart -> CLAUDE_ENV_FILE), fr-opencode-plugin src/pin.ts (shell.env). Tests red first: tests/unit/test_fr_binary_identity.py, tests/unit/test_hooks_binary_pin.py, packages/fr-opencode-plugin/test/pin.test.ts. Live 2026-10-05: FR_HARNESS_FR survives zsh -c .zshenv while command -v fr moves to ~/.local/bin; a same-version (5.5.0) fr from another package dir refuses exit 2; FR_SKIP_IDENTITY=1 passes; uv run fr warns and runs; hook-written pin naming the same fr passes. Full suite 8457 passed.
