@@ -1,0 +1,33 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-drive-close-tabs
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: finding
+    id: p2-r1
+    phase: 2
+    review_scope: in
+    title: "_try_runner caught only typer.Exit: an adapter's ImportError or from_env() failure crashed the drive, and a caught refusal printed a red error plus a warning"
+    body: "triage_batch_cmd.py `_Driver._try_runner`; fr_dispatch.registry.load_runner does not wrap `.load()`/`factory()`. Breaks R10 (a runner that cannot be loaded is reported once and skipped)."
+  - kind: finding
+    id: p2-r2
+    phase: 2
+    review_scope: in
+    title: "Busy/failed close dedup key was the whole outcome line, so the same cause re-reported once a sibling closed or an exception message changed"
+    body: "triage_batch_cmd.py `_close_sessions`/`_report_cause`; spec §D asks for one report per batch and cause."
+  - kind: review
+    id: p2-review-r1
+    phase: 2
+    title: "Phase 2 code review: 2 findings (p2-r1, p2-r2, in scope)"
+    body: |
+      Dispatched reviewer (separate context) checked R6-R10 against protocols.py, testing.py,
+      fr_herdr/runner.py, batch_drive.py, triage_batch_cmd.py, the fr-triage skill and mirrors, the
+      close tests and matrix rows. Verified correct: busy never closed, the R9 lone-tab rule,
+      recorded-runner probing skipping `hand`, did=False/no failed_write, is_finished shared by
+      steps 3 and 5, --keep-sessions and no probing without --yes, vk/cncd and Runner untouched.
+      Raised p2-r1 and p2-r2, both in scope.
+resolves:
+  - {id: p2-r1, state: fixed, body: "`_try_runner` captures `load_runner`'s refusal output and catches any exception, printing ONE warning with the reason; tests test_a_runner_whose_load_raises_is_skipped_with_one_warning (ImportError, RuntimeError) and test_a_runner_load_refusal_prints_one_warning_not_an_error (commit 8ec21f775)."}
+  - {id: p2-r2, state: fixed, body: "Causes key on (batch, item, busy | exception type); a line whose causes are all reported prints only what closed. Tests test_a_busy_cause_is_not_reported_again_when_a_sibling_closed and test_a_failed_close_is_reported_once_whatever_its_message (commit 8ec21f775)."}
+evidence: {review: p2-review-r1, reviewer: a6e9a40b0aa2c8974, model: claude-opus-5-5}
