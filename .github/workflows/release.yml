@@ -10,8 +10,10 @@ name: Release
 # No CI runs on the release commit. It is pushed with the GITHUB_TOKEN, and a
 # push made with the GITHUB_TOKEN triggers no workflow. So release.py checks it
 # twice before the push. The staged diff may carry nothing but
-# version_surfaces() lines and the consumed fragments, and a stale uv.lock is
-# refused rather than re-resolved: that proves WHICH lines changed. Then it
+# version_surfaces() lines, the consumed fragments and the live plans'
+# fr_version ceilings that `fr migrate artifacts --yes` widens at a major
+# (gh#861), and a stale uv.lock is refused rather than re-resolved: that
+# proves WHICH lines changed. Then it
 # tests the staged tree: the whole suite, with fr installed at the new number,
 # which proves how the code BEHAVES there. 5.0.0 passed the first check and
 # shipped refusing its own plans (gh#854). A red suite pushes, tags and
