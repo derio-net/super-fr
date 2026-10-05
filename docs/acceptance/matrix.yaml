@@ -6296,9 +6296,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R7
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: session_statuses degrades to unknown plus a note for every failing runner;
+      herdr side tested in phase 1; blocked highlight browser-checked
     visual:
       states:
       - blocked session card highlighted
