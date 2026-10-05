@@ -149,3 +149,63 @@ implement-phase refuses evidence.tests when the full suite ran via a background 
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 cards, filter and script are one small addition on the P2.T2 helpers; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-05T22:19:09+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · Batch stage filter with every box off shows no "no batches match" message (phase 2)
+
+Raised by the phase 2 reviewer (separate dispatched context).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-05T22:19:09+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Wave table's "Why" column is clipped at 390px with no scroll affordance (phase 2)
+
+Raised by the phase 2 reviewer (separate dispatched context).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-05T22:19:09+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Planned merge-order list is not tied to the stage filter, so it can list batches the cards hide (phase 2)
+
+Raised by the phase 2 reviewer (separate dispatched context).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-05T22:19:09+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · FOLD_SCRIPT calls reveal twice (click handler and hashchange); harmless but redundant (phase 2)
+
+Raised by the phase 2 reviewer (separate dispatched context).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-05T22:19:09+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · With every stage off the "Planned merge order" intro paragraph stays above an empty list (phase 2)
+
+Raised by the phase 2 reviewer (separate dispatched context).
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-10-05T22:19:09+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 review: 5 findings (all in, all minor) (phase 2)
+
+Dispatched reviewer read 18c6cc849..6666d74e2 against R2-R5 and plan phase 2, ran the triage tests (1054 passed), re-ran shots-p2.py as a command word and opened all 21 screenshots; after fixes it re-ran the capture, opened all 21 again, verified p2-r1..r4 and raised p2-r5, fixed in 3468e4a41.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-05T22:19:09+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: Batch stage filter with every box off shows no "no batches match" message (phase 2)
+
+filter-empty message shown by apply() when no card is visible (0f9b51a88); test test_an_empty_filter_says_so_and_the_merge_order_follows_it; reviewer saw it in p2-batch-filter-every-stage-off.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-05T22:19:09+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Wave table's "Why" column is clipped at 390px with no scroll affordance (phase 2)
+
+scroll shadows on .tablewrap (0f9b51a88, 9d979a21a); test test_wide_tables_show_that_they_scroll; reviewer saw the edge shadow.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-05T22:19:09+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Planned merge-order list is not tied to the stage filter, so it can list batches the cards hide (phase 2)
+
+merge-order rows hide with their batch's card (0f9b51a88); reviewer verified.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-05T22:19:09+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: FOLD_SCRIPT calls reveal twice (click handler and hashchange); harmless but redundant (phase 2)
+
+click path only for a link to the hash already shown (0f9b51a88); test test_a_link_reveals_once_and_only_the_same_hash_needs_the_click_path.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-05T22:19:09+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: With every stage off the "Planned merge order" intro paragraph stays above an empty list (phase 2)
+
+intro and list wrapped in div.merge-plan hidden when no step is visible (3468e4a41); test test_the_merge_plan_hides_whole_when_no_step_is_shown.
+
+<!-- fr:journal kind=finding scope=plan id=p2-suite-log-background-unwitnessed-resolved created=2026-10-05T22:19:09+00:00 phase=2 state=open resolves=p2-suite-log-background-unwitnessed out_of_scope=true -->
+### p2-suite-log-background-unwitnessed-resolved · finding [out-of-scope] · resolves p2-suite-log-background-unwitnessed: fr cannot witness a suite log written by a run_in_background command, which the brief's own long_commands rule prescribes (phase 2)
+
+A conflict between fr's suite-log witness and the brief's long_commands rule, not caused by this change; deliver re-runs the suite on the final tree.
