@@ -1,0 +1,31 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-run-upgrade-midflight
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T3.S3]
+refactor:
+  P2.T1: "the bound landed as a new pure module (fr/run/historical.py) and the findings witness string was extracted there as findings_witness on first use; nothing left duplicated to clean"
+  P2.T2: "adoption reuses the bound, reviews_phase, phase_finding_states, unauthorized_fixes and findings_witness directly; no copy of the gate's logic was made, so nothing to clean"
+journal:
+  - kind: decision
+    id: p2-implement-return-rule
+    phase: 2
+    title: Clause 2 reads every other phase/N unit's returned, the reviewer check's own implementer rule
+    body: |
+      `implement_returned` takes the latest `returned` over every `phase/N/*` unit except the review unit being resolved — the same "every other member of the phase" rule `_verify_reviewer` uses for implementers — so the bound needs no knowledge of which member id is the implement one. Adoption identifies the review member as the group member whose `evidence` declares `review`.
+  - kind: decision
+    id: p2-adopt-records-only-done
+    phase: 2
+    title: Adoption records only inferred-done review units; a not-inferable one stays absent (pending) with a note
+    body: |
+      A review member adoption cannot infer is left unrecorded, exactly as before (the next `advance` dispatches it), rather than written as an explicit `pending` unit. The cursor moves past the group only when it was ON the group (the all-complete fallback) and every member of every non-manual phase is done; an unticked manual phase keeps it on the group.
+  - kind: discovery
+    id: p2-adopted-implement-debt
+    phase: 2
+    title: Adopted implement-phase units already show `unevidenced` debt for `visual` under fr-goal
+    body: |
+      Pre-existing, not introduced here: an adopted `phase/N/implement-phase: done` unit carries no evidence, and fr-goal's implement-phase declares `visual`, so `fr run status` prints "unevidenced (predates the evidence gate)" for it. R9 only exempts historical REVIEW units; the R9 test asserts on the review unit's block only.
+resolves: []
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/eb6807d8-033c-4096-8b10-e6487f0bf0be/scratchpad/p2-suite.log
