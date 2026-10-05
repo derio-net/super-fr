@@ -8,6 +8,7 @@ unless forced, and both verbs say what they copied and what they skipped.
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -143,7 +144,8 @@ def test_import_skips_a_state_file_newer_than_the_repo_copy(tmp_path: Path) -> N
 
     report = import_state(src, state, force=False)
 
-    assert report.skipped == ("judgements.yaml",)
+    assert [s.path for s in report.skipped] == ["judgements.yaml"]
+    assert "newer" in report.skipped[0].reason
     assert "judgements.yaml" not in report.copied
     assert "edited here" in (state / "judgements.yaml").read_text(encoding="utf-8")
 
@@ -204,3 +206,86 @@ def test_the_import_verb_prints_copied_and_skipped(tmp_path: Path) -> None:
     forced = _invoke("import", "--from", str(out), "--repo", SCOPE, "--dir", str(state), "--force")
     assert "copied origins.yaml" in forced.output  # type: ignore[attr-defined]
     assert "skipped origins.yaml" not in forced.output  # type: ignore[attr-defined]
+
+
+# ------------------------------------------------- symlinks (p4-sec-symlink-follow)
+# A symlink is never followed, in either direction: export would copy whatever it
+# points at into a repo the driver pushes, and import from a cloned repo would copy
+# an arbitrary local file into the cache.
+
+
+def _skipped(report: SyncReport) -> dict[str, str]:
+    return {s.path: s.reason for s in report.skipped}
+
+
+def test_export_never_follows_a_symlinked_file(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    secret = tmp_path / "id_rsa"
+    secret.write_text("PRIVATE\n", encoding="utf-8")
+    (state / "authored-src" / "x").symlink_to(secret)
+    (state / "subsystems.yaml").unlink()
+    (state / "subsystems.yaml").symlink_to(secret)
+    dest = tmp_path / "dest"
+
+    report = export_state(state, dest)
+
+    assert not (dest / "authored-src" / "x").exists()
+    assert not (dest / "subsystems.yaml").exists()
+    assert "authored-src/x" not in report.copied
+    skipped = _skipped(report)
+    assert skipped["authored-src/x"] == "symlink, not followed"
+    assert skipped["subsystems.yaml"] == "symlink, not followed"
+    assert all("PRIVATE" not in p.read_text("utf-8") for p in dest.rglob("*") if p.is_file())
+
+
+def test_export_never_follows_a_symlinked_durable_dir_or_subdir(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    outside = tmp_path / "home"
+    (outside / "ssh").mkdir(parents=True)
+    (outside / "ssh" / "key").write_text("PRIVATE\n", encoding="utf-8")
+    shutil.rmtree(state / "history")
+    (state / "history").symlink_to(outside / "ssh")
+    (state / "board" / "deep").symlink_to(outside)
+
+    report = export_state(state, tmp_path / "dest")
+
+    assert not (tmp_path / "dest" / "history").exists()
+    assert not (tmp_path / "dest" / "board" / "deep").exists()
+    skipped = _skipped(report)
+    assert skipped["history"] == "symlink, not followed"
+    assert skipped["board/deep"] == "symlink, not followed"
+
+
+def test_import_never_follows_a_symlink_in_the_repo_copy(tmp_path: Path) -> None:
+    src = tmp_path / "repo-copy"
+    export_state(_state(tmp_path / "old"), src)
+    secret = tmp_path / "secret"
+    secret.write_text("PRIVATE\n", encoding="utf-8")
+    (src / "board" / "planted.html").symlink_to(secret)
+    state = tmp_path / "state"
+
+    report = import_state(src, state, force=True)
+
+    assert not (state / "board" / "planted.html").exists()
+    assert _skipped(report)["board/planted.html"] == "symlink, not followed"
+
+
+def test_a_symlinked_destination_is_never_written_through(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "dest"
+    victim = tmp_path / "victim"
+    victim.write_text("ORIGINAL\n", encoding="utf-8")
+    victim_dir = tmp_path / "victim-dir"
+    victim_dir.mkdir()
+    dest.mkdir()
+    (dest / "judgements.yaml").symlink_to(victim)
+    (dest / "board").symlink_to(victim_dir)
+
+    report = export_state(state, dest)
+
+    assert victim.read_text(encoding="utf-8") == "ORIGINAL\n"
+    assert list(victim_dir.iterdir()) == []
+    skipped = _skipped(report)
+    assert "symlink" in skipped["judgements.yaml"]
+    assert "symlink" in skipped["board/manifest.yaml"]
+    assert "judgements.yaml" not in report.copied

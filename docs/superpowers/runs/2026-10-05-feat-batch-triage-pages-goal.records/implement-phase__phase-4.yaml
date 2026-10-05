@@ -9,6 +9,21 @@ ticks:
 - P4.T1.S3
 refactor:
   P4.T1: state_sync is one copy loop shared by both directions; nothing to clean
-journal: []
-resolves: []
+journal:
+- kind: finding
+  id: p4-sec-symlink-follow
+  review_scope: in
+  phase: 4
+  title: state_sync followed symlinks on export and import
+  body: 'Security review of a82a6a0c6: base.rglob plus shutil.copy2 followed symlinks, so a symlink planted in the
+    state dir (authored-src/x -> ~/.ssh/id_rsa, or a symlinked page dir) copied its target into the repo, which the
+    R13 driver then commits and pushes; import from a cloned repo could copy an arbitrary local file into the cache;
+    and a symlinked destination was written through.'
+resolves:
+- id: p4-sec-symlink-follow
+  state: fixed
+  body: 'state_sync walks with os.scandir and never follows a symlink at any depth (durable files and dirs
+    themselves included); a symlinked target or parent under the destination root is never written through;
+    copy2 uses follow_symlinks=False. Each is skipped and reported in SyncReport.skipped with its reason
+    (Skipped(path, reason)); tests in tests/unit/test_triage_state_sync.py cover all four cases.'
 evidence: {}

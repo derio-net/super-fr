@@ -27,11 +27,11 @@ state_app = typer.Typer(
 triage_app.add_typer(state_app)
 
 
-def _print(report: SyncReport, *, skipped_why: str) -> None:
+def _print(report: SyncReport) -> None:
     for rel in report.copied:
         console.print(f"copied {rel}", markup=False, soft_wrap=True)
-    for rel in report.skipped:
-        console.print(f"skipped {rel} ({skipped_why})", markup=False, soft_wrap=True)
+    for skip in report.skipped:
+        console.print(f"skipped {skip.path} ({skip.reason})", markup=False, soft_wrap=True)
     console.print(
         f"{len(report.copied)} copied, {len(report.skipped)} skipped",
         markup=False,
@@ -51,7 +51,7 @@ def export_command(
     """Copy the scope's durable state to <dir>/<scope>/. Facts and pages never travel."""
     scope = triage_cmd._scope(repo, org)
     report = export_state(state_dir(scope, dir_override), to / scope.name)
-    _print(report, skipped_why="")
+    _print(report)
 
 
 @state_app.command("import")
@@ -68,4 +68,4 @@ def import_command(
     repo copy is skipped unless --force."""
     scope = triage_cmd._scope(repo, org)
     report = import_state(from_ / scope.name, state_dir(scope, dir_override), force=force)
-    _print(report, skipped_why="newer in the state directory; --force overwrites it")
+    _print(report)
