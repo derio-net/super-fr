@@ -99,7 +99,7 @@ tasks:
       runner injected by monkeypatching the new module's `load_runner` seam, judgements built with the
       helpers in tests/unit/triage_fixtures.py: exit 2 + reason for an unknown batch, a batch with no
       dispatch event, `--closeout` with no closeout event, `--closeout` on a `runner: hand` close-out
-      ("done by hand, no session"), an unloadable runner (no `error:` traceback, one line), a runner
+      ("an adopted close-out has no session"), an unloadable runner (no `error:` traceback, one line), a runner
       without `focus`, a failing preflight, `focus` returning False ("no live session"); exit 0 when
       it returns True, and the probe item's id is `batch_item_id(repo, id)` (or `closeout_item_id`)
       with `unit="run"` and `payload.group == wave_group(DEFAULT_WORKSPACE_PREFIX, wave)`. Also in
