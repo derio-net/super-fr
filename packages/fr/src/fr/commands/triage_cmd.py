@@ -40,8 +40,8 @@ from fr.triage.model import (
     Scope,
     issue_key,
     load_facts,
-    load_scope_facts,
     load_judgements,
+    load_scope_facts,
     state_dir,
 )
 from fr.triage.render import plural, render

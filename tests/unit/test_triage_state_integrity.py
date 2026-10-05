@@ -56,9 +56,7 @@ def _write_facts(d: Path, scope: Scope) -> None:
 # ------------------------------------------------- gh#886: facts of another scope
 
 
-@pytest.mark.parametrize(
-    "verb", [["check"], ["render"], ["batch", "list"], ["batch", "suggest"]]
-)
+@pytest.mark.parametrize("verb", [["check"], ["render"], ["batch", "list"], ["batch", "suggest"]])
 def test_a_state_directory_holding_another_repos_facts_is_refused(
     tmp_path: Path, verb: list[str]
 ) -> None:

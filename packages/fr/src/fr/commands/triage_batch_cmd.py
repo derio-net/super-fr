@@ -151,8 +151,8 @@ from fr.triage.model import (
     Launch,
     PostMergeEvent,
     Scope,
-    load_scope_facts,
     load_judgements,
+    load_scope_facts,
     state_dir,
 )
 from fr.triage.render import plural
