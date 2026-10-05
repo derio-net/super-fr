@@ -1,2 +1,0 @@
-bump: minor
-summary: fr triage batch drive merges each repo's ready PRs as a merge train: only the head is updated or merged, failing and refused PRs are stepped over, and each pass prints the train
