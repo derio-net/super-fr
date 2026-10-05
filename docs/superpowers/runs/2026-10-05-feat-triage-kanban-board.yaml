@@ -3,11 +3,14 @@ run: 2026-10-05-feat-triage-kanban-board
 workflow: fr-goal@1
 branch: feat/triage-kanban-board
 started: '2026-10-05T20:01:19+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-05T20:01:25+00:00'
+    state: done
+    at: '2026-10-05T20:19:23+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-05-triage-batch-board-design.md
   spec-review:
     state: pending
   plan:
