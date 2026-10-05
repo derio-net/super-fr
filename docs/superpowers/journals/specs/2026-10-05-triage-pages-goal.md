@@ -264,3 +264,8 @@ Fixed in the spec: R13 + §I: group and org scopes both warn; tested.
 ### sr-16-resolved · finding [fixed] · resolves sr-16: Test Plan omits several things the design builds
 
 Fixed in the spec: Test Plan: pr_create adapter, _export_merge + exit 1, loop not done while owed, writer, CLI verbs end to end, moved-name note, collect viewing, rows linkage.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-triage-pages-goal-p2 created=2026-10-05T21:12:47+00:00 -->
+### phase-split-2026-10-05-triage-pages-goal-p2 · decision · ask: the board's first screen (R2-R5, #887) is its own reviewable ask, and carries the visual evidence
+
+Board relayout is independent of phase 1's page partition once the shared chrome and fragments exist.
