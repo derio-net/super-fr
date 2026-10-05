@@ -7,7 +7,7 @@ journal:
 - kind: review
   id: review-p3
   phase: 3
-  title: 'phase 3 code + visual review: 3 low in-scope findings'
+  title: 'phase 3 code + visual review: 4 low in-scope findings'
   body: Independent reviewer approved; p3-r1..p3-r3 verified and fixed. It drove a real timer reload,
     refresh 0 and a phone-width reload itself and opened every fresh shot.
 - kind: finding
@@ -28,6 +28,13 @@ journal:
   title: opened = webbrowser.open(...) or True
   body: opened = webbrowser.open(...) or True
   review_scope: in
+- kind: finding
+  id: p3-r4
+  phase: 3
+  title: drive_lock decided lock liveness inline, duplicating live_driver
+  body: triage_batch_cmd.drive_lock re-implemented pid / grace-by-age / pid-alive instead of sharing live_driver's
+    rule.
+  review_scope: in
 resolves:
 - id: p3-r1
   state: fixed
@@ -43,6 +50,10 @@ resolves:
 - id: p3-r3
   state: fixed
   body: Plain assignment after the call.
+- id: p3-r4
+  state: fixed
+  body: fr.triage.drive_lock.lock_holder(path, text) is the one rule; live_driver and the drive's compare-and-swap
+    both call it on the same snapshot; the drive tests' pid seam moved to drive_lock.pid_alive.
 evidence:
   review: review-p3
   reviewer: a50809923916d3f46
