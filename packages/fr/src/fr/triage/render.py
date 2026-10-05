@@ -290,6 +290,7 @@ FOLD_SCRIPT = """
   var filter = document.querySelector("fieldset.stage-filter");
   var empty = document.querySelector("p.filter-empty");
   var steps = Array.prototype.slice.call(document.querySelectorAll("ol.merge-order li"));
+  var plan = document.querySelector("div.merge-plan");
   function apply() {
     var on = {}, shown = {}, any = false;
     boxes.forEach(function (b) { on[b.value] = b.checked; });
@@ -298,7 +299,12 @@ FOLD_SCRIPT = """
       if (!c.hidden) { any = true; shown[c.id.slice(6)] = true; }
     });
     // A merge step follows its batch's card; an empty selection says so (review p2-r1, p2-r3).
-    steps.forEach(function (li) { li.hidden = !shown[li.dataset.batch]; });
+    var anyStep = false;
+    steps.forEach(function (li) {
+      li.hidden = !shown[li.dataset.batch];
+      anyStep = anyStep || !li.hidden;
+    });
+    if (plan) { plan.hidden = !anyStep; }
     if (empty) { empty.hidden = any || !cards.length; }
   }
   function reveal() {
@@ -650,10 +656,10 @@ def _batches(judgements: Judgements, facts: Facts) -> str:
     cards += '<p class="filter-empty" hidden>No batches match the selected stages.</p>'
     steps = planned_merge_order(judgements.batches, facts, judgements.issues)
     order = (
-        '<p class="tier-desc">Planned merge order of the open batch PRs, with the files '
-        "each shares with a later step (a conflict forecast; <code>fr triage batch merge"
-        "</code> computes the final order).</p>"
-        f'<ol class="merge-order">{"".join(_merge_step(s) for s in steps)}</ol>'
+        '<div class="merge-plan"><p class="tier-desc">Planned merge order of the open batch '
+        "PRs, with the files each shares with a later step (a conflict forecast; <code>fr "
+        "triage batch merge</code> computes the final order).</p>"
+        f'<ol class="merge-order">{"".join(_merge_step(s) for s in steps)}</ol></div>'
         if steps
         else ""
     )

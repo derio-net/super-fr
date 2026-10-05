@@ -243,3 +243,19 @@ def test_wide_tables_show_that_they_scroll() -> None:
 
     wrap = re.search(r"\.tablewrap \{[^}]*\}", GRID_CSS)
     assert wrap and "local" in wrap.group(0) and "scroll" in wrap.group(0)
+
+
+def test_the_merge_plan_hides_whole_when_no_step_is_shown() -> None:
+    """Review p2-r5: the plan's intro and list sit in one `.merge-plan` the script hides
+    when the filter leaves no step visible, so no intro is orphaned above an empty list."""
+    from fr.triage.render import FOLD_SCRIPT
+
+    assert "div.merge-plan" in FOLD_SCRIPT
+    section = _section(render(FACTS, JUDGEMENTS))
+    if 'class="merge-order"' in section:
+        plan = re.search(r'<div class="merge-plan">(.*?)</div>', section, re.S)
+        assert (
+            plan
+            and 'class="merge-order"' in plan.group(1)
+            and "Planned merge order" in plan.group(1)
+        )
