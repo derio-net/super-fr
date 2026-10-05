@@ -93,9 +93,13 @@ R13. `.fr/triage.yaml` accepts an optional `export: {path: <repo-relative dir>}`
 - opens a ready (non-draft) PR as the collecting login, which `pr_authors` therefore trusts;
 - records `{wave, repo, pr}` under a new top-level `exports:` list in `judgements.yaml` (judgements schema 4).
 
-If the export changes nothing, the driver records the export with no PR and opens nothing. A trusted open PR already on `chore/triage-state-wave-<N>` with no recorded export means a pass died between opening and recording. The driver records that PR (adopts it) and does not push again. The export branch belongs to the driver, so a re-export force-pushes it.
+If the export changes nothing, the driver records the export with no PR and opens nothing. A trusted open PR already on `chore/triage-state-wave-<N>` with no recorded export means a pass died between opening and recording. The driver records that PR (adopts it) and does not push again, but only when every file the PR changes lies under `<path>/<scope>/`. The export branch belongs to the driver, so a re-export force-pushes it.
 
-On a later pass the driver merges the export PR under the same gate as an archive PR. The PR must be trusted, open, not a draft, with required checks green. It is merged at the live head SHA, as `_archive` does. The driver then records the merge. Other PR states each get a warning on every pass, and change nothing else:
+On a later pass the driver merges the export PR under the same gate as an archive PR. The PR must be trusted, open, not a draft, with required checks green. Two conditions are added, because the driver auto-merges content into the default branch:
+- The live head must equal the head SHA recorded in the export: the commit the driver pushed, or the head it adopted. `pr_merge` is called with that recorded SHA.
+- Every file the PR changes must lie under `<path>/<scope>/`.
+
+A commit pushed to the branch by anyone else therefore blocks the merge, with a warning, rather than riding into the default branch. The driver then records the merge. Other PR states each get a warning on every pass, and change nothing else:
 - open with checks pending: the driver waits;
 - open with checks failing, or untrusted: counted as blocked;
 - closed without a merge.
@@ -298,7 +302,8 @@ no exemption change.
 - `JUDGEMENTS_SCHEMA` becomes 4. `JUDGEMENTS_READS` (`model.py:46`) and
   `Judgements.schema_` both gain 4.
 - Schema 4 adds a top-level `exports: list[Export]`, where
-  `Export(wave: str, repo: str, at: AwareDatetime, pr: int | None = None, merged: bool = False)`.
+  `Export(wave: str, repo: str, at: AwareDatetime, pr: int | None = None, head: str | None = None, merged: bool = False)`,
+  where `head` is the SHA the merge is pinned to (R13).
   `at` is when the export was recorded, typed like the batch events' timestamps. The
   validator that ties schema-3 events to schema 3 gains the same rule: `exports` requires
   schema 4.
@@ -356,10 +361,12 @@ finished wave that has no merged export:
 | Recorded export | Live PR | Action |
 |---|---|---|
 | none | none | `export` |
-| none | open, trusted | `export-adopt` (record it, no push) |
+| none | open, trusted, files only under `<path>/<scope>/` | `export-adopt` (record it and its head, no push) |
+| none | open, trusted, a file outside `<path>/<scope>/` | `warn`, counted blocked |
 | none | open, untrusted | `warn`, counted blocked |
 | PR, merged | — | nothing |
-| PR | open, trusted, not a draft, required checks green | `export-merge` |
+| PR | open, trusted, not a draft, required checks green, head = recorded `head`, files only under `<path>/<scope>/` | `export-merge` |
+| PR | open, head differs from the recorded `head`, or a file outside `<path>/<scope>/` | `warn`, counted blocked |
 | PR | open, checks pending | nothing; counted closing |
 | PR | open, checks failing, or untrusted, or a draft | `warn`, counted blocked |
 | PR | closed, not merged | `warn` on every pass, counted blocked |
@@ -395,8 +402,11 @@ A crash after step 5's push and before step 6 leaves an open PR with no record. 
 pass sees it on the head and adopts it (`export-adopt` records it and pushes nothing). So
 no pass ever opens a second PR for one wave.
 
-`_export_merge` calls `pr_merge(repo, pr, head_sha=<live head>, method=ctx.method)`, as
-`_archive` does (`triage_batch_cmd.py:2151`), then sets `merged: true`.
+`_export_merge` calls `pr_merge(repo, pr, head_sha=<recorded head>, method=ctx.method)`, then
+sets `merged: true`. Unlike `_archive`, it never merges the live head: an export PR's content
+is machine-written, nobody reviews it, and a commit someone else pushed to its branch must not
+reach the default branch (security review, p4-sec-unpinned-merge). The PR's changed files come
+from the live read (`LivePr` gains `files` when the snapshot reads an export PR).
 
 The export branch prefix `chore/triage-state-` is not in `ARCHIVE_PREFIXES`, so archive
 attribution can never claim an export PR. Without `--yes`, both actions print as
