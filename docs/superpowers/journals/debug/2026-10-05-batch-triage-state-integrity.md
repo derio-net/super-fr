@@ -59,3 +59,8 @@ test_every_verb_refuses_a_group_of_two_repos_sharing_a_name (collect, check, ren
 ### fx-885 · finding [fixed] · #885 closed as decided: schema 4 stays on every scope
 
 FACTS_SCHEMA comment states why; test_repo_and_org_facts_are_stamped_schema_4_because_their_shape_moved pins it.
+
+<!-- fr:journal kind=finding scope=debug id=fx-888 created=2026-10-05T21:57:15+00:00 state=fixed -->
+### fx-888 · finding [fixed] · #888 fixed: origins collect refuses a window one page does not cover
+
+_short_of + refusal in collect_origins naming a covered --since and the --issue-limit/--pr-limit flags (new); no future or drifting since. Tests in test_triage_state_integrity.py; test_triage_origins.py warn test rewritten as a refusal test. fr-origins skill + mirrors. Commits 53f1cc387, 25545b911.
