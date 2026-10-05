@@ -681,7 +681,7 @@ def _next_section(facts: Facts, judgements: Judgements) -> str:
     return f'{head}<ul class="cards">{"".join(items)}</ul></section>'
 
 
-def _wave_table(
+def wave_table(
     batches: Sequence[Batch], facts: Facts, judgements: Judgements, href_prefix: str = ""
 ) -> str:
     """One wave's table; *href_prefix* is put before each batch link's `#batch-<id>`, so the
@@ -751,7 +751,7 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         selected = keys.index(str(picked)) if str(picked) in keys else len(keys) - 1
         panels = [
             (key, "No wave" if key == UNWAVED else f"Wave {key}",
-             _wave_table(batches, facts, judgements))
+             wave_table(batches, facts, judgements))
             for key, batches in grouped.items()
         ]  # fmt: skip
         body = tabs("wave", "Waves", panels, selected)

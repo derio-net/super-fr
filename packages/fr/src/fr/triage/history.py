@@ -27,7 +27,7 @@ from fr.triage.components import (
 )
 from fr.triage.fragments import Resolved, splice
 from fr.triage.model import Facts, Judgements
-from fr.triage.render import FONTS, _wave_table, esc
+from fr.triage.render import FONTS, esc, wave_table
 from fr.triage.snapshot import Snapshot, diff_snapshots
 from fr.triage.views import batch_stages, finished_waves, preselected_wave, waves
 
@@ -155,7 +155,7 @@ def _finished_waves(facts: Facts, judgements: Judgements) -> str:
     keys = list(grouped)
     selected = keys.index(str(picked)) if picked is not None else len(keys) - 1
     panels = [
-        (key, f"Wave {key}", _wave_table(batches, facts, judgements, BOARD_FILE))
+        (key, f"Wave {key}", wave_table(batches, facts, judgements, BOARD_FILE))
         for key, batches in grouped.items()
     ]
     return f"{head}{tabs('history-wave', 'Finished waves', panels, selected)}</section>"

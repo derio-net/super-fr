@@ -255,6 +255,15 @@ def test_a_collapsed_entry_renders_closed_with_its_title() -> None:
     assert "Dated &lt;history&gt;" in out and "<p>FRAG</p>" in out
 
 
+def test_collapsed_fragments_whose_names_slug_alike_get_distinct_ids() -> None:
+    resolved = Resolved(
+        order=[Entry("a_b.html", "One", True), Entry("a-b.html", "Two", True)],
+        fragments={"a_b.html": "<p>1</p>", "a-b.html": "<p>2</p>"},
+    )
+    ids = [m.group(1) for out in splice(resolved, {}) if (m := re.search(r'id="([^"]+)"', out))]
+    assert len(ids) == 2 and len(set(ids)) == 2
+
+
 def test_a_missing_entry_renders_nothing(tmp_path: Path) -> None:
     d = _arch(tmp_path, "sections:\n  - gone.html\n")
     resolved = resolve_manifest(d, GEN)

@@ -228,7 +228,7 @@ def resolve_manifest(
     )
 
 
-def _fragment(entry: Entry, text: str) -> str:
+def _fragment(entry: Entry, text: str, used_ids: set[str]) -> str:
     section = (
         f'<section class="fragment" data-fragment="{html.escape(entry.name, quote=True)}">'
         f'<div class="scroll">{text}</div></section>'
@@ -236,7 +236,14 @@ def _fragment(entry: Entry, text: str) -> str:
     if not entry.collapsed:
         return section
     slug = re.sub(r"[^A-Za-z0-9]+", "-", entry.name).strip("-").lower()
-    return collapsed(f"fragment-{slug}", entry.title or entry.name, None, section)
+    # Two file names can slug alike (`a_b.html`, `a-b.html`): number the later one, so
+    # every collapsed fragment keeps a unique, linkable id (review p1-r2).
+    base, n = f"fragment-{slug}", 2
+    anchor = base
+    while anchor in used_ids:
+        anchor, n = f"{base}-{n}", n + 1
+    used_ids.add(anchor)
+    return collapsed(anchor, entry.title or entry.name, None, section)
 
 
 def splice(resolved: Resolved, generated: Mapping[str, Callable[[], str]]) -> list[str]:
@@ -244,9 +251,10 @@ def splice(resolved: Resolved, generated: Mapping[str, Callable[[], str]]) -> li
     wrapped file (closed, when the entry asks). An entry with no builder and no file (a
     missing fragment) renders nothing."""
     out: list[str] = []
+    used_ids: set[str] = set()
     for entry in resolved.order:
         if entry.name in generated:
             out.append(generated[entry.name]())
         elif entry.name in resolved.fragments:
-            out.append(_fragment(entry, resolved.fragments[entry.name]))
+            out.append(_fragment(entry, resolved.fragments[entry.name], used_ids))
     return out
