@@ -492,9 +492,15 @@ def drive_pass(snap: Snapshot) -> Pass:
         if event is None or stages.get(batch.id) not in LANDED:
             continue
         archives = snap.archives.get(snap.repos.get(batch.id, ""), ())
-        if is_finished(batch, stages[batch.id], archives):
-            continue
         mine = [p for p in archives if attributed(p, batch, event)]
+        if is_finished(batch, stages[batch.id], archives):
+            merged = next((p for p in mine if p.state == "MERGED"), None)
+            if event.archived is None and merged is not None:
+                # Merged, but not by this driver: recorded once, so `batch list` and
+                # every later pass read it from the event (gh#882).
+                actions.append(Action("adopt", batch.id, f"archive PR #{merged.number} merged",
+                                      pr=merged.number, archived=merged.number))  # fmt: skip
+            continue
         closing += 1
         ready = next(
             (p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"), None

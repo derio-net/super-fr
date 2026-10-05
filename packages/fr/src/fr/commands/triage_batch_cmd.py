@@ -291,7 +291,7 @@ def _wave_columns(batch: Batch, batches: list[Batch], facts: Facts | None) -> st
         f"{d}({dependency_state(d, batches, facts)})" if facts is not None else d
         for d in batch.after
     )
-    closeout = closeout_state(batch, facts) if facts is not None else "none"
+    closeout = closeout_state(batch)
     wave = "-" if batch.wave is None else str(batch.wave)
     after = f"  after {deps}" if deps else ""
     return f"  wave {wave}{after}  close-out {closeout}"
@@ -1978,12 +1978,17 @@ class _Driver:
         if action.kind == "archive":
             return self._archive(action, facts, judgements, batch, repo), True, in_flight
         if action.kind == "adopt":
+            started = closeout_event(batch)
             self._append(
                 judgements, facts, batch,
-                CloseoutEvent(kind="closeout", at=_now_after(batch), runner="hand",
-                              handle=f"PR #{action.pr}" if action.pr else "archived",
-                              archive=_closeout_head(batch) if action.pr else None,
-                              archived=action.archived),
+                # A close-out this driver started: the same event again, now archived,
+                # as `_archive` records one it merged itself (gh#882).
+                started.model_copy(update={"at": _now_after(batch), "archived": action.archived})
+                if started is not None
+                else CloseoutEvent(kind="closeout", at=_now_after(batch), runner="hand",
+                                   handle=f"PR #{action.pr}" if action.pr else "archived",
+                                   archive=_closeout_head(batch) if action.pr else None,
+                                   archived=action.archived),
             )  # fmt: skip
             return action.detail, True, in_flight
         waits = sorted(d for d in batch.after if d in self._unlanded)
