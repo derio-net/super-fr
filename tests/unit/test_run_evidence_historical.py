@@ -72,16 +72,18 @@ def _stamp(at: datetime) -> str:
 def _at_the_review(
     tmp_path: Path,
     *,
-    started_in: timedelta = 2 * _HOUR,
-    review_at: timedelta | None = None,
+    started_at: timedelta = -_HOUR,
+    review_at: timedelta = -2 * _HOUR,
+    review_opened: timedelta = -_HOUR / 2,
     extra: list[dict[str, object]] | None = None,
     visual_row: bool = False,
 ) -> tuple[Path, Path]:
-    """`phase/1/peer-review` opened after `code` returned, with the cursor's
-    `started` moved `started_in` past now — the shape a superseded cursor has:
-    its implement attempt (carried from the old cursor) returned before this
-    cursor started. The plan journal holds `rev-h`, a phase-1 review created
-    `review_at` from now (default: halfway to `started`)."""
+    """`phase/1/peer-review` held open, on the shape a SUPERSEDED cursor has
+    (review p2-r2: never a `started` in the future): the implement attempt was
+    carried from the old cursor and returned 2h30 ago, this cursor `started`
+    `started_at` from now and briefed the review `review_opened` from now. The
+    plan journal holds `rev-h`, a phase-1 review created `review_at` from now.
+    All offsets are relative to now, so every default is in the past."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "grouped", _SHAPE)
@@ -93,18 +95,53 @@ def _at_the_review(
     assert _invoke(repo, shipped, [*code, "--agent", "impl-1"]).exit_code == 0
     assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
     now = datetime.now(UTC)
-    state = load_run_state(repo, "r1")
-    save_run_state(repo, state.model_copy(update={"started": _stamp(now + started_in)}))
-    at = now + (review_at if review_at is not None else started_in / 2)
+    _retime(
+        repo,
+        started=now + started_at,
+        code=(now - 3 * _HOUR, now - 5 * _HOUR / 2),
+        review=now + review_opened,
+    )
     build_plan_journal(
         repo,
         PLAN_SLUG,
         [
-            {"kind": "review", "id": "rev-h", "phase": 1, "title": "p1", "created": _stamp(at)},
+            {
+                "kind": "review",
+                "id": "rev-h",
+                "phase": 1,
+                "title": "p1",
+                "created": _stamp(now + review_at),
+            },
             *(extra or []),
         ],
     )
     return repo, shipped
+
+
+def _retime(
+    repo: Path, *, started: datetime, code: tuple[datetime, datetime], review: datetime
+) -> None:
+    """Move the cursor's clock: `started`, the implement attempt's
+    dispatched/returned, and the open review attempt's dispatched."""
+    state = load_run_state(repo, "r1")
+    record = state.steps["implement"]
+    new_units = {}
+    for key, unit in (record.units or {}).items():
+        if key == "phase/1/code":
+            attempts = tuple(
+                a.model_copy(update={"dispatched": _stamp(code[0]), "returned": _stamp(code[1])})
+                for a in unit.attempts
+            )
+        elif key == "phase/1/peer-review":
+            attempts = tuple(
+                a.model_copy(update={"dispatched": _stamp(review)}) for a in unit.attempts
+            )
+        else:
+            attempts = unit.attempts
+        new_units[key] = unit.model_copy(update={"attempts": attempts})
+    steps = dict(state.steps)
+    steps["implement"] = record.model_copy(update={"units": new_units})
+    save_run_state(repo, state.model_copy(update={"started": _stamp(started), "steps": steps}))
 
 
 def _link_visual_row(repo: Path) -> None:
@@ -131,6 +168,13 @@ def _evidence(repo: Path) -> dict[str, str]:
     return units.evidence_of(record, "phase/1/peer-review")
 
 
+def _unchanged(repo: Path) -> None:
+    """A refusal wrote nothing: no evidence, and the review unit still held."""
+    record = load_run_state(repo, "r1").steps["implement"]
+    assert units.evidence_of(record, "phase/1/peer-review") == {}
+    assert units.unit_state(record, "phase/1/peer-review") == "running"
+
+
 # --- R7: by hand ---------------------------------------------------------------
 
 
@@ -145,22 +189,23 @@ def test_a_review_between_the_implement_return_and_started_is_accepted(tmp_path:
 
 
 def test_a_review_created_after_the_run_started_is_refused(tmp_path: Path) -> None:
-    repo, shipped = _at_the_review(tmp_path, review_at=3 * _HOUR)
+    repo, shipped = _at_the_review(tmp_path, review_at=-_HOUR / 4)
 
     result = _review(repo, shipped, "review=rev-h", "reviewer=historical")
 
     assert result.exit_code == 2, result.output
     assert "not before this run started" in _squash(result.output)
-    assert _evidence(repo) == {}
+    _unchanged(repo)
 
 
 def test_a_review_created_before_the_implement_return_is_refused(tmp_path: Path) -> None:
-    repo, shipped = _at_the_review(tmp_path, review_at=-_HOUR)
+    repo, shipped = _at_the_review(tmp_path, review_at=-4 * _HOUR)
 
     result = _review(repo, shipped, "review=rev-h", "reviewer=historical")
 
     assert result.exit_code == 2, result.output
     assert "before phase 1's implementation last returned" in _squash(result.output)
+    _unchanged(repo)
 
 
 def test_a_phase_owing_visual_evidence_is_refused(tmp_path: Path) -> None:
@@ -170,6 +215,7 @@ def test_a_phase_owing_visual_evidence_is_refused(tmp_path: Path) -> None:
 
     assert result.exit_code == 2, result.output
     assert "phase 1 owes `visual` evidence" in _squash(result.output)
+    _unchanged(repo)
 
 
 def test_the_findings_gate_still_applies(tmp_path: Path) -> None:
@@ -180,6 +226,7 @@ def test_the_findings_gate_still_applies(tmp_path: Path) -> None:
 
     assert result.exit_code == 2, result.output
     assert "still open: f-1" in _squash(result.output)
+    _unchanged(repo)
 
 
 def test_the_review_entry_check_still_applies(tmp_path: Path) -> None:
@@ -189,6 +236,7 @@ def test_the_review_entry_check_still_applies(tmp_path: Path) -> None:
 
     assert result.exit_code == 2, result.output
     assert "names no entry" in _squash(result.output)
+    _unchanged(repo)
 
 
 def test_historical_is_refused_on_a_flat_spec_review_unit(tmp_path: Path) -> None:
@@ -206,6 +254,96 @@ def test_historical_is_refused_on_a_flat_spec_review_unit(tmp_path: Path) -> Non
 
     assert result.exit_code == 2, result.output
     assert "reviewer=historical is accepted only on a phase review unit" in _squash(result.output)
+
+
+def test_a_started_in_the_future_is_refused(tmp_path: Path) -> None:
+    # Review p2-r2: moving `started` forward must not buy a pass.
+    repo, shipped = _at_the_review(tmp_path, started_at=_HOUR, review_at=-_HOUR / 2)
+
+    result = _review(repo, shipped, "review=rev-h", "reviewer=historical")
+
+    assert result.exit_code == 2, result.output
+    assert "is in the future" in _squash(result.output)
+    _unchanged(repo)
+
+
+def test_a_review_briefed_before_the_run_started_is_refused(tmp_path: Path) -> None:
+    # Review p2-r2: the shape an edited-back `started` leaves — this cursor
+    # briefed the review unit before the time it now claims to have begun.
+    repo, shipped = _at_the_review(tmp_path, started_at=-_HOUR / 4, review_opened=-_HOUR / 2)
+
+    result = _review(repo, shipped, "review=rev-h", "reviewer=historical")
+
+    assert result.exit_code == 2, result.output
+    assert "before the run started" in _squash(result.output)
+    _unchanged(repo)
+
+
+def _entry(created: str):
+    from fr.journal.model import JournalEntry
+
+    return JournalEntry(
+        kind="review", scope="plan", id="rev-x", title="t", created=created, phase=1
+    )
+
+
+def _pure_state(started: str):
+    from fr.run.model import RunState, StepRecord
+
+    return RunState(
+        run="r1",
+        workflow="grouped@1",
+        branch="b",
+        started=started,
+        cursor="implement",
+        steps={"implement": StepRecord(state="pending")},
+    )
+
+
+def test_a_review_in_the_same_second_as_the_implement_return_is_refused() -> None:
+    # Review p2-r3: the review must POSTDATE the work, as clause 1's tie refuses.
+    from fr.run.historical import historical_review_refusal
+    from fr.run.model import Attempt, StepRecord, UnitRecord
+
+    returned = "2026-10-05T10:00:00+00:00"
+    attempt = Attempt(dispatched="2026-10-05T09:00:00+00:00", returned=returned, outcome="done")
+    state = _pure_state("2026-10-05T12:00:00+00:00").model_copy(
+        update={
+            "steps": {
+                "implement": StepRecord(
+                    state="pending",
+                    units={"phase/1/code": UnitRecord(state="done", attempts=(attempt,))},
+                )
+            }
+        }
+    )
+
+    refusal = historical_review_refusal(state, 1, _entry(returned), owes_visual=False)
+
+    assert refusal is not None and "implementation last returned" in refusal
+
+
+def test_an_unparseable_created_fails_closed() -> None:
+    from fr.run.historical import historical_review_refusal
+
+    refusal = historical_review_refusal(
+        _pure_state("2026-10-05T12:00:00+00:00"), 1, _entry("yesterday-ish"), owes_visual=False
+    )
+
+    assert refusal is not None and "cannot order them" in refusal
+
+
+def test_an_offset_created_is_compared_as_the_instant_it_names() -> None:
+    from fr.run.historical import historical_review_refusal
+
+    state = _pure_state("2026-10-05T12:00:00+00:00")
+    # 13:30+02:00 is 11:30Z — before `started`; 15:30+02:00 is 13:30Z — after.
+    before = _entry("2026-10-05T13:30:00+02:00")
+    after = _entry("2026-10-05T15:30:00+02:00")
+
+    assert historical_review_refusal(state, 1, before, owes_visual=False) is None
+    refusal = historical_review_refusal(state, 1, after, owes_visual=False)
+    assert refusal is not None and "not before this run started" in refusal
 
 
 # --- R9: reported as historical, never as debt ---------------------------------

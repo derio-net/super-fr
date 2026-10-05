@@ -13,14 +13,24 @@ Pure, and importable by both `fr.commands.run_cmd` (the by-hand resolve) and
 **Trust model.** The bound reads `JournalEntry.created`, a stamp the journal's
 author writes. fr cannot rule out an agent that writes a review entry and then
 supersedes the run, so the human control is visibility: every historical review
-is listed by name in the PR body (`fr.record.pr_body`), and the operator's
+is listed by name in the PR body (`fr.record.pr_body`) — `deliver` refuses a live
+PR body missing any of those lines, not only the heading — and the operator's
 review ok is given against that list.
+
+`started` anchors clause 1, and it sits in a tracked, hand-editable cursor. Two
+checks keep moving it from buying a pass (review p2-r2): a `started` later than
+now is refused, and so is a review unit this cursor briefed BEFORE `started` —
+a legitimate historical review is always briefed by the cursor that holds it,
+after it began (a superseded hold is closed and re-briefed; an adopted unit is
+briefed by the first `advance`). What remains — a cursor edited to a past
+`started` and the unit re-briefed after it — is a visible diff to a tracked
+file, and the PR-body list still names the review.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fr.journal.model import JournalEntry, journal_stamp_as_utc
 from fr.run import units
@@ -32,6 +42,7 @@ __all__ = [
     "HISTORICAL_REVIEWER",
     "findings_witness",
     "historical_review_refusal",
+    "historical_review_lines",
     "historical_reviews",
     "historical_sentence",
     "implement_returned",
@@ -74,9 +85,16 @@ def historical_review_refusal(
     *,
     owes_visual: bool,
     review_key: str | None = None,
+    review_dispatched: str | None = None,
+    now: datetime | None = None,
 ) -> str | None:
     """Why `entry` is NOT a historical review of `phase` for this cursor — the
-    failed clause, worded — or `None` when it is (spec §D, clauses 1-3)."""
+    failed clause, worded — or `None` when it is (spec §D, clauses 1-3, plus
+    the two anchors on `started` the module docstring explains).
+
+    `review_dispatched` is when this cursor briefed the review unit (the
+    by-hand path always has one; adoption briefs nothing yet). `now` defaults
+    to the clock — passed in by tests."""
     created = parse_timestamp(journal_stamp_as_utc(entry.created))
     started = parse_timestamp(state.started)
     if created is None or started is None:
@@ -84,6 +102,19 @@ def historical_review_refusal(
             f"review {entry.id} was created {entry.created!r} and this run started "
             f"{state.started!r} — fr cannot order them, so it cannot call the review historical"
         )
+    current = now if now is not None else datetime.now(UTC)
+    if started > current:
+        return (
+            f"this run's `started` ({state.started}) is in the future — fr will not "
+            "measure a review against it"
+        )
+    if review_dispatched is not None:
+        opened = parse_timestamp(review_dispatched)
+        if opened is None or opened < started.replace(microsecond=0):
+            return (
+                f"this cursor briefed the review at {review_dispatched}, before the run "
+                f"started at {state.started} — a cursor cannot brief a unit before it began"
+            )
     # Clause 1: it predates this cursor. Journal stamps carry whole seconds, so
     # the same second as `started` is not "before" it.
     if created >= started.replace(microsecond=0):
@@ -93,7 +124,8 @@ def historical_review_refusal(
         )
     # Clause 2: it follows the work it reviews.
     returned = implement_returned(state, phase, review_key=review_key)
-    if returned is not None and created < returned.replace(microsecond=0):
+    # Same second as the return is not "after" it (journal stamps are whole seconds).
+    if returned is not None and created <= returned.replace(microsecond=0):
         return (
             f"review {entry.id} was created {entry.created}, before phase {phase}'s "
             f"implementation last returned at {returned.isoformat()} — it reviews earlier work"
@@ -117,6 +149,22 @@ def historical_reviews(state: RunState) -> list[tuple[str, str, str]]:
             if evidence.get("reviewer") == HISTORICAL_REVIEWER:
                 out.append((step_id, key, evidence.get("review", "?")))
     return out
+
+
+def historical_review_lines(state: RunState) -> list[str]:
+    """The PR-body lines naming every historical review, phase order — the ONE
+    spelling `fr.record.pr_body` renders and `deliver` requires on the live PR."""
+
+    def phase_of(key: str) -> int:
+        part = key.split("/")[1] if key.startswith("phase/") else ""
+        return int(part) if part.isdigit() else 0
+
+    found = sorted(historical_reviews(state), key=lambda h: (phase_of(h[1]), h[1]))
+    return [
+        f"- phase {phase_of(key)} — journal {entry} (reviewed before this run's cursor "
+        "existed; reviewer not observed)"
+        for _, key, entry in found
+    ]
 
 
 def historical_sentence(entry_id: str) -> str:

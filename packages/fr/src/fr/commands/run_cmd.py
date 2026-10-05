@@ -66,6 +66,7 @@ from fr.run.historical import (
     HISTORICAL_HEADING,
     HISTORICAL_REVIEWER,
     findings_witness,
+    historical_review_lines,
     historical_reviews,
     historical_sentence,
 )
@@ -2005,8 +2006,14 @@ def _verify_historical_bound(
         )
     except VisualRefusedError as e:
         _derived_refusal(key, e.lines)
+    attempt = units.last_attempt(state, key)
     refusal = historical_review_refusal(
-        state, target.phase, entry, owes_visual=bool(owed), review_key=key
+        state,
+        target.phase,
+        entry,
+        owes_visual=bool(owed),
+        review_key=key,
+        review_dispatched=attempt.dispatched if attempt is not None else None,
     )
     if refusal is not None:
         err_console.print(
@@ -5377,6 +5384,10 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         (*REQUIRED_SECTIONS, HISTORICAL_HEADING) if historical_reviews(state) else REQUIRED_SECTIONS
     )
     missing = missing_sections(live, required=required)
+    # Review p2-r1: the heading alone is not the control — the operator's ok
+    # is given against the LIST, so every historical review must be named.
+    live_lines = {line.strip() for line in live.splitlines()}
+    missing += [line for line in historical_review_lines(state) if line not in live_lines]
     if missing:
         edit = pr_command(repo_root, "edit", ref=ref, body=rel)
         err_console.print(

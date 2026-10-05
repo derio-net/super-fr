@@ -275,3 +275,22 @@ def test_deliver_refuses_a_live_body_lacking_the_historical_section(
     _, out = _deliver(root)
 
     assert out.exit_code == 0, out.output
+
+
+def test_deliver_refuses_a_live_body_that_keeps_the_heading_but_drops_the_list(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    # Review p2-r1: the operator's ok is given against the LIST of historical
+    # reviews, so an emptied section is as much a refusal as a missing one.
+    root = _at_deliver(tmp_path)
+    _mark_historical(root)
+    live["body"] = "never read before the render"
+    _deliver(root)  # renders pr-body.md, refused
+    rendered = _body(root).read_text()
+    head, tail = rendered.split("## Historical reviews")
+    live["body"] = head + "## Historical reviews\n\nNone.\n\n## " + tail.split("## ", 1)[1]
+
+    _, out = _deliver(root)
+
+    assert out.exit_code == 2, out.output
+    assert "- phase 1 — journal" in " ".join(out.output.split())

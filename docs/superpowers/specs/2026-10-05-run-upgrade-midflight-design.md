@@ -228,8 +228,17 @@ writes (the closed ids in raise order, or `none`). Otherwise the member stays `p
 and a note says which: "no `kind=review` entry for phase N", "phase N owes visual
 evidence", or "phase N has open findings: <ids>". If every unit of the group is then
 `done`, the group step is `done` and the cursor is the step after it. Under
-`--supersede` the carried units (§C) are applied after inference, so a review the old
-cursor resolved keeps its real evidence.
+`--supersede` the inference sees the old cursor's implement attempts (clause 2 is
+checked against them, so a journal review older than a re-implementation the old
+cursor recorded is never inferred historical — review p2-r5), and the carried units
+(§C) are applied after inference, so a review the old cursor resolved keeps its real
+evidence.
+
+**Two anchors on `started`** (review p2-r2). `started` is a tracked, hand-editable
+field, so by hand the bound also refuses a `started` later than now and a review unit
+this cursor briefed before `started` — a legitimate historical review is always
+briefed by the cursor that holds it, after it began. `deliver` checks every listed
+`phase N — journal <id>` line on the live PR, not only the heading (p2-r1).
 
 **Trust model, stated.** The bound is checked against timestamps the journal's author
 writes (`JournalEntry.created`, `journal/model.py:95`). An agent that writes a review

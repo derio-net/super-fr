@@ -266,20 +266,10 @@ def _historical(state: RunState) -> str | None:
     """Every phase reviewed before this cursor existed, by name (R9) — the
     operator's review ok is given against this list, the human control the
     historical bound's trust model rests on. `None` when there is none."""
-    from fr.run.historical import historical_reviews
+    from fr.run.historical import historical_review_lines
 
-    def phase_of(key: str) -> int:
-        part = key.split("/")[1] if key.startswith("phase/") else ""
-        return int(part) if part.isdigit() else 0
-
-    found = sorted(historical_reviews(state), key=lambda h: (phase_of(h[1]), h[1]))
-    if not found:
-        return None
-    return "\n".join(
-        f"- phase {phase_of(key)} — journal {entry} (reviewed before this run's cursor "
-        "existed; reviewer not observed)"
-        for _, key, entry in found
-    )
+    lines = historical_review_lines(state)
+    return "\n".join(lines) if lines else None
 
 
 def render_pr_body(repo_root: Path, state: RunState) -> str:
