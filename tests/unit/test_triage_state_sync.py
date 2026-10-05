@@ -151,8 +151,8 @@ def test_import_skips_a_state_file_newer_than_the_repo_copy(tmp_path: Path) -> N
 
     report = import_state(*_at(src), state, force=False)
 
-    assert [s.path for s in report.skipped] == ["judgements.yaml"]
-    assert "newer" in report.skipped[0].reason
+    newer = [s for s in report.skipped if s.reason != "identical"]
+    assert [s.path for s in newer] == ["judgements.yaml"] and "newer" in newer[0].reason
     assert "judgements.yaml" not in report.copied
     assert "edited here" in (state / "judgements.yaml").read_text(encoding="utf-8")
 
@@ -167,7 +167,7 @@ def test_import_force_overwrites_a_newer_state_file(tmp_path: Path) -> None:
 
     report = import_state(*_at(src), state, force=True)
 
-    assert report.skipped == ()
+    assert [s for s in report.skipped if s.reason != "identical"] == []
     assert "judgements.yaml" in report.copied
     assert (state / "judgements.yaml").read_text(encoding="utf-8") == "schema: 3\n"
 
@@ -208,7 +208,7 @@ def test_the_import_verb_prints_copied_and_skipped(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
     text = result.output  # type: ignore[attr-defined]
     assert "skipped origins.yaml" in text
-    assert "copied judgements.yaml" in text
+    assert "skipped judgements.yaml (identical" in text  # p4-r5
 
     forced = _invoke("import", "--from", str(out), "--repo", SCOPE, "--dir", str(state), "--force")
     assert "copied origins.yaml" in forced.output  # type: ignore[attr-defined]
@@ -377,3 +377,31 @@ def test_a_scope_name_must_be_one_plain_part(name: str) -> None:
     with pytest.raises(TriageError, match="scope"):
         check_scope_name(name)
     assert check_scope_name(SCOPE_NAME) == SCOPE_NAME
+
+
+def test_a_byte_identical_file_is_neither_copied_nor_overwritten(tmp_path: Path) -> None:
+    """p4-r5: git keeps no mtime, so a fresh checkout looks newer than everything;
+    an identical file is skipped as identical, whatever the mtimes say."""
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "dest"
+    export_state(state, *_at(dest))
+    _age(dest / "judgements.yaml", 3600)
+    before = (dest / "judgements.yaml").stat().st_mtime
+
+    again = export_state(state, *_at(dest))
+    back = import_state(*_at(dest), state, force=True)
+
+    assert again.copied == () and back.copied == ()
+    assert {s.reason for s in again.skipped} == {"identical"}
+    assert sorted(s.path for s in back.skipped) == DURABLE
+    assert (dest / "judgements.yaml").stat().st_mtime == before  # never rewritten
+
+
+def test_the_newer_check_is_documented_as_mtime_based() -> None:
+    """p4-r5: the docs say what the check reads, and that a fresh checkout looks newer."""
+    from fr.commands import triage_state_cmd
+    from fr.triage import state_sync
+
+    for doc in (state_sync.__doc__ or "", triage_state_cmd.import_command.__doc__ or ""):
+        flat = " ".join(doc.split())
+        assert "mtime" in flat and "fresh checkout" in flat

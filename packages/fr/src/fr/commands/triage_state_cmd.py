@@ -69,14 +69,19 @@ def export_command(
 def import_command(
     from_: Annotated[Path, typer.Option("--from", help="Repo directory holding <dir>/<scope>/.")],
     force: Annotated[
-        bool, typer.Option("--force", help="Overwrite state files newer than the repo copy.")
+        bool,
+        typer.Option(
+            "--force", help="Overwrite state files whose mtime is newer than the repo copy's."
+        ),
     ] = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
 ) -> None:
-    """Copy <dir>/<scope>/ back into the state directory; a state file newer than its
-    repo copy is skipped unless --force."""
+    """Copy <dir>/<scope>/ back into the state directory. An identical file is skipped;
+    a state file whose mtime is newer than its repo copy's is skipped unless --force.
+    Git keeps no mtime: after a fresh checkout or pull the repo copy looks newer, so a
+    state file edited before it is overwritten. Export first if you edited one."""
     scope = triage_cmd._scope(repo, org)
     try:
         report = import_state(

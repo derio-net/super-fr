@@ -7,8 +7,12 @@ the stored snapshots and the authored fragment sources. Facts files and the rend
 pages are rebuilt from the forge and never travel, in either direction.
 
 Copies keep the source's mtime (`shutil.copy2`) and never delete a destination file.
-Import skips a state file that is newer than the repo copy unless forced, so a
-judgement edited since the last export is never silently overwritten.
+A destination file byte-identical to its source is skipped as `identical`: it is
+neither copied nor overwritten. Import skips a state file whose mtime is newer than
+the repo copy's unless forced. That check reads file mtimes only, and git keeps none:
+a fresh checkout or pull stamps every file with the time it was written, so the repo
+copy looks newer than anything edited before it and an edited state file is
+overwritten (p4-r5). Export before you pull, or compare first.
 
 A symlink is never followed, in either direction and at any depth, and a destination
 that is (or sits under) a symlink is never written through: export feeds a commit the
@@ -23,6 +27,7 @@ base itself is trusted as given: on macOS `/var` and `/tmp` are symlinks.
 
 from __future__ import annotations
 
+import filecmp
 import os
 import shutil
 from collections.abc import Iterator
@@ -38,6 +43,7 @@ _SKIPPED_PARTS = frozenset({"__pycache__"})
 SYMLINK = "symlink, not followed"
 SYMLINK_DEST = "the destination is a symlink, not written through"
 NEWER = "newer in the state directory; --force overwrites it"
+IDENTICAL = "identical"
 
 
 class Skipped(NamedTuple):
@@ -138,6 +144,9 @@ def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
             continue
         if _symlinked_dest(dest, rel):
             skipped.append(Skipped(rel, SYMLINK_DEST))
+            continue
+        if target.is_file() and filecmp.cmp(source, target, shallow=False):
+            skipped.append(Skipped(rel, IDENTICAL))
             continue
         if keep_newer and target.is_file() and target.stat().st_mtime > source.stat().st_mtime:
             skipped.append(Skipped(rel, NEWER))
