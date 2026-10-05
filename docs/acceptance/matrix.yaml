@@ -6230,9 +6230,10 @@ rows:
       - super-fr:tests/unit/test_run_reshape.py#test_a_step_added_at_or_behind_the_cursor_refuses
       - super-fr:tests/unit/test_run_reshape_cmd.py#test_yes_rewrites_the_cursor_in_one_chore_commit
       - super-fr:tests/unit/test_run_reshape_cmd.py#test_a_refusal_exits_2_and_writes_nothing
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_reshape_across_a_schema_change_refuses_naming_supersede
     status: ci
-    notes: fr run reshape implemented (preview, --yes, refusals; advance's drift message
-      names it); unit + CLI tests in CI
+    notes: fr run reshape implemented; a schema-change refusal names adopt --supersede
+      (review p1-r1)
   - id: run-read-drifted-cursor
     capability: run-cursor
     acceptance: '`fr run gates` and the other read-only run commands answer from a drifted
