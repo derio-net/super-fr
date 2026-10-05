@@ -3024,7 +3024,9 @@ def _unbound_tiers(repo_root: Path) -> list[str] | None:
     """The phase tiers with no model bound for the harness `advance` runs
     under, in `PHASE_TIERS` order — `None` when no harness is detected (or
     `FR_HARNESS` is invalid, which the gate path reports itself): an empty
-    list would read as "every tier is bound".
+    list would read as "every tier is bound". A malformed models.yaml raises,
+    as it already did from `_orchestrator_model_notice` at the top of every
+    `advance` — a broken config is reported, never read as "unbound".
 
     gh#538: fr-goal's model-per-tier question was gated on a `fr models
     resolve` the orchestrator had to REMEMBER to run, and on a real OpenCode
