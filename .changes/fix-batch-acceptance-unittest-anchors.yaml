@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr acceptance: unittest-style `Class.test` anchors resolve, and the line-anchor repair converts lines inside `unittest.TestCase` subclasses not named `Test*`"
