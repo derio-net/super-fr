@@ -34,7 +34,7 @@ from fr.triage.batch_drive import (
     train_line,
     wave_group,
 )
-from fr.triage.model import Batch, PullRequest
+from fr.triage.model import Batch, Export, PullRequest
 
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
@@ -907,3 +907,154 @@ def test_summary_line_adds_queued_between_closing_and_blocked() -> None:
     s = Summary(in_flight=1, merged=0, pending=0, closing=2, blocked=3, queued=4)
     assert summary_line(s) == ("in flight 1, merged 0, pending 0, closing 2, queued 4, blocked 3")
     assert "queued" not in summary_line(Summary(1, 0, 0, 0))
+
+
+# ------------------------------- per-wave state export (pages-goal R13, §I step 3b)
+
+_EXPORTED_AT = datetime(2026, 10, 2, 11, 0, tzinfo=UTC)
+
+
+def _export(wave: str = "1", **kw: Any) -> Export:
+    return Export(wave=wave, repo=REPO, at=_EXPORTED_AT, **kw)
+
+
+def _export_snap(
+    *,
+    exports: Sequence[Export] = (),
+    prs: dict[tuple[str, str], LivePr] | None = None,
+    export_path: dict[str, str] | None = None,
+    finished: frozenset[str] = frozenset({"1"}),
+    **kw: Any,
+) -> Snapshot:
+    """Wave 1 finished (one batch closed out and archived), wave 2 still live."""
+    batches = [_finished("a", 1), _merged("b", 2, wave=2)]
+    stages = {"a": "merged", "b": "merged"}
+    return _snap(
+        batches,
+        stages,
+        export_path={REPO: "docs/triage"} if export_path is None else export_path,
+        exports=tuple(exports),
+        export_prs=prs or {},
+        finished=finished,
+        **kw,
+    )
+
+
+def _exports(got: Any) -> list[tuple[str, str, str | None, int | None]]:
+    return [(a.kind, a.batch, a.wave, a.pr) for a in got.actions if a.wave is not None]
+
+
+def _trusted(n: int = 40, **kw: Any) -> LivePr:
+    return _live(n, f"export-head-{n}", head_ref="chore/triage-state-wave-1",
+                 trusted=kw.pop("trusted", True), **kw)  # fmt: skip
+
+
+def test_a_finished_wave_with_no_export_and_no_pr_is_exported() -> None:
+    got = drive_pass(_export_snap())
+    assert _exports(got) == [("export", REPO, "1", None)]
+    assert got.summary.closing >= 1 and not got.summary.done
+
+
+def test_an_open_trusted_pr_with_no_record_is_adopted_not_pushed_again() -> None:
+    got = drive_pass(_export_snap(prs={(REPO, "1"): _trusted(40, checks="pending")}))
+    assert _exports(got) == [("export-adopt", REPO, "1", 40)]
+    assert not got.summary.done
+
+
+def test_an_open_untrusted_pr_with_no_record_warns_and_blocks() -> None:
+    got = drive_pass(_export_snap(prs={(REPO, "1"): _trusted(40, trusted=False)}))
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert "not trusted" in got.actions[-1].detail
+    assert got.summary.blocked == 1
+
+
+def test_a_merged_export_needs_nothing() -> None:
+    got = drive_pass(_export_snap(exports=[_export(pr=40, merged=True)]))
+    assert _exports(got) == []
+
+
+def test_an_export_that_changed_nothing_needs_nothing() -> None:
+    got = drive_pass(_export_snap(exports=[_export(pr=None)]))
+    assert _exports(got) == []
+
+
+def test_a_recorded_open_green_ready_trusted_pr_is_merged_at_its_head() -> None:
+    got = drive_pass(_export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40)}))
+    assert _exports(got) == [("export-merge", REPO, "1", 40)]
+    (merge,) = [a for a in got.actions if a.kind == "export-merge"]
+    assert merge.head == "export-head-40"
+    assert not got.summary.done
+
+
+def test_a_recorded_pr_with_pending_checks_waits_and_counts_closing() -> None:
+    snap = _export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40, checks="pending")})
+    base = drive_pass(_export_snap(exports=[_export(pr=40, merged=True)])).summary
+    got = drive_pass(snap)
+    assert _exports(got) == []
+    assert got.summary.closing == base.closing + 1
+    assert not got.summary.done and got.summary.blocked == 0
+
+
+@pytest.mark.parametrize(
+    ("live", "why"),
+    [
+        ({"checks": "failing", "failing": ("lint",)}, "failing"),
+        ({"trusted": False}, "not trusted"),
+        ({"draft": True}, "draft"),
+        ({"state": "CLOSED"}, "closed without a merge"),
+    ],
+    ids=["failing", "untrusted", "draft", "closed"],
+)
+def test_a_recorded_pr_that_cannot_merge_warns_every_pass_and_blocks(
+    live: dict[str, Any], why: str
+) -> None:
+    snap = _export_snap(
+        exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40, **live)}, warned=frozenset({""})
+    )
+    got = drive_pass(snap)
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert why in [a for a in got.actions if a.wave][0].detail
+    assert got.summary.blocked == 1 and not got.summary.done
+
+
+def test_an_unfinished_wave_is_never_exported() -> None:
+    got = drive_pass(_export_snap(finished=frozenset()))
+    assert _exports(got) == []
+
+
+def test_without_export_config_no_export_action_exists() -> None:
+    got = drive_pass(_export_snap(export_path={}))
+    assert _exports(got) == []
+    assert all(not a.kind.startswith("export") for a in got.actions)
+
+
+def test_a_multi_repo_scope_that_opts_in_gets_one_warn_naming_repo() -> None:
+    got = drive_pass(_export_snap(export_path={}, export_refused=frozenset({REPO})))
+    warns = [a for a in got.actions if a.kind == "warn"]
+    assert len(warns) == 1
+    assert warns[0].batch == REPO and "--repo" in warns[0].detail
+    assert not any(a.kind.startswith("export") for a in got.actions)
+
+
+def test_every_finished_wave_is_decided_in_wave_order() -> None:
+    batches = [_finished("a", 1), _merged("b", 2, wave=10, events=[{**_CLOSEOUT, "archived": 8}])]
+    snap = _snap(
+        batches,
+        {"a": "merged", "b": "merged"},
+        export_path={REPO: "docs/triage"},
+        finished=frozenset({"1", "10"}),
+    )
+    assert [a.wave for a in drive_pass(snap).actions if a.kind == "export"] == ["1", "10"]
+
+
+def test_an_export_action_line_names_the_wave_and_the_repo() -> None:
+    action = Action("export", REPO, "to docs/triage", wave="3")
+    assert action_line(action) == f"export wave 3 {REPO}: to docs/triage"
+    assert action_line(action, "opened PR #9") == f"export wave 3 {REPO}: opened PR #9"
+
+
+def test_the_export_branch_is_never_attributed_as_an_archive() -> None:
+    from fr.triage.batch_drive import ARCHIVE_PREFIXES, export_branch
+
+    assert export_branch("3") == "chore/triage-state-wave-3"
+    assert not export_branch("3").startswith(ARCHIVE_PREFIXES)

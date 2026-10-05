@@ -28,7 +28,7 @@ from fr.triage.batch import (
     batch_branch,
     batch_item_id,
 )
-from fr.triage.model import Batch, CloseoutEvent
+from fr.triage.model import Batch, CloseoutEvent, Export
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
@@ -40,6 +40,9 @@ DEFAULT_MAX_INFLIGHT = 4
 IN_FLIGHT: frozenset[BatchStage] = frozenset({"dispatched", "pr-open"})
 LANDED: frozenset[BatchStage] = frozenset({"merged", "partial"})
 ARCHIVE_PREFIXES = ("chore/archive-", "chore/closeout-")
+EXPORT_PREFIX = "chore/triage-state-wave-"
+"""The head of a wave's state-export PR (pages-goal R13). Not in `ARCHIVE_PREFIXES`, so
+archive attribution can never claim an export PR."""
 RUNS_DIR = "docs/superpowers/runs"
 JOURNAL_DIRS = ("docs/superpowers/journals/", "docs/superpowers/implemented/journals/")
 RUN_ARTIFACT_DIRS = tuple(
@@ -60,7 +63,11 @@ ActionKind = Literal[
     "warn",
     "foreign",
     "close",
+    "export",
+    "export-adopt",
+    "export-merge",
 ]
+EXPORT_KINDS: frozenset[str] = frozenset({"export", "export-adopt", "export-merge"})
 
 ARCHIVED_BY_UNKNOWN_PR = 0
 """`CloseoutEvent.archived` for a close-out found archived on the default branch with
@@ -122,6 +129,17 @@ class Snapshot:
     # and the batch and close-out item ids of batches that a closing runner holds live.
     close_sessions: bool = False
     sessions: frozenset[str] = frozenset()
+    # Per-wave state export (pages-goal R13, §I). `export_path`: repo -> the configured
+    # repo-relative directory, for a single-repo scope only; `exports`: what the state
+    # file records; `export_prs`: (repo, wave) -> the live PR of a recorded, unmerged
+    # export, or the open PR on the wave's export head when none is recorded;
+    # `finished`: `finished_waves(batches, stages)`, computed once; `export_refused`:
+    # the repos of a group or org scope that opt in, which never export.
+    export_path: Mapping[str, str] = field(default_factory=dict)
+    exports: tuple[Export, ...] = ()
+    export_prs: Mapping[tuple[str, str], LivePr] = field(default_factory=dict)
+    finished: frozenset[str] = frozenset()
+    export_refused: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -136,6 +154,8 @@ class Action:
     train: str = ""  # merge: the repo whose train this candidate belongs to
     archived: int | None = None  # adopt: the close-out event's `archived`
     items: tuple[str, ...] = ()  # close: the item ids whose sessions to close
+    # export*, and a warn about one: the wave key (`batch` is then the repo)
+    wave: str | None = None
 
 
 @dataclass(frozen=True)
@@ -362,6 +382,81 @@ def finished_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> froze
     return frozenset(k for k, ok in wave_ok.items() if ok)
 
 
+def export_branch(wave: str) -> str:
+    """The head a wave's state-export PR is pushed to; the driver owns it."""
+    return f"{EXPORT_PREFIX}{wave}"
+
+
+def _wave_order(wave: str) -> tuple[int, int | str]:
+    return (0, int(wave)) if wave.lstrip("-").isdigit() else (1, wave)
+
+
+def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
+    """§I step 3b: for each opted-in repo and each finished wave of it with no merged
+    export, the one action the table gives. Returns the actions and how many owed
+    exports are closing (acting or waiting on checks) and blocked (warned)."""
+    actions: list[Action] = []
+    closing = blocked = 0
+    for repo in sorted(snap.export_refused):
+        actions.append(
+            Action("warn", repo, f"export is per repo scope; run drive with --repo {repo}")
+        )
+    recorded: dict[tuple[str, str], Export] = {}
+    for e in snap.exports:
+        recorded[(e.repo, e.wave)] = e  # the last record of a wave wins
+    for repo in sorted(snap.export_path):
+        mine = {str(b.wave) for b in snap.batches
+                if b.wave is not None and snap.repos.get(b.id) == repo}  # fmt: skip
+        for wave in sorted(mine & snap.finished, key=_wave_order):
+            done = recorded.get((repo, wave))
+            if done is not None and (done.merged or done.pr is None):
+                continue  # merged, or the export changed nothing
+            live = snap.export_prs.get((repo, wave))
+            head = export_branch(wave)
+            if done is None:
+                if live is None or live.state != "OPEN":
+                    closing += 1
+                    actions.append(Action("export", repo, f"to {snap.export_path[repo]} on {head}",
+                                          wave=wave))  # fmt: skip
+                elif live.trusted:
+                    closing += 1
+                    actions.append(Action("export-adopt", repo, f"PR #{live.number} on {head} "
+                                          "is open with no record; recording it",
+                                          pr=live.number, wave=wave))  # fmt: skip
+                else:
+                    blocked += 1
+                    actions.append(Action("warn", repo, f"PR #{live.number} on {head} is not "
+                                          "trusted (not from this repo by an allowed author); "
+                                          "it is never adopted or merged",
+                                          pr=live.number, wave=wave))  # fmt: skip
+                continue
+            if live is None:
+                closing += 1  # not read this pass: still owed
+                continue
+            if live.state == "MERGED":
+                continue
+            why = ""
+            if live.state != "OPEN":
+                why = "is closed without a merge"
+            elif not live.trusted:
+                why = "is not trusted (not from this repo by an allowed author)"
+            elif live.draft:
+                why = "is a draft"
+            elif live.checks == "failing":
+                why = f"has failing checks: {', '.join(live.failing) or 'unknown'}"
+            if why:
+                blocked += 1
+                actions.append(Action("warn", repo, f"export PR #{live.number} {why}; the "
+                                      "operator must act", pr=live.number, wave=wave))  # fmt: skip
+                continue
+            closing += 1
+            if live.checks == "green":
+                actions.append(Action("export-merge", repo, f"PR #{live.number} at "
+                                      f"{live.head[:12]}", pr=live.number, head=live.head,
+                                      wave=wave))  # fmt: skip
+    return actions, closing, blocked
+
+
 def is_finished(batch: Batch, stage: BatchStage, archives: Sequence[LivePr]) -> bool:
     """Whether *batch* is finished: landed, with a close-out event whose `archived`
     is set (the driver merged its archive PR), or an attributed archive PR in
@@ -524,6 +619,11 @@ def drive_pass(snap: Snapshot) -> Pass:
                        pr=ready.number, head=ready.head)
             )  # fmt: skip
 
+    # 3b. Export each finished wave's state (pages-goal R13).
+    exporting, exports_closing, exports_blocked = _export_actions(snap)
+    actions.extend(exporting)
+    closing += exports_closing
+
     # 4. Dispatch.
     # The cap counts every batch in flight, selected or not (review rg-3); the
     # summary's own figure is the selection's, which is what this drive waits on.
@@ -535,7 +635,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
-    pending = blocked = 0
+    pending, blocked = 0, exports_blocked
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed":
             continue
@@ -602,6 +702,8 @@ def drive_pass(snap: Snapshot) -> Pass:
 def action_line(action: Action, outcome: str | None = None) -> str:
     """The one line an action prints, in plan mode (*outcome* None) and when acted:
     the same words in `--once` and loop mode."""
+    if action.wave is not None:
+        return f"{action.kind} wave {action.wave} {action.batch}: {outcome or action.detail}"
     return f"{action.kind} {action.batch}: {outcome or action.detail}"
 
 
