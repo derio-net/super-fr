@@ -84,3 +84,58 @@ the bound landed as a new pure module (fr/run/historical.py) and the findings wi
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 adoption reuses the bound, reviews_phase, phase_finding_states, unauthorized_fixes and findings_witness directly; no copy of the gate's logic was made, so nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-05T22:13:30+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · deliver checks only the ## Historical reviews heading; a live PR body can drop the list the trust model rests on (phase 2)
+
+missing_sections checks heading lines only, so `## Historical reviews` followed by `None.` passed deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-05T22:13:30+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · clause 1 trusts an unvalidated cursor `started`; moving it lets a self-written review pass with no reviewer dispatch (phase 2)
+
+The accepted-case fixture itself moved started into the future. Fix: refuse a started later than now, and a review unit this cursor briefed before started. Also the background security scan's authorization-bypass flag.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-05T22:13:30+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · clause 2 accepts a review stamped in the same second as the implement return (phase 2)
+
+`created < returned` let a tie through, unlike clause 1's fail-closed tie.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-05T22:13:30+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · refusal tests other than clause 1 do not assert the cursor is unchanged; no tests for unparseable/offset stamps (phase 2)
+
+Test quality: refusals only checked exit code and message.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-05T22:13:30+00:00 phase=3 state=open review_scope=out -->
+### p2-r5 · finding [open] (reviewer: out of scope) · spec's supersede ordering (carry after inference) hides carried implement returns from clause 2 at adoption (phase 3)
+
+Not caused by phase 2 (adopt_run has no supersede yet). Phase 3 must check clause 2 against the carried attempts; spec §D amended to say so.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-10-05T22:13:30+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 review: p2-r1..p2-r4 (in), p2-r5 (out, filed to phase 3) (phase 2)
+
+Independent adversarial reviewer checked the historical bound, the by-hand branch (no regression for other reviewer values; flat unit refused), adoption inference (open findings and unauthorized fixes excluded, identical findings witness, manual/incomplete phases skipped), the PR-body requirement and status/check debt. Raised p2-r1..p2-r4 in scope, p2-r5 out of scope (phase 3).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-05T22:13:30+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: deliver checks only the ## Historical reviews heading; a live PR body can drop the list the trust model rests on (phase 2)
+
+historical_review_lines is the one spelling pr_body renders and _deliver_pr_gate now requires line by line on the live PR; test_deliver_refuses_a_live_body_that_keeps_the_heading_but_drops_the_list fails without the fix.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-05T22:13:30+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: clause 1 trusts an unvalidated cursor `started`; moving it lets a self-written review pass with no reviewer dispatch (phase 2)
+
+historical_review_refusal refuses a started later than now and a review unit briefed before started (review_dispatched from the unit's last attempt). Fixture rebuilt as a supersede-shaped cursor with every time in the past; tests test_a_started_in_the_future_is_refused and test_a_review_briefed_before_the_run_started_is_refused. Residual (a cursor edited to a past started and the unit re-briefed) is stated in the module docstring and spec §D as a visible tracked diff plus the PR-body list.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-05T22:13:30+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: clause 2 accepts a review stamped in the same second as the implement return (phase 2)
+
+Clause 2 refuses on `<=`; test_a_review_in_the_same_second_as_the_implement_return_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-05T22:13:30+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: refusal tests other than clause 1 do not assert the cursor is unchanged; no tests for unparseable/offset stamps (phase 2)
+
+Every by-hand refusal test now asserts no evidence was written and the unit is still running (_unchanged); pure tests for an unparseable created (fails closed) and offset stamps (compared as instants).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-05T22:13:30+00:00 phase=2 state=open resolves=p2-r5 out_of_scope=true -->
+### p2-r5-resolved · finding [out-of-scope] · resolves p2-r5: spec's supersede ordering (carry after inference) hides carried implement returns from clause 2 at adoption (phase 2)
+
+Not caused by phase 2 — supersede does not exist yet. Spec §D amended so phase 3's inference checks clause 2 against the old cursor's implement attempts; phase 3 is briefed with it.
