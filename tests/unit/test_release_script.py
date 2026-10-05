@@ -86,7 +86,7 @@ def _seed(repo: Path, version: str = BASE) -> None:
         "uv.lock": _lock(version),
         "README.md": "# demo\n",
         ".changes/README.md": "# fragments\n",
-        PLAN_META: f"slug: demo\nfr_version: '>=4.20.0,<5.0.0'\nschema_version: 2\n",
+        PLAN_META: "slug: demo\nfr_version: '>=4.20.0,<5.0.0'\nschema_version: 2\n",
         ARCHIVED_META: "slug: old\nfr_version: '>=3.0.0,<4.0.0'\n",
     }
     for rel, text in files.items():
@@ -186,9 +186,7 @@ class World:
             assert {s.value for s in vs.version_surfaces(repo)} == {new}
             return self.test_failure
 
-        return release.Commands(
-            bump=bump, lock_check=lock_check, gh=gh, test=test, migrate=migrate
-        )
+        return release.Commands(bump=bump, lock_check=lock_check, gh=gh, test=test, migrate=migrate)
 
     def run(self, *argv: str) -> int:
         return release.main(list(argv), repo=self.clone, commands=self.commands())
