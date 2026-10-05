@@ -140,24 +140,85 @@ def of_dispatch(pr: PullRequest, event: DispatchEvent) -> bool:
     return created is None or created >= event.at
 
 
-def batch_pr(batch: Batch, facts: Facts) -> PullRequest | None:
-    """The batch's PR: on its dispatch branch, in its repo, opened at or after
-    its LAST dispatch; highest number wins.
+def allowed_authors(repo: str, facts: Facts) -> frozenset[str]:
+    """The logins whose PRs may be *repo*'s batch PRs, lowercased (gh#936): the
+    repo's `.fr/triage.yaml` `pr_authors` when it lists any, else the user
+    `collect` ran as. Empty when neither is known, so nothing is trusted."""
+    listed = facts.config_for(repo).pr_authors
+    logins = listed or ([facts.viewer] if facts.viewer else [])
+    return frozenset(login.lower() for login in logins)
 
-    Candidates are the members' linked PRs, the unlinked open PRs and the
-    head-branch lookups (`Facts.batch_prs`) — the last is how a merged PR whose
-    body lost every Closes line is still found (spec §3.A).
+
+def distrust(author: str | None, cross_repo: bool | None, allowed: frozenset[str]) -> str | None:
+    """Why a PR is not trusted to be a batch's, or None when it is (gh#936).
+
+    A head branch NAME is chosen by whoever opens the PR, a fork included, so it
+    never attributes a PR alone: the PR must come from the repository itself, by
+    an allowed author. An identity never read is not trusted either.
     """
+    if cross_repo is None or author is None:
+        return "its author and origin were never read; re-collect"
+    if cross_repo:
+        return "opened from a fork"
+    if author.lower() not in allowed:
+        return f"by {author}, not an allowed author"
+    return None
+
+
+@dataclass(frozen=True)
+class ForeignPr:
+    """An open PR on a batch's dispatch branch that is not the batch's (gh#936)."""
+
+    pr: PullRequest
+    reason: str
+
+    @property
+    def key(self) -> str:
+        """What a driver remembers having reported it by."""
+        return f"foreign:{self.pr.repo}#{self.pr.number}"
+
+
+def _branch_prs(batch: Batch, facts: Facts) -> list[PullRequest]:
+    """Every PR on the batch's dispatch branch, in its repo, opened at or after its
+    LAST dispatch, whoever opened it. Candidates are the members' linked PRs, the
+    unlinked open PRs and the head-branch lookups (`Facts.batch_prs`) — the last is
+    how a merged PR whose body lost every Closes line is still found (spec §3.A)."""
     event = last_dispatch(batch)
     repo = batch_repo(batch, facts)
     if event is None or repo is None:
-        return None
+        return []
     pool = [p for issue in _members(batch, facts) for p in issue.prs]
     pool += [*facts.prs, *facts.batch_prs]
+    seen: set[int] = set()
+    out: list[PullRequest] = []
+    for p in pool:
+        if p.repo == repo and p.head_ref == event.branch and of_dispatch(p, event):
+            if p.number not in seen:
+                seen.add(p.number)
+                out.append(p)
+    return out
+
+
+def batch_pr(batch: Batch, facts: Facts) -> PullRequest | None:
+    """The batch's PR: on its dispatch branch, in its repo, opened at or after
+    its LAST dispatch, from the repo itself by an allowed author (gh#936);
+    highest number wins."""
+    allowed = allowed_authors(batch_repo(batch, facts) or "", facts)
     matches = [
-        p for p in pool if p.repo == repo and p.head_ref == event.branch and of_dispatch(p, event)
+        p for p in _branch_prs(batch, facts) if distrust(p.author, p.cross_repo, allowed) is None
     ]
     return max(matches, key=lambda p: p.number, default=None)
+
+
+def foreign_batch_prs(batch: Batch, facts: Facts) -> list[ForeignPr]:
+    """The OPEN PRs on the batch's dispatch branch that `batch_pr` refuses, each with
+    why: never merged, and reported to the operator (gh#936)."""
+    allowed = allowed_authors(batch_repo(batch, facts) or "", facts)
+    return [
+        ForeignPr(pr=p, reason=why)
+        for p in sorted(_branch_prs(batch, facts), key=lambda p: p.number)
+        if p.state == "OPEN" and (why := distrust(p.author, p.cross_repo, allowed)) is not None
+    ]
 
 
 def derive_batch_stage(batch: Batch, facts: Facts) -> BatchStage:

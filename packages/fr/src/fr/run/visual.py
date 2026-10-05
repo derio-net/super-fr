@@ -19,11 +19,14 @@ import subprocess
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fr.acceptance.model import Matrix, Row
 from fr.record.model import VisualEvidence
-from fr.run.telemetry import parse_timestamp, read_file_since, shell_named_since
+from fr.run.telemetry import parse_timestamp
+
+if TYPE_CHECKING:
+    from fr.run.observed import ObservedSession
 
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif"})
 """What a shot may be (§B) — compared case-insensitively."""
@@ -360,8 +363,8 @@ def derive_visual(
     )
     if isinstance(witness, str):
         return unobserved(witness)
-    transcript, whose, agent = witness
-    if transcript is False:
+    view, whose, agent = witness
+    if view is False:
         raise VisualRefusedError(
             [
                 f"refused — the visual evidence for {ids} names {whose}, but {agent!r} "
@@ -370,7 +373,7 @@ def derive_visual(
                 "returned."
             ]
         )
-    if transcript == "unclaimed":
+    if view == "unclaimed":
         raise VisualRefusedError(
             [
                 f"refused — this unit was dispatched to {dispatched_as}, and this session "
@@ -380,17 +383,16 @@ def derive_visual(
                 "then resolve again."
             ]
         )
-    assert isinstance(transcript, Path)
-    main_thread = agent is None
+    assert not isinstance(view, str)
+    opened_at = opened  # the unit's open time, parsed above
+    assert opened_at is not None
     problems: list[str] = []
     for row in check.rows:
         for shot in row.shots:
             written = _dt.datetime.fromtimestamp(shot.stat().st_mtime, tz=_dt.UTC)
-            seen = read_file_since(
-                transcript, shot, since, not_before=written - SLACK, main_thread=main_thread
-            )
+            seen = view.first_read(shot, opened_at, not_before=written - SLACK)
             if seen is None:
-                return unobserved(f"the transcript {transcript} could not be read")
+                return unobserved(f"the transcript of {whose} could not be read")
             if seen is False:
                 problems.append(
                     f"row {row.row}: {shot} was not opened in the transcript of {whose} "
@@ -398,9 +400,9 @@ def derive_visual(
                     f"({written.isoformat()}) — open it with an image read and look at it"
                 )
         if row.script is not None:
-            ran = shell_named_since(transcript, row.script, since, main_thread=main_thread)
+            ran = view.first_shell_executing(row.script, opened_at)
             if ran is None:
-                return unobserved(f"the transcript {transcript} could not be read")
+                return unobserved(f"the transcript of {whose} could not be read")
             if ran is False:
                 problems.append(
                     f"row {row.row}: no shell call in the transcript of {whose} executed "
@@ -426,19 +428,28 @@ def _unobservable(env: Mapping[str, str]) -> str:
         harness = None
     if harness is None:
         return "no harness detected, so there is no transcript to find the screenshot reads in"
+    if harness == "opencode":
+        return (
+            "no readable OpenCode session to find the screenshot reads in "
+            "(FR_OPENCODE_SESSION_ID is unset, or names a session the database does not hold)"
+        )
     if harness != "claude-code":
         return f"fr cannot yet read file opens from {harness}'s transcripts"
     return "no readable transcript for this session"
 
 
 def _same_agent(observed: str | None, expected: str) -> bool:
-    """`observed` is `expected`, plugin-qualified or bare, on either side."""
+    """`observed` is `expected`, plugin-qualified or bare and with or without
+    an OpenCode tier suffix, on either side (`fr.run.observed.agent_name`)."""
+    from fr.run.observed import agent_name
+
     if observed is None:
         return False
-    return observed.split(":", 1)[-1] == expected.split(":", 1)[-1]
+    return agent_name(observed) == agent_name(expected)
 
 
-_Witness = tuple[Path | Literal[False, "unclaimed"], str, str | None]
+_Witness = tuple["ObservedSession | Literal[False, 'unclaimed']", str, str | None]
+"""`(view, whose, agent)`: the session whose parts owe the reads."""
 
 
 def _witness_file(
@@ -450,15 +461,18 @@ def _witness_file(
     since: str,
     dispatched_as: str | None,
 ) -> _Witness | str:
-    """The witness transcript (§C, check 4) as `(file, whose, agent id)` — the
-    file `False` for an agent id this session never dispatched, `"unclaimed"`
-    for a dispatched holder unit nobody claimed — or, when it cannot be read,
-    the reason (a `str`)."""
-    from fr.run.telemetry import _this_session, attribute_dispatches, witness_transcript
+    """The witness session (§C, check 4; spec 2026-10-02 §G) as `(view, whose,
+    agent id)` — the view `False` for an agent id this session never dispatched,
+    `"unclaimed"` for a dispatched holder unit nobody claimed — or, when it
+    cannot be read, the reason (a `str`). The session is chosen as it always
+    was: the reviewer's child, the claimed holder's child, or the run
+    session's own parts; what reads it is the harness's `ObservedSession`."""
+    from fr.run.observed import observed_session
 
-    session = _this_session(env)
-    if session is None:
+    view = observed_session(env)
+    if view is None or view.harness not in ("claude-code", "opencode"):
         return _unobservable(env)
+    opened = parse_timestamp(since)
     if role == "reviewer":
         if reviewer is None:
             return "no reviewer was named, so there is no reviewer transcript to read"
@@ -468,21 +482,21 @@ def _witness_file(
     elif role == "holder":
         agent = None
         whose = "the orchestrator (the unit ran inline — no executor was claimed)"
-        if dispatched_as is not None:
-            start = parse_timestamp(since)
+        if dispatched_as is not None and opened is not None:
             dispatched = [
                 d
-                for d in attribute_dispatches(session)
+                for d in view.dispatches(opened) or []
                 if _same_agent(d.agent_type, dispatched_as)
                 and d.started is not None
-                and start is not None
-                and d.started >= start
+                and d.started >= opened
             ]
             if dispatched:
                 return ("unclaimed", whose, None)
     else:
         agent, whose = None, "the orchestrator"
-    found = witness_transcript(session, agent)
-    if found is None:
-        return f"the session transcript {session} could not be read"
-    return (found, whose, agent)
+    if agent is None:
+        return (view, whose, None)
+    child = view.child(agent)
+    if child is None:
+        return f"the session {view.session} could not be read"
+    return (child, whose, agent)

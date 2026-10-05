@@ -23,6 +23,7 @@ from fr.triage.views import (
 )
 
 from tests.unit.triage_board_fixtures import (
+    URL,
     batch,
     busy,
     dispatch,
@@ -176,6 +177,18 @@ def test_removing_the_driver_signal_removes_the_row() -> None:
             p["checks"] = {"pass": 3, "fail": 0, "pending": 0}
     f2 = facts(green, config={"example-org/widgets": {"post_merge": ["make", "deploy"]}})
     assert not [r for r in needs_you(f2, jd) if r.kind == "failing-ci"]
+
+
+def test_a_foreign_pr_on_a_batch_branch_needs_the_operator() -> None:
+    """gh#936: the driver reports it and never merges it; the board lists it."""
+    fork = pr(40, "feat/batch-x", cross_repo=True, is_draft=True)  # green draft: never "ready it"
+    f = facts([issue(1, prs=[fork])], prs=[fork])
+    jd = judgements({"widgets#1": j(1)}, [batch("x", [1], wave=1, events=[dispatch("x")])])
+    rows = [r for r in needs_you(f, jd) if r.kind == "foreign-pr"]
+    assert [(r.ref, r.href) for r in rows] == [("x", f"{URL}/pull/40")]
+    assert "opened from a fork" in rows[0].text
+    assert ("foreign-pr", "x") in _needs(render(f, jd))
+    assert not [r for r in needs_you(f, jd) if r.kind == "ready-pr"]
 
 
 def _merged_by_hand(**kw: object) -> tuple[Facts, Judgements]:

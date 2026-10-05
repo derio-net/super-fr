@@ -159,8 +159,7 @@ class GhClient(Protocol):
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         """Every PR (any state) whose head branch is *branch*, as `gh pr list`
-        records with `fr.gh.PR_LIST_FIELDS` plus `headRefOid`, `files` and
-        `isCrossRepository`."""
+        records with `fr.gh.PR_LIST_FIELDS` plus `headRefOid` and `files`."""
         ...
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:

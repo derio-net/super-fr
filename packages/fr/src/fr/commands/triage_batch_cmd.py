@@ -69,6 +69,7 @@ from fr.services import ServicesError, require_tracker
 from fr.services.resolve import resolve_services
 from fr.triage.batch import (
     CLOSED_OUT,
+    allowed_authors,
     batch_branch,
     batch_item_id,
     batch_pr,
@@ -79,6 +80,8 @@ from fr.triage.batch import (
     closeout_state,
     dependency_state,
     derive_batch_stage,
+    distrust,
+    foreign_batch_prs,
     last_dispatch,
     mixed_themes,
     pr_open_queue,
@@ -129,7 +132,7 @@ from fr.triage.batch_merge import (
     run_queue,
 )
 from fr.triage.batch_version import read_source, reserve
-from fr.triage.errors import TriageError
+from fr.triage.errors import ForgeError, TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.model import (
     Batch,
@@ -1176,13 +1179,30 @@ DriveCheckoutOpt = Annotated[
 ]
 
 
+class ForgeReadError(Exception):
+    """A forge read failed or timed out during a drive pass (gh#910). Loop mode skips
+    the rest of the pass and reads again after `--interval`; `--once` and plan mode
+    exit with *code*, as before."""
+
+    def __init__(self, message: str, *, code: int) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def recollect(scope: Scope, target: Path) -> None:
     """Re-collect facts.json through the `Forge` seam, as `fr triage collect` does:
-    every stage is derived from facts, so each pass starts here (wave-driver §B)."""
+    every stage is derived from facts, so each pass starts here (wave-driver §B).
+    Unlike `fr triage collect` it carries known-closed facts over from the
+    previous pass instead of viewing every settled judged issue again (gh#911),
+    and says what the pass cost. A forge that fails to answer raises
+    `ForgeReadError`; any other refusal exits."""
     try:
-        collect_into(scope, target)
+        _, _, stats = collect_into(scope, target, carry=True)
+    except ForgeError as exc:
+        raise ForgeReadError(str(exc), code=2) from exc
     except TriageError as exc:
         _fail(str(exc))
+    _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
 
 
 def ci_is_none(path: Path) -> bool:
@@ -1361,10 +1381,22 @@ def _closeout_head(batch: Batch) -> str:
     return housekeeping_branch(last.branch if last else batch_branch(batch), None, None)
 
 
-def _live_head_prs(client: GhClient, repo: str, head: str) -> list[LivePr]:
-    """The PRs with head *head*, as the archive step reads them (merged ones too)."""
+def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[str]) -> list[LivePr]:
+    """The PRs with head *head*, as the archive step reads them (merged ones too),
+    each `trusted` only from *repo* itself by an *allowed* author (gh#936)."""
     out: list[LivePr] = []
     for rec in client.list_prs_by_head(repo, head):
+        author = rec.get("author")
+        login = author.get("login") if isinstance(author, dict) else None
+        cross = rec.get("isCrossRepository")
+        trusted = (
+            distrust(
+                str(login) if login else None,
+                cross if isinstance(cross, bool) else None,
+                allowed,
+            )
+            is None
+        )
         out.append(
             LivePr(
                 number=int(rec.get("number", 0)),
@@ -1373,11 +1405,10 @@ def _live_head_prs(client: GhClient, repo: str, head: str) -> list[LivePr]:
                 head=str(rec.get("headRefOid") or ""),
                 checks="pending",  # an open one's checks come from the facts' record
                 head_ref=str(rec.get("headRefName") or head),
-                # unknown reads as a fork: adoption trusts only the repo's own branches
-                cross_repo=rec.get("isCrossRepository") is not False,
                 files=tuple(
                     str(f.get("path") if isinstance(f, dict) else f) for f in rec.get("files") or ()
                 ),
+                trusted=trusted,
             )
         )
     return out
@@ -1402,6 +1433,7 @@ class _Driver:
         self.max_inflight, self.yes = max_inflight, yes
         self.warned: set[str] = set()
         self.reported: set[str] = set()  # merge refusals already printed in full
+        self.read_failures: set[str] = set()  # forge read failures, since the last good pass
         self.failed_write = False  # a forge write failed this pass (--once exits 1)
         self._first_seen: dict[str, datetime] = {}  # merged with no merge time known
         self._ci: dict[str, bool] = {}  # per pass: repo -> origin/<default> says ci none
@@ -1442,6 +1474,8 @@ class _Driver:
                 _fail(str(exc))
             except TriageError as exc:
                 _fail(str(exc))
+            except FORGE_ERRORS as exc:
+                raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
             self._merge[repo] = MergeContext(
                 client=client,
                 checkout=checkout,
@@ -1481,7 +1515,7 @@ class _Driver:
                 view = client.pr_view(repo, e.pr.number)
                 verdict, failing = checks_verdict(
                     client.pr_required_checks(repo, e.pr.number),
-                    e.pr.checks,
+                    e.pr.checks or {},
                     ci_none=self._ci_none(repo),
                 )
                 live[e.batch.id] = LivePr(
@@ -1492,6 +1526,7 @@ class _Driver:
                     checks=verdict,
                     failing=failing,
                     head_ref=e.pr.head_ref,
+                    trusted=True,  # the queue holds `batch_pr`s only (gh#936)
                 )
             for b in chosen:
                 if stages[b.id] not in ("merged", "partial") or b.id not in repos:
@@ -1529,7 +1564,7 @@ class _Driver:
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
-            _fail(f"a forge read failed: {exc}", code=1)
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         return Snapshot(
             batches=tuple(judgements.batches),
             stages=stages,
@@ -1546,19 +1581,19 @@ class _Driver:
             selected=frozenset(ids),
             archived=frozenset(archived),
             adopted=adopted,
+            foreign={b.id: found for b in chosen if (found := tuple(foreign_batch_prs(b, facts)))},
         )
 
     def _hand_closeout(self, facts: Facts, repo: str, batch: Batch) -> LivePr | None:
         """The close-out PR started by hand for *batch*, merged first, else open: the
         one on `chore/closeout-<batch branch>`, a head only this batch produces, the
         attribution the archive step already trusts (gh#912). A closed one is
-        abandoned and attributes nothing. A fork's PR on that name is never adopted:
+        abandoned and attributes nothing. Only a `trusted` PR is adopted (gh#936):
         batch branch names are predictable, and an adopted open PR is merged by the
-        archive step once green."""
+        archive step once green, so a fork's or a foreign author's never is."""
+        client, allowed = self.client(facts, repo), allowed_authors(repo, facts)
         found = [
-            p
-            for p in _live_head_prs(self.client(facts, repo), repo, _closeout_head(batch))
-            if not p.cross_repo
+            p for p in _live_head_prs(client, repo, _closeout_head(batch), allowed) if p.trusted
         ]
         for state in ("MERGED", "OPEN"):
             pick = next((p for p in found if p.state == state), None)
@@ -1620,6 +1655,7 @@ class _Driver:
         """Archive PR candidates: the open `chore/*` PRs collect read (with files and
         checks), plus any PR on the close-out's own heads, merged ones included."""
         client = self.client(facts, repo)
+        allowed = allowed_authors(repo, facts)
         out: dict[int, LivePr] = {}
         for pr in facts.prs:
             if (
@@ -1630,17 +1666,18 @@ class _Driver:
                 continue
             verdict, failing = checks_verdict(
                 client.pr_required_checks(repo, pr.number),
-                pr.checks,
+                pr.checks or {},
                 ci_none=self._ci_none(repo),
             )
             out[pr.number] = LivePr(
                 number=pr.number, state="OPEN", draft=pr.is_draft, head=pr.head_oid,
                 checks=verdict, failing=failing, head_ref=pr.head_ref, files=tuple(pr.files),
+                trusted=distrust(pr.author, pr.cross_repo, allowed) is None,
             )  # fmt: skip
         heads = {_closeout_head(batch)}
         heads |= {event.archive} if event.archive else set()
         for head in sorted(heads):
-            for found in _live_head_prs(client, repo, head):
+            for found in _live_head_prs(client, repo, head, allowed):
                 if found.state != "OPEN" or found.number not in out:
                     out[found.number] = found
         return list(out.values())
@@ -1719,7 +1756,7 @@ class _Driver:
         repo = batch_repo(batch, facts)
         if action.kind in ("blocked", "held") or repo is None:
             return action.detail, False, in_flight
-        if action.kind == "warn":
+        if action.kind in ("warn", "foreign"):
             self.warned.add(action.head)
             return action.detail, False, in_flight
         if action.kind == "merge":
@@ -1810,6 +1847,9 @@ class _Driver:
             return f"stopped: {exc}", False, in_flight
         except TriageError as exc:
             _fail(str(exc))
+        except FORGE_ERRORS as exc:  # a re-read of the PR or its checks; the merge's own
+            # refusal is a MergeStopError above, so no write failure lands here
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         if attempt.outcome in ("merged", "already-merged"):
             self._unlanded.discard(batch.id)
             return f"merged PR #{action.pr} at {attempt.head[:12]}", True, in_flight - 1
@@ -1990,7 +2030,23 @@ def batch_drive_command(
     )
     with drive_lock(target):
         while True:
-            acted, summary, blocked = driver.run_pass()
+            try:
+                acted, summary, blocked = driver.run_pass()
+            except ForgeReadError as exc:
+                if once or not yes:
+                    _fail(str(exc), code=exc.code)
+                # Like a refused merge (rg-4), a degraded forge ends neither the run nor
+                # the loop: reported once per cause, then read again (gh#910).
+                if str(exc) not in driver.read_failures:
+                    driver.read_failures.add(str(exc))
+                    err_console.print(
+                        f"[yellow]warning:[/yellow] {escape(str(exc))}; pass skipped, "
+                        f"retrying every {interval}s",
+                        soft_wrap=True,
+                    )
+                _sleep(interval)
+                continue
+            driver.read_failures.clear()
             if not yes:
                 return  # the plan of one pass, in loop mode too
             if once:

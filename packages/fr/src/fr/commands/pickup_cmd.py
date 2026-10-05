@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, NoReturn
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr import parse
 from fr.commands.common import require_migrated_layout, resolve_repo_root
@@ -70,12 +71,12 @@ def pickup_command(
         try:
             run_state = load_run_state(repo_root, run)
         except RunStateError as e:
-            err_console.print(f"[red]{e}[/red]")
+            err_console.print(f"[red]{escape(str(e))}[/red]")
             raise typer.Exit(2) from e
         try:
             brief = closeout_brief(repo_root, run_state)
         except CloseoutNotReadyError as e:
-            err_console.print(f"[red]{e}[/red]")
+            err_console.print(f"[red]{escape(str(e))}[/red]")
             raise typer.Exit(2) from e
         typer.echo(brief)
         return
@@ -98,7 +99,7 @@ def pickup_command(
     try:
         plan = parse(plan_dir)
     except PlanSchemaError as e:
-        err_console.print(f"[red]parse error:[/red] {e}")
+        err_console.print(f"[red]parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
 
     matched = next((p for p in plan.phases if p.phase.number == phase), None)

@@ -28,6 +28,8 @@ def pr(number: int, head_ref: str, **kw: Any) -> dict[str, Any]:
         "head_oid": kw.pop("head_oid", f"sha-{number}"),
         "created_at": kw.pop("created_at", "2026-10-01T11:00:00Z"),
         "checks": kw.pop("checks", {"pass": 3, "fail": 0, "pending": 0}),
+        "author": kw.pop("author", "operator"),
+        "cross_repo": kw.pop("cross_repo", False),
         **kw,
     }
 
@@ -68,6 +70,7 @@ def facts(issues: list[dict[str, Any]], **kw: Any) -> Facts:
             "collected_at": kw.pop("collected_at", COLLECTED),
             "repos": [REPO],
             "issues": issues,
+            "viewer": kw.pop("viewer", "operator"),
             **kw,
         }
     )

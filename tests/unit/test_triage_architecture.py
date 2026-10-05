@@ -232,6 +232,7 @@ def _page(
     notes: list[str] | None = None,
     measured: Any = None,
     origins: bool = False,
+    snapshots: list[tuple[datetime, Snapshot]] | None = None,
 ) -> str:
     f, jd = busy()
     jd = Judgements.model_validate(
@@ -261,7 +262,7 @@ def _page(
             *(sections if sections is not None else GENERATED),
             *(n for n, _ in fragments or []),
         ],
-        snapshots=_snapshots(f, jd, snaps),
+        snapshots=snapshots if snapshots is not None else _snapshots(f, jd, snaps),
         notes=notes or [],
     )
 
@@ -351,6 +352,36 @@ def test_the_snapshot_timeline_steps_through_stored_snapshots() -> None:
     assert len(re.findall(r'role="tabpanel"', tl)) == 4
     assert re.search(r'aria-selected="true"[^>]*>2026-09-28', tl)  # newest preselected
     assert "2026-09-25" in tl
+
+
+def test_a_snapshot_tab_counts_batches_per_stage_and_folds_the_list() -> None:
+    """gh#917: a tab showed every batch with its stage as one unbroken run of text.
+
+    By hand: 5 merged, 2 cancelled, 1 pr-open, and one stage an older fr stored that
+    the current vocabulary lacks. Counts come in lifecycle order, unknown stages last.
+    """
+    batches = {f"m{n}": "merged" for n in range(5)}
+    batches |= {"c0": "cancelled", "c1": "cancelled", "p0": "pr-open", "z0": "retired"}
+    snap = Snapshot(batches=batches, issues={}, prs={}, figures={"open": 1})
+    page = _page(snapshots=[(datetime(2026, 9, 25, 9, 0, tzinfo=UTC), snap)])
+    tl = page[_pos(page, 'id="snapshot-timeline"') : _pos(page, 'id="summary"')]
+    counts = re.findall(r'<span class="chip">([a-z-]+) <b>(\d+)</b></span>', tl)
+    assert counts == [("cancelled", "2"), ("pr-open", "1"), ("merged", "5"), ("retired", "1")]
+    # The per-batch list survives, folded away: no batch name outside a closed <details>.
+    folded = re.search(
+        r"<details class=\"stages\"><summary>[^<]*9 batches[^<]*</summary>(.*?)</details>", tl
+    )
+    assert folded, tl
+    assert "<code>m0</code>" in folded.group(1)
+    assert "<code>m0</code>" not in tl.replace(folded.group(0), "")
+
+
+def test_a_snapshot_with_no_batches_says_so() -> None:
+    snap = Snapshot(batches={}, issues={}, prs={}, figures={"open": 1})
+    page = _page(snapshots=[(datetime(2026, 9, 25, 9, 0, tzinfo=UTC), snap)])
+    tl = page[_pos(page, 'id="snapshot-timeline"') : _pos(page, 'id="summary"')]
+    assert "no batches" in tl
+    assert "<details" not in tl
 
 
 @pytest.mark.parametrize("n", [0, 1])

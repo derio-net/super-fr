@@ -11,6 +11,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr import hermes
 
@@ -32,7 +33,7 @@ def install_cmd(
     try:
         hermes.install(source, target)
     except hermes.HermesError as exc:
-        _console.print(f"[red]fr hermes install:[/red] {exc}")
+        _console.print(f"[red]fr hermes install:[/red] {escape(str(exc))}")
         raise typer.Exit(1) from exc
     _console.print(f"fr hermes: installed into {target}")
 
@@ -51,6 +52,6 @@ def uninstall_cmd(
     try:
         hermes.uninstall(source, target)
     except hermes.HermesError as exc:
-        _console.print(f"[red]fr hermes uninstall:[/red] {exc}")
+        _console.print(f"[red]fr hermes uninstall:[/red] {escape(str(exc))}")
         raise typer.Exit(1) from exc
     _console.print(f"fr hermes: uninstalled from {target}")

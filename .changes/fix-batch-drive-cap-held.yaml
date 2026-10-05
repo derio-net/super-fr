@@ -1,2 +1,0 @@
-bump: patch
-summary: "`fr triage batch drive` prints a `held` line naming the in-flight cap and the batches occupying it, instead of a silent pending count when the cap holds the selection"

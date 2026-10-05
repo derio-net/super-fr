@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -73,6 +74,8 @@ class Forge(Protocol):
     def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]: ...
 
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]: ...
+
+    def viewer_login(self) -> str: ...
 
 
 GH_MISSING = (
@@ -137,6 +140,10 @@ class GhForge:
         with _forge_errors():
             return RealGhClient().list_prs_by_head(repo, branch)
 
+    def viewer_login(self) -> str:
+        with _forge_errors():
+            return gh.viewer_login()
+
 
 def scope_repos(
     forge: Forge, scope: Scope, *, repo_limit: int = REPO_LIMIT
@@ -181,10 +188,13 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             head_ref=r.get("headRefName") or "",
             head_oid=r.get("headRefOid") or "",
             files=[f["path"] for f in r.get("files") or [] if "path" in f],
-            checks=_checks(r.get("statusCheckRollup") or []),
-            mergeable=r.get("mergeable") or "UNKNOWN",
-            merge_state=r.get("mergeStateStatus") or "UNKNOWN",
+            # Only a record that carries the field gets a value (super-fr#648).
+            checks=_checks(r["statusCheckRollup"] or []) if "statusCheckRollup" in r else None,
+            mergeable=(r["mergeable"] or "UNKNOWN") if "mergeable" in r else None,
+            merge_state=((r["mergeStateStatus"] or "UNKNOWN") if "mergeStateStatus" in r else None),
             review=r.get("reviewDecision") or None,
+            author=_login(r),
+            cross_repo=r.get("isCrossRepository"),
         )
         refs = [
             _ref(ref["repository"]["owner"]["login"], ref["repository"]["name"], ref["number"])
@@ -192,6 +202,14 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
         ]
         out.append((pr, refs))
     return out
+
+
+def _login(raw: dict[str, Any]) -> str | None:
+    """The PR author's login; None when the record carries none (never read, or a
+    deleted account), which no batch attribution trusts."""
+    author = raw.get("author")
+    login = author.get("login") if isinstance(author, dict) else None
+    return str(login) if login else None
 
 
 def _checks(raw: Iterable[dict[str, Any]]) -> dict[str, int]:
@@ -331,6 +349,19 @@ def _judged_elsewhere(
     return wanted
 
 
+@dataclass(frozen=True)
+class CollectStats:
+    """What one collect cost in single-issue reads (gh#911).
+
+    *viewed* counts every `view_issue` call, failures and PR-past-limit answers
+    included; *carried* counts judged closed issues taken from the previous
+    facts instead of being viewed.
+    """
+
+    viewed: int = 0
+    carried: int = 0
+
+
 def collect_facts(
     forge: Forge,
     scope: Scope,
@@ -343,7 +374,40 @@ def collect_facts(
     pr_limit: int = PR_LIMIT,
     repo_limit: int = REPO_LIMIT,
 ) -> Facts:
+    """`collect_facts_counted` without a carried set: every not-open judged key is viewed."""
+    return collect_facts_counted(
+        forge,
+        scope,
+        now=now,
+        judged=judged,
+        batch_branches=batch_branches,
+        known_batch_prs=known_batch_prs,
+        issue_limit=issue_limit,
+        pr_limit=pr_limit,
+        repo_limit=repo_limit,
+    )[0]
+
+
+def collect_facts_counted(
+    forge: Forge,
+    scope: Scope,
+    *,
+    now: datetime,
+    judged: Iterable[str] = (),
+    batch_branches: Iterable[tuple[str, str, datetime]] = (),
+    known_batch_prs: Iterable[PullRequest] = (),
+    issue_limit: int = ISSUE_LIMIT,
+    pr_limit: int = PR_LIMIT,
+    repo_limit: int = REPO_LIMIT,
+    carried: Iterable[Issue] = (),
+) -> tuple[Facts, CollectStats]:
     """Build the facts for *scope*: two bulk calls per repo, inverted.
+
+    *carried* is the previous facts' issues: a judged key that is not open now
+    and was CLOSED there is taken from it instead of viewed (gh#911) — closed is
+    terminal for the board, and its PR links are recomputed from this pass. A
+    repo whose open-issue list was truncated carries nothing: a key missing from
+    a cut-short list is not known to have left it, so each is viewed again.
 
     In org scope a repo whose lists, config or comment reads fail — or whose
     `.fr/triage.yaml` is invalid — is recorded under `skipped` and the rest
@@ -361,6 +425,7 @@ def collect_facts(
     r2p-f3), so a finished batch costs nothing on later collects.
     """
     repos, warnings = scope_repos(forge, scope, repo_limit=repo_limit)
+    viewer = forge.viewer_login() or None
     skipped: list[Skipped] = []
     collected: list[str] = []
     raw_issues: list[tuple[str, dict[str, Any]]] = []
@@ -426,12 +491,22 @@ def collect_facts(
         for repo, i in raw_issues
     ]
     open_keys = {i.key for i in out}
+    carry = {(i.repo.lower(), i.number): i for i in carried if i.state == "closed"}
+    truncated = {w.target for w in warnings if w.source == "issues"}
+    viewed = carried_n = 0
     unviewed: list[Unviewed] = []
     judged_prs: list[PullRequest] = []
     for repo, number in _judged_elsewhere(judged, open_keys, collected):
         if (listed := listed_prs.get(issue_key(repo, number))) is not None:
             judged_prs.append(listed)
             continue
+        if repo not in truncated and (hit := carry.get((repo.lower(), number))) is not None:
+            out.append(
+                hit.model_copy(update={"prs": linked(repo, number), "dispatch_marker_at": None})
+            )
+            carried_n += 1
+            continue
+        viewed += 1
         try:
             raw = forge.view_issue(repo=repo, number=number)
         except ForgeError as exc:
@@ -460,7 +535,7 @@ def collect_facts(
     )
     in_facts = {(p.repo, p.number) for p in [*linked_prs_all(out), *unlinked, *batch_prs]}
     judged_prs = [p for p in judged_prs if (p.repo, p.number) not in in_facts]
-    return Facts(
+    facts = Facts(
         schema=FACTS_SCHEMA,
         scope=scope.name,
         kind=scope.kind,
@@ -474,7 +549,9 @@ def collect_facts(
         batch_prs=batch_prs,
         judged_prs=judged_prs,
         config=config,
+        viewer=viewer,
     )
+    return facts, CollectStats(viewed=viewed, carried=carried_n)
 
 
 def linked_prs_all(issues: Iterable[Issue]) -> list[PullRequest]:
@@ -572,8 +649,9 @@ def _batch_prs(
     Skipped when a collected PR (*seen*) of THIS dispatch is already on the
     branch — a PR opened before the last dispatch belongs to an earlier one and
     must not hide the redispatch's PR (review r2p-f1) — or when *known* (the
-    previous facts) holds a merged or closed PR of this dispatch: that batch is
-    terminal, and its PR is carried over instead (review r2p-f3).
+    previous facts) holds a merged or closed PR of this dispatch whose identity
+    was read: that batch is terminal, and its PR is carried over instead (review
+    r2p-f3).
     """
     by_name = {repo.split("/", 1)[1].lower(): repo for repo in collected}
     found: list[PullRequest] = []
@@ -588,7 +666,16 @@ def _batch_prs(
         ]
         if any(p in seen for p in ours):
             continue
-        terminal = [p for p in ours if p in known and p.state in {"MERGED", "CLOSED"}]
+        # A known PR whose author and origin were never read (facts from before gh#936)
+        # is not carried over: no attribution would trust it, so it is read again.
+        terminal = [
+            p
+            for p in ours
+            if p in known
+            and p.state in {"MERGED", "CLOSED"}
+            and p.author is not None
+            and p.cross_repo is not None
+        ]
         if terminal:
             found.extend(terminal)
             continue

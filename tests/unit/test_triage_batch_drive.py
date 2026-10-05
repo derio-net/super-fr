@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fr.triage.batch import QueueEntry
+from fr.triage.batch import ForeignPr, QueueEntry
 from fr.triage.batch_drive import (
     CLOSEOUT_FALLBACK,
     Action,
@@ -228,6 +228,38 @@ def test_a_failing_check_warns_once_per_head_sha() -> None:
     assert first.actions[0].head == "head-x" and "lint" in first.actions[0].detail
     again = drive_pass(_snap([b], {"x": "pr-open"}, live=live, warned=frozenset({"head-x"})))
     assert again.actions == ()
+
+
+def _foreign(n: int, reason: str = "opened from a fork") -> ForeignPr:
+    return ForeignPr(pr=_pr("x", n, head_ref="feat/batch-x"), reason=reason)
+
+
+def test_a_foreign_pr_on_a_batch_branch_is_reported_once_and_never_merged() -> None:
+    """gh#936: the PR is reported (the key is what the driver remembers), never merged."""
+    b = _dispatched("x", 1)
+    foreign = {"x": (_foreign(80), _foreign(81, "by mallory, not an allowed author"))}
+    first = drive_pass(_snap([b], {"x": "dispatched"}, foreign=foreign))
+    assert _kinds(first.actions) == [("foreign", "x"), ("foreign", "x")]
+    assert [(a.pr, a.head) for a in first.actions] == [
+        (80, f"foreign:{REPO}#80"),
+        (81, f"foreign:{REPO}#81"),
+    ]
+    assert first.actions[0].detail == (
+        "PR #80 on feat/batch-x is not this batch's: opened from a fork; it is never merged"
+    )
+    again = drive_pass(
+        _snap([b], {"x": "dispatched"}, foreign=foreign, warned=frozenset({f"foreign:{REPO}#80"}))
+    )
+    assert [a.pr for a in again.actions] == [81]
+    assert "merge" not in [a.kind for a in [*first.actions, *again.actions]]
+
+
+def test_a_foreign_pr_is_reported_only_for_a_selected_batch() -> None:
+    b = _dispatched("x", 1)
+    got = drive_pass(
+        _snap([b], {"x": "dispatched"}, foreign={"x": (_foreign(80),)}, selected=frozenset())
+    )
+    assert got.actions == ()
 
 
 def test_merges_follow_the_merge_order() -> None:
@@ -445,7 +477,7 @@ def _closed(bid: str, n: int, *, archive: str | None = None, run: str | None = N
 
 
 def _archive(n: int, head_ref: str, **kw: Any) -> LivePr:
-    return _live(n, f"h{n}", head_ref=head_ref, **kw)
+    return _live(n, f"h{n}", head_ref=head_ref, trusted=kw.pop("trusted", True), **kw)
 
 
 def test_an_attributed_ready_green_archive_pr_is_merged() -> None:
@@ -481,6 +513,23 @@ def test_attribution_by_head_or_by_the_run_file() -> None:
     assert attributed(by_branch, b, event)  # type: ignore[arg-type]
     assert attributed(by_file, b, event)  # type: ignore[arg-type]
     assert not attributed(stray, b, event)  # type: ignore[arg-type]
+
+
+def test_an_untrusted_archive_pr_is_never_attributed_or_merged() -> None:
+    """gh#936: a fork or a foreign author can name a head `chore/closeout-<branch>`
+    and touch the run file; neither attributes a PR whose identity is not trusted."""
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    event = b.events[-1]
+    by_head = _archive(1, "chore/closeout-feat-batch-x", trusted=False)
+    by_file = _archive(2, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), trusted=False)
+    assert not attributed(by_head, b, event)  # type: ignore[arg-type]
+    assert not attributed(by_file, b, event)  # type: ignore[arg-type]
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (by_head, by_file)}))
+    assert "archive" not in [a.kind for a in got.actions]
+
+
+def test_a_live_pr_is_untrusted_unless_said_otherwise() -> None:
+    assert LivePr(number=1, state="OPEN", draft=False, head="h").trusted is False
 
 
 def test_a_merged_archive_pr_finishes_the_batch() -> None:

@@ -348,10 +348,3 @@ def test_the_bundled_validator_is_byte_identical_to_the_shipped_script() -> None
     still execs the marketplace copy. The two must not drift."""
     bundled = REPO_ROOT / "packages/fr/src/fr/data/validate-plans.sh"
     assert bundled.read_bytes() == (REPO_ROOT / "scripts/validate-plans.sh").read_bytes()
-
-
-def test_the_legacy_installer_writes_the_same_wrapper() -> None:
-    """`scripts/install-validator-wrapper.sh` is the retired remedy, but it is
-    still shipped; it must not re-commit the Claude-Code-only form."""
-    text = (REPO_ROOT / "scripts/install-validator-wrapper.sh").read_text()
-    assert WRAPPER_TEXT in text

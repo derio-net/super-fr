@@ -1,5 +1,18 @@
 name: CI
-on: [push, pull_request]
+# push is scoped to main: an unscoped push overlaps pull_request, and every
+# push to a PR branch ran the whole workflow twice (#941).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Test the floor we declare (`requires-python = ">=3.11"`), not whatever
+# Python the runner ships (#940). An env var rather than a committed
+# `.python-version`, so it does not also pin an operator's local runs. The
+# test job overrides it per leg; tests/unit/test_ci_python_floor.py keeps it
+# equal to the requires-python floor.
+env:
+  UV_PYTHON: "3.11"
 
 jobs:
   lint:
@@ -24,7 +37,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The floor, and the newest stable Python, so a version-specific
+        # break shows up from either end (#940).
+        python: ["3.11", "3.14"]
         shard: [1, 2, 3, 4]
+    name: test (py${{ matrix.python }}, ${{ matrix.shard }})
+    env:
+      UV_PYTHON: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,7 +66,10 @@ jobs:
           --splitting-algorithm least_duration
         env:
           COVERAGE_FILE: .coverage.shard${{ matrix.shard }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      # Coverage is measured on the floor leg only: both legs would upload the
+      # same artifact name, and the gate needs one run of the suite, not two.
+      - if: matrix.python == '3.11'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-shard-${{ matrix.shard }}
           path: .coverage.shard${{ matrix.shard }}

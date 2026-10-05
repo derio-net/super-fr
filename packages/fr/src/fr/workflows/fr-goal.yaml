@@ -166,6 +166,18 @@ steps:
         # `visual` (spec 2026-09-28-ui-visual-evidence §C): the REVIEWER's own
         # fresh screenshots, opened in the reviewer's transcript — never the
         # executor's.
+        #
+        # `review_findings` (spec 2026-10-02-opencode-observe-2 §E): this
+        # step's brief carries the exact text the reviewer must be given, with
+        # the phase's N filled in — fr-goal §6 puts it into the reviewer's
+        # prompt verbatim. The reviewer ends its return with a fenced
+        # `review-findings` block (`p<N>-r<k> | in|out | summary`, or `none`;
+        # `p<N>a-r<k>` ... with several reviewers). The fence is not the
+        # DERIVED `findings` evidence above. Wherever fr can read the return,
+        # `done` is refused while a named reviewer's block is missing or
+        # malformed, an id repeats across reviewers, or a returned id is not a
+        # plan-journal finding against phase N or later (where the convention above files it) with the reviewer's scope tag; where it
+        # cannot, the check is skipped as `unobserved=reviewer-return`.
         evidence: [review, reviewer, findings, visual]
 
   - id: journal-check

@@ -52,6 +52,8 @@ def _pr(
         "url": f"https://github.com/{REPO}/pull/{number}",
         "headRefName": head,
         "closingIssuesReferences": [_ref(n) for n in refs],
+        "author": {"login": "operator"},
+        "isCrossRepository": False,
     }
 
 
@@ -111,14 +113,17 @@ def test_a_linked_open_pr_gains_files_head_oid_checks_and_merge_state_from_the_j
     assert pr.merge_state == "DIRTY"
 
 
-def test_a_closed_linked_pr_keeps_its_defaults() -> None:
+def test_a_closed_linked_pr_carries_no_forge_only_fields() -> None:
+    """Files and head oid keep their empty defaults; checks and merge state are
+    `None`, never a value the forge did not report (super-fr#648)."""
     forge = _Forge(
         issues={REPO: [_issue(7)]}, prs={REPO: [_pr(3, state="MERGED", refs=[7])]}, open_prs=[]
     )
 
     (pr,) = collect_facts(forge, SCOPE, now=NOW).issues[0].prs
 
-    assert (pr.files, pr.head_oid, pr.merge_state) == ([], "", "UNKNOWN")
+    assert (pr.files, pr.head_oid) == ([], "")
+    assert (pr.checks, pr.mergeable, pr.merge_state) == (None, None, None)
 
 
 def test_an_in_progress_issue_gets_the_age_of_its_latest_fr_batch_marker() -> None:
@@ -236,7 +241,7 @@ def test_a_linked_pr_from_before_the_dispatch_does_not_skip_the_lookup() -> None
     assert 52 in {p.number for p in facts.batch_prs}
 
 
-def _known(number: int, state: str, created: str) -> PullRequest:
+def _known(number: int, state: str, created: str, author: str | None = "operator") -> PullRequest:
     return PullRequest(
         repo=REPO,
         number=number,
@@ -246,6 +251,8 @@ def _known(number: int, state: str, created: str) -> PullRequest:
         url="u",
         head_ref="feat/batch-x",
         created_at=created,
+        author=author,
+        cross_repo=False if author is not None else None,
     )
 
 
@@ -274,6 +281,24 @@ def test_a_batch_already_terminal_in_the_previous_facts_costs_no_lookup(state: s
 def test_a_known_pr_that_is_not_terminal_for_this_dispatch_is_looked_up_again(
     known: PullRequest,
 ) -> None:
+    forge = _Forge(issues={REPO: [_issue(7)]}, prs={REPO: []}, open_prs=[])
+
+    collect_facts(
+        forge,
+        SCOPE,
+        now=NOW,
+        batch_branches=[("alpha", "feat/batch-x", AT)],
+        known_batch_prs=[known],
+    )
+
+    assert forge.called("list_prs_by_head") == [{"repo": REPO, "branch": "feat/batch-x"}]
+
+
+def test_a_terminal_known_pr_whose_identity_was_never_read_is_looked_up_again() -> None:
+    """gh#936 review: facts written before author and origin were collected carry a
+    merged batch PR with neither. Carried over, no attribution would ever trust it,
+    and its batch would read `dispatched` forever; one lookup re-reads it."""
+    known = _known(40, "MERGED", AFTER, author=None)
     forge = _Forge(issues={REPO: [_issue(7)]}, prs={REPO: []}, open_prs=[])
 
     collect_facts(

@@ -950,8 +950,39 @@ def test_git_ignored_does_not_cover_a_tracked_file_in_an_ignored_dir(tmp_path: P
 
 
 def test_a_dispatched_but_unclaimed_implement_phase_is_refused(tmp_path: Path) -> None:
-    """p2-r4: the session shows the executor's dispatch, nobody claimed it —
+    """p2-r4: the session shows two executor dispatches, nobody claimed either
+    (so no ONE child is the holder, spec 2026-10-02-opencode-observe-2 R5) —
     the orchestrator's own reads must not stand in for the executor's."""
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(
+        root,
+        orchestrator=[_read(_stamp(opened, 3), shot, 1)],
+        agents={
+            EXEC_ID: (_stamp(opened), "toolu_exec", "super-fr:fr-phase-executor", []),
+            "a0exec0000000009": (
+                _stamp(opened, 1),
+                "toolu_exec9",
+                "super-fr:fr-phase-executor",
+                [],
+            ),
+        },
+    )
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    text = _squash(out.output)
+    assert "no holder was claimed" in text
+    assert "fr run claim r1 --step code --item phase/1 --agent <id>" in text
+
+
+def test_the_one_observed_executor_is_the_holder_its_reads_are_checked(tmp_path: Path) -> None:
+    """R5: one unclaimed executor dispatch becomes the holder, so the witness
+    reads ITS session — the orchestrator's read of the shot does not count."""
     root = tmp_path / "projects"
     repo, shipped = _setup(tmp_path)
     opened = _advance(repo, shipped, "phase/1/code")
@@ -967,8 +998,37 @@ def test_a_dispatched_but_unclaimed_implement_phase_is_refused(tmp_path: Path) -
 
     assert out.exit_code == 2, out.output
     text = _squash(out.output)
-    assert "no holder was claimed" in text
-    assert "fr run claim r1 --step code --item phase/1 --agent <id>" in text
+    assert f"holder {EXEC_ID} observed" in text
+    assert "no holder was claimed" not in text
+
+
+def test_an_unclaimed_unit_owing_visual_resolves_through_its_one_child(tmp_path: Path) -> None:
+    """R5 runs BEFORE the visual derive: the one executor child read the shot,
+    nobody claimed the unit, and the fill names it before the witness's
+    "unclaimed" refusal could fire."""
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(
+        root,
+        agents={
+            EXEC_ID: (
+                _stamp(opened),
+                "toolu_exec",
+                "super-fr:fr-phase-executor",
+                [_read(_stamp(opened, 2), shot, 1)],
+            )
+        },
+    )
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 0, out.output
+    assert _unit_evidence(repo, "implement", "phase/1/code")["visual"] == _witness(
+        shot.read_bytes()
+    )
 
 
 def test_an_inline_refusal_names_the_orchestrator(tmp_path: Path) -> None:
@@ -1092,3 +1152,123 @@ def test_a_row_named_by_two_entries_is_refused(tmp_path: Path) -> None:
     )
 
     assert any("ui-row" in p and "more than one `visual` entry" in p for p in result.problems)
+
+
+# --- OpenCode: the witness reads OpenCode's own parts (spec 2026-10-02 §G, R12) ---
+
+
+def _opencode_visual(
+    tmp_path: Path, *, role: str, reviewer: str | None = None, holder: str | None = None,
+    orchestrator_reads: bool = True, reviewer_reads: bool = True, script_runs: bool = True,
+    with_script: bool = True,
+):  # fmt: skip
+    """`derive_visual` over a copy of the OpenCode run-tree fixture whose read
+    and shell parts name THIS test's shot and capture script. Returns what the
+    witness derives (or raises `VisualRefusedError`)."""
+    import json
+    import sqlite3
+    from contextlib import closing
+
+    from fr.run.telemetry import parse_timestamp
+    from fr.run.visual import derive_visual
+
+    from tests.unit.opencode_fixture import opencode_env, shifted
+
+    shot = tmp_path / "scratch" / "a.png"
+    shot.parent.mkdir(parents=True, exist_ok=True)
+    shot.write_bytes(b"\x89PNG one")
+    script = tmp_path / "scratch" / "shots.cjs"
+    script.write_text("// capture\n")
+    written = _dt.datetime.fromtimestamp(shot.stat().st_mtime, tz=_dt.UTC)
+    since = (written - _dt.timedelta(seconds=30)).isoformat()
+    opened = parse_timestamp(since)
+    assert opened is not None
+    db = shifted(tmp_path, opened)
+    with closing(sqlite3.connect(db)) as con:
+        for part_id, session, raw in con.execute(
+            "SELECT id, session_id, data FROM part"
+        ).fetchall():
+            data = json.loads(raw)
+            tool_input = data.get("state", {}).get("input", {})
+            if data.get("tool") == "read" and str(tool_input.get("filePath", "")).endswith("a.png"):
+                keep = orchestrator_reads if session == "ses_run" else reviewer_reads
+                if keep:
+                    tool_input["filePath"] = str(shot)
+                else:
+                    con.execute("DELETE FROM part WHERE id = ?", (part_id,))
+                    continue
+            elif data.get("tool") == "bash" and session == "ses_run":
+                if tool_input.get("command") == "node shots.cjs":
+                    if script_runs:
+                        tool_input["command"] = f"node {script}"
+                    else:
+                        con.execute("DELETE FROM part WHERE id = ?", (part_id,))
+                        continue
+            else:
+                continue
+            con.execute("UPDATE part SET data = ? WHERE id = ?", (json.dumps(data), part_id))
+        con.commit()
+    repo = tmp_path / "repo"
+    repo.mkdir(exist_ok=True)
+    return derive_visual(
+        [_row()],
+        [
+            _entry(
+                "ui-row",
+                (shot, ("accepted", "20 cap")),
+                script=str(script) if with_script else None,
+            )
+        ],
+        role=role,  # type: ignore[arg-type]
+        since=since,
+        holder=holder,
+        reviewer=reviewer,
+        repo_root=repo,
+        records_dir=repo / "docs/superpowers/runs/r1.records",
+        env={k: v for k, v in opencode_env(db).items() if v is not None},
+    )
+
+
+def test_a_png_read_only_in_the_orchestrators_session_does_not_satisfy_the_reviewer(
+    tmp_path: Path,
+) -> None:
+    from fr.run.visual import VisualRefusedError
+
+    with pytest.raises(VisualRefusedError) as refused:
+        _opencode_visual(
+            tmp_path, role="reviewer", reviewer="ses_gen1", reviewer_reads=False, with_script=False
+        )
+
+    assert "was not opened in the transcript of the reviewer ses_gen1" in " ".join(
+        refused.value.lines
+    )
+
+
+def test_the_same_read_in_the_reviewers_child_satisfies_it(tmp_path: Path) -> None:
+    derived = _opencode_visual(
+        tmp_path, role="reviewer", reviewer="ses_gen1", orchestrator_reads=False, with_script=False
+    )  # fmt: skip
+
+    assert derived.unobserved is False
+
+
+def test_a_capture_script_run_in_the_run_session_satisfies_an_inline_unit(tmp_path: Path) -> None:
+    derived = _opencode_visual(tmp_path, role="orchestrator")
+
+    assert derived.unobserved is False
+
+
+def test_a_capture_script_nobody_ran_is_refused_inline(tmp_path: Path) -> None:
+    from fr.run.visual import VisualRefusedError
+
+    with pytest.raises(VisualRefusedError) as refused:
+        _opencode_visual(tmp_path, role="orchestrator", script_runs=False)
+
+    assert "executed the capture script" in " ".join(refused.value.lines)
+
+
+def test_the_unobservable_reason_no_longer_names_opencode() -> None:
+    from fr.run.visual import _unobservable
+
+    assert "cannot yet read" not in _unobservable({"FR_HARNESS": "opencode"})
+    assert "hermes's transcripts" in _unobservable({"FR_HARNESS": "hermes"})

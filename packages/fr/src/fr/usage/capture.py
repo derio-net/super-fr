@@ -100,12 +100,11 @@ def _external_marker(repo_root: Path) -> bool:
     return isinstance(data, dict) and data.get("mode") == "external"
 
 
-def candidates(state: RunState, env: Mapping[str, str], repo_root: Path) -> list[tuple[str, str]]:
-    """`(harness, session)` pairs, first-seen order: every session the cursor
-    records, every session bound to the run's workspace, and this process's."""
-    from fr.harness.detect import detect_harness
-    from fr.run.telemetry import current_session
-
+def evidenced_sessions(state: RunState, repo_root: Path) -> list[tuple[str, str]]:
+    """`(harness, session)` pairs a run has POSITIVE evidence for, first-seen
+    order: every session the cursor records on an attempt, and every session
+    bound to the run's workspace — each with its own recorded harness (spec
+    2026-10-02-opencode-observe-2 §C, R3). Never the calling process's."""
     found: list[tuple[str, str]] = list(sessions_of(state.model_dump(mode="json")))
     try:
         from fr.isolation.types import load_state
@@ -117,7 +116,25 @@ def candidates(state: RunState, env: Mapping[str, str], repo_root: Path) -> list
         found.append(
             (_BINDING_TO_HARNESS.get(binding.harness, binding.harness), binding.session_id)
         )
-    current = current_session(env)
+    return list(dict.fromkeys(found))
+
+
+def candidates(
+    state: RunState, env: Mapping[str, str], repo_root: Path, *, ambient: bool
+) -> list[tuple[str, str]]:
+    """`evidenced_sessions`, plus — only when `ambient` — the run session of
+    the calling process (`run_session`).
+
+    `ambient=True` is for the run's own step resolves, whose caller IS the
+    orchestrator; the post-hoc paths (`fr run cost --recompute`, `fr archive`)
+    pass `False`, because whoever runs them is not evidence of anything
+    (#848: an operator's own Claude Code session charged to an OpenCode run).
+    No default, so the type checker names every caller."""
+    from fr.harness.detect import detect_harness
+    from fr.run.telemetry import run_session
+
+    found = evidenced_sessions(state, repo_root)
+    current = run_session(env) if ambient else None
     if current:
         try:
             harness = detect_harness(env) or "claude-code"
@@ -172,13 +189,14 @@ def build_capture(
     env: Mapping[str, str],
     existing: UsageFile,
     *,
+    ambient: bool,
     require_sessions: bool = False,
 ) -> Capture | None:
     """This host's capture of `state`'s run, merged over its entry in
     `existing` — built in memory, written nowhere. `None` when
     `require_sessions` and there is no session at all. May raise: `capture`
     is the never-raising writer, `live_usage` the never-raising reader."""
-    pairs = candidates(state, env, repo_root)
+    pairs = candidates(state, env, repo_root, ambient=ambient)
     if require_sessions and not pairs:
         return None
     windows = windows_from_cursor(
@@ -217,7 +235,13 @@ def build_capture(
 
 
 def live_usage(
-    repo_root: Path, state: RunState, at: str, env: Mapping[str, str], file: UsageFile | None
+    repo_root: Path,
+    state: RunState,
+    at: str,
+    env: Mapping[str, str],
+    file: UsageFile | None,
+    *,
+    ambient: bool,
 ) -> UsageFile:
     """`file` with this host's capture replaced by a fresh reading, in memory
     (gh#680): what a capture here would write NOW. `deliver` renders its PR
@@ -227,7 +251,9 @@ def live_usage(
     reading leaves `file` as it was."""
     base = file or UsageFile(run=state.run)
     try:
-        live = build_capture(repo_root, state, at, env, base, require_sessions=True)
+        live = build_capture(
+            repo_root, state, at, env, base, ambient=ambient, require_sessions=True
+        )
     except Exception:  # noqa: BLE001 — a render is not hostage to observability
         return base
     return base if live is None else upsert_capture(base, live)
@@ -239,6 +265,7 @@ def capture(
     at: str,
     env: Mapping[str, str],
     *,
+    ambient: bool,
     path: Path | None = None,
     require_sessions: bool = False,
 ) -> Path | None:
@@ -250,7 +277,9 @@ def capture(
     target = path or usage_path(repo_root, state.run)
     try:
         existing = load_usage(target) or UsageFile(run=state.run)
-        new = build_capture(repo_root, state, at, env, existing, require_sessions=require_sessions)
+        new = build_capture(
+            repo_root, state, at, env, existing, ambient=ambient, require_sessions=require_sessions
+        )
         if new is None:
             return None
         from fr.artifacts.atomic import write_text_atomic

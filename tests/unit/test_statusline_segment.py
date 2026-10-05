@@ -280,3 +280,25 @@ def test_never_invokes_fr(world: World, tmp_path: Path) -> None:
         )
     )
     assert not log.exists()
+
+
+# A state file that names its worktree through a symlink still matches the
+# physical toplevel git reports — the comparison is by inode (`[ -ef ]`, no
+# subshell per state file; super-fr#456), not by spelling.
+def test_a_state_file_naming_the_worktree_through_a_symlink_still_matches(
+    world: World, tmp_path: Path
+) -> None:
+    alias = tmp_path / "alias-feat-x"
+    alias.symlink_to(world.featx)
+    save_state(
+        IsolationState(
+            repo_root=world.repo,
+            branch="feat/x",
+            worktree=alias,
+            profile="host",
+            created_at="2026-09-05T00:00:00+00:00",
+        )
+    )
+    state, branch, wt = _plain(world.run(world.featx, sid=None))
+    assert (state, branch) == ("fr", "branch: feat/x")
+    assert wt == f"worktree: {world.featx}"

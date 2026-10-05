@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.closeout import HeldSpec, Owed, OwedArtifacts, PlanSweep, owed_artifacts
 from fr.commands.common import (
@@ -350,7 +351,7 @@ def status_command(
     try:
         report = build_plan_report(plan_dir, gh)
     except PlanSchemaError as e:
-        err_console.print(f"parse error: {e}")
+        err_console.print(f"parse error: {escape(str(e))}")
         raise typer.Exit(5) from e
 
     # The nudge and `archive_ready` share one merge-evidence read (#544).

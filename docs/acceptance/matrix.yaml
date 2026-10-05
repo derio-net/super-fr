@@ -577,12 +577,13 @@ rows:
       - super-fr:tests/unit/test_init_scaffold.py
       - super-fr:tests/unit/test_isolation_cmd.py
       - super-fr:tests/integration/test_install_sh.py
-      - super-fr:tests/integration/test_install_validator_wrapper.py
       - super-fr:tests/unit/test_closeout_run_clean.py
     status: ci
     notes: 'Scaffold install/refusal, isolation fail-closed behavior, and installer-output
       cleanup are pinned per-PR. gh#826: the wrapper runs fr validate plans (bundled
-      validator) on any harness, falling back to the marketplace copy (test_closeout_run_clean.py).'
+      validator) on any harness, falling back to the marketplace copy (test_closeout_run_clean.py).
+      gh#619: the retired install-validator-wrapper.sh and its integration test are
+      deleted; fr init validator-wrapper is the remedy.'
   - id: migrate-creates-missing-spec-table
     capability: Migrate v1-to-v2
     acceptance: fr migrate v1-to-v2 creates the spec-s Implementation Plans table (canonical
@@ -4742,6 +4743,81 @@ rows:
     notes: Batch.skill (goal|debug), batch_branch/batch_workflow, the debug brief's
       fix/batch-<id> branch and Debugging rules block, --skill on create/edit, and mixed_themes'
       create/edit warning are exercised by the model, dispatch and verbs test files.
+  - id: drive-collect-carries-closed
+    capability: Backlog triage
+    acceptance: A drive pass never views a judged issue the previous facts already show
+      closed; it carries it with fresh PR links, an issue open again reads open, and
+      a fully closed merged batch stays merged.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_carried_closed_key_is_not_viewed
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_carried_key_that_reads_open_is_the_open_one_and_not_counted
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_merged_batch_stays_merged_after_its_members_are_carried
+    status: ci
+    notes: carried closed issues are not viewed; PR links recomputed; reopened reads
+      open; merged batch stays merged
+  - id: drive-collect-views-what-changed
+    capability: Backlog triage
+    acceptance: A drive pass views every judged issue that just left the open list,
+      was unviewed or never seen, and collects fully when no same-scope previous facts
+      are readable.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_an_unseen_key_and_a_carried_open_issue_are_viewed
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_collect_into_with_carry_views_when_the_previous_facts_are_no_use
+    status: ci
+    notes: unseen and carried-open keys are viewed; unusable previous facts collect
+      fully
+  - id: collect-stays-full
+    capability: Backlog triage
+    acceptance: fr triage collect never carries facts over; it views every judged issue
+      that is not open.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_the_collect_command_views_on_a_second_run_too
+    status: ci
+    notes: fr triage collect never carries
+  - id: drive-collect-cost-line
+    capability: Backlog triage
+    acceptance: Each drive pass prints one line naming the issues its collect viewed
+      and carried over.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_recollect_carries_a_known_closed_issue_over
+    status: ci
+    notes: recollect prints the collect cost line
+  - id: drive-pass-fast-on-settled-backlog
+    capability: Backlog triage
+    acceptance: On a repo with a large settled judged backlog, a drive pass after a
+      full collect takes seconds, not minutes, and fr triage check reports the same
+      settled count.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
+  - id: drive-carry-keeps-settled-set
+    capability: Backlog triage
+    acceptance: After drive passes that carried facts over, fr triage check reports
+      the same settled set as right after a full fr triage collect.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
@@ -5261,8 +5337,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_container_git_ownership.py
     status: ci
-    notes: safe.directory override on git_answer, update-index restore and record/apply
+    notes: 'safe.directory override on git_answer, update-index restore and record/apply
       git calls; proven in a foreign-owned linked worktree from root and subdirectory
+      super-fr#700: _run_git (repo_root/add/commit/status) shares the git_argv seam,
+      proven in the same foreign-owned worktree; the walk-up honours GIT_CEILING_DIRECTORIES
+      so fr never trusts a repository git would not open.'
   - id: scaffold-trusts-workspace
     capability: isolation-git-ownership
     acceptance: A scaffolded devcontainer profile trusts its own workspace path for
@@ -5299,7 +5378,12 @@ rows:
       revert reads missing (the same log call reads each commit''s patch; the branch''s
       patch inverted un-lands). Known limit: a revert of a branch that only ADDED files
       stays indistinguishable from a later deletion or a consumed fragment. Still unit-only
-      in tests/unit/test_isolation.py.'
+      in tests/unit/test_isolation.py. super-fr#757: a fast-forward landing later reverted
+      reads missing when fr recorded the branch''s start at up (IsolationState.base_sha
+      passed by verify-merge, gc and archive); with no surviving record it is indistinguishable,
+      as before. super-fr#715: a squash whose blob combined a concurrent base edit,
+      then rewritten, reads landed (the landing is recognised by its patch adding every
+      line the branch added).'
   - id: installed-fr-carries-every-runner
     capability: fr install (host install.sh + devcontainer POST_CREATE)
     acceptance: An installed fr loads every runner the workspace declares (fr.runners
@@ -5368,6 +5452,48 @@ rows:
     notes: 'Implemented in phase 1 of plan 2026-09-28-ui-visual-evidence: Visual model
       and validation, fr acceptance add --visual-*, set-status preserving it, record
       AcceptanceItem.visual; unit tests run in CI.'
+  - id: pages-acceptance-report-published
+    capability: acceptance-matrix
+    acceptance: A push to main touching explainers, acceptance or the acceptance renderer
+      redeploys the Pages site (visible under Deployments) with the acceptance report
+      at /acceptance/, freshly rendered with github links pinned to the deployed commit,
+      published even when rows are failing
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py
+      - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
+    status: skipped
+    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+    verify: post-merge
+  - id: pages-explainers-preserved
+    capability: acceptance-matrix
+    acceptance: Publishing the acceptance report keeps every explainer page at its current
+      URL, because one workflow deploys both in a single Pages artifact
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py
+    status: skipped
+    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+    verify: post-merge
+  - id: pages-acceptance-report-discoverable
+    capability: acceptance-matrix
+    acceptance: The explainers landing page links to the published acceptance report
+      and the README carries a badge pointing at it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py#test_index_links_to_acceptance_report
+      - super-fr:tests/unit/test_pages_workflow.py#test_readme_has_acceptance_badge
+    status: ci
+    notes: Index link and README badge pinned by unit tests.
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
@@ -5677,6 +5803,148 @@ rows:
     status: ci
     notes: Record chain reaches 7 hop by hop through the frozen RecordV6; delegated
       dropped; unconfirmed left byte-identical and reported; RecordV6 source pinned.
+  - id: opencode-run-session
+    capability: fr-goal on OpenCode
+    acceptance: On OpenCode, the super-fr plugin hands fr the run's session id, advance
+      records the top-level session on the attempt, and fr run cost and the PR's Cost
+      table show the run's real figures
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_advance_from_a_child_session_records_the_run_session
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_an_opencode_runs_own_session_fills_the_cost_table
+      - super-fr:packages/fr-opencode-plugin/test/session.test.ts
+    status: ci
+    notes: 'R1/R2: advance records the root OpenCode session (from a child''s id too),
+      plugin shell.env export, real cost on the fixture run (phase 1); live run owed
+      by opencode-observe-take10-rerun'
+  - id: opencode-child-dispatch
+    capability: fr-goal on OpenCode
+    acceptance: On OpenCode, fr maps each dispatch to its child session, fills an unclaimed
+      holder from the single matching child, and refuses a reviewer id that names no
+      dispatched child or names a phase executor
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_an_invented_reviewer_id_is_refused_at_the_phase_review_on_opencode
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_a_tiered_opencode_phase_executor_is_never_a_reviewer
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_the_one_observed_executor_child_becomes_the_holder
+    status: ci
+    notes: 'R5/R6: holder fill from the one observed child, invented and executor reviewer
+      ids refused on OpenCode (phase 2)'
+  - id: opencode-observe-take10-rerun
+    capability: fr-goal on OpenCode
+    acceptance: Re-running take 10 run B's shape on OpenCode with this release, the
+      invented reviewer and the missing answered_by are refused or corrected and the
+      Cost table has real numbers
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
+  - id: run-cost-positive-attribution
+    capability: usage
+    acceptance: fr run cost --recompute and fr archive's capture attribute a session
+      to a run only when an attempt or workspace binding names it, and say unavailable
+      rather than show a foreign session's figures
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_recompute_never_adds_the_callers_session
+      - super-fr:tests/unit/test_run_cost_cmd.py#test_the_archive_capture_adds_no_ambient_session
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_advance_records_no_session_when_no_harness_owns_one
+    status: ci
+    notes: 'R3/#848: recompute and archive never add the caller''s session; no evidence
+      reads unavailable (phase 1)'
+  - id: session-observer-protocol
+    capability: transcript gates
+    acceptance: Every transcript gate reads the harness through one session protocol
+      with a Claude Code and an OpenCode backend, keeping the could-not-read / found-nothing
+      distinction
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_opencode.py
+      - super-fr:tests/unit/test_run_observed_claude_code.py
+    status: ci
+    notes: 'R4: both backends behind one protocol, three-valued contract pinned on fixtures
+      (phase 1)'
+  - id: review-phase-findings-block
+    capability: review-phase
+    acceptance: A review-phase resolve is refused when a reviewer's returned findings
+      block is missing, ambiguous, or names a finding the plan journal lacks, and the
+      PR body lists every review-phase finding with its resolution
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_review_return_resolve.py
+      - super-fr:tests/unit/test_run_review_return.py
+    status: ci
+    notes: 'R7/R8: review-findings returns checked against the plan journal on OpenCode
+      and Claude Code; PR body renders them (phase 2); first live use: this run''s own
+      phase 2/3 reviews'
+  - id: opencode-operator-answers
+    capability: operator gate
+    acceptance: On OpenCode, fr reads answered question-tool rounds from opencode.db
+      and verifies the operator gate as on Claude Code; the fr-goal skill and parity.yaml
+      describe the tool
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_gate_opencode.py
+      - super-fr:tests/unit/test_fr_goal_opencode_prose.py
+    status: ci
+    notes: 'R9: fixture-backed resolve tests read answered question rounds from the
+      OpenCode run session; skill and parity.yaml updated in phase 3'
+  - id: answered-by-no-default
+    capability: operator gate
+    acceptance: An operator gate fr cannot observe, resolved without answered_by, is
+      refused naming both values, and fr run gates/check say claimed-and-unobserved
+      instead of 'no operator answered it'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_answered_by_no_default.py
+    status: ci
+    notes: 'R10/R11: no default at the record form, the flag form and the in-process
+      body; gates/check wording distinguishes observed from claimed'
+  - id: opencode-visual-reads
+    capability: visual evidence
+    acceptance: On OpenCode, the visual witness observes screenshot reads and capture-script
+      runs in the owing session only
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_visual.py
+    status: ci
+    notes: 'R12: witness reads OpenCode read/bash parts of the owing session (fixture)'
+  - id: parity-observe-declarations
+    capability: harness parity
+    acceptance: parity.yaml declares the OpenCode observation cells partial with a run-session-identity
+      row, and the Hermes edit gate partial for its shell-write gap, and fr harness
+      parity --check passes
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_harness_matrix.py
+    status: ci
+    notes: 'R13/R14: OpenCode observation rows partial, run-session-identity row, Hermes
+      edit gate partial; parity --check passes'
   - id: batch-waves-and-deps
     capability: triage-batch-drive
     acceptance: An operator can give a triage batch a wave and prerequisite batches,

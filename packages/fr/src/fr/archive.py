@@ -541,9 +541,11 @@ def archive_run_cursor(repo_root: Path, run_id: str) -> None:
 
 
 def _archive_usage(repo_root: Path, cursor: Path, run_id: str) -> None:
-    """Capture the closeout session into the run's usage file, then move the
-    file to implemented/usage/ with the plan (spec 2026-09-25 §5.B.3). The
-    capture never fails the archive; the move is staged like every other."""
+    """Capture the run's evidenced sessions into its usage file, then move the
+    file to implemented/usage/ with the plan (spec 2026-09-25 §5.B.3). Never the
+    closeout process's own session: whoever closes a run out is not evidence
+    that it ran in their session (spec 2026-10-02-opencode-observe-2 §C, #848).
+    The capture never fails the archive; the move is staged like every other."""
     import os
 
     from fr.usage.capture import capture
@@ -558,7 +560,7 @@ def _archive_usage(repo_root: Path, cursor: Path, run_id: str) -> None:
     except (OSError, RunStateError):
         state = None
     if state is not None:
-        written = capture(repo_root, state, "closeout", os.environ)
+        written = capture(repo_root, state, "closeout", os.environ, ambient=False)
         if written is not None:
             _note_unpriced(written, state, os.environ)
     if not src.exists():

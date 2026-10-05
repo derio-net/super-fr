@@ -451,7 +451,17 @@ def _at_the_spec_review(
     start = ["run", "start", "specshape", "--branch", "b", "--run-id", "r1"]
     assert _run(repo, shipped, start, root, session).exit_code == 0
     assert _run(repo, shipped, ["run", "advance", "r1"], root, session).exit_code == 0
-    brainstorm = ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done"]
+    brainstorm = [
+        "run",
+        "resolve",
+        "r1",
+        "--step",
+        "brainstorm",
+        "--state",
+        "done",
+        "--answered-by",
+        "agent",
+    ]
     result = _run(repo, shipped, [*brainstorm, "--emitted", f"spec={_SPEC_REL}"], root, session)
     assert result.exit_code == 0, result.output
     assert _run(repo, shipped, ["run", "advance", "r1"], root, session).exit_code == 0
@@ -767,12 +777,13 @@ def test_p4_f3_the_review_date_is_compared_in_utc_east_and_west(
         assert "before this step opened" in _squash(result.output)
 
 
-@pytest.mark.parametrize("harness", ["opencode", "hermes"])
+@pytest.mark.parametrize("harness", ["hermes"])
 def test_an_unobservable_reviewer_names_dispatches_not_questions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
 ) -> None:
     """#815: the reviewer gate reads subagent dispatches, so its reason must
-    not borrow the operator gate's `questions` wording."""
+    not borrow the operator gate's `questions` wording. (OpenCode has a reader
+    now; its wording names the missing session export — below.)"""
     from fr.commands import run_cmd
 
     for key in ("CLAUDECODE", "CLAUDE_PLUGIN_ROOT"):
@@ -785,3 +796,22 @@ def test_an_unobservable_reviewer_names_dispatches_not_questions(
     assert run_cmd._why_unobservable("questions") == (
         f"fr has no transcript reader for {harness}'s questions"
     )
+
+
+@pytest.mark.parametrize("exported", [None, "ses_run"])
+def test_an_unobservable_opencode_reviewer_names_dispatches_not_questions(
+    monkeypatch: pytest.MonkeyPatch, exported: str | None
+) -> None:
+    """#815 on OpenCode: whether the session export is missing or names a
+    session fr could not read, the reason names the gate's own noun."""
+    from fr.commands import run_cmd
+
+    for key in ("CLAUDECODE", "CLAUDE_PLUGIN_ROOT", "FR_OPENCODE_SESSION_ID"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("FR_HARNESS", "opencode")
+    if exported is not None:
+        monkeypatch.setenv("FR_OPENCODE_SESSION_ID", exported)
+
+    dispatches = run_cmd._why_unobservable("subagent dispatches")
+    assert "subagent dispatches" in dispatches and "questions" not in dispatches
+    assert "FR_OPENCODE_SESSION_ID" in dispatches

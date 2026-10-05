@@ -4,11 +4,12 @@ captures:
 - host: h-545135b0
   harness: claude-code
   mode: devcontainer
-  captured_at: '2026-09-26T15:17:07+00:00'
+  captured_at: '2026-10-04T05:15:23+00:00'
   at:
   - resolve:brainstorm
   - deliver
   - closeout
+  - backfill
   sessions:
   - session: f1908e55-5b1f-462c-a1bc-d4f8124c1a63
     role: main
@@ -18,36 +19,43 @@ captures:
         cache_write: 655041
         cache_read: 13274374
         output: 38658
-        usd: null
-        usd_source: none
+        usd: 5.559785899999999
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.0015429999999999999
+        usd_source: exact
     activity:
       implementation:
-        usd: null
+        usd: 1.7623186202423369
         turns: 44
       other:
-        usd: null
+        usd: 2.1270194842322514
         turns: 42
       paperwork:
-        usd: null
+        usd: 1.6719907955254083
         turns: 37
     steps:
       (outside run):
-        usd: null
+        usd: 0.4389241826048664
         turns: 4
       brainstorm:
-        usd: null
+        usd: 0.5028783848712415
         turns: 13
       spec-review:
-        usd: null
+        usd: 0.3951044617233569
         turns: 11
       plan:
-        usd: null
+        usd: 0.2889012882148522
         turns: 6
       implement:
-        usd: null
+        usd: 2.421203323256295
         turns: 52
       deliver:
-        usd: null
+        usd: 1.5143172593293872
         turns: 34
     briefs:
       aa7e8eb08000d4d91: 1118
@@ -57,20 +65,27 @@ captures:
     role: main
     models:
       claude-sonnet-5:
-        input: 28
-        cache_write: 82643
-        cache_read: 1306430
-        output: 6199
-        usd: null
-        usd_source: none
+        input: 50
+        cache_write: 89218
+        cache_read: 2555713
+        output: 10525
+        usd: 1.025667
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001457
+        usd_source: exact
     activity:
       other:
-        usd: null
-        turns: 10
+        usd: 0.6740332496667742
+        turns: 18
       paperwork:
-        usd: null
-        turns: 6
+        usd: 0.3530907503332255
+        turns: 9
     steps:
       (outside run):
-        usd: null
-        turns: 14
+        usd: 1.0271239999999997
+        turns: 25

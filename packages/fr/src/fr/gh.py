@@ -7,6 +7,7 @@ we leverage gh's existing auth.
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import time
 from collections.abc import Callable
@@ -33,15 +34,28 @@ class GhError(Exception):
         self.stdout = stdout
 
 
+GH_TIMEOUT_SECONDS = 120.0
+"""How long one `gh` call may take before it is killed and fails as a transient
+error. A stalled GraphQL call otherwise blocks its caller indefinitely: the wave
+driver's loop once sat 16 minutes on a single `gh issue list` (gh#909)."""
+
+
 def _run_gh(args: list[str]) -> str:
-    """Run a gh command and return stdout.  Raises GhError on failure."""
+    """Run a gh command and return stdout.  Raises GhError on failure, and on a
+    call that outlives `GH_TIMEOUT_SECONDS` (transient: `is_transient` is true)."""
     try:
         result = subprocess.run(
             ["gh", *args],
             capture_output=True,
             text=True,
             check=True,
+            timeout=GH_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise GhError(
+            f"`{shlex.join(['gh', *args])}` timed out after {GH_TIMEOUT_SECONDS:g}s",
+            stderr=f"timeout after {GH_TIMEOUT_SECONDS:g}s",
+        ) from exc
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
         raise GhError(
@@ -290,8 +304,11 @@ ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body"
 # `fr triage origins` alone needs how an issue ended; `stateReason` wants a newer gh, so no
 # other issue-list verb asks for it.
 ORIGINS_ISSUE_LIST_FIELDS = ISSUE_LIST_FIELDS + ",state,closedAt,stateReason"
+# `author` and `isCrossRepository` are who opened a PR and whether from a fork: a batch
+# PR is attributed by them, never by its head branch name alone (gh#936).
 PR_LIST_FIELDS = (
-    "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences"
+    "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences,"
+    "author,isCrossRepository"
 )
 OPEN_PR_LIST_FIELDS = (
     PR_LIST_FIELDS + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision,headRefOid"
@@ -369,9 +386,8 @@ def list_open_prs(*, repo: str, limit: int) -> list[dict[str, object]]:
 
 
 def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[str, object]]:
-    """Every PR (any state) whose head is *branch*: `PR_LIST_FIELDS` plus `headRefOid`,
-    `files` (the wave driver attributes a merged archive PR by them) and
-    `isCrossRepository` (`--head` matches a fork's branch of the same name too)."""
+    """Every PR (any state) whose head is *branch*: `PR_LIST_FIELDS` plus `headRefOid`
+    and `files` (the wave driver attributes a merged archive PR by them)."""
     import json
 
     out = _run_gh(
@@ -387,7 +403,7 @@ def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[s
             "--limit",
             str(limit),
             "--json",
-            PR_LIST_FIELDS + ",headRefOid,files,isCrossRepository",
+            PR_LIST_FIELDS + ",headRefOid,files",
         ]
     )
     return json.loads(out) if out else []
@@ -419,6 +435,11 @@ def count_issues_with_label(*, repo: str, name: str) -> int:
         ]
     )
     return len(json.loads(out)) if out else 0
+
+
+def viewer_login() -> str:
+    """The login of the user `gh` is authenticated as."""
+    return _run_gh(["api", "user", "--jq", ".login"])
 
 
 def auth_status() -> bool:
