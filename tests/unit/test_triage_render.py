@@ -540,3 +540,15 @@ def test_a_truncation_note_names_its_list_in_plain_words_and_its_remedy(
     assert f"The {source} list" not in notes.group(1)
     if source != "prs":
         assert "--" not in notes.group(1), "no flag exists for this list: none may be named"
+
+
+# ------------------------------------------------ the board link (batch-board R13)
+
+
+def test_the_batches_section_links_the_board_only_when_asked() -> None:
+    from tests.unit.triage_board_fixtures import busy
+
+    facts, judgements = busy()
+    assert 'href="board.html"' in render(facts, judgements, board=True)
+    assert "board.html" not in render(facts, judgements)
+    assert "board.html" not in render(facts, judgements, board=False)
