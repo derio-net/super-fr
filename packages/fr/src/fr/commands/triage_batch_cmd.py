@@ -49,6 +49,7 @@ from rich.markup import escape
 
 from fr._hosts import backend_for_url
 from fr.acceptance.ci import CI_CONFIG_PATHS
+from fr.commands import triage_kanban_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
@@ -60,7 +61,6 @@ from fr.commands.triage_cmd import (
     console,
     err_console,
 )
-from fr.commands import triage_kanban_cmd
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
