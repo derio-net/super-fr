@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr run advance briefs carry `unbound_tiers` (the active harness's unbound model tiers), and fr-goal asks its model-per-tier question from that key instead of a remembered `fr models resolve` (gh#538)"

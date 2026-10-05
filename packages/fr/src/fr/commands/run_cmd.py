@@ -3016,7 +3016,27 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         # spec 2026-09-25 §5.C.3: the pre-filled step record — for a flat
         # step; a fan-out group's record is per member, in the member brief.
         "record": None if step.steps else _record_brief(state, step),
+        "unbound_tiers": _unbound_tiers(resolve_repo_root()),
     }
+
+
+def _unbound_tiers(repo_root: Path) -> list[str] | None:
+    """The phase tiers with no model bound for the harness `advance` runs
+    under, in `PHASE_TIERS` order — `None` when no harness is detected (or
+    `FR_HARNESS` is invalid, which the gate path reports itself): an empty
+    list would read as "every tier is bound".
+
+    gh#538: fr-goal's model-per-tier question was gated on a `fr models
+    resolve` the orchestrator had to REMEMBER to run, and on a real OpenCode
+    run with nothing bound it never ran it. fr answers it in one lookup, so the
+    brief states it and the question is triggered by data, not recall."""
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        return None
+    if harness is None:
+        return None
+    return [t for t in PHASE_TIERS if _resolved_model(repo_root, harness, t) is None]
 
 
 def _caller_evidence(step: Step) -> list[str]:
