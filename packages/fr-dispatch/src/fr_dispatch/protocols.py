@@ -24,7 +24,7 @@ lets one bad call kill the loop (apply's doctrine).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -116,6 +116,25 @@ class Runner(Protocol):
         2026-09-25-triage-batches §3.C records it in the batch's dispatch
         event); `tick` ignores it, and a runner with none returns None.
         """
+        ...
+
+
+CloseOutcome = Literal["closed", "busy", "absent"]
+"""What `SessionCloser.close` did: sessions gone, still working, or none held."""
+
+
+@runtime_checkable
+class SessionCloser(Protocol):
+    """An optional second protocol: a runner that can close what it dispatched.
+
+    Beside `Runner`, never part of it, so a runner without live sessions (vk,
+    cncd) needs no edit. `closed`: the item's sessions are gone now. `busy`:
+    at least one is still working; nothing was closed. `absent`: the runner
+    holds nothing for the item. Raising is a failed close.
+    """
+
+    def close(self, item: WorkItem) -> CloseOutcome:
+        """Close the item's sessions, unless one is still working."""
         ...
 
 

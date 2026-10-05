@@ -22,12 +22,19 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from fr_dispatch.protocols import SessionCloser
 from fr_dispatch.work_item import RUN_PAYLOAD_KEYS, WorkItem, run_item_id
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
 
-__all__ = ["RUN_PAYLOAD_KEYS", "check_constructible", "check_run_unit_contract", "run_item"]
+__all__ = [
+    "RUN_PAYLOAD_KEYS",
+    "check_close_contract",
+    "check_constructible",
+    "check_run_unit_contract",
+    "run_item",
+]
 
 
 def run_item(
@@ -102,3 +109,20 @@ def check_run_unit_contract(runner: Runner, item: WorkItem, *, sent: Callable[[]
         _require(
             value in text, f"dispatch did not pass the payload's {key} ({value!r}) to its backend"
         )
+
+
+def check_close_contract(runner: object, item: WorkItem) -> None:
+    """Assert *runner* is a `SessionCloser` and reports `absent` for an item it holds nothing for.
+
+    *item* must be one the runner does not hold: closing it is the probe.
+    """
+    _require(
+        isinstance(runner, SessionCloser),
+        f"{type(runner).__name__} is not a SessionCloser: it has no close(item)",
+    )
+    outcome = runner.close(item)  # type: ignore[attr-defined]
+    _require(
+        outcome == "absent",
+        f"close({item.id}) returned {outcome!r} for an item the runner does not hold; "
+        "the contract is 'absent'",
+    )

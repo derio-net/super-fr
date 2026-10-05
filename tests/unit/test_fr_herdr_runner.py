@@ -322,3 +322,93 @@ def test_preflight_needs_no_workspace_id_when_every_item_has_a_group(
 def test_the_runner_passes_the_run_unit_contract(herdr: _Herdr) -> None:
     check_constructible(HerdrRunner)
     check_run_unit_contract(HerdrRunner.from_env(), _item(), sent=herdr.text)
+
+
+# ---------------------------------------------------------------------- close
+
+
+def _tabs(*tabs: tuple[str, str, str, str]) -> dict[str, Any]:
+    """A tab list of `(tab_id, workspace_id, label, agent_status)`."""
+    return {
+        "result": {
+            "type": "tab_list",
+            "tabs": [
+                {"tab_id": t, "workspace_id": w, "label": lbl, "agent_status": st}
+                for t, w, lbl, st in tabs
+            ],
+        }
+    }
+
+
+def _closes(herdr: _Herdr) -> list[list[str]]:
+    return [c for c in herdr.calls if c[1:2] == ["close"]]
+
+
+def test_close_is_absent_when_no_tab_carries_the_item_id(herdr: _Herdr) -> None:
+    herdr.listing = _tabs(("w2:t1", "w2", "other", "idle"))
+    assert HerdrRunner.from_env().close(_item()) == "absent"
+    assert _closes(herdr) == []
+
+
+@pytest.mark.parametrize("status", ["working", "blocked"])
+def test_close_is_busy_for_a_working_or_blocked_tab_and_closes_nothing(
+    herdr: _Herdr, status: str
+) -> None:
+    item = _item()
+    herdr.listing = _tabs(("w9:t1", "w9", item.id, "idle"), ("w9:t2", "w9", item.id, status))
+    assert HerdrRunner.from_env().close(item) == "busy"
+    assert _closes(herdr) == []
+
+
+@pytest.mark.parametrize("status", ["idle", "done", "unknown"])
+def test_close_closes_a_settled_tab_by_id(herdr: _Herdr, status: str) -> None:
+    item = _item()
+    herdr.listing = _tabs(("w2:t7", "w2", item.id, status), ("w2:t8", "w2", "other", "idle"))
+    assert HerdrRunner.from_env().close(item) == "closed"
+    assert _closes(herdr) == [["tab", "close", "w2:t7"]]
+
+
+def test_close_closes_the_group_workspace_of_a_lone_tab(herdr: _Herdr) -> None:
+    item = _grouped()
+    herdr.listing = _tabs(("w9:t1", "w9", item.id, "idle"))
+    herdr.workspaces = _ws("drive-wave-1", "w9")
+    assert HerdrRunner.from_env().close(item) == "closed"
+    assert _closes(herdr) == [["workspace", "close", "w9"]]
+
+
+def test_close_never_closes_the_runners_own_workspace(herdr: _Herdr) -> None:
+    item = _grouped()
+    herdr.listing = _tabs(("w2:t1", "w2", item.id, "idle"))
+    herdr.workspaces = _ws("drive-wave-1", "w2")
+    assert HerdrRunner.from_env().close(item) == "closed"
+    assert _closes(herdr) == [["tab", "close", "w2:t1"]]
+
+
+def test_close_leaves_a_lone_tabs_workspace_of_another_label_open(herdr: _Herdr) -> None:
+    item = _grouped()
+    herdr.listing = _tabs(("w9:t1", "w9", item.id, "idle"))
+    herdr.workspaces = _ws("somebody-elses", "w9")
+    assert HerdrRunner.from_env().close(item) == "closed"
+    assert _closes(herdr) == [["tab", "close", "w9:t1"]]
+
+
+def test_close_keeps_the_workspace_when_it_holds_other_tabs(herdr: _Herdr) -> None:
+    item = _grouped()
+    herdr.listing = _tabs(("w9:t1", "w9", item.id, "idle"), ("w9:t2", "w9", "sibling", "working"))
+    herdr.workspaces = _ws("drive-wave-1", "w9")
+    assert HerdrRunner.from_env().close(item) == "closed"
+    assert _closes(herdr) == [["tab", "close", "w9:t1"]]
+
+
+def test_close_without_a_group_never_lists_workspaces(herdr: _Herdr) -> None:
+    item = _item()
+    herdr.listing = _tabs(("w9:t1", "w9", item.id, "idle"))
+    assert HerdrRunner.from_env().close(item) == "closed"
+    assert not any(c[:2] == ["workspace", "list"] for c in herdr.calls)
+
+
+def test_herdr_meets_the_close_contract(herdr: _Herdr) -> None:
+    from fr_dispatch.testing import check_close_contract
+
+    herdr.listing = _tabs(("w2:t1", "w2", "other", "idle"))
+    check_close_contract(HerdrRunner.from_env(), _item())

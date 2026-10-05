@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
+    from fr_dispatch.protocols import CloseOutcome
     from fr_dispatch.work_item import WorkItem
 
 
@@ -129,9 +130,37 @@ class HerdrRunner:
         return 1
 
     def existing_dispatches(self, items: Sequence[WorkItem]) -> set[str]:
-        listing = _run_herdr(["tab", "list"])
-        labels = {t.get("label") for t in listing.get("result", {}).get("tabs", [])}
+        labels = {t.get("label") for t in _list_tabs()}
         return {item.id for item in items if item.id in labels}
+
+    def close(self, item: WorkItem) -> CloseOutcome:
+        """Close the item's tabs, unless one is working or blocked (spec §B; R8, R9).
+
+        A lone tab is closed by closing its workspace only when that
+        workspace's label is the item's group and it is not this runner's own
+        workspace; every other tab goes with `tab close`.
+        """
+        tabs = _list_tabs()
+        mine = [t for t in tabs if t.get("label") == item.id]
+        if not mine:
+            return "absent"
+        if any(t.get("agent_status") in _BUSY for t in mine):
+            return "busy"
+        group = item.payload.get("group")
+        for tab in mine:
+            workspace = tab.get("workspace_id")
+            lone = sum(1 for t in tabs if t.get("workspace_id") == workspace) == 1
+            if (
+                group
+                and lone
+                and workspace
+                and workspace != self.workspace_id
+                and _workspace_label(str(workspace)) == group
+            ):
+                _run_herdr(["workspace", "close", str(workspace)])
+            else:
+                _run_herdr(["tab", "close", str(tab["tab_id"])])
+        return "closed"
 
     def can_dispatch(self, item: WorkItem) -> bool:
         return item.unit in self.units and item.payload.get("harness") in HARNESSES
@@ -234,12 +263,34 @@ def _root_pane(created: dict[str, Any], what: str) -> str:
         raise HerdrError(f"herdr {what} returned no root pane: {created!r}") from exc
 
 
+_BUSY = frozenset({"working", "blocked"})
+"""`agent_status` values that mean a session is mid-work: never closed."""
+
+
+def _list_tabs() -> list[dict[str, Any]]:
+    """Every tab of every workspace (`herdr tab list`, no `--workspace`)."""
+    result = _run_herdr(["tab", "list"]).get("result")
+    tabs = result.get("tabs", []) if isinstance(result, dict) else []
+    return [t for t in tabs if isinstance(t, dict)]
+
+
+def _list_workspaces() -> list[dict[str, Any]]:
+    result = _run_herdr(["workspace", "list"]).get("result")
+    workspaces = result.get("workspaces", []) if isinstance(result, dict) else []
+    return [w for w in workspaces if isinstance(w, dict)]
+
+
+def _workspace_label(workspace_id: str) -> str | None:
+    for ws in _list_workspaces():
+        if ws.get("workspace_id") == workspace_id:
+            label = ws.get("label")
+            return str(label) if label is not None else None
+    return None
+
+
 def _group_workspace(label: str) -> str | None:
     """The id of the first workspace labelled *label*, if any."""
-    listing = _run_herdr(["workspace", "list"])
-    result = listing.get("result")
-    workspaces = result.get("workspaces", []) if isinstance(result, dict) else []
-    for ws in workspaces:
+    for ws in _list_workspaces():
         if isinstance(ws, dict) and ws.get("label") == label and ws.get("workspace_id"):
             return str(ws["workspace_id"])
     return None
@@ -277,8 +328,9 @@ def _close_workspace(workspace: str | None) -> None:
 
 
 if TYPE_CHECKING:
-    from fr_dispatch.protocols import Runner
+    from fr_dispatch.protocols import Runner, SessionCloser
 
     # Conformance check: `Runner` is not runtime-checkable, so this assignment is
     # what makes CI's mypy fail when a signature here drifts from the protocol.
     _conforms: Runner = HerdrRunner()
+    _closes: SessionCloser = HerdrRunner()
