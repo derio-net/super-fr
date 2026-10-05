@@ -169,3 +169,68 @@ scope_args is the one scope-arg builder; focus builds no scope args, so the driv
 ### no-refactor-p2-t7 · discovery · no-refactor-because P2.T7 (phase 2)
 
 browser check and matrix moves only; no code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-10-05T21:16:47+00:00 phase=2 -->
+### review-p2 · review · phase 2 code + visual review: 5 in-scope low findings, 1 out-of-scope (phase 2)
+
+Independent reviewer approved with minor fixes p2-r1..p2-r5 (fixed) and p2-r6 (out of scope); it drove the page itself in Chrome (light/dark, 375/1000px, scripts off, clipboard removed/denied, close-out copy, auto-refresh) and opened every fresh shot.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-05T21:16:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · write_board reload test could never fail (phase 2)
+
+Test now asserts card-b1 sits in the proposed column, then in running (and not proposed) after judgements change on disk, via a _column() section extractor.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-05T21:16:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · unknown asserted via note text, not the card pill (phase 2)
+
+Test asserts the status-unknown pill inside the running column.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-05T21:16:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · board_command re-loaded state just to count batches (phase 2)
+
+write_board returns (path, card count) from the one load; command prints that.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-05T21:16:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · relative --dir copied verbatim (phase 2)
+
+scope_args resolves --dir to an absolute path; test_a_relative_dir_is_copied_as_an_absolute_path.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-05T21:16:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · command wrap split tokens (phase 2)
+
+code.cmd uses overflow-wrap: break-word.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-05T21:16:47+00:00 phase=2 state=open review_scope=out -->
+### p2-r6 · finding [open] (reviewer: out of scope) · partial batch in Done shows a close-out hint (phase 2)
+
+Reviewer: R2 puts partial in Done while the driver still emits close-out due for it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-05T21:16:47+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: write_board reload test could never fail (phase 2)
+
+Test now asserts card-b1 sits in the proposed column, then in running (and not proposed) after judgements change on disk, via a _column() section extractor.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-05T21:16:47+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: unknown asserted via note text, not the card pill (phase 2)
+
+Test asserts the status-unknown pill inside the running column.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-05T21:16:47+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: board_command re-loaded state just to count batches (phase 2)
+
+write_board returns (path, card count) from the one load; command prints that.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-05T21:16:47+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: relative --dir copied verbatim (phase 2)
+
+scope_args resolves --dir to an absolute path; test_a_relative_dir_is_copied_as_an_absolute_path.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-05T21:16:47+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: command wrap split tokens (phase 2)
+
+code.cmd uses overflow-wrap: break-word.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-05T21:16:47+00:00 phase=2 state=open resolves=p2-r6 out_of_scope=true -->
+### p2-r6-resolved · finding [out-of-scope] · resolves p2-r6: partial batch in Done shows a close-out hint (phase 2)
+
+Not a defect of this change: operator decision d2 put partial in Done, and spec-review finding sr-4 deliberately kept a partial card's live hint, status and jump buttons until its close-out finishes, so the board reports the driver faithfully. Changing the column table would be a new operator decision.
