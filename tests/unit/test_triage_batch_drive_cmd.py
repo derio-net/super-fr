@@ -124,7 +124,8 @@ class World:
         self.calls.append(f"pr_view {number}")
         p = self.prs[number]
         view = {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
-        return {**view, "merge_commit": p.get("merge_commit", f"merge-{number}")}
+        merge = p.get("merge_commit", f"merge-{number}")
+        return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge}
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
@@ -2860,3 +2861,54 @@ def test_a_reused_pr_with_nothing_to_export_is_left_open_with_one_stale_warn(
     assert world.prs[40]["state"] == "OPEN"
     code, out = _export_drive(state, "--once", "--yes")
     assert _lines(out, "warn") == []  # said once
+
+
+# ---------------------------------- the base branch (p4-r15) and extra orphans (p4-r16)
+
+
+def test_a_retargeted_recorded_export_pr_is_never_merged(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """p4-r15: its base moved off the default branch; the driver warns and merges nothing."""
+    sha = _export_pr(world, git_checkout.path, base="release/1.x")
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert "is based on release/1.x, not main" in out
+    assert not any(c.startswith("pr_merge") for c in world.calls)
+    assert world.merged == []
+
+
+def test_an_orphan_based_on_another_branch_is_not_reused_and_nothing_is_pushed(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    clone = git_checkout.path
+    sha = _export_pr(world, clone, base="release/1.x")
+    state = _finished_wave(tmp_path, world)
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert "is based on release/1.x, not main" in out
+    remote = _git(clone, "ls-remote", "origin", f"refs/heads/{EXPORT_HEAD}")
+    assert remote.split()[0] == sha  # nothing pushed over it
+    assert _exports(state) == []
+    assert not any(c.startswith("pr_create") for c in world.calls)
+
+
+def test_extra_orphans_are_warned_stale_once_each(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout, sleeps: list[float]
+) -> None:
+    """p4-r16: PR #40 (wave 1) is reused; #45 on another wave's branch is named stale."""
+    _export_pr(world, git_checkout.path)
+    world.pr(45, "chore/triage-state-wave-0", [], head_oid="e" * 40)
+    state = _finished_wave(tmp_path, world)
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    (stale,) = [ln for ln in _lines(out, "warn") if "stale" in ln]
+    assert "PR #45" in stale and "safe to close" in stale and "PR #40" in stale
+    assert _exports(state) == [("1", 40, False)]

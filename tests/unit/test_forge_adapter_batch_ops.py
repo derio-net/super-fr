@@ -102,18 +102,21 @@ def test_pr_view_shapes_state_draft_head_oid_and_mergeable(
         "isDraft": True,
         "headRefOid": "abc123",
         "headRefName": "feat/batch-x",
+        "baseRefName": "main",
         "mergeable": "MERGEABLE",
         "mergeStateStatus": "BEHIND",
     }
-    _fake(monkeypatch, {("pr", "view"): json.dumps(raw)})
+    fake = _fake(monkeypatch, {("pr", "view"): json.dumps(raw)})
 
     view = RealGhClient().pr_view(REPO, 12)
 
+    assert "baseRefName" in fake.calls[0][fake.calls[0].index("--json") + 1].split(",")  # p4-r15
     assert view == {
         "state": "OPEN",
         "draft": True,
         "head_oid": "abc123",
         "head_ref": "feat/batch-x",
+        "base_ref": "main",
         "mergeable": "MERGEABLE",
         "merge_state": "BEHIND",
         "merge_commit": "",

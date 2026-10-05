@@ -94,6 +94,9 @@ class LivePr:
     # From the repo itself, by an allowed author (`fr.triage.batch.distrust`). False
     # unless the command checked it: an archive PR is attributed only when True (gh#936).
     trusted: bool = False
+    # The branch the PR merges into, as the forge says now; "" when not read. An export
+    # PR is reused or merged only into the default branch (p4-r15).
+    base: str = ""
 
 
 @dataclass(frozen=True)
@@ -148,6 +151,8 @@ class Snapshot:
     # recording (p4-r3), or a reopened PR recorded closed. Cross-repo PRs never appear
     # here (p4-r7). The export reuses one; it never adopts its content (p4-r12).
     export_orphans: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)
+    # repo -> its default branch: the only base an export PR may have (p4-r15)
+    export_default: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -464,8 +469,16 @@ def export_target(
     return ExportTarget(repo, owed[-1], tuple(owed), None)
 
 
+def _wrong_base(live: LivePr, default: str) -> str:
+    """Why *live* is not based on the default branch, or "" (p4-r15). An unknown base
+    is never the default."""
+    if default and live.base == default:
+        return ""
+    return f"is based on {live.base or 'an unknown branch'}, not {default or 'the default branch'}"
+
+
 def _export_row(
-    repo: str, wave: str, done: Export | None, live: LivePr | None, root: str
+    repo: str, wave: str, done: Export | None, live: LivePr | None, root: str, default: str = ""
 ) -> tuple[Action | None, ExportCount]:
     """One row of §I's table: the action for *repo*'s finished *wave*, given its
     recorded export (*done*), the live PR and the export directory *root*
@@ -478,10 +491,11 @@ def _export_row(
     if done is None:
         if live is None or live.state != "OPEN":
             return Action("export", repo, f"to {root} on {head}", wave=wave), "closing"
-        if not live.trusted:
-            return Action("warn", repo, f"PR #{live.number} on {head} is not trusted (not "
-                          "from this repo by an allowed author); it is never reused or merged",
-                          pr=live.number, wave=wave), "blocked"  # fmt: skip
+        why = "" if live.trusted else "is not trusted (not from this repo by an allowed author)"
+        why = why or _wrong_base(live, default)
+        if why:
+            return Action("warn", repo, f"PR #{live.number} on {head} {why}; it is never "
+                          "reused or merged", pr=live.number, wave=wave), "blocked"  # fmt: skip
         # Reused, never adopted (p4-r12): the export pushes the driver's own commit onto
         # this PR's branch, and the merge pins to that commit. Nothing of the PR's is kept.
         reuse = f"to {root} on {head}, reusing open PR #{live.number}"
@@ -503,6 +517,8 @@ def _export_row(
                f"{(done.head or 'none')[:12]}: a commit the driver did not push")  # fmt: skip
     elif outside := _outside(root, live.files):
         why = outside
+    elif wrong := _wrong_base(live, default):
+        why = wrong
     elif live.draft:
         why = "is a draft"
     elif live.checks == "failing":
@@ -539,8 +555,9 @@ def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
             target.orphan if target.recorded is None else snap.export_prs.get((repo, target.wave))
         )
         action, count = _export_row(
-            repo, target.wave, target.recorded, live, snap.export_path[repo]
-        )
+            repo, target.wave, target.recorded, live, snap.export_path[repo],
+            snap.export_default.get(repo, ""),
+        )  # fmt: skip
         if action is not None:
             if action.kind == "export":
                 action = replace(action, covers=target.covers)
@@ -550,7 +567,23 @@ def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
             actions.append(action)
         if count is not None:
             counts[count] += 1
+        if action is not None and action.kind == "export" and target.orphan is not None:
+            actions.extend(_stale_orphans(repo, snap, target.orphan))
     return actions, counts["closing"], counts["blocked"]
+
+
+def _stale_orphans(repo: str, snap: Snapshot, reused: LivePr) -> list[Action]:
+    """p4-r16: every other unrecorded export PR, named once per drive as stale. They
+    block nothing: the reused PR carries the state."""
+    out = []
+    for o in sorted(snap.export_orphans.get(repo, ()), key=lambda o: o.number):
+        key = f"stale-export\0{repo}\0{o.number}"
+        if o.number == reused.number or key in snap.warned:
+            continue
+        out.append(Action("warn", repo, f"export PR #{o.number} on {o.head_ref} is stale: "
+                          f"PR #{reused.number} carries the export; it is safe to close",
+                          pr=o.number, head=key))  # fmt: skip
+    return out
 
 
 def is_finished(batch: Batch, stage: BatchStage, archives: Sequence[LivePr]) -> bool:

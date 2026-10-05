@@ -935,6 +935,7 @@ def _export_snap(
         batches,
         stages,
         export_path={REPO: "docs/triage"} if export_path is None else export_path,
+        export_default={REPO: "main"},
         exports=tuple(exports),
         export_prs=prs or {},
         finished=finished,
@@ -951,6 +952,7 @@ def _trusted(n: int = 40, **kw: Any) -> LivePr:
     """An export PR from this repo by an allowed author: one commit on the default
     branch, changing only the export directory, on the head of wave *wave*."""
     kw.setdefault("files", ("docs/triage/judgements.yaml",))
+    kw.setdefault("base", "main")
     wave = kw.pop("wave", "1")
     return _live(n, kw.pop("head", f"export-head-{n}"), head_ref=f"chore/triage-state-wave-{wave}",
                  trusted=kw.pop("trusted", True), **kw)  # fmt: skip
@@ -1057,6 +1059,7 @@ def _three_waves(**kw: Any) -> Snapshot:
     ]
     stages = {b.id: "merged" for b in batches}
     kw.setdefault("finished", frozenset({"1", "2", "10"}))
+    kw.setdefault("export_default", {REPO: "main"})
     return _snap(batches, stages, export_path={REPO: "docs/triage"}, **kw)
 
 
@@ -1234,6 +1237,7 @@ def test_a_crash_then_a_new_wave_reuses_the_orphan_and_opens_no_second_pr() -> N
     batches = [_finished("a", 1), _merged("b", 2, wave=2, events=[{**_CLOSEOUT, "archived": 8}])]
     snap = _snap(
         batches, {"a": "merged", "b": "merged"}, export_path={REPO: "docs/triage"},
+        export_default={REPO: "main"},
         finished=frozenset({"1", "2"}), export_orphans={REPO: (_trusted(40, wave="1"),)},
     )  # fmt: skip
     got = drive_pass(snap)
@@ -1245,3 +1249,50 @@ def test_an_untrusted_orphan_is_warned_and_no_export_runs() -> None:
     got = drive_pass(_export_snap(orphans=(_trusted(40, trusted=False),)))
     assert _exports(got) == [("warn", REPO, "1", 40)]
     assert not any(a.kind == "export" for a in got.actions)
+
+
+# ------------------------------------------------ the PR's base (p4-r15), extra orphans (p4-r16)
+
+
+@pytest.mark.parametrize("base", ["release/1.x", ""], ids=["retargeted", "unknown"])
+def test_a_recorded_export_pr_not_based_on_the_default_branch_is_never_merged(base: str) -> None:
+    """p4-r15: a retargeted base would take the driver's commit, and every default-branch
+    commit that branch lacks, somewhere nobody asked."""
+    got = drive_pass(
+        _export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40, base=base)})
+    )
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert "base" in got.actions[-1].detail
+    assert got.summary.blocked == 1
+    assert not any(a.kind == "export-merge" for a in got.actions)
+
+
+@pytest.mark.parametrize("base", ["release/1.x", ""], ids=["retargeted", "unknown"])
+def test_an_orphan_not_based_on_the_default_branch_is_never_reused(base: str) -> None:
+    got = drive_pass(_export_snap(orphans=(_trusted(40, base=base),)))
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert "base" in got.actions[-1].detail
+    assert got.summary.blocked == 1
+    assert not any(a.kind == "export" for a in got.actions)
+
+
+def test_the_happy_path_is_based_on_the_default_branch() -> None:
+    got = drive_pass(_export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40)}))
+    assert [a.kind for a in got.actions if a.wave is not None] == ["export-merge"]
+
+
+def test_every_orphan_besides_the_reused_one_is_warned_stale_once() -> None:
+    """p4-r16: extra unrecorded export PRs are named, not left silent."""
+    orphans = (_trusted(40, wave="1"), _trusted(41, wave="3"), _trusted(42, wave="2"))
+    got = drive_pass(_three_waves(export_orphans={REPO: orphans}))
+    export = [a for a in got.actions if a.kind == "export"]
+    assert [(a.pr, a.wave) for a in export] == [(41, "3")]
+    stale = [a for a in got.actions if a.kind == "warn" and "stale" in a.detail]
+    assert sorted(a.pr for a in stale if a.pr is not None) == [40, 42]
+    assert all("safe to close" in a.detail and a.head for a in stale)
+    assert got.summary.blocked == 0  # stale PRs block nothing
+
+    again = drive_pass(
+        _three_waves(export_orphans={REPO: orphans}, warned=frozenset(a.head for a in stale))
+    )
+    assert not [a for a in again.actions if a.kind == "warn" and "stale" in a.detail]

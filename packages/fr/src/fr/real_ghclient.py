@@ -284,7 +284,8 @@ class RealGhClient:
                 "--repo",
                 repo,
                 "--json",
-                "state,isDraft,headRefOid,headRefName,mergeable,mergeStateStatus,mergeCommit",
+                "state,isDraft,headRefOid,headRefName,baseRefName,mergeable,mergeStateStatus,"
+                "mergeCommit",
             ]
         )
         raw: dict[str, Any] = json.loads(out)
@@ -293,6 +294,7 @@ class RealGhClient:
             "draft": bool(raw.get("isDraft", False)),
             "head_oid": raw.get("headRefOid", ""),
             "head_ref": raw.get("headRefName", ""),
+            "base_ref": raw.get("baseRefName", ""),
             "mergeable": raw.get("mergeable") or "UNKNOWN",
             "merge_state": raw.get("mergeStateStatus") or "UNKNOWN",
             "merge_commit": (raw.get("mergeCommit") or {}).get("oid", ""),

@@ -1653,6 +1653,7 @@ class _Driver:
         export_prs, export_orphans = self._export_reads(
             facts, judgements, repos, done_waves, export_path
         )
+        export_default = {r: self._default_branch(r) for r in export_path}
         closing_sessions = self.yes and not self.keep_sessions
         sessions = frozenset[str]()
         self._probes = {}
@@ -1686,9 +1687,18 @@ class _Driver:
             exports=tuple(judgements.exports),
             export_prs=export_prs,
             export_orphans=export_orphans,
+            export_default=export_default,
             finished=done_waves,
             export_refused=export_refused,
         )
+
+    def _default_branch(self, repo: str) -> str:
+        """*repo*'s default branch, the only base an export PR may have (p4-r15); ""
+        when the clone cannot say, which matches no base."""
+        try:
+            return self._reader(repo).default_branch()
+        except TriageError:
+            return ""
 
     def _export_files(self, repo: str, head: str) -> tuple[str, ...]:
         """The paths *head* changed since it forked from `origin/<default>`, renames
@@ -1743,7 +1753,7 @@ class _Driver:
                 # a PR whose entry is recorded closed is reusable once reopened (p4-r13)
                 recorded = {e.pr for e in judgements.exports if e.repo == repo and not e.closed}
                 found = tuple(
-                    self._orphan(pr, allowed)
+                    self._orphan(self.client(facts, repo), repo, pr, allowed)
                     for pr in facts.prs
                     if pr.repo == repo
                     and pr.state == "OPEN"
@@ -1771,6 +1781,7 @@ class _Driver:
                     state=str(view.get("state", "")).upper(),
                     draft=bool(view.get("draft")),
                     head=str(view.get("head_oid") or ""),
+                    base=str(view.get("base_ref") or ""),  # p4-r15
                     files=self._export_files(repo, done.head or ""),
                 )
                 if pick.state == "OPEN":
@@ -1789,16 +1800,18 @@ class _Driver:
         return prs, orphans
 
     @staticmethod
-    def _orphan(pr: PullRequest, allowed: frozenset[str]) -> LivePr:
-        """An unrecorded open export PR, as reuse judges it: open and trusted. Nothing
-        else of it is read, because nothing of it is kept (p4-r12)."""
+    def _orphan(client: GhClient, repo: str, pr: PullRequest, allowed: frozenset[str]) -> LivePr:
+        """An unrecorded open export PR, as reuse judges it: open, trusted, and its base
+        read fresh (p4-r15). Nothing else of it is read: nothing of it is kept (p4-r12)."""
+        view = client.pr_view(repo, pr.number)
         return LivePr(
             number=pr.number,
-            state="OPEN",
+            state=str(view.get("state", "")).upper() or "OPEN",
             draft=pr.is_draft,
             head=pr.head_oid,
             head_ref=pr.head_ref,
             trusted=distrust(pr.author, pr.cross_repo, allowed) is None,
+            base=str(view.get("base_ref") or ""),
         )
 
     def _hand_closeout(self, facts: Facts, repo: str, batch: Batch) -> LivePr | None:

@@ -163,7 +163,7 @@ class GhClient(Protocol):
         ...
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
-        """`{state, draft, head_oid, head_ref, mergeable, merge_state, merge_commit}`
+        """`{state, draft, head_oid, head_ref, base_ref, mergeable, merge_state, merge_commit}`
         of one PR, read fresh. `state` is OPEN | CLOSED | MERGED; `merge_commit` is
         the commit the merge made on the base ("" while unmerged)."""
         ...
