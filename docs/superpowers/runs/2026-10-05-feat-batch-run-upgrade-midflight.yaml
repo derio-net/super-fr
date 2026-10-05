@@ -114,7 +114,7 @@ steps:
           visual: none
           findings: p2-r1,p2-r2,p2-r3,p2-r4
       phase/3/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-05T22:13:31+00:00'
           agent: acf0efc295930105e
@@ -122,6 +122,11 @@ steps:
           harness: claude-code
           model: claude-sonnet-5-5
           session: eb6807d8-033c-4096-8b10-e6487f0bf0be
+          returned: '2026-10-05T22:28:58+00:00'
+          outcome: done
+        evidence:
+          tests: p3-suite.log@7f31a5480c80;tree=8c7afcd8d9c0d09ca330b2e0676a829b0c150131e0a888454216ff081d65caa9
+          visual: none
   journal-check:
     state: pending
   deliver:

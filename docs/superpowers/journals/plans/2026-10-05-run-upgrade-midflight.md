@@ -139,3 +139,48 @@ Every by-hand refusal test now asserts no evidence was written and the unit is s
 ### p2-r5-resolved · finding [out-of-scope] · resolves p2-r5: spec's supersede ordering (carry after inference) hides carried implement returns from clause 2 at adoption (phase 2)
 
 Not caused by phase 2 — supersede does not exist yet. Spec §D amended so phase 3's inference checks clause 2 against the old cursor's implement attempts; phase 3 is briefed with it.
+
+<!-- fr:journal kind=decision scope=plan id=p3-prior-seen-by-clause-2 created=2026-10-05T22:28:58+00:00 phase=3 -->
+### p3-prior-seen-by-clause-2 · decision · Supersede inference sees the old cursor's attempts through a merged read-only view, and review_key is now passed (phase 3)
+
+build_run_state takes `prior`; clause 2 reads a copy of the new state whose steps are overlaid with the old cursor's, with review_key=<phase>/<review member> so the old review unit's own attempts never count as implementation (p2-r5). Carried units are applied after inference by carry_forward, which keeps an old done unit's real evidence over an inferred historical one.
+
+<!-- fr:journal kind=decision scope=plan id=p3-supersede-preview-default created=2026-10-05T22:28:58+00:00 phase=3 -->
+### p3-supersede-preview-default · decision · adopt_run previews (dry_run) unless --yes, but only when there is an existing run to replace (phase 3)
+
+A plain adopt (no run, or no --supersede) keeps writing immediately as before. Superseded is an outparam (old id, closed holds, removed and moved paths); the CLI previews from it and notes only git-tracked removed paths for the one commit, since `git add` of an untracked missing path would refuse the whole commit.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-usage-run-field created=2026-10-05T22:28:58+00:00 phase=3 -->
+### p3-usage-run-field · discovery · A moved usage file keeps its inner `run:` as the old id (phase 3)
+
+The usage file is renamed byte for byte (spec: renamed). Its host labels are hashes of that inner run id and backfill reads them via usage.run, so rewriting the field would orphan every capture; capture.py already builds on the existing file's run. New captures under the new run id append a new host label.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-find-run-sees-legacy created=2026-10-05T22:28:58+00:00 phase=3 -->
+### p3-find-run-sees-legacy · discovery · find_run_for_plan recognises legacy-shaped cursors, so a v4 cursor reaches the supersede parse check (phase 3)
+
+The parse-refusal test uses a v4-shaped file (items, stamp 4): find_run_for_plan still matches it via the frozen readers, the current model rejects it, and the refusal names `fr migrate artifacts --yes`. A file no reader can parse is not found at all and falls through to a plain adopt (unchanged behaviour).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-explainer-render created=2026-10-05T22:28:58+00:00 phase=3 -->
+### p3-explainer-render · discovery · Explainer renderer reproduced the committed 01-fr-goal.html byte for byte (phase 3)
+
+Unmodified .md re-rendered from `/` with --isolated matched the committed html exactly before the edit was rendered; the regenerated page differs only by the new paragraph.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-05T22:28:58+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+carry_forward is new pure code; nothing left duplicated to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-05T22:28:58+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+adopt_run's branch was rewritten in place; no old path left
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-05T22:28:58+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+prose and mirrors only
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved-2 created=2026-10-05T22:28:58+00:00 phase=3 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved-2 · finding [fixed] · resolves p2-r5: spec's supersede ordering (carry after inference) hides carried implement returns from clause 2 at adoption (phase 3)
+
+adopt --supersede passes the old cursor to the inference (clause 2 sees its implement attempts, review_key excluded) and applies carried units after it; two tests pin it: an older journal review stays pending with a note, and a review the old cursor resolved keeps its real evidence.
