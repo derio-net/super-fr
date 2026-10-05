@@ -65,3 +65,91 @@ Operator chose the #918 trigger for both tabs over closing the batch tab at its 
 ### q6-test-plan · decision · Post-merge Test Plan: a live two-wave drive
 
 Operator chose a live two-wave drive inside herdr as the owed post-merge run.
+
+<!-- fr:journal kind=finding scope=spec id=sr-1 created=2026-10-05T11:56:56+00:00 state=open review_scope=in -->
+### sr-1 · finding [open] (reviewer: in scope) · Busy sessions are never retried once the drive is done: loop exits on summary.done
+
+R8/Test Plan promised a later-pass retry, but R10 means the last pass reports done and the loop returns (triage_batch_cmd.py:2052-2059); close's `did` was unspecified, so --once's exit code could change.
+
+<!-- fr:journal kind=finding scope=spec id=sr-2 created=2026-10-05T11:56:56+00:00 state=open review_scope=in -->
+### sr-2 · finding [open] (reviewer: in scope) · Close probe's runner unspecified; loading one can exit 2, breaking R10
+
+`_Driver.runner` -> `load_runner` calls `_fail` (triage_batch_cmd.py:173-187); vk/cncd cannot be built outside their bridge (registry.py:77); `hand` close-outs have no runner; current `_launch` may differ from where the session went.
+
+<!-- fr:journal kind=finding scope=spec id=sr-3 created=2026-10-05T11:56:56+00:00 state=open review_scope=in -->
+### sr-3 · finding [open] (reviewer: in scope) · R9 closes any single-tab workspace other than the runner's own; q4 covers only wave workspaces
+
+A tab moved by hand into an operator workspace, alone there, would close that workspace.
+
+<!-- fr:journal kind=finding scope=spec id=sr-4 created=2026-10-05T11:56:56+00:00 state=open review_scope=in -->
+### sr-4 · finding [open] (reviewer: in scope) · `herdr tab rename` relied on but not among the verified herdr facts
+
+Background listed tab list/workspace create/close/tab close only; the first dispatch into a new wave depends on the rename.
+
+<!-- fr:journal kind=finding scope=spec id=sr-5 created=2026-10-05T11:56:56+00:00 state=open review_scope=in -->
+### sr-5 · finding [open] (reviewer: in scope) · Test Plan covers only the live happy path; R2, R4, R6, R9, R10 untested
+
+The deterministic parts (pure drive_pass, faked _run_herdr) have no automated verification listed.
+
+<!-- fr:journal kind=finding scope=spec id=sr-6 created=2026-10-05T11:56:56+00:00 state=open review_scope=in -->
+### sr-6 · finding [open] (reviewer: in scope) · fr-triage skill's driver paragraph not updated for the new flags and closing
+
+plugins/super-fr/skills/fr-triage/SKILL.md:96 documents drive's flags and per-pass behaviour.
+
+<!-- fr:journal kind=finding scope=spec id=sr-7 created=2026-10-05T11:56:56+00:00 state=open review_scope=in -->
+### sr-7 · finding [open] (reviewer: in scope) · R3 'same group as the batch' false for a hand-dispatched or re-waved batch
+
+The close-out gets wave_group(prefix, wave) while the batch tab may sit in the runner's own workspace.
+
+<!-- fr:journal kind=finding scope=spec id=sr-8 created=2026-10-05T11:56:56+00:00 state=open review_scope=in -->
+### sr-8 · finding [open] (reviewer: in scope) · R1 'reused by every later one' conflicts with R9 closing an emptied wave workspace
+
+A later dispatch into a closed wave workspace recreates it.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-r1 created=2026-10-05T11:56:56+00:00 -->
+### spec-review-r1 · review · independent spec review: 8 findings
+
+Reviewer (fr-spec-reviewer, dispatched by this session) raised sr-1..sr-8, all in scope.
+Decisions q1, q2, q3, q5, q6 honoured; q4 widened (sr-3). Verified the named files and
+helpers with file:line (runner.py, protocols.py, work_item.py, testing.py, registry.py,
+batch_drive.py, triage_batch_cmd.py, model.py, wave-driver spec).
+
+<!-- fr:journal kind=finding scope=spec id=sr-1-resolved created=2026-10-05T11:56:56+00:00 state=fixed resolves=sr-1 -->
+### sr-1-resolved · finding [fixed] · resolves sr-1: Busy sessions are never retried once the drive is done: loop exits on summary.done
+
+Chose to state the limit: R8 now says a done drive does not wait for a busy session and a later drive closes it; R10 and §D say close returns did=False and never changes the exit code; Test Plan 2 reworded.
+
+<!-- fr:journal kind=finding scope=spec id=sr-2-resolved created=2026-10-05T11:56:56+00:00 state=fixed resolves=sr-2 -->
+### sr-2-resolved · finding [fixed] · resolves sr-2: Close probe's runner unspecified; loading one can exit 2, breaking R10
+
+§D: probe the runner each event recorded (DispatchEvent for the batch item, CloseoutEvent for the close-out), skip `hand`, one preflight/existing call per runner, via a non-exiting load; a load failure, non-closer or preflight refusal skips that runner (reported once where it is not just a non-closer). R10 names the load failure.
+
+<!-- fr:journal kind=finding scope=spec id=sr-3-resolved created=2026-10-05T11:56:56+00:00 state=fixed resolves=sr-3 -->
+### sr-3-resolved · finding [fixed] · resolves sr-3: R9 closes any single-tab workspace other than the runner's own; q4 covers only wave workspaces
+
+R9 and §B: the lone tab's workspace closes only when its label equals the item's payload group and it is not the runner's own; otherwise only the tab closes. Probe items carry the group.
+
+<!-- fr:journal kind=finding scope=spec id=sr-4-resolved created=2026-10-05T11:56:56+00:00 state=fixed resolves=sr-4 -->
+### sr-4-resolved · finding [fixed] · resolves sr-4: `herdr tab rename` relied on but not among the verified herdr facts
+
+Verified live: `herdr tab rename <TAB_ID> <LABEL>...`; recorded in Background, and §B says a failed rename is a failed dispatch that closes the workspace.
+
+<!-- fr:journal kind=finding scope=spec id=sr-5-resolved created=2026-10-05T11:56:56+00:00 state=fixed resolves=sr-5 -->
+### sr-5-resolved · finding [fixed] · resolves sr-5: Test Plan covers only the live happy path; R2, R4, R6, R9, R10 untested
+
+Added an `Automated verification (CI)` section listing unit-level checks for every requirement the live Test Plan does not cover.
+
+<!-- fr:journal kind=finding scope=spec id=sr-6-resolved created=2026-10-05T11:56:56+00:00 state=fixed resolves=sr-6 -->
+### sr-6-resolved · finding [fixed] · resolves sr-6: fr-triage skill's driver paragraph not updated for the new flags and closing
+
+Added §E: update fr-triage SKILL.md's driver paragraph and regenerate the OpenCode and Hermes mirrors.
+
+<!-- fr:journal kind=finding scope=spec id=sr-7-resolved created=2026-10-05T11:56:56+00:00 state=fixed resolves=sr-7 -->
+### sr-7-resolved · finding [fixed] · resolves sr-7: R3 'same group as the batch' false for a hand-dispatched or re-waved batch
+
+R3 reworded to the built rule: the close-out opens in the group of the batch's CURRENT wave, wherever the batch's session is.
+
+<!-- fr:journal kind=finding scope=spec id=sr-8-resolved created=2026-10-05T11:56:56+00:00 state=fixed resolves=sr-8 -->
+### sr-8-resolved · finding [fixed] · resolves sr-8: R1 'reused by every later one' conflicts with R9 closing an emptied wave workspace
+
+R1 reworded: created when no workspace carries the label, reused while one does, recreated after R9 closes it.
