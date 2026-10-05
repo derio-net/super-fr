@@ -24,3 +24,8 @@ commands/triage_cmd.py _load_state and triage_batch_cmd.py batch list load facts
 ### rc-954 · root-cause · #954: closes through #886 — the only way two same-named repos' judgements meet is --dir onto another scope's state
 
 See ruled-out h-954-live-collision. _group_scope already refuses same-named repos; pin that every verb (collect, check, batch, origins) refuses it, and #886's scope check closes the --dir bypass. Lifting the limit (owner-qualified keys) is a feature, deferred by operator decision.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-885 created=2026-10-05T21:10:34+00:00 -->
+### rc-885 · root-cause · #885: schema 4 is correct on every scope; the FACTS_SCHEMA comment understates why
+
+See ruled-out h-885-shape-unchanged. The comment says 4 'added the group scope kind' only; #876/#906/#939 added fields on every scope under 4. Fix: correct the comment and pin with a test that a repo-scope facts.json carries keys the schema-3 shape lacks, so nobody re-stamps 3.
