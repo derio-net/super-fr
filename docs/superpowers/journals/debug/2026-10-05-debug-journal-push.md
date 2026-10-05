@@ -19,3 +19,8 @@ By design every journal/record write is one local commit; pushes are host-side g
 ### 1968bc31ff3c · root-cause · §4 records the review after the PR's last push and has no push after it
 
 The review record is the last commit of the run, written after the PR opened, and the skill's step order ends at 'relay closeout, stop' with no push and no ahead-of-upstream check — so the commit stays local and the merged PR lacks it.
+
+<!-- fr:journal kind=finding scope=debug id=4038889f25de created=2026-10-05T21:07:05+00:00 state=fixed -->
+### 4038889f25de · finding [fixed] · Deliver pushes after the review record and checks level-with-upstream before the closeout relay
+
+plugins/super-fr/skills/fr-debugging/SKILL.md §4 (+ both mirrors re-synced): after `fr journal add --kind review`, `git push` on the host and confirm `git rev-list --count @{u}..HEAD` is 0, before relaying `closeout: fr pickup --branch`. Pinned first by tests/unit/test_fr_debugging_journal.py::test_review_record_is_pushed_before_the_closeout_relay (red on all three copies at 6c582a926, green after). Full suite: 8441 passed, 1 failed (test_sentinel_lifecycle::test_looking_into_another_workspace_does_not_stake_the_pipeline_on_it — passes alone; untouched by this prose-only change, load flake).
