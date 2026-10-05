@@ -64,6 +64,7 @@ journal:
     re-exports (dead); triage_cmd.py registers the history command; tests/unit/test_triage_render.py and test_triage_board_views.py
     hold the board and finished-wave tests.
   phase: 1
+  - {kind: finding, id: p1-visual-matcher-uv-with, title: "capture-script witness misreads uv run --with", review_scope: out, body: "fr's capture-script witness misreads `uv run --with <pkg> python <script>` (value-taking flag read as the program), so a correctly run capture is reported unwitnessed", phase: 1}
 evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p1-suite.log}
 visual:
 - row: triage-page-goals
