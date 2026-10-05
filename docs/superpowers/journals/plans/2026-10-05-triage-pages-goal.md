@@ -209,3 +209,23 @@ intro and list wrapped in div.merge-plan hidden when no step is visible (3468e4a
 ### p2-suite-log-background-unwitnessed-resolved · finding [out-of-scope] · resolves p2-suite-log-background-unwitnessed: fr cannot witness a suite log written by a run_in_background command, which the brief's own long_commands rule prescribes (phase 2)
 
 A conflict between fr's suite-log witness and the brief's long_commands rule, not caused by this change; deliver re-runs the suite on the final tree.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-files-outside-list created=2026-10-05T22:30:54+00:00 phase=3 -->
+### p3-files-outside-list · discovery · touched beyond the obvious files (phase 3)
+
+commands/triage_cmd.py (collect_into adds duplicate_of targets to the judged keys, since the viewed-keys logic lives there and not in collect.py; check prints the two new sets), commands/triage_origins_cmd.py (third set), views.py (max_severity, NextRow.severity), plus the acceptance matrix and its reports (two rows to ci).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-origins-link-and-no-refactor created=2026-10-05T22:30:54+00:00 phase=3 -->
+### p3-origins-link-and-no-refactor · discovery · origins issue link logic did not duplicate, so P3.T1.S3 changed nothing (phase 3)
+
+The conclusion links batches (triage.html#batch-<id>), not issues, so the table's _original_link shares no URL logic with it. Row ids are origin-<key> with a literal #; the href percent-encodes it (origin-widgets%235), as batch refs do. The id attribute goes after data-key, since an existing test pins the attribute order.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-duplicate-checks-shape created=2026-10-05T22:30:54+00:00 phase=3 -->
+### p3-duplicate-checks-shape · discovery · check sets list issue keys; duplicate_outside / duplicate_unknown name the duplicate, not the target (phase 3)
+
+origins check's duplicate_outside and triage check's duplicate_unknown are lists of the DUPLICATE issue's key whose duplicate_of names an issue the facts do not hold. no_severity lists open judged issues with no severity (duplicates included, literal to the spec). Only duplicates with open state leave the tier sections; kind: parked issues stay in theirs, as before.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-05T22:30:54+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+severity pill and the Parked duplicate note are small additions on existing helpers (_row, _next_section, _parked); nothing to clean

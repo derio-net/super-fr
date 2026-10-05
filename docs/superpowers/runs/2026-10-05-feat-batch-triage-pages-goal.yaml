@@ -121,7 +121,7 @@ steps:
           visual: triage-board-first-screen:15:d5afcc0f7aca,triage-board-batch-filter:6:b80285e23029
           findings: p2-suite-log-background-unwitnessed,p2-r1,p2-r2,p2-r3,p2-r4,p2-r5
       phase/3/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-05T22:19:10+00:00'
           agent: a69ed4b32012115f9
@@ -129,6 +129,11 @@ steps:
           harness: claude-code
           model: claude-sonnet-5-5
           session: a95011be-df46-40a9-a07a-e24ccd3c8a59
+          returned: '2026-10-05T22:30:54+00:00'
+          outcome: done
+        evidence:
+          tests: p3-suite.log@81393465bd47;tree=d1d05abf4f04747c9ae8721f455e6ab195ceb6933d734cef900067b64aa28ebc
+          visual: none
   journal-check:
     state: pending
   deliver:
