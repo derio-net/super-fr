@@ -3,20 +3,23 @@
 The same scope options as every `fr triage` verb. `<dir>/<scope>/` is the repo-side
 root: `export --to <dir>` writes it, `import --from <dir>` reads it. Both print every
 file they copied and every file they skipped. Neither reads or writes a registered
-artifact, so `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success; 2 usage.
+artifact, so `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success; 2 usage, or a
+repo-side root that is a symlink or leaves the given directory (nothing is read or written).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
+from rich.markup import escape
 
 import fr.commands.triage_cmd as triage_cmd
-from fr.commands.triage_cmd import DirOpt, OrgOpt, RepoOpt, console, triage_app
+from fr.commands.triage_cmd import DirOpt, OrgOpt, RepoOpt, console, err_console, triage_app
+from fr.triage.errors import TriageError
 from fr.triage.model import state_dir
-from fr.triage.state_sync import SyncReport, export_state, import_state
+from fr.triage.state_sync import SyncReport, check_scope_name, export_state, import_state
 
 state_app = typer.Typer(
     name="state",
@@ -25,6 +28,11 @@ state_app = typer.Typer(
     no_args_is_help=True,
 )
 triage_app.add_typer(state_app)
+
+
+def _refuse(exc: TriageError) -> NoReturn:
+    err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+    raise typer.Exit(code=2) from exc
 
 
 def _print(report: SyncReport) -> None:
@@ -50,7 +58,10 @@ def export_command(
 ) -> None:
     """Copy the scope's durable state to <dir>/<scope>/. Facts and pages never travel."""
     scope = triage_cmd._scope(repo, org)
-    report = export_state(state_dir(scope, dir_override), to / scope.name)
+    try:
+        report = export_state(state_dir(scope, dir_override), to, check_scope_name(scope.name))
+    except TriageError as exc:
+        _refuse(exc)
     _print(report)
 
 
@@ -67,5 +78,10 @@ def import_command(
     """Copy <dir>/<scope>/ back into the state directory; a state file newer than its
     repo copy is skipped unless --force."""
     scope = triage_cmd._scope(repo, org)
-    report = import_state(from_ / scope.name, state_dir(scope, dir_override), force=force)
+    try:
+        report = import_state(
+            from_, check_scope_name(scope.name), state_dir(scope, dir_override), force=force
+        )
+    except TriageError as exc:
+        _refuse(exc)
     _print(report)

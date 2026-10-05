@@ -14,6 +14,11 @@ A symlink is never followed, in either direction and at any depth, and a destina
 that is (or sits under) a symlink is never written through: export feeds a commit the
 driver pushes, and import reads a cloned repo (p4-sec-symlink-follow). Both are
 skipped and reported.
+
+The repo-side root is `<base>/<rel>`, and only *rel* (the parts fr appends: the scope
+name, the configured export path) is checked by `contained`: no `..`, no symlinked
+component, nothing that resolves outside *base* (p4-sec-root-symlink-traversal). The
+base itself is trusted as given: on macOS `/var` and `/tmp` are symlinks.
 """
 
 from __future__ import annotations
@@ -24,6 +29,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
+
+from fr.triage.errors import TriageError
 
 DURABLE_FILES = ("judgements.yaml", "origins.yaml", "subsystems.yaml")
 DURABLE_DIRS = ("board", "origins", "architecture", "history", "snapshots", "authored-src")
@@ -44,6 +51,33 @@ class SyncReport:
 
     copied: tuple[str, ...]
     skipped: tuple[Skipped, ...]
+
+
+def contained(base: Path, rel: str) -> Path:
+    """`base / rel`, refused (`TriageError`, naming the path) when *rel* is absolute,
+    has an empty, `.` or `..` part, has an existing component under *base* that is a
+    symlink (the last one included), or resolves outside `base.resolve()`."""
+    parts = rel.replace("\\", "/").split("/")
+    if not rel or rel.startswith(("/", "\\")) or any(p in ("", ".", "..") for p in parts):
+        raise TriageError(f"{rel!r} must be a plain relative path under {base}")
+    path = base
+    for part in parts:
+        path = path / part
+        if path.is_symlink():
+            raise TriageError(f"{path} is a symlink; refusing to read or write through it")
+    target = base / "/".join(parts)
+    root = base.resolve()
+    if not target.resolve().is_relative_to(root):
+        raise TriageError(f"{target} resolves outside {base}; refusing it")
+    return target
+
+
+def check_scope_name(name: str) -> str:
+    """*name* when it is one plain path part (no separator, not `.` or `..`): the scope
+    names the repo-side directory, so it must never step out of it."""
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        raise TriageError(f"scope name {name!r} is not a single plain path part")
+    return name
 
 
 def _walk(root: Path, rel: PurePosixPath) -> Iterator[tuple[str, bool]]:
@@ -114,13 +148,13 @@ def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
     return SyncReport(copied=tuple(copied), skipped=tuple(skipped))
 
 
-def export_state(state_dir: Path, dest_root: Path) -> SyncReport:
-    """Copy *state_dir*'s durable state into *dest_root* (the repo-side
-    `<dir>/<scope>/`), overwriting what is there."""
-    return _sync(state_dir, dest_root, keep_newer=False)
+def export_state(state_dir: Path, base: Path, rel: str) -> SyncReport:
+    """Copy *state_dir*'s durable state into the repo-side root `contained(base, rel)`
+    (`<dir>/<scope>/`), overwriting what is there."""
+    return _sync(state_dir, contained(base, rel), keep_newer=False)
 
 
-def import_state(src_root: Path, state_dir: Path, *, force: bool) -> SyncReport:
-    """Copy *src_root*'s durable state (the repo-side `<dir>/<scope>/`) into
-    *state_dir*; a state file newer than its copy is skipped unless *force*."""
-    return _sync(src_root, state_dir, keep_newer=not force)
+def import_state(base: Path, rel: str, state_dir: Path, *, force: bool) -> SyncReport:
+    """Copy the repo-side root `contained(base, rel)` into *state_dir*; a state file
+    newer than its copy is skipped unless *force*."""
+    return _sync(contained(base, rel), state_dir, keep_newer=not force)

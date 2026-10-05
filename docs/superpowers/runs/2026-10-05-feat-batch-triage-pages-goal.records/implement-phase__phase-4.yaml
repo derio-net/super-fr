@@ -7,6 +7,9 @@ ticks:
 - P4.T1.S1
 - P4.T1.S2
 - P4.T1.S3
+- P4.T2.S1
+- P4.T2.S2
+- P4.T2.S3
 refactor:
   P4.T1: state_sync is one copy loop shared by both directions; nothing to clean
 journal:
@@ -19,6 +22,15 @@ journal:
     state dir (authored-src/x -> ~/.ssh/id_rsa, or a symlinked page dir) copied its target into the repo, which the
     R13 driver then commits and pushes; import from a cloned repo could copy an arbitrary local file into the cache;
     and a symlinked destination was written through.'
+- kind: finding
+  id: p4-sec-root-symlink-traversal
+  review_scope: in
+  phase: 4
+  title: state sync trusted the repo-side root and the parts joined to build it
+  body: 'Follow-up review of ed706bdfc: the symlink checks covered entries under a root but not the root, so a
+    cloned repo committing docs/triage or docs/triage/<scope> as a symlink made import read wherever it points
+    and the driver export write outside its worktree; and <dir>/<scope> and <worktree>/<path>/<scope> trusted
+    scope and every component of path (a symlinked component escapes without `..` or a leading `/`).'
 resolves:
 - id: p4-sec-symlink-follow
   state: fixed

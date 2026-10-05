@@ -13,10 +13,12 @@ from pathlib import Path
 
 import pytest
 from fr.cli import app
+from fr.triage.errors import TriageError
 from fr.triage.state_sync import (
     DURABLE_DIRS,
     DURABLE_FILES,
     SyncReport,
+    contained,
     export_state,
     import_state,
 )
@@ -73,6 +75,11 @@ DURABLE = sorted(
 )
 
 
+def _at(root: Path) -> tuple[Path, str]:
+    """A repo-side root as the (base, relative part) the engine takes."""
+    return root.parent, root.name
+
+
 def _files(root: Path) -> list[str]:
     return sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
 
@@ -93,7 +100,7 @@ def test_export_copies_the_durable_state_and_nothing_else(tmp_path: Path) -> Non
     state = _state(tmp_path / "state")
     dest = tmp_path / "repo" / "docs" / "triage" / SCOPE_NAME
 
-    report = export_state(state, dest)
+    report = export_state(state, *_at(dest))
 
     assert _files(dest) == DURABLE
     assert sorted(report.copied) == DURABLE
@@ -110,7 +117,7 @@ def test_export_overwrites_and_never_deletes_a_destination_file(tmp_path: Path) 
     (dest / "board" / "manifest.yaml").write_text("old\n", encoding="utf-8")
     (dest / "board" / "gone.html").write_text("kept\n", encoding="utf-8")
 
-    export_state(state, dest)
+    export_state(state, *_at(dest))
 
     assert (dest / "board" / "manifest.yaml").read_text(encoding="utf-8") == "sections: []\n"
     assert (dest / "board" / "gone.html").read_text(encoding="utf-8") == "kept\n"
@@ -118,11 +125,11 @@ def test_export_overwrites_and_never_deletes_a_destination_file(tmp_path: Path) 
 
 def test_import_copies_the_durable_state_back(tmp_path: Path) -> None:
     src = tmp_path / "repo-copy"
-    export_state(_state(tmp_path / "old"), src)
+    export_state(_state(tmp_path / "old"), *_at(src))
     (src / "facts.json").write_text("{}\n", encoding="utf-8")  # never travels back either
     state = tmp_path / "state"
 
-    report = import_state(src, state, force=False)
+    report = import_state(*_at(src), state, force=False)
 
     assert _files(state) == DURABLE
     assert sorted(report.copied) == DURABLE
@@ -136,13 +143,13 @@ def _age(path: Path, seconds: int) -> None:
 
 def test_import_skips_a_state_file_newer_than_the_repo_copy(tmp_path: Path) -> None:
     src = tmp_path / "repo-copy"
-    export_state(_state(tmp_path / "old"), src)
+    export_state(_state(tmp_path / "old"), *_at(src))
     state = tmp_path / "state"
-    import_state(src, state, force=False)
+    import_state(*_at(src), state, force=False)
     (state / "judgements.yaml").write_text("schema: 3\n# edited here\n", encoding="utf-8")
     _age(src / "judgements.yaml", 60)
 
-    report = import_state(src, state, force=False)
+    report = import_state(*_at(src), state, force=False)
 
     assert [s.path for s in report.skipped] == ["judgements.yaml"]
     assert "newer" in report.skipped[0].reason
@@ -152,13 +159,13 @@ def test_import_skips_a_state_file_newer_than_the_repo_copy(tmp_path: Path) -> N
 
 def test_import_force_overwrites_a_newer_state_file(tmp_path: Path) -> None:
     src = tmp_path / "repo-copy"
-    export_state(_state(tmp_path / "old"), src)
+    export_state(_state(tmp_path / "old"), *_at(src))
     state = tmp_path / "state"
-    import_state(src, state, force=False)
+    import_state(*_at(src), state, force=False)
     (state / "judgements.yaml").write_text("schema: 3\n# edited here\n", encoding="utf-8")
     _age(src / "judgements.yaml", 60)
 
-    report = import_state(src, state, force=True)
+    report = import_state(*_at(src), state, force=True)
 
     assert report.skipped == ()
     assert "judgements.yaml" in report.copied
@@ -166,7 +173,7 @@ def test_import_force_overwrites_a_newer_state_file(tmp_path: Path) -> None:
 
 
 def test_a_missing_source_copies_nothing(tmp_path: Path) -> None:
-    report = import_state(tmp_path / "absent", tmp_path / "state", force=False)
+    report = import_state(*_at(tmp_path / "absent"), tmp_path / "state", force=False)
     assert report == SyncReport(copied=(), skipped=())
 
 
@@ -190,7 +197,7 @@ def test_the_export_verb_prints_what_it_copied(tmp_path: Path) -> None:
 
 def test_the_import_verb_prints_copied_and_skipped(tmp_path: Path) -> None:
     out = tmp_path / "docs" / "triage"
-    export_state(_state(tmp_path / "old"), out / SCOPE_NAME)
+    export_state(_state(tmp_path / "old"), *_at(out / SCOPE_NAME))
     state = tmp_path / "state"
     _invoke("import", "--from", str(out), "--repo", SCOPE, "--dir", str(state))
     (state / "origins.yaml").write_text("schema: 2\n# mine\n", encoding="utf-8")
@@ -227,7 +234,7 @@ def test_export_never_follows_a_symlinked_file(tmp_path: Path) -> None:
     (state / "subsystems.yaml").symlink_to(secret)
     dest = tmp_path / "dest"
 
-    report = export_state(state, dest)
+    report = export_state(state, *_at(dest))
 
     assert not (dest / "authored-src" / "x").exists()
     assert not (dest / "subsystems.yaml").exists()
@@ -247,7 +254,7 @@ def test_export_never_follows_a_symlinked_durable_dir_or_subdir(tmp_path: Path) 
     (state / "history").symlink_to(outside / "ssh")
     (state / "board" / "deep").symlink_to(outside)
 
-    report = export_state(state, tmp_path / "dest")
+    report = export_state(state, *_at(tmp_path / "dest"))
 
     assert not (tmp_path / "dest" / "history").exists()
     assert not (tmp_path / "dest" / "board" / "deep").exists()
@@ -258,13 +265,13 @@ def test_export_never_follows_a_symlinked_durable_dir_or_subdir(tmp_path: Path) 
 
 def test_import_never_follows_a_symlink_in_the_repo_copy(tmp_path: Path) -> None:
     src = tmp_path / "repo-copy"
-    export_state(_state(tmp_path / "old"), src)
+    export_state(_state(tmp_path / "old"), *_at(src))
     secret = tmp_path / "secret"
     secret.write_text("PRIVATE\n", encoding="utf-8")
     (src / "board" / "planted.html").symlink_to(secret)
     state = tmp_path / "state"
 
-    report = import_state(src, state, force=True)
+    report = import_state(*_at(src), state, force=True)
 
     assert not (state / "board" / "planted.html").exists()
     assert _skipped(report)["board/planted.html"] == "symlink, not followed"
@@ -281,7 +288,7 @@ def test_a_symlinked_destination_is_never_written_through(tmp_path: Path) -> Non
     (dest / "judgements.yaml").symlink_to(victim)
     (dest / "board").symlink_to(victim_dir)
 
-    report = export_state(state, dest)
+    report = export_state(state, *_at(dest))
 
     assert victim.read_text(encoding="utf-8") == "ORIGINAL\n"
     assert list(victim_dir.iterdir()) == []
@@ -289,3 +296,84 @@ def test_a_symlinked_destination_is_never_written_through(tmp_path: Path) -> Non
     assert "symlink" in skipped["judgements.yaml"]
     assert "symlink" in skipped["board/manifest.yaml"]
     assert "judgements.yaml" not in report.copied
+
+
+# ------------------------------------------- roots (p4-sec-root-symlink-traversal)
+# Only the parts fr appends to a base are trusted to nothing: a symlinked component or
+# a `..` in them would read or write outside the base. The base itself is trusted as
+# given (on macOS /var and /tmp are themselves symlinks).
+
+
+@pytest.mark.parametrize("rel", ["../x", "a/../../x", "/abs", "", ".", "a/./b", "a//b"])
+def test_contained_refuses_a_part_that_leaves_the_base(tmp_path: Path, rel: str) -> None:
+    with pytest.raises(TriageError):
+        contained(tmp_path, rel)
+
+
+def test_contained_refuses_a_symlinked_component_the_last_one_included(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    base = tmp_path / "repo"
+    (base / "docs").mkdir(parents=True)
+    (base / "docs" / "triage").symlink_to(outside)
+    with pytest.raises(TriageError, match="docs/triage"):
+        contained(base, "docs/triage/scope")
+    with pytest.raises(TriageError, match="docs/triage"):
+        contained(base, "docs/triage")
+
+
+def test_contained_trusts_a_base_reached_through_a_symlink(tmp_path: Path) -> None:
+    real = tmp_path / "private" / "var"
+    real.mkdir(parents=True)
+    linked = tmp_path / "var"
+    linked.symlink_to(real)
+    base = linked / "repo"
+    base.mkdir()
+    assert base.resolve() != base
+
+    assert contained(base, "docs/triage/scope") == base / "docs/triage/scope"
+    state = _state(tmp_path / "state")
+    report = export_state(state, base, "docs/triage/scope")
+    assert sorted(report.copied) == DURABLE
+    assert _files(real / "repo" / "docs/triage/scope") == DURABLE
+
+
+def test_import_refuses_a_symlinked_repo_side_scope_dir_and_reads_nothing(tmp_path: Path) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    export_state(_state(tmp_path / "old"), *_at(elsewhere))
+    repo = tmp_path / "docs" / "triage"
+    repo.mkdir(parents=True)
+    (repo / SCOPE_NAME).symlink_to(elsewhere)
+    state = tmp_path / "state"
+
+    with pytest.raises(TriageError, match=SCOPE_NAME):
+        import_state(repo, SCOPE_NAME, state, force=True)
+    assert not state.exists()
+
+    result = CliRunner().invoke(
+        app,
+        ["triage", "state", "import", "--from", str(repo), "--repo", SCOPE, "--dir", str(state)],
+    )
+    assert result.exit_code == 2
+    assert not state.exists()
+
+
+def test_export_refuses_a_symlinked_repo_side_root_and_writes_nothing(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "docs").symlink_to(outside)
+
+    with pytest.raises(TriageError):
+        export_state(_state(tmp_path / "state"), repo, f"docs/triage/{SCOPE_NAME}")
+    assert list(outside.iterdir()) == []
+
+
+@pytest.mark.parametrize("name", ["..", ".", "", "a/b", "a\\b"])
+def test_a_scope_name_must_be_one_plain_part(name: str) -> None:
+    from fr.triage.state_sync import check_scope_name
+
+    with pytest.raises(TriageError, match="scope"):
+        check_scope_name(name)
+    assert check_scope_name(SCOPE_NAME) == SCOPE_NAME
