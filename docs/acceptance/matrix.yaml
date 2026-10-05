@@ -6029,6 +6029,62 @@ rows:
       and #907''s CI one re-run (a setup-bun 503). Rerun owed after #909 (read timeouts)
       and #910 (retry failed reads in loop mode); see also #911, #912, #913.'
     verify: post-merge
+  - id: drive-merge-train-head-only
+    capability: triage-batch-drive
+    acceptance: The drive acts only on the head of each repo's merge train — PRs behind
+      it are neither updated nor merged — and advances past a merged head in the same
+      pass
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_ready_green_prs_form_one_train_in_order
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_pending_head_waits_and_the_rest_are_queued
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_an_updated_head_queues_the_rest_without_attempting_them
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_merged_head_lets_the_next_candidate_go_in_the_same_pass
+    status: ci
+    notes: Pure train walk and executor stop covered by unit tests
+  - id: drive-merge-train-step-over
+    capability: triage-batch-drive
+    acceptance: A PR with failing CI or a refused merge is reported once and stepped
+      over, and rejoins the train at its merge-order place once green
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_failing_head_is_stepped_over_and_the_next_leads
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_green_member_ahead_is_the_head_with_no_stored_state
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_refused_head_is_reported_and_stepped_over
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_failing_member_behind_the_stop_is_warned_and_stepped_over
+    status: ci
+    notes: 'Review fix: a failing PR behind the stop is warned and stepped over at once
+      (test_a_failing_member_behind_the_stop_is_warned_and_stepped_over).'
+  - id: drive-merge-train-output
+    capability: triage-batch-drive
+    acceptance: Every drive pass prints one train line per repo (head, queued, stepped
+      over) and the summary counts queued PRs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_train_line_names_head_then_queued_and_stepped
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_summary_line_adds_queued_between_closing_and_blocked
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_train_line_comes_before_the_actions_in_plan_mode_and_with_yes
+    status: ci
+    notes: Train line and queued count printed in plan mode and with --yes
+  - id: drive-merge-train-live-wave
+    capability: triage-batch-drive
+    acceptance: In a live wave of several ready PRs in one repo, each PR is updated
+      at most once per PR merged ahead of it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
