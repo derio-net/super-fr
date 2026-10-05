@@ -6145,6 +6145,10 @@ rows:
       never asked and behaves as before
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_unit_runner_contract.py#test_session_closer_is_a_runtime_protocol_a_plain_runner_is_not
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_runner_that_cannot_close_is_never_asked
+    status: ci
+    notes: 'Phase 2 shipped: SessionCloser optional protocol + check_close_contract;
+      a plain runner is not a SessionCloser and the drive never asks it.'
