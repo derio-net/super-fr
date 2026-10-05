@@ -269,3 +269,8 @@ Fixed in the spec: Test Plan: pr_create adapter, _export_merge + exit 1, loop no
 ### phase-split-2026-10-05-triage-pages-goal-p2 · decision · ask: the board's first screen (R2-R5, #887) is its own reviewable ask, and carries the visual evidence
 
 Board relayout is independent of phase 1's page partition once the shared chrome and fragments exist.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-triage-pages-goal-p3 created=2026-10-05T21:12:48+00:00 -->
+### phase-split-2026-10-05-triage-pages-goal-p3 · decision · ask: data improvements (R10, R11) are their own ask
+
+Schema changes to origins.yaml and judgements plus their display; reviewable apart from layout.
