@@ -69,3 +69,8 @@ A failing member is stepped over and warned wherever it sits. Pinned by test_a_f
 ### rv-race-refusal-resolved · finding [out-of-scope] · resolves rv-race-refusal: A head moving between _open_head and pr_merge surfaces as a plain forge refusal and is stepped over (phase 1)
 
 The pr_merge race predates this change and is self-correcting, because the next candidate is updated, which stops the train.
+
+<!-- fr:journal kind=finding scope=plan id=rv-race-refusal-resolved-2 created=2026-10-05T10:49:58+00:00 state=open resolves=rv-race-refusal tracked_by=#962 -->
+### rv-race-refusal-resolved-2 · finding [deferred → #962] · resolves rv-race-refusal: A head moving between _open_head and pr_merge surfaces as a plain forge refusal and is stepped over
+
+Filed at closeout as #962.
