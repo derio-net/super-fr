@@ -256,3 +256,8 @@ Out of scope: pre-existing in fr pickup (not an `fr run` read-only command), and
 ### phase-split-2026-10-05-run-upgrade-midflight-p2 · decision · ask: historical review evidence (R7-R9) is its own reviewable ask, and changes the review gate
 
 Phase 2 serves R7-R9, an ask independent of reshape.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-run-upgrade-midflight-p3 created=2026-10-05T21:11:35+00:00 -->
+### phase-split-2026-10-05-run-upgrade-midflight-p3 · decision · ask: adopt --supersede (R5-R6) is its own reviewable ask, built on phase 2's inference
+
+Phase 3 serves R5-R6 plus R10 prose.
