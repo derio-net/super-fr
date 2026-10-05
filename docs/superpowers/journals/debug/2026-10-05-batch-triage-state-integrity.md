@@ -39,3 +39,8 @@ triage/origins.py collect_origins warns when len(raw) == limit. gh lists issues 
 ### rc-882 · root-cause · #882: the driver records 'archived' only for archive PRs it merged itself or close-outs it adopted; closeout_state's facts fallback is dead (facts.prs is open-only)
 
 batch_drive.py step 3 sees a started close-out whose attributed archive PR is MERGED (is_finished) and just continues: nothing is written, so batch list reads the event, finds archived None, and falls back to a MERGED chore/closeout-* PR in facts.prs, which collect fills with open PRs only. Fix: the pass records it once, as the adopt path already does (append a closeout event with archived=<pr>), and the dead facts.prs fallback goes; batch list then reads one source, the event, like the driver.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-889 created=2026-10-05T21:10:37+00:00 -->
+### rc-889 · root-cause · #889: gitseam show() decodes through subprocess text mode — locale encoding, universal newlines, UnicodeDecodeError on binary — and snapshot_paths uses it to copy whole trees
+
+Checkout.show/Worktree.show call git() (text=True): the decode is the locale's, not UTF-8; CRLF becomes LF; a binary blob raises UnicodeDecodeError, which is not a TriageError, so it escapes as a traceback. Every caller wants text (version manifests, .fr/triage.yaml) except Checkout.snapshot_paths, which copies SERVICE_PATHS trees byte-for-byte in intent. Fix: show_bytes() for raw content (snapshot_paths uses it with write_bytes); show() decodes those bytes as UTF-8 explicitly and refuses a non-UTF-8 blob with a GitError naming file and ref; contract documented.
