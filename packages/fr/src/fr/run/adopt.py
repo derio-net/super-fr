@@ -43,13 +43,23 @@ from __future__ import annotations
 import datetime as _dt
 import re
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from fr.journal.model import (
+    JournalEntry,
+    JournalParseError,
+    parse_journal,
+    phase_finding_states,
+    resolve_journal_read_path,
+    reviews_phase,
+    unauthorized_fixes,
+)
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.render import plan_locally_complete
 from fr.run import units
+from fr.run.historical import HISTORICAL_REVIEWER, findings_witness, historical_review_refusal
 from fr.run.model import (
     RunState,
     RunStateError,
@@ -59,7 +69,7 @@ from fr.run.model import (
     save_run_state,
     validate_run_id,
 )
-from fr.workflow.model import WorkflowError, WorkflowManifest
+from fr.workflow.model import Step, WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
 
 __all__ = [
@@ -304,6 +314,9 @@ def build_run_state(
     run_id: str,
     branch: str,
     started: str,
+    journal: Sequence[JournalEntry] = (),
+    visual_phases: Collection[int] = (),
+    notes: list[str] | None = None,
 ) -> RunState:
     """An adopted `RunState`: the cursor, everything before it `done`, the
     cursor and everything after it `pending`.
@@ -401,7 +414,7 @@ def build_run_state(
         )
         for index, step in enumerate(manifest.steps)
     }
-    return RunState(
+    state = RunState(
         # Born stamped with the version this fr writes — an adopted cursor is
         # a new artifact, not an old one, so it must not arrive stale.
         schema_version=current_run_schema_version(),
@@ -412,6 +425,109 @@ def build_run_state(
         cursor=adoption.cursor,
         steps=steps,
     )
+    if grouped and adoption.phases:
+        assert group is not None
+        state = _infer_historical_reviews(
+            state,
+            manifest,
+            group,
+            adoption,
+            journal=journal,
+            visual_phases=frozenset(visual_phases),
+            notes=notes,
+        )
+    return state
+
+
+def _infer_historical_reviews(
+    state: RunState,
+    manifest: WorkflowManifest,
+    group: Step,
+    adoption: Adoption,
+    *,
+    journal: Sequence[JournalEntry],
+    visual_phases: frozenset[int],
+    notes: list[str] | None,
+) -> RunState:
+    """R8 (spec 2026-10-05-run-upgrade-midflight §D): a complete phase whose
+    plan journal holds a review satisfying the historical bound, with no
+    finding against it still open and none fixed without the operator, gets
+    its review member `done` as `{review, reviewer: historical, findings}`.
+    Every other phase's review member stays pending, and a note says why.
+    When that leaves every unit of the group done, the group is done and the
+    cursor moves to the step after it."""
+    review = next((m for m in group.steps if "review" in m.evidence), None)
+    if review is None:
+        return state
+    entries = list(journal)
+    unauthorized = set(unauthorized_fixes(entries))
+    record = state.steps[group.id]
+    said: list[str] = []
+    manual = set(adoption.manual)
+    for item, value in adoption.phases.items():
+        n = int(item.removeprefix("phase/"))
+        if value != "done" or n in manual:
+            continue
+        candidates = [e for e in entries if reviews_phase(e, n)]
+        if not candidates:
+            said.append(f"no `kind=review` entry for phase {n} — its review stays pending.")
+            continue
+        if n in visual_phases:
+            said.append(f"phase {n} owes visual evidence — its review stays pending.")
+            continue
+        refusals = [
+            historical_review_refusal(state, n, e, owes_visual=False)
+            for e in reversed(candidates)
+        ]
+        chosen = next(
+            (e for e, r in zip(reversed(candidates), refusals, strict=True) if r is None), None
+        )
+        if chosen is None:
+            said.append(f"phase {n}'s review is not historical: {refusals[0]}.")
+            continue
+        states = phase_finding_states(entries, n)
+        still_open = [fid for fid, st in states.items() if st == "open"]
+        if still_open:
+            said.append(f"phase {n} has open findings: {', '.join(still_open)}.")
+            continue
+        unauth = [fid for fid in states if fid in unauthorized]
+        if unauth:
+            said.append(
+                f"phase {n} has findings fixed without the operator: {', '.join(unauth)}."
+            )
+            continue
+        key = f"{item}/{review.id}"
+        record = units.with_unit_state(record, key, "done")
+        record = units.with_evidence(
+            record,
+            key,
+            {
+                "review": chosen.id,
+                "reviewer": HISTORICAL_REVIEWER,
+                "findings": findings_witness(states),
+            },
+        )
+    steps = {**state.steps, group.id: record}
+    ids = [s.id for s in manifest.steps]
+    cursor = state.cursor
+    settled = all(
+        value == "done"
+        and (
+            int(item.removeprefix("phase/")) in manual
+            or all(units.unit_state(record, f"{item}/{m.id}") == "done" for m in group.steps)
+        )
+        for item, value in adoption.phases.items()
+    )
+    if cursor == group.id and settled and ids.index(cursor) + 1 < len(ids):
+        cursor = ids[ids.index(cursor) + 1]
+        steps[group.id] = record.model_copy(update={"state": "done"})
+        said.append(
+            f"every phase was reviewed before this cursor existed — the cursor lands on "
+            f"{cursor!r}."
+        )
+    if notes is not None:
+        notes.extend(said)
+    return state.model_copy(update={"steps": steps, "cursor": cursor})
 
 
 def _rel(repo_root: Path, path: Path) -> str:
@@ -640,15 +756,51 @@ def adopt_run(
     if notes is not None:
         notes.extend(adoption.notes)
 
+    journal, visual_phases = _review_inputs(repo_root, plan_rel, adoption, notes)
     state = build_run_state(
         manifest,
         adoption,
         run_id=rid,
         branch=resolved_branch,
         started=_dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
+        journal=journal,
+        visual_phases=visual_phases,
+        notes=notes,
     )
     save_run_state(repo_root, state)
     return state
+
+
+def _review_inputs(
+    repo_root: Path, plan_rel: str | None, adoption: Adoption, notes: list[str] | None
+) -> tuple[list[JournalEntry], frozenset[int]]:
+    """What R8's inference reads from disk: the plan journal's entries (the
+    reader the resolve-time evidence gate uses) and the complete phases that
+    owe `visual` evidence. Fail-soft and downward: an unreadable journal infers
+    no review, an unreadable matrix or plan counts the phase as owing visual."""
+    if plan_rel is None:
+        return [], frozenset()
+    from fr.run.visual import VisualRefusedError, owed_for_unit
+
+    entries: list[JournalEntry] = []
+    path = resolve_journal_read_path(repo_root, "plan", Path(plan_rel).name)
+    if path.is_file():
+        try:
+            entries = parse_journal(path.read_text())
+        except (JournalParseError, OSError) as e:
+            if notes is not None:
+                notes.append(f"the plan journal {path} is unreadable ({e}) — no review inferred.")
+    visual: set[int] = set()
+    for item, value in adoption.phases.items():
+        n = int(item.removeprefix("phase/"))
+        if value != "done":
+            continue
+        try:
+            if owed_for_unit(repo_root, plan_rel=plan_rel, phase=n, spec_rel=None):
+                visual.add(n)
+        except VisualRefusedError:
+            visual.add(n)
+    return entries, frozenset(visual)
 
 
 # --- what the migration offers -------------------------------------------
