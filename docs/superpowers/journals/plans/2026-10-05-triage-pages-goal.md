@@ -274,3 +274,73 @@ The operator chose 'severity on every open issue' in the question round (q4), an
 ### p3-r4-resolved · finding [refuted] · resolves p3-r4: Origin fixed_by/introduced_in are unvalidated free text (falls back to escaped plain text, same as pr:) (phase 3)
 
 Deliberately consistent with the existing pr: field, which is free text rendered through the same _pr_link (link when it parses, escaped text otherwise). Validating two of three PR-ref fields would make the schema inconsistent; nothing renders unsafely.
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-symlink-follow created=2026-10-05T23:19:04+00:00 phase=4 state=open review_scope=in -->
+### p4-sec-symlink-follow · finding [open] (reviewer: in scope) · state_sync followed symlinks on export and import (phase 4)
+
+Security review of a82a6a0c6: base.rglob plus shutil.copy2 followed symlinks, so a symlink planted in the state dir (authored-src/x -> ~/.ssh/id_rsa, or a symlinked page dir) copied its target into the repo, which the R13 driver then commits and pushes; import from a cloned repo could copy an arbitrary local file into the cache; and a symlinked destination was written through.
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-root-symlink-traversal created=2026-10-05T23:19:04+00:00 phase=4 state=open review_scope=in -->
+### p4-sec-root-symlink-traversal · finding [open] (reviewer: in scope) · state sync trusted the repo-side root and the parts joined to build it (phase 4)
+
+Follow-up review of ed706bdfc: the symlink checks covered entries under a root but not the root, so a cloned repo committing docs/triage or docs/triage/<scope> as a symlink made import read wherever it points and the driver export write outside its worktree; and <dir>/<scope> and <worktree>/<path>/<scope> trusted scope and every component of path (a symlinked component escapes without `..` or a leading `/`).
+
+<!-- fr:journal kind=discovery scope=plan id=p4-files-outside-list created=2026-10-05T23:19:04+00:00 phase=4 -->
+### p4-files-outside-list · discovery · touched beyond the phase's files list (phase 4)
+
+RealGhClient.pr_create lives in packages/fr/src/fr/real_ghclient.py (the gh adapter is not in ghclient.py, which holds only the Protocol and UnsupportedBatchOps); its tests and the glab/tea refusal parametrisation are in tests/unit/test_forge_adapter_batch_ops.py, the existing home of the batch-op adapter tests. Six existing triage tests that pinned "the writer writes schema 3" or "schema 4 is refused" now pin 4 and 5.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-export-decisions created=2026-10-05T23:19:04+00:00 phase=4 -->
+### p4-export-decisions · discovery · export choices the spec left open (phase 4)
+
+Action.batch carries the repo for export actions; action_line prints `<kind> wave <N> <repo>` for any action with a wave (export warns included). Export warns name no head, so they repeat every pass, as the spec wants. A recorded export whose live PR reads MERGED (merged by hand) needs nothing and is not counted; a recorded PR not read this pass counts as closing. The group/org scope warn is not counted blocked (it would stop every group drive). A contained() refusal in _export prints as a warn, counts blocked instead of closing, and is not `acted`, so --once exits 3 and the loop stops waiting on the operator. A leftover export worktree from a dead pass is force-removed before the next export (it is driver-owned scratch; add_worktree would otherwise refuse it forever). The P4.T4.S3 command tests were written right after the implementation draft rather than strictly before; one of them failed red (the refusal counted as acted) and drove a fix.
+
+<!-- fr:journal kind=finding scope=plan id=p4-export-backlog-of-finished-waves created=2026-10-05T23:19:04+00:00 phase=4 state=open review_scope=in -->
+### p4-export-backlog-of-finished-waves · finding [open] (reviewer: in scope) · opting in on a repo with many already-finished waves opens one export PR per wave at once (phase 4)
+
+Per the spec, step 3b acts on every finished wave with no merged export. A repo that sets export: after several waves finished (this repo, in phase 5) gets one export PR per old wave in the first pass, all carrying near-identical state. Exporting only the highest unexported finished wave, or recording older ones as superseded, would avoid that; it is a spec decision, not made here.
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-unpinned-merge created=2026-10-05T23:19:04+00:00 phase=4 state=open review_scope=in -->
+### p4-sec-unpinned-merge · finding [open] (reviewer: in scope) · the driver merged an export PR at its live head, so anyone's later commit on the branch auto-merged (phase 4)
+
+_export_merge called pr_merge with the live head. Author trust covers the PR opener, not later commits, so anyone with push access could add a commit to chore/triage-state-wave-<N> and the driver would merge it into the default branch unreviewed. Spec amended in a3ef99637 (R13, §G, §I).
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-file-list created=2026-10-05T23:19:04+00:00 phase=4 state=open review_scope=in -->
+### p4-sec-file-list · finding [open] (reviewer: in scope) · the export file allowlist trusted the forge's files field (phase 4)
+
+Security review of 648982163: gh's `files` names only a rename's new path, so a PR renaming .github/workflows/x.yml into docs/triage/... passed; and it stops at 100 entries, so a stray path past entry 100 passed. Spec amended in 435278157.
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-symlink-follow-resolved created=2026-10-05T23:19:04+00:00 phase=4 state=fixed resolves=p4-sec-symlink-follow -->
+### p4-sec-symlink-follow-resolved · finding [fixed] · resolves p4-sec-symlink-follow: state_sync followed symlinks on export and import (phase 4)
+
+state_sync walks with os.scandir and never follows a symlink at any depth (durable files and dirs themselves included); a symlinked target or parent under the destination root is never written through; copy2 uses follow_symlinks=False. Each is skipped and reported in SyncReport.skipped with its reason (Skipped(path, reason)); tests in tests/unit/test_triage_state_sync.py cover all four cases.
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-root-symlink-traversal-resolved created=2026-10-05T23:19:04+00:00 phase=4 state=fixed resolves=p4-sec-root-symlink-traversal -->
+### p4-sec-root-symlink-traversal-resolved · finding [fixed] · resolves p4-sec-root-symlink-traversal: state sync trusted the repo-side root and the parts joined to build it (phase 4)
+
+state_sync.contained(base, rel) refuses an absolute rel, an empty/./.. part, any existing symlinked component under base (the last included) and a resolve() outside base.resolve(); the base itself is trusted (macOS /var). check_scope_name refuses a scope that is not one plain part. export_state/import_state take (base, rel) and build the root through contained; the CLI passes (--to|--from, scope); the driver passes (worktree, <path>/<scope>), and a refusal there is a warn for that wave with nothing committed or pushed, counted blocked. _symlinked_dest still re-checks each target. Tests: test_triage_state_sync.py (contained, scope name, symlinked scope dir on import, symlinked root on export, base under a symlinked /var-style parent) and test_triage_batch_drive_cmd.py::test_a_symlinked_export_path_in_the_repo_is_refused_as_a_warn_with_nothing_written.
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-unpinned-merge-resolved created=2026-10-05T23:19:04+00:00 phase=4 state=fixed resolves=p4-sec-unpinned-merge -->
+### p4-sec-unpinned-merge-resolved · finding [fixed] · resolves p4-sec-unpinned-merge: the driver merged an export PR at its live head, so anyone's later commit on the branch auto-merged (phase 4)
+
+Export gains head: the SHA commit_paths returned (recorded by _export) or the adopted PR's live head (export-adopt). Step 3b merges only when the live head equals the recorded head and every changed file (the LivePr.files the head's PR list read) lies under <path>/<scope>/; a differing or missing head, a file outside, or an unknown file list is a warn counted blocked, and export-adopt needs the same file rule. export-merge carries the recorded head and _export_merge passes it to pr_merge. Tests: test_triage_batch_drive.py (pinned merge, foreign commit, no recorded head, files outside/sibling prefix/unknown for adopt and merge) and test_triage_batch_drive_cmd.py (foreign commit leaves no pr_merge call, a file outside blocks merge and adoption, the happy path merges at the recorded SHA).
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-file-list-resolved created=2026-10-05T23:19:04+00:00 phase=4 state=fixed resolves=p4-sec-file-list -->
+### p4-sec-file-list-resolved · finding [fixed] · resolves p4-sec-file-list: the export file allowlist trusted the forge's files field (phase 4)
+
+The driver's snapshot builder (_Driver._export_files) fetches, then reads the export PR's files with Checkout.changed_paths(origin/<default>, head) (git diff --name-only --no-renames ref...head: a rename is a delete plus an add, never truncated), for the recorded head on export-merge and the live head on export-adopt, and passes them to drive_pass as LivePr.files; the forge's files field no longer reaches the decision. An unreadable head gives no files, which _outside refuses (warn, blocked). Tests in test_triage_batch_drive_cmd.py against real temp repos: a rename from outside into the dir (both paths in changed_paths), 121 changed files with one outside sorting last, an unreadable head, and the happy path merging at the recorded SHA.
+
+<!-- fr:journal kind=finding scope=plan id=p4-export-backlog-of-finished-waves-resolved created=2026-10-05T23:19:04+00:00 phase=4 state=fixed resolves=p4-export-backlog-of-finished-waves -->
+### p4-export-backlog-of-finished-waves-resolved · finding [fixed] · resolves p4-export-backlog-of-finished-waves: opting in on a repo with many already-finished waves opens one export PR per wave at once (phase 4)
+
+Spec amended in 1e267a0ee. batch_drive.export_target picks, per repo, the newest unmerged export PR and the waves recorded with it, or else every finished wave with no entry; step 3b decides once per repo on it, so one export (or adopt) covers all unexported finished waves on chore/triage-state-wave-<highest> (Action.covers), Summary counts one owed export per PR, and a wave finishing while a PR is open waits. The driver records one entry per covered wave with the same pr/head (pr None when unchanged), and a merge marks every entry carrying that PR merged. Pure tests (written red first) in test_triage_batch_drive.py; command tests in test_triage_batch_drive_cmd.py (three waves, one PR, three entries, merge marks all; a wave finishing mid-PR waits, then exports alone), written right after the implementation.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-10-05T23:19:04+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+state_sync is one copy loop shared by both directions; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t4 created=2026-10-05T23:19:04+00:00 phase=4 -->
+### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
+
+execution reuses _archive's merge path and the gitseam/ghclient seams; the export steps are one method each, nothing to clean
