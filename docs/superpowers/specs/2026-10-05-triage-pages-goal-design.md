@@ -107,10 +107,7 @@ Two PR states are reconciled instead of warned on every pass:
 - merged outside the driver (by hand, or a pass that died between the merge and its record): the driver records the merge and moves on to any wave still owed;
 - closed without a merge: the driver records the entry as closed, warns once, and treats its waves as owed again, so the next pass exports them on a fresh PR. An operator who wants no exports removes `export:` from the config.
 
-Adoption is narrower than a trusted open PR on the branch. The driver adopts an unrecorded PR on any `chore/triage-state-wave-<N>` head, for any `N`, so a crash followed by a newly finished wave never opens a second PR. Three conditions must also hold:
-- the head is a single commit whose parent is on `origin/<default>`;
-- every file it changes lies under `<path>/<scope>/`;
-- the PR is not cross-repo.
+The driver never adopts content it did not write. When an unrecorded, same-repo, trusted open PR exists on any `chore/triage-state-wave-<N>` head, for any `N` (a reopened, recorded-closed PR included), the driver reuses that PR rather than opening a second one. It re-exports the current state, force-pushes its own commit onto that PR's branch, and records the PR with the SHA it pushed. A crash followed by a newly finished wave therefore never opens a second PR, and nothing someone else pushed to the branch can reach the merge, which stays pinned to the driver's own SHA (phase 4 review p4-r12, p4-r13).
 
 A cross-repo PR on such a head is ignored, never adopted or warned on, because the driver pushes only to its own branch and a fork cannot stall it.
 
