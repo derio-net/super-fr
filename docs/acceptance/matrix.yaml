@@ -6268,8 +6268,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban_focus.py
+      - super-fr:tests/unit/test_fr_herdr_runner.py
     status: skipped
-    notes: focus CLI + herdr focus unit-tested; copy button lands in phase 2
+    notes: focus CLI unit-tested (test_triage_kanban_focus.py); herdr focus and status
+      unit-tested against live-captured fixtures (test_fr_herdr_runner.py); copy button
+      lands in phase 2
     visual:
       states:
       - copy confirmed on button
