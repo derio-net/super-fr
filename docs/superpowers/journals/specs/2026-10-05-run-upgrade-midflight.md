@@ -261,3 +261,8 @@ Phase 2 serves R7-R9, an ask independent of reshape.
 ### phase-split-2026-10-05-run-upgrade-midflight-p3 · decision · ask: adopt --supersede (R5-R6) is its own reviewable ask, built on phase 2's inference
 
 Phase 3 serves R5-R6 plus R10 prose.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-05-run-upgrade-midflight-p2 created=2026-10-05T21:11:36+00:00 -->
+### tier-2026-10-05-run-upgrade-midflight-p2 · decision · hard: phase 2 changes the review-phase evidence gate every run relies on (#430/#497)
+
+A weakened gate fails silently; the bound needs judgement.
