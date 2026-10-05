@@ -16,8 +16,10 @@ ticks:
 - P4.T4.S1
 - P4.T4.S2
 - P4.T4.S3
+- P4.T4.S4
 refactor:
   P4.T1: state_sync is one copy loop shared by both directions; nothing to clean
+  P4.T4: execution reuses _archive's merge path and the gitseam/ghclient seams; the export steps are one method each, nothing to clean
 journal:
 - kind: finding
   id: p4-sec-symlink-follow
@@ -37,6 +39,37 @@ journal:
     cloned repo committing docs/triage or docs/triage/<scope> as a symlink made import read wherever it points
     and the driver export write outside its worktree; and <dir>/<scope> and <worktree>/<path>/<scope> trusted
     scope and every component of path (a symlinked component escapes without `..` or a leading `/`).'
+- kind: discovery
+  id: p4-files-outside-list
+  phase: 4
+  title: touched beyond the phase's files list
+  body: 'RealGhClient.pr_create lives in packages/fr/src/fr/real_ghclient.py (the gh adapter is not in
+    ghclient.py, which holds only the Protocol and UnsupportedBatchOps); its tests and the glab/tea refusal
+    parametrisation are in tests/unit/test_forge_adapter_batch_ops.py, the existing home of the batch-op adapter
+    tests. Six existing triage tests that pinned "the writer writes schema 3" or "schema 4 is refused" now pin 4
+    and 5.'
+- kind: discovery
+  id: p4-export-decisions
+  phase: 4
+  title: export choices the spec left open
+  body: 'Action.batch carries the repo for export actions; action_line prints `<kind> wave <N> <repo>` for any
+    action with a wave (export warns included). Export warns name no head, so they repeat every pass, as the
+    spec wants. A recorded export whose live PR reads MERGED (merged by hand) needs nothing and is not counted; a
+    recorded PR not read this pass counts as closing. The group/org scope warn is not counted blocked (it would
+    stop every group drive). A contained() refusal in _export prints as a warn, counts blocked instead of
+    closing, and is not `acted`, so --once exits 3 and the loop stops waiting on the operator. A leftover export
+    worktree from a dead pass is force-removed before the next export (it is driver-owned scratch; add_worktree
+    would otherwise refuse it forever). The P4.T4.S3 command tests were written right after the implementation
+    draft rather than strictly before; one of them failed red (the refusal counted as acted) and drove a fix.'
+- kind: finding
+  id: p4-export-backlog-of-finished-waves
+  review_scope: out
+  phase: 4
+  title: opting in on a repo with many already-finished waves opens one export PR per wave at once
+  body: 'Per the spec, step 3b acts on every finished wave with no merged export. A repo that sets export: after
+    several waves finished (this repo, in phase 5) gets one export PR per old wave in the first pass, all
+    carrying near-identical state. Exporting only the highest unexported finished wave, or recording older ones
+    as superseded, would avoid that; it is a spec decision, not made here.'
 resolves:
 - id: p4-sec-symlink-follow
   state: fixed
