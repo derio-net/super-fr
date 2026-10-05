@@ -101,8 +101,18 @@ On a later pass the driver merges the export PR under the same gate as an archiv
 
 A commit pushed to the branch by anyone else therefore blocks the merge, with a warning, rather than riding into the default branch. The driver then records the merge. Other PR states each get a warning on every pass, and change nothing else:
 - open with checks pending: the driver waits;
-- open with checks failing, or untrusted: counted as blocked;
-- closed without a merge.
+- open with checks failing, or untrusted: counted as blocked.
+
+Two PR states are reconciled instead of warned on every pass:
+- merged outside the driver (by hand, or a pass that died between the merge and its record): the driver records the merge and moves on to any wave still owed;
+- closed without a merge: the driver records the entry as closed, warns once, and treats its waves as owed again, so the next pass exports them on a fresh PR. An operator who wants no exports removes `export:` from the config.
+
+Adoption is narrower than a trusted open PR on the branch. The driver adopts an unrecorded PR on any `chore/triage-state-wave-<N>` head, for any `N`, so a crash followed by a newly finished wave never opens a second PR. Three conditions must also hold:
+- the head is a single commit whose parent is on `origin/<default>`;
+- every file it changes lies under `<path>/<scope>/`;
+- the PR is not cross-repo.
+
+A cross-repo PR on such a head is ignored, never adopted or warned on, because the driver pushes only to its own branch and a fork cannot stall it.
 
 An export that is recorded but not yet merged keeps `drive` running, the same way a close-out does. Without `--yes`, the pass prints the actions it would take. Without `export:` in the config, no export action exists. A `group` or `org` scope never exports. A repo of such a scope that opts in gets one warning per pass naming `--repo`.
 
@@ -344,7 +354,9 @@ def import_state(src_root: Path, state_dir: Path, *, force: bool) -> SyncReport:
 ### I. The driver exports a finished wave (R13)
 
 **Config.** `TriageConfig.export: ExportConfig | None = None`, where `ExportConfig(path: str)`.
-The path must be relative, with no `..` and no leading `/`, else it is refused at load.
+At load, the path is normalised: a trailing `/` is stripped. It is refused when it is absolute,
+or has a `..`, empty or `.` part, which is exactly what `contained()` would refuse later. Every
+reader uses the one normalised value.
 
 **Decision (pure).** `Snapshot` gains:
 - `export_path: dict[str, str]`: repo to path, from config, for single-repo scopes only;
