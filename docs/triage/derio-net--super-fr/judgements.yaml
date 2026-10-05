@@ -376,6 +376,7 @@ issues:
     verified: true
     detail: The third-harness trigger has not occurred and OpenCode/Hermes synchronizers still have materially different responsibilities.
     note: Park until a third harness reveals a real shared abstraction.
+    kind: parked
   super-fr#410:
     tier: 4
     theme: documentation
@@ -383,6 +384,7 @@ issues:
     verified: true
     detail: AGENTS.md and README cover the mechanics, but no concise centralized new-harness checklist exists.
     note: Low-cost documentation task; do not make it depend on super-fr#411.
+    kind: parked
   super-fr#363:
     tier: 4
     theme: acceptance-debt
@@ -390,6 +392,7 @@ issues:
     verified: true
     detail: This is a bot-managed registry of mixed verification debt, not a coherent implementation problem.
     note: Leave open and choose concrete child debt by the affected capability's tier.
+    kind: parked
   super-fr#333:
     tier: 4
     theme: externally-blocked
@@ -397,6 +400,7 @@ issues:
     verified: false
     detail: The Infisical work is an old externally gated branch and infrastructure effort, not current mainline maintenance.
     note: Re-triage PR and infrastructure availability before scheduling; do not treat this as ready backlog work.
+    kind: parked
   super-fr#563:
     tier: 2
     theme: isolation-enforcement
@@ -674,7 +678,7 @@ issues:
     cx: M
     verified: true
     detail: '**Mostly delivered by super-fr#604** (4.20.0): in/out-of-scope findings, `fr plan proportionality`, per-step cost, independent spec reviewer. Spec `2026-09-24-fr-goal-scope-proportion-cost-design.md:343-348` defers §3 (Performance section through spec/plan/tests/review) and §2 (cheaper orchestrator).'
-    note: 'Split, then close: `gh issue create --title "fr-goal: Performance section in spec, carried through plan, benchmarks and self-review (#597 §3)" --body "Deferred from #597 by spec 2026-09-24-fr-goal-scope-proportion-cost."` then `gh issue close 597 --comment "§1/§4 delivered by #604; §2 gated on #593/#627; §3 split out."`'
+    note: 'Close candidate: its four measures look shipped in #604 (fr-goal now says fix every finding in scope, file the rest). Verify measures 2-4 against the skill, then `gh issue close 597 -R derio-net/super-fr --reason completed --comment "Shipped in #604."`'
   super-fr#642:
     tier: 4
     theme: archive-workflow
@@ -823,7 +827,7 @@ issues:
     cx: M
     verified: false
     detail: 'Design ask: one session closes a queue of merged batches instead of N concurrent `fr pickup --run` closeouts that collide on `fr archive --all` and on the one-capture-per-host usage file. Observed live after #652 and #651 merged back to back.'
-    note: 'Batch `closeout-queue` with super-fr#665. One proposed design (a dispatch-time watcher: merge on the operator''s ready flip, then serialized fresh-session closeouts) is recorded as a comment on the issue, 2026-09-26; the concrete shape is for the brainstorm. The usage-file collision loses a capture, so promote if it recurs. Now after `closeout-always` (#733): the queue loops the branch-keyed close-out.'
+    note: Probably superseded by the wave driver, which runs each batch's close-out itself. Re-read before scheduling.
   super-fr#659:
     tier: 3
     theme: isolation-lifecycle
@@ -1562,7 +1566,7 @@ issues:
     verified: false
     detail: Board and origins page have no fragment mechanism; architecture's `load_manifest`/`validate_fragment` is the one to share.
     kind: feature
-    note: Filed 2026-10-05 after the 10-02 pages' authored sections were lost on re-render.
+    note: 'Folded into super-fr#970, whose design covers it. Close when #970 lands: `gh issue close 968 -R derio-net/super-fr --reason "not planned" --comment "Folded into #970."`'
   super-fr#965:
     tier: 3
     theme: acceptance-editing
@@ -1712,6 +1716,7 @@ issues:
     verified: false
     detail: Wave tables omit each batch's tier, on purpose per spec design D.
     kind: feature
+    note: Folded into super-fr#970 (board layout).
   super-fr#886:
     tier: 2
     theme: triage
@@ -1753,7 +1758,7 @@ issues:
     cx: XS
     verified: true
     detail: 'Verified 2026-10-05: the shipped fr-triage SKILL.md says a first run creates `schema: 3` and its example is schema 3. Close recommendation: `gh issue close 881 -R derio-net/super-fr --comment "Verified: skill teaches schema 3."`'
-    kind: defect
+    kind: parked
   super-fr#880:
     tier: 4
     theme: triage-batches
@@ -1813,6 +1818,29 @@ issues:
     verified: false
     detail: At the next major bump, this repo's live plans carry the old ceiling and install.sh's `fr models apply` is refused; release.py now catches it pre-push.
     kind: defect
+  super-fr#970:
+    tier: 4
+    theme: triage-board
+    cx: L
+    verified: true
+    kind: feature
+    detail: 'Brainstorm first: one goal per page, one home per fact, summary before detail, driver export of the triage state. Folds in super-fr#968 and super-fr#887.'
+    note: 'Operator priority 2026-10-05: artifact issues first (wave 4).'
+  super-fr#971:
+    tier: 4
+    theme: triage
+    cx: M
+    verified: true
+    kind: feature
+    detail: 'No sweep finds duplicate open issues; #781 (check before filing) was closed not planned because a run must not search the backlog. Triage owns it: candidates from the engine, judgement from the skill, `duplicate_of` in judgements.'
+    note: 'Operator 2026-10-05: finding duplicates is our responsibility.'
+  super-fr#969:
+    cx: S
+    tier: 4
+    theme: triage-board
+    verified: true
+    delivery: delivers
+    delivery_note: Mirrors the triage inputs and history into docs/triage with sync.sh export|import; regeneration from the repo copy verified. Draft; ready and merge after CI.
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -2436,8 +2464,10 @@ batches:
   title: 'Every forge call goes through the adapter: triage collect and isolation lookups, allowlist emptied'
   ids:
   - super-fr#742
-  rationale: 'Wave 6, after closeout-always (both touch run/closeout.py). #744 fixed the hard gate and added a shrink-only tripwire allowlist; this empties it: triage collect''s fr.gh.list_*, isolation/local.py''s own gh/glab/tea branching, and skill prose. After revert-detection too (isolation/local.py).'
+  - super-fr#892
+  rationale: 'Wave 5 (high severity): #742 is a high-severity regression (deliver never resolves on GitLab/Gitea); #744 fixed the hard gate and left a shrink-only allowlist, this empties it. #892 is the same bypass in the triage batch verbs (make_client drops the self-hosted host).'
   order: 3
+  wave: 5
   bump: minor
   launch:
     runner: herdr
@@ -3609,3 +3639,201 @@ batches:
     run: 2026-10-04-feat-batch-drive-merge-train
     archive: chore/archive-2026-10-04-drive-merge-train
     archived: 963
+- id: triage-state-integrity
+  title: 'Triage state reads what it should: scope-checked facts, owner-aware keys, schema stamp only where the shape moved, origins paging, list close-out column'
+  ids:
+  - super-fr#886
+  - super-fr#954
+  - super-fr#885
+  - super-fr#888
+  - super-fr#882
+  - super-fr#889
+  rationale: 'Wave 4 (artifact issues first): the data the triage pages are built from. All in fr/triage model/collect/state.'
+  wave: 4
+  skill: debug
+- id: triage-dedupe
+  title: 'Triage owns duplicates: a sweep proposes duplicate open issues, judgements record duplicate_of'
+  ids:
+  - super-fr#971
+  rationale: 'Wave 4: operator 2026-10-05, finding duplicates is our job. After state-integrity: both touch the judgement model and keys.'
+  wave: 4
+  after:
+  - triage-state-integrity
+  bump: minor
+- id: triage-pages-goal
+  title: 'Triage pages: one goal per page, one home per fact, authored sections everywhere, driver exports the state'
+  ids:
+  - super-fr#970
+  - super-fr#968
+  - super-fr#887
+  rationale: 'Wave 4: the artifact UX brainstorm. fr-goal starts with fr-brainstorming and will stop at its question round for the operator.'
+  wave: 4
+  bump: minor
+- id: acceptance-unittest-anchors
+  title: 'Acceptance: unittest-style Class.test anchors resolve, and the anchor repair recognises unittest classes'
+  ids:
+  - super-fr#965
+  - super-fr#893
+  rationale: 'Wave 5 (high severity): #965 is a high-severity regression from #866; #893 is the same naming class in the repair.'
+  wave: 5
+  skill: debug
+- id: run-upgrade-midflight
+  title: A run started on an older fr can be finished after an upgrade
+  ids:
+  - super-fr#891
+  rationale: 'Wave 5 (high severity): a run spanning an upgrade cannot finish; needs a design for adopt/supersede and historical evidence.'
+  wave: 5
+  bump: minor
+- id: drive-checks-pending
+  title: 'No checks reported yet is pending, not an error: batch merge waits, the drive pass carries on, merge_ready applies R4'
+  ids:
+  - super-fr#952
+  - super-fr#947
+  - super-fr#880
+  rationale: 'Wave 6 (medium severity): one root cause in two commands, plus the R4 gap in merge_ready.'
+  wave: 6
+  skill: debug
+- id: drive-restart-forge
+  title: 'Drive: a restart never starts a second close-out, and a degraded forge is bounded everywhere'
+  ids:
+  - super-fr#883
+  - super-fr#921
+  rationale: 'Wave 6: both in batch_drive/triage_batch_cmd; after drive-checks-pending to keep the driver files serial.'
+  wave: 6
+  after:
+  - drive-checks-pending
+  skill: debug
+- id: herdr-dispatch-reliability
+  title: 'herdr dispatch: a brief is always submitted, a busy pane is retried, one failed dispatch does not end the drive'
+  ids:
+  - super-fr#956
+  - super-fr#931
+  rationale: 'Wave 6: both seen live while driving waves; the runner and the drive loop. Pattern: the herdr runner assumes a ready, interactive pane.'
+  wave: 6
+  after:
+  - drive-restart-forge
+  skill: debug
+- id: debug-journal-push
+  title: fr-debugging pushes its review journal entry before the PR merges
+  ids:
+  - super-fr#871
+  rationale: 'Wave 6 (medium): the review the run claims never reaches main.'
+  wave: 6
+  skill: debug
+- id: release-major-plans
+  title: A major release migrates this repo's live plans, so install.sh's models apply is not refused
+  ids:
+  - super-fr#861
+  rationale: 'Wave 6 (medium): latent until the next major; release.py''s pre-push suite already catches it.'
+  wave: 6
+  skill: debug
+- id: fr-binary-path
+  title: A harness's shell and its hooks run the same fr
+  ids:
+  - super-fr#746
+  rationale: 'Wave 6 (medium): zsh .zshenv reorders PATH, so two fr binaries can serve one session.'
+  wave: 6
+  skill: debug
+- id: opencode-tier-question
+  title: fr-goal on OpenCode asks the model-per-tier question when every tier is unbound
+  ids:
+  - super-fr#538
+  rationale: 'Wave 6 (tier 2, no recorded severity, judged medium): re-verify on 5.x first.'
+  wave: 6
+  skill: debug
+features:
+- rank: 1
+  title: Merge conflicts go back to the session that wrote the code
+  ids:
+  - super-fr#959
+  why: The drive stalls on every real conflict until someone notices; it happened twice on 2026-10-05.
+  start: /fr-goal super-fr#959
+- rank: 2
+  title: Verify before release, close on evidence
+  ids:
+  - super-fr#818
+  - super-fr#822
+  why: 'A pre-merge candidate walk would have caught the six fixes take 10 found failing after release; #822 closes a promise on its live evidence.'
+  start: /fr-goal super-fr#818
+- rank: 3
+  title: Model bindings survive provider churn
+  ids:
+  - super-fr#591
+  why: A binding that rots fails at dispatch, mid-wave, with nobody watching.
+  start: /fr-goal super-fr#591
+- rank: 4
+  title: Driver sessions stay current and portable
+  ids:
+  - super-fr#964
+  - super-fr#878
+  why: Sessions keep pre-merge plugins through a long drive, and the driver only runs inside herdr.
+  start: /fr-goal super-fr#964
+- rank: 5
+  title: Cost evidence
+  ids:
+  - super-fr#838
+  - super-fr#793
+  - super-fr#593
+  - super-fr#627
+  - super-fr#597
+  why: 'The case for fr is cost. Per-phase tiers and overhead in the PR body make each run''s cost explain itself. #597 is probably already shipped (close candidate).'
+  start: /fr-goal super-fr#838
+- rank: 6
+  title: Archive does its own follow-ups
+  ids:
+  - super-fr#930
+  - super-fr#528
+  - super-fr#458
+  why: Close-outs leave unpriced sessions, stale matrix refs and open ends to fix by hand.
+  start: /fr-goal super-fr#930
+- rank: 7
+  title: Plan tooling
+  ids:
+  - super-fr#552
+  why: Adding a phase means hand-writing its YAML.
+  start: /fr-goal super-fr#552
+- rank: 8
+  title: Acceptance report for every fr-enabled repo
+  ids:
+  - super-fr#923
+  why: 'Low priority by its own text; after #877''s live check.'
+  start: /fr-goal super-fr#923
+- rank: 9
+  title: Operator conveniences
+  ids:
+  - super-fr#580
+  - super-fr#477
+  - super-fr#453
+  why: 'Idle devcontainers, status-line wiring, bridge logs: friction only.'
+  start: /fr-goal super-fr#580
+- rank: 10
+  title: Forge parity beyond GitHub
+  ids:
+  - super-fr#611
+  - super-fr#795
+  why: Matters when a second forge has a user; wave 5's forge-remainder comes first.
+  start: /fr-goal super-fr#611
+- rank: 11
+  title: Harness and live-evidence debt
+  ids:
+  - super-fr#556
+  - super-fr#601
+  - super-fr#623
+  - super-fr#509
+  - super-fr#511
+  - super-fr#510
+  - super-fr#555
+  - super-fr#454
+  why: Claims owed a live run on Hermes, Gitea and OpenCode; valuable, but each needs a live session to close.
+  start: /fr-goal super-fr#556
+- rank: 12
+  title: Low-severity defects, after wave 6
+  ids:
+  - super-fr#937
+  - super-fr#962
+  - super-fr#884
+  - super-fr#868
+  - super-fr#869
+  - super-fr#924
+  why: 'Low severity by classification. #937 is the one to watch: it can merge onto a red main.'
+  start: /fr-debugging super-fr#937
