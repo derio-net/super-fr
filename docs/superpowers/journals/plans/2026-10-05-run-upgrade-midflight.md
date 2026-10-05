@@ -59,3 +59,28 @@ Added test_check_answers_a_drifted_cursor_with_one_warning and cited it on run-r
 ### p1-r3-resolved · finding [out-of-scope] · resolves p1-r3: fr pickup's _run_unit_record uses the strict resolver and swallows the error on a drifted cursor (phase 1)
 
 Not caused by this change: fr pickup predates it and is not an `fr run` read-only command; listed in the spec's Non-goals. Reshape removes the drift it trips on.
+
+<!-- fr:journal kind=decision scope=plan id=p2-implement-return-rule created=2026-10-05T21:57:21+00:00 phase=2 -->
+### p2-implement-return-rule · decision · Clause 2 reads every other phase/N unit's returned, the reviewer check's own implementer rule (phase 2)
+
+`implement_returned` takes the latest `returned` over every `phase/N/*` unit except the review unit being resolved — the same "every other member of the phase" rule `_verify_reviewer` uses for implementers — so the bound needs no knowledge of which member id is the implement one. Adoption identifies the review member as the group member whose `evidence` declares `review`.
+
+<!-- fr:journal kind=decision scope=plan id=p2-adopt-records-only-done created=2026-10-05T21:57:21+00:00 phase=2 -->
+### p2-adopt-records-only-done · decision · Adoption records only inferred-done review units; a not-inferable one stays absent (pending) with a note (phase 2)
+
+A review member adoption cannot infer is left unrecorded, exactly as before (the next `advance` dispatches it), rather than written as an explicit `pending` unit. The cursor moves past the group only when it was ON the group (the all-complete fallback) and every member of every non-manual phase is done; an unticked manual phase keeps it on the group.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-adopted-implement-debt created=2026-10-05T21:57:21+00:00 phase=2 -->
+### p2-adopted-implement-debt · discovery · Adopted implement-phase units already show `unevidenced` debt for `visual` under fr-goal (phase 2)
+
+Pre-existing, not introduced here: an adopted `phase/N/implement-phase: done` unit carries no evidence, and fr-goal's implement-phase declares `visual`, so `fr run status` prints "unevidenced (predates the evidence gate)" for it. R9 only exempts historical REVIEW units; the R9 test asserts on the review unit's block only.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-05T21:57:21+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+the bound landed as a new pure module (fr/run/historical.py) and the findings witness string was extracted there as findings_witness on first use; nothing left duplicated to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-05T21:57:21+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+adoption reuses the bound, reviews_phase, phase_finding_states, unauthorized_fixes and findings_witness directly; no copy of the gate's logic was made, so nothing to clean
