@@ -6257,9 +6257,18 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_carry_forward_copies_gate_provenance_and_missing_emitted_keys
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_carry_forward_carries_every_old_unit_with_attempts_and_evidence
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_supersede_yes_replaces_the_run_in_one_commit_and_carries_provenance
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_supersede_preview_lists_the_closed_holds_and_writes_nothing
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_a_review_the_old_cursor_resolved_keeps_its_real_evidence
+    status: ci
+    notes: 'Phase 3: carry_forward (gate/answered_by, emitted, every unit with attempts
+      and evidence, open holds abandoned) and adopt --supersede (preview, --yes one
+      commit, usage moved, refusals, same-day overwrite) are covered by unit tests that
+      run in CI; p2-r5 ordering pinned.'
   - id: historical-review-evidence
     capability: run-evidence
     acceptance: A phase reviewed before its run's cursor existed can be closed honestly
