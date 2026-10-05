@@ -14,6 +14,8 @@ PATH survives `.zshenv`, so the shell sees the pin. At CLI entry `fr` compares
 itself to it:
 
 - no pin, or a pin naming this `fr`: nothing happens;
+- a pin naming this package directory at another version — the install was
+  upgraded under a live session, one binary still: warn, suggest a restart;
 - a disagreeing pin, and this `fr` runs from no project venv — it was reached
   through PATH, which is the skew: REFUSE, naming both;
 - a disagreeing pin, and this `fr` runs from a venv (`uv run fr`, a `uv run`
@@ -29,7 +31,7 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -38,6 +40,7 @@ import typer
 
 import fr
 from fr import __version__
+from fr.artifacts.trigger import _asks_for_help
 
 PIN_ENV = "FR_HARNESS_FR"
 SKIP_ENV = "FR_SKIP_IDENTITY"
@@ -73,6 +76,15 @@ def judge(env: Mapping[str, str], *, identity: str, from_venv: bool) -> Verdict:
     pin = env.get(PIN_ENV, "")
     if not pin or pin == identity or env.get(SKIP_ENV) == "1":
         return Verdict("ok")
+    if pin.partition(" ")[2] == identity.partition(" ")[2]:
+        # Same package directory, another version: the one install was
+        # upgraded under a live session (install.sh runs mid-flight), not a
+        # second binary on PATH.
+        return Verdict(
+            "warn",
+            f"fr: this fr was upgraded to {identity.partition(' ')[0]} after the session "
+            f"pinned {pin.partition(' ')[0]}; restart the session to re-pin it.",
+        )
     if from_venv:
         return Verdict(
             "warn",
@@ -85,14 +97,19 @@ def judge(env: Mapping[str, str], *, identity: str, from_venv: bool) -> Verdict:
         f"  this shell ran:            {identity}\n"
         f"  the harness's hooks run:   {pin}\n"
         "  PATH reached a different fr than the hooks did (a shell profile such as\n"
-        "  ~/.zshenv can reorder PATH). Run the intended fr explicitly — `uv run fr`\n"
-        "  in a worktree, or its absolute path — or set "
-        f"{SKIP_ENV}=1 to run this one anyway.",
+        "  ~/.zshenv can reorder PATH). Run the intended fr through its venv —\n"
+        "  `uv run fr` in a worktree, `uv run --project <worktree> fr` elsewhere —\n"
+        "  restart the session if the hooks' fr was the one replaced, or set\n"
+        f"  {SKIP_ENV}=1 to run this one anyway.",
     )
 
 
-def enforce() -> None:
-    """The CLI-entry check: warn on stderr, or exit 2."""
+def enforce(argv: Sequence[str] | None = None) -> None:
+    """The CLI-entry check: warn on stderr, or exit 2. A subcommand's `--help`
+    reaches the root callback too, and is answered whatever the pin says —
+    detected exactly as the migration gate detects it."""
+    if _asks_for_help(sys.argv[1:] if argv is None else argv):
+        return
     verdict = judge(
         os.environ, identity=current_identity(), from_venv=runs_from_venv(os.environ, sys.prefix)
     )

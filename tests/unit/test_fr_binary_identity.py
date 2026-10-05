@@ -116,3 +116,46 @@ def test_the_cli_is_silent_under_a_pin_naming_itself(monkeypatch: pytest.MonkeyP
     result = CliRunner().invoke(app, ["skills"])
     assert result.exit_code == 0, result.output
     assert PIN_ENV not in result.output
+
+
+def test_an_upgraded_install_is_not_a_second_binary() -> None:
+    # Review finding 1: install.sh upgrades the global fr mid-session; the pin
+    # still names the old version at the SAME package dir. That is one install.
+    here = current_identity()
+    _, _, package_dir = here.partition(" ")
+    verdict = judge({PIN_ENV: f"0.0.1 {package_dir}"}, identity=here, from_venv=False)
+    assert verdict.action == "warn"
+    assert "restart" in verdict.message
+
+
+def test_the_refusal_advises_only_what_passes() -> None:
+    # Review finding 2: an absolute venv path sets no VIRTUAL_ENV, so it would
+    # be refused too — the advice must not offer it.
+    message = judge({PIN_ENV: OTHER}, identity=current_identity(), from_venv=False).message
+    assert "absolute path" not in message
+    assert "uv run" in message
+    assert "restart" in message
+
+
+def test_subcommand_help_is_answered_under_a_disagreeing_pin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Review finding 3: the root callback runs before a subcommand's --help.
+    monkeypatch.setenv(PIN_ENV, OTHER)
+    monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+    monkeypatch.setattr(sys, "argv", ["fr", "isolation", "--help"])
+    result = CliRunner().invoke(app, ["isolation", "--help"])
+    assert result.exit_code == 0, result.output
+
+
+def test_the_refusal_fires_before_the_migration_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Review finding 4: a wrong fr must not migrate artifacts either.
+    import fr.cli
+
+    calls: list[object] = []
+    monkeypatch.setattr(fr.cli, "ensure_artifacts_current", lambda **kw: calls.append(kw))
+    monkeypatch.setenv(PIN_ENV, OTHER)
+    monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+    result = CliRunner().invoke(app, ["status"])
+    assert result.exit_code == 2
+    assert calls == []
