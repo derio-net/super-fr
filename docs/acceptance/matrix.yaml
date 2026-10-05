@@ -6317,9 +6317,13 @@ rows:
       around it.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_board.py#test_every_card_is_a_closed_details_with_its_stage_and_a_linkable_id
+      - super-fr:tests/unit/test_triage_batch_board.py#test_the_stage_filter_is_hidden_with_one_checked_box_per_stage_present
+    status: ci
+    notes: Collapsed stage-filtered batch cards and link-opening shipped (phase 2);
+      browser-checked headless.
     visual:
       states:
       - all-stages-on
