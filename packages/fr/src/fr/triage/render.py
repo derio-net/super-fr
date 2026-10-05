@@ -25,14 +25,24 @@ from typing import TYPE_CHECKING
 
 from fr.triage.batch import batch_pr as find_batch_pr
 from fr.triage.batch import derive_batch_stage, last_dispatch, planned_merge_order
+from fr.triage.batch_drive import finished_waves
 from fr.triage.check import CheckResult, classify
-from fr.triage.components import GUTTER_CSS, TABS_CSS, TABS_SCRIPT, TOKENS_CSS, tabs
+from fr.triage.components import (
+    CHROME_CSS,
+    GUTTER_CSS,
+    TABS_CSS,
+    TABS_SCRIPT,
+    TOKENS_CSS,
+    page_header,
+    tabs,
+)
 from fr.triage.model import issue_key
 from fr.triage.stage import IN_FLIGHT
 from fr.triage.views import (
     CX_RANK,
     NEED_LABELS,
     UNWAVED,
+    batch_stages,
     kind_counts,
     needs_you,
     next_up,
@@ -187,6 +197,7 @@ table.grid th, table.grid td { text-align: left; vertical-align: top;
 table.grid th { color: var(--muted); font-weight: 500; }
 """
     + TABS_CSS
+    + CHROME_CSS
     + GUTTER_CSS
     + """
 @media (max-width: 480px) {
@@ -732,11 +743,12 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         '<section class="decide waves" id="waves"><h2>Waves</h2>'
         f'<div id="closing-order"><h3>Closing order</h3><div class="counts">{chips}</div></div>'
     )
-    grouped = waves(judgements)
+    done = finished_waves(judgements.batches, batch_stages(facts, judgements))
+    grouped = {k: v for k, v in waves(judgements).items() if k not in done}
     if grouped:
-        picked = preselected_wave(facts, judgements)
+        picked = preselected_wave(facts, judgements, among=set(grouped))
         keys = list(grouped)
-        selected = keys.index(str(picked)) if picked is not None else len(keys) - 1
+        selected = keys.index(str(picked)) if str(picked) in keys else len(keys) - 1
         panels = [
             (key, "No wave" if key == UNWAVED else f"Wave {key}",
              _wave_table(batches, facts, judgements))
@@ -745,6 +757,11 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         body = tabs("wave", "Waves", panels, selected)
     else:
         body = '<p class="quiet">No waves: no batch carries a <code>wave</code> yet.</p>'
+    if done and not any(k != UNWAVED for k in grouped):
+        body = (
+            '<p class="quiet">Every wave is finished: see '
+            '<a href="history.html">the history page</a>.</p>' + (body if grouped else "")
+        )
     return f"{head}{body}{_features_table(judgements, facts)}{_parked(facts, judgements)}</section>"
 
 
@@ -810,7 +827,7 @@ def render(facts: Facts, judgements: Judgements, since: SnapshotDiff | None = No
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Backlog triage · {esc(facts.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
-        f"{_masthead(facts, judgements, result)}\n"
+        f"{_masthead(facts, judgements, result)}\n{page_header('board')}\n"
         f"{_since_section(since)}\n{_needs_section(facts, judgements)}\n"
         f"{_next_section(facts, judgements)}\n{_waves_section(facts, judgements)}\n"
         f"{FILTER_BAR}\n" + "\n".join(sections) + f"\n{_patterns(judgements)}\n"

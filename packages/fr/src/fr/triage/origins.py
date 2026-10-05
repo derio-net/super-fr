@@ -687,4 +687,3 @@ def render_origins(
         f"{page_header('origins')}\n" + "\n".join(body) + "\n"
         f"</main>\n<script>{FILTER_SCRIPT}</script>\n</body>\n</html>\n"
     )
-

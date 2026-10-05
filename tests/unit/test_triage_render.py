@@ -372,8 +372,11 @@ def test_a_non_https_url_produces_no_href(tmp_path: Path, url: str) -> None:
     block = _row_block(page, issue.key)
     assert "href=" not in block
     assert f"issue #{issue.number}" not in block
+    from fr.triage.components import PAGES
+
+    nav = {p.file for p in PAGES}  # the page chrome's own relative links, constants
     hrefs = [a.get("href") for t, a in _elements(page) if t == "a"]
-    assert all(h is None or h.startswith("https://") for h in hrefs), hrefs
+    assert all(h is None or h.startswith("https://") or h in nav for h in hrefs), hrefs
 
 
 def _hostile_theme(facts: dict[str, Any], judgements: dict[str, Any]) -> None:
@@ -540,3 +543,75 @@ def test_a_truncation_note_names_its_list_in_plain_words_and_its_remedy(
     assert f"The {source} list" not in notes.group(1)
     if source != "prs":
         assert "--" not in notes.group(1), "no flag exists for this list: none may be named"
+
+
+# ------------------------------------------------ page chrome and finished waves (R1, R8)
+
+
+def _board_waves(page: str) -> str:
+    m = re.search(r'<section[^>]*id="waves".*?</section>', page, flags=re.S)
+    assert m
+    return m.group(0)
+
+
+_CANCEL = {"kind": "cancel", "at": "2026-10-02T10:00:00Z", "reason": "no longer wanted"}
+_CLOSEOUT = {
+    "kind": "closeout",
+    "at": "2026-10-03T10:00:00Z",
+    "runner": "fake",
+    "handle": "h",
+    "archived": 12,
+}
+
+
+def _waved(*waves: tuple[int, list[dict[str, Any]]]) -> tuple[Facts, Judgements]:
+    from tests.unit.triage_board_fixtures import batch, dispatch, facts, issue, j, judgements
+
+    n = len(waves)
+    f = facts([issue(i) for i in range(1, n + 1)])
+    jd = judgements(
+        {f"widgets#{i}": j() for i in range(1, n + 1)},
+        [
+            batch(f"b{i}", [i], wave=w, events=[dispatch(f"b{i}"), *tail])
+            for i, (w, tail) in enumerate(waves, start=1)
+        ],
+    )
+    return f, jd
+
+
+def test_the_board_carries_its_nav_and_goal() -> None:
+    from tests.unit.triage_board_fixtures import busy
+
+    page = render(*busy())
+    assert re.search(r'<a [^>]*href="triage.html"[^>]*aria-current="page"', page)
+    assert 'class="goal">What do I do next?<' in page
+    assert (
+        page.index("</header>") < page.index('class="pages"') < page.index('id="since-last-report"')
+    )
+    assert 'href="history.html"' in page and 'href="origins.html"' in page
+
+
+def test_a_finished_wave_is_not_a_board_tab_and_the_selected_tab_exists() -> None:
+    f, jd = _waved((1, [_CANCEL]), (2, [_CLOSEOUT]), (3, []))
+    sect = _board_waves(render(f, jd))
+    keys = re.findall(r'role="tab"[^>]*data-key="([^"]*)"', sect)
+    assert keys == ["3"]
+    assert re.search(r'data-key="3"[^>]*>', sect) and 'aria-selected="true"' in sect
+
+
+def test_the_preselected_tab_is_always_present_when_the_top_wave_is_finished() -> None:
+    # the highest wave (3) is finished; an earlier one (1) still has live work (the
+    # `keys.index` ValueError regression: preselection must be among the unfinished waves)
+    f, jd = _waved((1, []), (3, [_CANCEL]))
+    sect = _board_waves(render(f, jd))
+    tab = re.search(r'<button[^>]*id="wave-tab-1"[^>]*>', sect)
+    assert tab and 'aria-selected="true"' in tab.group(0)
+    assert "wave-tab-3" not in sect
+
+
+def test_when_every_wave_is_finished_the_board_says_so_and_links_history() -> None:
+    f, jd = _waved((1, [_CANCEL]), (2, [_CLOSEOUT]))
+    sect = _board_waves(render(f, jd))
+    assert "Every wave is finished" in sect
+    assert 'href="history.html"' in sect
+    assert 'role="tab"' not in sect
