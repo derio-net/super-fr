@@ -3,7 +3,7 @@ run: 2026-10-05-feat-triage-kanban-board
 workflow: fr-goal@1
 branch: feat/triage-kanban-board
 started: '2026-10-05T20:01:19+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -139,6 +139,10 @@ steps:
           visual: triage-board-refresh:4:8ec176b5ed21
           findings: p3-r1,p3-r2,p3-r3,p3-r4
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-05T21:44:46+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p2-r6
   deliver:
     state: pending
