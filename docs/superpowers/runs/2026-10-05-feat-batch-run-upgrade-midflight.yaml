@@ -3,7 +3,7 @@ run: 2026-10-05-feat-batch-run-upgrade-midflight
 workflow: fr-goal@1
 branch: feat/batch-run-upgrade-midflight
 started: '2026-10-05T20:35:36+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md
   spec-review:
-    state: running
-    at: '2026-10-05T21:02:07+00:00'
+    state: done
+    at: '2026-10-05T21:09:29+00:00'
     units:
       step/spec-review:
         attempts:
@@ -23,6 +23,12 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: eb6807d8-033c-4096-8b10-e6487f0bf0be
+          returned: '2026-10-05T21:09:29+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: a4242b43c79733c89
+          findings: sr-1,sr-2,sr-3,sr-4,sr-5,sr-6,sr-7,sr-8,sr-9,sr-10,sr-11,sr-12
   plan:
     state: pending
   plan-review:
