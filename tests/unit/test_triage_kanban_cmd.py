@@ -222,6 +222,25 @@ def test_board_with_no_batches_still_writes_a_page_that_says_so(tmp_path: Path) 
     assert "No batches" in (tmp_path / "board.html").read_text(encoding="utf-8")
 
 
+def _column(page: str, key: str) -> str:
+    """The markup of one rendered column section."""
+    start = page.index(f'<section class="col" data-column="{key}">')
+    return page[start : page.index("</section>", start)]
+
+
+def test_a_relative_dir_is_copied_as_an_absolute_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A copied command is pasted in another pane: a relative --dir would resolve there."""
+    monkeypatch.chdir(tmp_path)
+    assert scope_args(REPO, None, Path("state")) == [
+        "--repo",
+        REPO,
+        "--dir",
+        str((tmp_path / "state").resolve()),
+    ]
+
+
 def test_refresh_zero_turns_the_reload_off_and_default_is_thirty(tmp_path: Path) -> None:
     _setup(tmp_path)
     _board(tmp_path, "--refresh", "0")
@@ -241,7 +260,8 @@ def test_an_unloadable_runner_never_fails_the_board_and_shows_a_page_note(tmp_pa
     code, out = _board(tmp_path)
     assert code == 0 and "error:" not in out
     page = (tmp_path / "board.html").read_text(encoding="utf-8")
-    assert "no-such-runner" in page and "unknown" in page
+    assert "no-such-runner" in page
+    assert '<span class="pill status-unknown">' in _column(page, "running")
 
 
 def test_the_copied_command_carries_dir_only_when_given(
@@ -253,7 +273,7 @@ def test_the_copied_command_carries_dir_only_when_given(
     page = (tmp_path / "board.html").read_text(encoding="utf-8")
     assert re.search(r'data-command="fr triage batch focus b1 --repo [^"]*--dir ', page)
     facts, judgements = _loaded(tmp_path)
-    path = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=30)
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=30)
     assert " --dir" not in path.read_text(encoding="utf-8").split("data-command=")[1].split(">")[0]
 
 
@@ -262,9 +282,12 @@ def test_write_board_is_atomic_and_reloads_judgements_from_disk(
 ) -> None:
     _setup(tmp_path)
     _use(monkeypatch, _Inspector())
-    path = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
-    assert path == tmp_path / "board.html" and "proposed" in path.read_text(encoding="utf-8")
+    path, cards = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    assert path == tmp_path / "board.html" and cards == 1
+    assert 'id="card-b1"' in _column(path.read_text(encoding="utf-8"), "proposed")
     _setup(tmp_path, _dispatch_event("b1"))  # judgements change on disk
     write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
-    assert 'data-column="running"' in path.read_text(encoding="utf-8")
+    page = path.read_text(encoding="utf-8")
+    assert 'id="card-b1"' in _column(page, "running")
+    assert 'id="card-b1"' not in _column(page, "proposed")
     assert [p.name for p in tmp_path.iterdir() if p.suffix == ".tmp" or ".tmp" in p.name] == []

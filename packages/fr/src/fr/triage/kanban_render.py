@@ -75,7 +75,7 @@ button.jump { font: inherit; font-size: .78rem; color: var(--accent); background
   border: 1px solid var(--accent); border-radius: 4px; padding: 0 8px; cursor: pointer; }
 code.cmd { display: block; margin: 4px 0; padding: 4px 6px; background: var(--ground);
   border: 1px solid var(--line); border-radius: 4px; white-space: pre-wrap;
-  overflow-wrap: anywhere; user-select: all; }
+  overflow-wrap: break-word; user-select: all; }
 @media (max-width: 1100px) { .board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .board { grid-template-columns: minmax(0, 1fr); } }
 """

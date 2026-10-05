@@ -193,10 +193,11 @@ def batch_focus_command(
 
 def scope_args(repo: str | None, org: str | None, dir_override: Path | None) -> list[str]:
     """The options a copied command carries so it reads the same state: `--repo` or `--org`
-    as the operator gave it, and `--dir` only when they did (R5)."""
+    as the operator gave it, and `--dir` only when they did (R5), made absolute: the
+    command is pasted in another pane, whose working directory is not this one's."""
     args = ["--repo", repo] if repo is not None else ["--org", str(org)]
     if dir_override is not None:
-        args += ["--dir", str(dir_override)]
+        args += ["--dir", str(dir_override.resolve())]
     return args
 
 
@@ -275,9 +276,9 @@ def write_board(
     scope_args: Sequence[str],
     refresh: int = DEFAULT_REFRESH,
     prefix: str = DEFAULT_WORKSPACE_PREFIX,
-) -> Path:
+) -> tuple[Path, int]:
     """Render `board.html` into the state directory *target* from the facts and judgements
-    on disk now, with live session statuses. Returns the path written."""
+    on disk now, with live session statuses. Returns the path written and its card count."""
     _, facts, judgements = _load_state(scope, target)
     statuses, notes = session_statuses(judgements, facts, prefix=prefix)
     board = build_board(facts, judgements, statuses)
@@ -290,7 +291,7 @@ def write_board(
     )
     out = target / BOARD_FILE
     write_text_atomic(out, page)
-    return out
+    return out, len(judgements.batches)
 
 
 @triage_app.command("board")
@@ -308,12 +309,9 @@ def board_command(
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
     scope = _scope(repo, org)
     target = state_dir(scope, dir_override)
-    out = write_board(
+    out, cards = write_board(
         scope, target, scope_args=scope_args(repo, org, dir_override), refresh=refresh
     )
-    _, _, judgements = _load_state(scope, target)
-    console.print(
-        f"wrote {out} ({plural(len(judgements.batches), 'batch')})", markup=False, soft_wrap=True
-    )
+    console.print(f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True)
     if open_:
         webbrowser.open(out.resolve().as_uri())
