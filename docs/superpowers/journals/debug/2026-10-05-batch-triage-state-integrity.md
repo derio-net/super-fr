@@ -29,3 +29,8 @@ See ruled-out h-954-live-collision. _group_scope already refuses same-named repo
 ### rc-885 · root-cause · #885: schema 4 is correct on every scope; the FACTS_SCHEMA comment understates why
 
 See ruled-out h-885-shape-unchanged. The comment says 4 'added the group scope kind' only; #876/#906/#939 added fields on every scope under 4. Fix: correct the comment and pin with a test that a repo-scope facts.json carries keys the schema-3 shape lacks, so nobody re-stamps 3.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-888 created=2026-10-05T21:10:35+00:00 -->
+### rc-888 · root-cause · #888: origins collect treats 'count == limit' as the truncation signal; for a newest-first list the signal is 'oldest row read is still inside the window'
+
+triage/origins.py collect_origins warns when len(raw) == limit. gh lists issues and PRs newest-first, so a capped list covers [since, now] iff its oldest createdAt predates since. When it does, the warning is spurious; when it does not, rows inside the window are missing and counts are silently partial. Fix (operator decision): refuse (TriageError, exit 2, nothing written) naming a --since that the rows read do cover; drop the warning when the window is covered.
