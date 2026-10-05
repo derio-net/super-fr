@@ -133,4 +133,4 @@ resolves:
     marks every entry carrying that PR merged. Pure tests (written red first) in test_triage_batch_drive.py;
     command tests in test_triage_batch_drive_cmd.py (three waves, one PR, three entries, merge marks all; a
     wave finishing mid-PR waits, then exports alone), written right after the implementation.'
-evidence: {}
+evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p4-suite.log}
