@@ -2357,7 +2357,9 @@ class _Driver:
                 return f"refused, nothing committed or pushed: {exc}"
             try:
                 head = worktree.commit_paths(
-                    [rel], f"chore(triage): export the triage state after wave {wave}"
+                    [rel],
+                    f"chore(triage): export the triage state after wave {wave}",
+                    include_ignored=True,  # the whole durable state (p4-r9)
                 )
                 if head is None:
                     self._record_export(repo, _covers(action), pr=None)

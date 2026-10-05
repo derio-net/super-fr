@@ -2667,3 +2667,26 @@ def test_a_wave_finishing_while_the_export_pr_is_open_waits_then_exports_alone(
     assert code == 0, out
     (second,) = [n for n, p in world.prs.items() if p["head_ref"] == "chore/triage-state-wave-3"]
     assert _exports(state) == [("1", first, True), ("2", first, True), ("3", second, False)]
+
+
+def test_the_export_commits_durable_files_the_target_repo_ignores(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """p4-r9: a target repo's .gitignore never thins the exported state."""
+    clone = git_checkout.path
+    (clone / ".gitignore").write_text("*.html\nsnapshots/\n", encoding="utf-8")
+    _git(clone, "add", ".gitignore")
+    _git(clone, "commit", "--quiet", "-m", "ignore pages")
+    _git(clone, "push", "--quiet", "origin", "main")
+    state = _finished_wave(tmp_path, world)
+    (state / "board" / "note.html").write_text("<p>n</p>\n", encoding="utf-8")
+    (state / "snapshots").mkdir()
+    (state / "snapshots" / "s.json").write_text("{}\n", encoding="utf-8")
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    _git(clone, "fetch", "--quiet", "origin")
+    changed = _git(clone, "diff", "--name-only", "origin/main", f"origin/{EXPORT_HEAD}").split()
+    assert f"{SCOPE_DIR}/board/note.html" in changed
+    assert f"{SCOPE_DIR}/snapshots/s.json" in changed

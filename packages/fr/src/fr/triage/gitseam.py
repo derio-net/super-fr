@@ -409,15 +409,19 @@ class Worktree:
         git(["commit", "--no-verify", "-m", message], self.path)
         return git(["rev-parse", "HEAD"], self.path).strip()
 
-    def commit_paths(self, paths: list[str], message: str) -> str | None:
+    def commit_paths(
+        self, paths: list[str], message: str, *, include_ignored: bool = False
+    ) -> str | None:
         """Stage exactly *paths* (directories included, untracked files under them too)
         and commit only them; the new head, or None when nothing under them changed.
 
         The driver's state export (pages-goal §I): unlike `commit_all`, untracked files
-        are what it commits, and nothing outside *paths* rides along."""
+        are what it commits, and nothing outside *paths* rides along. *include_ignored*
+        stages files the repo's `.gitignore` skips too, under *paths* only: the export
+        is the whole durable state, whatever the target repo ignores (p4-r9)."""
         if not paths:
             raise GitError("commit_paths needs at least one path")
-        git(["add", "--all", "--", *paths], self.path)
+        git(["add", "--all", *(["--force"] if include_ignored else []), "--", *paths], self.path)
         if git_ok(["diff", "--cached", "--quiet", "--", *paths], self.path):
             return None
         git(["commit", "--no-verify", "-m", message, "--", *paths], self.path)

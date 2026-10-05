@@ -353,3 +353,32 @@ def test_push_force_overwrites_a_diverged_remote_branch(tmp_path: Path) -> None:
 
     remote = _git(checkout.path, "ls-remote", "origin", "refs/heads/chore/triage-state-wave-1")
     assert remote.split()[0] == head
+
+
+def test_commit_paths_can_include_files_the_repo_ignores(tmp_path: Path) -> None:
+    """p4-r9: the export commits durable files a target repo's .gitignore would skip,
+    and only under the given path."""
+    checkout = _repo(tmp_path)
+    (checkout.path / ".gitignore").write_text("*.html\nsnapshots/\n")
+    _git(checkout.path, "add", ".gitignore")
+    _git(checkout.path, "commit", "--quiet", "-m", "ignore")
+    _git(checkout.path, "push", "--quiet", "origin", "main")
+    _git(checkout.path, "fetch", "--quiet", "origin")
+    wt = checkout.add_worktree(tmp_path / "export", "origin/main")
+    root = wt.path / "docs" / "triage" / "scope"
+    (root / "snapshots").mkdir(parents=True)
+    (root / "board").mkdir()
+    (root / "snapshots" / "s.json").write_text("{}\n")
+    (root / "board" / "note.html").write_text("<p>n</p>\n")
+    (wt.path / "outside.html").write_text("ignored and not mine\n")
+
+    assert wt.commit_paths(["docs/triage/scope"], "export") is None  # ignored without it
+
+    head = wt.commit_paths(["docs/triage/scope"], "export", include_ignored=True)
+
+    assert head is not None
+    committed = _git(wt.path, "show", "--name-only", "--format=", "HEAD").split()
+    assert sorted(committed) == [
+        "docs/triage/scope/board/note.html",
+        "docs/triage/scope/snapshots/s.json",
+    ]
