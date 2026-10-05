@@ -53,7 +53,7 @@ def _sourced_pin(env_file: Path) -> str:
 
 def test_the_hook_exports_the_fr_it_resolved(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
-    _fake_fr(bin_dir, f"[ \"$1\" = --identity ] && printf '%s\\n' \"{IDENTITY}\"")
+    _fake_fr(bin_dir, f'[ "$1" = --identity ] && printf \'%s\\n\' "{IDENTITY}"')
     env_file = tmp_path / "env.sh"
     result = run_hook(f"{bin_dir}:/usr/bin:/bin", env_file)
     assert result.returncode == 0, result.stderr

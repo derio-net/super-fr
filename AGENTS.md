@@ -286,6 +286,18 @@ bump that changes an artifact's shape reproduces this for anyone whose
 global `fr` predates it — `uv run fr` from the worktree always matches the
 code you are testing.
 
+PATH order does not choose `fr` in a harness shell either (gh#746): the
+shell tool's `zsh -c` re-reads `~/.zshenv`, which can rebuild PATH, while
+hooks and the OpenCode plugin spawn `fr` with no shell. So the integrations
+pin the `fr` they resolved as `FR_HARNESS_FR` (`fr-binary-pin.sh` /
+`fr-opencode-plugin`'s `pin.ts`; identity = `fr --identity`, version AND
+package dir), and `fr/binary_identity.py` refuses at CLI entry when a
+PATH-reached `fr` disagrees. A venv `fr` — the `uv run fr` above — only warns,
+so that warning in a worktree is expected. `FR_SKIP_IDENTITY=1` bypasses;
+`tests/conftest.py` drops the pin so the suite does not inherit yours. A live
+verification that needs a branch's `fr` names it explicitly (`uv run
+--project <worktree> fr`), never "first on PATH".
+
 ## Skills/rules: canonical source vs. generated mirrors
 
 Never hand-edit a generated file — the sync scripts overwrite it and a CI

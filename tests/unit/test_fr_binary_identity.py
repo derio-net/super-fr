@@ -15,8 +15,6 @@ from pathlib import Path
 
 import fr
 import pytest
-from typer.testing import CliRunner
-
 from fr import __version__
 from fr.binary_identity import (
     PIN_ENV,
@@ -26,6 +24,7 @@ from fr.binary_identity import (
     runs_from_venv,
 )
 from fr.cli import app
+from typer.testing import CliRunner
 
 OTHER = "0.0.1 /elsewhere/site-packages/fr"
 
