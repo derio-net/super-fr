@@ -6333,9 +6333,11 @@ rows:
       batch id and scope options.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: hostile titles, hostile --dir and script-text constancy unit-tested
   - id: triage-board-live-herdr
     capability: triage-batch-board
     acceptance: Inside herdr during a live drive, cards move columns as the drive acts,
