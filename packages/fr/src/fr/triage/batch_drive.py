@@ -26,6 +26,7 @@ from fr.triage.batch import (
     ForeignPr,
     QueueEntry,
     batch_branch,
+    batch_item_id,
     merge_order,
 )
 from fr.triage.model import Batch, CloseoutEvent
@@ -50,7 +51,16 @@ RUN_ARTIFACT_DIRS = tuple(
 
 ChecksVerdict = Literal["green", "pending", "failing"]
 ActionKind = Literal[
-    "merge", "closeout", "adopt", "archive", "dispatch", "blocked", "held", "warn", "foreign"
+    "merge",
+    "closeout",
+    "adopt",
+    "archive",
+    "dispatch",
+    "blocked",
+    "held",
+    "warn",
+    "foreign",
+    "close",
 ]
 
 ARCHIVED_BY_UNKNOWN_PR = 0
@@ -109,6 +119,10 @@ class Snapshot:
     adopted: Mapping[str, LivePr] = field(default_factory=dict)
     # batch id -> the open PRs on its branch that are not its own (gh#936).
     foreign: Mapping[str, tuple[ForeignPr, ...]] = field(default_factory=dict)
+    # Close finished batches' sessions (off under `--keep-sessions` and without `--yes`),
+    # and the batch and close-out item ids of batches that a closing runner holds live.
+    close_sessions: bool = False
+    sessions: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -121,6 +135,7 @@ class Action:
     recorded: bool = False  # closeout: the runner holds the tab; record the event only
     post_merge: bool = False  # closeout: run the repo's post_merge first
     archived: int | None = None  # adopt: the close-out event's `archived`
+    items: tuple[str, ...] = ()  # close: the item ids whose sessions to close
 
 
 @dataclass(frozen=True)
@@ -313,6 +328,18 @@ def closeout_event(batch: Batch) -> CloseoutEvent | None:
     return None
 
 
+def is_finished(batch: Batch, stage: BatchStage, archives: Sequence[LivePr]) -> bool:
+    """Whether *batch* is finished: landed, with a close-out event whose `archived`
+    is set (the driver merged its archive PR), or an attributed archive PR in
+    `archives` that is MERGED. One reading for the archive step and the close step."""
+    event = closeout_event(batch)
+    if event is None or stage not in LANDED:
+        return False
+    if event.archived is not None:
+        return True
+    return any(p.state == "MERGED" and attributed(p, batch, event) for p in archives)
+
+
 # ------------------------------------------------------------------ the pass
 
 
@@ -407,15 +434,10 @@ def drive_pass(snap: Snapshot) -> Pass:
         event = closeout_event(batch)
         if event is None or stages.get(batch.id) not in LANDED:
             continue
-        if event.archived is not None:
-            continue  # the driver merged its archive PR: the batch is finished
-        mine = [
-            p
-            for p in snap.archives.get(snap.repos.get(batch.id, ""), ())
-            if attributed(p, batch, event)
-        ]
-        if any(p.state == "MERGED" for p in mine):
-            continue  # archived: the batch is finished
+        archives = snap.archives.get(snap.repos.get(batch.id, ""), ())
+        if is_finished(batch, stages[batch.id], archives):
+            continue
+        mine = [p for p in archives if attributed(p, batch, event)]
         closing += 1
         ready = next(
             (p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"), None
@@ -465,6 +487,22 @@ def drive_pass(snap: Snapshot) -> Pass:
         actions.append(
             Action("dispatch", batch.id, f"wave {batch.wave if batch.wave is not None else '-'}")
         )
+
+    # 5. Close the sessions of finished batches. Never work remaining (R10): the
+    # summary does not see it.
+    if snap.close_sessions:
+        for batch in chosen:
+            repo = snap.repos.get(batch.id, "")
+            if not is_finished(
+                batch, stages.get(batch.id, "proposed"), snap.archives.get(repo, ())
+            ):
+                continue
+            live = tuple(
+                i for i in (batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id))
+                if i in snap.sessions
+            )  # fmt: skip
+            if live:
+                actions.append(Action("close", batch.id, f"sessions {', '.join(live)}", items=live))
 
     merged = sum(1 for b in driven if stages.get(b) in LANDED)
     closing += len(merging)
