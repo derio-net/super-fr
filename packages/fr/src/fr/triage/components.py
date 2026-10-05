@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import html
 from collections.abc import Sequence
+from typing import NamedTuple
 
 LIGHT = {
     "ground": "#F4F5F2", "surface": "#FFFFFF", "ink": "#1B2021", "muted": "#5E6A66",
@@ -35,6 +36,32 @@ FONT_TOKENS = (
     '  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,\n'
     '    "Liberation Mono", monospace;'
 )
+
+
+class Page(NamedTuple):
+    key: str
+    file: str
+    title: str
+    goal: str
+
+
+PAGES = (
+    Page("board", "triage.html", "Board", "What do I do next?"),
+    Page(
+        "origins",
+        "origins.html",
+        "Origins",
+        "Where do defects come from, and what process change stops them?",
+    ),
+    Page(
+        "architecture",
+        "architecture.html",
+        "Architecture",
+        "What is the system, and where does it hurt?",
+    ),
+    Page("history", "history.html", "History", "How did we get here?"),
+)
+"""The four pages the triage engine writes, in nav order: one goal each (spec §A)."""
 
 
 def _vars(tokens: dict[str, str]) -> str:
