@@ -1720,7 +1720,14 @@ class _Driver:
                 repo=repos[b.id],
                 parent=None,
                 inputs=(),
-                payload={"kind": "closeout", "harness": launch.harness, "model": launch.model},
+                # The group the close-out itself carries: a runner's preflight reads it
+                # (herdr needs no workspace of its own for a grouped item, review p1-r1).
+                payload={
+                    "kind": "closeout",
+                    "harness": launch.harness,
+                    "model": launch.model,
+                    "group": self.group_of(b),
+                },
                 tracking=None,
             )
             by_runner.setdefault(str(launch.runner), []).append(probe)
