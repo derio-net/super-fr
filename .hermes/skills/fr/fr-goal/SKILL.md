@@ -34,17 +34,15 @@ operator` blocks until you resolve it (same command; a gated `cli` step then run
 **`fr` refused with "artifacts … must be migrated"?** Expected — a pod, CI and an agent's Bash
 tool are all non-interactive, where fr never migrates or commits by itself. Run `fr migrate
 artifacts --yes` yourself and continue; it is exempt and needs no TTY. **Work already in
-flight when your `fr` changed under it?** If the plan already has a run whose shape drifted
-(a step added or removed), `fr run reshape <run-id>` previews moving it onto the current step
-list and `--yes` applies it; it refuses, changing nothing, when that would lose something the
-run recorded. When reshape refuses — or a review ran in an earlier session — `fr run adopt
-<plan-dir> --supersede` replaces the run with a freshly adopted one, carrying gate answers,
-emitted artifacts, units and evidence forward, closing any open attempt as abandoned (preview
-unless `--yes`). A plan with no run at all: `fr run adopt <plan-dir|spec>` rebuilds a cursor
-from disk, completed phases included — offered, never forced (`--yes --adopt` does all of
-them). A completed phase whose plan journal already holds its review (created before the cursor,
-after the work, no open findings, no `visual` evidence owed) is adopted with its review
-`done` as `reviewer=historical` and listed in the PR body's `## Historical reviews`.
+flight when your `fr` changed under it?** A run whose shape drifted: `fr run reshape <run-id>`
+previews moving it onto the current step list (`--yes` applies; it refuses, changing nothing,
+when that would lose something the run recorded). When reshape refuses, or a review ran in an
+earlier session: `fr run adopt <plan-dir> --supersede` replaces the run, carrying gate answers,
+artifacts, units and evidence forward and closing open attempts as abandoned (preview unless
+`--yes`). A plan with no run: `fr run adopt <plan-dir|spec>` rebuilds a cursor from disk —
+offered, never forced (`--yes --adopt` does all). A phase whose plan journal already holds its
+review (created before the cursor, after the work, no open findings, no `visual` owed) is adopted
+with that review `done` as `reviewer=historical`, listed in the PR body's `## Historical reviews`.
 
 **Announce at start:** "I'm using fr-goal to run this goal autonomously."
 
