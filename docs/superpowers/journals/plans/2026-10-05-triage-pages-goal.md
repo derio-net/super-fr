@@ -229,3 +229,48 @@ origins check's duplicate_outside and triage check's duplicate_unknown are lists
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 severity pill and the Parked duplicate note are small additions on existing helpers (_row, _next_section, _parked); nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-05T22:34:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Origin.duplicate_of is not validated against the key grammar or for self-reference, unlike Judgement.duplicate_of (phase 3)
+
+Raised by the phase 3 reviewer (separate dispatched context).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-05T22:34:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · duplicate_of cycles (A<->B) and chains (A->B->C) are accepted silently; both members vanish from tiers or link to a non-root original (phase 3)
+
+Raised by the phase 3 reviewer (separate dispatched context).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-05T22:34:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · no_severity includes open duplicates and parked issues, which never display a severity pill (phase 3)
+
+Raised by the phase 3 reviewer (separate dispatched context).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-05T22:34:47+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · Origin fixed_by/introduced_in are unvalidated free text (falls back to escaped plain text, same as pr:) (phase 3)
+
+Raised by the phase 3 reviewer (separate dispatched context).
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-10-05T22:34:47+00:00 phase=3 -->
+### p3-review-1 · review · phase 3 review: 4 findings (all in, minor) (phase 3)
+
+Dispatched reviewer read 1bc0f5712..0fd540cfd against R10, R11, spec §E/§G/§B and plan phase 3, checked compatibility, collect cost and escaping, ran the triage tests (1080 passed). p3-r1 and p3-r2 fixed in ecf259861 (1086 passed); p3-r3 and p3-r4 refuted with reasoning.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-05T22:34:47+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Origin.duplicate_of is not validated against the key grammar or for self-reference, unlike Judgement.duplicate_of (phase 3)
+
+Origin.duplicate_of is held to KEY_RE and Origins refuses a self-reference at load, naming the key (ecf259861); tests test_an_origins_duplicate_of_off_the_key_grammar_is_refused, test_an_origins_entry_that_duplicates_itself_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-05T22:34:47+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: duplicate_of cycles (A<->B) and chains (A->B->C) are accepted silently; both members vanish from tiers or link to a non-root original (phase 3)
+
+fr triage check gains the duplicate_chained set (text and --json): every judgement whose target is itself a duplicate (ecf259861); test test_a_duplicate_of_a_duplicate_is_duplicate_chained.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-05T22:34:47+00:00 phase=3 state=refuted resolves=p3-r3 -->
+### p3-r3-resolved · finding [refuted] · resolves p3-r3: no_severity includes open duplicates and parked issues, which never display a severity pill (phase 3)
+
+The operator chose 'severity on every open issue' in the question round (q4), and R11 states the set as open, judged issues without a severity. A parked or duplicate issue can be unparked or turn out distinct; its severity is still owed and still shown in fr triage check and the JSON. Excluding them would contradict the recorded decision.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-05T22:34:47+00:00 phase=3 state=refuted resolves=p3-r4 -->
+### p3-r4-resolved · finding [refuted] · resolves p3-r4: Origin fixed_by/introduced_in are unvalidated free text (falls back to escaped plain text, same as pr:) (phase 3)
+
+Deliberately consistent with the existing pr: field, which is free text rendered through the same _pr_link (link when it parses, escaped text otherwise). Validating two of three PR-ref fields would make the schema inconsistent; nothing renders unsafely.
