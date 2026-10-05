@@ -58,9 +58,9 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .card .title { display: block; font-weight: 600; margin: 2px 0; }
 .card .body { padding: 0 10px 10px; border-top: 1px solid var(--line); font-size: .88rem; }
 .card ul, .card ol { margin: 0; padding-left: 18px; }
-.card dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; }
-.card dt { color: var(--muted); }
-.card dd { margin: 0; }
+.card dl { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.card dt { color: var(--muted); font-size: .74rem; margin-top: 4px; }
+.card dd { margin: 0; overflow-wrap: break-word; }
 .pill { display: inline-block; font-size: .72rem; border-radius: 999px; padding: 0 8px;
   border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .status-working { color: var(--accent); border-color: var(--accent); }
@@ -209,7 +209,9 @@ def _member(member: Member) -> str:
 def _checks(checks: dict[str, int] | None) -> str:
     if not checks:
         return "no checks"
-    return " · ".join(f"{n} {esc(name)}" for name, n in sorted(checks.items(), reverse=True))
+    order = {"pass": 0, "fail": 1, "pending": 2}
+    ranked = sorted(checks.items(), key=lambda kv: (order.get(kv[0], 3), kv[0]))
+    return " · ".join(f"{n} {esc(name)}" for name, n in ranked)
 
 
 def _pr(pr: PrView) -> str:
