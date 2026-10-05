@@ -95,6 +95,9 @@ class LivePr:
     # From the repo itself, by an allowed author (`fr.triage.batch.distrust`). False
     # unless the command checked it: an archive PR is attributed only when True (gh#936).
     trusted: bool = False
+    # An export PR whose head is exactly one commit on top of the default branch, as
+    # the driver pushes: the only head adoption pins (p4-r8). Set by the command.
+    single_commit: bool = False
 
 
 @dataclass(frozen=True)
@@ -144,6 +147,10 @@ class Snapshot:
     export_prs: Mapping[tuple[str, str], LivePr] = field(default_factory=dict)
     finished: frozenset[str] = frozenset()
     export_refused: frozenset[str] = frozenset()
+    # repo -> the open PRs from the repo itself on any `chore/triage-state-wave-<N>`
+    # head that no export entry records: a pass that died between opening and
+    # recording (p4-r3). Cross-repo PRs never appear here (p4-r7).
+    export_orphans: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -420,6 +427,13 @@ class ExportTarget:
     wave: str
     covers: tuple[str, ...]
     recorded: Export | None  # the newest unmerged entry with a PR; None: not exported
+    orphan: LivePr | None = None  # unrecorded: the open PR to adopt, on wave `wave`'s head
+
+
+def export_wave_of(head_ref: str) -> str | None:
+    """The wave key a `chore/triage-state-wave-<N>` head names, or None."""
+    wave = head_ref.removeprefix(EXPORT_PREFIX) if head_ref.startswith(EXPORT_PREFIX) else ""
+    return wave if wave.isdigit() else None
 
 
 def export_target(
@@ -428,10 +442,13 @@ def export_target(
     repos: Mapping[str, str],
     finished: frozenset[str],
     exports: Iterable[Export],
+    orphans: Sequence[LivePr] = (),
 ) -> ExportTarget | None:
     """One export PR per repo covers every unexported finished wave. While one is
     unmerged, it is the target and a wave that finished since waits for a later pass,
-    so no second PR is opened. None: nothing is owed."""
+    so no second PR is opened. With none recorded, an unrecorded open PR on any wave's
+    export head (*orphans*, highest wave first) is the target and covers the owed waves
+    up to its own (p4-r3). None: nothing is owed."""
     mine = [e for e in exports if e.repo == repo and not e.closed]  # closed: owed again
     unmerged = [e for e in mine if e.pr is not None and not e.merged]
     if unmerged:
@@ -441,7 +458,14 @@ def export_target(
     entered = {e.wave for e in mine}
     waves = {str(b.wave) for b in batches if b.wave is not None and repos.get(b.id) == repo}
     owed = sorted((waves & finished) - entered, key=_wave_order)
-    return ExportTarget(repo, owed[-1], tuple(owed), None) if owed else None
+    if not owed:
+        return None
+    named = [(w, o) for o in orphans if (w := export_wave_of(o.head_ref)) is not None]
+    if named:
+        wave, orphan = max(named, key=lambda pair: _wave_order(pair[0]))
+        upto = tuple(w for w in owed if _wave_order(w) <= _wave_order(wave))
+        return ExportTarget(repo, wave, upto, None, orphan)
+    return ExportTarget(repo, owed[-1], tuple(owed), None)
 
 
 def _export_row(
@@ -459,6 +483,8 @@ def _export_row(
         if live is None or live.state != "OPEN":
             return Action("export", repo, f"to {root} on {head}", wave=wave), "closing"
         why = "" if live.trusted else "is not trusted (not from this repo by an allowed author)"
+        if not why and not live.single_commit:  # p4-r8: the pinned head must be ours
+            why = "is not one commit on top of the default branch"
         why = why or _outside(root, live.files)
         if why:
             return Action("warn", repo, f"PR #{live.number} on {head} {why}; it is never "
@@ -510,13 +536,22 @@ def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
     ]
     counts = {"closing": 0, "blocked": 0}
     for repo in sorted(snap.export_path):
-        target = export_target(repo, snap.batches, snap.repos, snap.finished, snap.exports)
+        target = export_target(
+            repo, snap.batches, snap.repos, snap.finished, snap.exports,
+            snap.export_orphans.get(repo, ()),
+        )  # fmt: skip
         if target is None:
             continue
+        live = (
+            target.orphan if target.recorded is None else snap.export_prs.get((repo, target.wave))
+        )
         action, count = _export_row(
-            repo, target.wave, target.recorded, snap.export_prs.get((repo, target.wave)),
-            snap.export_path[repo],
-        )  # fmt: skip
+            repo, target.wave, target.recorded, live, snap.export_path[repo]
+        )
+        if action is not None and action.kind == "export-adopt" and not target.covers:
+            action, count = Action("warn", repo, f"PR #{action.pr} on {export_branch(target.wave)} "
+                                   "covers none of the owed waves; close it", pr=action.pr,
+                                   wave=target.wave), "blocked"  # fmt: skip
         if action is not None:
             if action.kind in ("export", "export-adopt"):
                 action = replace(action, covers=target.covers)

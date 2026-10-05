@@ -124,6 +124,7 @@ from fr.triage.batch_drive import (
     drive_pass,
     export_branch,
     export_target,
+    export_wave_of,
     find_run,
     finished_waves,
     housekeeping_branch,
@@ -158,6 +159,7 @@ from fr.triage.model import (
     Judgements,
     Launch,
     PostMergeEvent,
+    PullRequest,
     Scope,
     load_facts,
     load_judgements,
@@ -1648,7 +1650,9 @@ class _Driver:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         done_waves = finished_waves(judgements.batches, stages)
         export_path, export_refused = self._export_config(facts)
-        export_prs = self._export_prs(facts, judgements, repos, done_waves, export_path)
+        export_prs, export_orphans = self._export_reads(
+            facts, judgements, repos, done_waves, export_path
+        )
         closing_sessions = self.yes and not self.keep_sessions
         sessions = frozenset[str]()
         self._probes = {}
@@ -1681,6 +1685,7 @@ class _Driver:
             export_path=export_path,
             exports=tuple(judgements.exports),
             export_prs=export_prs,
+            export_orphans=export_orphans,
             finished=done_waves,
             export_refused=export_refused,
         )
@@ -1710,54 +1715,63 @@ class _Driver:
             return opted, frozenset()
         return {}, frozenset(opted)
 
-    def _export_prs(
+    def _export_reads(
         self,
         facts: Facts,
         judgements: Judgements,
         repos: dict[str, str],
         finished: frozenset[str],
         export_path: dict[str, str],
-    ) -> dict[tuple[str, str], LivePr]:
-        """§I: the live PR of each recorded, unmerged export of a finished wave, and,
-        for a finished wave with no record, the open PR on its export head. Trust is
-        read from the head's PR list (`_live_head_prs`), the state and head fresh from
-        `pr_view`, the checks as for archive PRs.
+    ) -> tuple[dict[tuple[str, str], LivePr], dict[str, tuple[LivePr, ...]]]:
+        """§I's live reads: the export PR of each repo's newest unmerged export (keyed
+        by its wave), and the repo's orphans: open PRs from the repo itself on any
+        `chore/triage-state-wave-<N>` head that no entry records (p4-r3). A cross-repo
+        PR is never an orphan (p4-r7). Trust is the author check; state and head are
+        fresh from `pr_view` for a recorded PR, from this pass's collect for an orphan.
 
-        Its `files` are NEVER the forge's: gh names only a rename's new path and stops
-        at 100 entries (p4-sec-file-list). They are git's diff of the head the decision
-        is about (the recorded head for a recorded export, the live head otherwise)
-        against `origin/<default>`, fetched first; an unreadable head reads as no
-        files, which the decision refuses."""
+        `files` are NEVER the forge's: gh names only a rename's new path and stops at
+        100 entries (p4-sec-file-list). They are git's diff of the head the decision is
+        about (the recorded head, or the orphan's) against `origin/<default>`; an
+        unreadable head reads as no files, which the decision refuses. An orphan's
+        `single_commit` is read through git too (p4-r8)."""
         collected = {pr.number: pr for pr in facts.prs}
-        out: dict[tuple[str, str], LivePr] = {}
+        prs: dict[tuple[str, str], LivePr] = {}
+        orphans: dict[str, tuple[LivePr, ...]] = {}
         try:
             for repo in sorted(export_path):
+                allowed = allowed_authors(repo, facts)
+                recorded = {e.pr for e in judgements.exports if e.repo == repo}
+                found = tuple(
+                    self._orphan(repo, pr, allowed)
+                    for pr in facts.prs
+                    if pr.repo == repo
+                    and pr.state == "OPEN"
+                    and export_wave_of(pr.head_ref) is not None
+                    and pr.cross_repo is not True  # a fork never stalls the export
+                    and pr.number not in recorded
+                )
+                if found:
+                    orphans[repo] = found
                 target = export_target(
-                    repo, judgements.batches, repos, finished, judgements.exports
+                    repo, judgements.batches, repos, finished, judgements.exports, found
                 )
-                if target is None:
+                if target is None or target.recorded is None or target.recorded.pr is None:
                     continue
+                done, number = target.recorded, target.recorded.pr
                 client = self.client(facts, repo)
-                wave, done = target.wave, target.recorded
-                found = _live_head_prs(
-                    client, repo, export_branch(wave), allowed_authors(repo, facts)
+                listed = next(
+                    (p for p in _live_head_prs(client, repo, export_branch(target.wave), allowed)
+                     if p.number == number),
+                    None,
+                )  # fmt: skip
+                view = client.pr_view(repo, number)
+                pick = replace(
+                    listed or LivePr(number=number, state="", draft=False, head=""),
+                    state=str(view.get("state", "")).upper(),
+                    draft=bool(view.get("draft")),
+                    head=str(view.get("head_oid") or ""),
+                    files=self._export_files(repo, done.head or ""),
                 )
-                if done is None:
-                    open_ = [p for p in found if p.state == "OPEN"]
-                    pick = next((p for p in open_ if p.trusted), open_[0] if open_ else None)
-                elif done.pr is not None:
-                    listed = next((p for p in found if p.number == done.pr), None)
-                    view = client.pr_view(repo, done.pr)
-                    pick = replace(
-                        listed or LivePr(number=done.pr, state="", draft=False, head=""),
-                        state=str(view.get("state", "")).upper(),
-                        draft=bool(view.get("draft")),
-                        head=str(view.get("head_oid") or ""),
-                    )
-                if pick is None:
-                    continue
-                pinned = done.head if done is not None else pick.head
-                pick = replace(pick, files=self._export_files(repo, pinned or ""))
                 if pick.state == "OPEN":
                     pr = collected.get(pick.number)
                     verdict, failing = checks_verdict(
@@ -1766,12 +1780,32 @@ class _Driver:
                         ci_none=self._ci_none(repo),
                     )
                     pick = replace(pick, checks=verdict, failing=failing)
-                out[(repo, wave)] = pick
+                prs[(repo, target.wave)] = pick
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
-        return out
+        return prs, orphans
+
+    def _orphan(self, repo: str, pr: PullRequest, allowed: frozenset[str]) -> LivePr:
+        """An unrecorded open export PR as adoption judges it (p4-r3, p4-r8)."""
+        single = False
+        try:
+            checkout = self._reader(repo)
+            checkout.fetch()
+            single = checkout.single_commit_on(f"origin/{checkout.default_branch()}", pr.head_oid)
+        except TriageError:
+            pass  # unreadable: not one commit we can vouch for
+        return LivePr(
+            number=pr.number,
+            state="OPEN",
+            draft=pr.is_draft,
+            head=pr.head_oid,
+            head_ref=pr.head_ref,
+            files=self._export_files(repo, pr.head_oid),
+            trusted=distrust(pr.author, pr.cross_repo, allowed) is None,
+            single_commit=single,
+        )
 
     def _hand_closeout(self, facts: Facts, repo: str, batch: Batch) -> LivePr | None:
         """The close-out PR started by hand for *batch*, merged first, else open: the

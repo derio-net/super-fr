@@ -2785,3 +2785,62 @@ def test_a_filesystem_error_while_exporting_is_a_warn_for_the_wave(
     assert f"warn wave 1 {REPO}: refused, nothing committed or pushed" in out
     assert "board/manifest.yaml" in out
     assert _exports(state) == []
+
+
+def test_a_crash_after_opening_then_a_new_wave_adopts_and_opens_no_second_pr(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """p4-r3: PR #40 on wave 1's branch was opened but never recorded; wave 2 has
+    finished since. It is adopted for wave 1, and wave 2 waits: no second PR."""
+    sha = _export_pr(world, git_checkout.path)
+    state = _finished_wave(tmp_path, world, waves=(1, 2))
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert f"export-adopt wave 1 {REPO}: recorded the open PR #40" in out
+    assert _exports(state) == [("1", 40, False)] and _heads(state) == [sha]
+    assert not any(c.startswith("pr_create") for c in world.calls)
+
+    world.checks[40] = [{"name": "test", "bucket": "pending"}]
+    code, out = _export_drive(state, "--once", "--yes")
+    assert not any(c.startswith("pr_create") for c in world.calls)  # wave 2 still waits
+
+
+def test_a_fork_pr_on_the_export_branch_name_is_ignored(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """p4-r7: never adopted, never warned on; the driver exports as if it were not there."""
+    state = _finished_wave(tmp_path, world)
+    world.pr(40, EXPORT_HEAD, [], cross_repo=True, author="someone", head_oid="f" * 40)
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert _lines(out, "warn") == []
+    (mine,) = [n for n, p in world.prs.items() if p["head_ref"] == EXPORT_HEAD and n != 40]
+    assert _exports(state) == [("1", mine, False)]
+
+
+def test_an_orphan_with_more_than_one_commit_is_not_adopted(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """p4-r8: adoption pins the head, so it must be one commit atop the default branch."""
+    clone = git_checkout.path
+    _export_pr(world, clone)
+    _git(clone, "fetch", "--quiet", "origin")
+    _git(clone, "checkout", "--quiet", "-B", "more", f"origin/{EXPORT_HEAD}")
+    (clone / SCOPE_DIR / "extra.yaml").write_text("y\n", encoding="utf-8")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "a second commit")
+    _git(clone, "push", "--quiet", "origin", f"more:{EXPORT_HEAD}")
+    _git(clone, "checkout", "--quiet", "main")
+    world.prs[40]["head_oid"] = _git(clone, "rev-parse", "more").strip()
+    state = _finished_wave(tmp_path, world)
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert "is not one commit on top of the default branch" in out
+    assert _exports(state) == []
+    assert not any(c.startswith("pr_create") for c in world.calls)

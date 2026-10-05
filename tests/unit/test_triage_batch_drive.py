@@ -925,6 +925,7 @@ def _export_snap(
     prs: dict[tuple[str, str], LivePr] | None = None,
     export_path: dict[str, str] | None = None,
     finished: frozenset[str] = frozenset({"1"}),
+    orphans: tuple[LivePr, ...] = (),
     **kw: Any,
 ) -> Snapshot:
     """Wave 1 finished (one batch closed out and archived), wave 2 still live."""
@@ -937,6 +938,7 @@ def _export_snap(
         exports=tuple(exports),
         export_prs=prs or {},
         finished=finished,
+        export_orphans={REPO: orphans} if orphans else {},
         **kw,
     )
 
@@ -946,8 +948,12 @@ def _exports(got: Any) -> list[tuple[str, str, str | None, int | None]]:
 
 
 def _trusted(n: int = 40, **kw: Any) -> LivePr:
+    """An export PR from this repo by an allowed author: one commit on the default
+    branch, changing only the export directory, on the head of wave *wave*."""
     kw.setdefault("files", ("docs/triage/judgements.yaml",))
-    return _live(n, kw.pop("head", f"export-head-{n}"), head_ref="chore/triage-state-wave-1",
+    kw.setdefault("single_commit", True)
+    wave = kw.pop("wave", "1")
+    return _live(n, kw.pop("head", f"export-head-{n}"), head_ref=f"chore/triage-state-wave-{wave}",
                  trusted=kw.pop("trusted", True), **kw)  # fmt: skip
 
 
@@ -958,13 +964,13 @@ def test_a_finished_wave_with_no_export_and_no_pr_is_exported() -> None:
 
 
 def test_an_open_trusted_pr_with_no_record_is_adopted_not_pushed_again() -> None:
-    got = drive_pass(_export_snap(prs={(REPO, "1"): _trusted(40, checks="pending")}))
+    got = drive_pass(_export_snap(orphans=(_trusted(40, checks="pending"),)))
     assert _exports(got) == [("export-adopt", REPO, "1", 40)]
     assert not got.summary.done
 
 
 def test_an_open_untrusted_pr_with_no_record_warns_and_blocks() -> None:
-    got = drive_pass(_export_snap(prs={(REPO, "1"): _trusted(40, trusted=False)}))
+    got = drive_pass(_export_snap(orphans=(_trusted(40, trusted=False),)))
     assert _exports(got) == [("warn", REPO, "1", 40)]
     assert "not trusted" in got.actions[-1].detail
     assert got.summary.blocked == 1
@@ -1095,7 +1101,9 @@ def test_waves_recorded_with_no_pr_are_covered_and_never_exported_again() -> Non
 
 
 def test_an_adoption_covers_every_unexported_finished_wave() -> None:
-    got = drive_pass(_three_waves(export_prs={(REPO, "10"): _trusted(40, head="adopted")}))
+    got = drive_pass(
+        _three_waves(export_orphans={REPO: (_trusted(40, head="adopted", wave="10"),)})
+    )
     (adopt,) = [a for a in got.actions if a.wave is not None]
     assert (adopt.kind, adopt.wave, adopt.covers, adopt.head) == (
         "export-adopt",
@@ -1137,7 +1145,7 @@ def test_the_export_branch_is_never_attributed_as_an_archive() -> None:
 
 
 def test_an_adopted_pr_records_its_live_head() -> None:
-    got = drive_pass(_export_snap(prs={(REPO, "1"): _trusted(40, head="adopted-sha")}))
+    got = drive_pass(_export_snap(orphans=(_trusted(40, head="adopted-sha"),)))
     (adopt,) = [a for a in got.actions if a.kind == "export-adopt"]
     assert adopt.head == "adopted-sha"
 
@@ -1176,7 +1184,7 @@ def test_a_recorded_export_with_no_head_is_never_merged() -> None:
     ids=["outside", "sibling-prefix", "unknown"],
 )
 def test_a_file_outside_the_export_dir_blocks_adopt_and_merge(files: tuple[str, ...]) -> None:
-    adopt = drive_pass(_export_snap(prs={(REPO, "1"): _trusted(40, files=files)}))
+    adopt = drive_pass(_export_snap(orphans=(_trusted(40, files=files),)))
     assert _exports(adopt) == [("warn", REPO, "1", 40)]
     assert adopt.summary.blocked == 1
     merge = drive_pass(
@@ -1223,3 +1231,36 @@ def test_waves_of_a_closed_export_are_owed_again() -> None:
     got = drive_pass(_three_waves(exports=closed))
     (export,) = [a for a in got.actions if a.wave is not None]
     assert (export.kind, export.wave, export.covers) == ("export", "10", ("1", "2", "10"))
+
+
+# ------------------------------ adoption on any wave's branch, narrowly (p4-r3, r7, r8)
+
+
+def test_a_crash_then_a_new_wave_adopts_the_orphan_and_opens_no_second_pr() -> None:
+    """p4-r3: a PR opened on wave 1's branch but never recorded; wave 2 finished since.
+    The orphan is adopted for the waves up to its N, and no export runs."""
+    batches = [_finished("a", 1), _merged("b", 2, wave=2, events=[{**_CLOSEOUT, "archived": 8}])]
+    snap = _snap(
+        batches, {"a": "merged", "b": "merged"}, export_path={REPO: "docs/triage"},
+        finished=frozenset({"1", "2"}), export_orphans={REPO: (_trusted(40, wave="1"),)},
+    )  # fmt: skip
+    got = drive_pass(snap)
+    exports = [a for a in got.actions if a.wave is not None]
+    assert [(a.kind, a.wave, a.covers) for a in exports] == [("export-adopt", "1", ("1",))]
+
+
+def test_an_orphan_that_cannot_be_adopted_still_holds_back_a_second_pr() -> None:
+    got = drive_pass(_export_snap(orphans=(_trusted(40, single_commit=False),)))
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert not any(a.kind == "export" for a in got.actions)
+
+
+def test_an_orphan_is_adopted_only_as_one_commit_on_the_default_branch() -> None:
+    """p4-r8: adoption pins the head, so the head must be exactly one commit on top of
+    the default branch, as the driver itself pushes."""
+    got = drive_pass(_export_snap(orphans=(_trusted(40, single_commit=False),)))
+    (warn,) = [a for a in got.actions if a.wave is not None]
+    assert warn.kind == "warn" and "one commit" in warn.detail
+    assert got.summary.blocked == 1
+    ok = drive_pass(_export_snap(orphans=(_trusted(40),)))
+    assert [a.kind for a in ok.actions if a.wave is not None] == ["export-adopt"]

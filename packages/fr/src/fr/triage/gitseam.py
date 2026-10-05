@@ -212,6 +212,16 @@ class Checkout:
             out.append((sha, tuple((s, p) for s, p in pairs if s and p)))
         return tuple(out)
 
+    def single_commit_on(self, ref: str, head: str) -> bool:
+        """Whether *head* is exactly one commit whose parent is on *ref* (p4-r8):
+        `git rev-list --count ref..head` is 1 and `head^` is an ancestor of *ref*. An
+        unknown head is not."""
+        try:
+            count = git(["rev-list", "--count", f"{ref}..{head}"], self.path).strip()
+        except GitError:
+            return False
+        return count == "1" and self.is_ancestor(f"{head}^", ref)
+
     def changed_paths(self, ref: str, head: str) -> frozenset[str]:
         """The paths *head* changed since it forked from *ref* (`ref...head`)."""
         out = git(["diff", "--name-only", "--no-renames", "-z", f"{ref}...{head}"], self.path)
