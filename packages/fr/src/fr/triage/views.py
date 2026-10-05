@@ -45,7 +45,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import classify, stale_dispatches
-from fr.triage.model import Batch, Facts, Judgement, Judgements, PullRequest
+from fr.triage.model import Batch, Facts, Judgement, Judgements, PullRequest, Severity
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -246,12 +246,22 @@ class NextRow:
     deps: tuple[str, ...]
     reason: str
     waiting: bool = False  # a batch the driver would NOT start this pass
+    severity: Severity | None = None  # the most severe member's (R11)
 
 
 def size_of(keys: Sequence[str], issues: Mapping[str, Judgement]) -> str:
     """The largest size among the judged members; `-` when none carries one."""
     sizes = [issues[k].cx for k in keys if k in issues and issues[k].cx != "-"]
     return max(sizes, key=CX_RANK.__getitem__, default="-")
+
+
+SEVERITY_RANK: dict[str, int] = {"low": 1, "med": 2, "high": 3}
+
+
+def max_severity(keys: Sequence[str], issues: Mapping[str, Judgement]) -> Severity | None:
+    """The most severe member severity (`high > med > low`); None when none carries one."""
+    found = [s for k in keys if k in issues and (s := issues[k].severity) is not None]
+    return max(found, key=SEVERITY_RANK.__getitem__, default=None)
 
 
 def batch_tier(keys: Sequence[str], issues: Mapping[str, Judgement]) -> int | None:
@@ -283,6 +293,7 @@ def next_up(
             tuple(b.after),
             reason,
             waiting,
+            max_severity(b.ids, issues),
         )
 
     for bid in started:
@@ -320,6 +331,8 @@ def next_up(
                 size_of(feature.ids, issues),
                 (),
                 f"feature rank {feature.rank}{why}",
+                False,
+                max_severity(feature.ids, issues),
             )  # fmt: skip
         )
     return rows

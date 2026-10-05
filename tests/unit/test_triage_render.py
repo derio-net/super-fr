@@ -649,3 +649,70 @@ def test_the_render_command_reads_the_board_manifest(tmp_path: Path) -> None:
     )
     _render(state)
     assert "<p>kept</p>" in (state / "triage.html").read_text(encoding="utf-8")
+
+
+# ------------------------------- severity and duplicates on the board (triage-pages-goal R11)
+
+
+def _sev_board(**overrides: dict[str, Any]) -> tuple[Facts, Judgements]:
+    from tests.unit.triage_board_fixtures import busy
+
+    f, jd = busy()
+    data = jd.model_dump(mode="json", by_alias=True)
+    for key, extra in overrides.items():
+        data["issues"][key.replace("_", "#")].update(extra)
+    return f, Judgements.model_validate(data)
+
+
+def _row_of(page: str, key: str) -> str:
+    m = re.search(rf'<details class="row"[^>]*data-key="{re.escape(key)}".*?</details>', page, re.S)
+    assert m, f"no row {key}"
+    return m.group(0)
+
+
+def test_backlog_rows_show_a_severity_pill_or_a_dash() -> None:
+    page = render(*_sev_board(widgets_3={"severity": "high"}))
+    assert 'data-severity="high"' in _row_of(page, "widgets#3")
+    plain = _row_of(page, "widgets#4")
+    assert 'data-severity=""' in plain and "—" in plain
+
+
+def test_a_next_up_row_shows_the_most_severe_member_severity() -> None:
+    from fr.triage.views import next_up
+
+    f, jd = _sev_board(widgets_13={"severity": "low"}, widgets_12={"severity": "high"})
+    data = jd.model_dump(mode="json", by_alias=True)
+    for b in data["batches"]:
+        if b["id"] == "e-next":
+            b["ids"] = ["widgets#13", "widgets#12"]
+    data["features"] = []
+    jd2 = Judgements.model_validate(data)
+    row = next(r for r in next_up(f, jd2) if r.ref == "e-next")
+    assert row.severity == "high"
+    page = render(f, jd2)
+    m = re.search(r'<li class="next" data-next="batch" data-ref="e-next".*?</li>', page, re.S)
+    assert m and 'data-severity="high"' in m.group(0)
+    low = next(r for r in next_up(*_sev_board(widgets_13={"severity": "low"})) if r.ref == "e-next")
+    assert low.severity == "low"
+    none = next(r for r in next_up(*_sev_board()) if r.ref == "e-next")
+    assert none.severity is None
+
+
+def test_a_duplicate_leaves_the_tier_sections_and_is_listed_under_parked() -> None:
+    f, jd = _sev_board(widgets_6={"duplicate_of": "widgets#7"})
+    page = render(f, jd)
+    start = page.index('id="backlog-by-tier"')
+    backlog = page[start : page.index('id="parked"')]
+    assert 'data-key="widgets#6"' not in backlog
+    assert 'data-key="widgets#7"' in backlog
+    parked = re.search(r'<details[^>]*id="parked".*?</details>', page, re.S)
+    assert parked and "duplicate of" in parked.group(0)
+    assert 'href="https://github.com/example-org/widgets/issues/7"' in parked.group(0)
+
+
+def test_a_duplicate_of_an_unknown_issue_is_plain_text_under_parked() -> None:
+    page = render(*_sev_board(widgets_6={"duplicate_of": "widgets#99"}))
+    parked = re.search(r'<details[^>]*id="parked".*?</details>', page, re.S)
+    assert parked
+    text = parked.group(0)
+    assert "duplicate of widgets#99" in text and "issues/99" not in text

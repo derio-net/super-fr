@@ -134,6 +134,8 @@ details.row > summary::-webkit-details-marker { display: none; }
 .tag.ok { color: var(--accent); border-color: var(--accent); }
 .cx { font-family: var(--mono); font-size: .75rem; border: 1px solid var(--ink);
   border-radius: 4px; padding: 0 6px; }
+.sevtag-high { color: var(--sev-1); border-color: var(--sev-1); }
+.sevtag-med { color: var(--sev-2); border-color: var(--sev-2); }
 .pill { font-size: .75rem; border-radius: 999px; padding: 1px 9px; color: var(--surface);
   background: var(--muted); white-space: nowrap; }
 .pill.stage-pr-draft, .pill.stage-pr-ready { background: var(--live); }
@@ -406,6 +408,13 @@ def _safe_url(url: str) -> str | None:
     return esc(url) if url.startswith("https://") else None
 
 
+def _sev_pill(severity: str | None) -> str:
+    """The severity pill (R11), or an em dash: always present so a row's cells line up."""
+    if severity is None:
+        return '<span class="tag sevtag" data-severity="">—</span>'
+    return f'<span class="tag sevtag sevtag-{esc(severity)}" data-severity="{esc(severity)}">{esc(severity)}</span>'
+
+
 def _row(
     issue: Issue,
     *,
@@ -438,7 +447,7 @@ def _row(
         "data-done": "1" if stage in DONE else "0",
         "data-search": f"{issue.key} #{issue.number} {issue.title} {theme}".lower(),
     }
-    tags: list[str] = []
+    tags: list[str] = [_sev_pill(judgement.severity if judgement else None)]
     if theme:
         tags.append(f'<span class="tag">{esc(theme)}</span>')
     if filed:
@@ -773,7 +782,7 @@ def _next_section(facts: Facts, judgements: Judgements) -> str:
             f'data-waiting="{"1" if r.waiting else "0"}">{mark}'
             f"<strong>{esc(r.ref if r.kind == 'batch' else r.title)}</strong> "
             f'<span class="tag">{tier}</span><span class="tag">size {esc(r.size)}</span>'
-            f'<span class="tag">{esc(deps)}</span>'
+            f'<span class="tag">{esc(deps)}</span>{_sev_pill(r.severity)}'
             f'<span class="why">{inline(r.reason)}</span></li>'
         )
     return f'{head}<ul class="cards">{"".join(items)}</ul></section>'
@@ -825,13 +834,26 @@ def _features_table(judgements: Judgements, facts: Facts) -> str:
 
 
 def _parked(facts: Facts, judgements: Judgements) -> str:
+    """Issues parked by kind, plus open duplicates, which leave the tier sections (R11)."""
     parked = [
         i for i in facts.issues
-        if i.state == "open" and (j := judgements.issues.get(i.key)) and j.kind == "parked"
+        if i.state == "open"
+        and (j := judgements.issues.get(i.key))
+        and (j.kind == "parked" or j.duplicate_of)
     ]  # fmt: skip
     if not parked:
         return ""
-    items = "".join(f"<li>{_link(i.key, i.url)} {esc(i.title)}</li>" for i in parked)
+    by_key = {i.key: i for i in facts.issues}
+    items = []
+    for i in parked:
+        dup = judgements.issues[i.key].duplicate_of
+        note = ""
+        if dup:
+            original = by_key.get(dup)
+            ref = _link(dup, original.url) if original else esc(dup)
+            note = f" <em>duplicate of {ref}</em>"
+        items.append(f"<li>{_link(i.key, i.url)} {esc(i.title)}{note}</li>")
+    items = "".join(items)
     return collapsed("parked", "Parked", len(parked), f"<ul>{items}</ul>")
 
 
@@ -921,7 +943,7 @@ def render(
             rows = [
                 row(by_key[key], j, str(tier.n))
                 for key, j in judgements.issues.items()
-                if j.tier == tier.n and key in by_key
+                if j.tier == tier.n and key in by_key and not j.duplicate_of
             ]
             count += len(rows)
             sev = f"sev-{min(pos + 1, SEVERITIES)}"
