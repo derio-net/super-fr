@@ -3,7 +3,7 @@ run: 2026-10-05-feat-batch-triage-pages-goal
 workflow: fr-goal@1
 branch: feat/batch-triage-pages-goal
 started: '2026-10-05T20:34:01+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,16 +12,23 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md
   spec-review:
-    state: running
-    at: '2026-10-05T21:02:15+00:00'
+    state: done
+    at: '2026-10-05T21:09:00+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-10-05T21:02:15+00:00'
+          agent: ad65b64ed782f3d60
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
           model: claude-opus-5-5
           session: a95011be-df46-40a9-a07a-e24ccd3c8a59
+          returned: '2026-10-05T21:09:00+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: ad65b64ed782f3d60
+          findings: sr-1,sr-2,sr-3,sr-4,sr-5,sr-6,sr-7,sr-8,sr-9,sr-10,sr-11,sr-12,sr-13,sr-14,sr-15,sr-16
   plan:
     state: pending
   plan-review:
