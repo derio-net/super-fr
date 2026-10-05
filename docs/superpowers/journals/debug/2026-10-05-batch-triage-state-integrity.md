@@ -34,3 +34,8 @@ See ruled-out h-885-shape-unchanged. The comment says 4 'added the group scope k
 ### rc-888 · root-cause · #888: origins collect treats 'count == limit' as the truncation signal; for a newest-first list the signal is 'oldest row read is still inside the window'
 
 triage/origins.py collect_origins warns when len(raw) == limit. gh lists issues and PRs newest-first, so a capped list covers [since, now] iff its oldest createdAt predates since. When it does, the warning is spurious; when it does not, rows inside the window are missing and counts are silently partial. Fix (operator decision): refuse (TriageError, exit 2, nothing written) naming a --since that the rows read do cover; drop the warning when the window is covered.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-882 created=2026-10-05T21:10:36+00:00 -->
+### rc-882 · root-cause · #882: the driver records 'archived' only for archive PRs it merged itself or close-outs it adopted; closeout_state's facts fallback is dead (facts.prs is open-only)
+
+batch_drive.py step 3 sees a started close-out whose attributed archive PR is MERGED (is_finished) and just continues: nothing is written, so batch list reads the event, finds archived None, and falls back to a MERGED chore/closeout-* PR in facts.prs, which collect fills with open PRs only. Fix: the pass records it once, as the adopt path already does (append a closeout event with archived=<pr>), and the dead facts.prs fallback goes; batch list then reads one source, the event, like the driver.
