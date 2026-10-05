@@ -432,6 +432,30 @@ def test_the_closeout_item_carries_its_batchs_current_wave_group(
     assert item.payload["group"] == "bugfix-wave-1"
 
 
+def test_the_closeout_probe_carries_the_same_group_as_the_closeout(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    # Review p1-r1: a group-less probe is what herdr's preflight still refuses with
+    # HERDR_WORKSPACE_ID unset, so the drive would exit 2 at the close-out it may start.
+    _merged(world, tmp_path)
+    _cursor(checkout, "2026-10-01-b1", "feat/batch-b1")
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes", "--workspace-prefix", "bugfix")
+    assert code == 0, out
+    probes = [i for items in runner.preflighted for i in items]
+    assert probes and all(i.payload.get("group") == "bugfix-wave-1" for i in probes)
+
+
+def test_a_driven_batch_with_no_wave_opens_in_the_no_wave_group(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    _state(tmp_path, world, _batch("b1", 1).replace("wave: 1", "wave: null"))
+    code, out = _drive(tmp_path, "--once", "--yes", "b1", "--workspace-prefix", "bugfix")
+    assert code == 0, out
+    assert runner.dispatched[0].payload["group"] == "bugfix-no-wave"
+
+
 @pytest.mark.parametrize("prefix", ["", "  "])
 def test_a_blank_workspace_prefix_is_refused(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, prefix: str
