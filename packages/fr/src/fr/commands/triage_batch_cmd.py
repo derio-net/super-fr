@@ -60,6 +60,7 @@ from fr.commands.triage_cmd import (
     console,
     err_console,
 )
+from fr.commands import triage_kanban_cmd
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
@@ -140,6 +141,10 @@ from fr.triage.batch_merge import (
     run_queue,
 )
 from fr.triage.batch_version import read_source, reserve
+from fr.triage.drive_lock import DRIVE_LOCK
+from fr.triage.drive_lock import lock_pid as _lock_pid
+from fr.triage.drive_lock import lock_text as _lock_text
+from fr.triage.drive_lock import pid_alive as _pid_alive
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.model import (
@@ -1159,7 +1164,6 @@ def batch_merge_command(
 
 # ------------------------------------------------------------------- drive
 
-DRIVE_LOCK = "drive.lock"
 DEFAULT_INTERVAL = 120
 LOCK_GRACE = 10.0
 """Seconds an unreadable `drive.lock` is held: long enough for a starter that
@@ -1223,31 +1227,6 @@ def _now() -> datetime:
 def _sleep(seconds: float) -> None:
     """The loop's wait between passes; tests replace it."""
     time.sleep(seconds)
-
-
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True  # alive, owned by someone else
-    return True
-
-
-def _lock_text(path: Path) -> str | None:
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-
-
-def _lock_pid(text: str) -> int | None:
-    """The pid a lock names, or None when it is not (yet) a whole lock."""
-    try:
-        return int(json.loads(text)["pid"])
-    except (ValueError, KeyError, TypeError):
-        return None
 
 
 @contextmanager
@@ -1450,8 +1429,11 @@ class _Driver:
         yes: bool,
         workspace_prefix: str = DEFAULT_WORKSPACE_PREFIX,
         keep_sessions: bool = False,
+        scope_args: list[str] | None = None,
     ) -> None:
         self.scope, self.target, self.named = scope, target, named
+        self.scope_args = scope_args or []
+        self.board_failures: set[str] = set()  # board write failures, since the last good one
         self.workspace_prefix = workspace_prefix
         self.keep_sessions = keep_sessions
         self.checkout_paths = checkouts
@@ -1910,9 +1892,32 @@ class _Driver:
             plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
         )
         _say(summary_line(summary))
-        if not self.yes:
+        if self.yes:
+            self._write_board()
+        else:
             _say("nothing done; re-run with --yes to act")
         return acted, summary, [a.batch for a in plan.actions if a.kind == "blocked"]
+
+    def _write_board(self) -> None:
+        """Render `board.html` from what this pass left on disk (R11). A board that cannot
+        be written is one warning per distinct cause and never changes the pass."""
+        try:
+            triage_kanban_cmd.write_board(
+                self.scope,
+                self.target,
+                scope_args=self.scope_args,
+                prefix=self.workspace_prefix,
+            )
+        except Exception as exc:  # noqa: BLE001 - the board is a view; it never fails a pass
+            cause = triage_kanban_cmd.one_line(exc)
+            if cause not in self.board_failures:
+                self.board_failures.add(cause)
+                err_console.print(
+                    f"[yellow]warning:[/yellow] could not write the board: {escape(cause)}",
+                    soft_wrap=True,
+                )
+        else:
+            self.board_failures.clear()
 
     def _act(self, action: Action, facts: Facts, in_flight: int) -> tuple[str, bool, int]:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
@@ -2248,6 +2253,7 @@ def batch_drive_command(
         yes=yes,
         workspace_prefix=workspace_prefix,
         keep_sessions=keep_sessions,
+        scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override),
     )
     with drive_lock(target):
         while True:
