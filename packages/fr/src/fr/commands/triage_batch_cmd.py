@@ -1979,7 +1979,13 @@ def _cursors(root: Path) -> list[object]:
 
 
 def _closeout_item(
-    repo: str, batch: Batch, launch: Launch, *, run: str | None, checkout: Path, group: str
+    repo: str,
+    batch: Batch,
+    launch: Launch,
+    *,
+    run: str | None,
+    checkout: Path,
+    group: str | None = None,
 ) -> WorkItem:
     """The close-out work item (§C): unit `run`, `payload.kind: closeout`, model from
     `resolve_launch`, checkout from the `--checkout` map."""
@@ -1994,8 +2000,9 @@ def _closeout_item(
         "branch": last.branch if last else batch_branch(batch),
         "issues": list(batch.ids),
         "checkout": str(checkout),
-        "group": group,
     }
+    if group:
+        payload["group"] = group
     return WorkItem(
         id=closeout_item_id(repo, batch.id),
         unit="run",
