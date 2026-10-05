@@ -565,3 +565,88 @@ def test_a_review_the_old_cursor_resolved_keeps_its_real_evidence(
     record = load_run_state(repo, "new-run").steps["implement"]
     assert units.unit_state(record, "phase/1/review-phase") == "done"
     assert units.evidence_of(record, "phase/1/review-phase")["reviewer"] == "super-fr:fr-reviewer"
+
+
+# --- reviews p3-r1 / p3-r2: the file superseded is the file that names the plan --
+
+
+def _rewrite_old(repo: Path, *, to: str, run: str, plan: str | None = None) -> Path:
+    """Move `old-run`'s cursor to `runs/<to>.yaml` with `run: <run>` (and,
+    when given, `emitted.plan` repointed) — a name/content mismatch."""
+    src = run_path(repo, "old-run")
+    data = _yaml.safe_load(src.read_text())
+    data["run"] = run
+    if plan is not None:
+        for record in data["steps"].values():
+            if (record.get("emitted") or {}).get("plan"):
+                record["emitted"]["plan"] = plan
+    dst = src.parent / f"{to}.yaml"
+    dst.write_text(_yaml.safe_dump(data, sort_keys=False))
+    if dst != src:
+        src.unlink()
+    return dst
+
+
+def _snapshot(repo: Path) -> dict[str, bytes]:
+    root = repo / "docs" / "superpowers"
+    return {str(p.relative_to(repo)): p.read_bytes() for p in root.rglob("*.yaml")}
+
+
+def test_supersede_refuses_a_traversal_run_id_and_touches_nothing(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    repo, shipped, plan_dir = _old_run(tmp_path, repo_root)
+    # An archived cursor the crafted `run:` points at, which must survive.
+    victim = repo / "docs" / "superpowers" / "implemented" / "runs" / "victim.yaml"
+    victim.parent.mkdir(parents=True)
+    victim.write_text(run_path(repo, "old-run").read_text())
+    _rewrite_old(repo, to="old-run", run="../implemented/runs/victim")
+    _commit_all(repo)
+    before, commits = _snapshot(repo), _commit_count(repo)
+
+    result = _supersede(repo, shipped, plan_dir, "--yes")
+
+    assert result.exit_code == 2, result.output
+    assert "invalid run id" in _squash(result.output)
+    assert _snapshot(repo) == before
+    assert _commit_count(repo) == commits
+
+
+def test_supersede_refuses_a_run_file_whose_name_disagrees_with_its_run_field(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    repo, shipped, plan_dir = _old_run(tmp_path, repo_root)
+    # `a-copy.yaml` names the plan but says `run: other-run`; the real
+    # `other-run.yaml` is a DIFFERENT run (another plan). Superseding onto the
+    # derived id `other-run` must neither read, delete nor overwrite it.
+    other = _rewrite_old(repo, to="other-run", run="other-run", plan="docs/superpowers/plans/x")
+    _rewrite_old_copy = other.read_text()
+    (other.parent / "a-copy.yaml").write_text(
+        _rewrite_old_copy.replace("docs/superpowers/plans/x", str(plan_dir.relative_to(repo)))
+    )
+    _commit_all(repo)
+    assert find_run_for_plan(repo, plan_dir.relative_to(repo)) == "other-run"
+    before, commits = _snapshot(repo), _commit_count(repo)
+
+    argv = ["run", "adopt", str(plan_dir), "--supersede", "--branch", BRANCH, "--yes"]
+    result = _invoke(repo, shipped, [*argv, "--run-id", "other-run"])
+
+    assert result.exit_code == 2, result.output
+    assert "disagrees with its `run:` field" in _squash(result.output)
+    assert _snapshot(repo) == before
+    assert _commit_count(repo) == commits
+
+
+def test_supersede_refuses_when_no_file_carries_the_named_run_id(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    repo, shipped, plan_dir = _old_run(tmp_path, repo_root)
+    _rewrite_old(repo, to="renamed", run="old-run")
+    _commit_all(repo)
+    before = _snapshot(repo)
+
+    result = _supersede(repo, shipped, plan_dir, "--yes")
+
+    assert result.exit_code == 2, result.output
+    assert "disagrees with its `run:` field" in _squash(result.output)
+    assert _snapshot(repo) == before

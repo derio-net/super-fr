@@ -861,7 +861,7 @@ def adopt_run(
                     "units and evidence forward)."
                 )
             old_id = existing
-            old_state = _readable_old_cursor(repo_root, existing)
+            old_state = _owning_old_cursor(repo_root, existing, plan_rel)
             _refuse_live_step_records(repo_root, existing)
 
     if pr_url is not None and plan is not None:
@@ -952,6 +952,42 @@ def _readable_old_cursor(repo_root: Path, run_id: str) -> RunState:
             f"one ({e}) — carrying its facts forward would be a guess. Run "
             "`fr migrate artifacts --yes` first, then retry."
         ) from e
+
+
+def _owning_old_cursor(repo_root: Path, run_id: str, plan_rel: str) -> RunState:
+    """The cursor `--supersede` replaces — and proof that the file it will read,
+    carry from and DELETE is the one that names this plan (reviews p3-r1, p3-r2).
+
+    `find_run_for_plan` returns the `run:` string from inside the matching file,
+    not that file's name. Used as a path segment unchecked, a crafted `run:
+    ../…` steers the read, the unlink and the usage rename outside `runs/`; and a
+    file whose name disagrees with its `run:` sends all three to a DIFFERENT
+    run's file. So: the id must be a valid run id, and `runs/<id>.yaml` must
+    itself record this plan — otherwise refuse, touching nothing."""
+    try:
+        validate_run_id(run_id)
+    except RunStateError as e:
+        raise AdoptError(
+            f"the run file that names {plan_rel} records an invalid run id {run_id!r} "
+            f"({e}) — fr will not build a path from it. Inspect docs/superpowers/runs/ "
+            "by hand."
+        ) from e
+    mismatch = AdoptError(
+        f"a run file names {plan_rel} with `run: {run_id}`, but "
+        f"{run_path(repo_root, run_id).relative_to(repo_root)} is not that cursor — "
+        "a run file whose name disagrees with its `run:` field. Superseding would "
+        "read and delete the wrong file; rename the file to match its `run:` first."
+    )
+    if not run_path(repo_root, run_id).is_file():
+        raise mismatch
+    state = _readable_old_cursor(repo_root, run_id)
+    owns = any(
+        (record.emitted or {}).get("plan", "").rstrip("/") == plan_rel.rstrip("/")
+        for record in state.steps.values()
+    )
+    if state.run != run_id or not owns:
+        raise mismatch
+    return state
 
 
 def _refuse_live_step_records(repo_root: Path, run_id: str) -> None:
