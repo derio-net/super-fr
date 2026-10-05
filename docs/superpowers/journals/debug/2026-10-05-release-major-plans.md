@@ -19,3 +19,10 @@ Issue #861 question 2. Rejected as THE fix: it silences the one symptom the suit
 ### 20865383cd50 · ruled-out · Widening in a PR before the major
 
 Issue #861 option 1. A pre-major PR cannot write <N+2.0.0: the ceiling is derived from the installed fr, and an fr at N cannot widen past N+1. It would also need a human to remember before every major; the release is the only actor that knows the number.
+
+<!-- fr:journal kind=finding scope=debug id=release-major-plans-fix created=2026-10-05T20:53:51+00:00 state=fixed -->
+### release-major-plans-fix · finding [fixed] · The release migrates artifacts at the new number; verify_staged admits exactly a widened live-plan ceiling
+
+- scripts/release.py: Commands.migrate = _run_migrate ('uv run --locked fr migrate artifacts --yes', after bump-version.py, before git add -A); a failure raises ReleaseError before any commit. verify_staged admits docs/superpowers/plans/<slug>/_meta.yaml (M) only when its single changed line is fr_version with the same key/quoting/floor and every '<'/'<=' bound replaced by '<{new major+1}.0.0' (_plan_ceiling_widened).
+- Failing test first (4eee453ea): test_release_script.py - major widens the live plan, minor is a no-op, failed migrate refuses, a floor / wrong-ceiling / other-line plan edit refuses, an archived plan edit refuses, and the default command's argv/failure tail.
+- Live proof on a scratch clone: the real make_release_commit at 6.0.0 (real bump-version.py + fr migrate) committed the plan at '>=3.12.0,<7.0.0' and verify_staged accepted it. test_install_opencode_agents.py: 9 passed; reverting only the plan's ceiling reproduced #861's 2 failures. Full suite at 6.0.0: 8466 passed, 105 skipped. fr validate artifacts: 12 checked, all valid.
