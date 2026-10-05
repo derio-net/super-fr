@@ -24,3 +24,8 @@ The review record is the last commit of the run, written after the PR opened, an
 ### 4038889f25de · finding [fixed] · Deliver pushes after the review record and checks level-with-upstream before the closeout relay
 
 plugins/super-fr/skills/fr-debugging/SKILL.md §4 (+ both mirrors re-synced): after `fr journal add --kind review`, `git push` on the host and confirm `git rev-list --count @{u}..HEAD` is 0, before relaying `closeout: fr pickup --branch`. Pinned first by tests/unit/test_fr_debugging_journal.py::test_review_record_is_pushed_before_the_closeout_relay (red on all three copies at 6c582a926, green after). Full suite: 8441 passed, 1 failed (test_sentinel_lifecycle::test_looking_into_another_workspace_does_not_stake_the_pipeline_on_it — passes alone; untouched by this prose-only change, load flake).
+
+<!-- fr:journal kind=review scope=debug id=899c29cad61e created=2026-10-05T21:07:44+00:00 -->
+### 899c29cad61e · review · Independent review: no in-scope findings
+
+Reviewer checked prose placement in all three copies, host-only push consistency with fr-isolation's git-host I/O rule, test ordering/slicing robustness, and that the review record is §4's only post-PR commit. No in-scope findings. Noted (out of scope, cosmetic): `@{u}` errors loudly rather than passing if no upstream is set; a removed `--kind review` raises a bare ValueError instead of the custom message.
