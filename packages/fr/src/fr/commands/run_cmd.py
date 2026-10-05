@@ -4161,7 +4161,9 @@ def reshape_cmd(
     repo_root = resolve_repo_root()
     state = _load_or_exit(repo_root, run_id)
     try:
-        manifest = _resolve_manifest_checked_schema(repo_root, state)
+        # Not `_resolve_manifest_checked_schema`: its refusal says "start a new
+        # run", and rule 1 of `reshape` names the way on (`adopt --supersede`).
+        manifest = resolve_workflow(state.workflow.partition("@")[0], repo_root)
         new = reshape(state, manifest)
     except (RunStateError, WorkflowError, ReshapeError) as e:
         err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)

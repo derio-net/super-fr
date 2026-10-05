@@ -47,7 +47,8 @@ def reshape(state: RunState, manifest: WorkflowManifest) -> RunState:
         raise ReshapeError(
             f"run {state.run!r} was started against {state.workflow!r}, but {name!r} "
             f"now declares schema {manifest.schema_version}. A schema change alters the "
-            "step grammar itself; reshaping across it is not a list edit."
+            "step grammar itself; reshaping across it is not a list edit. Rebuild the "
+            "cursor from disk instead: `fr run adopt <plan-dir> --supersede`."
         )
 
     order = [s.id for s in manifest.steps]

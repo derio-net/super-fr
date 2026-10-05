@@ -151,3 +151,32 @@ def test_a_schema_mismatch_still_refuses_gates(tmp_path: Path) -> None:
     result = _invoke(repo, shipped, ["run", "gates", "r1"])
 
     assert result.exit_code == 2, result.output
+
+
+def test_check_answers_a_drifted_cursor_with_one_warning(tmp_path: Path) -> None:
+    repo, shipped = _drifted(tmp_path)
+    before = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    out = " ".join(before.output.split())
+    assert "was started against a different version" in out
+    assert out.count("fr run reshape") == 1
+    # A drift is a warning here, never the reason `check` fails.
+    assert before.exit_code == 0, before.output
+
+
+def test_reshape_across_a_schema_change_refuses_naming_supersede(tmp_path: Path) -> None:
+    repo, shipped = _drifted(tmp_path)
+    # The cursor records a schema the shape no longer declares (a shape this
+    # fr cannot parse at all is a different refusal, made by the resolver).
+    run_file = _run_file(repo)
+    run_file.write_text(run_file.read_text().replace("gated@1", "gated@2"))
+    subprocess.run(["git", "commit", "-qam", "schema drift"], cwd=repo, check=True)
+    before = run_file.read_bytes()
+    commits = _commit_count(repo)
+
+    result = _invoke(repo, shipped, ["run", "reshape", "r1", "--yes"])
+
+    assert result.exit_code == 2, result.output
+    assert "--supersede" in " ".join(result.output.split())
+    assert _run_file(repo).read_bytes() == before
+    assert _commit_count(repo) == commits

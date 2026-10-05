@@ -143,7 +143,7 @@ def test_a_schema_mismatch_refuses() -> None:
     manifest = _manifest()
     state = _state(manifest).model_copy(update={"workflow": "fr-goal@2"})
     assert str(manifest.schema_version) != "2"
-    with pytest.raises(ReshapeError, match="schema"):
+    with pytest.raises(ReshapeError, match=r"schema.*fr run adopt <plan-dir> --supersede"):
         reshape(state, manifest)
 
 
