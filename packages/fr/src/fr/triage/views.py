@@ -39,9 +39,11 @@ from fr.triage.batch_drive import (
     checks_verdict,
     closeout_event,
     drive_pass,
-    finished_waves as finished_waves,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
+from fr.triage.batch_drive import (
+    finished_waves as finished_waves,
+)
 from fr.triage.check import classify, stale_dispatches
 from fr.triage.model import Batch, Facts, Judgement, Judgements, PullRequest
 
