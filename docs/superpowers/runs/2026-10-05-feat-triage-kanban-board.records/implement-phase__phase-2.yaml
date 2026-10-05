@@ -39,7 +39,7 @@ visual:
     script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/capture.py
     shots:
       - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/jump-copied.png, shows: [copy confirmed on button, click jump button]}
-      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/jump-clipboard-removed-selected.png, shows: [click jump button]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/jump-clipboard-removed-selected.png, shows: [click jump button, clipboard unavailable fallback]}
   - row: triage-board-session-status
     script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/capture.py
     shots:
