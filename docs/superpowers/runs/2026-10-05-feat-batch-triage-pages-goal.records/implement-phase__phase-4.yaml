@@ -78,6 +78,14 @@ journal:
   body: '_export_merge called pr_merge with the live head. Author trust covers the PR opener, not later commits,
     so anyone with push access could add a commit to chore/triage-state-wave-<N> and the driver would merge it
     into the default branch unreviewed. Spec amended in a3ef99637 (R13, §G, §I).'
+- kind: finding
+  id: p4-sec-file-list
+  review_scope: in
+  phase: 4
+  title: the export file allowlist trusted the forge's files field
+  body: 'Security review of 648982163: gh''s `files` names only a rename''s new path, so a PR renaming
+    .github/workflows/x.yml into docs/triage/... passed; and it stops at 100 entries, so a stray path past entry
+    100 passed. Spec amended in 435278157.'
 resolves:
 - id: p4-sec-symlink-follow
   state: fixed
@@ -105,4 +113,14 @@ resolves:
     test_triage_batch_drive.py (pinned merge, foreign commit, no recorded head, files outside/sibling
     prefix/unknown for adopt and merge) and test_triage_batch_drive_cmd.py (foreign commit leaves no pr_merge
     call, a file outside blocks merge and adoption, the happy path merges at the recorded SHA).'
+- id: p4-sec-file-list
+  state: fixed
+  body: 'The driver''s snapshot builder (_Driver._export_files) fetches, then reads the export PR''s files with
+    Checkout.changed_paths(origin/<default>, head) (git diff --name-only --no-renames ref...head: a rename is a
+    delete plus an add, never truncated), for the recorded head on export-merge and the live head on
+    export-adopt, and passes them to drive_pass as LivePr.files; the forge''s files field no longer reaches the
+    decision. An unreadable head gives no files, which _outside refuses (warn, blocked). Tests in
+    test_triage_batch_drive_cmd.py against real temp repos: a rename from outside into the dir (both paths in
+    changed_paths), 121 changed files with one outside sorting last, an unreadable head, and the happy path
+    merging at the recorded SHA.'
 evidence: {}

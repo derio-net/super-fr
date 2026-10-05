@@ -1683,6 +1683,19 @@ class _Driver:
             export_refused=export_refused,
         )
 
+    def _export_files(self, repo: str, head: str) -> tuple[str, ...]:
+        """The paths *head* changed since it forked from `origin/<default>`, renames
+        split into a delete and an add, never truncated; () when git cannot read it."""
+        if not head:
+            return ()
+        try:
+            checkout = self._reader(repo)
+            checkout.fetch()
+            ref = f"origin/{checkout.default_branch()}"
+            return tuple(sorted(checkout.changed_paths(ref, head)))
+        except TriageError:
+            return ()
+
     def _export_config(self, facts: Facts) -> tuple[dict[str, str], frozenset[str]]:
         """(repo -> export directory `<path>/<scope>`) for a single-repo scope that opts
         in (R13), and the repos of a group or org scope that opt in, which never export."""
@@ -1706,7 +1719,13 @@ class _Driver:
         """§I: the live PR of each recorded, unmerged export of a finished wave, and,
         for a finished wave with no record, the open PR on its export head. Trust is
         read from the head's PR list (`_live_head_prs`), the state and head fresh from
-        `pr_view`, the checks as for archive PRs."""
+        `pr_view`, the checks as for archive PRs.
+
+        Its `files` are NEVER the forge's: gh names only a rename's new path and stops
+        at 100 entries (p4-sec-file-list). They are git's diff of the head the decision
+        is about (the recorded head for a recorded export, the live head otherwise)
+        against `origin/<default>`, fetched first; an unreadable head reads as no
+        files, which the decision refuses."""
         recorded = {(e.repo, e.wave): e for e in judgements.exports}
         collected = {pr.number: pr for pr in facts.prs}
         out: dict[tuple[str, str], LivePr] = {}
@@ -1736,6 +1755,8 @@ class _Driver:
                         )
                     if pick is None:
                         continue
+                    pinned = done.head if done is not None else pick.head
+                    pick = replace(pick, files=self._export_files(repo, pinned or ""))
                     if pick.state == "OPEN":
                         pr = collected.get(pick.number)
                         verdict, failing = checks_verdict(

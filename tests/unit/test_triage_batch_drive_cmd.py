@@ -2249,15 +2249,41 @@ def _heads(state: Path) -> list[str | None]:
     return [e.head for e in load_judgements(state / "judgements.yaml").exports]
 
 
-RECORDED = (
-    "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40, "
-    "head: sha-pushed}\n"
-)
+def _recorded(head: str) -> str:
+    return (
+        "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40, "
+        f"head: '{head}'}}\n"
+    )
 
 
-def _export_pr(world: World, **kw: Any) -> None:
-    kw.setdefault("files", [f"{SCOPE_DIR}/judgements.yaml"])
-    world.pr(40, EXPORT_HEAD, [], **{"head_oid": "sha-pushed", **kw})
+def _export_pr(
+    world: World,
+    clone: Path,
+    files: dict[str, str] | None = None,
+    *,
+    renames: tuple[tuple[str, str], ...] = (),
+    **kw: Any,
+) -> str:
+    """PR #40 on the export head, whose head is a REAL commit on origin off main that
+    writes *files* and makes *renames*. The forge's own `files` field always claims
+    an in-directory file only: the driver must never believe it (p4-sec-file-list)."""
+    _git(clone, "fetch", "--quiet", "origin")
+    _git(clone, "checkout", "--quiet", "-B", "export-pr", "origin/main")
+    for src, dst in renames:
+        (clone / dst).parent.mkdir(parents=True, exist_ok=True)
+        _git(clone, "mv", src, dst)
+    for rel, text in (
+        files if files is not None else {f"{SCOPE_DIR}/judgements.yaml": "x\n"}
+    ).items():
+        (clone / rel).parent.mkdir(parents=True, exist_ok=True)
+        (clone / rel).write_text(text, encoding="utf-8")
+    _git(clone, "add", "--all")
+    _git(clone, "commit", "--quiet", "-m", "export pr")
+    sha = _git(clone, "rev-parse", "HEAD").strip()
+    _git(clone, "push", "--quiet", "--force", "origin", f"export-pr:{EXPORT_HEAD}")
+    _git(clone, "checkout", "--quiet", "main")
+    world.pr(40, EXPORT_HEAD, [], **{"head_oid": sha, "files": [f"{SCOPE_DIR}/j.yaml"], **kw})
+    return sha
 
 
 def _export_drive(state: Path, *args: str) -> tuple[int, str]:
@@ -2329,8 +2355,8 @@ def test_an_export_that_changes_nothing_records_no_pr_and_opens_none(
 def test_an_open_export_pr_with_no_record_is_adopted_without_a_push(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
+    sha = _export_pr(world, git_checkout.path)
     state = _finished_wave(tmp_path, world)
-    world.pr(40, EXPORT_HEAD, [], files=[f"{SCOPE_DIR}/judgements.yaml"])
     world.checks[40] = [{"name": "test", "bucket": "pending"}]
 
     code, out = _export_drive(state, "--once", "--yes")
@@ -2338,31 +2364,33 @@ def test_an_open_export_pr_with_no_record_is_adopted_without_a_push(
     assert code == 0, out
     assert f"export-adopt wave 1 {REPO}: recorded the open PR #40" in out
     assert _exports(state) == [("1", 40, False)]
-    assert _heads(state) == ["sha-40"]  # the merge is pinned to the head it adopted
+    assert _heads(state) == [sha]  # the merge is pinned to the head it adopted
     assert not any(c.startswith("pr_create") for c in world.calls)
-    assert EXPORT_HEAD not in _git(git_checkout.path, "ls-remote", "origin")
+    remote = _git(git_checkout.path, "ls-remote", "origin", f"refs/heads/{EXPORT_HEAD}")
+    assert remote.split()[0] == sha  # nothing pushed over it
 
 
 def test_a_green_recorded_export_pr_is_merged_at_its_recorded_head_and_recorded(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    state = _finished_wave(tmp_path, world, exports=RECORDED)
-    _export_pr(world)
+    sha = _export_pr(world, git_checkout.path)
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
 
     code, out = _export_drive(state, "--once", "--yes")
 
     assert code == 0, out
-    assert world.merged == [(40, "sha-pushed", "squash")]  # the recorded head
+    assert world.merged == [(40, sha, "squash")]  # the recorded head
     assert f"export-merge wave 1 {REPO}: merged export PR #40" in out
     assert _exports(state) == [("1", 40, True)]
-    assert _heads(state) == ["sha-pushed"]
+    assert _heads(state) == [sha]
 
 
 def test_a_foreign_commit_on_the_export_branch_blocks_the_merge(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    state = _finished_wave(tmp_path, world, exports=RECORDED)
-    _export_pr(world, head_oid="sha-someone-else")
+    sha = _export_pr(world, git_checkout.path)
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+    world.prs[40]["head_oid"] = "sha-someone-else"
 
     code, out = _export_drive(state, "--once", "--yes")
 
@@ -2376,8 +2404,9 @@ def test_a_foreign_commit_on_the_export_branch_blocks_the_merge(
 def test_a_file_outside_the_export_dir_blocks_the_merge(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    state = _finished_wave(tmp_path, world, exports=RECORDED)
-    _export_pr(world, files=[f"{SCOPE_DIR}/judgements.yaml", ".github/workflows/ci.yml"])
+    files = {f"{SCOPE_DIR}/judgements.yaml": "x\n", ".github/workflows/ci.yml": "evil\n"}
+    sha = _export_pr(world, git_checkout.path, files)
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
 
     code, out = _export_drive(state, "--once", "--yes")
 
@@ -2386,11 +2415,58 @@ def test_a_file_outside_the_export_dir_blocks_the_merge(
     assert not any(c.startswith("pr_merge") for c in world.calls)
 
 
+def test_a_rename_from_outside_into_the_export_dir_blocks_the_merge(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """gh's `files` names only a rename's new path; git names both (p4-sec-file-list)."""
+    clone = git_checkout.path
+    sha = _export_pr(world, clone, {}, renames=(("README.md", f"{SCOPE_DIR}/README.md"),))
+    assert git_checkout.changed_paths("origin/main", sha) == frozenset(
+        {"README.md", f"{SCOPE_DIR}/README.md"}
+    )
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert "README.md, outside" in out
+    assert not any(c.startswith("pr_merge") for c in world.calls)
+
+
+def test_a_stray_file_past_the_forges_hundredth_is_still_seen(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    files = {f"{SCOPE_DIR}/snapshots/{i:03}.json": "{}\n" for i in range(120)}
+    files["zzz/evil.sh"] = "evil\n"  # sorts last: past entry 100 of a truncated list
+    sha = _export_pr(world, git_checkout.path, files)
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert "zzz/evil.sh" in out
+    assert world.merged == []
+
+
+def test_an_unreadable_export_head_is_never_merged(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    ghost = "0123456789abcdef0123456789abcdef01234567"
+    state = _finished_wave(tmp_path, world, exports=_recorded(ghost))
+    world.pr(40, EXPORT_HEAD, [], head_oid=ghost, files=[f"{SCOPE_DIR}/j.yaml"])
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert "changed files are unknown" in out
+    assert world.merged == []
+
+
 def test_a_file_outside_the_export_dir_blocks_the_adoption(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
+    _export_pr(world, git_checkout.path, {"packages/evil.py": "evil\n"})
     state = _finished_wave(tmp_path, world)
-    _export_pr(world, files=["packages/evil.py"])
 
     code, out = _export_drive(state, "--once", "--yes")
 
@@ -2403,8 +2479,8 @@ def test_a_file_outside_the_export_dir_blocks_the_adoption(
 def test_a_refused_export_merge_exits_1(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    state = _finished_wave(tmp_path, world, exports=RECORDED)
-    _export_pr(world)
+    sha = _export_pr(world, git_checkout.path)
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
     world.refuse_merge = "protected branch"
 
     code, out = _export_drive(state, "--once", "--yes")
@@ -2430,8 +2506,8 @@ def test_a_refused_pr_create_exits_1_and_records_nothing(
 def test_a_recorded_export_pr_closed_unmerged_warns_every_pass_and_waits_on_the_operator(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout, sleeps: list[float]
 ) -> None:
-    state = _finished_wave(tmp_path, world, exports=RECORDED)
-    _export_pr(world, state="CLOSED")
+    sha = _export_pr(world, git_checkout.path, state="CLOSED")
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
 
     code, out = _export_drive(state, "--yes")
 
