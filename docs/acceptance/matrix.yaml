@@ -6265,9 +6265,11 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_focus.py
+    status: skipped
+    notes: focus CLI + herdr focus unit-tested; copy button lands in phase 2
     visual:
       states:
       - copy confirmed on button
