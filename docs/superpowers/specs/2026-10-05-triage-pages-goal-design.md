@@ -93,7 +93,7 @@ R13. `.fr/triage.yaml` accepts an optional `export: {path: <repo-relative dir>}`
 - opens a ready (non-draft) PR as the collecting login, which `pr_authors` therefore trusts;
 - records `{wave, repo, pr}` under a new top-level `exports:` list in `judgements.yaml` (judgements schema 4).
 
-If the export changes nothing, the driver records the export with no PR and opens nothing. A trusted open PR already on `chore/triage-state-wave-<N>` with no recorded export means a pass died between opening and recording. The driver records that PR (adopts it) and does not push again, but only when every file the PR changes lies under `<path>/<scope>/`. The export branch belongs to the driver, so a re-export force-pushes it.
+One export PR covers every finished wave of the repo that has no recorded export yet. It is named for the highest of them, and the driver records one `exports:` entry per covered wave, all with the same PR and head. Each export copies the whole current state, so a repo that opts in after several waves have finished gets one PR, not one per old wave, and a wave that finishes while an export PR is open waits for the next pass. If the export changes nothing, the driver records the export with no PR and opens nothing. A trusted open PR already on `chore/triage-state-wave-<N>` with no recorded export means a pass died between opening and recording. The driver records that PR (adopts it) and does not push again, but only when every file the PR changes lies under `<path>/<scope>/`. The export branch belongs to the driver, so a re-export force-pushes it.
 
 On a later pass the driver merges the export PR under the same gate as an archive PR. The PR must be trusted, open, not a draft, with required checks green. Two conditions are added, because the driver auto-merges content into the default branch:
 - The live head must equal the head SHA recorded in the export: the commit the driver pushed, or the head it adopted. `pr_merge` is called with that recorded SHA.
@@ -355,8 +355,10 @@ The path must be relative, with no `..` and no leading `/`, else it is refused a
   `trusted`, the checks and the head, as for archive PRs.
 - `finished: frozenset[str]`: `finished_waves(batches, stages)`, computed once.
 
-`drive_pass` adds a step after archive (step 3b). For each repo with `export_path` and each
-finished wave that has no merged export:
+`drive_pass` adds a step after archive (step 3b). The table is read per repo with
+`export_path`. An export entry covers the waves recorded with its PR, so "the recorded export"
+of a repo is its newest unmerged one. The `none` rows apply when a finished wave has no entry
+at all; one `export` then covers all such waves (R13):
 
 | Recorded export | Live PR | Action |
 |---|---|---|
