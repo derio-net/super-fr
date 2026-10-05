@@ -4825,9 +4825,16 @@ rows:
       shows severity and lists duplicates under Parked.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_check.py#test_severity_and_duplicate_of_load_on_every_schema
+      - super-fr:tests/unit/test_triage_check.py#test_open_judged_issue_without_severity_is_no_severity
+      - super-fr:tests/unit/test_triage_check.py#test_duplicate_of_a_key_not_in_the_facts_is_duplicate_unknown
+      - super-fr:tests/unit/test_triage_render.py#test_backlog_rows_show_a_severity_pill_or_a_dash
+      - super-fr:tests/unit/test_triage_render.py#test_a_duplicate_leaves_the_tier_sections_and_is_listed_under_parked
+    status: ci
+    notes: severity and duplicate_of load, check sets, board pill and Parked listing
+      (phase 3)
   - id: triage-state-sync-verbs
     capability: Backlog triage
     acceptance: fr triage state export and import copy a scope's durable state between
