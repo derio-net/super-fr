@@ -14,3 +14,8 @@ Hypothesis: owner-blind keys let two same-named repos in a group share judgement
 ### h-885-shape-unchanged · ruled-out · #885: repo/org facts shape DID move after schema 3; stamping 3 would break the old reader worse
 
 Hypothesis (from the issue): only groups changed shape, so repo/org could keep writing schema 3. Ruled out empirically: a current repo-scope facts.json restamped schema 3 and validated with v5.1.1's Facts (the last schema-3-only reader, extra=forbid) fails with 9 errors — prs[].checks/mergeable/merge_state (now nullable, written null), prs[].author/cross_repo (#939), config[*].post_merge (#876), config[*].pr_authors (#939), judged_prs (#906), viewer (#939). to_json dumps every field on every scope. Stamp 4 is the honest marker: it makes v5.1.1 refuse with 'unsupported schema 4; re-run collect' instead of 'invalid facts'.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-886 created=2026-10-05T21:10:32+00:00 -->
+### rc-886 · root-cause · #886: _load_state and batch list never compare facts.scope/kind to the requested scope
+
+commands/triage_cmd.py _load_state and triage_batch_cmd.py batch list load facts.json from state_dir(scope, --dir) and use it unchecked. _previous_facts in the same module already has the right predicate (facts.scope == scope.name and facts.kind == scope.kind); the two command loaders never got it. batch list also calls load_facts bare, so a bad file is a traceback, not exit 2. The origins loader has the same hole (OriginsFacts.scope vs scope.target).
