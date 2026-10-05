@@ -349,7 +349,8 @@ def test_check_prints_and_emits_the_two_new_sets(tmp_path: Path) -> None:
         tmp_path,
         _facts([_issue(1), _issue(2)]),
         "schema: 3\ntiers: [{n: 1, title: T}]\nissues:\n"
-        '  "super-fr#1": {tier: 1}\n  "super-fr#2": {tier: 1, severity: low, duplicate_of: "super-fr#9"}\n',
+        '  "super-fr#1": {tier: 1}\n'
+        '  "super-fr#2": {tier: 1, severity: low, duplicate_of: "super-fr#9"}\n',
     )
     r = _check(tmp_path)
     assert r.exit_code == 0

@@ -412,7 +412,8 @@ def _sev_pill(severity: str | None) -> str:
     """The severity pill (R11), or an em dash: always present so a row's cells line up."""
     if severity is None:
         return '<span class="tag sevtag" data-severity="">—</span>'
-    return f'<span class="tag sevtag sevtag-{esc(severity)}" data-severity="{esc(severity)}">{esc(severity)}</span>'
+    sev = esc(severity)
+    return f'<span class="tag sevtag sevtag-{sev}" data-severity="{sev}">{sev}</span>'
 
 
 def _row(
@@ -844,7 +845,7 @@ def _parked(facts: Facts, judgements: Judgements) -> str:
     if not parked:
         return ""
     by_key = {i.key: i for i in facts.issues}
-    items = []
+    lis: list[str] = []
     for i in parked:
         dup = judgements.issues[i.key].duplicate_of
         note = ""
@@ -852,8 +853,8 @@ def _parked(facts: Facts, judgements: Judgements) -> str:
             original = by_key.get(dup)
             ref = _link(dup, original.url) if original else esc(dup)
             note = f" <em>duplicate of {ref}</em>"
-        items.append(f"<li>{_link(i.key, i.url)} {esc(i.title)}{note}</li>")
-    items = "".join(items)
+        lis.append(f"<li>{_link(i.key, i.url)} {esc(i.title)}{note}</li>")
+    items = "".join(lis)
     return collapsed("parked", "Parked", len(parked), f"<ul>{items}</ul>")
 
 

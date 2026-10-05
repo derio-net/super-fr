@@ -626,7 +626,7 @@ def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
     for i in facts.issues:
         o = origins.issues.get(i.key)
         cat = o.category if o else "unclassified"
-        cat_cell = cat
+        cat_cell: str = cat
         if o and o.duplicate_of:
             cat_cell = f"{cat} of {_original_link(i, o.duplicate_of, held)}"
         closed = (
