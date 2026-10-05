@@ -234,3 +234,38 @@ code.cmd uses overflow-wrap: break-word.
 ### p2-r6-resolved · finding [out-of-scope] · resolves p2-r6: partial batch in Done shows a close-out hint (phase 2)
 
 Not a defect of this change: operator decision d2 put partial in Done, and spec-review finding sr-4 deliberately kept a partial card's live hint, status and jump buttons until its close-out finishes, so the board reports the driver faithfully. Changing the column table would be a new operator decision.
+
+<!-- fr:journal kind=decision scope=plan id=p3-drive-lock-module created=2026-10-05T21:33:23+00:00 phase=3 -->
+### p3-drive-lock-module · decision · drive-lock liveness moved to fr/triage/drive_lock.py (phase 3)
+
+pid_alive, lock_text, lock_pid, DRIVE_LOCK and live_driver are pure path+pid logic there; triage_batch_cmd imports them under its old private names (so its tests patching _pid_alive still work) and triage_kanban_cmd imports live_driver, keeping the command-module import one-way.
+
+<!-- fr:journal kind=decision scope=plan id=p3-watch-collect-failure created=2026-10-05T21:33:23+00:00 phase=3 -->
+### p3-watch-collect-failure · decision · --watch collect failures warn once per cause and still render (phase 3)
+
+A TriageError from the collect seam (recollect) prints one warning per distinct message, the board is still written from what is on disk, and the loop continues; Ctrl-C ends it with exit 0.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-plural-batches created=2026-10-05T21:33:23+00:00 phase=3 -->
+### p3-plural-batches · discovery · plural(n, 'batch') printed 'batchs' (phase 3)
+
+noun() only appended s; the phase-2 board line and the existing merge line both said '6 batchs'. Found while running the visual capture; fixed in noun() (-ch/-sh/-s/-x take es) with a test.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-explainers-none created=2026-10-05T21:33:23+00:00 phase=3 -->
+### p3-explainers-none · discovery · no explainer describes triage batches or the driver (phase 3)
+
+grep of docs/explainers/*.md for triage and driver found nothing, so explainers-currency owes no page update.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-05T21:33:23+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the guard was extracted as _Driver._write_board in S2 (S3 done by construction)
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-05T21:33:23+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+the seams are named recollect and _sleep like the drive's; nothing else repeats
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-05T21:33:23+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+triage.html link is one keyword threaded through render/_batches; nothing repeated to clean
