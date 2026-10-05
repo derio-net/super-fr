@@ -1739,6 +1739,7 @@ class CloserRunner(FakeRunner):
         super().__init__()
         self.closes: list[Any] = []
         self.outcome = "closed"
+        self.outcomes: dict[str, str] = {}  # item id -> outcome, over `outcome`
         self.close_raises: Exception | None = None
 
     def close(self, item: Any) -> str:
@@ -1746,7 +1747,7 @@ class CloserRunner(FakeRunner):
         self.closes.append(item)
         if self.close_raises is not None:
             raise self.close_raises
-        return self.outcome
+        return self.outcomes.get(item.id, self.outcome)
 
 
 @pytest.fixture
@@ -1848,6 +1849,42 @@ def test_a_runner_that_will_not_load_is_skipped_without_exit_2(
     assert out.count("could not be loaded") == 1
 
 
+@pytest.mark.parametrize(
+    "error", [ImportError("no module named fr_herdr"), RuntimeError("bad env")]
+)
+def test_a_runner_whose_load_raises_is_skipped_with_one_warning(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+) -> None:
+    # Review p2-r1: an adapter's own import or from_env() failure is not a typer.Exit.
+    def broken(name: str) -> Any:
+        raise error
+
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", broken)
+    _finished(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert out.count("could not be loaded") == 1 and str(error) in out
+
+
+def test_a_runner_load_refusal_prints_one_warning_not_an_error(
+    tmp_path: Path, world: World, checkout: DriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Review p2-r1: `load_runner`'s refusal must not also print a red `error:` line.
+    def refuse(name: str) -> Any:
+        triage_batch_cmd._fail("runner `fake` is not installed")
+
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", refuse)
+    _finished(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "error:" not in out
+    assert out.count("is not installed") == 1
+
+
 def test_a_preflight_refusal_skips_the_runner_and_is_reported_once(
     tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
 ) -> None:
@@ -1902,10 +1939,53 @@ def test_a_repeated_busy_cause_is_reported_once_per_batch(
         triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
         yes=True,
     )  # fmt: skip
-    probe = closer  # any object with close(): the driver only forwards it
-    driver._probes = {BATCH_ITEM: (closer, probe)}  # type: ignore[dict-item]
+    driver._probes = {BATCH_ITEM: (closer, _ProbeId(BATCH_ITEM))}  # type: ignore[dict-item]
     action = Action("close", "b1", "x", items=(BATCH_ITEM,))
     first = driver._close_sessions(action)
     assert "busy, retried next pass" in first
+    assert driver._close_sessions(action) == ""
+    assert driver.failed_write is False
+
+
+def _close_driver(tmp_path: Path, closer: CloserRunner) -> Any:
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+    driver._probes = {i: (closer, _ProbeId(i)) for i in (BATCH_ITEM, CLOSEOUT_ITEM)}
+    return driver
+
+
+class _ProbeId:
+    def __init__(self, item_id: str) -> None:
+        self.id = item_id
+
+
+def test_a_busy_cause_is_not_reported_again_when_a_sibling_closed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    # Review p2-r2: pass 1 closes the batch tab while the close-out is busy; pass 2
+    # sees only the close-out, still busy: the same cause, so no second report.
+    from fr.triage.batch_drive import Action
+
+    _finished(world, tmp_path)
+    closer.outcomes = {CLOSEOUT_ITEM: "busy"}
+    driver = _close_driver(tmp_path, closer)
+    first = driver._close_sessions(Action("close", "b1", "x", items=(BATCH_ITEM, CLOSEOUT_ITEM)))
+    assert f"closed {BATCH_ITEM}" in first and "busy, retried next pass" in first
+    assert driver._close_sessions(Action("close", "b1", "x", items=(CLOSEOUT_ITEM,))) == ""
+
+
+def test_a_failed_close_is_reported_once_whatever_its_message(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    from fr.triage.batch_drive import Action
+
+    _finished(world, tmp_path)
+    driver = _close_driver(tmp_path, closer)
+    action = Action("close", "b1", "x", items=(CLOSEOUT_ITEM,))
+    closer.close_raises = RuntimeError("socket timeout after 1.2s")
+    assert "socket timeout" in driver._close_sessions(action)
+    closer.close_raises = RuntimeError("socket timeout after 3.4s")
     assert driver._close_sessions(action) == ""
     assert driver.failed_write is False

@@ -47,6 +47,7 @@ import typer
 import yaml
 from pydantic import ValidationError
 from rich.markup import escape
+from rich.text import Text
 
 from fr._hosts import backend_for_url
 from fr.acceptance.ci import CI_CONFIG_PATHS
@@ -1491,16 +1492,23 @@ class _Driver:
         best effort, so a load failure never ends the drive (R10)."""
         if name in self._unloadable:
             return None
+        # `load_runner` reports a refusal through `_fail` (a red `error:` and an exit);
+        # an adapter's own import or `from_env()` failure is any exception. Either is
+        # one warning here, with its reason (review p2-r1).
         try:
-            return self.runner(name)
-        except typer.Exit:  # `load_runner` has already printed why
-            self._unloadable.add(name)
-            err_console.print(
-                f"[yellow]warning:[/yellow] runner `{escape(name)}` could not be loaded; "
-                "its sessions are not closed",
-                soft_wrap=True,
-            )
-            return None
+            with err_console.capture() as said:
+                return self.runner(name)
+        except typer.Exit:
+            reason = Text.from_ansi(said.get()).plain.strip().removeprefix("error:").strip()
+        except Exception as exc:  # noqa: BLE001 - closing is best effort
+            reason = f"{type(exc).__name__}: {exc}"
+        self._unloadable.add(name)
+        err_console.print(
+            f"[yellow]warning:[/yellow] runner `{escape(name)}` could not be loaded "
+            f"({escape(reason or 'no reason given')}); its sessions are not closed",
+            soft_wrap=True,
+        )
+        return None
 
     def merge_ctx(self, facts: Facts, repo: str) -> MergeContext:
         if repo not in self._merge:
@@ -1840,29 +1848,35 @@ class _Driver:
         outcome line, or "" for a cause already reported."""
         closed: list[str] = []
         busy: list[str] = []
-        failed: list[str] = []
+        failed: list[tuple[str, Exception]] = []
         for item_id in action.items:
             runner, probe = self._probes[item_id]
             try:
                 outcome = str(runner.close(probe))  # type: ignore[attr-defined]
             except Exception as exc:  # noqa: BLE001 - closing is best effort
-                failed.append(f"{item_id}: {exc}")
+                failed.append((item_id, exc))
                 continue
             (busy if outcome == "busy" else closed).append(item_id)
-        parts = []
-        if closed:
-            parts.append(f"closed {', '.join(closed)}")
+        # A cause is the item and what kept it open (an exception by its type, never
+        # its message), so a sibling closing, or a timeout's figure, is not a new
+        # cause (review p2-r2). The bitwise `|` keeps every cause recorded.
+        fresh = False
+        for item_id in busy:
+            fresh |= self._report_cause(action.batch, f"{item_id}\0busy")
+        for item_id, error in failed:
+            fresh |= self._report_cause(action.batch, f"{item_id}\0{type(error).__name__}")
+        done = f"closed {', '.join(closed)}" if closed else ""
+        if (busy or failed) and not fresh:
+            return done  # every cause reported already: only what closed is news
+        parts = [done] if done else []
         if busy:
             parts.append(f"busy, retried next pass: {', '.join(busy)}")
         if failed:
-            parts.append(f"failed to close {'; '.join(failed)}")
-        line = "; ".join(parts)
-        if not busy and not failed:
-            return line
-        return line if self._report_cause(action.batch, line) else ""
+            parts.append(f"failed to close {'; '.join(f'{i}: {e}' for i, e in failed)}")
+        return "; ".join(parts)
 
-    def _report_cause(self, batch: str, line: str) -> bool:
-        key = f"close\0{batch}\0{line}"
+    def _report_cause(self, batch: str, cause: str) -> bool:
+        key = f"close\0{batch}\0{cause}"
         if key in self.warned:
             return False
         self.warned.add(key)
