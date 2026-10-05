@@ -1,0 +1,67 @@
+schema_version: 7
+run: 2026-10-05-feat-triage-kanban-board
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: review
+  id: review-p3
+  phase: 3
+  title: 'phase 3 code + visual review: 3 low in-scope findings'
+  body: Independent reviewer approved; p3-r1..p3-r3 verified and fixed. It drove a real timer reload,
+    refresh 0 and a phone-width reload itself and opened every fresh shot.
+- kind: finding
+  id: p3-r1
+  phase: 3
+  title: live_driver and the drive disagreed on an unreadable lock
+  body: live_driver and the drive disagreed on an unreadable lock
+  review_scope: in
+- kind: finding
+  id: p3-r2
+  phase: 3
+  title: --watch ended on non-forge collect errors and unguarded render failures
+  body: --watch ended on non-forge collect errors and unguarded render failures
+  review_scope: in
+- kind: finding
+  id: p3-r3
+  phase: 3
+  title: opened = webbrowser.open(...) or True
+  body: opened = webbrowser.open(...) or True
+  review_scope: in
+resolves:
+- id: p3-r1
+  state: fixed
+  body: 'LOCK_GRACE moved into fr.triage.drive_lock; live_driver returns ''a driver starting up'' for
+    a young unreadable lock and None once older than LOCK_GRACE, the drive''s own rule. Tests: young lock
+    refuses, old lock ignored.'
+- id: p3-r2
+  state: fixed
+  body: 'Collect and render each guarded against any exception (and the render''s typer.Exit refusal,
+    captured), one warning per kind+cause, cleared only by that kind''s own success. Tests: OSError collect,
+    failing and refusing render, resume after the lock goes with the skip message re-armed. A regression
+    where a good render cleared collect warnings was caught by these tests and fixed.'
+- id: p3-r3
+  state: fixed
+  body: Plain assignment after the call.
+evidence:
+  review: review-p3
+  reviewer: a50809923916d3f46
+  model: claude-opus-5-5
+visual:
+- row: triage-board-refresh
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3-review/capture.py
+  shots:
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3-review/before-reload.png
+    shows:
+    - rendered and collected times shown
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3-review/after-reload.png
+    shows:
+    - rendered and collected times shown
+    - reload keeps expanded cards
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3-review/refresh-zero-no-reload.png
+    shows:
+    - rendered and collected times shown
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3-review/phone-manual-reload.png
+    shows:
+    - rendered and collected times shown
+    - reload keeps expanded cards
