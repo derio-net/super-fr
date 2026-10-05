@@ -6377,9 +6377,14 @@ rows:
       page links a duplicate to its original.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_origins.py#test_facts_stay_schema_1_and_origins_yaml_loads_1_and_2
+      - super-fr:tests/unit/test_triage_origins.py#test_duplicate_of_needs_the_duplicate_category
+      - super-fr:tests/unit/test_triage_origins.py#test_check_reports_a_duplicate_target_outside_the_window
+      - super-fr:tests/unit/test_triage_origins.py#test_every_issue_row_has_an_anchor_and_a_duplicate_links_its_original
+    status: ci
+    notes: origins schema 2 loaded, validated, checked and rendered (phase 3)
   - id: runner-close-optional
     capability: runner-protocol
     acceptance: A runner may offer to close an item's sessions; one that does not is
