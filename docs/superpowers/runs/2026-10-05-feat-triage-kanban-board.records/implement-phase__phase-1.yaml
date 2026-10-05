@@ -13,5 +13,4 @@ journal:
   - {kind: discovery, id: p1-herdr-focus-capture, title: "herdr focus fixtures captured live", body: "Captured with herdr 0.9.1 inside herdr (workspace focus / tab focus on the already-focused ones). workspace focus returns result.type workspace_info; tab focus returns tab_info. Tab label redacted to example-tab-1.", phase: 1}
   - {kind: decision, id: p1-focus-error-shape, title: "focus refusals are one line via a local load_runner and _try_load", body: "triage_kanban_cmd keeps its own find_spec-guarded load_runner and _fail (never importing triage_batch_cmd), and _try_load captures err_console so an unloadable runner is one error line with no traceback.", phase: 1}
 resolves: []
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/p1-suite.log
+evidence: {}
