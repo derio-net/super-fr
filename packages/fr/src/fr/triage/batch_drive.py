@@ -129,9 +129,9 @@ class Snapshot:
     # and the batch and close-out item ids of batches that a closing runner holds live.
     close_sessions: bool = False
     sessions: frozenset[str] = frozenset()
-    # Per-wave state export (pages-goal R13, §I). `export_path`: repo -> the configured
-    # repo-relative directory, for a single-repo scope only; `exports`: what the state
-    # file records; `export_prs`: (repo, wave) -> the live PR of a recorded, unmerged
+    # Per-wave state export (pages-goal R13, §I). `export_path`: repo -> the export
+    # directory `<path>/<scope>` in the repo, for a single-repo scope only; `exports`:
+    # what the state file records; `export_prs`: (repo, wave) -> the live PR of a recorded, unmerged
     # export, or the open PR on the wave's export head when none is recorded;
     # `finished`: `finished_waves(batches, stages)`, computed once; `export_refused`:
     # the repos of a group or org scope that opt in, which never export.
@@ -394,23 +394,39 @@ def _wave_order(wave: str) -> tuple[int, int | str]:
 ExportCount = Literal["closing", "blocked"] | None
 
 
+def _outside(root: str, files: Sequence[str]) -> str:
+    """Why *files* do not all lie under the export directory *root*, or "". An unknown
+    file list is never "all inside": an export PR always changes something."""
+    if not files:
+        return "its changed files are unknown"
+    prefix = root.rstrip("/") + "/"
+    stray = [f for f in files if not f.startswith(prefix)]
+    return f"it changes {', '.join(stray[:3])}, outside {prefix}" if stray else ""
+
+
 def _export_row(
-    repo: str, wave: str, done: Export | None, live: LivePr | None, path: str
+    repo: str, wave: str, done: Export | None, live: LivePr | None, root: str
 ) -> tuple[Action | None, ExportCount]:
     """One row of §I's table: the action for *repo*'s finished *wave*, given its
-    recorded export (*done*) and the live PR, and how the summary counts it."""
+    recorded export (*done*), the live PR and the export directory *root*
+    (`<path>/<scope>`), and how the summary counts it. The driver auto-merges this
+    PR unreviewed, so it adopts or merges one only when every file it changes is under
+    *root*, and merges only at the head it recorded (p4-sec-unpinned-merge)."""
     head = export_branch(wave)
     if done is not None and (done.merged or done.pr is None):
         return None, None  # merged, or the export changed nothing
     if done is None:
         if live is None or live.state != "OPEN":
-            return Action("export", repo, f"to {path} on {head}", wave=wave), "closing"
-        if live.trusted:
-            adopt = f"PR #{live.number} on {head} is open with no record; recording it"
-            return Action("export-adopt", repo, adopt, pr=live.number, wave=wave), "closing"
-        return Action("warn", repo, f"PR #{live.number} on {head} is not trusted (not from "
-                      "this repo by an allowed author); it is never adopted or merged",
-                      pr=live.number, wave=wave), "blocked"  # fmt: skip
+            return Action("export", repo, f"to {root} on {head}", wave=wave), "closing"
+        why = "" if live.trusted else "is not trusted (not from this repo by an allowed author)"
+        why = why or _outside(root, live.files)
+        if why:
+            return Action("warn", repo, f"PR #{live.number} on {head} {why}; it is never "
+                          "adopted or merged", pr=live.number, wave=wave), "blocked"  # fmt: skip
+        adopt = f"PR #{live.number} on {head} is open with no record; recording it"
+        return Action(
+            "export-adopt", repo, adopt, pr=live.number, head=live.head, wave=wave
+        ), "closing"
     if live is None:
         return None, "closing"  # not read this pass: still owed
     if live.state == "MERGED":
@@ -420,6 +436,11 @@ def _export_row(
         why = "is closed without a merge"
     elif not live.trusted:
         why = "is not trusted (not from this repo by an allowed author)"
+    elif live.head != done.head or not done.head:
+        why = (f"head is {live.head[:12] or 'unknown'}, not the recorded "
+               f"{(done.head or 'none')[:12]}: a commit the driver did not push")  # fmt: skip
+    elif outside := _outside(root, live.files):
+        why = outside
     elif live.draft:
         why = "is a draft"
     elif live.checks == "failing":
@@ -429,8 +450,10 @@ def _export_row(
                       pr=live.number, wave=wave), "blocked"  # fmt: skip
     if live.checks != "green":
         return None, "closing"  # checks pending: wait
-    return Action("export-merge", repo, f"PR #{live.number} at {live.head[:12]}",
-                  pr=live.number, head=live.head, wave=wave), "closing"  # fmt: skip
+    pinned = done.head or ""  # set: a head that differs was refused above
+    # Pinned to the RECORDED head, never the live one (they are equal here).
+    return Action("export-merge", repo, f"PR #{live.number} at {pinned[:12]}",
+                  pr=live.number, head=pinned, wave=wave), "closing"  # fmt: skip
 
 
 def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:

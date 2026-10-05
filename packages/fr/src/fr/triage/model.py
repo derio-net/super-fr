@@ -598,6 +598,9 @@ class Export(_Strict):
     repo: str  # OWNER/REPO
     at: AwareDatetime  # when the export was recorded
     pr: int | None = None
+    # The SHA the merge is pinned to: the commit the driver pushed, or the head of the
+    # PR it adopted. A commit anyone else pushes to the branch never merges (R13).
+    head: str | None = None
     merged: bool = False
 
     @field_validator("wave", mode="before")

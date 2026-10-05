@@ -70,6 +70,14 @@ journal:
     several waves finished (this repo, in phase 5) gets one export PR per old wave in the first pass, all
     carrying near-identical state. Exporting only the highest unexported finished wave, or recording older ones
     as superseded, would avoid that; it is a spec decision, not made here.'
+- kind: finding
+  id: p4-sec-unpinned-merge
+  review_scope: in
+  phase: 4
+  title: the driver merged an export PR at its live head, so anyone's later commit on the branch auto-merged
+  body: '_export_merge called pr_merge with the live head. Author trust covers the PR opener, not later commits,
+    so anyone with push access could add a commit to chore/triage-state-wave-<N> and the driver would merge it
+    into the default branch unreviewed. Spec amended in a3ef99637 (R13, §G, §I).'
 resolves:
 - id: p4-sec-symlink-follow
   state: fixed
@@ -87,4 +95,14 @@ resolves:
     counted blocked. _symlinked_dest still re-checks each target. Tests: test_triage_state_sync.py (contained,
     scope name, symlinked scope dir on import, symlinked root on export, base under a symlinked /var-style
     parent) and test_triage_batch_drive_cmd.py::test_a_symlinked_export_path_in_the_repo_is_refused_as_a_warn_with_nothing_written.'
+- id: p4-sec-unpinned-merge
+  state: fixed
+  body: 'Export gains head: the SHA commit_paths returned (recorded by _export) or the adopted PR''s live head
+    (export-adopt). Step 3b merges only when the live head equals the recorded head and every changed file (the
+    LivePr.files the head''s PR list read) lies under <path>/<scope>/; a differing or missing head, a file
+    outside, or an unknown file list is a warn counted blocked, and export-adopt needs the same file rule.
+    export-merge carries the recorded head and _export_merge passes it to pr_merge. Tests:
+    test_triage_batch_drive.py (pinned merge, foreign commit, no recorded head, files outside/sibling
+    prefix/unknown for adopt and merge) and test_triage_batch_drive_cmd.py (foreign commit leaves no pr_merge
+    call, a file outside blocks merge and adoption, the happy path merges at the recorded SHA).'
 evidence: {}

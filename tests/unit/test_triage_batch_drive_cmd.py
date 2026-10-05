@@ -53,6 +53,8 @@ class World:
         self.merged: list[tuple[int, str, str]] = []
         self.refuse_merge: str | None = None
         self.refuse_create: str | None = None
+        self.create_files: list[str] = []  # what a PR pr_create opens changes
+        self.head_of: Any = lambda branch: "sha-created"  # the head a pushed branch has
         self.calls: list[str] = []
         self.comments: dict[int, list[dict[str, Any]]] = {}
         self.config: dict[str, Any] | None = None
@@ -156,7 +158,7 @@ class World:
         if self.refuse_create:
             raise GhError(self.refuse_create, returncode=1)
         number = max([*self.prs, 199]) + 1
-        self.pr(number, head, [], head_oid=f"sha-{number}")
+        self.pr(number, head, [], head_oid=self.head_of(head), files=list(self.create_files))
         return number
 
     def closing_ref(self, repo: str, number: int) -> str:
@@ -2218,6 +2220,8 @@ def git_checkout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World) 
     _git(clone, "remote", "set-head", "origin", "main")
     fake = GitDriveCheckout(clone)
     monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
+    world.head_of = lambda branch: _git(origin, "rev-parse", f"refs/heads/{branch}").strip()
+    world.create_files = [f"{SCOPE_DIR}/judgements.yaml"]
     return fake
 
 
@@ -2241,6 +2245,21 @@ def _exports(state: Path) -> list[tuple[str, int | None, bool]]:
     return [(e.wave, e.pr, e.merged) for e in load_judgements(state / "judgements.yaml").exports]
 
 
+def _heads(state: Path) -> list[str | None]:
+    return [e.head for e in load_judgements(state / "judgements.yaml").exports]
+
+
+RECORDED = (
+    "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40, "
+    "head: sha-pushed}\n"
+)
+
+
+def _export_pr(world: World, **kw: Any) -> None:
+    kw.setdefault("files", [f"{SCOPE_DIR}/judgements.yaml"])
+    world.pr(40, EXPORT_HEAD, [], **{"head_oid": "sha-pushed", **kw})
+
+
 def _export_drive(state: Path, *args: str) -> tuple[int, str]:
     return _drive(state, "--keep-sessions", *args)
 
@@ -2251,7 +2270,7 @@ def test_plan_mode_prints_the_export_and_writes_nothing(
     state = _finished_wave(tmp_path, world)
     code, out = _export_drive(state)
     assert code == 0, out
-    assert f"export wave 1 {REPO}: to docs/triage on {EXPORT_HEAD}" in out
+    assert f"export wave 1 {REPO}: to {SCOPE_DIR} on {EXPORT_HEAD}" in out
     assert _exports(state) == []
     assert not any(c.startswith("pr_create") for c in world.calls)
 
@@ -2278,6 +2297,7 @@ def test_export_commits_only_the_scope_dir_force_pushes_and_records_the_pr(
     assert _exports(state) == [("1", number, False)]
     _git(clone, "fetch", "--quiet", "origin")
     tip = f"origin/{EXPORT_HEAD}"
+    assert _heads(state) == [_git(clone, "rev-parse", tip).strip()]  # the SHA it pushed
     assert _git(clone, "rev-parse", f"{tip}^") == _git(clone, "rev-parse", "origin/main")
     changed = _git(clone, "diff", "--name-only", "origin/main", tip).split()
     assert sorted(changed) == [f"{SCOPE_DIR}/board/manifest.yaml", f"{SCOPE_DIR}/judgements.yaml"]
@@ -2310,7 +2330,7 @@ def test_an_open_export_pr_with_no_record_is_adopted_without_a_push(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
     state = _finished_wave(tmp_path, world)
-    world.pr(40, EXPORT_HEAD, [])
+    world.pr(40, EXPORT_HEAD, [], files=[f"{SCOPE_DIR}/judgements.yaml"])
     world.checks[40] = [{"name": "test", "bucket": "pending"}]
 
     code, out = _export_drive(state, "--once", "--yes")
@@ -2318,31 +2338,73 @@ def test_an_open_export_pr_with_no_record_is_adopted_without_a_push(
     assert code == 0, out
     assert f"export-adopt wave 1 {REPO}: recorded the open PR #40" in out
     assert _exports(state) == [("1", 40, False)]
+    assert _heads(state) == ["sha-40"]  # the merge is pinned to the head it adopted
     assert not any(c.startswith("pr_create") for c in world.calls)
     assert EXPORT_HEAD not in _git(git_checkout.path, "ls-remote", "origin")
 
 
-def test_a_green_recorded_export_pr_is_merged_at_its_live_head_and_recorded(
+def test_a_green_recorded_export_pr_is_merged_at_its_recorded_head_and_recorded(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    exports = "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40}\n"
-    state = _finished_wave(tmp_path, world, exports=exports)
-    world.pr(40, EXPORT_HEAD, [], head_oid="sha-live")
+    state = _finished_wave(tmp_path, world, exports=RECORDED)
+    _export_pr(world)
 
     code, out = _export_drive(state, "--once", "--yes")
 
     assert code == 0, out
-    assert world.merged == [(40, "sha-live", "squash")]
+    assert world.merged == [(40, "sha-pushed", "squash")]  # the recorded head
     assert f"export-merge wave 1 {REPO}: merged export PR #40" in out
     assert _exports(state) == [("1", 40, True)]
+    assert _heads(state) == ["sha-pushed"]
+
+
+def test_a_foreign_commit_on_the_export_branch_blocks_the_merge(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    state = _finished_wave(tmp_path, world, exports=RECORDED)
+    _export_pr(world, head_oid="sha-someone-else")
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert f"warn wave 1 {REPO}: export PR #40 head is sha-someone-" in out
+    assert not any(c.startswith("pr_merge") for c in world.calls)
+    assert world.merged == []
+    assert _exports(state) == [("1", 40, False)]
+
+
+def test_a_file_outside_the_export_dir_blocks_the_merge(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    state = _finished_wave(tmp_path, world, exports=RECORDED)
+    _export_pr(world, files=[f"{SCOPE_DIR}/judgements.yaml", ".github/workflows/ci.yml"])
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert ".github/workflows/ci.yml" in out
+    assert not any(c.startswith("pr_merge") for c in world.calls)
+
+
+def test_a_file_outside_the_export_dir_blocks_the_adoption(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    state = _finished_wave(tmp_path, world)
+    _export_pr(world, files=["packages/evil.py"])
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert "packages/evil.py" in out and "never adopted or merged" in out
+    assert _exports(state) == []
+    assert not any(c.startswith(("pr_merge", "pr_create")) for c in world.calls)
 
 
 def test_a_refused_export_merge_exits_1(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    exports = "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40}\n"
-    state = _finished_wave(tmp_path, world, exports=exports)
-    world.pr(40, EXPORT_HEAD, [])
+    state = _finished_wave(tmp_path, world, exports=RECORDED)
+    _export_pr(world)
     world.refuse_merge = "protected branch"
 
     code, out = _export_drive(state, "--once", "--yes")
@@ -2368,9 +2430,8 @@ def test_a_refused_pr_create_exits_1_and_records_nothing(
 def test_a_recorded_export_pr_closed_unmerged_warns_every_pass_and_waits_on_the_operator(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout, sleeps: list[float]
 ) -> None:
-    exports = "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40}\n"
-    state = _finished_wave(tmp_path, world, exports=exports)
-    world.pr(40, EXPORT_HEAD, [], state="CLOSED")
+    state = _finished_wave(tmp_path, world, exports=RECORDED)
+    _export_pr(world, state="CLOSED")
 
     code, out = _export_drive(state, "--yes")
 
@@ -2409,7 +2470,7 @@ def test_a_drive_loop_is_not_done_while_its_export_pr_is_open(
     assert code == 0, out
     assert len(naps) >= 2  # it kept passing while the PR's checks were pending
     (number,) = [n for n, p in world.prs.items() if p["head_ref"] == EXPORT_HEAD]
-    assert [m[0] for m in world.merged] == [number]
+    assert world.merged == [(number, _heads(state)[0], "squash")]
     assert _exports(state) == [("1", number, True)]
 
 

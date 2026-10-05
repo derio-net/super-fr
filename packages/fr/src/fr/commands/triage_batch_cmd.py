@@ -1684,9 +1684,13 @@ class _Driver:
         )
 
     def _export_config(self, facts: Facts) -> tuple[dict[str, str], frozenset[str]]:
-        """(repo -> export path) for a single-repo scope that opts in (R13), and the
-        repos of a group or org scope that opt in, which never export."""
-        opted = {r: c.path for r in facts.repos if (c := facts.config_for(r).export) is not None}
+        """(repo -> export directory `<path>/<scope>`) for a single-repo scope that opts
+        in (R13), and the repos of a group or org scope that opt in, which never export."""
+        opted = {
+            r: f"{c.path.rstrip('/')}/{self.scope.name}"
+            for r in facts.repos
+            if (c := facts.config_for(r).export) is not None
+        }
         if self.scope.kind == "repo":
             return opted, frozenset()
         return {}, frozenset(opted)
@@ -2270,16 +2274,19 @@ class _Driver:
         if action.kind == "export":
             return self._export(action, facts, action.batch, action.wave)
         if action.kind == "export-adopt":
-            self._record_export(action.batch, action.wave, pr=action.pr)
-            return f"recorded the open PR #{action.pr}; nothing pushed"
+            # pinned to the head adopted: a later commit on the branch never merges
+            self._record_export(action.batch, action.wave, pr=action.pr, head=action.head)
+            return f"recorded the open PR #{action.pr} at {action.head[:12]}; nothing pushed"
         return self._export_merge(action, facts, action.batch, action.wave)
 
-    def _record_export(self, repo: str, wave: str, *, pr: int | None, merged: bool = False) -> None:
+    def _record_export(
+        self, repo: str, wave: str, *, pr: int | None, head: str | None = None, merged: bool = False
+    ) -> None:
         """Record *wave*'s export in `judgements.yaml`'s `exports:` (§G), replacing an
         earlier record of the same wave; a refused write exits 2."""
         path = self.target / "judgements.yaml"
         read = load_judgements(path).exports
-        new = Export(wave=wave, repo=repo, at=_now(), pr=pr, merged=merged)
+        new = Export(wave=wave, repo=repo, at=_now(), pr=pr, head=head, merged=merged)
         kept = [e for e in read if (e.repo, e.wave) != (repo, wave)]
         try:
             save_exports(path, [*kept, new], read=read)
@@ -2340,7 +2347,7 @@ class _Driver:
                 _fail(str(exc))
             except FORGE_ERRORS as exc:
                 _fail(f"export wave {wave}: the forge refused the PR: {exc}", code=1)
-            self._record_export(repo, wave, pr=number)
+            self._record_export(repo, wave, pr=number, head=head)  # the merge's pin
             return f"opened PR #{number} from {branch} at {head[:12]}"
         finally:
             try:
@@ -2349,8 +2356,10 @@ class _Driver:
                 pass  # scratch: the next export replaces it
 
     def _export_merge(self, action: Action, facts: Facts, repo: str, wave: str) -> str:
-        """Merge the export PR at the head whose checks were judged, as `_archive`
-        does, then record it merged."""
+        """Merge the export PR at its RECORDED head (`action.head`, which step 3b sets
+        from the export record and only when the live head equals it), never the live
+        one: nobody reviews this PR, so a commit someone else pushed to its branch must
+        not reach the default branch (p4-sec-unpinned-merge). Then record it merged."""
         ctx = self.merge_ctx(facts, repo)
         assert action.pr is not None
         try:
@@ -2359,7 +2368,7 @@ class _Driver:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             _fail(f"export PR #{action.pr}: the forge refused the merge: {exc}", code=1)
-        self._record_export(repo, wave, pr=action.pr, merged=True)
+        self._record_export(repo, wave, pr=action.pr, head=action.head, merged=True)
         return f"merged export PR #{action.pr} at {action.head[:12]}"
 
 

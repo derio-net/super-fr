@@ -915,6 +915,7 @@ _EXPORTED_AT = datetime(2026, 10, 2, 11, 0, tzinfo=UTC)
 
 
 def _export(wave: str = "1", **kw: Any) -> Export:
+    kw.setdefault("head", "export-head-40")  # the SHA the driver pushed or adopted
     return Export(wave=wave, repo=REPO, at=_EXPORTED_AT, **kw)
 
 
@@ -945,7 +946,8 @@ def _exports(got: Any) -> list[tuple[str, str, str | None, int | None]]:
 
 
 def _trusted(n: int = 40, **kw: Any) -> LivePr:
-    return _live(n, f"export-head-{n}", head_ref="chore/triage-state-wave-1",
+    kw.setdefault("files", ("docs/triage/judgements.yaml",))
+    return _live(n, kw.pop("head", f"export-head-{n}"), head_ref="chore/triage-state-wave-1",
                  trusted=kw.pop("trusted", True), **kw)  # fmt: skip
 
 
@@ -1058,3 +1060,56 @@ def test_the_export_branch_is_never_attributed_as_an_archive() -> None:
 
     assert export_branch("3") == "chore/triage-state-wave-3"
     assert not export_branch("3").startswith(ARCHIVE_PREFIXES)
+
+
+# ------------------------------------------------ pinned merges (p4-sec-unpinned-merge)
+
+
+def test_an_adopted_pr_records_its_live_head() -> None:
+    got = drive_pass(_export_snap(prs={(REPO, "1"): _trusted(40, head="adopted-sha")}))
+    (adopt,) = [a for a in got.actions if a.kind == "export-adopt"]
+    assert adopt.head == "adopted-sha"
+
+
+def test_the_merge_is_pinned_to_the_recorded_head() -> None:
+    got = drive_pass(
+        _export_snap(
+            exports=[_export(pr=40, head="pushed")], prs={(REPO, "1"): _trusted(40, head="pushed")}
+        )
+    )
+    (merge,) = [a for a in got.actions if a.kind == "export-merge"]
+    assert merge.head == "pushed"
+
+
+def test_a_foreign_commit_on_the_export_branch_blocks_the_merge() -> None:
+    got = drive_pass(
+        _export_snap(
+            exports=[_export(pr=40, head="pushed")], prs={(REPO, "1"): _trusted(40, head="foreign")}
+        )
+    )
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert "pushed" in got.actions[-1].detail and "foreign" in got.actions[-1].detail
+    assert got.summary.blocked == 1 and not got.summary.done
+
+
+def test_a_recorded_export_with_no_head_is_never_merged() -> None:
+    got = drive_pass(
+        _export_snap(exports=[_export(pr=40, head=None)], prs={(REPO, "1"): _trusted(40)})
+    )
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+
+
+@pytest.mark.parametrize(
+    "files",
+    [("docs/triage/j.yaml", ".github/workflows/x.yml"), ("docs/triage-evil/j.yaml",), ()],
+    ids=["outside", "sibling-prefix", "unknown"],
+)
+def test_a_file_outside_the_export_dir_blocks_adopt_and_merge(files: tuple[str, ...]) -> None:
+    adopt = drive_pass(_export_snap(prs={(REPO, "1"): _trusted(40, files=files)}))
+    assert _exports(adopt) == [("warn", REPO, "1", 40)]
+    assert adopt.summary.blocked == 1
+    merge = drive_pass(
+        _export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40, files=files)})
+    )
+    assert _exports(merge) == [("warn", REPO, "1", 40)]
+    assert merge.summary.blocked == 1
