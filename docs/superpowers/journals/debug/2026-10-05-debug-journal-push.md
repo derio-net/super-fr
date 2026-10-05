@@ -9,3 +9,8 @@ fr-debugging §4 orders: open PR -> `fr journal add --scope debug --kind review`
 ### 95d6812b3938 · hypothesis · Skill §4 has no push step after its last journal commit
 
 The only commit-producing step after the PR opens is the review record; the prose never pushes it and never checks the branch is level with its upstream before stopping.
+
+<!-- fr:journal kind=ruled-out scope=debug id=416b7f149748 created=2026-10-05T20:37:44+00:00 -->
+### 416b7f149748 · ruled-out · fr journal add is not expected to push
+
+By design every journal/record write is one local commit; pushes are host-side git I/O (fr-isolation: all git-host I/O runs on the host, outside exec). Making the engine push would break that seam, so the engine is not the defect.
