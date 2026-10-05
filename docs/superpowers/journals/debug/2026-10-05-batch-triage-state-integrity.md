@@ -69,3 +69,8 @@ _short_of + refusal in collect_origins naming a covered --since and the --issue-
 ### fx-882 · finding [fixed] · #882 fixed: the driver records a hand-merged archive PR; batch list reads events only
 
 batch_drive step 3 emits adopt; executor repeats the started closeout event with archived; closeout_state(batch) drops the dead facts.prs fallback. Tests: test_a_merged_archive_pr_finishes_the_batch (now expects the adopt), test_a_recorded_archive_is_not_recorded_again, test_an_archive_pr_merged_by_hand_is_recorded_so_batch_list_reads_archived. Commit 43b4ceac4.
+
+<!-- fr:journal kind=finding scope=debug id=fx-889 created=2026-10-05T21:57:18+00:00 state=fixed -->
+### fx-889 · finding [fixed] · #889 fixed: show() is UTF-8 text by contract, show_bytes() is exact, snapshots copy bytes
+
+gitseam show_text/show_bytes; GitError naming file+ref on non-UTF-8; snapshot_paths uses ls-tree -z + show_bytes. Tests: binary, CRLF, byte-for-byte snapshot incl. non-ASCII path. Commits 0d9e17fbe, 25545b911.
