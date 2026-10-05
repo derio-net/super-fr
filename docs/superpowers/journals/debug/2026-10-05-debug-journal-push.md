@@ -14,3 +14,8 @@ The only commit-producing step after the PR opens is the review record; the pros
 ### 416b7f149748 · ruled-out · fr journal add is not expected to push
 
 By design every journal/record write is one local commit; pushes are host-side git I/O (fr-isolation: all git-host I/O runs on the host, outside exec). Making the engine push would break that seam, so the engine is not the defect.
+
+<!-- fr:journal kind=root-cause scope=debug id=1968bc31ff3c created=2026-10-05T20:37:46+00:00 -->
+### 1968bc31ff3c · root-cause · §4 records the review after the PR's last push and has no push after it
+
+The review record is the last commit of the run, written after the PR opened, and the skill's step order ends at 'relay closeout, stop' with no push and no ahead-of-upstream check — so the commit stays local and the merged PR lacks it.
