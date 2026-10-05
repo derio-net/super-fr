@@ -6230,3 +6230,15 @@ rows:
     notes: 'super-fr#746: FR_HARNESS_FR pin (Claude Code SessionStart -> CLAUDE_ENV_FILE;
       OpenCode shell.env, bun test/pin.test.ts) + CLI-entry check. Identity is version
       AND package dir: a branch fr and the global fr share a version until release.'
+  - id: fr-binary-pin-live
+    capability: harness-parity
+    acceptance: In a live Claude Code and OpenCode session the shell tool carries the
+      pin its integrations wrote, and a PATH-skewed bare fr is refused
+    origin:
+    - super-fr:docs/acceptance/evidence/2026-09-27-opencode-holder-identity-live.md
+    levels: {}
+    status: not-implemented
+    notes: 'Owed after the release installs fr-binary-pin.sh / pin.ts: start a session,
+      check FR_HARNESS_FR in the shell, then reproduce the zsh .zshenv skew. Pieces
+      verified 2026-10-05 on macOS: the pin survives zsh -c .zshenv while fr moves;
+      the refusal fires.'
