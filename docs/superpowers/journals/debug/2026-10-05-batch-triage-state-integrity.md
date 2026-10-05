@@ -64,3 +64,8 @@ FACTS_SCHEMA comment states why; test_repo_and_org_facts_are_stamped_schema_4_be
 ### fx-888 · finding [fixed] · #888 fixed: origins collect refuses a window one page does not cover
 
 _short_of + refusal in collect_origins naming a covered --since and the --issue-limit/--pr-limit flags (new); no future or drifting since. Tests in test_triage_state_integrity.py; test_triage_origins.py warn test rewritten as a refusal test. fr-origins skill + mirrors. Commits 53f1cc387, 25545b911.
+
+<!-- fr:journal kind=finding scope=debug id=fx-882 created=2026-10-05T21:57:17+00:00 state=fixed -->
+### fx-882 · finding [fixed] · #882 fixed: the driver records a hand-merged archive PR; batch list reads events only
+
+batch_drive step 3 emits adopt; executor repeats the started closeout event with archived; closeout_state(batch) drops the dead facts.prs fallback. Tests: test_a_merged_archive_pr_finishes_the_batch (now expects the adopt), test_a_recorded_archive_is_not_recorded_again, test_an_archive_pr_merged_by_hand_is_recorded_so_batch_list_reads_archived. Commit 43b4ceac4.
