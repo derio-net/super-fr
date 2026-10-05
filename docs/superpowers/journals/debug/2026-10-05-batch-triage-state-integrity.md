@@ -49,3 +49,8 @@ Checkout.show/Worktree.show call git() (text=True): the decode is the locale's, 
 ### fx-886 · finding [fixed] · #886 fixed: facts and origins facts of another scope are refused
 
 Facts.matches + load_scope_facts (model.py) in _load_state, batch list, _previous_facts; load_scope_origins_facts in origins and architecture render. Pinned by tests/unit/test_triage_state_integrity.py (state-directory, kind, origins, architecture tests). Commits 85e3ac01b, 25545b911.
+
+<!-- fr:journal kind=finding scope=debug id=fx-954 created=2026-10-05T21:57:13+00:00 state=fixed -->
+### fx-954 · finding [fixed] · #954 closed: same-name refusal pinned on every verb; its --dir bypass closed by #886
+
+test_every_verb_refuses_a_group_of_two_repos_sharing_a_name (collect, check, render, batch list, batch drive, origins collect/check). Owner-qualified keys deferred as a feature by operator decision.
