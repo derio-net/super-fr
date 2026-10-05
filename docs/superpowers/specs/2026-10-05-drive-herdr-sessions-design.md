@@ -28,7 +28,8 @@ Two facts, checked against herdr itself (protocol 22, `herdr api schema
 - `herdr tab list` without `--workspace` lists the tabs of every workspace;
   `herdr workspace create --label --cwd --no-focus` returns the new
   `workspace`, its first `tab` and that tab's `root_pane`; `herdr workspace
-  close <id>` and `herdr tab close <id>` exist.
+  close <id>`, `herdr tab close <id>` and `herdr tab rename <TAB_ID>
+  <LABEL>` exist.
 
 The runner protocol (`packages/fr-dispatch/src/fr_dispatch/protocols.py`,
 `Runner`) is a structural `Protocol` implemented by `vk`, `cncd` and `herdr`
@@ -39,16 +40,16 @@ is a payload hint (`WorkItem.payload`, documented in
 
 ## Requirements
 
-R1. When `fr triage batch drive` dispatches a batch, the batch's session opens in a runner group named `<prefix>-wave-<n>` for the batch's wave `n`, or `<prefix>-no-wave` for a batch with no wave; with the herdr runner a group is a herdr workspace with that label, created on the first dispatch into it and reused by every later one.
+R1. When `fr triage batch drive` dispatches a batch, the batch's session opens in a runner group named `<prefix>-wave-<n>` for the batch's wave `n`, or `<prefix>-no-wave` for a batch with no wave; with the herdr runner a group is a herdr workspace with that label, created when no workspace carries that label and reused while one does (a wave workspace R9 closed is created again by a later dispatch into it).
 R2. `drive` takes `--workspace-prefix <text>`; without it the prefix is `drive`. An empty prefix is refused.
-R3. A batch's close-out session opens in the same group as the batch: the one its current wave names.
+R3. A batch's close-out session opens in the group of the batch's CURRENT wave, wherever the batch's own session is (a batch dispatched by hand, or re-waved after dispatch, can sit elsewhere).
 R4. The group travels to the runner as an optional `group` key in the work item's payload. A runner without the concept ignores it. A batch dispatched by hand with `fr triage batch dispatch` carries no group and opens where it does today (the herdr runner's own workspace).
 R5. The herdr runner finds a live dispatch by its tab label in ANY workspace, so a live item is never dispatched twice because its tab sits in a wave workspace or was moved by hand.
 R6. The runner protocol gains an optional close capability — close the sessions of one item, reporting `closed`, `busy` or `absent`. A runner that does not offer it is never asked, and its behaviour is unchanged.
 R7. Once a batch is finished — its close-out event records a merged archive PR (driver-merged or adopted as archived), or an archive PR attributed to its close-out is merged — the driver closes the batch's session and its close-out session, when its runner offers the close capability and holds them live. `--keep-sessions` turns this off.
-R8. The driver closes only its own items' sessions (a herdr tab whose label is the item id) and never one whose herdr agent status is `working` or `blocked`: that one is left and tried again on the next pass. `idle`, `done` and `unknown` are closable.
-R9. When a closed item's tab is the only tab of its herdr workspace, and that workspace is not the runner's own (`HERDR_WORKSPACE_ID`), the workspace is closed instead of the tab, so an emptied wave workspace does not linger.
-R10. Closing never holds or fails the drive: a busy session, a runner's preflight refusal or a failed close is reported once per cause, does not count as work remaining, and does not change the exit code.
+R8. The driver closes only its own items' sessions (a herdr tab whose label is the item id) and never one whose herdr agent status is `working` or `blocked`: that one is left and tried again on the next pass, if the drive runs one: a drive that is otherwise done does not wait for it, and a later drive closes it. `idle`, `done` and `unknown` are closable.
+R9. When a closed item's tab is the only tab of its herdr workspace, and that workspace's label is the item's group and it is not the runner's own (`HERDR_WORKSPACE_ID`), the workspace is closed instead of the tab, so an emptied wave workspace does not linger. Any other workspace — one of the operator's, a tab moved there by hand — only loses the tab.
+R10. Closing never holds or fails the drive: a busy session, a runner's preflight refusal or a failed close is reported once per cause, does not count as work remaining, and does not change the exit code; neither does a close that succeeded (a pass that only closed sessions is not a pass that acted). A runner that cannot be loaded for the close probe is the same: reported once, skipped.
 
 ## Design
 
@@ -90,12 +91,15 @@ R10. Closing never holds or fails the drive: a busy session, a runner's prefligh
      re-raising, as a failed `tab create` already closes its tab (review
      r2p-f9).
   3. Otherwise `tab create --workspace <that id>` as today.
-  Without a group, today's path: the runner's own workspace (R4).
+  Without a group, today's path: the runner's own workspace (R4). The
+  rename is `herdr tab rename <tab_id> <item id>`; a failed rename is a
+  failed dispatch (the workspace is closed), never an unlabelled tab.
 - `preflight` requires `HERDR_WORKSPACE_ID` only when an item has no group.
 - `close(item)`: one `tab list`; the tabs labelled `item.id`. None →
   `absent`. Any with `agent_status` in {`working`, `blocked`} → `busy`,
   nothing closed (R8). Otherwise each tab is closed with `tab close`, except
-  a tab that is the only tab of its workspace when that workspace is not
+  a tab that is the only tab of its workspace when that workspace's label
+  (`workspace list`) equals `item.payload["group"]` and it is not
   `self.workspace_id`: that workspace is closed with `workspace close` (R9).
   Returns `closed`.
 
@@ -120,16 +124,30 @@ R10. Closing never holds or fails the drive: a busy session, a runner's prefligh
 - `dispatch_batch(..., group=None)`: the driver passes
   `wave_group(prefix, batch.wave)`; `batch dispatch` passes none (R4). It
   lands in `_work_item`'s payload when set.
-- `_closeout_item` carries the same group (R3).
-- Snapshot: unless `--keep-sessions` (or without `--yes`), the driver probes
-  each finished selected batch's two item ids against its runner, only for a
-  runner that is a `SessionCloser`. A preflight refusal there is reported
-  once and the probe skipped — unlike the close-out probe, it never exits 2
-  (R10).
+- `_closeout_item` carries `wave_group(prefix, batch.wave)` (R3).
+- Snapshot: unless `--keep-sessions` (and only with `--yes`), the driver
+  probes each finished selected batch's items: the batch item against the
+  runner its last `DispatchEvent` names, the close-out item against the
+  runner its `CloseoutEvent` names, skipping `hand` (an adopted close-out has
+  no session). Each probe item carries `group = wave_group(prefix,
+  batch.wave)`. Probes are grouped per runner, one `preflight` and one
+  `existing_dispatches` call each, as `_existing` does. Loading a runner
+  goes through a non-exiting variant of `load_runner`: a load failure, a
+  runner that is not a `SessionCloser`, or a preflight refusal skips that
+  runner, the first two silently for a non-closer and the rest reported
+  once — never the close-out probe's exit 2 (R10).
 - `_act("close")`: `runner.close(item)` for each of the batch's live items.
   Outcome line: `closed …`, `busy, retried next pass: …`, or the failure.
-  A failure or a busy outcome is printed once per batch and cause (the
-  `warned` set), never sets `failed_write`.
+  It returns `did=False` whatever happened, so `--once` exits as it would
+  without it (R10). A failure or a busy outcome is printed once per batch
+  and cause (the `warned` set), never sets `failed_write`.
+
+### E. Skill prose
+
+`plugins/super-fr/skills/fr-triage/SKILL.md`'s driver paragraph names the
+wave workspaces, `--workspace-prefix`, session closing and
+`--keep-sessions`; the OpenCode and Hermes mirrors are regenerated
+(`scripts/sync-opencode.py`, `scripts/sync-hermes.py`).
 
 ## Non-goals
 
@@ -139,6 +157,19 @@ R10. Closing never holds or fails the drive: a busy session, a runner's prefligh
   re-derived each pass from the runner's own listing.
 - No moving of tabs already open when a drive starts.
 
+## Automated verification (CI)
+
+Unit level, herdr faked at `_run_herdr` with its JSON fixtures:
+`drive_pass` emits `close` for a finished batch with a live item and none
+under `--keep-sessions`, and its summary is unchanged by it; `is_finished`
+covers both readings; `wave_group` and the empty-prefix refusal; a driver
+dispatch and close-out carry the group, a hand `batch dispatch` none;
+`existing_dispatches` finds a tab in another workspace; `close` returns
+`closed`/`busy`/`absent`, closes a lone tab's group workspace but never the
+runner's own nor a workspace of another label; the probe skips `hand`, a
+non-closer runner and a load failure without exiting 2; a close outcome
+never changes the exit code; `check_close_contract` passes for herdr.
+
 ## Test Plan (post-merge, operator-driven)
 
 1. Inside herdr, drive two small batches in different waves (`--yes`, default
@@ -146,7 +177,7 @@ R10. Closing never holds or fails the drive: a busy session, a runner's prefligh
    close-out of each opens beside its batch.
 2. After each archive PR merges, the batch's and close-out's tabs close on
    the next pass, and the emptied wave workspace closes; a tab still working
-   is left and closed on a later pass.
+   is left, and closed by a later pass or a later drive.
 3. `--keep-sessions` on a further drive leaves finished tabs open.
 
 ## Implementation Plans
