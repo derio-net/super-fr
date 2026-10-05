@@ -78,13 +78,20 @@ steps:
           tests: p1-suite.log@74453a7e6893;tree=94a1bf31c2a9bed5ec84c50fb81e77932753fedcb9184ee70a25d752228bad32
           visual: triage-page-goals:9:797108291fa1,triage-history-page:4:408fe293db6c
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-05T21:44:35+00:00'
           agent: a060a54453b9a8a98
           harness: claude-code
-          model: claude-sonnet-5-5
+          model: claude-opus-5-5
           session: a95011be-df46-40a9-a07a-e24ccd3c8a59
+          returned: '2026-10-05T21:51:57+00:00'
+          outcome: done
+        evidence:
+          review: p1-review-1
+          reviewer: a060a54453b9a8a98
+          visual: triage-page-goals:14:1070e1f1f2eb,triage-history-page:6:0a018ebe85a9
+          findings: p1-visual-matcher-uv-with,p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6
   journal-check:
     state: pending
   deliver:
