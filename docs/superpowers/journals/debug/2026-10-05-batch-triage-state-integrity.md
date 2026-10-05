@@ -54,3 +54,8 @@ Facts.matches + load_scope_facts (model.py) in _load_state, batch list, _previou
 ### fx-954 · finding [fixed] · #954 closed: same-name refusal pinned on every verb; its --dir bypass closed by #886
 
 test_every_verb_refuses_a_group_of_two_repos_sharing_a_name (collect, check, render, batch list, batch drive, origins collect/check). Owner-qualified keys deferred as a feature by operator decision.
+
+<!-- fr:journal kind=finding scope=debug id=fx-885 created=2026-10-05T21:57:14+00:00 state=fixed -->
+### fx-885 · finding [fixed] · #885 closed as decided: schema 4 stays on every scope
+
+FACTS_SCHEMA comment states why; test_repo_and_org_facts_are_stamped_schema_4_because_their_shape_moved pins it.
