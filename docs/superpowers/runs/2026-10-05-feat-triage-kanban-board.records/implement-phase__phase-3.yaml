@@ -3,23 +3,63 @@ run: 2026-10-05-feat-triage-kanban-board
 step: implement-phase
 item: phase/3
 outcome: done
-ticks: [P3.T1.S1, P3.T1.S2, P3.T1.S3, P3.T2.S1, P3.T2.S2, P3.T2.S3, P3.T3.S1, P3.T3.S2, P3.T3.S3]
+ticks:
+- P3.T1.S1
+- P3.T1.S2
+- P3.T1.S3
+- P3.T2.S1
+- P3.T2.S2
+- P3.T2.S3
+- P3.T3.S1
+- P3.T3.S2
+- P3.T3.S3
 refactor:
-  P3.T3: "triage.html link is one keyword threaded through render/_batches; nothing repeated to clean"
+  P3.T3: triage.html link is one keyword threaded through render/_batches; nothing repeated to clean
 journal:
-  - {kind: decision, id: p3-drive-lock-module, title: "drive-lock liveness moved to fr/triage/drive_lock.py", body: "pid_alive, lock_text, lock_pid, DRIVE_LOCK and live_driver are pure path+pid logic there; triage_batch_cmd imports them under its old private names (so its tests patching _pid_alive still work) and triage_kanban_cmd imports live_driver, keeping the command-module import one-way.", phase: 3}
-  - {kind: decision, id: p3-watch-collect-failure, title: "--watch collect failures warn once per cause and still render", body: "A TriageError from the collect seam (recollect) prints one warning per distinct message, the board is still written from what is on disk, and the loop continues; Ctrl-C ends it with exit 0.", phase: 3}
-  - {kind: discovery, id: p3-plural-batches, title: "plural(n, 'batch') printed 'batchs'", body: "noun() only appended s; the phase-2 board line and the existing merge line both said '6 batchs'. Found while running the visual capture; fixed in noun() (-ch/-sh/-s/-x take es) with a test.", phase: 3}
-  - {kind: discovery, id: p3-explainers-none, title: "no explainer describes triage batches or the driver", body: "grep of docs/explainers/*.md for triage and driver found nothing, so explainers-currency owes no page update.", phase: 3}
-  - {kind: discovery, id: no-refactor-p3-t1, title: "no-refactor-because P3.T1", body: "the guard was extracted as _Driver._write_board in S2 (S3 done by construction)", phase: 3}
-  - {kind: discovery, id: no-refactor-p3-t2, title: "no-refactor-because P3.T2", body: "the seams are named recollect and _sleep like the drive's; nothing else repeats", phase: 3}
+- kind: decision
+  id: p3-drive-lock-module
+  title: drive-lock liveness moved to fr/triage/drive_lock.py
+  body: pid_alive, lock_text, lock_pid, DRIVE_LOCK and live_driver are pure path+pid logic there; triage_batch_cmd
+    imports them under its old private names (so its tests patching _pid_alive still work) and triage_kanban_cmd
+    imports live_driver, keeping the command-module import one-way.
+  phase: 3
+- kind: decision
+  id: p3-watch-collect-failure
+  title: --watch collect failures warn once per cause and still render
+  body: A TriageError from the collect seam (recollect) prints one warning per distinct message, the board
+    is still written from what is on disk, and the loop continues; Ctrl-C ends it with exit 0.
+  phase: 3
+- kind: discovery
+  id: p3-plural-batches
+  title: plural(n, 'batch') printed 'batchs'
+  body: noun() only appended s; the phase-2 board line and the existing merge line both said '6 batchs'.
+    Found while running the visual capture; fixed in noun() (-ch/-sh/-s/-x take es) with a test.
+  phase: 3
+- kind: discovery
+  id: p3-explainers-none
+  title: no explainer describes triage batches or the driver
+  body: grep of docs/explainers/*.md for triage and driver found nothing, so explainers-currency owes
+    no page update.
+  phase: 3
+- kind: discovery
+  id: no-refactor-p3-t1
+  title: no-refactor-because P3.T1
+  body: the guard was extracted as _Driver._write_board in S2 (S3 done by construction)
+  phase: 3
+- kind: discovery
+  id: no-refactor-p3-t2
+  title: no-refactor-because P3.T2
+  body: the seams are named recollect and _sleep like the drive's; nothing else repeats
+  phase: 3
 resolves: []
-evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/p3-suite.log}
+evidence: {}
 visual:
-  - row: triage-board-refresh
-    script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3/capture.py
-    shots:
-      - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3/before-reload.png
-        shows: [rendered and collected times shown]
-      - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3/after-reload.png
-        shows: [reload keeps expanded cards]
+- row: triage-board-refresh
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3/capture.py
+  shots:
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3/before-reload.png
+    shows:
+    - rendered and collected times shown
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual-p3/after-reload.png
+    shows:
+    - reload keeps expanded cards
