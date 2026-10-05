@@ -88,6 +88,7 @@ if TYPE_CHECKING:
     from fr.record.model import QuestionRounds, VisualEvidence
     from fr.run.telemetry import Round
 from fr.run.provenance import cleared_gates, gates
+from fr.run.reshape import ReshapeError, diff_ids, reshape
 from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.types import PHASE_TIERS
@@ -740,6 +741,11 @@ def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
     return [f"phase/{n}/{m.id}" for n in phases for m in group.steps]
 
 
+class _StepDriftError(RunStateError):
+    """The step list a cursor recorded differs from the manifest's — the one
+    refusal a read-only command downgrades to a warning (`_resolve_manifest_for_read`)."""
+
+
 def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowManifest:
     """The manifest this run was started against — name AND schema version.
 
@@ -749,17 +755,46 @@ def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowMan
     a step graph the cursor was never computed for. The suffix is a version
     stamp; a version stamp nobody checks is decoration.
     """
+    manifest = _resolve_manifest_checked_schema(repo_root, state)
+    _check_step_drift(state, manifest)
+    return manifest
+
+
+def _resolve_manifest_checked_schema(repo_root: Path, state: RunState) -> WorkflowManifest:
     name, _, recorded_schema = state.workflow.partition("@")
     manifest = resolve_workflow(name, repo_root)
     if recorded_schema and str(manifest.schema_version) != recorded_schema:
         raise RunStateError(
             f"run {state.run!r} was started against {state.workflow!r}, but "
             f"{name!r} now declares schema {manifest.schema_version}. A shape's "
-            "schema version changes its step grammar; start a new run rather than "
-            "advancing this one against a different one."
+            "schema version changes its step grammar; start a new run rather "
+            "than advancing this one against a different one."
         )
-    _check_step_drift(state, manifest)
     return manifest
+
+
+def _resolve_manifest_for_read(repo_root: Path, state: RunState) -> WorkflowManifest:
+    """`_resolve_manifest_for_state` for a command that only READS the cursor
+    (spec 2026-10-05-run-upgrade-midflight §B).
+
+    A step-list drift is printed as ONE warning and the manifest returned
+    anyway: refusing to say who cleared a gate because a later step was added
+    helps nobody. A schema-version mismatch still refuses — a different grammar
+    is not safe to read with. Mutating commands keep the strict resolver.
+    """
+    manifest = _resolve_manifest_checked_schema(repo_root, state)
+    try:
+        _check_step_drift(state, manifest)
+    except _StepDriftError as e:
+        err_console.print(f"[yellow]warning: {escape(str(e))}[/yellow]", soft_wrap=True)
+    return manifest
+
+
+def _reshape_hint(state: RunState) -> str:
+    return (
+        f" `fr run reshape {state.run}` moves the cursor onto the current list "
+        "when that loses nothing it recorded."
+    )
 
 
 def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
@@ -775,21 +810,18 @@ def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
     Reported as a DIFF, because "the workflow changed" is not actionable and
     "added: verify; removed: spec-review" is.
     """
-    recorded = set(state.steps)
-    current = {s.id for s in manifest.steps}
-    if recorded != current:
-        added = sorted(current - recorded)
-        removed = sorted(recorded - current)
+    added, removed = diff_ids(state.steps, (s.id for s in manifest.steps))
+    if added or removed:
         parts = []
         if added:
             parts.append(f"added: {', '.join(added)}")
         if removed:
             parts.append(f"removed: {', '.join(removed)}")
-        raise RunStateError(
+        raise _StepDriftError(
             f"run {state.run!r} was started against a different version of "
             f"{state.workflow!r} ({'; '.join(parts)}). A run's cursor is a position in "
             "a step list; start a new run rather than advancing this one against a "
-            "list it was never computed for."
+            "list it was never computed for." + _reshape_hint(state)
         )
     for step in manifest.steps:
         if not step.steps:
@@ -800,18 +832,18 @@ def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
             continue  # pre-nesting run file: top-level ids match, members unknowable
         current_members = [m.id for m in step.steps]
         if recorded_members != current_members:
-            added = sorted(set(current_members) - set(recorded_members))
-            removed = sorted(set(recorded_members) - set(current_members))
+            added, removed = diff_ids(recorded_members, current_members)
             parts = []
             if added:
                 parts.append(f"added: {', '.join(added)}")
             if removed:
                 parts.append(f"removed: {', '.join(removed)}")
-            raise RunStateError(
+            raise _StepDriftError(
                 f"run {state.run!r} was started against a different version of "
                 f"{state.workflow!r} (step {step.id!r} members changed: {'; '.join(parts)}). "
                 "A run's cursor is a position in a step list; start a new run rather "
                 "than advancing this one against a list it was never computed for."
+                + _reshape_hint(state)
             )
 
 
@@ -2915,7 +2947,10 @@ def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str]
     every caller is unchanged either way.
     """
     try:
-        manifest = _resolve_manifest_for_state(repo_root, state)
+        # Schema-checked only: a step-list drift does not make "which units owe
+        # evidence" unanswerable, and the caller (`status`/`check`) warns about
+        # the drift itself (spec 2026-10-05-run-upgrade-midflight §B).
+        manifest = _resolve_manifest_checked_schema(repo_root, state)
     except (RunStateError, WorkflowError, AdoptError, OSError):
         return {}
     out: dict[tuple[str, str], tuple[str, ...]] = {}
@@ -4106,6 +4141,53 @@ def start_cmd(
         err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
 
 
+@run_app.command("reshape")
+@_commits_run_writes("reshape")
+def reshape_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    yes: bool = typer.Option(
+        False, "--yes", help="Write the reshaped cursor (default: preview the diff only)."
+    ),
+) -> None:
+    """Move a drifted cursor onto the shape's current step list.
+
+    A run records its step list at `fr run start`; when the shape later gains or
+    loses a step every mutating command refuses it. Reshape inserts an added
+    step `pending` (only AFTER the cursor), drops a removed one that recorded
+    nothing, and refuses — exit 2, nothing written — when the rewrite would lose
+    something the run recorded (spec 2026-10-05-run-upgrade-midflight §A).
+    Dry-run by default; `--yes` writes one `chore(fr):` commit.
+    """
+    repo_root = resolve_repo_root()
+    state = _load_or_exit(repo_root, run_id)
+    try:
+        manifest = _resolve_manifest_checked_schema(repo_root, state)
+        new = reshape(state, manifest)
+    except (RunStateError, WorkflowError, ReshapeError) as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    added, removed = diff_ids(state.steps, new.steps)
+    members_changed = [
+        sid for sid in new.steps if sid in state.steps and new.steps[sid] != state.steps[sid]
+    ]
+    if new == state:
+        console.print(f"{state.run}: nothing to reshape")
+        return
+    parts = []
+    if added:
+        parts.append(f"added: {', '.join(added)}")
+    if removed:
+        parts.append(f"removed: {', '.join(removed)}")
+    if members_changed:
+        parts.append(f"members rewritten: {', '.join(members_changed)}")
+    console.print(f"{state.run}: {'; '.join(parts)}", soft_wrap=True)
+    if not yes:
+        console.print("(preview — re-run with --yes to write)")
+        return
+    _save_run_state(repo_root, new)
+    console.print(f"{state.run}: reshaped")
+
+
 @run_app.command("adopt")
 @_commits_run_writes("adopt")
 def adopt_cmd(
@@ -4363,6 +4445,12 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """
     repo_root = resolve_repo_root()
     state = _load_or_exit(repo_root, run_id)
+    try:
+        _resolve_manifest_for_read(repo_root, state)
+    except (RunStateError, WorkflowError) as e:
+        # status is how an operator finds out a cursor is unusable — it reports
+        # the problem and still prints what it can read.
+        err_console.print(f"[yellow]warning: {escape(str(e))}[/yellow]", soft_wrap=True)
 
     _render_cursor(state, console)
     _render_step_and_items(state, console, _unevidenced_units(repo_root, state))
@@ -6337,6 +6425,10 @@ def check_cmd(
         )
         raise typer.Exit(2)
     state = _load_or_exit(repo_root, run_id)
+    try:
+        _resolve_manifest_for_read(repo_root, state)  # warns once on a drifted cursor
+    except (RunStateError, WorkflowError):
+        pass  # check's verdict never depended on the manifest resolving
 
     record = state.steps.get(state.cursor)
     step_state = record.state if record is not None else "unknown"
@@ -6419,7 +6511,7 @@ def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     repo_root = resolve_repo_root()
     try:
         state = _load_or_exit(repo_root, run_id)
-        manifest = _resolve_manifest_for_state(repo_root, state)
+        manifest = _resolve_manifest_for_read(repo_root, state)
     except (RunStateError, WorkflowError, AdoptError) as e:
         err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
