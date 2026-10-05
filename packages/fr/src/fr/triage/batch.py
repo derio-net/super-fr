@@ -394,10 +394,51 @@ def _replace_top_level(text: str, key: str, block: str, *, prepend: bool) -> str
     return "".join(lines)
 
 
+def _rewrite(
+    path: Path,
+    key: str,
+    block: str,
+    *,
+    unchanged: Callable[[Judgements], bool],
+    dry_run: bool = False,
+) -> Judgements:
+    """Replace `path`'s top-level *key* section with *block* and stamp the current
+    schema; every other byte (comments and layout included) is kept.
+
+    The one refuse-or-write discipline of the engine's writers: the file must load and
+    *unchanged* must hold for what it holds NOW (another writer may have changed it
+    since the caller read it), and the new text must load through the loader's own
+    model, all BEFORE a byte is written, so a refused write leaves the file
+    byte-identical. The write itself is atomic. *dry_run* checks everything and
+    writes nothing."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
+    try:
+        current = Judgements.model_validate(
+            _check_schema(path, yaml.safe_load(text), JUDGEMENTS_READS)
+        )
+    except (yaml.YAMLError, ValidationError) as exc:
+        raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
+    if not unchanged(current):
+        raise TriageError(f"{path}: judgements.yaml changed since it was read; re-run")
+    text = _replace_top_level(text, "schema", f"schema: {JUDGEMENTS_SCHEMA}\n", prepend=True)
+    text = _replace_top_level(text, key, block, prepend=False)
+    try:
+        data = _check_schema(path, yaml.safe_load(text), JUDGEMENTS_READS)
+        judgements = Judgements.model_validate(data)
+    except (yaml.YAMLError, ValidationError) as exc:
+        raise TriageError(f"{path}: refusing to write invalid judgements: {exc}") from exc
+    if not dry_run:
+        write_text_atomic(path, text)
+    return judgements
+
+
 def save_batches(
     path: Path, batches: Sequence[Batch], *, read: Sequence[Batch], dry_run: bool = False
 ) -> Judgements:
-    """Write *batches* as `path`'s `batches:` section and stamp schema 3.
+    """Write *batches* as `path`'s `batches:` section and stamp the current schema.
 
     Only the `schema:` line and the `batches:` section change: the rest of the
     agent-owned file (its comments and layout included) is kept byte for byte.
@@ -414,28 +455,13 @@ def save_batches(
     holds them before it launches a runner, whose launch cannot be undone
     (review r3-f1).
     """
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
-    try:
-        current = Judgements.model_validate(
-            _check_schema(path, yaml.safe_load(text), JUDGEMENTS_READS)
-        ).batches
-    except (yaml.YAMLError, ValidationError) as exc:
-        raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
-    if list(current) != list(read):
-        raise TriageError(f"{path}: judgements.yaml changed since it was read; re-run")
-    text = _replace_top_level(text, "schema", f"schema: {JUDGEMENTS_SCHEMA}\n", prepend=True)
-    text = _replace_top_level(text, "batches", _dump_batches(batches), prepend=False)
-    try:
-        data = _check_schema(path, yaml.safe_load(text), JUDGEMENTS_READS)
-        judgements = Judgements.model_validate(data)
-    except (yaml.YAMLError, ValidationError) as exc:
-        raise TriageError(f"{path}: refusing to write invalid judgements: {exc}") from exc
-    if not dry_run:
-        write_text_atomic(path, text)
-    return judgements
+    return _rewrite(
+        path,
+        "batches",
+        _dump_batches(batches),
+        unchanged=lambda now: list(now.batches) == list(read),
+        dry_run=dry_run,
+    )
 
 
 def _dump_exports(exports: Iterable[Export]) -> str:
@@ -446,35 +472,15 @@ def _dump_exports(exports: Iterable[Export]) -> str:
 
 def save_exports(path: Path, exports: Sequence[Export], *, read: Sequence[Export]) -> Judgements:
     """Write *exports* as `path`'s `exports:` section and stamp the current schema
-    (spec 2026-10-05-triage-pages-goal §G).
-
-    The sibling of `save_batches`: only the `schema:` line and the `exports:` section
-    change, the result is validated through the loader's model before anything is
-    written, and the file's CURRENT exports must still be *read* (the caller's), so a
-    refused write leaves the file byte-identical.
-    """
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
-    try:
-        current = Judgements.model_validate(
-            _check_schema(path, yaml.safe_load(text), JUDGEMENTS_READS)
-        ).exports
-    except (yaml.YAMLError, ValidationError) as exc:
-        raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
-    if list(current) != list(read):
-        raise TriageError(f"{path}: judgements.yaml changed since it was read; re-run")
-    text = _replace_top_level(text, "schema", f"schema: {JUDGEMENTS_SCHEMA}\n", prepend=True)
-    text = _replace_top_level(text, "exports", _dump_exports(exports), prepend=False)
-    try:
-        judgements = Judgements.model_validate(
-            _check_schema(path, yaml.safe_load(text), JUDGEMENTS_READS)
-        )
-    except (yaml.YAMLError, ValidationError) as exc:
-        raise TriageError(f"{path}: refusing to write invalid judgements: {exc}") from exc
-    write_text_atomic(path, text)
-    return judgements
+    (spec 2026-10-05-triage-pages-goal §G): the sibling of `save_batches`, under the
+    same refuse-or-write discipline (`_rewrite`). *read* is the exports the caller
+    loaded; a file whose exports changed since is refused."""
+    return _rewrite(
+        path,
+        "exports",
+        _dump_exports(exports),
+        unchanged=lambda now: list(now.exports) == list(read),
+    )
 
 
 # ------------------------------------------------------------------ launch
