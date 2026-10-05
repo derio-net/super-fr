@@ -61,7 +61,7 @@ from fr.journal.model import (
 from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
 from fr.run import units
-from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
+from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run, plan_phase_tags
 from fr.run.historical import (
     HISTORICAL_HEADING,
     HISTORICAL_REVIEWER,
@@ -177,6 +177,10 @@ class _RunWrites:
     # p3-r10: the step-record engine prints its own one line naming the
     # commit, so `commit_records`' "fr: committed …" echo would be a second.
     quiet: bool = False
+    # `adopt --supersede`: the run this command replaced. Its subject names it
+    # (spec 2026-10-05-run-upgrade-midflight §C), so the replaced cursor is
+    # findable in history.
+    supersedes: str | None = None
 
     def remember(self, path: Path) -> None:
         """Keep `path`'s bytes as they are now, before this command writes it."""
@@ -188,6 +192,8 @@ class _RunWrites:
 
     def message(self) -> str:
         run = self.last.run if self.last is not None else "?"
+        if self.supersedes is not None:
+            return f"chore(fr): run {run} — adopt, supersedes {self.supersedes}"
         step = self.step or self.loaded_cursor or (self.last.cursor if self.last else None)
         parts = [self.verb]
         if step:
@@ -4279,6 +4285,49 @@ def reshape_cmd(
     console.print(f"{state.run}: reshaped")
 
 
+def _print_supersede_preview(state: RunState, effects: Superseded, notes: list[str]) -> None:
+    console.print(
+        f"supersede: {effects.old} -> {state.run} (cursor: {state.cursor})", soft_wrap=True
+    )
+    for step, key, agent, session in effects.holds:
+        who = ", ".join(
+            part
+            for part in (f"agent {agent}" if agent else "", f"session {session}" if session else "")
+            if part
+        )
+        console.print(
+            f"  closes a hold on {step} {key} ({who or 'holder unrecorded'}) "
+            "as abandoned — that work is cut off",
+            soft_wrap=True,
+        )
+    if not effects.holds:
+        console.print("  no unit is held; nothing is cut off")
+    for note in notes:
+        console.print(f"  {note}", soft_wrap=True)
+    console.print("(preview — re-run with --yes to write)")
+
+
+def _note_supersede_writes(repo_root: Path, effects: Superseded) -> None:
+    """Name the removed and moved files for the closing commit. A removed path
+    git never tracked is left out: `git add` of a missing, untracked path fails
+    and would refuse the whole commit."""
+    writes = _RUN_WRITES.get()
+    if writes is None:
+        return
+    writes.supersedes = effects.old
+    for path in (*effects.removed, *effects.written):
+        if path.exists() or _is_tracked(repo_root, path):
+            writes.note(repo_root, path)
+
+
+def _is_tracked(repo_root: Path, path: Path) -> bool:
+    try:
+        rel = path.resolve().relative_to(repo_root.resolve()).as_posix()
+        return git_answer(repo_root, "ls-files", "--error-unmatch", "--", rel).returncode == 0
+    except (ValueError, GitUnavailableError):
+        return False
+
+
 @run_app.command("adopt")
 @_commits_run_writes("adopt")
 def adopt_cmd(
@@ -4297,6 +4346,17 @@ def adopt_cmd(
     pr: str | None = typer.Option(
         None, "--pr", help="URL of the PR delivering this work, if one is already open."
     ),
+    supersede: bool = typer.Option(
+        False,
+        "--supersede",
+        help=(
+            "Replace the plan's existing run with a freshly adopted one, carrying its gate "
+            "answers, units and evidence forward (preview unless --yes)."
+        ),
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", help="With --supersede over an existing run: write it (default: preview)."
+    ),
 ) -> None:
     """Give in-flight work a run cursor, inferred from artifacts that exist.
 
@@ -4311,9 +4371,17 @@ def adopt_cmd(
     Explicit by design. `fr migrate artifacts` *reports* which plans could be
     adopted, and adopts only with `--adopt`; nothing creates a run as a side
     effect of an unrelated command.
+
+    Over a plan that already has a run it refuses, naming `fr run reshape` and
+    `--supersede`. `--supersede` replaces that run (spec
+    2026-10-05-run-upgrade-midflight §C): the old cursor's gate answers, emitted
+    artifacts, units, attempts and evidence are carried into the fresh one, any
+    open attempt closed `abandoned`, its usage file moved to the new id. Dry-run
+    by default; `--yes` writes one commit.
     """
     repo_root = resolve_repo_root()
     notes: list[str] = []
+    effects = Superseded(old="")
     try:
         state = adopt_run(
             repo_root,
@@ -4323,11 +4391,19 @@ def adopt_cmd(
             workflow=workflow,
             pr_url=pr,
             notes=notes,
+            supersede=supersede,
+            dry_run=not yes,
+            superseded=effects,
         )
     except AdoptError as e:
         err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
+    if effects.old and not effects.written_new:
+        _print_supersede_preview(state, effects, notes)
+        return
     _note_record_write(repo_root, run_path(repo_root, state.run), state)
+    if effects.old:
+        _note_supersede_writes(repo_root, effects)
 
     console.print(f"adopted run {state.run} ({state.workflow}) \u2014 cursor: {state.cursor}")
     done = [sid for sid, rec in state.steps.items() if rec.state == "done"]
