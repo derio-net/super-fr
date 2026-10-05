@@ -409,5 +409,22 @@ class Worktree:
         git(["commit", "--no-verify", "-m", message], self.path)
         return git(["rev-parse", "HEAD"], self.path).strip()
 
-    def push(self, branch: str) -> None:
-        git(["push", "origin", f"HEAD:refs/heads/{branch}"], self.path)
+    def commit_paths(self, paths: list[str], message: str) -> str | None:
+        """Stage exactly *paths* (directories included, untracked files under them too)
+        and commit only them; the new head, or None when nothing under them changed.
+
+        The driver's state export (pages-goal §I): unlike `commit_all`, untracked files
+        are what it commits, and nothing outside *paths* rides along."""
+        if not paths:
+            raise GitError("commit_paths needs at least one path")
+        git(["add", "--all", "--", *paths], self.path)
+        if git_ok(["diff", "--cached", "--quiet", "--", *paths], self.path):
+            return None
+        git(["commit", "--no-verify", "-m", message, "--", *paths], self.path)
+        return git(["rev-parse", "HEAD"], self.path).strip()
+
+    def push(self, branch: str, *, force: bool = False) -> None:
+        """Push HEAD to *branch*; *force* overwrites it, for a branch fr owns (the
+        driver's export branch, which a pass that died may have left behind)."""
+        argv = ["push", *(["--force"] if force else []), "origin", f"HEAD:refs/heads/{branch}"]
+        git(argv, self.path)

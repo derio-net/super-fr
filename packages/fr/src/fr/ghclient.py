@@ -198,6 +198,12 @@ class GhClient(Protocol):
         with the forge's own message."""
         ...
 
+    def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
+        """Open a ready (never draft) PR from *head* into *base*; its number. The
+        driver's per-wave state export (pages-goal R13). A refusal raises with the
+        forge's own message."""
+        ...
+
     def closing_ref(self, repo: str, number: int) -> str:
         """The PR-body line that closes issue *number* of *repo* on merge."""
         ...
@@ -257,6 +263,9 @@ class UnsupportedBatchOps:
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         raise self._unsupported("pr_merge")
+
+    def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
+        raise self._unsupported("pr_create")
 
     def closing_ref(self, repo: str, number: int) -> str:
         raise self._unsupported("closing_ref")
