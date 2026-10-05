@@ -6224,9 +6224,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_reshape.py#test_a_step_added_after_the_cursor_is_inserted_pending_in_manifest_order
+      - super-fr:tests/unit/test_run_reshape.py#test_a_step_added_at_or_behind_the_cursor_refuses
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_yes_rewrites_the_cursor_in_one_chore_commit
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_a_refusal_exits_2_and_writes_nothing
+    status: ci
+    notes: fr run reshape implemented (preview, --yes, refusals; advance's drift message
+      names it); unit + CLI tests in CI
   - id: run-read-drifted-cursor
     capability: run-cursor
     acceptance: '`fr run gates` and the other read-only run commands answer from a drifted
