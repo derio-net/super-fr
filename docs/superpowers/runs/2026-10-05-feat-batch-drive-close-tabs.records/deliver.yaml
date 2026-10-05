@@ -1,0 +1,11 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-drive-close-tabs
+step: deliver
+outcome: done
+journal: []
+resolves: []
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/966
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/08bef1b5-8ca7-4d19-93d3-d0d2343afbe9/scratchpad/full-suite.log
