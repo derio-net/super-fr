@@ -19,3 +19,8 @@ Hypothesis (from the issue): only groups changed shape, so repo/org could keep w
 ### rc-886 · root-cause · #886: _load_state and batch list never compare facts.scope/kind to the requested scope
 
 commands/triage_cmd.py _load_state and triage_batch_cmd.py batch list load facts.json from state_dir(scope, --dir) and use it unchecked. _previous_facts in the same module already has the right predicate (facts.scope == scope.name and facts.kind == scope.kind); the two command loaders never got it. batch list also calls load_facts bare, so a bad file is a traceback, not exit 2. The origins loader has the same hole (OriginsFacts.scope vs scope.target).
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-954 created=2026-10-05T21:10:33+00:00 -->
+### rc-954 · root-cause · #954: closes through #886 — the only way two same-named repos' judgements meet is --dir onto another scope's state
+
+See ruled-out h-954-live-collision. _group_scope already refuses same-named repos; pin that every verb (collect, check, batch, origins) refuses it, and #886's scope check closes the --dir bypass. Lifting the limit (owner-qualified keys) is a feature, deferred by operator decision.
