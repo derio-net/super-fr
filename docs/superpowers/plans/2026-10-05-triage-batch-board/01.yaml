@@ -6,8 +6,7 @@ phase:
   tag: agentic
   depends_on: []
   tracking_issue: null
-  acceptance:
-  - triage-board-jump-focus
+  acceptance: []
   skeleton: true
   tier: standard
   files:
