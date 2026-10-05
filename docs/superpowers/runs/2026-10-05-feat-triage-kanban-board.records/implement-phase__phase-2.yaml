@@ -1,0 +1,47 @@
+schema_version: 7
+run: 2026-10-05-feat-triage-kanban-board
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T4.S1, P2.T4.S2, P2.T4.S3, P2.T5.S1, P2.T5.S2, P2.T5.S3, P2.T6.S1, P2.T6.S2, P2.T6.S3, P2.T7.S1, P2.T7.S2]
+refactor:
+  P2.T1: "a one-function extraction; _chosen now calls default_selection, nothing else repeated"
+  P2.T2: "the column table is already one ordered mapping (COLUMN_TITLES) with a stage map; no branch repeats"
+  P2.T3: "phrase tables and hint strings are already module constants beside the column table"
+  P2.T4: "kanban.py is ~370 lines, under the 400 split threshold"
+  P2.T5: "esc, FONTS and _safe_url are imported from render.py, not copied"
+  P2.T6: "scope_args is the one scope-arg builder; focus builds no scope args, so the drive (phase 3) is its second caller"
+  P2.T7: "browser check and matrix moves only; no code to clean"
+journal:
+  - {kind: decision, id: p2-build-board-no-notes, title: build_board takes no notes, body: "Page notes belong to the page (spec D passes them to render_board); Board carries scope and collected_at only.", phase: 2}
+  - {kind: decision, id: p2-no-forge-url-guess, title: a member missing from the facts has no link, body: "Its Member has stage unknown and url None; the forge URL is never guessed.", phase: 2}
+  - {kind: discovery, id: p2-hint-partial-closeout-due, title: a partial batch can read close-out due in Done, body: "partial is LANDED so drive_pass emits closeout for it; R6 puts the driver's action first, so the Done/partial card shows the action phrase, as specified.", phase: 2}
+  - {kind: discovery, id: p2-clipboard-timing, title: copied appears after the clipboard promise resolves, body: "A capture script must wait for the confirmation before asserting button text; fixed in the script, not the page.", phase: 2}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/p2-suite.log}
+visual:
+  - row: triage-board-columns
+    script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/capture.py
+    shots:
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/empty-board.png, shows: [empty board]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/columns-light.png, shows: [every column populated]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/waiting-blocked.png, shows: [waiting card blocked]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/done-cancelled-pill.png, shows: [done card with cancelled pill]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/columns-dark.png, shows: [dark theme]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/phone-375.png, shows: [phone width stacked columns]}
+  - row: triage-board-card-detail
+    script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/capture.py
+    shots:
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/card-expanded-pr-and-closeout.png, shows: [expanded card with PR and close-out]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/card-expanded-no-pr.png, shows: [expanded card without PR]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/card-collapsed-again.png, shows: [expand and collapse a card]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/reload-kept-expanded.png, shows: [expand and collapse a card]}
+  - row: triage-board-jump-focus
+    script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/capture.py
+    shots:
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/jump-copied.png, shows: [copy confirmed on button, click jump button]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/jump-clipboard-removed-selected.png, shows: [click jump button]}
+  - row: triage-board-session-status
+    script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/capture.py
+    shots:
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/running-column-blocked.png, shows: [blocked session card highlighted]}
+      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/visual/columns-light.png, shows: [unknown status with page note]}
