@@ -204,7 +204,7 @@ def test_no_batches_means_no_filter_and_the_fold_script_ships_once() -> None:
     page = render(FACTS, JUDGEMENTS)
     assert page.count("function reveal()") == 1
     plain = Judgements.model_validate({"schema": 1, "tiers": [{"n": 1, "title": "Now"}]})
-    assert "stage-filter" not in render(FACTS, plain).split("<script>")[0]
+    assert "<fieldset" not in render(FACTS, plain)
 
 
 def test_the_fold_script_toggles_by_stage_and_opens_every_ancestor_then_scrolls() -> None:
