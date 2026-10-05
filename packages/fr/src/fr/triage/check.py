@@ -80,6 +80,9 @@ class CheckResult:
     settled_prs: list[PullRequest] = field(default_factory=list)
     no_severity: list[Issue] = field(default_factory=list)
     duplicate_unknown: list[str] = field(default_factory=list)
+    # Judgements whose `duplicate_of` target is itself a duplicate: a chain or a cycle
+    # leaves no original on the board for its members (review p3-r2).
+    duplicate_chained: list[str] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -104,6 +107,7 @@ class CheckResult:
             "unplaced": [row(i) for i in self.unplaced],
             "no_severity": [row(i) for i in self.no_severity],
             "duplicate_unknown": list(self.duplicate_unknown),
+            "duplicate_chained": list(self.duplicate_chained),
             "stale_dispatch": [
                 {
                     "key": s.key,
@@ -243,6 +247,13 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
             k
             for k, j in judgements.issues.items()
             if j.duplicate_of and j.duplicate_of not in found
+        ),
+        duplicate_chained=sorted(
+            k
+            for k, j in judgements.issues.items()
+            if j.duplicate_of
+            and (t := judgements.issues.get(j.duplicate_of)) is not None
+            and t.duplicate_of
         ),
         settled_prs=settled_prs,
     )

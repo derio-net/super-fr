@@ -37,7 +37,7 @@ from fr.triage.collect import ORIGINS_ISSUE_LIST_FIELDS, REPO_LIMIT, Forge, pars
 from fr.triage.components import CHROME_CSS, GUTTER_CSS, TOKENS_CSS, collapsed, page_header
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.fragments import Entry, Resolved, splice
-from fr.triage.model import Judgements, Scope, issue_key, normalize_key
+from fr.triage.model import KEY_RE, Judgements, Scope, issue_key, normalize_key
 from fr.triage.render import FONTS, esc, plural
 
 CATEGORIES = ("latent", "regression", "new-feature", "leftover", "gap", "duplicate")
@@ -270,6 +270,9 @@ class Origin(_Strict):
     @field_validator("duplicate_of")
     @classmethod
     def _normalise_duplicate_of(cls, v: str | None) -> str | None:
+        # Held to the key grammar like `Judgement.duplicate_of` (review p3-r1).
+        if v and not KEY_RE.match(v):
+            raise ValueError(f"`duplicate_of` {v!r} is not an issue key (`<repo>#<number>`)")
         return normalize_key(v) if v else v
 
 
@@ -283,6 +286,13 @@ class Cause(_Strict):
 class Origins(_Strict):
     issues: dict[str, Origin] = {}
     causes: list[Cause] = []
+
+    @model_validator(mode="after")
+    def _no_entry_duplicates_itself(self) -> Origins:
+        selves = sorted(k for k, o in self.issues.items() if o.duplicate_of == normalize_key(k))
+        if selves:
+            raise ValueError(f"`duplicate_of` names the issue itself: {', '.join(selves)}")
+        return self
 
 
 def load_origins(path: Path) -> Origins:

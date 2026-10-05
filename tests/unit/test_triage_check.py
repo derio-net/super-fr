@@ -358,3 +358,21 @@ def test_check_prints_and_emits_the_two_new_sets(tmp_path: Path) -> None:
     data = json.loads(_check(tmp_path, "--json").output)
     assert data["no_severity"][0]["key"] == "super-fr#1"
     assert data["duplicate_unknown"] == ["super-fr#2"]
+
+
+def test_a_duplicate_of_a_duplicate_is_duplicate_chained() -> None:
+    """Review p3-r2: a chain (1 -> 2 -> 3) or a cycle (4 <-> 5) leaves no original on the
+    board for its members; `check` names every judgement whose target is itself a duplicate."""
+    facts = _facts([_issue(n) for n in range(1, 6)])
+    j = _sev_judgements(
+        **{
+            "super-fr_1": {"duplicate_of": "super-fr#2"},
+            "super-fr_2": {"duplicate_of": "super-fr#3"},
+            "super-fr_3": {},
+            "super-fr_4": {"duplicate_of": "super-fr#5"},
+            "super-fr_5": {"duplicate_of": "super-fr#4"},
+        }
+    )
+    result = classify(facts, j)
+    assert result.duplicate_chained == ["super-fr#1", "super-fr#4", "super-fr#5"]
+    assert result.to_json()["duplicate_chained"] == ["super-fr#1", "super-fr#4", "super-fr#5"]

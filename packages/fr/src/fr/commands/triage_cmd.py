@@ -343,6 +343,12 @@ def check_command(
     )
     for key in result.duplicate_unknown:
         console.print(f"  {escape(key)}", soft_wrap=True)
+    console.print(
+        f"[bold]duplicate chained[/bold] ({len(result.duplicate_chained)}) — `duplicate_of` "
+        "names an issue that is itself a duplicate (a chain or a cycle)"
+    )
+    for key in result.duplicate_chained:
+        console.print(f"  {escape(key)}", soft_wrap=True)
 
 
 @triage_app.command("render")

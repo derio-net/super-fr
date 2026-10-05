@@ -834,3 +834,26 @@ def test_related_pr_cell_shows_introduced_in_and_fixed_by(
     assert "introduced in" in row and "widgets/pull/90" in row
     assert "fixed by" in row and "widgets/pull/91" in row
     assert "introduced in" not in _row(page, "widgets#3")
+
+
+@pytest.mark.parametrize("target", ["foo", "widgets#", "#4", "widgets 4"])
+def test_an_origins_duplicate_of_off_the_key_grammar_is_refused(target: str) -> None:
+    """Review p3-r1: `Origin.duplicate_of` is held to the key grammar, as the judgement
+    field is."""
+    from fr.triage.origins import Origin
+
+    with pytest.raises(ValueError, match="duplicate_of"):
+        Origin(category="duplicate", source="hand", severity="low", reason="x", duplicate_of=target)
+
+
+def test_an_origins_entry_that_duplicates_itself_is_refused(tmp_path: Path) -> None:
+    """Review p3-r1: a self-reference is refused at load, naming the key."""
+    from fr.triage.origins import load_origins
+
+    (tmp_path / "origins.yaml").write_text(
+        "schema: 2\nissues:\n  widgets#6: {category: duplicate, source: hand, severity: low,"
+        " reason: x, duplicate_of: 'Widgets#6'}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(Exception, match="widgets#6"):
+        load_origins(tmp_path / "origins.yaml")
