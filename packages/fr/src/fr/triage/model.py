@@ -39,11 +39,12 @@ from fr.triage.stage import Stage, derive_stage
 # §H); 3 still loads, and the first collect upgrades it. Independent of JUDGEMENTS_SCHEMA.
 FACTS_SCHEMA: Literal[4] = 4
 FACTS_READS: tuple[int, ...] = (3, 4)
-# The version this fr WRITES: every engine write of `batches:` stamps 3 (spec
-# 2026-10-02-wave-driver §A: `wave`, `after`; 2 was 2026-09-25-triage-batches §3.A);
-# the loader reads every version in JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[3] = 3
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3)
+# The version this fr WRITES: every engine write stamps 4 (spec
+# 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
+# `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
+# JUDGEMENTS_READS.
+JUDGEMENTS_SCHEMA: Literal[4] = 4
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -293,6 +294,24 @@ class ConfigDefaults(_Strict):
     launch: Launch = Launch()
 
 
+class ExportConfig(_Strict):
+    """`.fr/triage.yaml`'s `export:` (spec 2026-10-05-triage-pages-goal §I): the
+    repo-relative directory the driver exports the triage state under."""
+
+    path: str
+
+    @field_validator("path")
+    @classmethod
+    def _inside_the_repo(cls, v: str) -> str:
+        """Relative, non-empty and without `..`: the export never leaves the repo."""
+        parts = v.replace("\\", "/").split("/")
+        if not v.strip() or v.startswith(("/", "\\")) or ".." in parts or ":" in parts[0]:
+            raise ValueError(
+                f"export path must be a repo-relative directory with no `..`, got {v!r}"
+            )
+        return v
+
+
 class TriageConfig(_Strict):
     """`.fr/triage.yaml` of one repo, read at its default branch (spec §3.I).
 
@@ -310,6 +329,9 @@ class TriageConfig(_Strict):
     # The logins whose PRs on a batch branch are the batch's (gh#936). Empty means
     # the user `collect` ran as (`Facts.viewer`); a list REPLACES that default.
     pr_authors: list[str] = []
+    # Where the wave driver exports this repo's triage state once a wave is finished
+    # (spec 2026-10-05-triage-pages-goal R13); None: the driver never exports.
+    export: ExportConfig | None = None
 
 
 class Facts(_Strict):
@@ -565,16 +587,37 @@ class Batch(_Strict):
         return self.ids[0].rpartition("#")[0]
 
 
+class Export(_Strict):
+    """One wave's state export by the driver (spec 2026-10-05-triage-pages-goal §G).
+    Needs judgements schema 4. Written by the engine only.
+
+    `pr` is None when the export changed nothing, so no PR was opened; `merged` is set
+    once the driver merged the PR."""
+
+    wave: str  # the wave key, `str(batch.wave)`
+    repo: str  # OWNER/REPO
+    at: AwareDatetime  # when the export was recorded
+    pr: int | None = None
+    merged: bool = False
+
+    @field_validator("wave", mode="before")
+    @classmethod
+    def _wave_key(cls, v: object) -> object:
+        """A wave written as a number is the same key as its string."""
+        return str(v) if isinstance(v, int) and not isinstance(v, bool) else v
+
+
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
     patterns: list[Pattern] = []
     batches: list[Batch] = []
     features: list[Feature] = []  # ranked groups (wave-driver R9); any schema
+    exports: list[Export] = []  # the driver's per-wave state exports; schema 4
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -648,6 +691,10 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`{'`, `'.join(late)}` events need schema 3, but this file is stamped "
                 f"schema {self.schema_}"
+            )
+        if self.exports and self.schema_ < 4:
+            raise ValueError(
+                f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
         return self
 

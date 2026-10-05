@@ -28,6 +28,7 @@ from fr.triage.model import (
     JUDGEMENTS_SCHEMA,
     Batch,
     DispatchEvent,
+    Export,
     Facts,
     Issue,
     Judgement,
@@ -434,6 +435,45 @@ def save_batches(
         raise TriageError(f"{path}: refusing to write invalid judgements: {exc}") from exc
     if not dry_run:
         write_text_atomic(path, text)
+    return judgements
+
+
+def _dump_exports(exports: Iterable[Export]) -> str:
+    """The `exports:` block, in field order, storing only what was set."""
+    docs = [e.model_dump(mode="json", exclude_defaults=True) for e in exports]
+    return yaml.safe_dump({"exports": docs}, sort_keys=False, allow_unicode=True, width=100)
+
+
+def save_exports(path: Path, exports: Sequence[Export], *, read: Sequence[Export]) -> Judgements:
+    """Write *exports* as `path`'s `exports:` section and stamp the current schema
+    (spec 2026-10-05-triage-pages-goal §G).
+
+    The sibling of `save_batches`: only the `schema:` line and the `exports:` section
+    change, the result is validated through the loader's model before anything is
+    written, and the file's CURRENT exports must still be *read* (the caller's), so a
+    refused write leaves the file byte-identical.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
+    try:
+        current = Judgements.model_validate(
+            _check_schema(path, yaml.safe_load(text), JUDGEMENTS_READS)
+        ).exports
+    except (yaml.YAMLError, ValidationError) as exc:
+        raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
+    if list(current) != list(read):
+        raise TriageError(f"{path}: judgements.yaml changed since it was read; re-run")
+    text = _replace_top_level(text, "schema", f"schema: {JUDGEMENTS_SCHEMA}\n", prepend=True)
+    text = _replace_top_level(text, "exports", _dump_exports(exports), prepend=False)
+    try:
+        judgements = Judgements.model_validate(
+            _check_schema(path, yaml.safe_load(text), JUDGEMENTS_READS)
+        )
+    except (yaml.YAMLError, ValidationError) as exc:
+        raise TriageError(f"{path}: refusing to write invalid judgements: {exc}") from exc
+    write_text_atomic(path, text)
     return judgements
 
 
