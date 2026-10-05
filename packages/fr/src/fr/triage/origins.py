@@ -25,7 +25,7 @@ import re
 import statistics
 import urllib.parse
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
@@ -34,8 +34,9 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from fr.triage.collect import ORIGINS_ISSUE_LIST_FIELDS, REPO_LIMIT, Forge, parse_prs, scope_repos
-from fr.triage.components import GUTTER_CSS, TOKENS_CSS
+from fr.triage.components import CHROME_CSS, GUTTER_CSS, TOKENS_CSS, collapsed, page_header
 from fr.triage.errors import ForgeError, TriageError
+from fr.triage.fragments import Entry, Resolved, splice
 from fr.triage.model import Judgements, Scope, issue_key, normalize_key
 from fr.triage.render import FONTS, esc, plural
 
@@ -50,6 +51,16 @@ LEADERBOARDS: tuple[Category, ...] = ("new-feature", "leftover")
 FACTS_FILE = "origins-facts.json"
 CLASSIFICATION_FILE = "origins.yaml"
 PAGE_FILE = "origins.html"
+ORIGINS_DIR = "origins"
+# The generated sections, in the order R7 gives; fragments interleave where the manifest says.
+GENERATED = (
+    "origin-counts",
+    "conclusion",
+    "filings-per-day",
+    "time-to-fix",
+    "leaderboards",
+    "issues",
+)
 SCHEMA = 1
 ISSUE_LIMIT = 1000
 PR_LIMIT = 1000
@@ -396,6 +407,7 @@ svg.chart text { font-family: var(--mono); font-size: 10px; }
 .sev-high { color: var(--sev-1); } .sev-med { color: var(--sev-2); }
 .sev-low { color: var(--muted); }
 """
+    + CHROME_CSS
     + GUTTER_CSS
 )
 
@@ -577,13 +589,16 @@ def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
             f"<td>{_pr_link(o.pr if o else None)}</td>"
             f'<td>{closed}{f" by {esc(by)}" if by else ""}</td><td class="wrap">{detail}</td></tr>'
         )
-    return (
-        '<section id="issue-table"><h2>Every issue</h2>'
+    body = (
         f'<div class="bar" data-filter-bar hidden>{buttons}</div>'
         '<div class="scroll"><table><thead><tr><th>Issue</th>'
         '<th class="wrap">Title</th><th>Category</th><th>Source</th><th>Severity</th>'
         '<th>Related PR</th><th>Ended</th><th class="wrap">Why</th></tr>'
-        f"</thead><tbody>{''.join(rows)}</tbody></table></div></section>"
+        f"</thead><tbody>{''.join(rows)}</tbody></table></div>"
+    )
+    return (
+        f'<section id="issue-table">'
+        f"{collapsed('issue-table-fold', 'Every issue', len(rows), body)}</section>"
     )
 
 
@@ -636,12 +651,28 @@ def _conclusion(facts: OriginsFacts, origins: Origins, titles: Mapping[str, str]
 
 
 def render_origins(
-    facts: OriginsFacts, origins: Origins, judgements: Judgements | None = None
+    facts: OriginsFacts,
+    origins: Origins,
+    judgements: Judgements | None = None,
+    resolved: Resolved | None = None,
+    notes: Sequence[str] = (),
 ) -> str:
-    """The defect-origins page: same inputs, same bytes."""
+    """The defect-origins page: same inputs, same bytes. The generated sections (R7) and the
+    authored fragments in the order *resolved* (the manifest) gives; with none, the default
+    order and no fragments."""
     titles = {b.id: b.title for b in judgements.batches} if judgements else {}
     missing = check_origins(facts, origins)
-    notes = "".join(f"<li>{esc(w)}</li>" for w in facts.warnings)
+    resolved = resolved or Resolved(order=[Entry(g) for g in GENERATED])
+    generated = {
+        "origin-counts": lambda: _counts(facts, origins),
+        "conclusion": lambda: _conclusion(facts, origins, titles),
+        "filings-per-day": lambda: _chart(facts),
+        "time-to-fix": lambda: _time_to_fix(facts, origins),
+        "leaderboards": lambda: _leaderboards(facts, origins),
+        "issues": lambda: _issue_table(facts, origins),
+    }
+    body = splice(resolved, generated)
+    note_items = "".join(f"<li>{esc(w)}</li>" for w in [*facts.warnings, *notes])
     title = f"Defect origins · {facts.scope} · since {facts.since}"
     return (
         '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
@@ -652,14 +683,8 @@ def render_origins(
         f"<span>{len(missing.unclassified)} unclassified</span>"
         f"<span>collected {esc(facts.collected_at)}</span>"
         "<span>rendered by <code>fr triage origins render</code></span></div>"
-        f'<ul class="notes">{notes}</ul></header>\n'
-        f"{_counts(facts, origins)}\n{_chart(facts)}\n{_time_to_fix(facts, origins)}\n"
-        f"{_leaderboards(facts, origins)}\n{_issue_table(facts, origins)}\n"
-        f"{_conclusion(facts, origins, titles)}\n"
+        f'<ul class="notes">{note_items}</ul></header>\n'
+        f"{page_header('origins')}\n" + "\n".join(body) + "\n"
         f"</main>\n<script>{FILTER_SCRIPT}</script>\n</body>\n</html>\n"
     )
 
-
-# Public names for the pieces the architecture page reuses (wave-driver R11).
-origin_counts = _counts
-filings_chart = _chart

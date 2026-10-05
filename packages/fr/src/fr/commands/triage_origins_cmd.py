@@ -20,10 +20,13 @@ from rich.markup import escape
 import fr.commands.triage_cmd as triage_cmd
 from fr.commands.triage_cmd import DirOpt, OrgOpt, RepoOpt, console, err_console, triage_app
 from fr.triage.errors import TriageError
+from fr.triage.fragments import resolve_manifest
 from fr.triage.model import Judgements, Scope, load_judgements, state_dir
 from fr.triage.origins import (
     CLASSIFICATION_FILE,
     FACTS_FILE,
+    GENERATED,
+    ORIGINS_DIR,
     PAGE_FILE,
     Origins,
     OriginsFacts,
@@ -119,12 +122,26 @@ def render_command(
     dir_override: DirOpt = None,
     open_: bool = typer.Option(False, "--open", help="Open the page in a browser."),
 ) -> None:
-    """Write origins.html from origins-facts.json, origins.yaml and (for links) judgements.yaml."""
+    """Write origins.html from origins-facts.json, origins.yaml and (for links) judgements.yaml,
+    with the fragments `origins/manifest.yaml` places among the sections."""
     scope = triage_cmd._scope(repo, org)
     target, facts, origins = _load(scope, dir_override)
     judgements = _judgements(target)
+    try:
+        resolved = resolve_manifest(target / ORIGINS_DIR, GENERATED)
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
+    notes = [f"manifest entry {name} has no file in {ORIGINS_DIR}/" for name in resolved.missing]
+    if resolved.appended:
+        notes.append(
+            f"the manifest does not name {', '.join(resolved.appended)}; they are shown after "
+            "the entries it lists, in the default order"
+        )
+    for note in notes:
+        err_console.print(f"[yellow]warning:[/yellow] {escape(note)}", soft_wrap=True)
     out = target / PAGE_FILE
-    out.write_text(render_origins(facts, origins, judgements), encoding="utf-8")
+    out.write_text(render_origins(facts, origins, judgements, resolved, notes), encoding="utf-8")
     console.print(
         f"wrote {out} ({plural(len(facts.issues), 'issue')})", markup=False, soft_wrap=True
     )

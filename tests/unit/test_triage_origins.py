@@ -269,8 +269,7 @@ def test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch(
 ) -> None:
     page = _page(monkeypatch, tmp_path)
     sections = re.findall(r'<section[^>]*id="([a-z-]+)"', page)
-    assert sections[-1] == "conclusion"
-    assert page.rindex('id="conclusion"') > page.rindex('id="issue-table"')
+    assert sections[1] == "conclusion"  # R7: right after where the issues came from
     concl = _section(page, "conclusion")
     assert "Feature work lands half-done" in concl
     assert "Require a follow-up checklist before merge" in concl
@@ -279,6 +278,68 @@ def test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch(
     assert re.search(r'class="unresolved"[^>]*>[^<]*ghost-batch', concl)
     # a cause with no batch says so
     assert "no batch yet" in _text(concl)
+
+
+def test_sections_follow_r7_and_the_issue_table_is_a_closed_fold(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _page(monkeypatch, tmp_path)
+    ids = re.findall(r'<section[^>]*id="([a-z-]+)"', page)
+    assert ids == [
+        "origin-counts",
+        "conclusion",
+        "filings-per-day",
+        "time-to-fix",
+        "pr-leaderboards",
+        "issue-table",
+    ]
+    table = _section(page, "issue-table")
+    m = re.search(r'<details id="issue-table-fold" class="fold">', table)
+    assert m and "<table" in table[m.end() :]
+    assert "open" not in table[: table.index(">", m.start())].split()
+    assert re.search(r'<summary>Every issue <span class="count">15</span></summary>', table)
+
+
+def test_the_origins_page_carries_its_nav_and_goal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _page(monkeypatch, tmp_path)
+    assert re.search(r'<a [^>]*href="origins.html"[^>]*aria-current="page"', page)
+    assert "Where do defects come from, and what process change stops them?" in page
+    assert page.index("</header>") < page.index('class="pages"') < page.index('id="origin-counts"')
+
+
+def test_a_manifest_fragment_survives_render_at_its_position(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    (tmp_path / "origins.yaml").write_text(classification_yaml(causes=CAUSES), encoding="utf-8")
+    d = tmp_path / "origins"
+    d.mkdir()
+    (d / "manifest.yaml").write_text(
+        "sections:\n  - origin-counts\n  - analysis.html\n  - conclusion\n", encoding="utf-8"
+    )
+    (d / "analysis.html").write_text("<p>HAND WRITTEN</p>", encoding="utf-8")
+    for _ in range(2):  # a second render loses nothing
+        assert _run(monkeypatch, "render", tmp_path).exit_code == 0
+        page = (tmp_path / "origins.html").read_text(encoding="utf-8")
+        at = [page.index(x) for x in ('id="origin-counts"', "HAND WRITTEN", 'id="conclusion"')]
+        assert at == sorted(at)
+        assert 'id="issue-table"' in page  # omitted generated names are appended
+
+
+def test_a_malformed_origins_fragment_is_refused_and_nothing_is_written(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    (tmp_path / "origins.yaml").write_text(classification_yaml(), encoding="utf-8")
+    d = tmp_path / "origins"
+    d.mkdir()
+    (d / "manifest.yaml").write_text("sections:\n  - bad.html\n", encoding="utf-8")
+    (d / "bad.html").write_text("<div>open", encoding="utf-8")
+    r = _run(monkeypatch, "render", tmp_path)
+    assert r.exit_code == 2 and "bad.html" in r.output
+    assert not (tmp_path / "origins.html").exists()
 
 
 def test_every_batch_is_unresolved_when_there_is_no_judgements_file(
