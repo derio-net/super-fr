@@ -670,12 +670,17 @@ def _next_section(facts: Facts, judgements: Judgements) -> str:
     return f'{head}<ul class="cards">{"".join(items)}</ul></section>'
 
 
-def _wave_table(batches: Sequence[Batch], facts: Facts, judgements: Judgements) -> str:
+def _wave_table(
+    batches: Sequence[Batch], facts: Facts, judgements: Judgements, href_prefix: str = ""
+) -> str:
+    """One wave's table; *href_prefix* is put before each batch link's `#batch-<id>`, so the
+    history page (another file) links to the board's cards."""
     rows = []
     for b in batches:
         stage = derive_batch_stage(b, facts)
         rows.append(
-            f'<tr data-batch="{esc(b.id)}"><td><a href="#batch-{esc(b.id)}">{esc(b.id)}</a></td>'
+            f'<tr data-batch="{esc(b.id)}"><td>'
+            f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a></td>'
             f'<td>{esc(b.skill)}</td><td class="mono">{esc(", ".join(b.ids))}</td>'
             f"<td>{inline(b.rationale)}</td><td>{esc(size_of(b.ids, judgements.issues))}</td>"
             f"<td>{esc(', '.join(b.after) or '-')}</td>"

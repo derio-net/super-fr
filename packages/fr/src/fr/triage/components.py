@@ -97,6 +97,42 @@ details.fold[open] > summary { border-bottom: 1px solid var(--line); margin-bott
 """
 """The page chrome every page's CSS includes: nav bar, goal sentence, collapsed sections."""
 
+BASE_CSS = """
+* { box-sizing: border-box; }
+html, body { margin: 0; overflow-x: hidden; }
+body { background: var(--ground); color: var(--ink); font: 15px/1.5 var(--sans); }
+main { max-width: 1040px; margin: 0 auto; padding: 0 16px 48px; }
+a { color: var(--accent); }
+code { font-family: var(--mono); font-size: .92em; overflow-wrap: anywhere; }
+header.mast { padding: 28px 0 16px; border-bottom: 2px solid var(--ink); }
+header.mast h1 { margin: 0 0 6px; font-size: 1.6rem; font-weight: 600; overflow-wrap: anywhere; }
+.meta { color: var(--muted); font-size: .88rem; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.notes { margin: 12px 0 0; padding: 0; list-style: none; font-size: .85rem; color: var(--sev-2); }
+section { margin-top: 28px; }
+section > h2 { margin: 0 0 8px; font-size: 1.15rem; font-weight: 600; }
+.lede, .src { color: var(--muted); font-size: .85rem; margin: 0 0 10px; }
+.quiet { color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: 2px 10px; font-size: .85rem; }
+.chip b { font-family: var(--mono); font-weight: 500; }
+.scroll { overflow-x: auto; }
+table { width: 100%; min-width: 560px; border-collapse: collapse; background: var(--surface);
+  border: 1px solid var(--line); font-size: .88rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line);
+  vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+td.n, th.n { text-align: right; font-family: var(--mono); }
+svg.chart { display: block; height: auto; }
+svg.chart text { font-family: var(--mono); font-size: 10px; }
+.stages summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.stage-list { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .85rem;
+  margin-top: 6px; }
+.fragment { margin-top: 28px; }
+"""
+"""The prelude the architecture and history pages share (theme-built ground, masthead,
+sections, tables); a page adds its own pieces after it."""
+
 GUTTER_CSS = """
 @media (max-width: 480px) {
   main { padding-left: 16px; padding-right: 16px; }
@@ -193,9 +229,9 @@ def tabs(group: str, label: str, panels: Sequence[tuple[str, str, str]], selecte
 def page_header(current: str) -> str:
     """The nav bar linking the four pages, *current* marked `aria-current="page"`, then
     the goal sentence of *current* (spec §A). Every renderer calls it after its masthead."""
+    here = ' aria-current="page"'
     links = "".join(
-        f'<a href="{_esc(p.file)}"{" aria-current=\"page\"" if p.key == current else ""}>'
-        f"{_esc(p.title)}</a>"
+        f'<a href="{_esc(p.file)}"{here if p.key == current else ""}>{_esc(p.title)}</a>'
         for p in PAGES
     )
     goal = next(p.goal for p in PAGES if p.key == current)

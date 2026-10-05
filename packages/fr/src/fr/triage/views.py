@@ -18,7 +18,7 @@ not collected), so no row of that kind is produced — it is not invented
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -39,6 +39,7 @@ from fr.triage.batch_drive import (
     checks_verdict,
     closeout_event,
     drive_pass,
+    finished_waves,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.check import classify, stale_dispatches
@@ -333,18 +334,33 @@ def waves(judgements: Judgements) -> dict[str, list[Batch]]:
     return grouped
 
 
-def preselected_wave(facts: Facts, judgements: Judgements) -> int | None:
+def batch_stages(facts: Facts, judgements: Judgements) -> dict[str, str]:
+    """Every batch's derived stage, by batch id: the *stages* `finished_waves` takes."""
+    return {b.id: derive_batch_stage(b, facts) for b in judgements.batches}
+
+
+def unfinished_waves(facts: Facts, judgements: Judgements) -> set[str]:
+    """The wave keys that still show on the board: every wave minus the finished ones."""
+    done = finished_waves(judgements.batches, batch_stages(facts, judgements))
+    return {str(b.wave) for b in judgements.batches if b.wave is not None} - done
+
+
+def preselected_wave(
+    facts: Facts, judgements: Judgements, among: Collection[str] | None = None
+) -> int | None:
     """The most recent wave (R16): the highest wave number with a batch not yet merged,
-    else the highest. A cancelled batch never merges, so it does not hold a wave open."""
-    numbers = {b.wave for b in judgements.batches if b.wave is not None}
-    if not numbers:
-        return None
-    live = {
-        b.wave
+    else the highest. A cancelled batch never merges, so it does not hold a wave open.
+    With *among* (wave keys), only those waves are considered: the board passes the
+    unfinished ones, the history page the finished ones (triage-pages-goal R8)."""
+    waved = [
+        (b.wave, derive_batch_stage(b, facts))
         for b in judgements.batches
-        if b.wave is not None and derive_batch_stage(b, facts) not in {"merged", "cancelled"}
-    }
-    return max(live) if live else max(numbers)
+        if b.wave is not None and (among is None or str(b.wave) in among)
+    ]
+    if not waved:
+        return None
+    live = [n for n, stage in waved if stage not in {"merged", "cancelled"}]
+    return max(live) if live else max(n for n, _ in waved)
 
 
 def kind_counts(facts: Facts, judgements: Judgements) -> dict[str, int]:

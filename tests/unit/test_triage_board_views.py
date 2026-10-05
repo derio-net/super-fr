@@ -454,3 +454,99 @@ def test_no_waves_means_no_tabs() -> None:
     page = render(f, judgements({"widgets#1": j()}))
     assert '<div role="tablist"' not in page
     assert "No waves" in _section(page, "waves")
+
+
+# ------------------------------------------------- finished waves (triage-pages-goal R8)
+
+CANCEL = {"kind": "cancel", "at": "2026-10-02T10:00:00Z", "reason": "no longer wanted"}
+CLOSEOUT = {
+    "kind": "closeout",
+    "at": "2026-10-03T10:00:00Z",
+    "runner": "fake",
+    "handle": "h",
+    "archived": 12,
+}
+
+
+def _stages(f: Facts, jd: Judgements) -> dict[str, str]:
+    from fr.triage.batch import derive_batch_stage
+
+    return {b.id: derive_batch_stage(b, f) for b in jd.batches}
+
+
+def test_finished_waves_needs_every_batch_terminal() -> None:
+    from fr.triage.views import finished_waves
+
+    merged = pr(10, "feat/batch-c", state="MERGED")
+    closed = pr(11, "feat/batch-d", state="CLOSED")
+    f = facts(
+        [
+            issue(1),
+            issue(2, state="closed", prs=[merged]),
+            issue(3, prs=[closed]),
+            issue(4, state="closed", prs=[merged]),
+            issue(5),
+        ]
+    )
+    jd = judgements(
+        {f"widgets#{n}": j() for n in range(1, 6)},
+        [
+            # wave 1: cancelled + archived-by-closeout
+            batch("a", [1], wave=1, events=[dispatch("a"), CANCEL]),
+            batch("c", [2], wave=1, events=[dispatch("c"), CLOSEOUT]),
+            # wave 2: abandoned (PR closed unmerged) + archived
+            batch("d", [3], wave=2, events=[dispatch("d")]),
+            batch("e", [4], wave=2, events=[dispatch("e"), CLOSEOUT]),
+            # wave 3: a merged-but-unarchived batch holds the wave open
+            batch("g", [2], wave=3, events=[dispatch("c")]),
+            # no wave: never yields a key
+            batch("z", [5], events=[dispatch("z"), CANCEL]),
+        ],
+    )
+    done = finished_waves(jd.batches, _stages(f, jd))
+    assert done == frozenset({"1", "2"})
+
+
+def test_finished_waves_is_the_driver_predicate_re_exported() -> None:
+    from fr.triage import batch_drive, views
+
+    assert views.finished_waves is batch_drive.finished_waves
+
+
+def test_preselected_wave_is_restricted_to_among() -> None:
+    f = facts([issue(1), issue(2), issue(3)])
+    jd = judgements(
+        {f"widgets#{n}": j() for n in (1, 2, 3)},
+        [
+            batch("a", [1], wave=1, events=[dispatch("a")]),
+            batch("b", [2], wave=2, events=[dispatch("b")]),
+            batch("c", [3], wave=3, events=[dispatch("c")]),
+        ],
+    )
+    assert preselected_wave(f, jd) == 3
+    assert preselected_wave(f, jd, among={"1", "2"}) == 2
+    assert preselected_wave(f, jd, among={"1"}) == 1
+    assert preselected_wave(f, jd, among=set()) is None
+
+
+def test_among_finished_keys_picks_the_highest_finished() -> None:
+    f = facts([issue(1), issue(2)])
+    jd = judgements(
+        {f"widgets#{n}": j() for n in (1, 2)},
+        [
+            batch("a", [1], wave=1, events=[dispatch("a"), CANCEL]),
+            batch("b", [2], wave=2, events=[dispatch("b"), CANCEL]),
+        ],
+    )
+    from fr.triage.views import finished_waves
+
+    done = finished_waves(jd.batches, _stages(f, jd))
+    assert preselected_wave(f, jd, among=done) == 2
+
+
+def test_batch_stages_derives_every_batch() -> None:
+    from fr.triage.views import batch_stages
+
+    f = facts([issue(1)])
+    jd = judgements({"widgets#1": j()}, [batch("a", [1], wave=1, events=[dispatch("a")])])
+    assert batch_stages(f, jd) == {"a": "dispatched"}
