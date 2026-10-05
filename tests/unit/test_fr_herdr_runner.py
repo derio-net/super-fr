@@ -412,3 +412,8 @@ def test_herdr_meets_the_close_contract(herdr: _Herdr) -> None:
 
     herdr.listing = _tabs(("w2:t1", "w2", "other", "idle"))
     check_close_contract(HerdrRunner.from_env(), _item())
+
+
+def test_the_live_captured_focus_fixtures_have_herdrs_result_types() -> None:
+    assert _fixture("workspace-focus.json")["result"]["type"] == "workspace_info"
+    assert _fixture("tab-focus.json")["result"]["type"] == "tab_info"
