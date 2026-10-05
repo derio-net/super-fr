@@ -62,6 +62,7 @@ from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
+from fr.run.historical import HISTORICAL_REVIEWER, findings_witness
 from fr.run.liveness import gate_pending as _gate_pending
 from fr.run.liveness import hold_on as _hold_on
 from fr.run.liveness import next_step_id as _next_step_id
@@ -1839,7 +1840,16 @@ def _verified_evidence(
     # window for both (review p4-f1: a None window let any reviewer id pass).
     flat_record = state.steps.get(step.id) if target is not None and target.phase is None else None
     since = opened or (flat_record.at if flat_record is not None else None)
-    if "reviewer" in offered:
+    # `reviewer=historical` (spec 2026-10-05-run-upgrade-midflight §D, R7): a
+    # phase reviewed before this cursor existed. It skips ONLY the two checks
+    # that read this cursor's dispatches (`_verify_reviewer`, the reviewer
+    # return) and is held to the bound instead; the review-entry and findings
+    # checks below run unchanged. Every other reviewer value keeps every check.
+    historical = offered.get("reviewer") == HISTORICAL_REVIEWER
+    if historical:
+        assert target is not None  # phase-scoped, refused above otherwise
+        _refuse_unboundable_historical(key, target, offered)
+    if "reviewer" in offered and not historical:
         assert target is not None  # phase-scoped, refused above otherwise
         _verify_reviewer(
             key,
@@ -1895,6 +1905,10 @@ def _verified_evidence(
         _verify_review_entry(
             key, offered["review"], slug=slug, entries=entries, target=target, since=since
         )
+        if historical:
+            _verify_historical_bound(
+                key, repo_root, state, target=target, entry_id=offered["review"], entries=entries
+            )
     if state_value == "done" and "visual" in step.evidence:
         derive(
             "visual",
@@ -1915,7 +1929,8 @@ def _verified_evidence(
         assert review_journal is not None and target is not None
         slug, entries = review_journal
         findings_target = target
-        returned_phase = target.phase if "reviewer" in step.evidence else None
+        # A historical review has no dispatch in this cursor, so no return to read.
+        returned_phase = target.phase if "reviewer" in step.evidence and not historical else None
 
         def findings_witness() -> str:
             if returned_phase is not None:
@@ -1936,6 +1951,63 @@ def _verified_evidence(
     if refused:
         raise typer.Exit(2)
     return verified
+
+
+def _refuse_unboundable_historical(
+    key: str, target: _EvidenceTarget, offered: Mapping[str, str]
+) -> None:
+    """`reviewer=historical` where no bound can apply — or return. A flat unit
+    (spec-review) is refused: its review must postdate the step, and adoption
+    never leaves it open. A phase unit must name the `review` entry the bound
+    is checked against."""
+    if target.phase is None:
+        err_console.print(
+            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER} is accepted only on a "
+            "phase review unit; a spec review must be done by a reviewer dispatched after "
+            "the step opened.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if "review" not in offered:
+        err_console.print(
+            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER} needs --evidence "
+            "review=<entry-id>, the journal review it stands on.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+
+
+def _verify_historical_bound(
+    key: str,
+    repo_root: Path,
+    state: RunState,
+    *,
+    target: _EvidenceTarget,
+    entry_id: str,
+    entries: list[JournalEntry],
+) -> None:
+    """The review entry `entry_id` meets spec §D's bound for `target`'s phase
+    — or exit 2 naming the clause it fails."""
+    from fr.run.historical import historical_review_refusal
+    from fr.run.visual import VisualRefusedError, owed_for_unit
+
+    assert target.phase is not None
+    entry = next(e for e in entries if e.id == entry_id)  # `_verify_review_entry` found it
+    try:
+        owed = owed_for_unit(
+            repo_root, plan_rel=_emitted_plan(state), phase=target.phase, spec_rel=None
+        )
+    except VisualRefusedError as e:
+        _derived_refusal(key, e.lines)
+    refusal = historical_review_refusal(
+        state, target.phase, entry, owes_visual=bool(owed), review_key=key
+    )
+    if refusal is not None:
+        err_console.print(
+            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER}: {escape(refusal)}.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
 
 
 def _visual_witness(
@@ -2880,7 +2952,7 @@ def _closed_findings_witness(
             )
         raise typer.Exit(2)
     if not still_open:
-        return ",".join(states) or "none"
+        return findings_witness(states)
     err_console.print(
         f"[red]{key}: refused — {len(still_open)} finding(s) filed against {subject} "
         f"are still open: {', '.join(still_open)}.[/red]",
