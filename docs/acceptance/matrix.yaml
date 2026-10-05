@@ -6216,15 +6216,12 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R20
     levels:
       unit:
-      - super-fr:tests/unit/test_triage_board_views.py#test_the_board_is_ordered_since_needs_next_waves_backlog
       - super-fr:tests/unit/test_triage_board_views.py#test_needs_you_now_lists_each_kind_and_the_unplaced_issues
       - super-fr:tests/unit/test_triage_kind_features_snapshot.py#test_the_diff_lists_exactly_what_changed
+      - super-fr:tests/unit/test_triage_board_views.py#test_the_board_is_ordered_since_needs_next_waves_then_the_folds
     status: ci
-    notes: 'Phase 4: the board opens with Since last report, Needs you now, Next up
-      and Waves tabs in the R20 order, keeping every earlier section; tabs preselect
-      the most recent wave and show every wave without scripts. Covered by unit tests
-      over a fixture board. The operator-answer row of R18 has no deterministic signal
-      and is not produced (spec amended).'
+    notes: 'Re-pointed the renamed ordering test (board order moved in phase 2: since,
+      needs, next, waves, then folds).'
   - id: defect-origins-page
     capability: triage-views
     acceptance: A defect-origins page is generated from classified issues, with counts
