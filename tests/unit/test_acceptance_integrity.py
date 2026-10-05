@@ -571,6 +571,8 @@ def test_node_line_resolves_unittest_dotted_ids() -> None:
     assert node_line(UNITTEST_SOURCE, "FooTests.test_x") == 8
     assert node_line(SOURCE, "TestGroup.test_missing") is None
     assert node_line(SOURCE, "TestGroup.") is None, "an empty part names nothing"
+    assert node_line(SOURCE, "TestGroup..test_inner") is None
+    assert node_line(SOURCE, ".test_alpha") is None
 
 
 def test_check_accepts_a_unittest_dotted_anchor(tmp_path: Path) -> None:
@@ -605,3 +607,22 @@ def test_the_repair_converts_a_line_anchor_inside_a_testcase_subclass(tmp_path: 
     _repair().fn(path)
 
     assert _row(root, "r1").levels["unit"] == ("own:tests/test_u.py#FooTests::test_x",)
+
+
+def test_collection_reads_a_base_where_python_resolves_it() -> None:
+    """A function-local `TestCase` that shares a name with a module-level helper
+    does not certify the helper; a base cycle terminates and collects nothing."""
+    from fr.acceptance.anchors import collected_node_at
+
+    shadow = (
+        "import unittest\n"
+        "class Helper:\n"
+        "    def test_x(self):\n"
+        "        pass\n"
+        "def f():\n"
+        "    class Helper(unittest.TestCase):\n"
+        "        pass\n"
+    )
+    assert collected_node_at(shadow, 4) is None
+    cycle = "class A(B):\n    def test_a(self):\n        pass\nclass B(A):\n    pass\n"
+    assert collected_node_at(cycle, 3) is None
