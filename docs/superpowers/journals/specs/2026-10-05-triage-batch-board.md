@@ -157,3 +157,6 @@ R4: harness/model from stored launch, else facts.config_for(repo).defaults.launc
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-triage-batch-board-p2 created=2026-10-05T20:27:51+00:00 -->
 ### phase-split-2026-10-05-triage-batch-board-p2 · decision · ask: the board page itself (R1-R7, R10, R14, R15), reviewable apart from the session plumbing
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-triage-batch-board-p3 created=2026-10-05T20:27:52+00:00 -->
+### phase-split-2026-10-05-triage-batch-board-p3 · decision · ask: freshness - drive hook, --watch, triage link (R11-R13)
