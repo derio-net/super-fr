@@ -6324,9 +6324,14 @@ rows:
       finished waves leave the board.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_history.py#test_finished_waves_are_tabs_with_the_highest_finished_selected
+      - super-fr:tests/unit/test_triage_render.py#test_a_finished_wave_is_not_a_board_tab_and_the_selected_tab_exists
+      - super-fr:tests/unit/test_triage_render.py#test_when_every_wave_is_finished_the_board_says_so_and_links_history
+    status: ci
+    notes: 'Phase 1: history render, finished waves leave the board; visual evidence
+      captured headless (history finished/none, wave tab, batch link)'
     visual:
       states:
       - no-finished-waves
