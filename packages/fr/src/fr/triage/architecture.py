@@ -42,7 +42,6 @@ from fr.triage.fragments import Resolved, splice
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.model import Facts, Issue, Judgements
 from fr.triage.render import FONTS, esc, plural
-from fr.triage.views import kind_counts
 
 DASH = "—"
 OTHER = "Other"
@@ -319,16 +318,9 @@ def _summary(
 ) -> str:
     then = [m.then.lines for m in measured.values() if m.then is not None]
     now = [m.now.lines for m in measured.values() if m.now is not None]
-    open_n = sum(1 for i in facts.issues if i.state == "open")
     figures = [
         ("lines then", _num(sum(then) if then else None), "git, at each subsystem's then_ref"),
         ("lines now", _num(sum(now) if now else None), "git, at the now ref"),
-        ("open issues", str(open_n), f"facts.json, collected {facts.collected_at}"),
-        (
-            "defects",
-            str(kind_counts(facts, judgements)["defect"]),
-            "judgements.yaml: open issues with kind: defect",
-        ),
     ]
     cells = "".join(
         f'<div class="figure" data-figure="{esc(name)}"><b>{esc(value)}</b>'
