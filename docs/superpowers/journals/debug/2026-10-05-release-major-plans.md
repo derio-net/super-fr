@@ -4,3 +4,8 @@
 ### ce4c7a3181dd · repro · A major release leaves this repo's live plans stale; install.sh's fr models apply is refused
 
 From super-fr#861: a scratch clone bumped to 6.0.0 (bump + consumed fragment, committed) fails 2 of test_install_opencode_agents.py under release._run_staged_tests; both pass at the pre-bump commit. Static: the one live plan, docs/superpowers/plans/2026-07-09-multi-backend-git-host-adapters/_meta.yaml, carries fr_version '>=3.12.0,<6.0.0', which does not admit 6.0.0, so the CLI-entry migration gate refuses the non-interactive 'fr models apply' behind install.sh's '|| true'.
+
+<!-- fr:journal kind=root-cause scope=debug id=ebfd094ccb5f created=2026-10-05T20:39:24+00:00 -->
+### ebfd094ccb5f · root-cause · The release commit can carry only version lines, so nothing widens the live plans' derived ceiling at a major
+
+release.py's make_release_commit runs bump-version.py, git rm's fragments and verify_staged allows nothing but version_surfaces lines. A plan's fr_version ceiling is <(major+1).0.0 (version_floor.ceiling_for), so a major bump moves the installed fr past every live plan's ceiling, and the widen-fr-version-ceiling repair (fr migrate artifacts) is never run on the release tree. The first commit at the new major therefore has stale artifacts; the #858 pre-push suite catches it via install.sh's gated 'fr models apply'.
