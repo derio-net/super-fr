@@ -3,56 +3,127 @@ run: 2026-10-05-feat-batch-triage-pages-goal
 step: implement-phase
 item: phase/2
 outcome: done
-ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T3.S3]
+ticks:
+- P2.T1.S1
+- P2.T1.S2
+- P2.T1.S3
+- P2.T2.S1
+- P2.T2.S2
+- P2.T2.S3
+- P2.T3.S1
+- P2.T3.S2
+- P2.T3.S3
 refactor:
-  P2.T3: "cards, filter and script are one small addition on the P2.T2 helpers; nothing to clean"
+  P2.T3: cards, filter and script are one small addition on the P2.T2 helpers; nothing to clean
 journal:
 - kind: discovery
   id: p2-files-outside-list
   title: touched beyond the obvious files
-  body: "components.py gained GRID_CSS (shared by board and history so the wave tables scroll sideways at 390px instead of wrapping by the letter: min-width 720px inside .tablewrap, nowrap headers); history.py uses it; triage_cmd.py reads <state>/board/manifest.yaml (BOARD_DIR); the acceptance matrix and its reports moved (two rows to ci, board-decision-views re-pointed at the renamed ordering test)."
+  body: 'components.py gained GRID_CSS (shared by board and history so the wave tables scroll sideways at 390px
+    instead of wrapping by the letter: min-width 720px inside .tablewrap, nowrap headers); history.py uses it; triage_cmd.py
+    reads <state>/board/manifest.yaml (BOARD_DIR); the acceptance matrix and its reports moved (two rows to ci,
+    board-decision-views re-pointed at the renamed ordering test).'
   phase: 2
 - kind: discovery
   id: p2-section-shapes
   title: fold bodies keep the old wrapper tags, ids are new
-  body: "PRs, Batches and Patterns keep a <section class=prs|batches|patterns> inside their fold so the existing tests still address them. Fold ids: backlog-by-tier, backlog-tier-<n|unranked>, ranked-features, parked, patterns, prs, batches. Empty features, parked, patterns and batches render no fold (as before); Backlog and PRs always render. The board ordering test replaced lives in test_triage_board_views.py, not test_triage_render.py as the plan says."
+  body: 'PRs, Batches and Patterns keep a <section class=prs|batches|patterns> inside their fold so the existing
+    tests still address them. Fold ids: backlog-by-tier, backlog-tier-<n|unranked>, ranked-features, parked, patterns,
+    prs, batches. Empty features, parked, patterns and batches render no fold (as before); Backlog and PRs always
+    render. The board ordering test replaced lives in test_triage_board_views.py, not test_triage_render.py as the
+    plan says.'
   phase: 2
 - kind: discovery
   id: p2-link-opens-filtered-card
   title: a link to a filtered-off card re-checks its stage
-  body: "FOLD_SCRIPT turns the target card's stage checkbox back on before opening the card and its ancestors, so a link never lands on a hidden card. A same-hash re-click is handled by a click listener, since hashchange does not fire."
+  body: FOLD_SCRIPT turns the target card's stage checkbox back on before opening the card and its ancestors, so
+    a link never lands on a hidden card. A same-hash re-click is handled by a click listener, since hashchange does
+    not fire.
   phase: 2
 - kind: discovery
   id: p2-unreachable-no-judgement-tier-dash
   title: the Tier dash cannot arise from a valid board
-  body: "Judgements validation requires every batch member to be judged, so the em-dash tier is reachable only through wave_table on a hand-built Batch; the test builds it that way."
+  body: Judgements validation requires every batch member to be judged, so the em-dash tier is reachable only through
+    wave_table on a hand-built Batch; the test builds it that way.
   phase: 2
-evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p2-suite.log}
+- kind: finding
+  id: p2-suite-log-background-unwitnessed
+  review_scope: out
+  title: fr cannot witness a suite log written by a run_in_background command, which the brief's own long_commands
+    rule prescribes
+  body: implement-phase refuses evidence.tests when the full suite ran via a background Bash call (the call returns
+    at once, so the log's writes fall outside the command's window). The dispatch brief's long_commands rule tells
+    executors to do exactly that for the suite. Not caused by this change; the deliver step re-runs the suite on
+    the final tree.
+evidence: {}
 visual:
 - row: triage-board-first-screen
   script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots-p2.py
   shots:
-  - {path: .shots/png/p2-since-table-with-changes-1280-light.png, shows: [since-table-with-changes]}
-  - {path: .shots/png/p2-since-table-with-changes-1280-dark.png, shows: [since-table-with-changes]}
-  - {path: .shots/png/p2-since-table-with-changes-390-light.png, shows: [since-table-with-changes]}
-  - {path: .shots/png/p2-since-table-empty-1280-light.png, shows: [since-table-empty]}
-  - {path: .shots/png/p2-since-table-empty-1280-dark.png, shows: [since-table-empty]}
-  - {path: .shots/png/p2-since-table-empty-390-light.png, shows: [since-table-empty]}
-  - {path: .shots/png/p2-every-wave-finished-1280-light.png, shows: [every-wave-finished]}
-  - {path: .shots/png/p2-every-wave-finished-1280-dark.png, shows: [every-wave-finished]}
-  - {path: .shots/png/p2-every-wave-finished-390-light.png, shows: [every-wave-finished]}
-  - {path: .shots/png/p2-sections-collapsed-1280-light.png, shows: [sections-collapsed]}
-  - {path: .shots/png/p2-sections-collapsed-1280-dark.png, shows: [sections-collapsed]}
-  - {path: .shots/png/p2-sections-collapsed-390-light.png, shows: [sections-collapsed]}
-  - {path: .shots/png/p2-wave-table-390-light.png, shows: [sections-collapsed]}
-  - {path: .shots/png/p2-interaction-switch-wave-tab.png, shows: [switch-wave-tab]}
-  - {path: .shots/png/p2-interaction-expand-collapsed-section.png, shows: [expand-collapsed-section]}
+  - path: .shots/png/p2-since-table-with-changes-1280-light.png
+    shows:
+    - since-table-with-changes
+  - path: .shots/png/p2-since-table-with-changes-1280-dark.png
+    shows:
+    - since-table-with-changes
+  - path: .shots/png/p2-since-table-with-changes-390-light.png
+    shows:
+    - since-table-with-changes
+  - path: .shots/png/p2-since-table-empty-1280-light.png
+    shows:
+    - since-table-empty
+  - path: .shots/png/p2-since-table-empty-1280-dark.png
+    shows:
+    - since-table-empty
+  - path: .shots/png/p2-since-table-empty-390-light.png
+    shows:
+    - since-table-empty
+  - path: .shots/png/p2-every-wave-finished-1280-light.png
+    shows:
+    - every-wave-finished
+  - path: .shots/png/p2-every-wave-finished-1280-dark.png
+    shows:
+    - every-wave-finished
+  - path: .shots/png/p2-every-wave-finished-390-light.png
+    shows:
+    - every-wave-finished
+  - path: .shots/png/p2-sections-collapsed-1280-light.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-sections-collapsed-1280-dark.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-sections-collapsed-390-light.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-wave-table-390-light.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-interaction-switch-wave-tab.png
+    shows:
+    - switch-wave-tab
+  - path: .shots/png/p2-interaction-expand-collapsed-section.png
+    shows:
+    - expand-collapsed-section
 - row: triage-board-batch-filter
   script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots-p2.py
   shots:
-  - {path: .shots/png/p2-batch-filter-all-stages-on.png, shows: [all-stages-on]}
-  - {path: .shots/png/p2-batch-filter-merged-and-cancelled-off.png, shows: [merged-and-cancelled-off, toggle-stage]}
-  - {path: .shots/png/p2-batch-filter-every-stage-off.png, shows: [every-stage-off]}
-  - {path: .shots/png/p2-batch-filter-no-javascript.png, shows: [no-javascript]}
-  - {path: .shots/png/p2-interaction-follow-batch-link.png, shows: [follow-batch-link]}
-  - {path: .shots/png/p2-interaction-open-card.png, shows: [open-card]}
+  - path: .shots/png/p2-batch-filter-all-stages-on.png
+    shows:
+    - all-stages-on
+  - path: .shots/png/p2-batch-filter-merged-and-cancelled-off.png
+    shows:
+    - merged-and-cancelled-off
+    - toggle-stage
+  - path: .shots/png/p2-batch-filter-every-stage-off.png
+    shows:
+    - every-stage-off
+  - path: .shots/png/p2-batch-filter-no-javascript.png
+    shows:
+    - no-javascript
+  - path: .shots/png/p2-interaction-follow-batch-link.png
+    shows:
+    - follow-batch-link
+  - path: .shots/png/p2-interaction-open-card.png
+    shows:
+    - open-card
