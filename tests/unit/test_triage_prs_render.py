@@ -59,14 +59,14 @@ def _prs_section(page: str) -> str:
     return m.group(1)
 
 
-def test_prs_section_lists_every_open_pr_before_unranked_issues() -> None:
+def test_prs_section_lists_every_open_pr_after_the_backlog() -> None:
     prs = [_pr(1), _pr(2)]
     page = render(_facts(prs), _judgements(("super-fr#2", {"delivery": "delivers"})))
 
     section = _prs_section(page)
     assert 'data-key="super-fr#1"' in section
     assert 'data-key="super-fr#2"' in section
-    assert page.index('<section class="prs">') < page.index('data-tier="unranked"')
+    assert page.index('data-tier="unranked"') < page.index('<section class="prs">')
 
 
 def test_judged_pr_shows_its_delivery_verdict_and_note() -> None:

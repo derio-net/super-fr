@@ -210,7 +210,7 @@ def test_two_identical_renders_store_one_snapshot_and_keep_the_earlier_diff(
     _render(state)
     assert len(_snaps(state)) == 2, "an identical board is not stored again"
     page = (state / "triage.html").read_text(encoding="utf-8")
-    assert "<li>widgets#40</li>" in page, "the diff is still against the last different snapshot"
+    assert "<td>widgets#40</td>" in page, "the diff is still against the last different snapshot"
     assert "Nothing changed" not in page
 
 

@@ -254,7 +254,8 @@ def size_of(keys: Sequence[str], issues: Mapping[str, Judgement]) -> str:
     return max(sizes, key=CX_RANK.__getitem__, default="-")
 
 
-def _tier(keys: Sequence[str], issues: Mapping[str, Judgement]) -> int | None:
+def batch_tier(keys: Sequence[str], issues: Mapping[str, Judgement]) -> int | None:
+    """The lowest tier among the judged members; None when none carries a judgement."""
     tiers = [issues[k].tier for k in keys if k in issues]
     return min(tiers) if tiers else None
 
@@ -277,7 +278,7 @@ def next_up(
             "batch",
             b.id,
             b.title,
-            _tier(b.ids, issues),
+            batch_tier(b.ids, issues),
             size_of(b.ids, issues),
             tuple(b.after),
             reason,
@@ -315,7 +316,7 @@ def next_up(
                 "feature",
                 feature.title,
                 feature.title,
-                _tier(feature.ids, issues),
+                batch_tier(feature.ids, issues),
                 size_of(feature.ids, issues),
                 (),
                 f"feature rank {feature.rank}{why}",

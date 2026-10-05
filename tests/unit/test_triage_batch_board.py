@@ -115,21 +115,22 @@ def _section(html: str) -> str:
     return match.group(0)
 
 
-def test_the_batches_section_sits_above_the_tiers() -> None:
+def test_the_batches_fold_sits_below_the_tiers() -> None:
     html = render(FACTS, JUDGEMENTS)
-    assert html.index('<section class="batches">') < html.index('<section class="tier')
+    assert html.index('<section class="tier') < html.index('<section class="batches">')
+    assert html.index('<details id="batches" class="fold">') > html.index('id="prs"')
 
 
 def test_each_batch_card_shows_members_stage_version_and_pr() -> None:
     section = _section(render(FACTS, JUDGEMENTS))
-    card = re.search(r'<article class="batch" data-batch="lifecycle".*?</article>', section, re.S)
+    card = re.search(r'<details class="batch" data-batch="lifecycle".*?</details>', section, re.S)
     assert card
     body = card.group(0)
     assert "super-fr#577" in body and "super-fr#575" in body
     assert 'class="pill bstage-pr-open"' in body
     assert "4.22.0" in body
     assert f'href="https://github.com/{REPO}/pull/50"' in body
-    later = re.search(r'data-batch="later".*?</article>', section, re.S)
+    later = re.search(r'data-batch="later".*?</details>', section, re.S)
     assert later and "bstage-proposed" in later.group(0)
 
 
@@ -175,3 +176,41 @@ def test_no_batches_renders_no_batches_section() -> None:
 
 def test_the_board_is_deterministic_with_batches() -> None:
     assert render(FACTS, JUDGEMENTS) == render(FACTS, JUDGEMENTS)
+
+
+def test_every_card_is_a_closed_details_with_its_stage_and_a_linkable_id() -> None:
+    from fr.triage.batch import derive_batch_stage
+
+    section = _section(render(FACTS, JUDGEMENTS))
+    cards = re.findall(r'<details class="batch"[^>]*>', section)
+    assert len(cards) == len(JUDGEMENTS.batches) == 3
+    for tag, b in zip(cards, JUDGEMENTS.batches, strict=True):
+        assert f'id="batch-{b.id}"' in tag
+        assert f'data-stage="{derive_batch_stage(b, FACTS)}"' in tag
+        assert " open" not in tag
+
+
+def test_the_stage_filter_is_hidden_with_one_checked_box_per_stage_present() -> None:
+    section = _section(render(FACTS, JUDGEMENTS))
+    fieldset = re.search(r"<fieldset[^>]*>.*?</fieldset>", section, re.S)
+    assert fieldset and " hidden" in re.match(r"<fieldset[^>]*>", fieldset.group(0)).group(0)  # type: ignore[union-attr]
+    boxes = re.findall(r"<input[^>]*>", fieldset.group(0))
+    stages = re.findall(r'data-stage="([^"]+)"', section)
+    assert sorted(re.findall(r'value="([^"]+)"', "".join(boxes))) == sorted(set(stages))
+    assert all(b.startswith('<input type="checkbox"') and " checked" in b for b in boxes)
+
+
+def test_no_batches_means_no_filter_and_the_fold_script_ships_once() -> None:
+    page = render(FACTS, JUDGEMENTS)
+    assert page.count("function reveal()") == 1
+    plain = Judgements.model_validate({"schema": 1, "tiers": [{"n": 1, "title": "Now"}]})
+    assert "stage-filter" not in render(FACTS, plain).split("<script>")[0]
+
+
+def test_the_fold_script_toggles_by_stage_and_opens_every_ancestor_then_scrolls() -> None:
+    from fr.triage.render import FOLD_SCRIPT
+
+    assert "dataset.stage" in FOLD_SCRIPT and ".hidden" in FOLD_SCRIPT
+    assert "hashchange" in FOLD_SCRIPT and "location.hash" in FOLD_SCRIPT
+    assert 'tagName === "DETAILS"' in FOLD_SCRIPT and "parentElement" in FOLD_SCRIPT
+    assert "scrollIntoView" in FOLD_SCRIPT

@@ -105,7 +105,7 @@ def test_an_unranked_issue_renders_in_the_first_tier_labelled_not_yet_triaged(
 
     assert _sections(page)[0] == "unranked"
     assert _section_of(page, "super-fr#535") == "unranked"
-    first = page[page.index('data-tier="unranked"') : page.index('data-tier="1"')]
+    first = page[page.index('id="backlog-tier-unranked"') : page.index('id="backlog-tier-1"')]
     assert "not yet triaged" in first
     assert "fr-triage" in first
 
@@ -615,3 +615,37 @@ def test_when_every_wave_is_finished_the_board_says_so_and_links_history() -> No
     assert "Every wave is finished" in sect
     assert 'href="history.html"' in sect
     assert 'role="tab"' not in sect
+
+
+def test_a_board_fragment_survives_a_render(tmp_path: Path) -> None:
+    from fr.triage.fragments import resolve_manifest
+    from fr.triage.render import GENERATED
+
+    from tests.unit.triage_board_fixtures import busy
+
+    board = tmp_path / "board"
+    board.mkdir()
+    (board / "note.html").write_text("<p>operator note</p>", encoding="utf-8")
+    (board / "manifest.yaml").write_text(
+        yaml.safe_dump({"sections": ["since", "note.html", "needs"]}), encoding="utf-8"
+    )
+    resolved = resolve_manifest(board, GENERATED)
+    page = render(*busy(), resolved=resolved)
+    assert page.index('id="since-last-report"') < page.index("operator note")
+    assert page.index("operator note") < page.index('id="needs-you-now"')
+    # a generated section the manifest omits is still shown, after its entries
+    assert 'id="batches"' in page
+    assert resolved.appended and "since" not in resolved.appended
+
+
+def test_the_render_command_reads_the_board_manifest(tmp_path: Path) -> None:
+    from tests.unit.test_triage_render_command import _render, _state
+
+    state = _state(tmp_path)
+    (state / "board").mkdir()
+    (state / "board" / "n.html").write_text("<p>kept</p>", encoding="utf-8")
+    (state / "board" / "manifest.yaml").write_text(
+        yaml.safe_dump({"sections": ["n.html"]}), encoding="utf-8"
+    )
+    _render(state)
+    assert "<p>kept</p>" in (state / "triage.html").read_text(encoding="utf-8")

@@ -20,22 +20,25 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
+from fr.triage.batch import BATCH_STAGES, derive_batch_stage, last_dispatch, planned_merge_order
 from fr.triage.batch import batch_pr as find_batch_pr
-from fr.triage.batch import derive_batch_stage, last_dispatch, planned_merge_order
 from fr.triage.batch_drive import finished_waves
 from fr.triage.check import CheckResult, classify
 from fr.triage.components import (
     CHROME_CSS,
+    GRID_CSS,
     GUTTER_CSS,
     TABS_CSS,
     TABS_SCRIPT,
     TOKENS_CSS,
+    collapsed,
     page_header,
     tabs,
 )
+from fr.triage.fragments import Entry, Resolved, splice
 from fr.triage.model import issue_key
 from fr.triage.stage import IN_FLIGHT
 from fr.triage.views import (
@@ -43,6 +46,7 @@ from fr.triage.views import (
     NEED_LABELS,
     UNWAVED,
     batch_stages,
+    batch_tier,
     kind_counts,
     needs_you,
     next_up,
@@ -61,6 +65,7 @@ _CODE = re.compile(r"`([^`\n]+)`")
 # never rescanned for bold (review r-p3-inline-nesting).
 _INLINE = re.compile(r"`([^`\n]+)`|\*\*([^*\n]+)\*\*")
 
+DASH = "—"
 DONE = frozenset({"closed", "merged"})
 UNTOUCHED = frozenset({"backlog", "blocked"})
 EXCERPT = 600  # characters of an unranked issue's body shown on the page
@@ -105,15 +110,12 @@ header.mast h1 { margin: 0 0 6px; font-size: 1.6rem; font-weight: 600; letter-sp
   border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
 .chip[aria-pressed="true"] { color: var(--surface); background: var(--accent);
   border-color: var(--accent); }
-section.tier { margin-top: 28px; }
-.tier-head { display: flex; gap: 12px; align-items: baseline; }
-.tier-chip { flex: none; font-family: var(--mono); font-weight: 500; width: 28px; height: 28px;
-  line-height: 28px; text-align: center; border-radius: 6px; color: var(--surface);
-  background: var(--sev); }
-.tier-head h2 { margin: 0; font-size: 1.15rem; font-weight: 600; }
-.tier-desc { margin: 2px 0 10px 40px; color: var(--muted); font-size: .9rem; }
+section.tier { margin: 0 0 8px; }
+details.fold details.fold { margin-top: 10px; }
+details.fold > .bar { margin-top: 0; }
+.tier-desc { margin: 2px 0 10px; color: var(--muted); font-size: .9rem; }
 .unranked .tier-desc { color: var(--ink); }
-.empty { margin-left: 40px; color: var(--muted); font-size: .9rem; }
+.empty { color: var(--muted); font-size: .9rem; }
 .sev-1 { --sev: var(--sev-1); } .sev-2 { --sev: var(--sev-2); }
 .sev-3 { --sev: var(--sev-3); } .sev-4 { --sev: var(--sev-4); }
 .sev-u { --sev: var(--accent); }
@@ -143,13 +145,16 @@ details.row > summary::-webkit-details-marker { display: none; }
 .pill.stage-in-progress { background: transparent; color: var(--live);
   border: 1px solid var(--live); }
 .tag.batch { color: var(--live); border-color: var(--live); }
-.batches { margin-top: 28px; }
-.batches h2 { margin: 0 0 10px; font-size: 1.15rem; }
-.batches article { background: var(--surface); border: 1px solid var(--line);
-  border-left: 4px solid var(--live); border-radius: 6px; padding: 10px 12px; margin: 6px 0; }
-.batches h3 { margin: 0 0 4px; font-size: 1rem; display: flex; flex-wrap: wrap; gap: 4px 10px;
-  align-items: baseline; overflow-wrap: anywhere; }
 .batches p { margin: 4px 0; font-size: .9rem; overflow-wrap: anywhere; }
+fieldset.stage-filter { border: 1px solid var(--line); border-radius: 6px; margin: 0 0 8px;
+  padding: 4px 10px 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .88rem; }
+fieldset.stage-filter legend { color: var(--muted); font-size: .8rem; padding: 0 4px; }
+fieldset.stage-filter label { display: inline-flex; gap: 6px; align-items: center; }
+details.batch { background: var(--surface); border: 1px solid var(--line);
+  border-left: 4px solid var(--live); border-radius: 6px; margin: 6px 0; }
+details.batch > summary { cursor: pointer; padding: 8px 12px; display: flex; flex-wrap: wrap;
+  gap: 4px 10px; align-items: baseline; overflow-wrap: anywhere; }
+details.batch > .detail { padding: 4px 12px 10px; }
 .pill.bstage-dispatched, .pill.bstage-pr-open { background: var(--live); }
 .pill.bstage-merged { background: var(--accent); }
 .pill.bstage-partial { background: var(--sev-2); }
@@ -190,18 +195,13 @@ footer { margin-top: 40px; color: var(--muted); font-size: .8rem; }
   border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px; }
 .next[data-waiting="1"] { border-left-color: var(--sev-4); }
 .next .why { color: var(--muted); font-size: .88rem; display: block; }
-.tablewrap { overflow-x: auto; }
-table.grid { border-collapse: collapse; width: 100%; font-size: .88rem; }
-table.grid th, table.grid td { text-align: left; vertical-align: top;
-  border-bottom: 1px solid var(--line); padding: 4px 8px; overflow-wrap: anywhere; }
-table.grid th { color: var(--muted); font-weight: 500; }
 """
+    + GRID_CSS
     + TABS_CSS
     + CHROME_CSS
     + GUTTER_CSS
     + """
 @media (max-width: 480px) {
-  .tier-desc, .empty { margin-left: 0; }
   .title { flex-basis: 100%; }
 }
 """
@@ -281,6 +281,44 @@ SCRIPT = """
 })();
 """
 
+# The Batches fold's script (R5): toggles cards by `data-stage`, and opens the card a
+# `#batch-<id>` link names with every `details` around it, then scrolls to it. A constant.
+FOLD_SCRIPT = """
+(function () {
+  var boxes = Array.prototype.slice.call(document.querySelectorAll("input[data-stage-filter]"));
+  var cards = Array.prototype.slice.call(document.querySelectorAll("details.batch"));
+  var filter = document.querySelector("fieldset.stage-filter");
+  function apply() {
+    var on = {};
+    boxes.forEach(function (b) { on[b.value] = b.checked; });
+    cards.forEach(function (c) { c.hidden = !on[c.dataset.stage]; });
+  }
+  function reveal() {
+    var id = "";
+    try { id = decodeURIComponent(location.hash.slice(1)); } catch (e) { return; }
+    var target = id ? document.getElementById(id) : null;
+    if (!target) { return; }
+    boxes.forEach(function (b) {
+      if (target.dataset.stage === b.value) { b.checked = true; }
+    });
+    apply();
+    for (var n = target; n; n = n.parentElement) {
+      if (n.tagName === "DETAILS") { n.open = true; }
+    }
+    target.scrollIntoView();
+  }
+  boxes.forEach(function (b) { b.addEventListener("change", apply); });
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest ? e.target.closest('a[href^="#batch-"]') : null;
+    if (a) { setTimeout(reveal, 0); }
+  });
+  window.addEventListener("hashchange", reveal);
+  if (filter) { filter.hidden = false; }
+  apply();
+  reveal();
+})();
+"""
+
 FILTER_BAR = """<div class="bar" role="toolbar" aria-label="Filter and sort">
 <input id="q" type="search" placeholder="Search number, title, theme" aria-label="Search">
 <select id="sort" aria-label="Sort">
@@ -297,6 +335,14 @@ FILTER_BAR = """<div class="bar" role="toolbar" aria-label="Filter and sort">
 <button class="chip" type="button" data-filter="redci" aria-pressed="false">red CI</button>
 <button class="chip" type="button" data-filter="conflicts" aria-pressed="false">conflicts</button>
 </div>"""
+
+GENERATED = (
+    "since", "needs", "next-up", "waves", "backlog", "features", "parked", "patterns", "prs",
+    "batches",
+)  # fmt: skip
+"""The board's generated sections, in default order (spec 2026-10-05-triage-pages-goal §C).
+The masthead and nav sit outside the manifest, always first; `FILTER_BAR` belongs to
+`backlog` and the stage filter to `batches`."""
 
 UNRANKED_TITLE = "Unranked — not yet triaged"
 UNRANKED_DESC = (
@@ -420,19 +466,19 @@ def _row(
     )
 
 
-def _section(tier: str, chip: str, sev: str, title: str, desc: str, rows: list[str]) -> str:
+def _section(tier: str, sev: str, title: str, desc: str, rows: list[str]) -> str:
+    """One backlog tier as a nested closed fold (spec 2026-10-05-triage-pages-goal R2)."""
     extra = " unranked" if tier == "unranked" else ""
     body = (
         f'<div class="rows">{"".join(rows)}</div>'
         if rows
         else '<p class="empty">No issues in this tier.</p>'
     )
-    return (
+    inner = (
         f'<section class="tier {sev}{extra}" data-tier="{esc(tier)}">'
-        f'<div class="tier-head"><span class="tier-chip">{esc(chip)}</span>'
-        f"<h2>{esc(title)}</h2></div>"
         f'<p class="tier-desc">{desc}</p>{body}</section>'
     )
+    return collapsed(f"backlog-tier-{tier}", title, len(rows), inner)
 
 
 def _pr_row(pr: PullRequest, judgement: Judgement | None, order: int, collected_at: str) -> str:
@@ -491,11 +537,11 @@ def _prs_section(
         key = issue_key(pr.repo, pr.number)
         rows.append(_pr_row(pr, judgements.issues.get(key), start + offset, collected_at))
     body = "".join(rows) if rows else '<p class="empty">No open pull requests.</p>'
-    return (
-        '<section class="prs"><h2>PRs</h2>'
-        '<p class="tier-desc">Open pull requests, with their implementation anchor '
-        f'and delivery verdict.</p><div class="rows">{body}</div></section>'
+    inner = (
+        '<section class="prs"><p class="tier-desc">Open pull requests, with their '
+        f'implementation anchor and delivery verdict.</p><div class="rows">{body}</div></section>'
     )
+    return collapsed("prs", "PRs", len(prs), inner)
 
 
 def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
@@ -534,6 +580,8 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
 
 
 def _batch_card(batch: Batch, facts: Facts) -> str:
+    """A closed `details` the board's links open (R5); `data-stage` is what the stage
+    filter toggles."""
     stage = derive_batch_stage(batch, facts)
     event = last_dispatch(batch)
     pr = find_batch_pr(batch, facts)
@@ -555,9 +603,10 @@ def _batch_card(batch: Batch, facts: Facts) -> str:
         )
         lines.append(f'<p>{link} <span class="mono">{esc(pr.state.lower())}</span></p>')
     return (
-        f'<article class="batch" data-batch="{esc(batch.id)}" id="batch-{esc(batch.id)}">'
-        f'<h3><span class="mono">{esc(batch.id)}</span> {esc(batch.title)} '
-        f'<span class="pill bstage-{stage}">{stage}</span></h3>{"".join(lines)}</article>'
+        f'<details class="batch" data-batch="{esc(batch.id)}" id="batch-{esc(batch.id)}" '
+        f'data-stage="{stage}"><summary><span class="mono">{esc(batch.id)}</span> '
+        f'{esc(batch.title)} <span class="pill bstage-{stage}">{stage}</span></summary>'
+        f'<div class="detail">{"".join(lines)}</div></details>'
     )
 
 
@@ -571,8 +620,20 @@ def _merge_step(step: MergeStep) -> str:
     return f'<li data-batch="{esc(step.batch.id)}">{" · ".join(parts)}</li>'
 
 
+def _stage_filter(judgements: Judgements, facts: Facts) -> str:
+    """One checkbox per derived batch stage present, all on. Rendered `hidden`:
+    `FOLD_SCRIPT` shows it, so without JavaScript there is no control that does nothing."""
+    present = {derive_batch_stage(b, facts) for b in judgements.batches}
+    boxes = "".join(
+        f'<label><input type="checkbox" data-stage-filter value="{s}" checked> {s}</label>'
+        for s in BATCH_STAGES
+        if s in present
+    )
+    return f'<fieldset class="stage-filter" hidden><legend>Show stages</legend>{boxes}</fieldset>'
+
+
 def _batches(judgements: Judgements, facts: Facts) -> str:
-    """The Batches section (spec 2026-09-25-triage-batches §3.G); empty with no batches."""
+    """The Batches fold (spec 2026-09-25-triage-batches §3.G); empty with no batches."""
     if not judgements.batches:
         return ""
     cards = "".join(_batch_card(b, facts) for b in judgements.batches)
@@ -585,11 +646,12 @@ def _batches(judgements: Judgements, facts: Facts) -> str:
         if steps
         else ""
     )
-    return (
-        '<section class="batches"><h2>Batches</h2>'
-        '<p class="tier-desc">Groups of judged issues delivered as one run. Members also '
-        f"appear in their tiers, with a batch chip.</p>{cards}{order}</section>"
+    inner = (
+        '<section class="batches"><p class="tier-desc">Groups of judged issues delivered as '
+        "one run. Members also appear in their tiers, with a batch chip.</p>"
+        f"{_stage_filter(judgements, facts)}{cards}{order}</section>"
     )
+    return collapsed("batches", "Batches", len(judgements.batches), inner)
 
 
 def _patterns(judgements: Judgements) -> str:
@@ -600,7 +662,12 @@ def _patterns(judgements: Judgements) -> str:
         f'<p class="mono">{esc(", ".join(p.ids))}</p><p>{inline(p.body)}</p></article>'
         for p in judgements.patterns
     )
-    return f'<section class="patterns"><h2>Patterns</h2>{items}</section>'
+    return collapsed(
+        "patterns",
+        "Patterns",
+        len(judgements.patterns),
+        f'<section class="patterns">{items}</section>',
+    )
 
 
 # ------------------------------------------------------- the decision views (R17-R20)
@@ -620,28 +687,42 @@ def _link(text: str, href: str | None) -> str:
     return f'<a href="{target}" rel="noopener noreferrer">{esc(text)}</a>'
 
 
-def _bullets(items: Sequence[str]) -> str:
-    return "<ul>" + "".join(f"<li>{esc(i)}</li>" for i in items) + "</ul>"
+CHANGE_LABELS = {
+    "merged-or-closed": "Merged or closed",
+    "filed": "Filed",
+    "batch-stage": "Batch stage",
+    "acceptance": "Acceptance row",
+    "figure": "Figure",
+}
 
 
-def _since_section(since: SnapshotDiff | None) -> str:
+def _since_table(since: SnapshotDiff | None) -> str:
+    """Since last report: one row per transition (R3); a batch row links to its card."""
     head = '<section class="decide" id="since-last-report"><h2>Since last report</h2>'
     if since is None:
         body = (
             '<p class="quiet">No earlier snapshot: this is the first report, so there is '
             "nothing to compare with yet.</p>"
         )
-    elif since.empty:
+    elif not since.transitions:
         body = '<p class="quiet">Nothing changed since the last report.</p>'
     else:
-        groups = [
-            ("Merged or closed", since.merged_or_closed),
-            ("Filed", since.filed),
-            ("Batch stage changes", since.stage_changes),
-            ("Acceptance rows moved", since.acceptance_moved),
-            ("Figures changed", [f"{n}: {a} -> {b}" for n, a, b in since.figures_changed]),
-        ]
-        body = "".join(f"<h3>{t}</h3>{_bullets(items)}" for t, items in groups if items)
+        rows = []
+        for t in since.transitions:
+            item = (
+                f'<a href="#batch-{esc(t.batch)}">{esc(t.item)}</a>'
+                if t.batch is not None
+                else esc(t.item)
+            )
+            rows.append(
+                f'<tr data-change="{esc(t.change)}"><td>{esc(CHANGE_LABELS[t.change])}</td>'
+                f"<td>{item}</td><td>{esc(t.before)}</td><td>{esc(t.after)}</td></tr>"
+            )
+        cols = "".join(f"<th>{c}</th>" for c in ("Change", "Item", "Before", "After"))
+        body = (
+            '<div class="tablewrap"><table class="grid narrow"><thead><tr>'
+            f"{cols}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
+        )
     if since is not None and since.acceptance_note:
         body += f'<p class="quiet">{esc(since.acceptance_note)}</p>'
     return f"{head}{body}</section>"
@@ -689,15 +770,17 @@ def wave_table(
     rows = []
     for b in batches:
         stage = derive_batch_stage(b, facts)
+        tier = batch_tier(b.ids, judgements.issues)
         rows.append(
             f'<tr data-batch="{esc(b.id)}"><td>'
             f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a></td>'
-            f'<td>{esc(b.skill)}</td><td class="mono">{esc(", ".join(b.ids))}</td>'
+            f'<td class="n">{DASH if tier is None else tier}</td><td>{esc(b.skill)}</td>'
+            f'<td class="mono">{esc(", ".join(b.ids))}</td>'
             f"<td>{inline(b.rationale)}</td><td>{esc(size_of(b.ids, judgements.issues))}</td>"
             f"<td>{esc(', '.join(b.after) or '-')}</td>"
             f'<td><span class="pill bstage-{stage}">{stage}</span></td></tr>'
         )
-    cols = ("Batch", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
+    cols = ("Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
     head = "".join(f"<th>{c}</th>" for c in cols)
     return (
         f'<div class="tablewrap"><table class="grid"><thead><tr>{head}</tr></thead>'
@@ -717,10 +800,11 @@ def _features_table(judgements: Judgements, facts: Facts) -> str:
         for f in sorted(judgements.features, key=lambda f: (f.rank, f.title))
     )
     head = "".join(f"<th>{c}</th>" for c in ("Rank", "Feature", "Issues", "Why", "Start", "State"))
-    return (
-        f'<h3>Ranked features</h3><div class="tablewrap"><table class="grid"><thead><tr>'
+    table = (
+        f'<div class="tablewrap"><table class="grid"><thead><tr>'
         f"{head}</tr></thead><tbody>{rows}</tbody></table></div>"
     )
+    return collapsed("ranked-features", "Ranked features", len(judgements.features), table)
 
 
 def _parked(facts: Facts, judgements: Judgements) -> str:
@@ -731,7 +815,7 @@ def _parked(facts: Facts, judgements: Judgements) -> str:
     if not parked:
         return ""
     items = "".join(f"<li>{_link(i.key, i.url)} {esc(i.title)}</li>" for i in parked)
-    return f"<h3>Parked</h3><ul>{items}</ul>"
+    return collapsed("parked", "Parked", len(parked), f"<ul>{items}</ul>")
 
 
 def _waves_section(facts: Facts, judgements: Judgements) -> str:
@@ -762,14 +846,21 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
             '<p class="quiet">Every wave is finished: see '
             '<a href="history.html">the history page</a>.</p>' + (body if grouped else "")
         )
-    return f"{head}{body}{_features_table(judgements, facts)}{_parked(facts, judgements)}</section>"
+    return f"{head}{body}</section>"
 
 
-def render(facts: Facts, judgements: Judgements, since: SnapshotDiff | None = None) -> str:
+def render(
+    facts: Facts,
+    judgements: Judgements,
+    since: SnapshotDiff | None = None,
+    resolved: Resolved | None = None,
+) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes.
 
     *since* is the diff against the previous snapshot (`fr.triage.snapshot`); None means
-    there is none, and the page says so.
+    there is none, and the page says so. *resolved* is the board manifest
+    (`<state>/board/manifest.yaml`, `fragments.resolve_manifest`): it orders the generated
+    sections and places authored fragments among them; None is the default order.
     """
     show_repo = facts.kind != "repo"
     result = classify(facts, judgements)  # the one classification, shared below
@@ -798,29 +889,43 @@ def render(facts: Facts, judgements: Judgements, since: SnapshotDiff | None = No
             batches=batches_by_key.get(issue.key, []),
         )
 
-    sections = [
-        _prs_section(facts.prs, judgements, 1, facts.collected_at),
-        *([batches] if (batches := _batches(judgements, facts)) else []),
-        '<h2 class="backlog" id="backlog-by-tier">Backlog by tier</h2>',
-        _section(
-            "unranked",
-            "?",
-            "sev-u",
-            UNRANKED_TITLE,
-            UNRANKED_DESC,
-            [row(i, None, "unranked") for i in result.unranked],
-        ),
-    ]
-    for pos, tier in enumerate(sorted(judgements.tiers, key=lambda t: t.n)):
-        rows = [
-            row(by_key[key], j, str(tier.n))
-            for key, j in judgements.issues.items()
-            if j.tier == tier.n and key in by_key
+    def backlog() -> str:
+        folds = [
+            _section(
+                "unranked",
+                "sev-u",
+                UNRANKED_TITLE,
+                UNRANKED_DESC,
+                [row(i, None, "unranked") for i in result.unranked],
+            )
         ]
-        sev = f"sev-{min(pos + 1, SEVERITIES)}"
-        sections.append(
-            _section(str(tier.n), str(tier.n), sev, tier.title, inline(tier.description), rows)
-        )
+        count = len(result.unranked)
+        for pos, tier in enumerate(sorted(judgements.tiers, key=lambda t: t.n)):
+            rows = [
+                row(by_key[key], j, str(tier.n))
+                for key, j in judgements.issues.items()
+                if j.tier == tier.n and key in by_key
+            ]
+            count += len(rows)
+            sev = f"sev-{min(pos + 1, SEVERITIES)}"
+            title = f"Tier {tier.n} · {tier.title}"
+            folds.append(_section(str(tier.n), sev, title, inline(tier.description), rows))
+        return collapsed("backlog-by-tier", "Backlog by tier", count, FILTER_BAR + "".join(folds))
+
+    builders: dict[str, Callable[[], str]] = {
+        "since": lambda: _since_table(since),
+        "needs": lambda: _needs_section(facts, judgements),
+        "next-up": lambda: _next_section(facts, judgements),
+        "waves": lambda: _waves_section(facts, judgements),
+        "backlog": backlog,
+        "features": lambda: _features_table(judgements, facts),
+        "parked": lambda: _parked(facts, judgements),
+        "patterns": lambda: _patterns(judgements),
+        "prs": lambda: _prs_section(facts.prs, judgements, 1, facts.collected_at),
+        "batches": lambda: _batches(judgements, facts),
+    }
+    resolved = resolved or Resolved(order=[Entry(g) for g in GENERATED])
+    sections = [s for s in splice(resolved, builders) if s]
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="utf-8">\n'
@@ -828,11 +933,9 @@ def render(facts: Facts, judgements: Judgements, since: SnapshotDiff | None = No
         f"<title>Backlog triage · {esc(facts.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
         f"{_masthead(facts, judgements, result)}\n{page_header('board')}\n"
-        f"{_since_section(since)}\n{_needs_section(facts, judgements)}\n"
-        f"{_next_section(facts, judgements)}\n{_waves_section(facts, judgements)}\n"
-        f"{FILTER_BAR}\n" + "\n".join(sections) + f"\n{_patterns(judgements)}\n"
-        "<footer>Rendered by <code>fr triage render</code> from facts.json and "
+        + "\n".join(sections)
+        + "\n<footer>Rendered by <code>fr triage render</code> from facts.json and "
         "judgements.yaml. Stages are derived from the forge; re-run "
         "<code>fr triage collect</code> to refresh.</footer>\n"
-        f"</main>\n<script>{SCRIPT}{TABS_SCRIPT}</script>\n</body>\n</html>\n"
+        f"</main>\n<script>{SCRIPT}{TABS_SCRIPT}{FOLD_SCRIPT}</script>\n</body>\n</html>\n"
     )

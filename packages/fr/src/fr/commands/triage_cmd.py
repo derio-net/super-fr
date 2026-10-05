@@ -34,6 +34,7 @@ from fr.triage.batch import last_dispatch
 from fr.triage.check import classify
 from fr.triage.collect import PR_LIMIT, CollectStats, Forge, GhForge, collect_facts_counted
 from fr.triage.errors import TriageError
+from fr.triage.fragments import resolve_manifest
 from fr.triage.model import (
     Facts,
     Judgements,
@@ -43,7 +44,7 @@ from fr.triage.model import (
     load_judgements,
     state_dir,
 )
-from fr.triage.render import plural, render
+from fr.triage.render import GENERATED, plural, render
 from fr.triage.snapshot import (
     acceptance_rows,
     diff_snapshots,
@@ -56,6 +57,8 @@ from fr.triage.snapshot import (
 
 console = Console()
 err_console = Console(stderr=True)
+
+BOARD_DIR = "board"  # `<state>/board/manifest.yaml`: the board's authored fragments
 
 triage_app = typer.Typer(
     name="triage",
@@ -357,8 +360,18 @@ def render_command(
         matrix_path = matrix_for_scope(scope.target if scope.kind == "repo" else None, Path.cwd())
     snap = take_snapshot(facts, judgements, acceptance=acceptance_rows(matrix_path))
     since = diff_snapshots(previous_snapshot(target_dir, snap), snap)
+    try:
+        resolved = resolve_manifest(target_dir / BOARD_DIR, GENERATED)
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
+    for name in resolved.missing:
+        err_console.print(
+            f"[yellow]warning:[/yellow] manifest entry {escape(name)} has no file in {BOARD_DIR}/",
+            soft_wrap=True,
+        )
     out = target_dir / "triage.html"
-    out.write_text(render(facts, judgements, since), encoding="utf-8")
+    out.write_text(render(facts, judgements, since, resolved), encoding="utf-8")
     # Stored only once the page exists, and only when the board differs from the latest
     # snapshot: a re-render with nothing new must not erase "Since last report".
     if snap != latest_snapshot(target_dir):

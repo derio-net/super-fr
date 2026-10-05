@@ -312,7 +312,7 @@ def test_every_render_stores_a_snapshot_and_the_second_diffs_against_the_first(
     (state / "facts.json").write_text(json.dumps(facts_doc), encoding="utf-8")
     second = _render(state)
     assert "No earlier snapshot" not in second
-    assert "<li>widgets#40</li>" in second
+    assert "<td>widgets#40</td>" in second
     assert len(list((state / "snapshots").glob("*.json"))) == 2
 
 

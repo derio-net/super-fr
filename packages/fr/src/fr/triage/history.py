@@ -18,6 +18,7 @@ from fr.triage.batch import BATCH_STAGES
 from fr.triage.components import (
     BASE_CSS,
     CHROME_CSS,
+    GRID_CSS,
     GUTTER_CSS,
     TABS_CSS,
     TABS_SCRIPT,
@@ -42,13 +43,9 @@ MOVED = {"waves": "board"}  # a section an old manifest may name that the board 
 CSS = (
     TOKENS_CSS
     + BASE_CSS
+    + GRID_CSS
     + """
 .mono { font-family: var(--mono); font-size: .92em; }
-.tablewrap { overflow-x: auto; }
-table.grid { border-collapse: collapse; width: 100%; font-size: .88rem; }
-table.grid th, table.grid td { text-align: left; vertical-align: top;
-  border-bottom: 1px solid var(--line); padding: 4px 8px; overflow-wrap: anywhere; }
-table.grid th { color: var(--muted); font-weight: 500; }
 .pill { font-size: .75rem; border-radius: 999px; padding: 1px 9px; color: var(--surface);
   background: var(--muted); white-space: nowrap; }
 .pill.bstage-dispatched, .pill.bstage-pr-open { background: var(--live); }

@@ -133,6 +133,20 @@ svg.chart text { font-family: var(--mono); font-size: 10px; }
 """The prelude the architecture and history pages share (theme-built ground, masthead,
 sections, tables); a page adds its own pieces after it."""
 
+GRID_CSS = """
+.tablewrap { overflow-x: auto; }
+table.grid { border-collapse: collapse; width: 100%; min-width: 720px; font-size: .88rem; }
+table.grid th, table.grid td { text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--line); padding: 4px 8px; }
+table.grid th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+table.grid td.mono { overflow-wrap: anywhere; min-width: 7em; }
+table.grid.narrow { min-width: 0; }
+table.grid.narrow td { overflow-wrap: anywhere; }
+"""
+"""Wide data tables: a `.tablewrap` scrolls sideways, so a table keeps readable columns at
+phone width (a 390px page never scrolls as a whole) instead of wrapping letter by letter;
+`.narrow` is for a table of short columns that fits."""
+
 GUTTER_CSS = """
 @media (max-width: 480px) {
   main { padding-left: 16px; padding-right: 16px; }
