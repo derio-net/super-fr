@@ -3,7 +3,7 @@ run: 2026-10-05-feat-batch-drive-close-tabs
 workflow: fr-goal@1
 branch: feat/batch-drive-close-tabs
 started: '2026-10-05T10:02:21+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -50,8 +50,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-05T12:33:44+00:00'
+    state: done
+    at: '2026-10-05T12:39:26+00:00'
     members:
     - implement-phase
     - review-phase
@@ -105,13 +105,20 @@ steps:
         evidence:
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-05T12:33:44+00:00'
           agent: a6e9a40b0aa2c8974
           harness: claude-code
           model: claude-opus-5-5
           session: 08bef1b5-8ca7-4d19-93d3-d0d2343afbe9
+          returned: '2026-10-05T12:39:26+00:00'
+          outcome: done
+        evidence:
+          review: p2-review-r1
+          reviewer: a6e9a40b0aa2c8974
+          visual: none
+          findings: p2-r1,p2-r2
   journal-check:
     state: pending
   deliver:

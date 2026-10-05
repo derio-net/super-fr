@@ -63,3 +63,33 @@ _sessions and _existing build different probes (batch+closeout items vs due clos
 ### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
 
 prose, mirrors and matrix rows only; no code to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-05T12:39:25+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · _try_runner caught only typer.Exit: an adapter's ImportError or from_env() failure crashed the drive, and a caught refusal printed a red error plus a warning (phase 2)
+
+triage_batch_cmd.py `_Driver._try_runner`; fr_dispatch.registry.load_runner does not wrap `.load()`/`factory()`. Breaks R10 (a runner that cannot be loaded is reported once and skipped).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-05T12:39:25+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Busy/failed close dedup key was the whole outcome line, so the same cause re-reported once a sibling closed or an exception message changed (phase 2)
+
+triage_batch_cmd.py `_close_sessions`/`_report_cause`; spec §D asks for one report per batch and cause.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-r1 created=2026-10-05T12:39:25+00:00 phase=2 -->
+### p2-review-r1 · review · Phase 2 code review: 2 findings (p2-r1, p2-r2, in scope) (phase 2)
+
+Dispatched reviewer (separate context) checked R6-R10 against protocols.py, testing.py,
+fr_herdr/runner.py, batch_drive.py, triage_batch_cmd.py, the fr-triage skill and mirrors, the
+close tests and matrix rows. Verified correct: busy never closed, the R9 lone-tab rule,
+recorded-runner probing skipping `hand`, did=False/no failed_write, is_finished shared by
+steps 3 and 5, --keep-sessions and no probing without --yes, vk/cncd and Runner untouched.
+Raised p2-r1 and p2-r2, both in scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-05T12:39:25+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: _try_runner caught only typer.Exit: an adapter's ImportError or from_env() failure crashed the drive, and a caught refusal printed a red error plus a warning (phase 2)
+
+`_try_runner` captures `load_runner`'s refusal output and catches any exception, printing ONE warning with the reason; tests test_a_runner_whose_load_raises_is_skipped_with_one_warning (ImportError, RuntimeError) and test_a_runner_load_refusal_prints_one_warning_not_an_error (commit 8ec21f775).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-05T12:39:25+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Busy/failed close dedup key was the whole outcome line, so the same cause re-reported once a sibling closed or an exception message changed (phase 2)
+
+Causes key on (batch, item, busy | exception type); a line whose causes are all reported prints only what closed. Tests test_a_busy_cause_is_not_reported_again_when_a_sibling_closed and test_a_failed_close_is_reported_once_whatever_its_message (commit 8ec21f775).
