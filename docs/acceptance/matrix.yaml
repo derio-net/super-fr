@@ -6060,9 +6060,16 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R9
     - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_close_closes_the_group_workspace_of_a_lone_tab
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_finished_batchs_sessions_are_closed_on_the_runner_each_event_recorded
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_keep_sessions_probes_and_closes_nothing
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_closing_adds_nothing_to_the_summary
+    status: ci
+    notes: 'Phase 2 shipped: herdr close (busy/absent/lone-tab-workspace rules), drive
+      close step and probes, --keep-sessions; closing never changes the exit code. Live
+      run stays in drive-herdr-sessions-live.'
   - id: drive-herdr-sessions-live
     capability: triage-batch-drive
     acceptance: A live two-wave drive inside herdr groups each wave's sessions in its
