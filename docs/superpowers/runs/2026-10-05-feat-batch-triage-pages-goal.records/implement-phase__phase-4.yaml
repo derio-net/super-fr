@@ -15,6 +15,7 @@ ticks:
 - P4.T3.S3
 - P4.T4.S1
 - P4.T4.S2
+- P4.T4.S3
 refactor:
   P4.T1: state_sync is one copy loop shared by both directions; nothing to clean
 journal:
@@ -43,4 +44,14 @@ resolves:
     themselves included); a symlinked target or parent under the destination root is never written through;
     copy2 uses follow_symlinks=False. Each is skipped and reported in SyncReport.skipped with its reason
     (Skipped(path, reason)); tests in tests/unit/test_triage_state_sync.py cover all four cases.'
+- id: p4-sec-root-symlink-traversal
+  state: fixed
+  body: 'state_sync.contained(base, rel) refuses an absolute rel, an empty/./.. part, any existing symlinked
+    component under base (the last included) and a resolve() outside base.resolve(); the base itself is trusted
+    (macOS /var). check_scope_name refuses a scope that is not one plain part. export_state/import_state take
+    (base, rel) and build the root through contained; the CLI passes (--to|--from, scope); the driver passes
+    (worktree, <path>/<scope>), and a refusal there is a warn for that wave with nothing committed or pushed,
+    counted blocked. _symlinked_dest still re-checks each target. Tests: test_triage_state_sync.py (contained,
+    scope name, symlinked scope dir on import, symlinked root on export, base under a symlinked /var-style
+    parent) and test_triage_batch_drive_cmd.py::test_a_symlinked_export_path_in_the_repo_is_refused_as_a_warn_with_nothing_written.'
 evidence: {}

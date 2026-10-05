@@ -24,6 +24,7 @@ from fr.gh import GhError
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
+from fr.triage.gitseam import Checkout
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
 
@@ -51,6 +52,7 @@ class World:
         self.all_checks: dict[int, dict[str, int]] = {}
         self.merged: list[tuple[int, str, str]] = []
         self.refuse_merge: str | None = None
+        self.refuse_create: str | None = None
         self.calls: list[str] = []
         self.comments: dict[int, list[dict[str, Any]]] = {}
         self.config: dict[str, Any] | None = None
@@ -148,6 +150,14 @@ class World:
              "author": {"login": p["author"]}, "isCrossRepository": p["cross_repo"]}
             for n, p in self.prs.items() if p["head_ref"] == branch
         ]  # fmt: skip
+
+    def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
+        self.calls.append(f"pr_create {head} -> {base}")
+        if self.refuse_create:
+            raise GhError(self.refuse_create, returncode=1)
+        number = max([*self.prs, 199]) + 1
+        self.pr(number, head, [], head_oid=f"sha-{number}")
+        return number
 
     def closing_ref(self, repo: str, number: int) -> str:
         return f"Closes {repo}#{number}"
@@ -2161,3 +2171,284 @@ def test_no_train_line_without_a_ready_pr(
     _proposed(world, tmp_path)
     code, out = _drive(tmp_path)
     assert "train " not in out
+
+
+# ------------------------------------- per-wave state export (pages-goal R13, §I)
+
+EXPORT_CONFIG = {"export": {"path": "docs/triage"}}
+SCOPE_DIR = "docs/triage/derio-net--super-fr"
+EXPORT_HEAD = "chore/triage-state-wave-1"
+ARCHIVED = (
+    "      - {kind: closeout, at: '2026-10-01T12:00:00Z', runner: fake, handle: h, archived: 7}\n"
+)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout
+
+
+class GitDriveCheckout(Checkout):
+    """A real clone of a throwaway bare origin, whose origin reads as REPO."""
+
+    def origin_repo(self) -> str | None:
+        return REPO
+
+
+@pytest.fixture
+def git_checkout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World) -> GitDriveCheckout:
+    world.config = EXPORT_CONFIG
+    origin = tmp_path / "git" / "origin.git"
+    origin.parent.mkdir()
+    _git(origin.parent, "init", "--quiet", "--bare", "--initial-branch=main", str(origin))
+    clone = tmp_path / "git" / "clone"
+    _git(origin.parent, "clone", "--quiet", str(origin), str(clone))
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(clone, "config", k, v)
+    _git(clone, "checkout", "--quiet", "-b", "main")
+    (clone / ".fr").mkdir()
+    (clone / ".fr" / "triage.yaml").write_text(yaml.safe_dump(EXPORT_CONFIG), encoding="utf-8")
+    (clone / "README.md").write_text("r\n", encoding="utf-8")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "seed")
+    _git(clone, "push", "--quiet", "origin", "main")
+    _git(clone, "remote", "set-head", "origin", "main")
+    fake = GitDriveCheckout(clone)
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
+    return fake
+
+
+def _finished_wave(tmp_path: Path, world: World, *, exports: str = "") -> Path:
+    """Wave 1 is finished: its one batch merged, closed out and archived."""
+    world.issues[1] = "closed"
+    world.pr(11, "feat/batch-a", [1], state="MERGED", merged_at=NOW.isoformat())
+    state = tmp_path / "state"
+    state.mkdir()
+    _state(state, world, _batch("a", 1, events=_dispatch_event("a") + ARCHIVED))
+    (state / "board").mkdir()
+    (state / "board" / "manifest.yaml").write_text("sections: []\n", encoding="utf-8")
+    if exports:
+        text = (state / "judgements.yaml").read_text(encoding="utf-8")
+        text = text.replace("schema: 3\n", "schema: 4\n") + "exports:\n" + exports
+        (state / "judgements.yaml").write_text(text, encoding="utf-8")
+    return state
+
+
+def _exports(state: Path) -> list[tuple[str, int | None, bool]]:
+    return [(e.wave, e.pr, e.merged) for e in load_judgements(state / "judgements.yaml").exports]
+
+
+def _export_drive(state: Path, *args: str) -> tuple[int, str]:
+    return _drive(state, "--keep-sessions", *args)
+
+
+def test_plan_mode_prints_the_export_and_writes_nothing(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    state = _finished_wave(tmp_path, world)
+    code, out = _export_drive(state)
+    assert code == 0, out
+    assert f"export wave 1 {REPO}: to docs/triage on {EXPORT_HEAD}" in out
+    assert _exports(state) == []
+    assert not any(c.startswith("pr_create") for c in world.calls)
+
+
+def test_export_commits_only_the_scope_dir_force_pushes_and_records_the_pr(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    clone = git_checkout.path
+    # a stale export branch a dead pass left behind, diverged from main
+    _git(clone, "checkout", "--quiet", "-b", "stale")
+    (clone / "stale.txt").write_text("old\n", encoding="utf-8")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "stale")
+    _git(clone, "push", "--quiet", "origin", f"stale:{EXPORT_HEAD}")
+    _git(clone, "checkout", "--quiet", "main")
+    state = _finished_wave(tmp_path, world)
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    (number,) = [n for n, p in world.prs.items() if p["head_ref"] == EXPORT_HEAD]
+    assert f"export wave 1 {REPO}: opened PR #{number}" in out
+    assert f"pr_create {EXPORT_HEAD} -> main" in world.calls
+    assert _exports(state) == [("1", number, False)]
+    _git(clone, "fetch", "--quiet", "origin")
+    tip = f"origin/{EXPORT_HEAD}"
+    assert _git(clone, "rev-parse", f"{tip}^") == _git(clone, "rev-parse", "origin/main")
+    changed = _git(clone, "diff", "--name-only", "origin/main", tip).split()
+    assert sorted(changed) == [f"{SCOPE_DIR}/board/manifest.yaml", f"{SCOPE_DIR}/judgements.yaml"]
+    assert not (state / "export" / "1").exists()  # the scratch worktree is gone
+
+
+def test_an_export_that_changes_nothing_records_no_pr_and_opens_none(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    from fr.triage.state_sync import export_state
+
+    state = _finished_wave(tmp_path, world)
+    clone = git_checkout.path
+    export_state(state, clone, SCOPE_DIR)
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "already exported")
+    _git(clone, "push", "--quiet", "origin", "main")
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert f"{SCOPE_DIR} is unchanged; recorded with no PR" in out
+    assert _exports(state) == [("1", None, False)]
+    assert not any(c.startswith("pr_create") for c in world.calls)
+    _git(clone, "fetch", "--quiet", "origin")
+    assert EXPORT_HEAD not in _git(clone, "branch", "-r")
+
+
+def test_an_open_export_pr_with_no_record_is_adopted_without_a_push(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    state = _finished_wave(tmp_path, world)
+    world.pr(40, EXPORT_HEAD, [])
+    world.checks[40] = [{"name": "test", "bucket": "pending"}]
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert f"export-adopt wave 1 {REPO}: recorded the open PR #40" in out
+    assert _exports(state) == [("1", 40, False)]
+    assert not any(c.startswith("pr_create") for c in world.calls)
+    assert EXPORT_HEAD not in _git(git_checkout.path, "ls-remote", "origin")
+
+
+def test_a_green_recorded_export_pr_is_merged_at_its_live_head_and_recorded(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    exports = "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40}\n"
+    state = _finished_wave(tmp_path, world, exports=exports)
+    world.pr(40, EXPORT_HEAD, [], head_oid="sha-live")
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert world.merged == [(40, "sha-live", "squash")]
+    assert f"export-merge wave 1 {REPO}: merged export PR #40" in out
+    assert _exports(state) == [("1", 40, True)]
+
+
+def test_a_refused_export_merge_exits_1(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    exports = "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40}\n"
+    state = _finished_wave(tmp_path, world, exports=exports)
+    world.pr(40, EXPORT_HEAD, [])
+    world.refuse_merge = "protected branch"
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 1, out
+    assert "protected branch" in out
+    assert _exports(state) == [("1", 40, False)]
+
+
+def test_a_refused_pr_create_exits_1_and_records_nothing(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    state = _finished_wave(tmp_path, world)
+    world.refuse_create = "no permission"
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 1, out
+    assert "no permission" in out
+    assert _exports(state) == []
+
+
+def test_a_recorded_export_pr_closed_unmerged_warns_every_pass_and_waits_on_the_operator(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout, sleeps: list[float]
+) -> None:
+    exports = "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40}\n"
+    state = _finished_wave(tmp_path, world, exports=exports)
+    world.pr(40, EXPORT_HEAD, [], state="CLOSED")
+
+    code, out = _export_drive(state, "--yes")
+
+    assert code == 3, out
+    assert f"warn wave 1 {REPO}: export PR #40 is closed without a merge" in out
+    assert f"export wave 1 {REPO}" in out.split("stopped:")[1]
+
+
+def test_a_drive_loop_is_not_done_while_its_export_pr_is_open(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = _finished_wave(tmp_path, world)
+    naps: list[float] = []
+
+    def _sleep(seconds: float) -> None:  # the export PR's checks go green on the 2nd nap
+        naps.append(seconds)
+        if len(naps) == 2:
+            for n, p in world.prs.items():
+                if p["head_ref"] == EXPORT_HEAD:
+                    world.checks[n] = [{"name": "test", "bucket": "pass"}]
+        if len(naps) > 6:
+            raise AssertionError("the loop did not end")
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _sleep)
+    real_create = world.pr_create
+
+    def _create(repo: str, **kw: Any) -> int:
+        n = real_create(repo, **kw)
+        world.checks[n] = [{"name": "test", "bucket": "pending"}]
+        return n
+
+    monkeypatch.setattr(world, "pr_create", _create)
+
+    code, out = _export_drive(state, "--yes")
+
+    assert code == 0, out
+    assert len(naps) >= 2  # it kept passing while the PR's checks were pending
+    (number,) = [n for n, p in world.prs.items() if p["head_ref"] == EXPORT_HEAD]
+    assert [m[0] for m in world.merged] == [number]
+    assert _exports(state) == [("1", number, True)]
+
+
+def test_a_symlinked_export_path_in_the_repo_is_refused_as_a_warn_with_nothing_written(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    clone = git_checkout.path
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (clone / "docs").mkdir()
+    (clone / "docs" / "triage").symlink_to(outside)
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "a planted symlink")
+    _git(clone, "push", "--quiet", "origin", "main")
+    state = _finished_wave(tmp_path, world)
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert f"warn wave 1 {REPO}: refused, nothing committed or pushed" in out
+    assert list(outside.iterdir()) == []
+    assert _exports(state) == []
+    assert not any(c.startswith("pr_create") for c in world.calls)
+    assert EXPORT_HEAD not in _git(clone, "ls-remote", "origin")
+
+
+def test_a_group_scope_that_opts_in_is_warned_to_use_repo(
+    tmp_path: Path, world: World, checkout: DriveCheckout
+) -> None:
+    from fr.triage.model import Scope
+
+    world.config = EXPORT_CONFIG
+    state = _finished_wave(tmp_path, world)
+    facts = world.facts()
+    driver = triage_batch_cmd._Driver(
+        Scope.group([REPO, "derio-net/other"]), state, named=None, checkouts={},
+        max_inflight=4, yes=False,
+    )  # fmt: skip
+    snap = driver.snapshot(facts, load_judgements(state / "judgements.yaml"), NOW)
+    assert snap.export_path == {}
+    assert snap.export_refused == frozenset({REPO})
+    assert snap.finished == frozenset({"1"})
