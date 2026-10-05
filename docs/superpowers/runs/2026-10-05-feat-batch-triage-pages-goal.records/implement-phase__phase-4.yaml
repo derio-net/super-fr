@@ -123,4 +123,4 @@ resolves:
     test_triage_batch_drive_cmd.py against real temp repos: a rename from outside into the dir (both paths in
     changed_paths), 121 changed files with one outside sorting last, an unreadable head, and the happy path
     merging at the recorded SHA.'
-evidence: {}
+evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p4-suite.log}
