@@ -43,3 +43,23 @@ prefix with surrounding spaces is not stripped (cosmetic).
 ### p1-r1-resolved · finding [fixed] · resolves p1-r1: _Driver._existing builds close-out probes without payload group, so herdr's preflight refuses them with HERDR_WORKSPACE_ID unset (phase 1)
 
 The probe payload now carries group=self.group_of(b); test_the_closeout_probe_carries_the_same_group_as_the_closeout pins it (red before the fix, commit f28e1fcdf).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-d1 created=2026-10-05T12:33:43+00:00 phase=2 -->
+### p2-d1 · discovery · closing is best effort, so a runner load failure is caught as typer.Exit (phase 2)
+
+load_runner _fails (prints, Exit 2) and tests replace it wholesale; _try_runner catches typer.Exit, caches the failure and prints one warning. A raised close or busy outcome is deduplicated per batch and cause via the driver's warned set; a repeat returns an empty outcome and run_pass stays quiet.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-05T12:33:43+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+docstrings only; protocol and contract are one small function each, nothing duplicated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-10-05T12:33:43+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+_sessions and _existing build different probes (batch+closeout items vs due close-outs) and differ in failure policy (exit 2 vs skip); sharing a grouping helper would have blurred that
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-10-05T12:33:43+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+prose, mirrors and matrix rows only; no code to clean
