@@ -420,3 +420,4 @@ import fr.commands.triage_architecture_cmd  # noqa: E402, F401
 import fr.commands.triage_batch_cmd  # noqa: E402, F401
 import fr.commands.triage_history_cmd  # noqa: E402, F401
 import fr.commands.triage_origins_cmd  # noqa: E402, F401
+import fr.commands.triage_state_cmd  # noqa: E402, F401

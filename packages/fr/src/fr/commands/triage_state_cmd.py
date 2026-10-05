@@ -1,0 +1,71 @@
+"""`fr triage state export|import` (spec 2026-10-05-triage-pages-goal, R12, §H).
+
+The same scope options as every `fr triage` verb. `<dir>/<scope>/` is the repo-side
+root: `export --to <dir>` writes it, `import --from <dir>` reads it. Both print every
+file they copied and every file they skipped. Neither reads or writes a registered
+artifact, so `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success; 2 usage.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Annotated
+
+import typer
+
+import fr.commands.triage_cmd as triage_cmd
+from fr.commands.triage_cmd import DirOpt, OrgOpt, RepoOpt, console, triage_app
+from fr.triage.model import state_dir
+from fr.triage.state_sync import SyncReport, export_state, import_state
+
+state_app = typer.Typer(
+    name="state",
+    help="Copy a scope's durable state (judgements, origins, manifests, fragments, "
+    "snapshots) to a repo directory and back.",
+    no_args_is_help=True,
+)
+triage_app.add_typer(state_app)
+
+
+def _print(report: SyncReport, *, skipped_why: str) -> None:
+    for rel in report.copied:
+        console.print(f"copied {rel}", markup=False, soft_wrap=True)
+    for rel in report.skipped:
+        console.print(f"skipped {rel} ({skipped_why})", markup=False, soft_wrap=True)
+    console.print(
+        f"{len(report.copied)} copied, {len(report.skipped)} skipped",
+        markup=False,
+        soft_wrap=True,
+    )
+
+
+@state_app.command("export")
+def export_command(
+    to: Annotated[
+        Path, typer.Option("--to", help="Repo directory; the state lands in <dir>/<scope>/.")
+    ],
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+) -> None:
+    """Copy the scope's durable state to <dir>/<scope>/. Facts and pages never travel."""
+    scope = triage_cmd._scope(repo, org)
+    report = export_state(state_dir(scope, dir_override), to / scope.name)
+    _print(report, skipped_why="")
+
+
+@state_app.command("import")
+def import_command(
+    from_: Annotated[Path, typer.Option("--from", help="Repo directory holding <dir>/<scope>/.")],
+    force: Annotated[
+        bool, typer.Option("--force", help="Overwrite state files newer than the repo copy.")
+    ] = False,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+) -> None:
+    """Copy <dir>/<scope>/ back into the state directory; a state file newer than its
+    repo copy is skipped unless --force."""
+    scope = triage_cmd._scope(repo, org)
+    report = import_state(from_ / scope.name, state_dir(scope, dir_override), force=force)
+    _print(report, skipped_why="newer in the state directory; --force overwrites it")

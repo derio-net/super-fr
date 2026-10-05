@@ -1,0 +1,14 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-triage-pages-goal
+step: implement-phase
+item: phase/4
+outcome: done
+ticks:
+- P4.T1.S1
+- P4.T1.S2
+- P4.T1.S3
+refactor:
+  P4.T1: state_sync is one copy loop shared by both directions; nothing to clean
+journal: []
+resolves: []
+evidence: {}
