@@ -100,6 +100,33 @@ def test_an_unloadable_runner_is_one_line_and_no_traceback(
     assert len([ln for ln in out.splitlines() if ln.strip()]) == 1
 
 
+def test_a_runner_the_registry_cannot_load_is_one_captured_line(tmp_path: Path) -> None:
+    """The real `load_runner` -> `_fail` -> `typer.Exit` path: its red `error:` is
+    captured into the reason, never printed twice (review p1-r4)."""
+    _setup(tmp_path, _dispatch_event("b1").replace("runner: fake", "runner: no-such-runner"))
+    code, out = _focus(tmp_path, "b1")
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    assert code == 2 and len(lines) == 1, out
+    assert "no-such-runner" in lines[0] and "could not be loaded" in lines[0]
+    assert lines[0].count("error:") == 1 and "Traceback" not in out
+
+
+def test_a_multi_line_focus_failure_is_one_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path, _dispatch_event("b1"))
+
+    class _Raises(_Focuser):
+        def focus(self, item: Any) -> bool:
+            raise RuntimeError("herdr tab focus failed:\nline two\nline three")
+
+    _use(monkeypatch, _Raises())
+    code, out = _focus(tmp_path, "b1")
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    assert code == 2 and len(lines) == 1, out
+    assert "line two line three" in lines[0]
+
+
 def test_a_runner_without_focus_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _setup(tmp_path, _dispatch_event("b1"))
     _use(monkeypatch, _NoFocus())

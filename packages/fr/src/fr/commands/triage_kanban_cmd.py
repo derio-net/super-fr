@@ -13,7 +13,8 @@ Exit codes: 0 focused; 2 a refusal, always one line.
 from __future__ import annotations
 
 import importlib.util
-from typing import TYPE_CHECKING, Annotated, Any, NoReturn
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Annotated, NoReturn
 
 import typer
 from rich.markup import escape
@@ -54,14 +55,20 @@ def _fail(message: str, code: int = 2) -> NoReturn:
     raise typer.Exit(code=code)
 
 
-def load_runner(name: str) -> Runner:
+def one_line(exc: BaseException) -> str:
+    """*exc*'s message on one line, or its type name when it has none."""
+    return " ".join(str(exc).split()) or type(exc).__name__
+
+
+def load_runner(name: str, install_hint: str = DISPATCH_INSTALL_HINT) -> Runner:
     """Build runner *name* through `fr_dispatch.registry.load_runner`.
 
     The soft point: `fr_dispatch` is imported here, behind find_spec, never at
-    module level. Tests replace this.
+    module level. Tests replace this. `triage_batch_cmd.load_runner` delegates
+    here with its own install hint.
     """
     if importlib.util.find_spec("fr_dispatch") is None:
-        _fail(DISPATCH_INSTALL_HINT)
+        _fail(install_hint)
     from fr_dispatch.registry import RunnerLoadError
     from fr_dispatch.registry import load_runner as _load
 
@@ -71,20 +78,23 @@ def load_runner(name: str) -> Runner:
         _fail(str(exc))
 
 
-def _try_load(name: str) -> tuple[Runner | None, str]:
+def try_load(name: str, loader: Callable[[str], Runner] | None = None) -> tuple[Runner | None, str]:
     """Runner *name* and no reason, or None and why it could not be loaded.
 
     `load_runner` reports a refusal through `_fail` (a red `error:` and an exit);
     an adapter's own import or `from_env()` failure is any exception. Either is
-    one reason here, never a traceback.
+    one line of reason here, never a traceback and never printed. *loader* defaults
+    to this module's `load_runner`; the drive passes its own cached one.
     """
+    load = loader or load_runner
     try:
         with err_console.capture() as said:
-            return load_runner(name), ""
+            return load(name), ""
     except typer.Exit:
-        reason = Text.from_ansi(said.get()).plain.strip().removeprefix("error:").strip()
+        text = Text.from_ansi(said.get()).plain.strip().removeprefix("error:").strip()
+        reason = " ".join(text.split())
     except Exception as exc:  # noqa: BLE001 - a broken adapter is a refusal, not a crash
-        reason = f"{type(exc).__name__}: {exc}"
+        reason = f"{type(exc).__name__}: {one_line(exc)}"
     return None, reason or "no reason given"
 
 
@@ -142,14 +152,14 @@ def batch_focus_command(
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
     name = _runner_name(batch, closeout=closeout)
-    runner, reason = _try_load(name)
+    runner, reason = try_load(name)
     if runner is None:
         _fail(f"runner `{name}` could not be loaded ({reason})")
     from fr_dispatch.protocols import SessionFocuser
 
     if not isinstance(runner, SessionFocuser):
         _fail(f"runner `{name}` cannot focus a session")
-    probe: Any = probe_item(owner_repo, batch, closeout=closeout)
+    probe = probe_item(owner_repo, batch, closeout=closeout)
     try:
         refusal = runner.preflight([probe])
         if refusal:
@@ -158,7 +168,7 @@ def batch_focus_command(
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - a failed focus is a refusal
-        _fail(f"runner `{name}` failed to focus: {exc}")
+        _fail(f"runner `{name}` failed to focus: {one_line(exc)}")
     if not focused:
         _fail(f"no live session for {probe.id}")
     console.print(f"focused {probe.id}", markup=False)

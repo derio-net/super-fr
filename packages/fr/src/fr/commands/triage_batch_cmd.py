@@ -30,7 +30,6 @@ backend declares unsupported).
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import tempfile
@@ -40,14 +39,13 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, NamedTuple, NoReturn
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 from urllib.parse import urlparse
 
 import typer
 import yaml
 from pydantic import ValidationError
 from rich.markup import escape
-from rich.text import Text
 
 from fr._hosts import backend_for_url
 from fr.acceptance.ci import CI_CONFIG_PATHS
@@ -62,6 +60,8 @@ from fr.commands.triage_cmd import (
     console,
     err_console,
 )
+from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
+from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_backend
 from fr.labels import FR_IN_PROGRESS
@@ -178,25 +178,9 @@ def make_checkout(path: Path | None) -> Checkout:
 
 
 def load_runner(name: str) -> Runner:
-    """Build runner *name* through `fr_dispatch.registry.load_runner` (§3.C step 1).
-
-    The soft point: `fr_dispatch` is imported here, behind find_spec, never at
-    module level. Tests replace this.
-    """
-    if importlib.util.find_spec("fr_dispatch") is None:
-        _fail(DISPATCH_INSTALL_HINT)
-    from fr_dispatch.registry import RunnerLoadError
-    from fr_dispatch.registry import load_runner as _load
-
-    try:
-        return _load(name)
-    except RunnerLoadError as exc:
-        _fail(str(exc))
-
-
-def _fail(message: str, code: int = 2) -> NoReturn:
-    err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
-    raise typer.Exit(code=code)
+    """Build runner *name* through the soft point in `triage_kanban_cmd` (§3.C step 1),
+    with this module's install hint. Tests replace this."""
+    return kanban_load_runner(name, DISPATCH_INSTALL_HINT)
 
 
 def _now_after(batch: Batch) -> datetime:
@@ -1517,16 +1501,9 @@ class _Driver:
         best effort, so a load failure never ends the drive (R10)."""
         if name in self._unloadable:
             return None
-        # `load_runner` reports a refusal through `_fail` (a red `error:` and an exit);
-        # an adapter's own import or `from_env()` failure is any exception. Either is
-        # one warning here, with its reason (review p2-r1).
-        try:
-            with err_console.capture() as said:
-                return self.runner(name)
-        except typer.Exit:
-            reason = Text.from_ansi(said.get()).plain.strip().removeprefix("error:").strip()
-        except Exception as exc:  # noqa: BLE001 - closing is best effort
-            reason = f"{type(exc).__name__}: {exc}"
+        runner, reason = try_load(name, self.runner)
+        if runner is not None:
+            return runner
         self._unloadable.add(name)
         err_console.print(
             f"[yellow]warning:[/yellow] runner `{escape(name)}` could not be loaded "
@@ -1816,29 +1793,18 @@ class _Driver:
         if not finished:
             return frozenset()
         from fr_dispatch.protocols import SessionCloser
-        from fr_dispatch.work_item import WorkItem
 
         by_runner: dict[str, list[WorkItem]] = {}
         for b in finished:
             repo = repos[b.id]
-            group = self.group_of(b)
             dispatch, closeout = last_dispatch(b), closeout_event(b)
-            wanted = [(batch_item_id(repo, b.id), dispatch.runner if dispatch else None)]
+            wanted = [(False, dispatch.runner if dispatch else None)]
             if closeout is not None and closeout.runner != "hand":
-                wanted.append((closeout_item_id(repo, b.id), closeout.runner))
-            for item_id, name in wanted:
+                wanted.append((True, closeout.runner))
+            for is_closeout, name in wanted:
                 if not name:
                     continue
-                probe = WorkItem(
-                    id=item_id,
-                    unit="run",
-                    workflow=batch_workflow(b),
-                    repo=repo,
-                    parent=None,
-                    inputs=(),
-                    payload={"group": group},
-                    tracking=None,
-                )
+                probe = probe_item(repo, b, closeout=is_closeout, prefix=self.workspace_prefix)
                 by_runner.setdefault(str(name), []).append(probe)
         for name, probes in by_runner.items():
             runner = self._try_runner(name)

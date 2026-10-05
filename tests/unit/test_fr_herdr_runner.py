@@ -444,6 +444,25 @@ def test_a_working_tab_outranks_an_idle_one(herdr: _Herdr) -> None:
     assert HerdrRunner.from_env().session_statuses([item]) == {item.id: "working"}
 
 
+@pytest.mark.parametrize(
+    ("first", "second", "wins"),
+    [
+        ("working", "blocked", "blocked"),
+        ("idle", "working", "working"),
+        ("done", "idle", "idle"),
+        ("unknown", "done", "done"),
+    ],
+)
+def test_the_precedence_is_blocked_working_idle_done_unknown(
+    herdr: _Herdr, first: str, second: str, wins: str
+) -> None:
+    """R9's whole order, each adjacent pair in both tab orders."""
+    item = _item()
+    for a, b in ((first, second), (second, first)):
+        herdr.listing = _tabs_of((item.id, a, "w9:t1", "w9"), (item.id, b, "w9:t2", "w9"))
+        assert HerdrRunner.from_env().session_statuses([item]) == {item.id: wins}
+
+
 def test_an_item_with_no_tab_is_absent(herdr: _Herdr) -> None:
     item = _item()
     herdr.listing = _tabs_of(("other", "idle", "w9:t1", "w9"))

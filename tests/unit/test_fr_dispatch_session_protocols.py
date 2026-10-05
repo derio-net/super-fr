@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, get_args
 
+import pytest
 from fr_dispatch.protocols import (
     Runner,
     SessionFocuser,
@@ -50,5 +51,9 @@ def test_session_focuser_is_structural() -> None:
 
 
 def test_neither_is_a_member_of_runner() -> None:
-    members = set(getattr(Runner, "__protocol_attrs__", set()))
+    # `__protocol_attrs__` exists from Python 3.12; without it the check would be vacuous.
+    if not hasattr(Runner, "__protocol_attrs__"):
+        pytest.skip("typing.Protocol exposes no __protocol_attrs__ before Python 3.12")
+    members = set(Runner.__protocol_attrs__)
+    assert "dispatch" in members  # the check reads real members
     assert not {"session_statuses", "focus"} & members
