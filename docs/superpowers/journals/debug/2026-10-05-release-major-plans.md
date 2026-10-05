@@ -14,3 +14,8 @@ release.py's make_release_commit runs bump-version.py, git rm's fragments and ve
 ### d1181a64e79b · ruled-out · Exempting 'fr models apply' from the migration gate
 
 Issue #861 question 2. Rejected as THE fix: it silences the one symptom the suite saw while every live plan still refuses to parse at the new major (dispatch, fr plan, the gate for every other command). The stale artifacts are the cause; the exemption would be a separate argument to the pinned READ_ONLY_COMMANDS list, not this batch's.
+
+<!-- fr:journal kind=ruled-out scope=debug id=20865383cd50 created=2026-10-05T20:39:29+00:00 -->
+### 20865383cd50 · ruled-out · Widening in a PR before the major
+
+Issue #861 option 1. A pre-major PR cannot write <N+2.0.0: the ceiling is derived from the installed fr, and an fr at N cannot widen past N+1. It would also need a human to remember before every major; the release is the only actor that knows the number.
