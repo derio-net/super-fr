@@ -75,6 +75,7 @@ def _issue(number: int, **kw: Any) -> Issue:
 
 def _facts(*issues: Issue, config: dict[str, TriageConfig] | None = None, **kw: Any) -> Facts:
     return Facts(
+        viewer="operator",
         schema=3,
         scope="derio-net--super-fr",
         kind="repo",

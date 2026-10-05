@@ -78,6 +78,7 @@ def _issue(number: int, **kw: Any) -> Issue:
 
 def _facts(config: dict[str, Any] | None = None, **kw: Any) -> Facts:
     return Facts(
+        viewer="operator",
         schema=3,
         scope="derio-net--super-fr",
         kind="repo",
@@ -576,6 +577,8 @@ def _pr(state: str = "OPEN", **kw: Any) -> Any:
     from fr.triage.model import PullRequest
 
     return PullRequest(
+        author="operator",
+        cross_repo=False,
         repo=REPO,
         number=kw.pop("number", 700),
         title="batch PR",
@@ -1025,3 +1028,13 @@ def test_repair_completes_a_batch_in_flight(
     assert code == 0, out
     for n in MEMBERS:
         assert "fr:in-progress" in gh.issues[(REPO, n)].labels
+
+
+def test_the_reserved_version_is_called_provisional_until_merge() -> None:
+    """super-fr#646: reservations see only the dispatching scope's batches, so a
+    repo-scope and an org-scope triage can reserve the same number; merge
+    reconcile renumbers. The brief must not claim the number is final."""
+    brief = _brief()
+    line = next(ln for ln in brief.splitlines() if "Bump the version" in ln)
+    assert "provisional" in line
+    assert "do not pick another number" not in line

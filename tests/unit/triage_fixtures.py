@@ -14,6 +14,7 @@ never through a `sys.path` insert (review r-p3-syspath).
 from __future__ import annotations
 
 import ast
+import copy
 import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -37,6 +38,31 @@ ISSUES = _load("super-fr-issues.json")
 PRS = _load("super-fr-prs.json")
 
 
+def _captured_pr_with_refs() -> dict[str, Any]:
+    """A captured PR record that carries at least one closing reference."""
+    return next(p for p in PRS if p["closingIssuesReferences"])
+
+
+def _pr_closing(*, owner: str, name: str, number: int, pr_number: int) -> dict[str, Any]:
+    """A deep copy of a captured PR whose single reference names owner/name#number."""
+    pr = copy.deepcopy(_captured_pr_with_refs())
+    ref = pr["closingIssuesReferences"][0]
+    ref["repository"]["owner"]["login"] = owner
+    ref["repository"]["name"] = name
+    ref["number"] = number
+    pr["closingIssuesReferences"] = [ref]
+    pr["number"] = pr_number
+    return pr
+
+
+def _issue(number: int, *, title: str = "t") -> dict[str, Any]:
+    """A deep copy of a captured issue record, renumbered."""
+    issue = copy.deepcopy(ISSUES[0])
+    issue["number"] = number
+    issue["title"] = title
+    return issue
+
+
 class FakeForge:
     """A Forge serving per-repo canned data and recording every call."""
 
@@ -51,6 +77,7 @@ class FakeForge:
         file_bodies: dict[tuple[str, str, str], str | Exception] | None = None,
         comments: dict[tuple[str, int], list[dict[str, Any]]] | None = None,
         head_prs: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
+        viewer: str = "operator",
     ) -> None:
         self.issues = issues
         self.prs = prs
@@ -60,6 +87,7 @@ class FakeForge:
         self.file_bodies = file_bodies or {}
         self.comments = comments or {}
         self.head_prs = head_prs or {}
+        self.viewer = viewer
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
@@ -102,6 +130,10 @@ class FakeForge:
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
         self.calls.append(("list_prs_by_head", {"repo": repo, "branch": branch}))
         return self.head_prs.get((repo, branch), [])
+
+    def viewer_login(self) -> str:
+        self.calls.append(("viewer_login", {}))
+        return self.viewer
 
     def anchor_reads(self) -> list[dict[str, Any]]:
         """`read_file_at_ref` calls other than collect's one config read per repo."""

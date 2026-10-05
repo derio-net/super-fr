@@ -2258,7 +2258,7 @@ def test_the_operator_guard_owns_a_parity_row_and_its_notice_quotes_it(
     states = {h: c.state for h, c in row.harnesses.items()}
     assert states == {
         "claude-code": "enforced",
-        "opencode": "advisory",
+        "opencode": "partial",
         "hermes": "advisory",
         "codex": "unsupported",
         "copilot-cli": "unsupported",

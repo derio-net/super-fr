@@ -18,6 +18,8 @@ SHARED = "packages/fr/src/fr/isolation/local.py"
 
 def _pr(number: int, head: str, files: list[str], state: str = "OPEN") -> PullRequest:
     return PullRequest(
+        author="operator",
+        cross_repo=False,
         repo=REPO,
         number=number,
         title=f"batch pr {number}",
@@ -46,6 +48,7 @@ def _issue(number: int, *, prs: list[PullRequest] = (), labels: list[str] = ()) 
 
 
 FACTS = Facts(
+    viewer="operator",
     schema=3,
     scope="derio-net--super-fr",
     kind="repo",

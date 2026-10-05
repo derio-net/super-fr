@@ -1,2 +1,0 @@
-bump: patch
-summary: "Plan and record tooling: self-review and every command report errors containing [brackets] instead of crashing; fr plan edit rewrites only the phase file's state block; a hand-edited journal token is a named parse error; fr journal add refuses a spec/plan slug that names no artifact; the dispatch brief and record template no longer list evidence fr derives itself, and advance creates the records directory."

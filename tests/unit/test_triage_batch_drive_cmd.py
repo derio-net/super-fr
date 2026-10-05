@@ -20,6 +20,7 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd
 from fr.gh import GhError
+from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
@@ -63,6 +64,8 @@ class World:
             "files": [],
             "created_at": "2026-10-01T11:00:00+00:00",
             "merged_at": None,
+            "author": "operator",
+            "cross_repo": False,
             **kw,
         }
 
@@ -88,6 +91,7 @@ class World:
             ],  # fmt: skip
             prs=[prs[n] for n, p in self.prs.items() if not p["closes"] and p["state"] == "OPEN"],
             config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
+            viewer="operator",
         )
 
     def _pr(self, n: int) -> PullRequest:
@@ -105,6 +109,8 @@ class World:
             head_oid=p["head_oid"] if p["state"] == "OPEN" else "",
             files=p["files"] if p["state"] == "OPEN" else [],
             checks=self.all_checks.get(n, {"pass": 1, "fail": 0, "pending": 0}),
+            author=p["author"],
+            cross_repo=p["cross_repo"],
         )
 
     # -- the GhClient adapter
@@ -136,7 +142,8 @@ class World:
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         return [
             {"number": n, "state": p["state"], "isDraft": p["draft"], "headRefName": branch,
-             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]]}
+             "headRefOid": p["head_oid"], "files": [{"path": f} for f in p["files"]],
+             "author": {"login": p["author"]}, "isCrossRepository": p["cross_repo"]}
             for n, p in self.prs.items() if p["head_ref"] == branch
         ]  # fmt: skip
 
@@ -191,6 +198,14 @@ class DriveCheckout:
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return descendant not in self.behind
+
+    def commits_behind(
+        self, head: str, ref: str
+    ) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
+        return (("code", (("M", "packages/x.py"),)),)
+
+    def changed_paths(self, ref: str, head: str) -> frozenset[str]:
+        return frozenset()
 
     def add_worktree(self, where: Path, ref: str) -> Any:
         return _Worktree(self, where)
@@ -531,6 +546,63 @@ def test_a_failing_check_warns_once_per_head_across_loop_passes(
     assert sleeps[:2] == [5, 5]
 
 
+@pytest.mark.parametrize(
+    ("kw", "reason"),
+    [
+        (dict(cross_repo=True), "opened from a fork"),
+        (dict(author="mallory"), "by mallory, not an allowed author"),
+    ],
+    ids=["fork", "foreign-author"],
+)
+def test_a_foreign_pr_on_the_batch_branch_is_never_merged_and_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, kw: dict[str, Any], reason: str,
+) -> None:  # fmt: skip
+    """gh#936: green, not a draft, on `feat/batch-b1` after the dispatch — and still
+    never merged, because a branch name is not an identity."""
+    _pr_open(world, tmp_path, **kw)
+    sleeps: list[float] = []
+
+    def _stop_after_three(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop_after_three)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    assert isinstance(result.exception, _StopError), result.output
+    assert len(world.passes) >= 3  # type: ignore[attr-defined]
+    assert world.merged == [] and not [c for c in world.calls if c.startswith("pr_merge")]
+    assert _lines(result.output, "foreign") == [
+        f"foreign b1: PR #101 on feat/batch-b1 is not this batch's: {reason}; it is never merged"
+    ]
+
+
+def test_an_allow_listed_author_in_triage_yaml_is_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.config = {"pr_authors": ["fr-bot"]}
+    _pr_open(world, tmp_path, author="fr-bot")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(101, "sha-101", "squash")]
+
+
+def test_an_untrusted_archive_pr_is_never_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _merged(world, tmp_path, events=closeout)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"], cross_repo=True)
+    world.pr(202, "chore/closeout-feat-batch-b1", [], author="mallory")
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    _drive(tmp_path, "--once", "--yes")
+    assert world.merged == []
+
+
 def test_a_pr_behind_its_base_is_updated_then_merged_on_a_later_pass(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
@@ -804,6 +876,81 @@ def test_recollect_goes_through_the_forge_seam(
     triage_batch_cmd.recollect(Scope(kind="repo", target=REPO), tmp_path)
     assert forge.called("list_issues")
     assert load_facts(tmp_path / "facts.json").repos == [REPO]
+
+
+def _closed_world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    from tests.unit.triage_fixtures import FakeForge
+
+    (tmp_path / "judgements.yaml").write_text(
+        'schema: 1\ntiers: [{n: 1, title: T}]\nissues:\n  "super-fr#5": {tier: 1}\n',
+        encoding="utf-8",
+    )
+    forge = FakeForge(
+        issues={REPO: []},
+        prs={REPO: []},
+        closed={
+            (REPO, 5): {
+                "number": 5,
+                "title": "done",
+                "body": "",
+                "labels": [],
+                "state": "CLOSED",
+                "url": f"https://github.com/{REPO}/issues/5",
+                "closedAt": "2026-09-20T10:00:00Z",
+            }
+        },
+    )
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    return forge
+
+
+def test_recollect_carries_a_known_closed_issue_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.triage.model import Scope, load_facts
+
+    forge = _closed_world(tmp_path, monkeypatch)
+    scope = Scope(kind="repo", target=REPO)
+    triage_batch_cmd.recollect(scope, tmp_path)
+    assert len(forge.called("view_issue")) == 1
+    assert "collect: 1 issue viewed, 0 carried over" in capsys.readouterr().out
+
+    triage_batch_cmd.recollect(scope, tmp_path)
+    assert len(forge.called("view_issue")) == 1  # no second view
+    assert "collect: 0 issues viewed, 1 carried over" in capsys.readouterr().out
+    assert [i.state for i in load_facts(tmp_path / "facts.json").issues] == ["closed"]
+
+
+def test_a_merged_batch_stays_merged_after_its_members_are_carried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.batch import batch_pr, derive_batch_stage
+    from fr.triage.model import Batch, DispatchEvent, Scope, load_facts
+
+    from tests.unit.triage_fixtures import _pr_closing
+
+    forge = _closed_world(tmp_path, monkeypatch)
+    merged = _pr_closing(owner="derio-net", name="super-fr", number=5, pr_number=9)
+    # A batch PR is attributed only from the repo itself by an allowed author
+    # (gh#936): the captured record carries neither, so give it the collector's.
+    merged.update(
+        state="MERGED", headRefName="batch/b1", createdAt=NOW.isoformat(),
+        mergedAt=NOW.isoformat(), author={"login": forge.viewer}, isCrossRepository=False,
+    )  # fmt: skip
+    forge.prs[REPO] = [merged]
+    scope = Scope(kind="repo", target=REPO)
+    triage_batch_cmd.recollect(scope, tmp_path)
+    triage_batch_cmd.recollect(scope, tmp_path)
+    assert len(forge.called("view_issue")) == 1  # the second pass carried #5
+    facts = load_facts(tmp_path / "facts.json")
+    dispatch = DispatchEvent(
+        kind="dispatch", at=NOW - timedelta(days=1), runner="r", handle="h", branch="batch/b1"
+    )
+    batch = Batch(id="b1", title="t", ids=["super-fr#5"], events=[dispatch])
+
+    assert [p.number for p in facts.issues[0].prs] == [9]  # its link recomputed this pass
+    assert (pr := batch_pr(batch, facts)) is not None and pr.number == 9
+    assert derive_batch_stage(batch, facts) == "merged"
 
 
 # ------------------------------------------------- kill-safety (R6, Test Plan 5)
@@ -1256,11 +1403,12 @@ def _flaky_collect(
     as a stalled-then-dropped `gh` read does; later calls write the world's facts."""
     calls: list[int] = []
 
-    def _collect_into(scope: Any, target: Path) -> None:
+    def _collect_into(scope: Any, target: Path, **_: Any) -> Any:
         calls.append(1)
         if len(calls) <= failures:
             raise ForgeError(message)
         (target / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+        return None, target / "facts.json", CollectStats()
 
     monkeypatch.setattr(triage_batch_cmd, "recollect", REAL_RECOLLECT)
     monkeypatch.setattr(triage_batch_cmd, "collect_into", _collect_into)

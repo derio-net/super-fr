@@ -20,6 +20,7 @@ from fr.triage.batch import (
     batch_workflow,
     check_open_membership,
     derive_batch_stage,
+    foreign_batch_prs,
     is_open,
     save_batches,
 )
@@ -31,6 +32,7 @@ from fr.triage.model import (
     Issue,
     Judgements,
     PullRequest,
+    TriageConfig,
     load_judgements,
 )
 from fr.triage.stage import derive_stage
@@ -80,6 +82,8 @@ def _pr(
     head: str = BRANCH,
     repo: str = REPO,
     created: str | None = None,
+    author: str | None = "operator",
+    cross_repo: bool | None = False,
 ) -> PullRequest:
     return PullRequest(
         repo=repo,
@@ -90,6 +94,8 @@ def _pr(
         url=f"https://github.com/{repo}/pull/{number}",
         head_ref=head,
         created_at=created,
+        author=author,
+        cross_repo=cross_repo,
     )
 
 
@@ -105,7 +111,14 @@ def _issue(number: int, *, state: str = "open", prs: list[PullRequest] = (), lab
     )
 
 
-def _facts(issues: list[Issue], *, prs: list[PullRequest] = (), batch_prs=()) -> Facts:
+def _facts(
+    issues: list[Issue],
+    *,
+    prs: list[PullRequest] = (),
+    batch_prs=(),
+    viewer: str | None = "operator",
+    config: dict[str, Any] | None = None,
+) -> Facts:
     return Facts(
         schema=3,
         scope="derio-net--super-fr",
@@ -115,6 +128,8 @@ def _facts(issues: list[Issue], *, prs: list[PullRequest] = (), batch_prs=()) ->
         issues=issues,
         prs=list(prs),
         batch_prs=list(batch_prs),
+        viewer=viewer,
+        config={REPO: TriageConfig.model_validate(config)} if config is not None else {},
     )
 
 
@@ -447,6 +462,70 @@ def test_an_unlinked_open_pr_on_the_branch_is_found_in_facts_prs() -> None:
 def test_batch_prs_find_a_merged_pr_with_no_closes_lines_and_give_partial() -> None:
     facts = _facts([_issue(577), _issue(575)], batch_prs=[_pr(40, "MERGED")])
     assert _stage([_dispatch()], facts) == "partial"
+
+
+# gh#936: a batch PR is one from this repository, by an allowed author. A head
+# branch NAME is chosen by whoever opens the PR, a fork included, so the name
+# alone never attributes a PR the unattended driver would then merge.
+
+
+def test_a_fork_pr_on_the_batch_branch_is_not_the_batch_pr() -> None:
+    fork = _pr(80, "OPEN", cross_repo=True)
+    facts = _facts([_issue(577, prs=[fork]), _issue(575)], prs=[fork])
+    assert _stage([_dispatch()], facts) == "dispatched"
+
+
+def test_a_foreign_author_pr_on_the_batch_branch_is_not_the_batch_pr() -> None:
+    foreign = _pr(81, "OPEN", author="mallory")
+    facts = _facts([_issue(577), _issue(575)], prs=[foreign])
+    assert _stage([_dispatch()], facts) == "dispatched"
+
+
+def test_an_own_author_pr_is_the_batch_pr_and_author_case_does_not_matter() -> None:
+    own = _pr(82, "OPEN", author="Operator")
+    facts = _facts([_issue(577), _issue(575)], prs=[own])
+    batch = _one(_judgements(_batch(events=[_dispatch()])))
+    assert batch_pr(batch, facts) == own
+
+
+def test_a_foreign_pr_never_outranks_the_batchs_own_pr() -> None:
+    own, foreign = _pr(82, "OPEN"), _pr(90, "OPEN", author="mallory")
+    facts = _facts([_issue(577, prs=[own]), _issue(575)], prs=[foreign])
+    batch = _one(_judgements(_batch(events=[_dispatch()])))
+    assert batch_pr(batch, facts) == own
+
+
+def test_the_configured_allow_list_replaces_the_authenticated_user() -> None:
+    bot, me = _pr(83, "OPEN", author="fr-bot"), _pr(84, "OPEN", author="operator")
+    batch = _one(_judgements(_batch(events=[_dispatch()])))
+    facts = _facts([_issue(577), _issue(575)], prs=[bot], config={"pr_authors": ["FR-Bot"]})
+    assert batch_pr(batch, facts) == bot
+    facts = _facts([_issue(577), _issue(575)], prs=[me], config={"pr_authors": ["fr-bot"]})
+    assert batch_pr(batch, facts) is None
+
+
+@pytest.mark.parametrize(
+    ("author", "cross_repo", "viewer"),
+    [(None, False, "operator"), ("operator", None, "operator"), ("operator", False, None)],
+    ids=["author-unread", "origin-unread", "no-authenticated-user"],
+)
+def test_an_identity_that_was_never_read_is_not_trusted(
+    author: str | None, cross_repo: bool | None, viewer: str | None
+) -> None:
+    pr = _pr(85, "OPEN", author=author, cross_repo=cross_repo)
+    facts = _facts([_issue(577), _issue(575)], prs=[pr], viewer=viewer)
+    assert _stage([_dispatch()], facts) == "dispatched"
+
+
+def test_foreign_batch_prs_name_each_open_refused_pr_with_its_reason() -> None:
+    fork = _pr(80, "OPEN", cross_repo=True)
+    foreign = _pr(81, "OPEN", author="mallory")
+    closed = _pr(79, "CLOSED", author="mallory")  # nothing left to refuse
+    own = _pr(82, "OPEN")
+    facts = _facts([_issue(577, prs=[own]), _issue(575)], prs=[fork, foreign, closed])
+    batch = _one(_judgements(_batch(events=[_dispatch()])))
+    got = {(f.pr.number, f.reason) for f in foreign_batch_prs(batch, facts)}
+    assert got == {(80, "opened from a fork"), (81, "by mallory, not an allowed author")}
 
 
 # Review r2p-f1: a redispatch after an abandoned PR. Only a PR created at or

@@ -32,12 +32,11 @@ from rich.markup import escape
 
 from fr.triage.batch import last_dispatch
 from fr.triage.check import classify
-from fr.triage.collect import PR_LIMIT, Forge, GhForge, collect_facts
+from fr.triage.collect import PR_LIMIT, CollectStats, Forge, GhForge, collect_facts_counted
 from fr.triage.errors import TriageError
 from fr.triage.model import (
     Facts,
     Judgements,
-    PullRequest,
     Scope,
     issue_key,
     load_facts,
@@ -166,7 +165,7 @@ def collect_command(
     """Read the forge and write facts.json for the scope."""
     scope = _scope(repo, org)
     try:
-        facts, out = collect_into(scope, state_dir(scope, dir_override), pr_limit=pr_limit)
+        facts, out, _ = collect_into(scope, state_dir(scope, dir_override), pr_limit=pr_limit)
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
@@ -175,12 +174,17 @@ def collect_command(
     console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
 
 
-def collect_into(scope: Scope, target_dir: Path, *, pr_limit: int = PR_LIMIT) -> tuple[Facts, Path]:
+def collect_into(
+    scope: Scope, target_dir: Path, *, pr_limit: int = PR_LIMIT, carry: bool = False
+) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
 
     `collect` and the wave driver's every pass share it (wave-driver §B), so a
-    driver pass reads the forge exactly as `fr triage collect` does. Raises
-    `TriageError` on a refusal; writes nothing then.
+    driver pass reads the forge exactly as `fr triage collect` does. With
+    *carry* (the driver's passes) a judged issue the previous facts.json for
+    this scope holds closed is carried over instead of viewed again (gh#911);
+    `fr triage collect` never carries. Returns the stats of single-issue reads.
+    Raises `TriageError` on a refusal; writes nothing then.
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
@@ -194,35 +198,39 @@ def collect_into(scope: Scope, target_dir: Path, *, pr_limit: int = PR_LIMIT) ->
         for b in (loaded.batches if loaded else [])
         if b.events and b.events[-1].kind != "cancel" and (event := last_dispatch(b)) is not None
     ]
-    facts = collect_facts(
+    previous = _previous_facts(target_dir / "facts.json", scope)
+    facts, stats = collect_facts_counted(
         make_forge(),
         scope,
         now=datetime.now(UTC),
         judged=judged,
         batch_branches=branches,
-        known_batch_prs=_previous_batch_prs(target_dir / "facts.json"),
+        known_batch_prs=previous.batch_prs if previous else [],
         pr_limit=pr_limit,
+        carried=[i for i in previous.issues if i.state == "closed"] if previous and carry else (),
     )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
     out.write_text(
         json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    return facts, out
+    return facts, out, stats
 
 
-def _previous_batch_prs(path: Path) -> list[PullRequest]:
-    """The previous collect's `batch_prs`; none when there is no readable facts.json.
+def _previous_facts(path: Path, scope: Scope) -> Facts | None:
+    """The previous collect's facts for *scope*; None when there is no usable file.
 
-    Only an optimisation (review r2p-f3): unreadable or older-schema facts
-    just mean every dispatched batch is looked up again.
+    Only an optimisation (review r2p-f3, gh#911): a missing, unreadable,
+    older-schema or other-scope facts.json just means every dispatched batch is
+    looked up and every judged closed issue viewed again.
     """
     if not path.exists():
-        return []
+        return None
     try:
-        return load_facts(path).batch_prs
+        facts = load_facts(path)
     except TriageError:
-        return []
+        return None
+    return facts if facts.scope == scope.name and facts.kind == scope.kind else None
 
 
 def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, Judgements]:

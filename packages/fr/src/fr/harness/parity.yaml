@@ -63,7 +63,13 @@ surfaces:
           on 1.18.32 through the project-local copy (acceptance row
           opencode-isolation-enforcement); the delivered copy is the same
           module, and only its load path is new.
-      hermes: {state: enforced}
+      hermes:
+        state: partial
+        scope_note: >-
+          the `pre_tool_call` hook (.hermes/config.snippet.yaml) gates
+          `write_file` and `patch` only; `terminal`/`execute_code` writes
+          reach only `fr-isolation-guard.sh`, which sees git/gh mutations
+          alone — a shell redirect into the base clone is not gated (#561)
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
@@ -204,8 +210,15 @@ surfaces:
               transcript is — the host-side rule refuses it inside the container
           external: {state: enforced, scope_note: "harness and fr share the container, and its transcript"}
       opencode:
-        state: advisory
-        scope_note: "no operator-question tool exists on OpenCode — the gate cannot mechanically block; the measured failure of #436 instance 2"
+        state: partial
+        scope_note: >-
+          verified in fixture tests, not yet live: `fr run resolve` reads the
+          `question` tool's parts in the run session of opencode.db
+          (tests/unit/test_run_observed_opencode.py,
+          test_run_observed_gate_opencode.py) and refuses a gate with no
+          answered round. Stays `partial` until the post-merge acceptance row
+          `opencode-observe-take10-rerun` is run live; without the plugin's
+          session id the gate is unobserved and `answered_by` must be stated.
       hermes:
         state: advisory
         scope_note: delegate_task has no operator-question primitive — the gate is prose only
@@ -227,8 +240,16 @@ surfaces:
               transcript is — the host-side rule refuses it inside the container
           external: {state: enforced, scope_note: "harness and fr share the container, and its transcript"}
       opencode:
-        state: advisory
-        scope_note: "no operator-question tool fr can read on OpenCode — `--answered-by operator` is recorded as stated; the fold still refuses a fix that does not carry it"
+        state: partial
+        scope_note: >-
+          `--answered-by operator` is verified against the `question` parts in
+          the run session's opencode.db where fr can read them (fixture tests
+          of the guard itself: tests/unit/test_journal_operator_guard_opencode.py
+          — refused with no answered round since the out-of-scope record,
+          accepted with one; the round reader:
+          tests/unit/test_run_observed_opencode.py); until the post-merge row
+          `opencode-observe-take10-rerun` runs live it stays `partial`, and an
+          unreadable store records the claim as stated
       hermes:
         state: advisory
         scope_note: delegate_task has no operator-question primitive — `--answered-by operator` is recorded as stated; the fold still refuses a fix that does not carry it
@@ -250,8 +271,13 @@ surfaces:
               transcript is — the host-side rule refuses it inside the container
           external: {state: enforced, scope_note: "harness and fr share the container, and its transcript"}
       opencode:
-        state: advisory
-        scope_note: "no dispatch reader for OpenCode sessions — `reviewer=<agent-id>` is recorded as claimed, with a warning; the spec-journal review and findings checks still hold"
+        state: partial
+        scope_note: >-
+          `reviewer=<agent-id>` is checked against the `task` parts of the run
+          session in opencode.db (a tiered `fr-spec-reviewer-hard` counts;
+          fixture tests tests/unit/test_run_observed_resolve_opencode.py).
+          Stays `partial` until the post-merge row
+          `opencode-observe-take10-rerun` runs live
       hermes:
         state: advisory
         scope_note: no dispatch reader for delegate_task — `reviewer=<agent-id>` is recorded as claimed, with a warning; the spec-journal review and findings checks still hold
@@ -288,9 +314,10 @@ surfaces:
           external: {state: enforced, scope_note: "harness and fr share the container, and its database"}
         scope_note: >-
           `bash` tool parts in opencode.db, status completed and exit 0, in a
-          top-level session (a `task` subagent is a child session). No session
-          id reaches fr, so ANY top-level session active since the unit opened
-          counts, not only this one. Live-verified 2026-09-26 on 1.18.32 (a
+          top-level session (a `task` subagent is a child session). Pinned to
+          the run session when the plugin exports its id
+          (`run-session-identity`); without it ANY top-level session active
+          since the unit opened counts, as before. Live-verified 2026-09-26 on 1.18.32 (a
           bash-redirect log matched, a write-tool log did not). A suite the
           long-command rule detached with `&` is windowed until the first later
           command of the orchestrator's that names the log prints its `exit=N`
@@ -326,11 +353,13 @@ surfaces:
           in the subagent file `attribute_dispatches` pairs to the holder or
           reviewer, or in the orchestrator's own stream
       opencode:
-        state: advisory
+        state: partial
         scope_note: >-
-          the session store is read for `tests=`, but no file-read detection
-          exists yet, so the image-read and script checks record as unobserved;
-          the file checks apply
+          `read` and `bash` parts of the owing session (the reviewer's or
+          holder's child, else the run session) in opencode.db witness the
+          image reads and the capture script (fixture tests in
+          tests/unit/test_run_evidence_visual.py). Stays `partial` until the
+          post-merge row `opencode-observe-take10-rerun` runs live
       hermes:
         state: advisory
         scope_note: >-
@@ -385,13 +414,35 @@ surfaces:
           "HELD BY agent ses_… (opencode, <model>)" with the tier agent
           recorded. Still partial, not enforced: the claim is fail-open, so an
           `fr` on OpenCode's PATH too old to know `--open-unit` leaves the unit
-          unclaimed until the call returns, and nothing refuses that.
+          unclaimed until the call returns, and nothing refuses that. The
+          claim's session is now the TOP-LEVEL run session (`run-session-identity`):
+          a claim made from a child still lands on the run's own record
+          (fixture tests: tests/unit/test_run_observed_resolve_opencode.py).
       hermes:
         state: partial
         scope_note: >-
           the record and the refusal are the same harness-neutral CLI, but when
           `delegate_task` yields its handle has not been observed live, so
           nothing here claims the holder is nameable in flight
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: run-session-identity
+    kind: interaction
+    summary: Which session is "the run's" (spec 2026-10-02-opencode-observe-2 §B). `fr run start`/`advance` record the TOP-LEVEL session of the calling process, and every gate that reads a transcript or session store (`operator-gate`, `spec-review-independence`, `visual-evidence`, `deliver-tests-provenance`) reads that session — never a child's, even when a subagent runs the command. Claude Code names its session in the environment; OpenCode's super-fr plugin exports it into `bash` (`FR_OPENCODE_SESSION_ID`, via `shell.env`) and fr walks `parent_id` up to the root. Not a hook, so `fr harness parity` observes nothing for it and `session.ts` carries no parity marker.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode:
+        state: partial
+        scope_note: >-
+          verified in fixture tests, not yet live (tests/unit/test_run_observed_opencode.py,
+          test_run_observed_resolve_opencode.py); a plugin older than this
+          release exports no id, and the gates then read as unobserved or
+          fall back to the unscoped reading. Stays `partial` until the
+          post-merge row `opencode-observe-take10-rerun` runs live
+      hermes:
+        state: absent
+        scope_note: no session reader exists for Hermes, so no gate observes a session there
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
@@ -435,7 +486,10 @@ surfaces:
         state: partial
         scope_note: >-
           implemented; $0 for free models, estimated for Copilot-routed ones;
-          the live walk that verifies it is owed (phase 4)
+          the live walk that verifies it is owed (phase 4). The session fr
+          records for a run is now the top-level run session
+          (`run-session-identity`), so the usage window follows the same
+          session the gates read
         modes:
           host-worktree: {state: partial, scope_note: "read from the host's SQLite session store; live walk owed"}
           devcontainer:

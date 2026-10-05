@@ -103,6 +103,38 @@ def is_lockfile(path: str) -> bool:
     return any(fnmatch.fnmatch(name, g) for g in LOCKFILE_NAMES)
 
 
+# A quoted bare version, `"5.2.4"`: the quotes keep `"a>=5.2.4"` from matching.
+_QUOTED_VERSION = re.compile(r'"(\d+\.\d+\.\d+)"')
+
+
+def only_versions_bumped(pairs: Iterable[tuple[str, str]]) -> bool:
+    """Whether every (before, after) file pair differs only where ONE quoted
+    version moved up to ONE newer one, the same move on every changed line: the
+    shape of a release commit (gh#927), read with no version block declared.
+
+    Line for line, as `only_version_changed`. No change at all, a downgrade, or
+    two different moves (two packages bumped) is not a release.
+    """
+    moves: set[tuple[str, str]] = set()
+    for before, after in pairs:
+        was, now = before.splitlines(), after.splitlines()
+        if len(was) != len(now):
+            return False
+        for b, a in zip(was, now, strict=True):
+            if b == a:
+                continue
+            olds, news = _QUOTED_VERSION.findall(b), _QUOTED_VERSION.findall(a)
+            if len(olds) != 1 or len(news) != 1:
+                return False
+            if b.replace(f'"{olds[0]}"', f'"{news[0]}"') != a:
+                return False
+            moves.add((olds[0], news[0]))
+    if len(moves) != 1:
+        return False
+    ((old, new),) = moves
+    return is_above(new, old)
+
+
 def only_version_changed(base: str, head: str, old: str, new: str) -> bool:
     """Whether *head* differs from *base* only where the quoted version *old*
     became *new* (spec §3.F step 3, review r3-f2).

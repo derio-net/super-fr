@@ -372,6 +372,20 @@ Claude Code's markers, and `fr` used to believe them. It now names the
 harness nearest to it in its own process tree, and records a session only
 when that harness owns the session variable it read.
 
+That session is also what lets `fr` check a few things on OpenCode that it
+could only take on trust before. The plugin hands the calling session's
+identifier to every shell command, and `fr` climbs from it to the top-level
+session, the run's own, because a child that runs the command is still acting
+for the run. From that session `fr` reads what the gates ask about: whether
+the operator really answered the questions you put to them through OpenCode's
+question tool (a dismissed question is no answer), whether the reviewer you
+name is an agent the run dispatched, and whether the screenshots a unit owes
+were opened by the session that owes them. Where it cannot read the session
+(an older plugin, a database it cannot open) it does not guess. It asks you to
+say who answered the gate, there is no default any more, and it reports your
+word as a claim: "cleared by the agent, as claimed, unobserved" rather than
+the flat sentence it prints when it did watch.
+
 One more limit on what the record may say: a model is written down only when
 the tool has *seen* it. A tier binding says which model a dispatched phase
 *should* get, and that is a promise, not an observation. For a while the tool
@@ -581,12 +595,17 @@ structured question prompt, that prompt call is itself what pauses the run.
 Elsewhere `fr-goal` cannot force a pause the same way: it puts the numbered
 round in its reply and ends the turn, and `fr run advance` says so loudly
 there rather than behaving as though the gate had fired silently. Either way
-the record travels with the run: resolving the gate types who actually
-answered it — `agent` by default, `operator` only when typed deliberately
-once the operator genuinely answered — and `fr run gates <run-id>` prints
-that provenance, so a reviewer reading the delivered pull request can tell a
-human-answered round from one the agent had to clear on its own, rather than
-trust silence.
+the record travels with the run, and who answered is observed rather than
+claimed wherever fr can see it. Where fr can read the session transcript,
+resolving the gate looks for an answered question since the gate blocked:
+one found records `operator`, whatever the agent typed. None found refuses
+the resolve, unless the agent clears the gate on the record, saying why no
+decision was needed (`--no-questions --reason`). That records `agent` and
+writes the reason to the spec journal. Only where fr cannot observe the
+session does the typed claim stand (`agent` unless stated), and it is marked
+unverified. `fr run gates <run-id>` prints that provenance, so a reviewer
+reading the delivered pull request can tell a human-answered round from one
+the agent cleared on its own, rather than trust silence.
 
 ### 3. Define how success will be proved (`spec-review` and acceptance tests)
 
