@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fr.triage.batch import QueueEntry
+from fr.triage.batch import ForeignPr, QueueEntry
 from fr.triage.batch_drive import (
     CLOSEOUT_FALLBACK,
     Action,
@@ -233,6 +233,38 @@ def test_a_failing_check_warns_once_per_head_sha() -> None:
     assert again.actions == ()
 
 
+def _foreign(n: int, reason: str = "opened from a fork") -> ForeignPr:
+    return ForeignPr(pr=_pr("x", n, head_ref="feat/batch-x"), reason=reason)
+
+
+def test_a_foreign_pr_on_a_batch_branch_is_reported_once_and_never_merged() -> None:
+    """gh#936: the PR is reported (the key is what the driver remembers), never merged."""
+    b = _dispatched("x", 1)
+    foreign = {"x": (_foreign(80), _foreign(81, "by mallory, not an allowed author"))}
+    first = drive_pass(_snap([b], {"x": "dispatched"}, foreign=foreign))
+    assert _kinds(first.actions) == [("foreign", "x"), ("foreign", "x")]
+    assert [(a.pr, a.head) for a in first.actions] == [
+        (80, f"foreign:{REPO}#80"),
+        (81, f"foreign:{REPO}#81"),
+    ]
+    assert first.actions[0].detail == (
+        "PR #80 on feat/batch-x is not this batch's: opened from a fork; it is never merged"
+    )
+    again = drive_pass(
+        _snap([b], {"x": "dispatched"}, foreign=foreign, warned=frozenset({f"foreign:{REPO}#80"}))
+    )
+    assert [a.pr for a in again.actions] == [81]
+    assert "merge" not in [a.kind for a in [*first.actions, *again.actions]]
+
+
+def test_a_foreign_pr_is_reported_only_for_a_selected_batch() -> None:
+    b = _dispatched("x", 1)
+    got = drive_pass(
+        _snap([b], {"x": "dispatched"}, foreign={"x": (_foreign(80),)}, selected=frozenset())
+    )
+    assert got.actions == ()
+
+
 def test_merges_follow_the_merge_order() -> None:
     batches = [_dispatched("b", 1, order=2), _dispatched("a", 2, order=1)]
     got = drive_pass(_snap(batches, {"a": "pr-open", "b": "pr-open"}))
@@ -335,8 +367,37 @@ def test_an_archived_batch_is_not_closed_out() -> None:
     snap = _snap([b], {"old": "merged"}, released=frozenset({"old"}),
                  archived=frozenset({"old"}))  # fmt: skip
     got = drive_pass(snap)
-    assert got.actions == ()
+    # recorded once, so no later pass re-probes it and the board sees it (gh#899, gh#900)
+    assert [(a.kind, a.batch, a.pr, a.archived) for a in got.actions] == [("adopt", "old", None, 0)]
     assert got.summary.closing == 0 and got.summary.done
+
+
+def test_an_open_hand_opened_closeout_pr_is_adopted_not_doubled() -> None:
+    """gh#912: a close-out started by hand left its PR open on
+    `chore/closeout-<batch branch>`; the driver records it instead of starting a
+    second session, due or not, and the batch is still closing."""
+    b = _merged("x", 1)
+    hand = _live(895, "h895", head_ref="chore/closeout-feat-batch-x")
+    for released in (frozenset(), frozenset({"x"})):
+        got = drive_pass(_snap([b], {"x": "merged"}, released=released, adopted={"x": hand}))
+        assert [(a.kind, a.pr, a.archived) for a in got.actions] == [("adopt", 895, None)]
+        assert got.summary.closing == 1
+
+
+def test_a_merged_hand_opened_closeout_pr_finishes_the_batch() -> None:
+    b = _merged("x", 1)
+    hand = _live(895, "", state="MERGED", head_ref="chore/closeout-feat-batch-x")
+    got = drive_pass(_snap([b], {"x": "merged"}, adopted={"x": hand}))
+    assert [(a.kind, a.pr, a.archived) for a in got.actions] == [("adopt", 895, 895)]
+    assert got.summary.closing == 0 and got.summary.done
+
+
+def test_a_recorded_closeout_is_never_adopted() -> None:
+    event = {"kind": "closeout", "at": "2026-10-02T11:00:00Z", "runner": "fake", "handle": "h"}
+    b = _merged("x", 1, events=[event])
+    hand = _live(895, "h895", head_ref="chore/closeout-feat-batch-x")
+    snap = _snap([b], {"x": "merged"}, adopted={"x": hand}, archived=frozenset({"x"}))
+    assert all(a.kind != "adopt" for a in drive_pass(snap).actions)
 
 
 def test_a_merged_batch_without_a_wave_is_still_closed_out() -> None:
@@ -419,7 +480,7 @@ def _closed(bid: str, n: int, *, archive: str | None = None, run: str | None = N
 
 
 def _archive(n: int, head_ref: str, **kw: Any) -> LivePr:
-    return _live(n, f"h{n}", head_ref=head_ref, **kw)
+    return _live(n, f"h{n}", head_ref=head_ref, trusted=kw.pop("trusted", True), **kw)
 
 
 def test_an_attributed_ready_green_archive_pr_is_merged() -> None:
@@ -455,6 +516,23 @@ def test_attribution_by_head_or_by_the_run_file() -> None:
     assert attributed(by_branch, b, event)  # type: ignore[arg-type]
     assert attributed(by_file, b, event)  # type: ignore[arg-type]
     assert not attributed(stray, b, event)  # type: ignore[arg-type]
+
+
+def test_an_untrusted_archive_pr_is_never_attributed_or_merged() -> None:
+    """gh#936: a fork or a foreign author can name a head `chore/closeout-<branch>`
+    and touch the run file; neither attributes a PR whose identity is not trusted."""
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    event = b.events[-1]
+    by_head = _archive(1, "chore/closeout-feat-batch-x", trusted=False)
+    by_file = _archive(2, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), trusted=False)
+    assert not attributed(by_head, b, event)  # type: ignore[arg-type]
+    assert not attributed(by_file, b, event)  # type: ignore[arg-type]
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (by_head, by_file)}))
+    assert "archive" not in [a.kind for a in got.actions]
+
+
+def test_a_live_pr_is_untrusted_unless_said_otherwise() -> None:
+    assert LivePr(number=1, state="OPEN", draft=False, head="h").trusted is False
 
 
 def test_a_merged_archive_pr_finishes_the_batch() -> None:
@@ -585,6 +663,14 @@ def test_settle_moves_a_merge_that_did_not_land_back_in_flight() -> None:
     assert got.summary.merged == 1
     settled = settle(got.summary, unlanded=1, held=1)
     assert (settled.in_flight, settled.merged, settled.pending, settled.closing) == (1, 0, 1, 0)
+
+
+def test_archived_evidence_wins_over_a_hand_pr_and_only_the_selection_is_adopted() -> None:
+    hand = _live(895, "h895", head_ref="chore/closeout-feat-batch-x")
+    x, y = _merged("x", 1), _merged("y", 2)
+    snap = _snap([x, y], {"x": "merged", "y": "merged"}, archived=frozenset({"x", "y"}),
+                 adopted={"x": hand}, selected=frozenset({"x"}))  # fmt: skip
+    assert [(a.kind, a.batch, a.archived) for a in drive_pass(snap).actions] == [("adopt", "x", 0)]
 
 
 # ------------------------------------------------------- the merge train (§A, §C)

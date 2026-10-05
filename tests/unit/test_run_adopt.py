@@ -666,7 +666,7 @@ def _drive_to_plan_step(wt: Path, shipped: Path, plan_dir: Path) -> None:
     for step in ("brainstorm", "spec-review"):
         assert _invoke(wt, shipped, ["run", "advance", "r-first"]).exit_code == 0
         extra = (
-            ["--emitted", f"spec={SPEC_REL}"]
+            ["--emitted", f"spec={SPEC_REL}", "--answered-by", "agent"]
             if step == "brainstorm"
             else spec_review_evidence(wt, SPEC_REL)
         )

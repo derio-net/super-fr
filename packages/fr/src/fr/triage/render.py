@@ -426,14 +426,14 @@ def _section(tier: str, chip: str, sev: str, title: str, desc: str, rows: list[s
 
 def _pr_row(pr: PullRequest, judgement: Judgement | None, order: int, collected_at: str) -> str:
     """Render an open PR with the forge's status, never an inferred status."""
-    checks = pr.checks
+    checks = pr.checks or {}
     if checks.get("fail", 0):
         ci_class, ci_symbol, ci_label = "fail", "✗", "fail"
     elif checks.get("pending", 0):
         ci_class, ci_symbol, ci_label = "pending", "●", "pending"
     else:
         ci_class, ci_symbol, ci_label = "pass", "✓", "pass"
-    merge = pr.merge_state
+    merge = pr.merge_state or "UNKNOWN"
     conflict = merge in {"DIRTY", "BLOCKED"} or pr.mergeable == "CONFLICTING"
     delivery = judgement.delivery if judgement and judgement.delivery else "unranked"
     delivery_note = judgement.delivery_note if judgement else ""

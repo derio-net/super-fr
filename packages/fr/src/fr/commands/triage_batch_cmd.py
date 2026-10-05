@@ -69,6 +69,7 @@ from fr.services import ServicesError, require_tracker
 from fr.services.resolve import resolve_services
 from fr.triage.batch import (
     CLOSED_OUT,
+    allowed_authors,
     batch_branch,
     batch_item_id,
     batch_pr,
@@ -79,6 +80,8 @@ from fr.triage.batch import (
     closeout_state,
     dependency_state,
     derive_batch_stage,
+    distrust,
+    foreign_batch_prs,
     last_dispatch,
     mixed_themes,
     pr_open_queue,
@@ -1192,13 +1195,17 @@ class ForgeReadError(Exception):
 def recollect(scope: Scope, target: Path) -> None:
     """Re-collect facts.json through the `Forge` seam, as `fr triage collect` does:
     every stage is derived from facts, so each pass starts here (wave-driver §B).
-    A forge that fails to answer raises `ForgeReadError`; any other refusal exits."""
+    Unlike `fr triage collect` it carries known-closed facts over from the
+    previous pass instead of viewing every settled judged issue again (gh#911),
+    and says what the pass cost. A forge that fails to answer raises
+    `ForgeReadError`; any other refusal exits."""
     try:
-        collect_into(scope, target)
+        _, _, stats = collect_into(scope, target, carry=True)
     except ForgeError as exc:
         raise ForgeReadError(str(exc), code=2) from exc
     except TriageError as exc:
         _fail(str(exc))
+    _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
 
 
 def ci_is_none(path: Path) -> bool:
@@ -1370,10 +1377,29 @@ def _parse_at(stamp: str | None) -> datetime | None:
     return parsed if parsed.tzinfo is not None else None
 
 
-def _live_head_prs(client: GhClient, repo: str, head: str) -> list[LivePr]:
-    """The PRs with head *head*, as the archive step reads them (merged ones too)."""
+def _closeout_head(batch: Batch) -> str:
+    """`chore/closeout-<batch branch with / as ->`: the close-out head only *batch*
+    can produce, from the branch it was last dispatched on."""
+    last = last_dispatch(batch)
+    return housekeeping_branch(last.branch if last else batch_branch(batch), None, None)
+
+
+def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[str]) -> list[LivePr]:
+    """The PRs with head *head*, as the archive step reads them (merged ones too),
+    each `trusted` only from *repo* itself by an *allowed* author (gh#936)."""
     out: list[LivePr] = []
     for rec in client.list_prs_by_head(repo, head):
+        author = rec.get("author")
+        login = author.get("login") if isinstance(author, dict) else None
+        cross = rec.get("isCrossRepository")
+        trusted = (
+            distrust(
+                str(login) if login else None,
+                cross if isinstance(cross, bool) else None,
+                allowed,
+            )
+            is None
+        )
         out.append(
             LivePr(
                 number=int(rec.get("number", 0)),
@@ -1385,6 +1411,7 @@ def _live_head_prs(client: GhClient, repo: str, head: str) -> list[LivePr]:
                 files=tuple(
                     str(f.get("path") if isinstance(f, dict) else f) for f in rec.get("files") or ()
                 ),
+                trusted=trusted,
             )
         )
     return out
@@ -1503,6 +1530,7 @@ class _Driver:
         merged_at: dict[str, datetime] = {}
         released: set[str] = set()
         archived: set[str] = set()
+        adopted: dict[str, LivePr] = {}
         archives: dict[str, tuple[LivePr, ...]] = {}
         due: list[Batch] = []
         try:
@@ -1512,7 +1540,7 @@ class _Driver:
                 view = client.pr_view(repo, e.pr.number)
                 verdict, failing = checks_verdict(
                     client.pr_required_checks(repo, e.pr.number),
-                    e.pr.checks,
+                    e.pr.checks or {},
                     ci_none=self._ci_none(repo),
                 )
                 live[e.batch.id] = LivePr(
@@ -1523,6 +1551,7 @@ class _Driver:
                     checks=verdict,
                     failing=failing,
                     head_ref=e.pr.head_ref,
+                    trusted=True,  # the queue holds `batch_pr`s only (gh#936)
                 )
             for b in chosen:
                 if stages[b.id] not in ("merged", "partial") or b.id not in repos:
@@ -1539,6 +1568,10 @@ class _Driver:
                     )  # fmt: skip
                     if self._archived(repo, merge):
                         archived.add(b.id)
+                        continue
+                    hand = self._hand_closeout(facts, repo, b)
+                    if hand is not None:
+                        adopted[b.id] = hand
                         continue
                     when = _parse_at(pr.merged_at if pr else None)
                     merged_at[b.id] = when or self._first_seen.setdefault(b.id, now)
@@ -1572,7 +1605,26 @@ class _Driver:
             warned=frozenset(self.warned),
             selected=frozenset(ids),
             archived=frozenset(archived),
+            adopted=adopted,
+            foreign={b.id: found for b in chosen if (found := tuple(foreign_batch_prs(b, facts)))},
         )
+
+    def _hand_closeout(self, facts: Facts, repo: str, batch: Batch) -> LivePr | None:
+        """The close-out PR started by hand for *batch*, merged first, else open: the
+        one on `chore/closeout-<batch branch>`, a head only this batch produces, the
+        attribution the archive step already trusts (gh#912). A closed one is
+        abandoned and attributes nothing. Only a `trusted` PR is adopted (gh#936):
+        batch branch names are predictable, and an adopted open PR is merged by the
+        archive step once green, so a fork's or a foreign author's never is."""
+        client, allowed = self.client(facts, repo), allowed_authors(repo, facts)
+        found = [
+            p for p in _live_head_prs(client, repo, _closeout_head(batch), allowed) if p.trusted
+        ]
+        for state in ("MERGED", "OPEN"):
+            pick = next((p for p in found if p.state == state), None)
+            if pick is not None:
+                return pick
+        return None
 
     def _reader(self, repo: str) -> Checkout:
         """The clone for a read: the checked one with --yes, else leniently opened
@@ -1628,6 +1680,7 @@ class _Driver:
         """Archive PR candidates: the open `chore/*` PRs collect read (with files and
         checks), plus any PR on the close-out's own heads, merged ones included."""
         client = self.client(facts, repo)
+        allowed = allowed_authors(repo, facts)
         out: dict[int, LivePr] = {}
         for pr in facts.prs:
             if (
@@ -1638,18 +1691,18 @@ class _Driver:
                 continue
             verdict, failing = checks_verdict(
                 client.pr_required_checks(repo, pr.number),
-                pr.checks,
+                pr.checks or {},
                 ci_none=self._ci_none(repo),
             )
             out[pr.number] = LivePr(
                 number=pr.number, state="OPEN", draft=pr.is_draft, head=pr.head_oid,
                 checks=verdict, failing=failing, head_ref=pr.head_ref, files=tuple(pr.files),
+                trusted=distrust(pr.author, pr.cross_repo, allowed) is None,
             )  # fmt: skip
-        last = last_dispatch(batch)
-        heads = {housekeeping_branch(last.branch if last else batch_branch(batch), None, None)}
+        heads = {_closeout_head(batch)}
         heads |= {event.archive} if event.archive else set()
         for head in sorted(heads):
-            for found in _live_head_prs(client, repo, head):
+            for found in _live_head_prs(client, repo, head, allowed):
                 if found.state != "OPEN" or found.number not in out:
                     out[found.number] = found
         return list(out.values())
@@ -1733,7 +1786,7 @@ class _Driver:
         repo = batch_repo(batch, facts)
         if action.kind in ("blocked", "held") or repo is None:
             return action.detail, False, in_flight
-        if action.kind == "warn":
+        if action.kind in ("warn", "foreign"):
             self.warned.add(action.head)
             return action.detail, False, in_flight
         if action.kind == "merge":
@@ -1751,6 +1804,15 @@ class _Driver:
             return outcome, did, in_flight
         if action.kind == "archive":
             return self._archive(action, facts, judgements, batch, repo), True, in_flight
+        if action.kind == "adopt":
+            self._append(
+                judgements, facts, batch,
+                CloseoutEvent(kind="closeout", at=_now_after(batch), runner="hand",
+                              handle=f"PR #{action.pr}" if action.pr else "archived",
+                              archive=_closeout_head(batch) if action.pr else None,
+                              archived=action.archived),
+            )  # fmt: skip
+            return action.detail, True, in_flight
         waits = sorted(d for d in batch.after if d in self._unlanded)
         if waits:  # the pass planned this dispatch on a merge that did not land (rg-1)
             self._held += 1

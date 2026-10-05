@@ -87,7 +87,7 @@ if TYPE_CHECKING:
 
     from fr.record.model import QuestionRounds, VisualEvidence
     from fr.run.telemetry import Round
-from fr.run.provenance import agent_cleared_gates, gates
+from fr.run.provenance import cleared_gates, gates
 from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.types import PHASE_TIERS
@@ -243,15 +243,13 @@ def _why_unobservable(what: str) -> str:
     """Why a gate could not observe `what` — the thing it reads from the
     transcript (`questions`, `subagent dispatches`, `commands`), so a gate
     never borrows another gate's noun (#815)."""
+    from fr.run.observed import why_unobservable
+
     try:
         harness = detect_harness(os.environ)
     except HarnessError:
         harness = None
-    if harness is None:
-        return "no harness detected"
-    if harness != "claude-code":
-        return f"fr has no transcript reader for {harness}'s {what}"
-    return "no readable transcript for this session"
+    return why_unobservable(harness, os.environ, what)
 
 
 TESTS_PROVENANCE_SURFACE = "deliver-tests-provenance"
@@ -436,7 +434,11 @@ def _capture_usage(
     from fr.usage.file import usage_path
 
     _remember(usage_path(repo_root, state.run))
-    path = capture(repo_root, state, at, os.environ, require_sessions=require_sessions)
+    # `ambient=True`: a step resolve's caller is the run's orchestrator, so its
+    # own session is evidence (spec 2026-10-02-opencode-observe-2 §C).
+    path = capture(
+        repo_root, state, at, os.environ, ambient=True, require_sessions=require_sessions
+    )
     if path is not None:
         _note_record_write(repo_root, path)
 
@@ -973,7 +975,8 @@ def _complete_step(
 
 def _gate_degradation_notice() -> str | None:
     """The loud degradation notice for a blocked `gate: operator` step (spec
-    §3.D.1), or `None` when the detected harness genuinely enforces it.
+    §3.D.1), or `None` when fr can observe who answers it here (Claude Code
+    with a readable transcript, OpenCode with an exported, readable session).
 
     Reads `os.environ` through `detect_harness` (never a hardcoded harness
     name) and the shipped matrix's `operator-gate` row through `load_matrix`
@@ -988,6 +991,7 @@ def _gate_degradation_notice() -> str | None:
     `fr.harness.HARNESSES` — a typo must not silently become an inference,
     so the caller surfaces it as a command error rather than guessing.
     """
+    from fr.run.observed import why_unobservable
     from fr.run.telemetry import operator_answered_since
 
     harness = detect_harness(os.environ)
@@ -995,23 +999,27 @@ def _gate_degradation_notice() -> str | None:
     surface = next(s for s in matrix.surfaces if s.id == "operator-gate")
     if harness is not None:
         hstate = surface.harnesses[harness]
-        # `enforced` is a claim about a MECHANISM — `resolve` verifying an
-        # answered question in the session transcript — so it holds only where
-        # that transcript can be read. Before 2026-09-21 (debug journal C1) it
-        # was a claim about a TOOL existing, nothing checked it, and this early
+        # Observed is a claim about a MECHANISM — `resolve` reading answered
+        # questions in the session (Claude Code's transcript, OpenCode's
+        # `question` parts) — so the notice is silent exactly where that read
+        # works, whatever the row's state. Before 2026-09-21 (debug journal C1)
+        # it was a claim about a TOOL existing, nothing checked it, and an early
         # return spared the one harness that skipped its gate the only warning.
         epoch = "1970-01-01T00:00:00+00:00"
-        if hstate.state == "enforced" and operator_answered_since(os.environ, epoch) is not None:
+        if operator_answered_since(os.environ, epoch) is not None:
             return None
-        if hstate.state == "enforced":
+        if hstate.state in ("enforced", "partial"):
+            # fr HAS a reader here, so the row's scope_note (which describes
+            # the verification) would be false — say why the read failed.
             detail = (
-                f"your harness ({harness}) enforces this gate by reading the session "
-                "transcript, which is not readable here — so this gate is advisory now"
+                f"your harness ({harness}) is verified by reading the session, but "
+                f"{why_unobservable(harness, os.environ, 'questions')} — so this gate "
+                "is advisory now"
             )
         else:
             detail = f"your harness ({harness}) does not enforce this gate (state: {hstate.state})"
-        if hstate.scope_note:
-            detail += f" — {hstate.scope_note}"
+            if hstate.scope_note:
+                detail += f" — {hstate.scope_note}"
     else:
         detail = (
             "your harness could not be detected (set FR_HARNESS to one of "
@@ -1019,9 +1027,14 @@ def _gate_degradation_notice() -> str | None:
         )
     return (
         f"gate: {detail}.\n"
-        "      Put the questions to the operator in your reply and STOP. Clearing this "
-        "gate without\n"
-        "      asking is recorded as `answered_by: agent` and reported in the delivered PR."
+        "      Put the questions to the operator (with your harness's question tool where "
+        "it has one) and STOP until they answer.\n"
+        "      fr cannot verify who answered this gate, so its resolve must say: "
+        "`answered_by: operator` (the operator answered) or `answered_by: agent` "
+        "(cleared without asking) — `--answered-by` on the flag form, an "
+        "`answered_by` evidence key in a record. There is no default."
+        # No braces in this notice: it precedes the JSON brief, which a harness
+        # finds by its first `{`.
     )
 
 
@@ -1196,7 +1209,7 @@ def _gate_provenance(
     step_id: str,
     record: StepRecord,
     *,
-    claimed: str,
+    claimed: AnsweredBy | None,
     no_questions: bool,
     reason: str | None,
     questions: QuestionRounds | None = None,
@@ -1217,8 +1230,10 @@ def _gate_provenance(
     - observed, none answered → REFUSED (exit 2), unless the bypass is explicit
       and on the record: `--no-questions --reason "…"` → `agent`, the reason
       written to the spec journal this resolve emits (when it emits one);
-    - not observable (another harness, no transcript) → the claim stands, as
-      before, and on Claude Code it says out loud that it could not verify.
+    - not observable (Hermes, no harness, an unreadable Claude Code transcript,
+      OpenCode without a session export or with an unreadable store) → a
+      stated claim is recorded as claimed, unverified, and says so out loud;
+      no claim is REFUSED (R10 — there is no default).
 
     `questions` is the declared round count (spec 2026-09-26 §3.C): observed
     answered rounds are checked against it by `question_rounds_refusal`, and a
@@ -1298,10 +1313,23 @@ def _gate_provenance(
             soft_wrap=True,
         )
         return "agent"
-    # Wherever the gate cannot observe — no harness, no readable transcript,
-    # or a harness fr has no question reader for (OpenCode, Hermes) — it says
-    # so on the record (§5.B.7, p2-r28); `advance` already told the last two
-    # that the gate is not enforced there, which is no reason to be quiet now.
+    if claimed is None:
+        # R10 (spec 2026-10-02 §F): there is no default. An unobserved gate with
+        # no claim is a question fr cannot answer for the caller, so it asks.
+        err_console.print(
+            f"[red]{step_id}: could not verify who answered this gate "
+            f"({_why_unobservable('questions')}) — pass `answered_by: operator` "
+            "(the operator answered) or `answered_by: agent` (cleared without asking): "
+            "`--answered-by operator|agent` on the flag form, "
+            "`evidence: {answered_by: …}` in a record.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # Wherever the gate cannot observe — no harness, an unreadable Claude Code
+    # transcript, OpenCode without a session export (FR_OPENCODE_SESSION_ID)
+    # or with an unreadable store, or Hermes, which has no question reader —
+    # it says so on the record (§5.B.7, p2-r28); `advance` already printed the
+    # degradation notice there, which is no reason to be quiet now.
     _note_unobserved("operator-gate")
     _record_round_two(repo_root, step_id, questions, spec_for_reason)
     # p2-r2: only `rounds: 2` writes anything (`_record_round_two`); `rounds: 1`
@@ -1320,7 +1348,7 @@ def _gate_provenance(
         f"(evidence: unobserved=operator-gate).{declared}[/yellow]",
         soft_wrap=True,
     )
-    return claimed  # type: ignore[return-value]  # validated by the caller
+    return claimed
 
 
 def _record_round_two(
@@ -1854,7 +1882,19 @@ def _verified_evidence(
     if derives:
         assert review_journal is not None and target is not None
         slug, entries = review_journal
-        derive("findings", lambda: _closed_findings_witness(key, slug, entries, target))
+        findings_target = target
+        returned_phase = target.phase if "reviewer" in step.evidence else None
+
+        def findings_witness() -> str:
+            if returned_phase is not None:
+                # R7: only a step that names a dispatched reviewer has a return
+                # that could owe a review-findings block.
+                _check_returned_findings(
+                    key, entries, returned_phase, since, offered.get("reviewer")
+                )
+            return _closed_findings_witness(key, slug, entries, findings_target)
+
+        derive("findings", findings_witness)
     if len(refused) > 1:
         err_console.print(
             f"{key}: refused — {len(refused)} derived witnesses failed: {', '.join(refused)}",
@@ -2084,13 +2124,16 @@ def _verify_reviewer(
 
     A spec review (`target.phase is None`, 2026-09-24 spec §E) has no
     implementer to exclude — the spec's author is the orchestrator, which has
-    no agent id and so can never pass the dispatch check. On OpenCode and
-    Hermes there is no dispatch reader, so the id is recorded as claimed.
+    no agent id and so can never pass the dispatch check. Dispatches are read
+    through `fr.run.observed` — Claude Code's transcript, OpenCode's child
+    sessions (once the super-fr plugin exports the run session); on Hermes, or
+    wherever the session cannot be read, the id is recorded as claimed.
     When the step names its reviewer (`expected_agent`, spec-review's
     `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
-    is refused (review p4-f2) — qualified or bare spelling both match.
+    is refused (review p4-f2) — every spelling `agent_name` folds matches.
     """
-    from fr.run.telemetry import subagent_dispatch_since
+    from fr.run.observed import ChildDispatch, observed_session
+    from fr.run.telemetry import parse_timestamp
 
     phase = target.phase
     # The review unit's own holders are reviewers by construction: a reviewer
@@ -2116,8 +2159,17 @@ def _verify_reviewer(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    observed = subagent_dispatch_since(os.environ, agent_id, opened) if opened else None
-    if observed and observed.agent_type == PHASE_EXECUTOR_AGENT:
+    # Through the session protocol (spec 2026-10-02-opencode-observe-2 §A):
+    # the dispatch named by the id, among those since the review opened.
+    start = parse_timestamp(opened)
+    view = observed_session(os.environ) if start is not None else None
+    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    observed: ChildDispatch | Literal[False] | None = (
+        None
+        if dispatched is None
+        else next((d for d in dispatched if d.agent_id == agent_id), False)
+    )
+    if observed and _same_agent(observed.agent_type, PHASE_EXECUTOR_AGENT):
         # Review r1-11: a phase executor is an IMPLEMENTER by construction —
         # any phase's — so it is never the separate context a review needs.
         err_console.print(
@@ -2158,12 +2210,128 @@ def _verify_reviewer(
 
 
 def _same_agent(observed: str | None, expected: str) -> bool:
-    """`observed` is `expected`, in its plugin-qualified or bare spelling
-    (`super-fr:fr-spec-reviewer` / `fr-spec-reviewer`)."""
+    """`observed` is `expected`, in any spelling `fr.run.observed.agent_name`
+    folds: plugin-qualified or bare (`super-fr:fr-spec-reviewer` /
+    `fr-spec-reviewer`), and OpenCode's tiered name (`fr-spec-reviewer-hard`)."""
+    from fr.run.observed import agent_name
+
     if observed is None:
         return False
-    bare = expected.split(":", 1)[-1]
-    return observed in (expected, bare)
+    return agent_name(observed) == agent_name(expected)
+
+
+def _check_returned_findings(
+    key: str,
+    entries: list[JournalEntry],
+    phase: int,
+    since: str | None,
+    reviewer: str | None,
+) -> None:
+    """Every finding a phase reviewer RETURNED is a plan-journal finding
+    against `phase` with the reviewer's own scope tag — or exit 2 (spec
+    2026-10-02-opencode-observe-2 §E, R7).
+
+    A child dispatched since the review opened is a reviewer of this unit when
+    it is the one the record names (`reviewer`), or when its return carries a
+    ```review-findings fence; each owes a well-formed block (`none` when it
+    raised nothing). Any other child — a helper dispatched while receiving the
+    review — owes nothing. The journal may hold MORE findings than the blocks
+    (the orchestrator's own), never fewer. Where fr cannot read the session, or
+    the named reviewer's return, the check is noted `unobserved=reviewer-return`
+    and warned, never silently skipped."""
+    from fr.run.observed import observed_session
+    from fr.run.review_return import ReviewFindingsBlockError, parse_review_findings
+    from fr.run.telemetry import parse_timestamp
+
+    start = parse_timestamp(since) if since is not None else None
+    view = observed_session(os.environ) if start is not None else None
+    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    if dispatched is None:
+        _return_unobserved(key, "the phase reviewers", _why_unobservable("subagent returns"))
+        return
+    problems: list[str] = []
+    returned: dict[str, tuple[str, str]] = {}  # id -> (scope, reviewer)
+    for d in dispatched:
+        named = reviewer is not None and d.agent_id == reviewer
+        if d.returned is None:
+            if named:
+                _return_unobserved(key, f"reviewer {d.agent_id}", "its return is not readable yet")
+            continue
+        try:
+            rows = parse_review_findings(d.returned)
+        except ReviewFindingsBlockError as e:
+            problems.append(f"{d.agent_id}: {e}")
+            continue
+        if rows is None:
+            if named:
+                problems.append(
+                    f"reviewer {d.agent_id} returned no review-findings block — its return "
+                    "must end with one (`none` when it raised nothing)"
+                )
+            continue
+        for fid, scope, _summary in rows:
+            if fid in returned:
+                problems.append(
+                    f"{fid} is returned by both {returned[fid][1]} and {d.agent_id} — "
+                    "give each reviewer its own letter (p<N>a-r<k>, p<N>b-r<k>)"
+                )
+                continue
+            returned[fid] = (scope, d.agent_id)
+    # Phase N OR LATER (review p2-r3): the manifest files a finding that
+    # belongs to a later phase against THAT phase, where it gates that review.
+    journaled = {
+        e.id: e
+        for e in entries
+        if e.kind == "finding" and e.resolves is None and e.phase is not None and e.phase >= phase
+    }
+    missing = [fid for fid in returned if fid not in journaled]
+    if missing:
+        problems.append(
+            f"returned finding(s) not in the plan journal against phase {phase} or later: "
+            + ", ".join(f"{fid} (reviewer {returned[fid][1]})" for fid in missing)
+            + " — journal each under its id with the reviewer's tag "
+            "(`fr journal add --kind finding --id <id> --review-scope in|out ...`)"
+        )
+    for fid, (scope, by) in returned.items():
+        entry = journaled.get(fid)
+        if entry is not None and entry.review_scope != scope:
+            problems.append(
+                f"{fid} is journaled with review_scope {entry.review_scope} but {by} "
+                f"tagged it {scope} — keep the reviewer's tag; reclassify by resolving it "
+                "out-of-scope"
+            )
+    if problems:
+        _return_refusal(
+            key,
+            problems,
+            "Journal every returned finding under its id with the reviewer's tag, or "
+            "re-dispatch a reviewer whose return is malformed; never edit a return.",
+        )
+
+
+def _return_unobserved(key: str, who: str, why: str) -> None:
+    """A reviewer-return check skipped: warned and noted, never silent (§E)."""
+    _note_unobserved("reviewer-return")
+    err_console.print(
+        f"[yellow]{key}: could not read what {who} returned — {why}; the record is "
+        "taken as claimed (evidence: unobserved=reviewer-return).[/yellow]",
+        soft_wrap=True,
+    )
+
+
+def _return_refusal(key: str, problems: list[str], remedy: str) -> NoReturn:
+    """THE refusal of the reviewer-return check (spec
+    2026-10-02-opencode-observe-2 §E): the unit (its step and phase), every
+    problem — each naming its reviewer and ids — on its own line, then what to
+    do; exit 2."""
+    _derived_refusal(
+        key,
+        [
+            "refused — the review record does not match what the phase reviewers returned:",
+            *(f"- {p}" for p in problems),
+            remedy,
+        ],
+    )
 
 
 def _wrote_before(
@@ -2302,33 +2470,36 @@ def _log_witness(path: Path, data: bytes, repo_root: Path) -> str:
 def _phase_log_windows(
     path: Path, opened: str | None, holder: str | None
 ) -> list[tuple[_dt.datetime, _dt.datetime]] | str | Literal[False] | None:
-    """The run windows of the holder's commands that wrote `path` — read from
-    the holder's own transcript: the claimed agent's subagent transcript, or
-    the orchestrator's main thread when the unit ran inline (no holder).
+    """The run windows of the holder's commands that wrote `path` — read
+    through `fr.run.observed` from the holder's own session: the claimed
+    agent's child (a Claude Code subagent transcript, an OpenCode child
+    session), or the run session itself when the unit ran inline (no holder).
 
     `False` when this session dispatched no agent `holder` (a bogus or foreign
     id: refused, never unobserved); a `str` reason when nothing can be read —
-    including OpenCode and Hermes, which have no child-session reader today
-    (spec 2026-09-29-fr-goal-light-path §D, §E)."""
-    from fr.run.telemetry import _this_session, witness_transcript, wrote_since
+    including Hermes, which has no session reader (spec
+    2026-09-29-fr-goal-light-path §D, §E; 2026-10-02-opencode-observe-2 §A)."""
+    from fr.run.observed import observed_session
+    from fr.run.telemetry import parse_timestamp
 
     try:
         harness = detect_harness(os.environ)
     except HarnessError:
         harness = None
-    if harness in ("opencode", "hermes"):
+    if harness == "hermes":
         return f"fr has no child-session reader for {harness}, so a phase log is not witnessed"
-    session = _this_session(os.environ)
-    if session is None or opened is None:
-        return _why_unobservable("commands") if session is None else "the unit has no opening stamp"
-    found = witness_transcript(session, holder)
+    view = observed_session(os.environ)
+    start = parse_timestamp(opened)
+    if view is None or start is None:
+        return _why_unobservable("commands") if view is None else "the unit has no opening stamp"
+    found = view.child(holder) if holder is not None else view
     if found is None:
-        return f"the session transcript {session} could not be read"
+        return f"the session {view.session} could not be read"
     if found is False:
         return False
-    windows = wrote_since(found, path, opened, main_thread=holder is None)
+    windows = found.wrote_windows(path, start)
     if windows is None:
-        return f"the holder's transcript {found} could not be read"
+        return f"the holder's session {found.session} could not be read"
     return windows
 
 
@@ -3008,7 +3179,7 @@ def _open_dispatch(
     `blocked`, not `running`, so nothing was dispatched and there is nothing
     to hold.
     """
-    from fr.run.telemetry import ClaudeCodeReader, current_session, orchestrator_model
+    from fr.run.telemetry import SESSION_ID_ENVS, orchestrator_model, run_session
 
     record = state.steps[step_id]
     # Detected ONCE and both recorded and used (finding f8): the harness is
@@ -3046,11 +3217,16 @@ def _open_dispatch(
             # and never as zero. No hostname beside it: a missing session
             # directory already says "elsewhere".
             #
-            # Only when the harness fr runs under OWNS the session key
-            # (gh#537): the one key read is Claude Code's, and an OpenCode
-            # started from a Claude Code shell inherits it — recording it
-            # there named a session that never held this unit.
-            session=(current_session(os.environ) if harness == ClaudeCodeReader.harness else None),
+            # `current_session` reads only the key the detected harness OWNS
+            # (gh#537): an OpenCode started from a Claude Code shell inherits
+            # Claude Code's key, which names a session that never held this
+            # unit; OpenCode's own arrives through the super-fr plugin's
+            # `shell.env` export (spec 2026-10-02-opencode-observe-2 §B).
+            # `run_session` walks a child's id up to the run's. An UNDETECTED
+            # harness owns no key (review p1-r1): there `current_session`
+            # falls back to Claude Code's, which in gh#537's mixed shell is
+            # the inherited, stale one — record nothing, as main did.
+            session=(run_session(os.environ) if harness in SESSION_ID_ENVS else None),
         ),
     )
     return _with_step(state, step_id, new_record)
@@ -3275,7 +3451,21 @@ def _build_member_brief(
         "for_each": group.for_each,
         "steps": [],
         "record": _record_brief(state, member, group, item),
+        **_review_findings_brief(member, item),
     }
+
+
+def _review_findings_brief(member: Step, item: str) -> dict[str, str]:
+    """`review_findings` for a phase review unit whose reviewer's return fr
+    checks at resolve (spec 2026-10-02-opencode-observe-2 §E, R7) — every
+    `review-phase` of the shipped shapes — else nothing. fr-goal §6 puts its
+    text into the reviewer's prompt verbatim."""
+    from fr.run.review_return import review_findings_rule
+
+    if not {"findings", "reviewer"} <= set(member.evidence):
+        return {}
+    phase = _item_phase(item)
+    return {} if phase is None else {"review_findings": review_findings_rule(phase)}
 
 
 def _resolve_hint(run_id: str, member_id: str, item: str | None, state: str = "done") -> str:
@@ -4272,6 +4462,56 @@ def cost_cmd(
         f"sessions: {summary.read} read, {summary.unavailable} unavailable; {note}",
         soft_wrap=True,
     )
+    # Each unavailable session's reason, so `--recompute` reads exactly as the
+    # committed file does (`unavailable: no session found`, spec
+    # 2026-10-02-opencode-observe-2 §C).
+    for entry in entries:
+        if entry.unavailable is not None:
+            who = f"{entry.session}: " if entry.session else ""
+            console.print(f"  {who}unavailable: {entry.unavailable}", soft_wrap=True, markup=False)
+
+
+def _observed_holder(state: RunState, key: str) -> str | None:
+    """The child session that holds `key`, observed — or `None` (spec
+    2026-10-02-opencode-observe-2 §D, R5).
+
+    Only for an OPEN attempt dispatched to an agent type with nobody claiming
+    it: when the session protocol shows exactly ONE child of that agent type
+    (compared through `agent_name`) dispatched since the attempt opened, that
+    child is the holder. Zero or several, or a session fr cannot read, leave
+    the unit unclaimed — the existing "unclaimed" handling stands."""
+    from fr.run.observed import agent_name, observed_session
+    from fr.run.telemetry import parse_timestamp
+
+    attempt = units.last_attempt(state, key)
+    if (
+        attempt is None
+        or attempt.returned is not None
+        or attempt.synthesized
+        or attempt.agent is not None
+        or attempt.agent_type is None
+    ):
+        return None
+    start = parse_timestamp(attempt.dispatched)
+    view = observed_session(os.environ) if start is not None else None
+    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    if not dispatched:
+        return None
+    wanted = agent_name(attempt.agent_type)
+    matching = [
+        d.agent_id
+        for d in dispatched
+        if d.agent_type is not None and agent_name(d.agent_type) == wanted
+    ]
+    if len(matching) != 1:
+        return None
+    err_console.print(
+        f"{key}: holder {matching[0]} observed — the one {attempt.agent_type} "
+        "dispatch since the unit opened; recorded as its claim.",
+        soft_wrap=True,
+        markup=False,
+    )
+    return matching[0]
 
 
 @run_app.command("advance")
@@ -4433,19 +4673,22 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         # copy-pastes, and the brief is JSON a harness parses off stdout —
         # rich's default folding would break a long token mid-string and
         # produce invalid JSON.
-        console.print(
-            f"{step.id}: blocked on operator gate — answer it, then "
-            f"`fr run resolve {state.run} --step {step.id} --state done`",
-            soft_wrap=True,
-        )
-        # spec §3.D.1: printed BEFORE the agent brief (below), not after — the
-        # brief is a single JSON line a harness parses off stdout, and this
-        # notice must not become the last line a naive `tail -1` reads.
         try:
             notice = _gate_degradation_notice()
         except HarnessError as e:
             err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
+        # R10: where fr cannot observe who answers, the resolve must carry the
+        # claim — so the command the agent copies carries it too.
+        claim = "" if notice is None else " --answered-by <operator|agent>"
+        console.print(
+            f"{step.id}: blocked on operator gate — answer it, then "
+            f"`fr run resolve {state.run} --step {step.id} --state done{claim}`",
+            soft_wrap=True,
+        )
+        # spec §3.D.1: printed BEFORE the agent brief (below), not after — the
+        # brief is a single JSON line a harness parses off stdout, and this
+        # notice must not become the last line a naive `tail -1` reads.
         if notice is not None:
             console.print(notice, soft_wrap=True)
         # A gate stops the RUN, not the harness's view of the step: an `agent`
@@ -4642,6 +4885,10 @@ def _resolve_member(
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    # R5 (spec 2026-10-02-opencode-observe-2 §D): the holder is filled FIRST,
+    # before any evidence is derived — the visual witness refuses an unclaimed
+    # unit — and written through the claim path `_close_on_resolve` takes.
+    agent = agent if agent is not None else _observed_holder(state, key)
     # The evidence gate runs BEFORE any write (§4.E). A refusal must leave
     # the unit exactly as it found it — a half-resolved review is a worse
     # state than an unresolved one, and is indistinguishable from the skipped
@@ -4756,7 +5003,8 @@ def resolve_cmd(
         None,
         "--answered-by",
         help="operator | agent — who answered this step's operator gate. "
-        "Defaults to `agent`, the weaker claim; recorded only when a gate "
+        "Required when the gate's answer cannot be observed (there is no "
+        "default); an observed gate derives it. Recorded only when a gate "
         "is cleared, and reported by `fr run check` and in the PR body.",
     ),
     agent: str | None = typer.Option(
@@ -4876,7 +5124,7 @@ def resolve_cmd(
         no_questions=no_questions,
         reason=reason,
         questions=questions,
-        answered_by=answered_by or "agent",
+        answered_by=_answered_by_or_exit(answered_by),
         agent=agent,
         harness=harness,
         model=model,
@@ -4986,6 +5234,21 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         _note_record_write(repo_root, body_path)
 
 
+def _answered_by_or_exit(value: str | None) -> AnsweredBy | None:
+    """Narrow an `answered_by` string where it ENTERS fr — the flag, or a
+    record's evidence key — to the closed set (spec §F). Refused rather than
+    coerced: a typo recorded as a third provenance would be read by nobody and
+    would quietly weaken the one claim this field exists to make."""
+    if value is None:
+        return None
+    if value == "operator":
+        return "operator"
+    if value == "agent":
+        return "agent"
+    err_console.print(f"[red]--answered-by must be 'operator' or 'agent', got {value!r}[/red]")
+    raise typer.Exit(2)
+
+
 def _resolve_body(
     *,
     run_id: str,
@@ -4997,7 +5260,7 @@ def _resolve_body(
     no_questions: bool = False,
     reason: str | None = None,
     questions: QuestionRounds | None = None,
-    answered_by: str = "agent",
+    answered_by: AnsweredBy | None = None,
     agent: str | None = None,
     harness: str | None = None,
     model: str | None = None,
@@ -5012,14 +5275,6 @@ def _resolve_body(
     shape (`_rebind_shape`), riding this resolve's one commit."""
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
-        raise typer.Exit(2)
-    if answered_by not in ("operator", "agent"):
-        # Refused rather than coerced: a typo recorded as a third provenance
-        # would be read by nobody and would quietly weaken the one claim this
-        # field exists to make.
-        err_console.print(
-            f"[red]--answered-by must be 'operator' or 'agent', got {answered_by!r}[/red]"
-        )
         raise typer.Exit(2)
     if harness is not None and harness not in HARNESSES:
         err_console.print(f"[red]--harness must be one of {list(HARNESSES)}, got {harness!r}[/red]")
@@ -5225,6 +5480,8 @@ def _resolve_body(
         raise typer.Exit(2)
 
     flat_key = _unit_key(repo_root, state, step, None, None)
+    # R5: the observed holder, before any evidence is derived.
+    agent = agent if agent is not None else _observed_holder(state, flat_key)
     # A flat `step/<id>` unit names no phase, so `review` evidence cannot be
     # verified for it and `_verified_evidence` refuses rather than records.
     verified = _verified_evidence(
@@ -5237,6 +5494,7 @@ def _resolve_body(
         state_value=state_value,
         emitted=emitted_map,
         visual=visual,
+        holder=agent,  # the filled holder reaches the visual witness (review p2-r2)
     )
     verified = {**verified, **_take_unobserved()}
     if verified:
@@ -5382,7 +5640,7 @@ def resolve_in_process(
     import sys
 
     offered = dict(evidence)
-    answered_by = offered.pop("answered_by", "agent")
+    answered_by = offered.pop("answered_by", None)
     agent = offered.pop("agent", None)
     harness = offered.pop("harness", None)
     model = offered.pop("model", None)
@@ -5405,7 +5663,7 @@ def resolve_in_process(
                 no_questions=no_questions,
                 reason=reason,
                 questions=questions,
-                answered_by=answered_by,
+                answered_by=_answered_by_or_exit(answered_by),
                 agent=agent,
                 harness=harness,
                 model=model,
@@ -6083,14 +6341,19 @@ def check_cmd(
     record = state.steps.get(state.cursor)
     step_state = record.state if record is not None else "unknown"
     console.print(f"{state.run}: cursor={state.cursor} ({step_state})")
-    for gate in agent_cleared_gates(state):
+    for gate in cleared_gates(state):
+        # An observed operator answer is the gate working — nothing to report.
+        # An agent clearance, or an operator answer fr only has the caller's
+        # word for (R11, p3-r2), is reported in the sentence `gates` prints.
+        if gate.by_agent:
+            line = _agent_clearance(gate.unobserved)
+        elif gate.unobserved:
+            line = _operator_answer(unobserved=True)
+        else:
+            continue
         # soft_wrap: this line is read for the step id it names, and rich
         # would fold a long id across a line break at a narrow width.
-        console.print(
-            f"{gate.step}: operator gate cleared by the agent (answered_by: agent) — "
-            "no operator answered it",
-            soft_wrap=True,
-        )
+        console.print(f"{gate.step}: operator gate {line}", soft_wrap=True)
     open_dispatches = _open_dispatches(state)
     for step_id, key, held in open_dispatches:
         console.print(
@@ -6125,6 +6388,21 @@ def check_cmd(
         raise typer.Exit(1)
 
 
+def _agent_clearance(unobserved: bool) -> str:
+    """One sentence for an `agent` clearance, shared by `check` and `gates`
+    (R11): an observed one says no operator answered; an unobserved one says
+    only that the agent claimed it and fr could not read the truth."""
+    if unobserved:
+        return "cleared by the agent, as claimed — unobserved: fr could not read who answered"
+    return "cleared by the agent (answered_by: agent) — no operator answered it"
+
+
+def _operator_answer(unobserved: bool) -> str:
+    """One sentence for an `operator` answer, shared by `check` and `gates`
+    (R11, p3-r2): an unobserved one is the caller's claim, and says so."""
+    return "answered by the operator" + (", as claimed — unobserved" if unobserved else "")
+
+
 @run_app.command("gates")
 def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """Every `gate: operator` step this run's manifest declares, and who
@@ -6157,12 +6435,14 @@ def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             # most needs to notice must not be the tersest line on the page —
             # "cleared by agent" alone reads as bookkeeping, not as a warning.
             console.print(
-                f"{status.step}: operator gate cleared by the agent "
-                "(answered_by: agent) — no operator answered it",
+                f"{status.step}: operator gate {_agent_clearance(status.unobserved)}",
                 soft_wrap=True,
             )
         elif status.outcome == "recorded":
-            console.print(f"{status.step}: operator gate answered by the operator", soft_wrap=True)
+            console.print(
+                f"{status.step}: operator gate {_operator_answer(status.unobserved)}",
+                soft_wrap=True,
+            )
         else:
             console.print(
                 f"{status.step}: cleared, but provenance not recorded "

@@ -9,7 +9,6 @@ reference shape is always the captured one.
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -33,35 +32,11 @@ from tests.unit.triage_fixtures import (
     PRS,
     SUPER_FR,
     FakeForge,
+    _issue,
+    _pr_closing,
     _super_fr_forge,
     forbidden_imports,
 )
-
-
-def _captured_pr_with_refs() -> dict[str, Any]:
-    """A captured PR record that carries at least one closing reference."""
-    return next(p for p in PRS if p["closingIssuesReferences"])
-
-
-def _pr_closing(*, owner: str, name: str, number: int, pr_number: int) -> dict[str, Any]:
-    """A deep copy of a captured PR whose single reference names owner/name#number."""
-    pr = copy.deepcopy(_captured_pr_with_refs())
-    ref = pr["closingIssuesReferences"][0]
-    ref["repository"]["owner"]["login"] = owner
-    ref["repository"]["name"] = name
-    ref["number"] = number
-    pr["closingIssuesReferences"] = [ref]
-    pr["number"] = pr_number
-    return pr
-
-
-def _issue(number: int, *, title: str = "t") -> dict[str, Any]:
-    """A deep copy of a captured issue record, renumbered."""
-    issue = copy.deepcopy(ISSUES[0])
-    issue["number"] = number
-    issue["title"] = title
-    return issue
-
 
 # ------------------------------------------------------------ P2.T2 inversion
 

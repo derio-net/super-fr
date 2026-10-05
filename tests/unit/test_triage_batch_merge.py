@@ -203,6 +203,8 @@ def _batch_yaml(bid: str, n: int, *, order: int | None = None, bump: str = "patc
 
 def _pr(n: int, bid: str, head: str, files: list[str]) -> PullRequest:
     return PullRequest(
+        author="operator",
+        cross_repo=False,
         repo=REPO,
         number=n,
         title=bid,
@@ -243,6 +245,7 @@ def _setup(
         checkout.files[(head, "pyproject.toml")] = _toml(v)
         checkout.up_to_date.add(head)
     facts = Facts(
+        viewer="operator",
         schema=3,
         scope="derio-net--super-fr",
         kind="repo",

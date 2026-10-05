@@ -176,10 +176,16 @@ class PullRequest(_Strict):
     url: str
     head_ref: str = ""
     head_oid: str = ""  # open PRs only (the open-PR list carries headRefOid)
+    # Who opened the PR, and whether from a fork (`isCrossRepository`). None is
+    # "never read", which no attribution trusts (gh#936).
+    author: str | None = None
+    cross_repo: bool | None = None
     files: list[str] = []  # open PRs only: the paths the PR touches
-    checks: dict[str, int] = {"pass": 0, "fail": 0, "pending": 0}
-    mergeable: str = "UNKNOWN"
-    merge_state: str = "UNKNOWN"
+    # Open PRs only — `None` when the record came from `list_prs(state=all)`,
+    # which carries none of them, so a default can never pass for data (#648).
+    checks: dict[str, int] | None = None
+    mergeable: str | None = None
+    merge_state: str | None = None
     review: str | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None
@@ -300,6 +306,9 @@ class TriageConfig(_Strict):
     # fast-forwarded checkout (wave-driver R14). An argument list, never a shell
     # string: a string is refused, and nothing is ever handed to a shell.
     post_merge: list[str] = []
+    # The logins whose PRs on a batch branch are the batch's (gh#936). Empty means
+    # the user `collect` ran as (`Facts.viewer`); a list REPLACES that default.
+    pr_authors: list[str] = []
 
 
 class Facts(_Strict):
@@ -329,6 +338,8 @@ class Facts(_Strict):
     judged_prs: list[PullRequest] = []
     # `.fr/triage.yaml` per OWNER/REPO; a repo without the file has no entry.
     config: dict[str, TriageConfig] = {}
+    # The forge login `collect` ran as: the default allowed batch PR author (gh#936).
+    viewer: str | None = None
 
     @model_validator(mode="after")
     def _group_needs_schema_4(self) -> Facts:

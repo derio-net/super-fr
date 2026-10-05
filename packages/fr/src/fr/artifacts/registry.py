@@ -136,6 +136,16 @@ def read_verbatim(path: Path) -> tuple[str, str]:
     return "", text
 
 
+def split_lines(text: str) -> list[str]:
+    """`text`'s lines, each keeping its own ending — split on `\\n` ONLY.
+
+    Never `str.splitlines`: it also breaks on `\\x0c`, `\\x1c`, U+2028 and
+    friends, which YAML reads as ordinary characters inside a comment, so the
+    tail of such a comment would be matched as a key of its own (super-fr#806).
+    """
+    return [ln for ln in re.split(r"(?<=\n)", text) if ln]
+
+
 def _dominant_newline(text: str) -> str:
     """The line ending to give a line this module ADDS. CRLF only when the
     file is already CRLF, so a mixed file is not made more mixed."""
@@ -180,7 +190,7 @@ def _insertion_index(lines: list[str]) -> int:
 
 def _yaml_write_key(path: Path, key: str, version: int) -> None:
     bom, text = read_verbatim(path)
-    lines = text.splitlines(keepends=True)
+    lines = split_lines(text)
     pattern = re.compile(rf"^{re.escape(key)}\s*:")
     for i, line in enumerate(lines):
         if pattern.match(line):
@@ -233,7 +243,7 @@ _JOURNAL_STAMP_RE = re.compile(r"<!--[ \t]*fr:journal-schema=(\d+)[ \t]*-->[ \t]
 def _first_non_blank(text: str) -> tuple[int, int] | None:
     """`(start, end)` of the first non-blank line, or `None` for a blank file."""
     offset = 0
-    for line in text.splitlines(keepends=True):
+    for line in split_lines(text):
         stripped = line.rstrip("\r\n")
         if stripped.strip():
             return offset, offset + len(stripped)

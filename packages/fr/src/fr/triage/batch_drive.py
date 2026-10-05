@@ -23,6 +23,7 @@ from typing import Any, Literal
 from fr.triage.batch import (
     UNSATISFIABLE,
     BatchStage,
+    ForeignPr,
     QueueEntry,
     batch_branch,
 )
@@ -46,7 +47,13 @@ RUN_ARTIFACT_DIRS = tuple(
 `docs/superpowers/implemented/` (`fr archive --branch`)."""
 
 ChecksVerdict = Literal["green", "pending", "failing"]
-ActionKind = Literal["merge", "closeout", "archive", "dispatch", "blocked", "held", "warn"]
+ActionKind = Literal[
+    "merge", "closeout", "adopt", "archive", "dispatch", "blocked", "held", "warn", "foreign"
+]
+
+ARCHIVED_BY_UNKNOWN_PR = 0
+"""`CloseoutEvent.archived` for a close-out found archived on the default branch with
+no PR to name: every reader only asks whether `archived` is set (gh#900)."""
 
 _FAILING_BUCKETS = frozenset({"fail", "cancel"})
 
@@ -63,6 +70,9 @@ class LivePr:
     failing: tuple[str, ...] = ()
     head_ref: str = ""
     files: tuple[str, ...] = ()
+    # From the repo itself, by an allowed author (`fr.triage.batch.distrust`). False
+    # unless the command checked it: an archive PR is attributed only when True (gh#936).
+    trusted: bool = False
 
 
 @dataclass(frozen=True)
@@ -80,7 +90,8 @@ class Snapshot:
     released: frozenset[str] = frozenset()  # merged batches whose release commit landed
     archives: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)  # repo -> PRs
     existing: frozenset[str] = frozenset()  # runner item ids live now
-    warned: frozenset[str] = frozenset()  # head shas whose failing CI was reported
+    # What was reported already: a head sha whose CI failed, or a `ForeignPr.key`.
+    warned: frozenset[str] = frozenset()
     # The batches this drive acts on (None: all). The in-flight cap and dependency
     # resolution always read every batch: a batch outside the selection still holds
     # a slot, and a dependency outside it is still merged or not (review rg-3).
@@ -90,6 +101,12 @@ class Snapshot:
     # before the driver existed carries no close-out event, so without this every one
     # of them read as owed (debug 2026-10-03: 50 on this repo).
     archived: frozenset[str] = frozenset()
+    # Landed batches with no close-out event whose close-out PR, on the head no other
+    # batch can produce (`housekeeping_branch` with no run), is open or merged: a
+    # close-out started by hand (gh#912).
+    adopted: Mapping[str, LivePr] = field(default_factory=dict)
+    # batch id -> the open PRs on its branch that are not its own (gh#936).
+    foreign: Mapping[str, tuple[ForeignPr, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -102,6 +119,7 @@ class Action:
     recorded: bool = False  # closeout: the runner holds the tab; record the event only
     post_merge: bool = False  # closeout: run the repo's post_merge first
     train: str = ""  # merge: the repo whose train this candidate belongs to
+    archived: int | None = None  # adopt: the close-out event's `archived`
 
 
 @dataclass(frozen=True)
@@ -265,7 +283,11 @@ def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
     Its head alone attributes it only when the head is `chore/closeout-<batch branch
     with / as ->`, a name no other batch can produce. Any other `chore/archive-*` or
     `chore/closeout-*` head (`chore/archive-<plan>`, `chore/closeout-<run-id>`) must
-    also change the batch's run file or its plan journal (review rg-12)."""
+    also change the batch's run file or its plan journal (review rg-12). Neither
+    attributes a PR that is not `trusted`: a fork or a foreign author can choose
+    both the head name and the files (gh#936)."""
+    if not pr.trusted:
+        return False
     branch = batch_branch(batch)
     if pr.head_ref == f"chore/closeout-{branch.replace('/', '-')}":
         return True
@@ -357,12 +379,24 @@ def _walk_train(
 
 
 def drive_pass(snap: Snapshot) -> Pass:
-    """One pass: merge, close out, archive, dispatch — in that order, so a slot a
-    merge frees is used in the same pass."""
+    """One pass: report foreign PRs, merge, close out, archive, dispatch — in that
+    order, so a slot a merge frees is used in the same pass."""
     actions: list[Action] = []
     stages = dict(snap.stages)
     merging: set[str] = set()
     chosen = tuple(b for b in snap.batches if snap.selected is None or b.id in snap.selected)
+
+    # 0. Report a PR on a batch branch that is not the batch's, once (gh#936). It
+    # never reaches the queue, so it is never merged.
+    for batch in chosen:
+        for found in snap.foreign.get(batch.id, ()):
+            if found.key not in snap.warned:
+                actions.append(
+                    Action("foreign", batch.id,
+                           f"PR #{found.pr.number} on {found.pr.head_ref} is not this batch's: "
+                           f"{found.reason}; it is never merged", pr=found.pr.number,
+                           head=found.key)
+                )  # fmt: skip
 
     # 1. Merge: one train per repo, walked in the stable dispatch order.
     by_repo: dict[str, list[QueueEntry]] = {}
@@ -384,12 +418,25 @@ def drive_pass(snap: Snapshot) -> Pass:
     for batch in chosen:
         if stages.get(batch.id) not in LANDED or batch.id in merging:
             continue
+        if closeout_event(batch) is not None:
+            continue
+        # A close-out the driver did not start is recorded once, as an event: every
+        # later pass, the board and `batch list` read it (gh#899, gh#900, gh#912).
         if batch.id in snap.archived:
-            continue  # closed out already: its run's artifacts are archived
-        event = closeout_event(batch)
-        if event is not None:
+            actions.append(Action("adopt", batch.id, "archived on the default branch already",
+                                  archived=ARCHIVED_BY_UNKNOWN_PR))  # fmt: skip
+            continue
+        hand = snap.adopted.get(batch.id)
+        if hand is not None and hand.state == "MERGED":
+            actions.append(Action("adopt", batch.id, f"close-out PR #{hand.number} merged",
+                                  pr=hand.number, archived=hand.number))  # fmt: skip
             continue
         closing += 1
+        if hand is not None:
+            actions.append(Action("adopt", batch.id,
+                                  f"close-out PR #{hand.number} ({hand.head_ref}) is open",
+                                  pr=hand.number))  # fmt: skip
+            continue
         due = closeout_due(
             released=batch.id in snap.released,
             merged_at=snap.merged_at.get(batch.id),

@@ -237,21 +237,164 @@ def test_recompute_reads_this_hosts_transcripts_and_writes_nothing(
     root.mkdir(parents=True)
     shutil.copy(FIXTURES / "claude-code" / f"{CC_SESSION}.jsonl", root)
     monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "projects"))
-    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", CC_SESSION)
-    save_run_state(
-        tmp_path,
-        RunState(
-            run=RUN,
-            workflow="fr-goal@1",
-            branch="b",
-            started="2026-09-21T11:00:00+00:00",
-            cursor="deliver",
-            steps={"brainstorm": StepRecord(state="done", at="2026-09-21T13:00:00+00:00")},
-        ),
-    )
+    save_run_state(tmp_path, _run_with_attempt_session(CC_SESSION))
 
     result = _invoke(tmp_path, RUN, "--recompute")
 
     assert result.exit_code == 0, result.output
     assert "recomputed" in result.output and "1 read" in result.output
     assert not usage_path(tmp_path, RUN).exists()
+
+
+# --- positive-evidence attribution (spec 2026-10-02-opencode-observe-2 §C, R3) --
+
+
+def _run_with_attempt_session(session: str | None, harness: str = "claude-code") -> RunState:
+    """A run whose one agent attempt records `session` (`None`: records none)."""
+    from fr.run.model import Attempt, UnitRecord
+
+    attempt = Attempt(
+        dispatched="2026-09-21T12:00:00+00:00",
+        harness=harness,
+        session=session,
+        returned="2026-09-21T13:00:00+00:00",
+        outcome="done",
+    )
+    return RunState(
+        run=RUN,
+        workflow="fr-goal@1",
+        branch="b",
+        started="2026-09-21T11:00:00+00:00",
+        cursor="deliver",
+        steps={
+            "brainstorm": StepRecord(
+                state="done",
+                at="2026-09-21T13:00:00+00:00",
+                units={"step/brainstorm": UnitRecord(attempts=(attempt,))},
+            )
+        },
+    )
+
+
+@pytest.fixture
+def unrelated_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """A readable Claude Code transcript the CALLING process owns, which no
+    attempt of the run records — #848's operator session."""
+    root = tmp_path / "projects" / "-work-example"
+    root.mkdir(parents=True)
+    shutil.copy(FIXTURES / "claude-code" / f"{CC_SESSION}.jsonl", root)
+    monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "projects"))
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", CC_SESSION)
+    return CC_SESSION
+
+
+def test_recompute_never_adds_the_callers_session(tmp_path: Path, unrelated_session: str) -> None:
+    """#848: `--recompute` from an unrelated session, on a run whose attempts
+    record none, reports no session found — never the caller's figures."""
+    save_run_state(tmp_path, _run_with_attempt_session(None))
+
+    result = _invoke(tmp_path, RUN, "--recompute")
+
+    assert result.exit_code == 0, result.output
+    out = " ".join(result.output.split())
+    assert "0 read, 1 unavailable" in out
+    assert "unavailable: no session found" in out
+    assert "$" not in out
+
+
+def test_recompute_reads_exactly_the_attempts_session(
+    tmp_path: Path, unrelated_session: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "another-callers-session")
+    save_run_state(tmp_path, _run_with_attempt_session(unrelated_session))
+
+    result = _invoke(tmp_path, RUN, "--recompute")
+
+    assert result.exit_code == 0, result.output
+    assert "1 read, 0 unavailable" in " ".join(result.output.split())
+
+
+def test_the_archive_capture_adds_no_ambient_session(
+    tmp_path: Path, unrelated_session: str
+) -> None:
+    """`fr archive`'s closeout capture runs from whoever closes the run out."""
+    import subprocess
+
+    from fr.archive import _archive_usage
+    from fr.run.model import run_path
+    from fr.usage.file import load_usage
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    cursor = save_run_state(tmp_path, _run_with_attempt_session(None))
+    assert cursor == run_path(tmp_path, RUN)
+
+    _archive_usage(tmp_path, cursor, RUN)
+
+    archived = load_usage(archived_usage_path(tmp_path, RUN))
+    assert archived is not None
+    sessions = [s for c in archived.captures for s in c.sessions]
+    assert [(s.session, s.unavailable) for s in sessions] == [("", "no session found")]
+
+
+def test_a_step_resolve_capture_still_adds_its_own_session(
+    tmp_path: Path, unrelated_session: str
+) -> None:
+    from fr.commands.run_cmd import _capture_usage
+    from fr.usage.file import load_usage
+
+    state = _run_with_attempt_session(None)
+    save_run_state(tmp_path, state)
+
+    _capture_usage(tmp_path, state, "resolve:brainstorm")
+
+    usage = load_usage(usage_path(tmp_path, RUN))
+    assert usage is not None
+    assert [s.session for c in usage.captures for s in c.sessions] == [unrelated_session]
+
+
+@pytest.mark.parametrize("exported", ["ses_run", "ses_gen1"])
+def test_an_opencode_runs_own_session_fills_the_cost_table(tmp_path: Path, exported: str) -> None:
+    """R2 (spec 2026-10-02-opencode-observe-2 §B): the plugin's `shell.env`
+    export names the run session, so a step resolve's capture reads it — and
+    its children — from opencode.db, and the Cost table prints real figures,
+    not dashes. The stale Claude Code key an OpenCode started from a Claude
+    Code shell inherits is never read (gh#537). A CHILD's id (a subagent ran
+    the command) captures as the run session it belongs to: one session read
+    whole, never the child a second time on top of it."""
+    from fr.usage.capture import capture
+    from fr.usage.file import load_usage
+
+    env = {
+        "FR_HARNESS": "opencode",
+        "FR_OPENCODE_DB": str(FIXTURES / "opencode" / "opencode.db"),
+        "FR_OPENCODE_SESSION_ID": exported,
+        "CLAUDE_CODE_SESSION_ID": "stale-claude-session",
+    }
+    state = _run_with_attempt_session(None)
+    save_run_state(tmp_path, state)
+
+    assert capture(tmp_path, state, "deliver", env, ambient=True) is not None
+    result = _invoke(tmp_path, RUN)
+
+    assert result.exit_code == 0, result.output
+    # ses_run $0.25 + its children $0.125 + $0.0625 + $0.0625 + $0.50
+    assert "$1.00" in result.output
+    usage = load_usage(usage_path(tmp_path, RUN))
+    assert usage is not None
+    assert [s.session for c in usage.captures for s in c.sessions] == ["ses_run"]
+
+
+def test_recompute_on_the_opencode_run_reads_its_attempt_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`advance` recorded `ses_run` on the attempt, so a post-hoc `--recompute`
+    from any process prints the run's real figures."""
+    monkeypatch.setenv("FR_OPENCODE_DB", str(FIXTURES / "opencode" / "opencode.db"))
+    save_run_state(tmp_path, _run_with_attempt_session("ses_run", harness="opencode"))
+
+    result = _invoke(tmp_path, RUN, "--recompute")
+
+    assert result.exit_code == 0, result.output
+    assert "$1.00" in result.output
+    assert "1 read, 0 unavailable" in " ".join(result.output.split())

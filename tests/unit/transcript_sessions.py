@@ -42,6 +42,14 @@ whose `toolUseResult` is an object with a non-empty `answers` map. A declined
 or failed tool call carries a plain STRING `toolUseResult` instead — observed
 on other tools in the same transcript."""
 
+HANDBACK = FIXTURES / "claude-code-subagent-handback.jsonl"
+"""A backgrounded subagent's own file, ending in its `SubagentHandback`
+tool_use (`input.message` = its report) — see `NOTE.md`, review p1-r3."""
+HANDBACK_MESSAGE = "Reviewed phase 1.\n\n```review-findings\np1-r1 | in | an example gap\n```"
+LAUNCH_ACK = FIXTURES / "claude-code-agent-launch-ack.jsonl"
+"""The parent-side `tool_result` of a backgrounded `Agent` dispatch: a launch
+ack (`toolUseResult.isAsync`, `status: async_launched`), not the report."""
+
 AGENT_ID = "adc0716be5565cc07"
 TOOL_USE_ID = "toolu_014ynBvFpxdbG1PXwxASc1Cu"
 AGENT_TOOL_USE_LINE = 7
@@ -299,6 +307,36 @@ def tool_rows(timestamp: str, *, tool_use_id: str, name: str) -> list[dict[str, 
     call, result = bash_rows(timestamp, tool_use_id=tool_use_id)
     call["message"]["content"][0]["name"] = name
     return [call, result]
+
+
+def agent_result_row(timestamp: str, *, tool_use_id: str, text: str) -> dict[str, Any]:
+    """The PARENT-side `tool_result` answering a dispatch's `Agent` tool_use:
+    the captured `Bash` result record (`BASH`, line 1) re-keyed to
+    `tool_use_id`, its content re-shaped to the list-of-text-blocks form an
+    `Agent` result carries (`[{type: text, text}]`), and its Bash-specific
+    `toolUseResult` dropped — see `claude-code-session.NOTE.md`. What the
+    orchestrator received is `text`; the subagent's own file ends in a
+    handback stub instead."""
+    result = copy_of(records(BASH)[1])
+    result["timestamp"] = timestamp
+    result["message"]["content"] = [
+        {
+            "tool_use_id": tool_use_id,
+            "type": "tool_result",
+            "content": [{"type": "text", "text": text}],
+        }
+    ]
+    result.pop("toolUseResult", None)
+    return result
+
+
+def agent_ack_row(timestamp: str, *, tool_use_id: str) -> dict[str, Any]:
+    """The launch ack of a backgrounded dispatch (`LAUNCH_ACK`), re-keyed to
+    `tool_use_id` and moved to `timestamp`."""
+    (ack,) = copy_of(records(LAUNCH_ACK))
+    ack["timestamp"] = timestamp
+    ack["message"]["content"][0]["tool_use_id"] = tool_use_id
+    return ack
 
 
 def text_row(timestamp: str) -> dict[str, Any]:

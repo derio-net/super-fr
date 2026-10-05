@@ -149,6 +149,8 @@ class DemoCheckout(Checkout):
 
 def _pr(number: int, bid: str, head: str, files: list[str]) -> PullRequest:
     return PullRequest(
+        author="operator",
+        cross_repo=False,
         repo=REPO,
         number=number,
         title=bid,
@@ -225,6 +227,7 @@ def _build(
         )
     )
     facts = Facts(
+        viewer="operator",
         schema=3,
         scope="example-org--demo",
         kind="repo",

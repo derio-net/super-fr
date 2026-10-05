@@ -37,6 +37,11 @@ permissions:
   contents: write
   issues: write
 
+# The pre-push suite release.py runs is the only test a release gets; it runs
+# on the requires-python floor, like CI (#940).
+env:
+  UV_PYTHON: "3.11"
+
 concurrency:
   group: release
   cancel-in-progress: false

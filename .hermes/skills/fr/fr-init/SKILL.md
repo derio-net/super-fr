@@ -37,8 +37,8 @@ The interview confirms and fills gaps; it never asks what the scan answers.
 ## 2. Interview (batched ≤4 per round)
 
 **Hard gate:** an unanswered round is a stop signal — restate the open questions, never default.
-**Harness — questions:** Claude Code batches them into one `AskUserQuestion` call. Hermes and
-OpenCode have no question tool: put the numbered round in your reply and END THE TURN.
+**Harness — questions:** Claude Code batches them into one `AskUserQuestion` call; OpenCode uses its
+`question` tool. Hermes has none: put the numbered round in your reply and END THE TURN.
 
 Cover, with scan-informed recommended options:
 

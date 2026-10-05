@@ -91,10 +91,12 @@ if [ "$state" = none ] && [ -n "${cwd:-}" ] && [ -d "$cwd" ]; then
     # refs/heads/<b> is a branch; "HEAD" is detached (or unborn) -> no branch.
     case "$head" in refs/heads/?*) branch="${head#refs/heads/}" ;; esac
     if [ -d "$common/fr/isolation" ]; then
-      # One jq over every workspace state file; compare physical paths.
+      # One jq over every workspace state file; compare physical paths. `-ef`
+      # (same device and inode) is a builtin: a `$(cd && pwd -P)` subshell per
+      # state file cost ~2.5 ms each, ~35 ms on a 13-workspace clone (#456).
       while IFS= read -r wt; do
         [ -n "$wt" ] && [ -d "$wt" ] || continue
-        if [ "$(cd "$wt" 2>/dev/null && pwd -P)" = "$toplevel" ]; then
+        if [ "$wt" -ef "$toplevel" ]; then
           state=fr
           worktree="$toplevel"
           break

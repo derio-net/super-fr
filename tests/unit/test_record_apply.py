@@ -497,7 +497,7 @@ def _at_spec_review(tmp_path: Path, *, finding_scope: str | None = None) -> Path
     for argv in (
         ["run", "start", "fr-goal", "--branch", "feat/rec", "--run-id", RUN],
         ["run", "advance", RUN],
-        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done",
+        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done", "--answered-by", "agent",
          "--emitted", "spec=docs/spec.md"],
         ["run", "advance", RUN],
     ):  # fmt: skip
@@ -678,7 +678,7 @@ def _at_spec_review_with_acceptance(tmp_path: Path) -> Path:
     for argv in (
         ["run", "start", "fr-goal", "--branch", "feat/rec2", "--run-id", RUN],
         ["run", "advance", RUN],
-        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done",
+        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done", "--answered-by", "agent",
          "--emitted", "spec=docs/spec.md"],
         ["run", "advance", RUN],
     ):  # fmt: skip
