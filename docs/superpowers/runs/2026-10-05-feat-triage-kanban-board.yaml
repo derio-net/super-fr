@@ -1,0 +1,24 @@
+schema_version: 8
+run: 2026-10-05-feat-triage-kanban-board
+workflow: fr-goal@1
+branch: feat/triage-kanban-board
+started: '2026-10-05T20:01:19+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
