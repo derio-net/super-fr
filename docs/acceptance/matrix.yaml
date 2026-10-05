@@ -4818,6 +4818,38 @@ rows:
     status: not-implemented
     notes: ''
     verify: post-merge
+  - id: triage-severity-and-duplicates
+    capability: Backlog triage
+    acceptance: A judgement can carry severity and duplicate_of; triage check lists
+      open issues with no severity and duplicates whose target is unknown, and the board
+      shows severity and lists duplicates under Parked.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-state-sync-verbs
+    capability: Backlog triage
+    acceptance: fr triage state export and import copy a scope's durable state between
+      the state directory and a repo directory, never facts or rendered pages, and import
+      keeps a newer local file unless forced.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R12
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-pages-skills-documented
+    capability: Backlog triage
+    acceptance: The fr-triage, fr-origins and fr-audit skills document the page goals,
+      the fragment manifests (hand-written analysis lives in fragments), severity and
+      duplicates, origins schema 2, the history verb, the state verbs and the export
+      key.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
@@ -6138,6 +6170,26 @@ rows:
     status: not-implemented
     notes: ''
     verify: post-merge
+  - id: drive-exports-finished-wave
+    capability: triage-batch-drive
+    acceptance: With export configured, once a wave is finished the driver opens one
+      state-export PR for it and merges it when green, recording the export so it never
+      repeats.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: drive-exports-finished-wave-live
+    capability: triage-batch-drive
+    acceptance: On a real finished wave, the repo copy of the triage state matches the
+      cache with no manual step.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
@@ -6202,6 +6254,106 @@ rows:
     notes: 'fr triage architecture render now builds the page: measured sections from
       git ls-tree/show at two refs, authored fragments in manifest order, snapshot timeline,
       wave tabs; covered by unit tests over a real two-ref fixture repo'
+  - id: triage-page-goals
+    capability: triage-views
+    acceptance: Each of the four triage pages (board, origins, architecture, history)
+      opens with the one question it answers and a nav bar to the other three, and no
+      generated section appears on two pages.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    visual:
+      states:
+      - board-page
+      - origins-page
+      - architecture-page
+      - history-page
+      - phone-width
+      - dark-theme
+      interactions:
+      - follow-nav-link
+  - id: triage-board-first-screen
+    capability: triage-views
+    acceptance: The board's first screen is Since last report as a transitions table,
+      Needs you now, Next up and the unfinished waves with a per-batch Tier column;
+      backlog, features, parked, patterns, PRs and batches follow as collapsed sections.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    visual:
+      states:
+      - since-table-with-changes
+      - since-table-empty
+      - every-wave-finished
+      - sections-collapsed
+      interactions:
+      - switch-wave-tab
+      - expand-collapsed-section
+  - id: triage-board-batch-filter
+    capability: triage-views
+    acceptance: On the board every batch card starts collapsed, a multi-select stage
+      filter hides cards by stage, and a link to a batch opens its card and the sections
+      around it.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    visual:
+      states:
+      - all-stages-on
+      - merged-and-cancelled-off
+      - every-stage-off
+      - no-javascript
+      interactions:
+      - toggle-stage
+      - follow-batch-link
+      - open-card
+  - id: triage-history-page
+    capability: triage-views
+    acceptance: fr triage history render writes a history page with the snapshot timeline,
+      the finished waves (every batch cancelled or archived) and dated fragments, and
+      finished waves leave the board.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    visual:
+      states:
+      - no-finished-waves
+      - finished-waves
+      interactions:
+      - switch-wave-tab
+      - follow-batch-link
+  - id: triage-fragments-every-page
+    capability: triage-views
+    acceptance: A fragment listed in any of the four pages' manifests survives every
+      render and is placed exactly at its manifest position, optionally as a collapsed
+      titled section, under the same refusals as before.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-origins-schema-2
+    capability: triage-views
+    acceptance: origins.yaml schema 2 records duplicate_of, fixed_by and introduced_in;
+      origins check reports a duplicate whose target is outside the window, and the
+      page links a duplicate to its original.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: runner-close-optional
     capability: runner-protocol
     acceptance: A runner may offer to close an item's sessions; one that does not is
