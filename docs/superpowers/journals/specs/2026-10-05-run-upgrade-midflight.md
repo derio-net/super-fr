@@ -251,3 +251,8 @@ Fixed: Test Plan now lists every one of the named behaviours per requirement.
 ### sr-12-resolved · finding [out-of-scope] · resolves sr-12: fr pickup resolves the manifest strictly and fails on a drifted cursor
 
 Out of scope: pre-existing in fr pickup (not an `fr run` read-only command), and reshape removes the drift it trips on; listed in Non-goals.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-run-upgrade-midflight-p2 created=2026-10-05T21:11:34+00:00 -->
+### phase-split-2026-10-05-run-upgrade-midflight-p2 · decision · ask: historical review evidence (R7-R9) is its own reviewable ask, and changes the review gate
+
+Phase 2 serves R7-R9, an ask independent of reshape.
