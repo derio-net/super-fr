@@ -1,0 +1,17 @@
+schema_version: 7
+run: 2026-10-05-feat-triage-kanban-board
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3]
+refactor:
+  P1.T1: "fixture capture, nothing to refactor"
+  P1.T2: "the two new protocols share no framing with SessionCloser beyond 'optional, beside Runner'; docstrings are already one line each"
+  P1.T3: "close() now shares _tabs_labelled with session_statuses and focus; existing_dispatches builds a label set and reads better as is"
+  P1.T4: "probe_item duplicates about ten lines of WorkItem construction from _Driver._sessions, but a shared pure helper would only return constants the caller wraps into a WorkItem anyway; left as is"
+journal:
+  - {kind: discovery, id: p1-herdr-focus-capture, title: "herdr focus fixtures captured live", body: "Captured with herdr 0.9.1 inside herdr (workspace focus / tab focus on the already-focused ones). workspace focus returns result.type workspace_info; tab focus returns tab_info. Tab label redacted to example-tab-1.", phase: 1}
+  - {kind: decision, id: p1-focus-error-shape, title: "focus refusals are one line via a local load_runner and _try_load", body: "triage_kanban_cmd keeps its own find_spec-guarded load_runner and _fail (never importing triage_batch_cmd), and _try_load captures err_console so an unloadable runner is one error line with no traceback.", phase: 1}
+resolves: []
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4d61f643-2b34-4f04-88a8-73bd26ee5bf6/scratchpad/p1-suite.log
