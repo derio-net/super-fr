@@ -711,14 +711,143 @@ def test_a_named_batch_already_archived_by_hand_is_not_closed_out(
     world.prs[101]["merge_commit"] = "m101"
     checkout.added["m101"] = (journal, "packages/x.py")
     checkout.released = True
+    checkout.live.add(journal)  # not archived yet: the close-out is owed
+    code, out = _drive(tmp_path, "--once", "b1")
+    assert _lines(out, "closeout") == [f"closeout b1: start {REPO}/run/closeout-b1"], out
+    checkout.live.discard(journal)  # archived by hand
     code, out = _drive(tmp_path, "--once", "--yes", "b1")
     assert code == 0, out
     assert _lines(out, "closeout") == [] and runner.dispatched == []
     assert "closing 0" in out
-    checkout.live.add(journal)  # not archived yet: the close-out is owed
+
+
+def test_an_archived_batch_is_recorded_once_and_never_probed_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """gh#900, gh#899: the first pass that finds a batch archived records a close-out
+    event, so later passes read nothing for it, `batch list` shows it archived and
+    the board drops its 'post_merge not done' row."""
+    from fr.triage import views
+    from fr.triage.batch import closeout_state
+
+    world.config = {"post_merge": ["./scripts/install.sh"]}
+    _merged(world, tmp_path)
+    world.prs[101].update(merge_commit="m101", merged_at=(NOW - timedelta(days=1)).isoformat())
+    checkout.added["m101"] = ("docs/superpowers/journals/debug/2026-10-01-b1.md",)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    before = views.needs_you(world.facts(), load_judgements(tmp_path / "judgements.yaml"))
+    assert [n.kind for n in before] == ["post-merge"]  # the stale row, as filed
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert runner.dispatched == [] and checkout.commands == []
+    assert _lines(out, "adopt") == ["adopt b1: archived on the default branch already"]
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    event = batch.events[-1]
+    assert (event.kind, event.runner, event.archived) == ("closeout", "hand", 0)  # type: ignore[union-attr]
+    assert closeout_state(batch, world.facts()) == "archived"
+    assert views.needs_you(world.facts(), load_judgements(tmp_path / "judgements.yaml")) == []
+    world.calls.clear()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "pr_view 101" not in world.calls and checkout.release_probes == []
+    assert _lines(out, "adopt") == [] and _events(tmp_path, "b1") == ["dispatch", "closeout"]
+
+
+def test_a_hand_opened_closeout_pr_is_adopted_then_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """gh#912: #895 was a close-out started by hand and left open. Naming its batch
+    must not start a second close-out: the driver records the open PR as the
+    close-out under way, and the archive step then merges it."""
+    journal = "docs/superpowers/journals/debug/2026-10-01-b1.md"
+    _merged(world, tmp_path)
+    world.prs[101]["merge_commit"] = "m101"
+    checkout.added["m101"] = (journal,)
+    checkout.live.add(journal)  # the archive PR has not merged: still live on main
+    checkout.released = True
+    world.pr(895, "chore/closeout-feat-batch-b1", [], files=[journal])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes", "b1")
+    assert runner.dispatched == [], out
+    assert _lines(out, "adopt") == [
+        "adopt b1: close-out PR #895 (chore/closeout-feat-batch-b1) is open"
+    ]
+    event = load_judgements(tmp_path / "judgements.yaml").batches[0].events[-1]
+    assert (event.kind, event.runner, event.handle, event.archive, event.archived) == (  # type: ignore[union-attr]
+        "closeout",
+        "hand",
+        "PR #895",
+        "chore/closeout-feat-batch-b1",
+        None,
+    )
     code, out = _drive(tmp_path, "--once", "--yes", "b1")
     assert code == 0, out
+    assert runner.dispatched == [] and [m[0] for m in world.merged] == [895]
+    event = load_judgements(tmp_path / "judgements.yaml").batches[0].events[-1]
+    assert event.archived == 895  # type: ignore[union-attr]
+
+
+def test_a_merged_hand_opened_closeout_pr_finishes_the_batch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """A debug batch whose merge added no run artifact has no archived evidence in
+    git; its merged hand close-out PR is the evidence."""
+    _merged(world, tmp_path)
+    checkout.released = True
+    world.pr(895, "chore/closeout-feat-batch-b1", [], state="MERGED",
+             merged_at=NOW.isoformat())  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert runner.dispatched == []
+    assert _lines(out, "adopt") == ["adopt b1: close-out PR #895 merged"]
+    event = load_judgements(tmp_path / "judgements.yaml").batches[0].events[-1]
+    assert event.archived == 895  # type: ignore[union-attr]
+
+
+def test_a_closed_hand_closeout_pr_leaves_the_closeout_owed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """An abandoned (closed, unmerged) close-out PR is no evidence of anything."""
+    _merged(world, tmp_path)
+    checkout.released = True
+    world.pr(895, "chore/closeout-feat-batch-b1", [], state="CLOSED")
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "adopt") == []
     assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
+
+
+def test_a_forks_pr_on_the_closeout_head_is_never_adopted(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Batch branch names are predictable and `gh pr list --head` matches a fork's
+    branch of the same name; an adopted open PR is merged by the archive step, so a
+    fork's PR must never be adopted. The close-out stays owed and starts as usual."""
+    _merged(world, tmp_path)
+    checkout.released = True
+    world.pr(895, "chore/closeout-feat-batch-b1", [], cross_repo=True)
+    world.pr(896, "chore/closeout-feat-batch-b1", [], state="MERGED", cross_repo=True,
+             merged_at=NOW.isoformat())  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "adopt") == []
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
+
+
+def test_plan_mode_reports_an_adoption_and_writes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _merged(world, tmp_path)
+    world.pr(895, "chore/closeout-feat-batch-b1", [])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once")
+    assert _lines(out, "adopt") == [
+        "adopt b1: close-out PR #895 (chore/closeout-feat-batch-b1) is open"
+    ], out
+    assert _events(tmp_path, "b1") == ["dispatch"]
 
 
 def test_a_debug_batch_is_closed_out_with_branch(

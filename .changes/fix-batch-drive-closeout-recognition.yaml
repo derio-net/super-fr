@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr triage batch drive records a close-out it did not start (a hand-opened close-out PR, or a batch already archived) once, so it never starts a second close-out, the board drops its stale post_merge row, and archived batches are not re-probed every pass"

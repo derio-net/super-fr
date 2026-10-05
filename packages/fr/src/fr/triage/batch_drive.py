@@ -49,8 +49,12 @@ RUN_ARTIFACT_DIRS = tuple(
 
 ChecksVerdict = Literal["green", "pending", "failing"]
 ActionKind = Literal[
-    "merge", "closeout", "archive", "dispatch", "blocked", "held", "warn", "foreign"
+    "merge", "closeout", "adopt", "archive", "dispatch", "blocked", "held", "warn", "foreign"
 ]
+
+ARCHIVED_BY_UNKNOWN_PR = 0
+"""`CloseoutEvent.archived` for a close-out found archived on the default branch with
+no PR to name: every reader only asks whether `archived` is set (gh#900)."""
 
 _FAILING_BUCKETS = frozenset({"fail", "cancel"})
 
@@ -98,6 +102,10 @@ class Snapshot:
     # before the driver existed carries no close-out event, so without this every one
     # of them read as owed (debug 2026-10-03: 50 on this repo).
     archived: frozenset[str] = frozenset()
+    # Landed batches with no close-out event whose close-out PR, on the head no other
+    # batch can produce (`housekeeping_branch` with no run), is open or merged: a
+    # close-out started by hand (gh#912).
+    adopted: Mapping[str, LivePr] = field(default_factory=dict)
     # batch id -> the open PRs on its branch that are not its own (gh#936).
     foreign: Mapping[str, tuple[ForeignPr, ...]] = field(default_factory=dict)
 
@@ -111,6 +119,7 @@ class Action:
     head: str = ""
     recorded: bool = False  # closeout: the runner holds the tab; record the event only
     post_merge: bool = False  # closeout: run the repo's post_merge first
+    archived: int | None = None  # adopt: the close-out event's `archived`
 
 
 @dataclass(frozen=True)
@@ -352,12 +361,25 @@ def drive_pass(snap: Snapshot) -> Pass:
     for batch in chosen:
         if stages.get(batch.id) not in LANDED or batch.id in merging:
             continue
+        if closeout_event(batch) is not None:
+            continue
+        # A close-out the driver did not start is recorded once, as an event: every
+        # later pass, the board and `batch list` read it (gh#899, gh#900, gh#912).
         if batch.id in snap.archived:
-            continue  # closed out already: its run's artifacts are archived
-        event = closeout_event(batch)
-        if event is not None:
+            actions.append(Action("adopt", batch.id, "archived on the default branch already",
+                                  archived=ARCHIVED_BY_UNKNOWN_PR))  # fmt: skip
+            continue
+        hand = snap.adopted.get(batch.id)
+        if hand is not None and hand.state == "MERGED":
+            actions.append(Action("adopt", batch.id, f"close-out PR #{hand.number} merged",
+                                  pr=hand.number, archived=hand.number))  # fmt: skip
             continue
         closing += 1
+        if hand is not None:
+            actions.append(Action("adopt", batch.id,
+                                  f"close-out PR #{hand.number} ({hand.head_ref}) is open",
+                                  pr=hand.number))  # fmt: skip
+            continue
         due = closeout_due(
             released=batch.id in snap.released,
             merged_at=snap.merged_at.get(batch.id),
