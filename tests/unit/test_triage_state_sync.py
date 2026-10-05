@@ -405,3 +405,25 @@ def test_the_newer_check_is_documented_as_mtime_based() -> None:
     for doc in (state_sync.__doc__ or "", triage_state_cmd.import_command.__doc__ or ""):
         flat = " ".join(doc.split())
         assert "mtime" in flat and "fresh checkout" in flat
+
+
+def test_a_filesystem_error_is_a_clean_triage_error(tmp_path: Path) -> None:
+    """p4-r10: an OSError mid-copy is reported by name, never as a traceback."""
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "board").write_text("a file where a directory goes\n", encoding="utf-8")
+
+    with pytest.raises(TriageError, match="board/manifest.yaml"):
+        export_state(_state(tmp_path / "state"), *_at(dest))
+
+    out = tmp_path / "docs"
+    (out / SCOPE_NAME).mkdir(parents=True)
+    (out / SCOPE_NAME / "board").write_text("x\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        app,
+        ["triage", "state", "export", "--to", str(out), "--repo", SCOPE,
+         "--dir", str(tmp_path / "state")],
+    )  # fmt: skip
+    assert result.exit_code == 2
+    assert "board/manifest.yaml" in result.output
+    assert "Traceback" not in result.output

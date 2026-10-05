@@ -33,6 +33,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import tempfile
 import time
 import uuid
@@ -2345,8 +2346,10 @@ class _Driver:
             default = checkout.default_branch()
             if (where / ".git").exists():  # a pass that died left it: driver-owned
                 checkout.remove_worktree(where)
+            if where.exists():  # fr's own scratch, not a worktree: replaced (p4-r10)
+                shutil.rmtree(where)
             worktree = checkout.add_worktree(where, f"origin/{default}")
-        except TriageError as exc:
+        except (TriageError, OSError) as exc:
             _fail(f"export wave {wave}: {exc}", code=1)
         try:
             rel = f"{config.path}/{check_scope_name(self.scope.name)}"

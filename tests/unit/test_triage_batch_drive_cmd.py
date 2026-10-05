@@ -2690,3 +2690,52 @@ def test_the_export_commits_durable_files_the_target_repo_ignores(
     changed = _git(clone, "diff", "--name-only", "origin/main", f"origin/{EXPORT_HEAD}").split()
     assert f"{SCOPE_DIR}/board/note.html" in changed
     assert f"{SCOPE_DIR}/snapshots/s.json" in changed
+
+
+def test_a_leftover_export_worktree_with_changes_is_replaced(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """p4-r10: a pass that died mid-export leaves a dirty worktree; it is fr's scratch."""
+    state = _finished_wave(tmp_path, world)
+    left = git_checkout.add_worktree(state / "export" / "1", "origin/main")
+    (left.path / "half-written.yaml").write_text("x\n", encoding="utf-8")
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert _exports(state)[0][1] is not None
+    assert not (state / "export" / "1").exists()
+
+
+def test_a_plain_directory_at_the_export_scratch_path_is_replaced(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """p4-r10: not a worktree, but still fr's own scratch: removed, never a per-pass failure."""
+    state = _finished_wave(tmp_path, world)
+    (state / "export" / "1").mkdir(parents=True)
+    (state / "export" / "1" / "junk.txt").write_text("x\n", encoding="utf-8")
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert _exports(state)[0][1] is not None
+
+
+def test_a_filesystem_error_while_exporting_is_a_warn_for_the_wave(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """p4-r10: the repo holds a file where the export needs a directory."""
+    clone = git_checkout.path
+    (clone / SCOPE_DIR).mkdir(parents=True)
+    (clone / SCOPE_DIR / "board").write_text("a file\n", encoding="utf-8")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "a file in the way")
+    _git(clone, "push", "--quiet", "origin", "main")
+    state = _finished_wave(tmp_path, world)
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 3, out
+    assert f"warn wave 1 {REPO}: refused, nothing committed or pushed" in out
+    assert "board/manifest.yaml" in out
+    assert _exports(state) == []

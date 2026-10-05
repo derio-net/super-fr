@@ -134,6 +134,13 @@ def _symlinked_dest(dest: Path, rel: str) -> bool:
     return False
 
 
+def _same(a: Path, b: Path) -> bool:
+    try:
+        return filecmp.cmp(a, b, shallow=False)
+    except OSError:
+        return False  # unreadable: never "identical"; the copy reports the error
+
+
 def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
     copied: list[str] = []
     skipped: list[Skipped] = []
@@ -145,14 +152,18 @@ def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
         if _symlinked_dest(dest, rel):
             skipped.append(Skipped(rel, SYMLINK_DEST))
             continue
-        if target.is_file() and filecmp.cmp(source, target, shallow=False):
+        if target.is_file() and _same(source, target):
             skipped.append(Skipped(rel, IDENTICAL))
             continue
         if keep_newer and target.is_file() and target.stat().st_mtime > source.stat().st_mtime:
             skipped.append(Skipped(rel, NEWER))
             continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target, follow_symlinks=False)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target, follow_symlinks=False)
+        except OSError as exc:  # p4-r10: a clean refusal naming the file, never a traceback
+            why = exc.strerror or type(exc).__name__
+            raise TriageError(f"cannot copy {rel} to {dest}: {why}") from exc
         copied.append(rel)
     return SyncReport(copied=tuple(copied), skipped=tuple(skipped))
 
