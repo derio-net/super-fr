@@ -2362,19 +2362,26 @@ class _Driver:
         try:
             rel = f"{config.path}/{check_scope_name(self.scope.name)}"
             try:
-                export_state(self.target, worktree.path, rel)
+                report = export_state(self.target, worktree.path, rel)
             except TriageError as exc:
                 self._export_refusals += 1
                 return f"refused, nothing committed or pushed: {exc}"
             try:
+                # Never forced past the repo's .gitignore (p4-r9): named, not staged.
+                left = worktree.ignored([f"{rel}/{p}" for p in report.copied])
                 head = worktree.commit_paths(
-                    [rel],
-                    f"chore(triage): export the triage state after wave {wave}",
-                    include_ignored=True,  # the whole durable state (p4-r9)
+                    [rel], f"chore(triage): export the triage state after wave {wave}"
                 )
-                if head is None:
-                    self._record_export(repo, _covers(action), pr=None)
-                    return f"{rel} is unchanged; recorded with no PR"
+            except TriageError as exc:
+                _fail(f"export wave {wave}: {exc}", code=1)
+            note = _ignored_note(left)
+            if left:
+                _say(action_line(Action("warn", repo, note, wave=wave)))
+            suffix = f"; {_ignored_note(left, short=True)}" if left else ""
+            if head is None:
+                self._record_export(repo, _covers(action), pr=None)
+                return f"{rel} is unchanged; recorded with no PR{suffix}"
+            try:
                 worktree.push(branch, force=True)
             except TriageError as exc:
                 _fail(f"export wave {wave}: {exc}", code=1)
@@ -2390,6 +2397,7 @@ class _Driver:
                         f"exported under `{rel}/` by `fr triage batch drive` "
                         "(`fr triage state import` reads it back).\n\n"
                         "Facts and rendered pages are not exported; they are rebuilt."
+                        + (f"\n\n{note}" if left else "")
                     ),
                 )
             except UnsupportedForgeOperation as exc:
@@ -2397,7 +2405,7 @@ class _Driver:
             except FORGE_ERRORS as exc:
                 _fail(f"export wave {wave}: the forge refused the PR: {exc}", code=1)
             self._record_export(repo, _covers(action), pr=number, head=head)  # the pin
-            return f"opened PR #{number} from {branch} at {head[:12]}"
+            return f"opened PR #{number} from {branch} at {head[:12]}{suffix}"
         finally:
             try:
                 checkout.remove_worktree(where)
@@ -2419,6 +2427,18 @@ class _Driver:
             _fail(f"export PR #{action.pr}: the forge refused the merge: {exc}", code=1)
         self._mark(repo, action.pr, merged=True)
         return f"merged export PR #{action.pr} at {action.head[:12]}"
+
+
+def _ignored_note(paths: tuple[str, ...], *, short: bool = False) -> str:
+    """What the export left out because the target repo ignores it (p4-r9), the first
+    few named: the warn's words, or (*short*) the export line's."""
+    n = len(paths)
+    shown = ", ".join(paths[:5]) + (f", and {n - 5} more" if n > 5 else "")
+    files = "file" if n == 1 else "files"
+    if short:
+        return f"{n} durable {files} ignored by the target repo not exported: {shown}"
+    verb = "is" if n == 1 else "are"
+    return f"{n} durable {files} {verb} ignored by the target repo and were not exported: {shown}"
 
 
 def _covers(action: Action) -> tuple[str, ...]:

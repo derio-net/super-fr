@@ -355,11 +355,13 @@ def test_push_force_overwrites_a_diverged_remote_branch(tmp_path: Path) -> None:
     assert remote.split()[0] == head
 
 
-def test_commit_paths_can_include_files_the_repo_ignores(tmp_path: Path) -> None:
-    """p4-r9: the export commits durable files a target repo's .gitignore would skip,
-    and only under the given path."""
+def test_commit_paths_never_forces_past_gitignore_and_ignored_names_what_it_left(
+    tmp_path: Path,
+) -> None:
+    """p4-r9: a target repo's .gitignore says what must never be committed; the export
+    respects it and reports what it left out instead."""
     checkout = _repo(tmp_path)
-    (checkout.path / ".gitignore").write_text("*.html\nsnapshots/\n")
+    (checkout.path / ".gitignore").write_text("snapshots/\n*.env\n")
     _git(checkout.path, "add", ".gitignore")
     _git(checkout.path, "commit", "--quiet", "-m", "ignore")
     _git(checkout.path, "push", "--quiet", "origin", "main")
@@ -367,18 +369,19 @@ def test_commit_paths_can_include_files_the_repo_ignores(tmp_path: Path) -> None
     wt = checkout.add_worktree(tmp_path / "export", "origin/main")
     root = wt.path / "docs" / "triage" / "scope"
     (root / "snapshots").mkdir(parents=True)
-    (root / "board").mkdir()
     (root / "snapshots" / "s.json").write_text("{}\n")
-    (root / "board" / "note.html").write_text("<p>n</p>\n")
-    (wt.path / "outside.html").write_text("ignored and not mine\n")
+    (root / "secret.env").write_text("TOKEN=x\n")
+    (root / "judgements.yaml").write_text("schema: 4\n")
 
-    assert wt.commit_paths(["docs/triage/scope"], "export") is None  # ignored without it
-
-    head = wt.commit_paths(["docs/triage/scope"], "export", include_ignored=True)
+    head = wt.commit_paths(["docs/triage/scope"], "export")
 
     assert head is not None
     committed = _git(wt.path, "show", "--name-only", "--format=", "HEAD").split()
-    assert sorted(committed) == [
-        "docs/triage/scope/board/note.html",
+    assert committed == ["docs/triage/scope/judgements.yaml"]
+    asked = ["docs/triage/scope/snapshots/s.json", "docs/triage/scope/secret.env",
+             "docs/triage/scope/judgements.yaml"]  # fmt: skip
+    assert wt.ignored(asked) == (
+        "docs/triage/scope/secret.env",
         "docs/triage/scope/snapshots/s.json",
-    ]
+    )
+    assert wt.ignored([]) == ()

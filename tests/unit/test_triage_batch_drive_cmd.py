@@ -2699,27 +2699,43 @@ def test_a_wave_finishing_while_the_export_pr_is_open_waits_then_exports_alone(
     assert _exports(state) == [("1", first, True), ("2", first, True), ("3", second, False)]
 
 
-def test_the_export_commits_durable_files_the_target_repo_ignores(
+def test_files_the_target_repo_ignores_are_reported_never_force_added(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    """p4-r9: a target repo's .gitignore never thins the exported state."""
+    """p4-r9: the export lands in a (public) repo whose .gitignore says what must never
+    be committed. Ignored durable files stay out, and are named three times: in the
+    export's line, in a warn for the wave, and in the PR body."""
     clone = git_checkout.path
-    (clone / ".gitignore").write_text("*.html\nsnapshots/\n", encoding="utf-8")
+    (clone / ".gitignore").write_text("snapshots/\n", encoding="utf-8")
     _git(clone, "add", ".gitignore")
-    _git(clone, "commit", "--quiet", "-m", "ignore pages")
+    _git(clone, "commit", "--quiet", "-m", "ignore snapshots")
     _git(clone, "push", "--quiet", "origin", "main")
     state = _finished_wave(tmp_path, world)
-    (state / "board" / "note.html").write_text("<p>n</p>\n", encoding="utf-8")
     (state / "snapshots").mkdir()
     (state / "snapshots" / "s.json").write_text("{}\n", encoding="utf-8")
+    bodies: list[str] = []
+    real_create = world.pr_create
+
+    def _create(repo: str, **kw: Any) -> int:
+        bodies.append(kw["body"])
+        return real_create(repo, **kw)
+
+    world.pr_create = _create  # type: ignore[method-assign]
 
     code, out = _export_drive(state, "--once", "--yes")
 
     assert code == 0, out
     _git(clone, "fetch", "--quiet", "origin")
     changed = _git(clone, "diff", "--name-only", "origin/main", f"origin/{EXPORT_HEAD}").split()
-    assert f"{SCOPE_DIR}/board/note.html" in changed
-    assert f"{SCOPE_DIR}/snapshots/s.json" in changed
+    assert f"{SCOPE_DIR}/snapshots/s.json" not in changed
+    assert f"{SCOPE_DIR}/judgements.yaml" in changed
+    snap = f"{SCOPE_DIR}/snapshots/s.json"
+    (export,) = _lines(out, "export")
+    assert "1 durable file ignored by the target repo" in export and snap in export
+    (warn,) = _lines(out, "warn")
+    assert warn.startswith(f"warn wave 1 {REPO}: 1 durable file is ignored by the target repo")
+    assert snap in warn
+    assert snap in bodies[0]
 
 
 def test_a_leftover_export_worktree_with_changes_is_replaced(
