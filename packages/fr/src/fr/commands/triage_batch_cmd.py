@@ -117,6 +117,7 @@ from fr.triage.batch_drive import (
     closeout_due,
     closeout_event,
     closeout_item_id,
+    default_selection,
     drive_pass,
     find_run,
     housekeeping_branch,
@@ -1360,8 +1361,8 @@ def _chosen(batches: list[Batch], named: list[str] | None) -> list[Batch]:
     """The batches to drive: those named; else every batch with a wave; else all."""
     if named:
         return [_find(batches, b) for b in named]
-    waved = [b for b in batches if b.wave is not None]
-    return waved or list(batches)
+    selected = default_selection(batches)
+    return [b for b in batches if b.id in selected]
 
 
 def _parse_at(stamp: str | None) -> datetime | None:

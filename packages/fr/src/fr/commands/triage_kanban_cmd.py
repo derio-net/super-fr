@@ -1,5 +1,5 @@
-"""`fr triage batch focus` — the board's only contact with `fr_dispatch` (spec
-2026-10-05-triage-batch-board §E; R8).
+"""`fr triage board` and `fr triage batch focus` — the board's only contact with
+`fr_dispatch` (spec 2026-10-05-triage-batch-board §E; R1, R7, R8).
 
 This module is `fr`'s third sanctioned soft point into `fr_dispatch`
 (`tests/unit/test_import_direction.py` `_SOFT_POINTS`): every such import sits
@@ -7,19 +7,24 @@ inside a function, behind `importlib.util.find_spec("fr_dispatch")`. It imports
 from `triage_cmd` and `fr.triage.*` only, never from `triage_batch_cmd`, so the
 import between the two stays one-way.
 
-Exit codes: 0 focused; 2 a refusal, always one line.
+Exit codes: 0 focused or written; 2 a refusal, always one line. Reading session
+statuses never refuses: whatever goes wrong is `unknown` plus one page note (R7).
 """
 
 from __future__ import annotations
 
 import importlib.util
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Annotated, NoReturn
+import webbrowser
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Annotated, NoReturn, get_args
 
 import typer
 from rich.markup import escape
 from rich.text import Text
 
+from fr.artifacts.atomic import write_text_atomic
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
@@ -29,6 +34,7 @@ from fr.commands.triage_cmd import (
     batch_app,
     console,
     err_console,
+    triage_app,
 )
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
 from fr.triage.batch_drive import (
@@ -37,12 +43,20 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     wave_group,
 )
+from fr.triage.kanban import BoardStatus, build_board
+from fr.triage.kanban_render import render_board
+from fr.triage.model import Facts, Judgements, Scope, state_dir
+from fr.triage.render import plural
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
     from fr_dispatch.work_item import WorkItem
 
     from fr.triage.model import Batch
+
+BOARD_FILE = "board.html"
+DEFAULT_REFRESH = 30
+_STATUSES = frozenset(get_args(BoardStatus))
 
 DISPATCH_INSTALL_HINT = (
     "this requires fr-dispatch — install it "
@@ -172,3 +186,134 @@ def batch_focus_command(
     if not focused:
         _fail(f"no live session for {probe.id}")
     console.print(f"focused {probe.id}", markup=False)
+
+
+# ---------------------------------------------------------------- the board
+
+
+def scope_args(repo: str | None, org: str | None, dir_override: Path | None) -> list[str]:
+    """The options a copied command carries so it reads the same state: `--repo` or `--org`
+    as the operator gave it, and `--dir` only when they did (R5)."""
+    args = ["--repo", repo] if repo is not None else ["--org", str(org)]
+    if dir_override is not None:
+        args += ["--dir", str(dir_override)]
+    return args
+
+
+def _probes(judgements: Judgements, facts: Facts, prefix: str) -> dict[str, list[WorkItem]]:
+    """Each batch's session (its latest dispatch's runner) and each runner-started
+    close-out's (its own), as probe items grouped by runner name. A `hand` close-out
+    has no session and is never probed."""
+    by_runner: dict[str, list[WorkItem]] = {}
+    for batch in judgements.batches:
+        repo = batch_repo(batch, facts)
+        if repo is None:
+            continue
+        dispatch, closeout = last_dispatch(batch), closeout_event(batch)
+        wanted = [(False, dispatch.runner)] if dispatch else []
+        if closeout is not None and closeout.runner != "hand":
+            wanted.append((True, closeout.runner))
+        for is_closeout, name in wanted:
+            probe = probe_item(repo, batch, closeout=is_closeout, prefix=prefix)
+            by_runner.setdefault(str(name), []).append(probe)
+    return by_runner
+
+
+def session_statuses(
+    judgements: Judgements, facts: Facts, *, prefix: str = DEFAULT_WORKSPACE_PREFIX
+) -> tuple[dict[str, BoardStatus], list[str]]:
+    """The live status of each batch's and each runner close-out's session, by item id,
+    and one page note per runner that could not say (R7).
+
+    Never refuses and prints nothing: a runner that cannot be loaded, fails its
+    preflight, lacks `SessionInspector` or raises leaves its items out of the result
+    (the board shows them `unknown`) and costs one note.
+    """
+    by_runner = _probes(judgements, facts, prefix) if judgements.batches else {}
+    if not by_runner:
+        return {}, []
+    if importlib.util.find_spec("fr_dispatch") is None:
+        return {}, ["fr-dispatch is not installed; session status is unavailable"]
+    from fr_dispatch.protocols import SessionInspector
+
+    statuses: dict[str, BoardStatus] = {}
+    notes: list[str] = []
+    for name, probes in sorted(by_runner.items()):
+        runner, reason = try_load(name)
+        if runner is None:
+            notes.append(
+                f"runner `{name}` could not be loaded ({reason}); its sessions show unknown"
+            )
+            continue
+        if not isinstance(runner, SessionInspector):
+            notes.append(f"runner `{name}` cannot report session status; its sessions show unknown")
+            continue
+        try:
+            refusal = runner.preflight(probes)
+            if refusal:
+                notes.append(
+                    f"runner `{name}` cannot report sessions: {' '.join(refusal.split())}; "
+                    "its sessions show unknown"
+                )
+                continue
+            found = runner.session_statuses(probes)
+        except Exception as exc:  # noqa: BLE001 - a failed read is `unknown`, never a failed render
+            notes.append(
+                f"runner `{name}` failed to report sessions: {one_line(exc)}; "
+                "its sessions show unknown"
+            )
+            continue
+        for key, value in found.items():
+            statuses[key] = value if value in _STATUSES else "unknown"
+    return statuses, notes
+
+
+def write_board(
+    scope: Scope,
+    target: Path,
+    *,
+    scope_args: Sequence[str],
+    refresh: int = DEFAULT_REFRESH,
+    prefix: str = DEFAULT_WORKSPACE_PREFIX,
+) -> Path:
+    """Render `board.html` into the state directory *target* from the facts and judgements
+    on disk now, with live session statuses. Returns the path written."""
+    _, facts, judgements = _load_state(scope, target)
+    statuses, notes = session_statuses(judgements, facts, prefix=prefix)
+    board = build_board(facts, judgements, statuses)
+    page = render_board(
+        board,
+        scope_args=scope_args,
+        rendered_at=datetime.now(UTC),
+        refresh=refresh,
+        notes=notes,
+    )
+    out = target / BOARD_FILE
+    write_text_atomic(out, page)
+    return out
+
+
+@triage_app.command("board")
+def board_command(
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    refresh: Annotated[
+        int,
+        typer.Option("--refresh", min=0, help="Reload the page every N seconds (0: never)."),
+    ] = DEFAULT_REFRESH,
+    open_: Annotated[bool, typer.Option("--open", help="Open the board in a browser.")] = False,
+) -> None:
+    """Write board.html: one card per batch in six lifecycle columns, with live session
+    status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
+    scope = _scope(repo, org)
+    target = state_dir(scope, dir_override)
+    out = write_board(
+        scope, target, scope_args=scope_args(repo, org, dir_override), refresh=refresh
+    )
+    _, _, judgements = _load_state(scope, target)
+    console.print(
+        f"wrote {out} ({plural(len(judgements.batches), 'batch')})", markup=False, soft_wrap=True
+    )
+    if open_:
+        webbrowser.open(out.resolve().as_uri())
