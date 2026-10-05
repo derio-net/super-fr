@@ -160,3 +160,6 @@ R4: harness/model from stored launch, else facts.config_for(repo).defaults.launc
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-triage-batch-board-p3 created=2026-10-05T20:27:52+00:00 -->
 ### phase-split-2026-10-05-triage-batch-board-p3 · decision · ask: freshness - drive hook, --watch, triage link (R11-R13)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-triage-batch-board-p1 created=2026-10-05T20:28:16+00:00 -->
+### phase-split-2026-10-05-triage-batch-board-p1 · decision · risk-first: the unproven herdr focus verbs, the new runner protocols and the third fr_dispatch soft point land and are reviewed before the board builds on them
