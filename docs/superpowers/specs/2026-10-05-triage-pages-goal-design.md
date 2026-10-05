@@ -67,7 +67,7 @@ R6. The architecture page (`architecture.html`) answers "What is the system, and
 
 R7. The origins page (`origins.html`) answers "Where do defects come from, and what process change stops them?". It shows, in order: where the issues came from, the conclusion (each cause linked to the batches that address it), filings per day, median hours to fix, the PR leaderboards, then the issue table as a collapsed section.
 
-R8. A new verb, `fr triage history render`, writes `history.html`, which answers "How did we get here?". It shows the snapshot timeline, then the finished waves as tabs (same table as the board), then authored fragments. A wave is finished when every batch in it is cancelled or has a close-out event with `archived` set. Finished waves appear on the history page and not on the board. Batch links on the history page point to `triage.html#batch-<id>`.
+R8. A new verb, `fr triage history render`, writes `history.html`, which answers "How did we get here?". It shows the snapshot timeline, then the finished waves as tabs (same table as the board), then authored fragments. A wave is finished when every batch in it is terminal. A batch is terminal when it is cancelled, has a close-out event with `archived` set, or has the derived stage `abandoned` (its PR closed without a merge). Finished waves appear on the history page and not on the board. The board preselects a wave only among the unfinished ones. The history page preselects the highest finished wave. Batch links on the history page point to `triage.html#batch-<id>`.
 
 R9. All four pages take authored fragments from `<state dir>/<page>/manifest.yaml` and the fragment files beside it, where `<page>` is `board`, `origins`, `architecture` or `history`. One shared implementation serves all four. It keeps today's manifest rules (names, the generated-section names a page has, missing generated names appended) and today's `validate_fragment` refusals. A fragment is placed exactly at its manifest position, between generated sections if that is where it is listed. A manifest entry can also be a mapping, `{fragment: <file>, title: <text>, collapsed: true}`, which renders the fragment as a closed section titled `<text>`. A fragment listed in a manifest survives every render of its page.
 
@@ -80,9 +80,9 @@ Schema 1 files still load. `fr triage origins check` reports a new set, "duplica
 
 R11. A judgement in `judgements.yaml` gains two optional fields, `severity` (`low`, `med` or `high`) and `duplicate_of` (an issue key). Both load on every schema, as `kind` does. `fr triage check` reports two new sets:
 - "no severity": open, judged issues without a severity;
-- "duplicate target unknown": `duplicate_of` names an issue that collect did not read.
+- "duplicate target unknown": `duplicate_of` names an issue that the forge would not show.
 
-The board shows each backlog row's severity, and each Next up row shows the most severe severity among its issues. An issue with `duplicate_of` is listed under Parked as "duplicate of <link>", and counts as placed for the unplaced set.
+`fr triage collect` views every `duplicate_of` target in a collected repo, as it already views every judged key, so a closed original is known and is not reported. The board shows each backlog row's severity, and each Next up row shows the most severe severity among its issues. An issue with `duplicate_of` leaves Backlog by tier and is listed only under Parked, as "duplicate of <link>". It counts as placed for the unplaced set. The link goes to the original's URL from the facts. When the facts do not hold the original, the key is shown as plain text.
 
 R12. `fr triage state export --to <dir>` copies a scope's durable state from the state directory to `<dir>/<scope>/`. `fr triage state import --from <dir> [--force]` copies it back. The durable state is: `judgements.yaml`, `origins.yaml`, `subsystems.yaml`, each page's manifest directory (manifest and fragment files), `snapshots/` and `authored-src/`. Facts files and rendered pages never travel. Import skips a state-directory file that is newer than the repo copy unless `--force` is given. Both verbs print every file they copied and every file they skipped.
 
@@ -93,11 +93,18 @@ R13. `.fr/triage.yaml` accepts an optional `export: {path: <repo-relative dir>}`
 - opens a ready (non-draft) PR as the collecting login, which `pr_authors` therefore trusts;
 - records `{wave, repo, pr}` under a new top-level `exports:` list in `judgements.yaml` (judgements schema 4).
 
-If the export changes nothing, the driver records the export with no PR and opens nothing. On a later pass the driver merges the export PR under the same gate as an archive PR: open, not a draft, required checks green, and head unchanged. It then records the merge. An export PR closed without a merge is reported as a warning on every pass. Without `--yes`, the pass prints the export and merge actions it would take. Without `export:` in the config, no export action exists.
+If the export changes nothing, the driver records the export with no PR and opens nothing. A trusted open PR already on `chore/triage-state-wave-<N>` with no recorded export means a pass died between opening and recording. The driver records that PR (adopts it) and does not push again. The export branch belongs to the driver, so a re-export force-pushes it.
+
+On a later pass the driver merges the export PR under the same gate as an archive PR. The PR must be trusted, open, not a draft, with required checks green. It is merged at the live head SHA, as `_archive` does. The driver then records the merge. Other PR states each get a warning on every pass, and change nothing else:
+- open with checks pending: the driver waits;
+- open with checks failing, or untrusted: counted as blocked;
+- closed without a merge.
+
+An export that is recorded but not yet merged keeps `drive` running, the same way a close-out does. Without `--yes`, the pass prints the actions it would take. Without `export:` in the config, no export action exists. A `group` or `org` scope never exports. A repo of such a scope that opts in gets one warning per pass naming `--repo`.
 
 R14. The `fr-triage`, `fr-origins` and `fr-audit` skills document the four page goals and the four fragment manifests. They state that hand-written analysis lives in fragments and never in a page edited after it is rendered. They also document `severity` and `duplicate_of` on judgements, the origins schema-2 fields, `fr triage history render`, `fr triage state export|import` and the `export:` config key.
 
-R15. In this repo, `docs/triage/README.md` names the `fr triage state` verbs and `docs/triage/sync.sh` is deleted. This repo's `docs/triage/derio-net--super-fr/` manifests move the dated fragments (the 2026-10-02 closing order, the 2026-10-02 origins analysis and the history to 2026-10-02) from the architecture manifest to `history/manifest.yaml`. They also drop the architecture manifest's entries for sections the page no longer has. `.fr/triage.yaml` opts in with `export: {path: docs/triage}`.
+R15. In this repo, `docs/triage/README.md` names the `fr triage state` verbs and `docs/triage/sync.sh` is deleted. This repo's `docs/triage/derio-net--super-fr/` manifests move the dated fragments (the 2026-10-02 closing order, the 2026-10-02 origins analysis and the history to 2026-10-02) from the architecture manifest to `history/manifest.yaml`. That manifest lists `timeline` and `finished-waves` first, then the three fragments, so R8's order holds under R9's placement rule. They also drop the architecture manifest's entries for sections the page no longer has. `.fr/triage.yaml` opts in with `export: {path: docs/triage}`.
 
 ## Design
 
@@ -119,21 +126,32 @@ helper. R2, R7, R9 and the history page use it, so every collapsed section looks
 `render.render()` keeps its inputs. Its body becomes:
 
 1. Masthead and `page_header("board")`.
-2. Since last report, as a table (R3). `diff_snapshots` already yields typed groups. A new
-   `_since_table(since)` flattens them into rows `(change, item_html, before, after)`.
-   "Filed" and "merged or closed" rows have an empty before or after. Acceptance moves come
-   from the existing `acceptance_note` data. Batches link to `#batch-<id>`. With no changes,
-   it shows one line, "Nothing changed since the last report."
+2. Since last report, as a table (R3). `SnapshotDiff` (`snapshot.py:69`) holds
+   pre-formatted strings today (`"bid: old -> stage"`, `"key closed"`), so it gains a
+   structured field. `transitions: list[Transition]`, where
+   `Transition(change, item, before, after, batch: str | None)`, is built by `diff_snapshots`
+   beside the strings, from the same comparisons:
+   - `change` is one of `merged-or-closed`, `filed`, `batch-stage`, `acceptance` or `figure`;
+   - `acceptance` rows come from what `acceptance_moved` compares, never from
+     `acceptance_note`, which stays the "not tracked" notice.
+
+   The string fields stay, because the history timeline's panels render them. A new
+   `_since_table(since)` draws the transitions. A row with `batch` set links to
+   `#batch-<id>`, and "filed" and "merged or closed" rows leave before or after empty. With
+   no transitions it shows one line, "Nothing changed since the last report."
 3. Needs you now and Next up, unchanged except for a severity pill on Next up rows (R11).
    Their severity is the maximum over member judgements, ordered `high > med > low`.
-4. Waves: tabs over `views.waves(judgements)`, minus the finished waves
-   (`views.finished_waves`, §D). `_wave_table` gains `Tier` after `Batch` (R4), computed by
-   the existing `views._tier`, renamed to the public `views.batch_tier` because two modules
-   now call it. If every wave is finished, the section reads "Every wave is finished: see
-   the history page." and links there.
+4. Waves: the closing-order kind chips (`kind_counts`) still head the section. Below them
+   come tabs over `views.waves(judgements)`, minus the finished waves (`finished_waves`, §D).
+   `preselected_wave` gains an `among` parameter, and the board passes the unfinished keys,
+   so the preselected key is always a tab (R8). `_wave_table` gains `Tier` after `Batch`
+   (R4). It is computed by the existing `views._tier`, renamed to the public
+   `views.batch_tier` because two modules now call it. If every wave is finished, the
+   section reads "Every wave is finished: see the history page." and links there.
 5. Collapsed sections, each through `collapsed(...)`: Backlog by tier (one nested collapsed
    section per tier, and Unranked), Ranked features, Parked, Patterns, PRs, Batches.
-   Backlog rows gain a severity pill, or `—`.
+   The existing backlog `FILTER_BAR` (search, sort, chips) moves inside Backlog by tier, at
+   its top, beside the rows it filters. Backlog rows gain a severity pill, or `—`.
 6. Batches. A stage filter of checkboxes, one per `BatchStage` present, is rendered `hidden`
    and unhidden by script, the same no-JS rule `tabs()` uses. Each `_batch_card` becomes a
    `<details id="batch-<id>" data-stage="<stage>">`. A small `FOLD_SCRIPT` does two things:
@@ -144,9 +162,11 @@ helper. R2, R7, R9 and the history page use it, so every collapsed section looks
    The merge-order list stays in the Batches section.
 
 Parked (R11): issues with `kind: parked`, plus open issues whose judgement has
-`duplicate_of`. A duplicate row reads "duplicate of <link>". The link points to the issue's
-row on the board when it is open there, and to its forge URL otherwise. The unplaced set in
-`check.py` treats an issue with `duplicate_of` as placed.
+`duplicate_of`. Those issues are left out of the tier sections. A duplicate row reads
+"duplicate of <link>". The link uses the original's `url` from the facts, or plain text when
+the facts do not hold it. `collect` adds every `duplicate_of` target in a collected repo to
+the keys it views, beside the judged keys (`collect.py`). The unplaced set in `check.py`
+treats an issue with `duplicate_of` as placed.
 
 ### C. Fragments: one shared module (R9)
 
@@ -182,9 +202,9 @@ def splice(resolved: Resolved, generated: Mapping[str, Callable[[], str]]) -> li
   entry becomes `<section class="fragment" data-fragment=…><div class="scroll">…</div></section>`,
   wrapped in `collapsed(...)` when the entry asks for it. Fragments therefore interleave
   (R9).
-- `architecture.py` re-exports `validate_fragment` and `resolve_manifest` for one release,
-  as thin aliases bound to the architecture page's generated names. That keeps
-  `test_triage_architecture.py` and any caller of the old import path working.
+- Nothing outside `fr/triage` imports these. `architecture.py` keeps no aliases, and the
+  manifest and fragment tests in `test_triage_architecture.py` move to a new
+  `test_triage_fragments.py`, rewritten for `Entry` and the interleaved order.
 
 Each page declares its `GENERATED` tuple:
 - board: `since`, `needs`, `next-up`, `waves`, `backlog`, `features`, `parked`, `patterns`,
@@ -199,17 +219,29 @@ The architecture page's `MOVED` map is:
 - `filings-per-day`, `origin-counts`: origins;
 - `timeline`: history.
 
-The masthead, `page_header` and the board's filter bar sit outside the manifest, always
-first.
+The masthead and `page_header` sit outside the manifest, always first. The board's
+`FILTER_BAR` belongs to the `backlog` section, and its stage filter to `batches`.
+
+A manifest that lists fragments but omits a page's generated names gets those names
+appended after its entries, as today. A manifest that wants generated sections first must
+therefore name them. R15's history manifest does this.
 
 ### D. Finished waves, one predicate (R8, R13)
 
-`views.finished_waves(judgements) -> set[str]` returns the wave keys where every batch is
-cancelled, or has a `closeout_event(batch)` whose `archived is not None`. The board, the
-history page and `batch_drive.drive_pass` all call it. It reads judgements only: the driver
-writes `archived` when it merges an archive PR (`_Driver._archive`) or adopts a hand
-archive, so judgements already record what "finished" needs. Unwaved batches never make a
-finished wave.
+`batch_drive.finished_waves(batches, stages) -> frozenset[str]` sits beside
+`closeout_event` (`batch_drive.py:338`). It returns the wave keys whose every batch is
+terminal: derived stage `cancelled` or `abandoned`, or a `closeout_event(batch)` whose
+`archived is not None`. `stages` maps batch id to `derive_batch_stage(batch, facts)`, which
+the driver `Snapshot` already carries (`Snapshot.stages`). `views` re-exports the function
+and calls it with stages derived the same way, so the board, the history page and
+`drive_pass` share one predicate. `views` already imports `batch_drive`, so the predicate
+lives there, not in `views`, to keep imports one-way. Unwaved batches never make a finished
+wave.
+
+`preselected_wave(judgements, among=None)` restricts its pick to `among` when it is given.
+The board passes the unfinished keys, and the history page the finished ones. Among those,
+it picks the highest wave with a batch neither merged nor cancelled, else the highest. For
+history, that is always the highest finished wave.
 
 ### E. Architecture and origins (R6, R7, R10)
 
@@ -227,7 +259,10 @@ stops loading them.
 
 **Origins.** `render_origins` builds its body through `splice` with the origins `GENERATED`
 order (R7), wrapping the issue table in `collapsed(...)`. Schema 2 (R10):
-- `SCHEMA` becomes 2, and `load_origins` accepts 1 or 2.
+- `SCHEMA` (`origins.py:53`) stamps both `origins-facts.json` and `origins.yaml` today. It
+  splits into two constants:
+  - `FACTS_SCHEMA = 1`, used by `write_facts` and `load_origins_facts`, which are unchanged;
+  - `CLASSIFICATION_SCHEMA = 2`, with `load_origins` accepting 1 or 2.
 - `Origin` gains `duplicate_of: str | None`, `fixed_by: str | None` and
   `introduced_in: str | None`. Validators refuse `duplicate_of` without
   `category: duplicate`, and refuse `introduced_in` on a regression. `duplicate_of` is
@@ -236,8 +271,9 @@ order (R7), wrapping the issue table in `collapsed(...)`. Schema 2 (R10):
   set.
 - The issue table's "Related PR" cell adds `introduced in …` and `fixed by …` lines when
   they are set. The Category cell for a duplicate links its original: to its table row
-  (each row gains `id="origin-<key>"`; rows carry none today) when the original is in the window, else to the forge URL built from
-  the key.
+  (each row gains `id="origin-<key>"`; rows carry none today) when the original is in the window. When it is outside the window but in
+  the same repo, the link is the duplicate's own `url` with its number replaced. Otherwise
+  the key is plain text.
 
 ### F. History page (R8)
 
@@ -259,12 +295,18 @@ no exemption change.
 - `Judgement.severity: Severity | None = None` and `Judgement.duplicate_of: str | None = None`
   load on every schema, the precedent `kind` set. `duplicate_of` is normalised like issue
   keys, and a judgement naming its own key is refused.
-- `JUDGEMENTS_SCHEMA` becomes 4, and `Judgements.schema_` accepts `1 | 2 | 3 | 4`.
+- `JUDGEMENTS_SCHEMA` becomes 4. `JUDGEMENTS_READS` (`model.py:46`) and
+  `Judgements.schema_` both gain 4.
 - Schema 4 adds a top-level `exports: list[Export]`, where
-  `Export(wave: str, repo: str, pr: int | None, merged: bool = False, at: str)`. The
+  `Export(wave: str, repo: str, at: AwareDatetime, pr: int | None = None, merged: bool = False)`.
+  `at` is when the export was recorded, typed like the batch events' timestamps. The
   validator that ties schema-3 events to schema 3 gains the same rule: `exports` requires
   schema 4.
-- The one writer (`batch.py`) writes `schema: 4`, as it writes 3 today.
+- The one writer (`batch.py`) writes `schema: 4`, as it writes 3 today. `save_batches`
+  rewrites only the `schema:` line and the `batches:` section, so a sibling
+  `save_exports(path, exports)` replaces the top-level `exports:` section. It uses the same
+  `_replace_top_level` and the same refuse-or-restore discipline. `_Driver` appends an
+  export through a `_record_export` helper beside `_append` (`triage_batch_cmd.py:2140`).
 - `check.classify` gains `no_severity` and `duplicate_unknown`. `check` prints them as
   sets; it still always exits 0.
 
@@ -302,23 +344,37 @@ The path must be relative, with no `..` and no leading `/`, else it is refused a
 **Decision (pure).** `Snapshot` gains:
 - `export_path: dict[str, str]`: repo to path, from config, for single-repo scopes only;
 - `exports: list[Export]`;
-- `export_prs: dict[(repo, wave), PrState]`: the live state of each recorded open export PR.
+- `export_prs: dict[tuple[str, str], LivePr]`, keyed `(repo, wave)`. It holds the live PR of
+  each recorded, unmerged export. For a finished wave with no recorded export, it holds the
+  open PR on `chore/triage-state-wave-<N>`, if any (`list_prs_by_head`). `LivePr` carries
+  `trusted`, the checks and the head, as for archive PRs.
+- `finished: frozenset[str]`: `finished_waves(batches, stages)`, computed once.
 
 `drive_pass` adds a step after archive (step 3b). For each repo with `export_path` and each
-`finished_waves` key that has no merged export:
+finished wave that has no merged export:
 
-| Recorded export | Live PR state | Action |
+| Recorded export | Live PR | Action |
 |---|---|---|
-| none | — | `export` |
+| none | none | `export` |
+| none | open, trusted | `export-adopt` (record it, no push) |
+| none | open, untrusted | `warn`, counted blocked |
 | PR, merged | — | nothing |
-| PR | open, not a draft, required checks green | `export-merge` |
-| PR | closed, not merged | `warn` (on every pass) |
-| `pr: None` | — | nothing (nothing changed when exported) |
+| PR | open, trusted, not a draft, required checks green | `export-merge` |
+| PR | open, checks pending | nothing; counted closing |
+| PR | open, checks failing, or untrusted, or a draft | `warn`, counted blocked |
+| PR | closed, not merged | `warn` on every pass, counted blocked |
+| `pr: None` | — | nothing (the export changed nothing) |
 
-`ActionKind` gains `export` and `export-merge`.
+`ActionKind` gains `export`, `export-adopt` and `export-merge`. `Action` gains an optional
+`wave: str | None`, and `action_line` prints `export wave <N> <repo>` for those kinds.
+`Summary` counts each `export`, `export-adopt`, `export-merge` and pending export as
+`closing`, and each warned export as `blocked`. So `summary.done` stays false while an
+export is still owed. A loop then keeps passing until the merge, or exits 3 waiting on the
+operator.
 
-For an org scope, a repo that opts in gets one `warn` per pass, "export is per repo scope;
-run drive with `--repo`". Export never copies an org scope's state into one repo.
+A `group` or `org` scope whose repo opts in gets one `warn` per pass: "export is per repo
+scope; run drive with `--repo`". Export never copies a multi-repo scope's state into one
+repo.
 
 **Execution.** `_Driver._export(action)` runs these steps:
 1. `checkout.fetch()`, then `add_worktree(<state>/export/<wave>, origin/<default>)`.
@@ -327,22 +383,28 @@ run drive with `--repo`". Export never copies an org scope's state into one repo
    those paths, including untracked files (`commit_all` stages only tracked ones), and
    returns `None` when nothing changed.
 4. If nothing changed, append `Export(pr=None)` and stop.
-5. Otherwise `Worktree.push("chore/triage-state-wave-<N>")`, then
-   `GhClient.pr_create(repo, head, base, title, body)`. That is a new adapter method: GitHub
-   only, ready not draft. GitLab and Gitea raise `UnsupportedForgeOperation`, as the other
-   write verbs do.
-6. Append `Export(pr=<n>)`, then remove the worktree.
+5. Otherwise `Worktree.push("chore/triage-state-wave-<N>", force=True)`, then
+   `GhClient.pr_create(repo, head, base, title, body) -> int`. `force` is a new keyword: the
+   branch belongs to the driver, and a pass that died after pushing leaves it behind
+   `origin/<default>`'s new commit. `pr_create` is a new adapter method: GitHub only, ready
+   not draft. GitLab and Gitea raise `UnsupportedForgeOperation`, as the other write verbs
+   do.
+6. Append `Export(pr=<n>)` through `_record_export`, then remove the worktree.
 
-`_export_merge` calls `pr_merge(repo, pr, head_sha=…, method=ctx.method)`, the archive
-path, and sets `merged: true`.
+A crash after step 5's push and before step 6 leaves an open PR with no record. The next
+pass sees it on the head and adopts it (`export-adopt` records it and pushes nothing). So
+no pass ever opens a second PR for one wave.
+
+`_export_merge` calls `pr_merge(repo, pr, head_sha=<live head>, method=ctx.method)`, as
+`_archive` does (`triage_batch_cmd.py:2151`), then sets `merged: true`.
 
 The export branch prefix `chore/triage-state-` is not in `ARCHIVE_PREFIXES`, so archive
 attribution can never claim an export PR. Without `--yes`, both actions print as
 `action_line`s. A forge write failure exits 1, as the other writes do.
 
 The PR is opened by the collecting login (`Facts.viewer`), so `allowed_authors` trusts it.
-A repo whose `pr_authors` leaves that login out sees its own export PR as untrusted, and
-the driver refuses to merge it with a `warn` that says so.
+A repo whose `pr_authors` leaves that login out sees its own export PR as untrusted. The
+table above refuses to merge it, with a `warn` that says why.
 
 ## Non-goals
 
@@ -374,11 +436,32 @@ Unit (CI):
   schema 4; the writer writes 4; `check`'s two new sets.
 - **State sync:** export and import file sets; facts and pages never copied; import
   skipping newer files and `--force`.
-- **Driver (pure):** the step-3b table, row by row; the org-scope warning; no action
-  without config.
+- **`finished_waves` and preselection:** an `abandoned` batch is terminal; the board never
+  preselects a finished wave (the case that used to raise `ValueError`); history preselects
+  the highest finished wave.
+- **Since table:** `SnapshotDiff.transitions` matches the string groups, change for change;
+  acceptance rows come from the moved rows.
+- **Origins schema split:** `origins-facts.json` stays schema 1, and `origins.yaml` loads 1
+  and 2.
+- **Driver (pure):** the step-3b table, row by row, including adopt, untrusted, pending,
+  failing and closed; the group-scope and org-scope warnings; no action without config;
+  `Summary.done` false while an export is owed.
 - **Driver (command):** `_export` against a temporary git repo with a fake `GhClient`:
-  committed paths, branch name, the `pr: None` path, the recorded `Export`.
-- **Worktree:** `commit_paths` stages untracked files under the path and nothing else.
+  committed paths, branch name, the force push over a stale branch, the `pr: None` path, the
+  recorded `Export`. `_export_merge` records `merged: true`, and a forge failure exits 1. A
+  drive loop does not return `done` while an export PR is open.
+- **Writer:** `save_exports` replaces only `exports:` and restores the file on refusal.
+- **Forge adapter:** `pr_create` opens a ready PR through `gh`; GitLab and Gitea raise
+  `UnsupportedForgeOperation`.
+- **Worktree:** `commit_paths` stages untracked files under the path and nothing else, and
+  `push(force=True)` overwrites the remote branch.
+- **CLI end to end:** `fr triage history render`, `fr triage state export` and
+  `fr triage state import` against a temporary state directory, including the printed
+  copied and skipped lists. Each render command prints the moved-name note.
+- **Collect:** a `duplicate_of` target in a collected repo is viewed.
+
+Every unit line above backs one of the eleven acceptance rows added at brainstorm. The plan
+links each row to its tests, and each row moves to `ci` as they land.
 
 Browser (visual evidence, phase and deliver): the board with the stage filter on and off,
 a batch link opening a collapsed card, collapsed sections, and the four pages' nav and
@@ -389,8 +472,9 @@ Post-merge, operator-driven:
    the four renders and open each page: one goal line, no section on two pages, and the
    2026-10-02 fragments on the history page.
 2. On the next finished wave, the driver opens `chore/triage-state-wave-<N>` and merges it
-   once green. Then `docs/triage/derio-net--super-fr/judgements.yaml` on main matches the
-   cache copy.
+   once green. The files on main then equal the cache as of the export commit (`git show`
+   of that commit against a copy taken when it was made), except for the `exports:` entry.
+   The driver records that entry after the commit, so it is never in the exported copy.
 
 ## Dependencies
 
