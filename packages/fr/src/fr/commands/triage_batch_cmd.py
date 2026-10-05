@@ -122,6 +122,7 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     drive_pass,
     export_branch,
+    export_target,
     find_run,
     finished_waves,
     housekeeping_branch,
@@ -1726,46 +1727,45 @@ class _Driver:
         is about (the recorded head for a recorded export, the live head otherwise)
         against `origin/<default>`, fetched first; an unreadable head reads as no
         files, which the decision refuses."""
-        recorded = {(e.repo, e.wave): e for e in judgements.exports}
         collected = {pr.number: pr for pr in facts.prs}
         out: dict[tuple[str, str], LivePr] = {}
         try:
             for repo in sorted(export_path):
-                waves = {str(b.wave) for b in judgements.batches
-                         if b.wave is not None and repos.get(b.id) == repo}  # fmt: skip
+                target = export_target(
+                    repo, judgements.batches, repos, finished, judgements.exports
+                )
+                if target is None:
+                    continue
                 client = self.client(facts, repo)
-                for wave in sorted(waves & finished):
-                    done = recorded.get((repo, wave))
-                    if done is not None and (done.merged or done.pr is None):
-                        continue
-                    found = _live_head_prs(
-                        client, repo, export_branch(wave), allowed_authors(repo, facts)
+                wave, done = target.wave, target.recorded
+                found = _live_head_prs(
+                    client, repo, export_branch(wave), allowed_authors(repo, facts)
+                )
+                if done is None:
+                    open_ = [p for p in found if p.state == "OPEN"]
+                    pick = next((p for p in open_ if p.trusted), open_[0] if open_ else None)
+                elif done.pr is not None:
+                    listed = next((p for p in found if p.number == done.pr), None)
+                    view = client.pr_view(repo, done.pr)
+                    pick = replace(
+                        listed or LivePr(number=done.pr, state="", draft=False, head=""),
+                        state=str(view.get("state", "")).upper(),
+                        draft=bool(view.get("draft")),
+                        head=str(view.get("head_oid") or ""),
                     )
-                    if done is None:
-                        open_ = [p for p in found if p.state == "OPEN"]
-                        pick = next((p for p in open_ if p.trusted), open_[0] if open_ else None)
-                    elif done.pr is not None:
-                        listed = next((p for p in found if p.number == done.pr), None)
-                        view = client.pr_view(repo, done.pr)
-                        pick = replace(
-                            listed or LivePr(number=done.pr, state="", draft=False, head=""),
-                            state=str(view.get("state", "")).upper(),
-                            draft=bool(view.get("draft")),
-                            head=str(view.get("head_oid") or ""),
-                        )
-                    if pick is None:
-                        continue
-                    pinned = done.head if done is not None else pick.head
-                    pick = replace(pick, files=self._export_files(repo, pinned or ""))
-                    if pick.state == "OPEN":
-                        pr = collected.get(pick.number)
-                        verdict, failing = checks_verdict(
-                            client.pr_required_checks(repo, pick.number),
-                            (pr.checks if pr is not None else None) or {},
-                            ci_none=self._ci_none(repo),
-                        )
-                        pick = replace(pick, checks=verdict, failing=failing)
-                    out[(repo, wave)] = pick
+                if pick is None:
+                    continue
+                pinned = done.head if done is not None else pick.head
+                pick = replace(pick, files=self._export_files(repo, pinned or ""))
+                if pick.state == "OPEN":
+                    pr = collected.get(pick.number)
+                    verdict, failing = checks_verdict(
+                        client.pr_required_checks(repo, pick.number),
+                        (pr.checks if pr is not None else None) or {},
+                        ci_none=self._ci_none(repo),
+                    )
+                    pick = replace(pick, checks=verdict, failing=failing)
+                out[(repo, wave)] = pick
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
@@ -2296,21 +2296,36 @@ class _Driver:
             return self._export(action, facts, action.batch, action.wave)
         if action.kind == "export-adopt":
             # pinned to the head adopted: a later commit on the branch never merges
-            self._record_export(action.batch, action.wave, pr=action.pr, head=action.head)
+            self._record_export(action.batch, _covers(action), pr=action.pr, head=action.head)
             return f"recorded the open PR #{action.pr} at {action.head[:12]}; nothing pushed"
         return self._export_merge(action, facts, action.batch, action.wave)
 
     def _record_export(
-        self, repo: str, wave: str, *, pr: int | None, head: str | None = None, merged: bool = False
+        self, repo: str, waves: tuple[str, ...], *, pr: int | None, head: str | None = None
     ) -> None:
-        """Record *wave*'s export in `judgements.yaml`'s `exports:` (§G), replacing an
-        earlier record of the same wave; a refused write exits 2."""
+        """Record one `exports:` entry per covered wave (§G, R13), all with the same PR
+        and head, replacing earlier entries of those waves; a refused write exits 2."""
         path = self.target / "judgements.yaml"
         read = load_judgements(path).exports
-        new = Export(wave=wave, repo=repo, at=_now(), pr=pr, head=head, merged=merged)
-        kept = [e for e in read if (e.repo, e.wave) != (repo, wave)]
+        at = _now()
+        new = [Export(wave=w, repo=repo, at=at, pr=pr, head=head) for w in waves]
+        kept = [e for e in read if not (e.repo == repo and e.wave in waves)]
+        self._save_exports(path, [*kept, *new], read)
+
+    def _mark_merged(self, repo: str, pr: int) -> None:
+        """Every entry carrying export PR *pr* is merged: a PR covers all its waves."""
+        path = self.target / "judgements.yaml"
+        read = load_judgements(path).exports
+        merged = [
+            e.model_copy(update={"merged": True}) if (e.repo, e.pr) == (repo, pr) else e
+            for e in read
+        ]
+        self._save_exports(path, merged, read)
+
+    @staticmethod
+    def _save_exports(path: Path, exports: list[Export], read: list[Export]) -> None:
         try:
-            save_exports(path, [*kept, new], read=read)
+            save_exports(path, exports, read=read)
         except TriageError as exc:
             _fail(str(exc))
 
@@ -2345,7 +2360,7 @@ class _Driver:
                     [rel], f"chore(triage): export the triage state after wave {wave}"
                 )
                 if head is None:
-                    self._record_export(repo, wave, pr=None)
+                    self._record_export(repo, _covers(action), pr=None)
                     return f"{rel} is unchanged; recorded with no PR"
                 worktree.push(branch, force=True)
             except TriageError as exc:
@@ -2368,7 +2383,7 @@ class _Driver:
                 _fail(str(exc))
             except FORGE_ERRORS as exc:
                 _fail(f"export wave {wave}: the forge refused the PR: {exc}", code=1)
-            self._record_export(repo, wave, pr=number, head=head)  # the merge's pin
+            self._record_export(repo, _covers(action), pr=number, head=head)  # the pin
             return f"opened PR #{number} from {branch} at {head[:12]}"
         finally:
             try:
@@ -2389,8 +2404,13 @@ class _Driver:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             _fail(f"export PR #{action.pr}: the forge refused the merge: {exc}", code=1)
-        self._record_export(repo, wave, pr=action.pr, head=action.head, merged=True)
+        self._mark_merged(repo, action.pr)
         return f"merged export PR #{action.pr} at {action.head[:12]}"
+
+
+def _covers(action: Action) -> tuple[str, ...]:
+    """The waves an export or adoption records: every one its PR covers (R13)."""
+    return action.covers or ((action.wave,) if action.wave is not None else ())
 
 
 def _say(line: str) -> None:

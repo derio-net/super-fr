@@ -2225,13 +2225,25 @@ def git_checkout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World) 
     return fake
 
 
-def _finished_wave(tmp_path: Path, world: World, *, exports: str = "") -> Path:
-    """Wave 1 is finished: its one batch merged, closed out and archived."""
-    world.issues[1] = "closed"
-    world.pr(11, "feat/batch-a", [1], state="MERGED", merged_at=NOW.isoformat())
+def _finished_wave(
+    tmp_path: Path,
+    world: World,
+    *,
+    exports: str = "",
+    waves: tuple[int, ...] = (1,),
+    live: tuple[int, ...] = (),
+) -> Path:
+    """Each of *waves* is finished: its one batch merged, closed out and archived. Each
+    of *live* has one merged batch still owed its close-out. Batch ids are `w<N>`."""
+    batches = []
+    for n in (*waves, *live):
+        world.issues[n] = "closed"
+        world.pr(10 + n, f"feat/batch-w{n}", [n], state="MERGED", merged_at=NOW.isoformat())
+        events = _dispatch_event(f"w{n}") + (ARCHIVED if n in waves else "")
+        batches.append(_batch(f"w{n}", n, wave=n, events=events))
     state = tmp_path / "state"
     state.mkdir()
-    _state(state, world, _batch("a", 1, events=_dispatch_event("a") + ARCHIVED))
+    _state(state, world, *batches)
     (state / "board").mkdir()
     (state / "board" / "manifest.yaml").write_text("sections: []\n", encoding="utf-8")
     if exports:
@@ -2589,3 +2601,69 @@ def test_a_group_scope_that_opts_in_is_warned_to_use_repo(
     assert snap.export_path == {}
     assert snap.export_refused == frozenset({REPO})
     assert snap.finished == frozenset({"1"})
+
+
+# --------------------------- one export PR covers every unexported finished wave (R13)
+
+
+def _finish(state: Path, n: int) -> None:
+    """Wave *n*'s batch is closed out and archived now."""
+    path = state / "judgements.yaml"
+    line = _dispatch_event(f"w{n}")
+    path.write_text(path.read_text("utf-8").replace(line, line + ARCHIVED), "utf-8")
+
+
+def test_one_pr_covers_three_finished_waves_and_its_merge_marks_all_three(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    state = _finished_wave(tmp_path, world, waves=(1, 2, 3))
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    prs = [n for n, p in world.prs.items() if p["head_ref"].startswith("chore/triage-state-")]
+    assert len(prs) == 1 and world.prs[prs[0]]["head_ref"] == "chore/triage-state-wave-3"
+    assert _lines(out, "export") == [
+        f"export wave 3 {REPO}: opened PR #{prs[0]} from chore/triage-state-wave-3 at "
+        + world.prs[prs[0]]["head_oid"][:12]
+    ]
+    assert _exports(state) == [("1", prs[0], False), ("2", prs[0], False), ("3", prs[0], False)]
+    assert len(set(_heads(state))) == 1 and _heads(state)[0] == world.prs[prs[0]]["head_oid"]
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert [m[0] for m in world.merged] == prs
+    assert _exports(state) == [("1", prs[0], True), ("2", prs[0], True), ("3", prs[0], True)]
+
+
+def test_a_wave_finishing_while_the_export_pr_is_open_waits_then_exports_alone(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = _finished_wave(tmp_path, world, waves=(1, 2), live=(3,))
+    real_create = world.pr_create
+
+    def _pending(repo: str, **kw: Any) -> int:
+        n = real_create(repo, **kw)
+        world.checks[n] = [{"name": "test", "bucket": "pending"}]
+        return n
+
+    monkeypatch.setattr(world, "pr_create", _pending)
+    assert _export_drive(state, "--once", "--yes")[0] == 0
+    (first,) = [n for n, p in world.prs.items() if p["head_ref"] == "chore/triage-state-wave-2"]
+    _finish(state, 3)  # wave 3 finishes while PR `first` is open
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert _lines(out, "export") == [] and _lines(out, "export-merge") == []
+    assert not [p for p in world.prs.values() if p["head_ref"] == "chore/triage-state-wave-3"]
+    assert _exports(state) == [("1", first, False), ("2", first, False)]
+
+    world.checks[first] = [{"name": "test", "bucket": "pass"}]
+    assert _export_drive(state, "--once", "--yes")[0] == 0  # merges `first`
+    assert [m[0] for m in world.merged] == [first]
+    code, out = _export_drive(state, "--once", "--yes")  # then wave 3, alone
+
+    assert code == 0, out
+    (second,) = [n for n, p in world.prs.items() if p["head_ref"] == "chore/triage-state-wave-3"]
+    assert _exports(state) == [("1", first, True), ("2", first, True), ("3", second, False)]

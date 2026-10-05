@@ -63,7 +63,7 @@ journal:
     draft rather than strictly before; one of them failed red (the refusal counted as acted) and drove a fix.'
 - kind: finding
   id: p4-export-backlog-of-finished-waves
-  review_scope: out
+  review_scope: in
   phase: 4
   title: opting in on a repo with many already-finished waves opens one export PR per wave at once
   body: 'Per the spec, step 3b acts on every finished wave with no merged export. A repo that sets export: after
@@ -123,4 +123,14 @@ resolves:
     test_triage_batch_drive_cmd.py against real temp repos: a rename from outside into the dir (both paths in
     changed_paths), 121 changed files with one outside sorting last, an unreadable head, and the happy path
     merging at the recorded SHA.'
+- id: p4-export-backlog-of-finished-waves
+  state: fixed
+  body: 'Spec amended in 1e267a0ee. batch_drive.export_target picks, per repo, the newest unmerged export PR and
+    the waves recorded with it, or else every finished wave with no entry; step 3b decides once per repo on it,
+    so one export (or adopt) covers all unexported finished waves on chore/triage-state-wave-<highest>
+    (Action.covers), Summary counts one owed export per PR, and a wave finishing while a PR is open waits.
+    The driver records one entry per covered wave with the same pr/head (pr None when unchanged), and a merge
+    marks every entry carrying that PR merged. Pure tests (written red first) in test_triage_batch_drive.py;
+    command tests in test_triage_batch_drive_cmd.py (three waves, one PR, three entries, merge marks all; a
+    wave finishing mid-PR waits, then exports alone), written right after the implementation.'
 evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p4-suite.log}

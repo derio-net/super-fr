@@ -1038,15 +1038,87 @@ def test_a_multi_repo_scope_that_opts_in_gets_one_warn_naming_repo() -> None:
     assert not any(a.kind.startswith("export") for a in got.actions)
 
 
-def test_every_finished_wave_is_decided_in_wave_order() -> None:
-    batches = [_finished("a", 1), _merged("b", 2, wave=10, events=[{**_CLOSEOUT, "archived": 8}])]
-    snap = _snap(
-        batches,
-        {"a": "merged", "b": "merged"},
-        export_path={REPO: "docs/triage"},
-        finished=frozenset({"1", "10"}),
+def _three_waves(**kw: Any) -> Snapshot:
+    """Waves 1, 2 and 10 finished; 11 still live."""
+    done = [{**_CLOSEOUT, "archived": 8}]
+    batches = [
+        _finished("a", 1),
+        _merged("b", 2, wave=2, events=done),
+        _merged("c", 3, wave=10, events=done),
+        _merged("d", 4, wave=11),
+    ]
+    stages = {b.id: "merged" for b in batches}
+    kw.setdefault("finished", frozenset({"1", "2", "10"}))
+    return _snap(batches, stages, export_path={REPO: "docs/triage"}, **kw)
+
+
+def test_one_export_covers_every_unexported_finished_wave_named_for_the_highest() -> None:
+    got = drive_pass(_three_waves())
+    (export,) = [a for a in got.actions if a.wave is not None]
+    assert (export.kind, export.wave, export.covers) == ("export", "10", ("1", "2", "10"))
+    assert "chore/triage-state-wave-10" in export.detail
+    base = drive_pass(_three_waves(finished=frozenset())).summary
+    assert got.summary.closing == base.closing + 1  # one owed export per PR, not per wave
+
+
+def _covering(
+    pr: int | None, *, merged: bool = False, waves: tuple[str, ...] = ("1", "2", "10")
+) -> list[Export]:
+    return [_export(w, pr=pr, merged=merged) for w in waves]
+
+
+def test_an_open_covering_pr_is_merged_once_for_all_its_waves() -> None:
+    got = drive_pass(_three_waves(exports=_covering(40), export_prs={(REPO, "10"): _trusted(40)}))
+    exports = [a for a in got.actions if a.wave is not None]
+    assert [(a.kind, a.wave, a.pr) for a in exports] == [("export-merge", "10", 40)]
+
+
+def test_a_wave_finishing_while_an_export_pr_is_open_waits_for_its_merge() -> None:
+    finished = frozenset({"1", "2", "10", "11"})
+    snap = _three_waves(
+        finished=finished,
+        exports=_covering(40),
+        export_prs={(REPO, "10"): _trusted(40, checks="pending")},
     )
-    assert [a.wave for a in drive_pass(snap).actions if a.kind == "export"] == ["1", "10"]
+    got = drive_pass(snap)
+    assert [a for a in got.actions if a.wave is not None] == []  # no second PR
+    base = drive_pass(_three_waves(finished=frozenset())).summary
+    assert got.summary.closing == base.closing + 1  # the one PR, still owed
+
+    after = drive_pass(_three_waves(finished=finished, exports=_covering(40, merged=True)))
+    (export,) = [a for a in after.actions if a.wave is not None]
+    assert (export.kind, export.wave, export.covers) == ("export", "11", ("11",))
+
+
+def test_waves_recorded_with_no_pr_are_covered_and_never_exported_again() -> None:
+    got = drive_pass(_three_waves(exports=_covering(None)))
+    assert [a for a in got.actions if a.wave is not None] == []
+
+
+def test_an_adoption_covers_every_unexported_finished_wave() -> None:
+    got = drive_pass(_three_waves(export_prs={(REPO, "10"): _trusted(40, head="adopted")}))
+    (adopt,) = [a for a in got.actions if a.wave is not None]
+    assert (adopt.kind, adopt.wave, adopt.covers, adopt.head) == (
+        "export-adopt",
+        "10",
+        ("1", "2", "10"),
+        "adopted",
+    )
+
+
+def test_export_target_names_the_newest_unmerged_pr_and_its_waves() -> None:
+    from fr.triage.batch_drive import export_target
+
+    snap = _three_waves(
+        exports=[*_covering(39, merged=True, waves=("1",)), *_covering(40, waves=("2", "10"))]
+    )
+    target = export_target(REPO, snap.batches, snap.repos, snap.finished, snap.exports)
+    assert target is not None
+    assert (target.wave, target.covers, target.recorded and target.recorded.pr) == (
+        "10",
+        ("2", "10"),
+        40,
+    )
 
 
 def test_an_export_action_line_names_the_wave_and_the_repo() -> None:

@@ -154,8 +154,10 @@ class Action:
     train: str = ""  # merge: the repo whose train this candidate belongs to
     archived: int | None = None  # adopt: the close-out event's `archived`
     items: tuple[str, ...] = ()  # close: the item ids whose sessions to close
-    # export*, and a warn about one: the wave key (`batch` is then the repo)
+    # export*, and a warn about one: the wave key (`batch` is then the repo); the
+    # highest wave the export PR covers, which names its branch
     wave: str | None = None
+    covers: tuple[str, ...] = ()  # export, export-adopt: every wave the PR records
 
 
 @dataclass(frozen=True)
@@ -404,6 +406,40 @@ def _outside(root: str, files: Sequence[str]) -> str:
     return f"it changes {', '.join(stray[:3])}, outside {prefix}" if stray else ""
 
 
+@dataclass(frozen=True)
+class ExportTarget:
+    """What step 3b decides about for one repo (§I, R13): the repo's newest unmerged
+    export PR and the waves recorded with it, or, with none, every finished wave of the
+    repo that has no export entry at all. `wave`, the highest, names the branch."""
+
+    repo: str
+    wave: str
+    covers: tuple[str, ...]
+    recorded: Export | None  # the newest unmerged entry with a PR; None: not exported
+
+
+def export_target(
+    repo: str,
+    batches: Iterable[Batch],
+    repos: Mapping[str, str],
+    finished: frozenset[str],
+    exports: Iterable[Export],
+) -> ExportTarget | None:
+    """One export PR per repo covers every unexported finished wave. While one is
+    unmerged, it is the target and a wave that finished since waits for a later pass,
+    so no second PR is opened. None: nothing is owed."""
+    mine = [e for e in exports if e.repo == repo]
+    unmerged = [e for e in mine if e.pr is not None and not e.merged]
+    if unmerged:
+        newest = unmerged[-1]
+        covers = sorted({e.wave for e in unmerged if e.pr == newest.pr}, key=_wave_order)
+        return ExportTarget(repo, covers[-1], tuple(covers), newest)
+    entered = {e.wave for e in mine}
+    waves = {str(b.wave) for b in batches if b.wave is not None and repos.get(b.id) == repo}
+    owed = sorted((waves & finished) - entered, key=_wave_order)
+    return ExportTarget(repo, owed[-1], tuple(owed), None) if owed else None
+
+
 def _export_row(
     repo: str, wave: str, done: Export | None, live: LivePr | None, root: str
 ) -> tuple[Action | None, ExportCount]:
@@ -458,26 +494,31 @@ def _export_row(
 
 def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
     """§I step 3b: a group or org scope that opts in is warned once; then, for each
-    opted-in repo and each finished wave of it, `_export_row`. Returns the actions and
-    how many owed exports are closing (acting or waiting) and blocked (warned)."""
+    opted-in repo, `_export_row` on its `export_target`: one PR per repo, never one per
+    wave. Returns the actions and how many owed export PRs are closing (acting or
+    waiting) and blocked (warned)."""
     actions = [
         Action("warn", repo, f"export is per repo scope; run drive with --repo {repo}")
         for repo in sorted(snap.export_refused)
     ]
     counts = {"closing": 0, "blocked": 0}
-    recorded = {(e.repo, e.wave): e for e in snap.exports}  # the last record of a wave wins
     for repo in sorted(snap.export_path):
-        mine = {str(b.wave) for b in snap.batches
-                if b.wave is not None and snap.repos.get(b.id) == repo}  # fmt: skip
-        for wave in sorted(mine & snap.finished, key=_wave_order):
-            action, count = _export_row(
-                repo, wave, recorded.get((repo, wave)), snap.export_prs.get((repo, wave)),
-                snap.export_path[repo],
-            )  # fmt: skip
-            if action is not None:
-                actions.append(action)
-            if count is not None:
-                counts[count] += 1
+        target = export_target(repo, snap.batches, snap.repos, snap.finished, snap.exports)
+        if target is None:
+            continue
+        action, count = _export_row(
+            repo, target.wave, target.recorded, snap.export_prs.get((repo, target.wave)),
+            snap.export_path[repo],
+        )  # fmt: skip
+        if action is not None:
+            if action.kind in ("export", "export-adopt"):
+                action = replace(action, covers=target.covers)
+                if len(target.covers) > 1:
+                    action = replace(action, detail=f"{action.detail} (covers waves "
+                                     f"{', '.join(target.covers)})")  # fmt: skip
+            actions.append(action)
+        if count is not None:
+            counts[count] += 1
     return actions, counts["closing"], counts["blocked"]
 
 
