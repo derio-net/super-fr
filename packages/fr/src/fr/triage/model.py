@@ -54,6 +54,7 @@ TruncatedList = Literal["repos", "issues", "prs"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
 Kind = Literal["defect", "feature", "parked"]
+Severity = Literal["low", "med", "high"]
 
 # The hidden first line of the comment a batch dispatch posts on each member
 # (spec 2026-09-25-triage-batches §3.E). `collect` dates a dispatch by it, so the
@@ -385,6 +386,20 @@ class Judgement(_Strict):
     # What the issue is, for the board's closing order (wave-driver R9). Optional on
     # every schema: a file that never says loads exactly as before.
     kind: Kind | None = None
+    # How bad it is, and what it duplicates (triage-pages-goal R11). Optional on every
+    # schema, the `kind` precedent: a file that never says loads exactly as before.
+    severity: Severity | None = None
+    duplicate_of: str | None = None
+
+    @field_validator("duplicate_of")
+    @classmethod
+    def _duplicate_of_is_a_key(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        bad = _bad_keys([v])
+        if bad:
+            raise ValueError(f"duplicate_of must be '<repo-name>#<number>', got {bad!r}")
+        return normalize_key(v)
 
 
 class Feature(_Strict):
@@ -582,6 +597,13 @@ class Judgements(_Strict):
             seen[canon] = key
             out[canon] = value
         return out
+
+    @model_validator(mode="after")
+    def _no_judgement_duplicates_itself(self) -> Judgements:
+        own = sorted(k for k, j in self.issues.items() if j.duplicate_of == k)
+        if own:
+            raise ValueError(f"{own} name their own key as duplicate_of")
+        return self
 
     @model_validator(mode="after")
     def _tiers_are_declared(self) -> Judgements:

@@ -191,7 +191,13 @@ def collect_into(
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
-    judged = list(loaded.issues) if loaded else []
+    # Judged keys, plus each `duplicate_of` target: a closed original is viewed too, so the
+    # board can link it and `check` does not call it unknown (triage-pages-goal R11).
+    judged = (
+        [*loaded.issues, *(j.duplicate_of for j in loaded.issues.values() if j.duplicate_of)]
+        if loaded
+        else []
+    )
     # The branch and time of each batch's last dispatch, unless it was cancelled
     # since (spec 2026-09-25-triage-batches §3.A): collect looks each one up by
     # head, unless the previous facts already show it terminal (review r2p-f3).
@@ -326,6 +332,17 @@ def check_command(
     )
     for i in result.unplaced:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+    console.print(
+        f"[bold]no severity[/bold] ({len(result.no_severity)}) — open, judged, no severity"
+    )
+    for i in result.no_severity:
+        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+    console.print(
+        f"[bold]duplicate unknown[/bold] ({len(result.duplicate_unknown)}) — `duplicate_of` "
+        "names an issue the facts do not hold"
+    )
+    for key in result.duplicate_unknown:
+        console.print(f"  {escape(key)}", soft_wrap=True)
 
 
 @triage_app.command("render")

@@ -284,3 +284,19 @@ def test_the_collect_command_views_on_a_second_run_too(tmp_path: Path, forge: Fa
     assert CliRunner().invoke(app, args).exit_code == 0
 
     assert len(_viewed(forge)) == 1
+
+
+def test_a_duplicate_of_target_in_a_collected_repo_is_viewed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _forge(closed={(REPO, 8): _view(8)})
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: fake)
+    (tmp_path / "judgements.yaml").write_text(
+        "schema: 3\ntiers: [{n: 1, title: T}]\nissues:\n"
+        '  "repo#5": {tier: 1, duplicate_of: "Repo#8"}\n',
+        encoding="utf-8",
+    )
+
+    triage_cmd.collect_into(SCOPE, tmp_path)
+
+    assert sorted(kw["number"] for kw in _viewed(fake)) == [5, 8]

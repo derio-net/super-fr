@@ -753,7 +753,9 @@ def test_check_reports_a_duplicate_target_outside_the_window(
 ) -> None:
     _collect(monkeypatch, tmp_path)
     (tmp_path / "origins.yaml").write_text(
-        classification_yaml().replace("schema: 1", "schema: 2").replace(
+        classification_yaml()
+        .replace("schema: 1", "schema: 2")
+        .replace(
             "  widgets#6:\n    category: duplicate\n",
             "  widgets#6:\n    duplicate_of: widgets#99\n    category: duplicate\n",
         ),
@@ -769,7 +771,8 @@ def _dup_page(monkeypatch: pytest.MonkeyPatch, d: Path, extra_6: str, extra_14: 
     _collect(monkeypatch, d)
     text = classification_yaml().replace("schema: 1", "schema: 2")
     text = text.replace(
-        "  widgets#6:\n    category: duplicate\n", f"  widgets#6:\n    category: duplicate\n{extra_6}"
+        "  widgets#6:\n    category: duplicate\n",
+        f"  widgets#6:\n    category: duplicate\n{extra_6}",
     )
     text = text.replace(
         "  widgets#14:\n    category: duplicate\n",
@@ -816,10 +819,14 @@ def test_related_pr_cell_shows_introduced_in_and_fixed_by(
 ) -> None:
     page = _dup_page(monkeypatch, tmp_path, "")
     _collect(monkeypatch, tmp_path)
-    text = classification_yaml().replace("schema: 1", "schema: 2").replace(
-        "  widgets#3:\n    category: new-feature\n",
-        "  widgets#3:\n    category: new-feature\n    introduced_in: example-org/widgets#90\n"
-        "    fixed_by: example-org/widgets#91\n",
+    text = (
+        classification_yaml()
+        .replace("schema: 1", "schema: 2")
+        .replace(
+            "  widgets#3:\n    category: new-feature\n",
+            "  widgets#3:\n    category: new-feature\n    introduced_in: example-org/widgets#90\n"
+            "    fixed_by: example-org/widgets#91\n",
+        )
     )
     (tmp_path / "origins.yaml").write_text(text, encoding="utf-8")
     assert _run(monkeypatch, "render", tmp_path).exit_code == 0
