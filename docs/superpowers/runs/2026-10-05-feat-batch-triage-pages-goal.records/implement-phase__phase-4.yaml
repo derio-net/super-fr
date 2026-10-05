@@ -12,6 +12,7 @@ ticks:
 - P4.T2.S3
 - P4.T3.S1
 - P4.T3.S2
+- P4.T3.S3
 refactor:
   P4.T1: state_sync is one copy loop shared by both directions; nothing to clean
 journal:

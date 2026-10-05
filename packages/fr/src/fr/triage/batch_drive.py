@@ -391,70 +391,71 @@ def _wave_order(wave: str) -> tuple[int, int | str]:
     return (0, int(wave)) if wave.lstrip("-").isdigit() else (1, wave)
 
 
+ExportCount = Literal["closing", "blocked"] | None
+
+
+def _export_row(
+    repo: str, wave: str, done: Export | None, live: LivePr | None, path: str
+) -> tuple[Action | None, ExportCount]:
+    """One row of §I's table: the action for *repo*'s finished *wave*, given its
+    recorded export (*done*) and the live PR, and how the summary counts it."""
+    head = export_branch(wave)
+    if done is not None and (done.merged or done.pr is None):
+        return None, None  # merged, or the export changed nothing
+    if done is None:
+        if live is None or live.state != "OPEN":
+            return Action("export", repo, f"to {path} on {head}", wave=wave), "closing"
+        if live.trusted:
+            adopt = f"PR #{live.number} on {head} is open with no record; recording it"
+            return Action("export-adopt", repo, adopt, pr=live.number, wave=wave), "closing"
+        return Action("warn", repo, f"PR #{live.number} on {head} is not trusted (not from "
+                      "this repo by an allowed author); it is never adopted or merged",
+                      pr=live.number, wave=wave), "blocked"  # fmt: skip
+    if live is None:
+        return None, "closing"  # not read this pass: still owed
+    if live.state == "MERGED":
+        return None, None
+    why = ""
+    if live.state != "OPEN":
+        why = "is closed without a merge"
+    elif not live.trusted:
+        why = "is not trusted (not from this repo by an allowed author)"
+    elif live.draft:
+        why = "is a draft"
+    elif live.checks == "failing":
+        why = f"has failing checks: {', '.join(live.failing) or 'unknown'}"
+    if why:
+        return Action("warn", repo, f"export PR #{live.number} {why}; the operator must act",
+                      pr=live.number, wave=wave), "blocked"  # fmt: skip
+    if live.checks != "green":
+        return None, "closing"  # checks pending: wait
+    return Action("export-merge", repo, f"PR #{live.number} at {live.head[:12]}",
+                  pr=live.number, head=live.head, wave=wave), "closing"  # fmt: skip
+
+
 def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
-    """§I step 3b: for each opted-in repo and each finished wave of it with no merged
-    export, the one action the table gives. Returns the actions and how many owed
-    exports are closing (acting or waiting on checks) and blocked (warned)."""
-    actions: list[Action] = []
-    closing = blocked = 0
-    for repo in sorted(snap.export_refused):
-        actions.append(
-            Action("warn", repo, f"export is per repo scope; run drive with --repo {repo}")
-        )
-    recorded: dict[tuple[str, str], Export] = {}
-    for e in snap.exports:
-        recorded[(e.repo, e.wave)] = e  # the last record of a wave wins
+    """§I step 3b: a group or org scope that opts in is warned once; then, for each
+    opted-in repo and each finished wave of it, `_export_row`. Returns the actions and
+    how many owed exports are closing (acting or waiting) and blocked (warned)."""
+    actions = [
+        Action("warn", repo, f"export is per repo scope; run drive with --repo {repo}")
+        for repo in sorted(snap.export_refused)
+    ]
+    counts = {"closing": 0, "blocked": 0}
+    recorded = {(e.repo, e.wave): e for e in snap.exports}  # the last record of a wave wins
     for repo in sorted(snap.export_path):
         mine = {str(b.wave) for b in snap.batches
                 if b.wave is not None and snap.repos.get(b.id) == repo}  # fmt: skip
         for wave in sorted(mine & snap.finished, key=_wave_order):
-            done = recorded.get((repo, wave))
-            if done is not None and (done.merged or done.pr is None):
-                continue  # merged, or the export changed nothing
-            live = snap.export_prs.get((repo, wave))
-            head = export_branch(wave)
-            if done is None:
-                if live is None or live.state != "OPEN":
-                    closing += 1
-                    actions.append(Action("export", repo, f"to {snap.export_path[repo]} on {head}",
-                                          wave=wave))  # fmt: skip
-                elif live.trusted:
-                    closing += 1
-                    actions.append(Action("export-adopt", repo, f"PR #{live.number} on {head} "
-                                          "is open with no record; recording it",
-                                          pr=live.number, wave=wave))  # fmt: skip
-                else:
-                    blocked += 1
-                    actions.append(Action("warn", repo, f"PR #{live.number} on {head} is not "
-                                          "trusted (not from this repo by an allowed author); "
-                                          "it is never adopted or merged",
-                                          pr=live.number, wave=wave))  # fmt: skip
-                continue
-            if live is None:
-                closing += 1  # not read this pass: still owed
-                continue
-            if live.state == "MERGED":
-                continue
-            why = ""
-            if live.state != "OPEN":
-                why = "is closed without a merge"
-            elif not live.trusted:
-                why = "is not trusted (not from this repo by an allowed author)"
-            elif live.draft:
-                why = "is a draft"
-            elif live.checks == "failing":
-                why = f"has failing checks: {', '.join(live.failing) or 'unknown'}"
-            if why:
-                blocked += 1
-                actions.append(Action("warn", repo, f"export PR #{live.number} {why}; the "
-                                      "operator must act", pr=live.number, wave=wave))  # fmt: skip
-                continue
-            closing += 1
-            if live.checks == "green":
-                actions.append(Action("export-merge", repo, f"PR #{live.number} at "
-                                      f"{live.head[:12]}", pr=live.number, head=live.head,
-                                      wave=wave))  # fmt: skip
-    return actions, closing, blocked
+            action, count = _export_row(
+                repo, wave, recorded.get((repo, wave)), snap.export_prs.get((repo, wave)),
+                snap.export_path[repo],
+            )  # fmt: skip
+            if action is not None:
+                actions.append(action)
+            if count is not None:
+                counts[count] += 1
+    return actions, counts["closing"], counts["blocked"]
 
 
 def is_finished(batch: Batch, stage: BatchStage, archives: Sequence[LivePr]) -> bool:
