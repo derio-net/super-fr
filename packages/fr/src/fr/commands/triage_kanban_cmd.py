@@ -46,7 +46,6 @@ from fr.triage.batch_drive import (
     wave_group,
 )
 from fr.triage.drive_lock import live_driver
-from fr.triage.errors import TriageError
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.model import Facts, Judgements, Scope, state_dir
@@ -314,40 +313,61 @@ def _watch(
 ) -> None:
     """Re-collect and re-render every *interval* seconds until interrupted (R12). A live
     drive keeps the board fresh itself, so an iteration that finds its lock held skips."""
-    if (pid := live_driver(target)) is not None:
-        _fail(f"a drive (pid {pid}) holds {target / 'drive.lock'}; it keeps the board fresh")
+    if (holder := live_driver(target)) is not None:
+        _fail(f"a drive ({holder}) holds {target / 'drive.lock'}; it keeps the board fresh")
     skipping, failures, opened = False, set[str](), False
+
+    def recovered(what: str) -> None:
+        failures.difference_update({f for f in failures if f.startswith(f"{what}\0")})
+
+    def warn_once(what: str, exc: BaseException) -> None:
+        reason = one_line(exc)
+        if f"{what}\0{reason}" not in failures:
+            failures.add(f"{what}\0{reason}")
+            err_console.print(
+                f"[yellow]warning:[/yellow] {what} failed: {escape(reason)}; "
+                f"retrying every {interval}s",
+                soft_wrap=True,
+            )
+
     try:
         while True:
-            if (pid := live_driver(target)) is not None:
+            if (holder := live_driver(target)) is not None:
                 if not skipping:
                     skipping = True
                     console.print(
-                        f"a drive (pid {pid}) now holds the lock: skipping collect and render "
+                        f"a drive ({holder}) now holds the lock: skipping collect and render "
                         "until it is gone",
                         markup=False,
                         soft_wrap=True,
                     )
+                _sleep(interval)
+                continue
+            skipping = False
+            # Nothing but an interrupt ends the watch (R12): a degraded forge, a missing
+            # facts.json or a failed write is one warning per cause, then the next interval.
+            try:
+                recollect(scope, target)
+            except Exception as exc:  # noqa: BLE001
+                warn_once("collect", exc)
             else:
-                skipping = False
-                try:
-                    recollect(scope, target)
-                except TriageError as exc:  # a degraded forge never ends the watch
-                    if str(exc) not in failures:
-                        failures.add(str(exc))
-                        err_console.print(
-                            f"[yellow]warning:[/yellow] collect failed: {escape(str(exc))}; "
-                            f"rendering what is on disk, retrying every {interval}s",
-                            soft_wrap=True,
-                        )
-                else:
-                    failures.clear()
-                out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
+                recovered("collect")
+            try:
+                with err_console.capture() as said:
+                    out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
+            except typer.Exit:
+                text = Text.from_ansi(said.get()).plain.strip().removeprefix("error:").strip()
+                warn_once("render", RuntimeError(text or "refused"))
+            except Exception as exc:  # noqa: BLE001
+                warn_once("render", exc)
+            else:
+                recovered("render")
                 console.print(
                     f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True
                 )
                 if open_ and not opened:
-                    opened = webbrowser.open(out.resolve().as_uri()) or True
+                    webbrowser.open(out.resolve().as_uri())
+                    opened = True
             _sleep(interval)
     except KeyboardInterrupt:
         console.print("stopped", markup=False)

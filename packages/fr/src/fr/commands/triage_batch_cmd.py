@@ -141,7 +141,7 @@ from fr.triage.batch_merge import (
     run_queue,
 )
 from fr.triage.batch_version import read_source, reserve
-from fr.triage.drive_lock import DRIVE_LOCK
+from fr.triage.drive_lock import DRIVE_LOCK, LOCK_GRACE
 from fr.triage.drive_lock import lock_pid as _lock_pid
 from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.drive_lock import pid_alive as _pid_alive
@@ -1165,9 +1165,6 @@ def batch_merge_command(
 # ------------------------------------------------------------------- drive
 
 DEFAULT_INTERVAL = 120
-LOCK_GRACE = 10.0
-"""Seconds an unreadable `drive.lock` is held: long enough for a starter that
-created it to have written it (review rg-7)."""
 SERVICE_PATHS: tuple[str, ...] = (
     ".devcontainer/fr-profiles.yaml",
     *sorted({p for paths in CI_CONFIG_PATHS.values() for p in paths}),

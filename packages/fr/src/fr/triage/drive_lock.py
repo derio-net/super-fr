@@ -10,9 +10,13 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 
 DRIVE_LOCK = "drive.lock"
+LOCK_GRACE = 10.0
+"""Seconds an unreadable `drive.lock` is held: long enough for a starter that
+created it to have written it (review rg-7)."""
 
 
 def pid_alive(pid: int) -> bool:
@@ -40,9 +44,21 @@ def lock_pid(text: str) -> int | None:
         return None
 
 
-def live_driver(target: Path) -> int | None:
-    """The pid of the live driver holding `<target>/drive.lock`, else None (no lock,
-    a lock not yet whole, or one whose pid is gone)."""
-    held = lock_text(target / DRIVE_LOCK)
-    pid = lock_pid(held) if held is not None else None
-    return pid if pid is not None and pid_alive(pid) else None
+def live_driver(target: Path) -> str | None:
+    """Who holds `<target>/drive.lock`, as `pid <n>` or `a driver starting up`, else
+    None (no lock, or one whose pid is gone).
+
+    The drive's own rule (`triage_batch_cmd.drive_lock`): a lock not yet whole is held
+    for `LOCK_GRACE` seconds after it was written, then counts as stale (review p3-r1)."""
+    path = target / DRIVE_LOCK
+    held = lock_text(path)
+    if held is None:
+        return None
+    pid = lock_pid(held)
+    if pid is None:
+        try:
+            age = time.time() - path.stat().st_mtime
+        except FileNotFoundError:
+            return None
+        return "a driver starting up" if age < LOCK_GRACE else None
+    return f"pid {pid}" if pid_alive(pid) else None

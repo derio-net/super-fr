@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ import pytest
 from fr.cli import app
 from fr.commands import triage_kanban_cmd
 from fr.commands.triage_kanban_cmd import scope_args, session_statuses, write_board
+from fr.triage.drive_lock import LOCK_GRACE
 from fr.triage.errors import ForgeError
 from fr.triage.model import Scope, load_facts, load_judgements
 from typer.testing import CliRunner
@@ -400,6 +402,86 @@ def test_a_collect_that_fails_warns_once_and_the_loop_goes_on(
     code, out = _board(tmp_path, "--watch")
     assert code == 0, out
     assert out.count("forge said no") == 1 and w.calls == ["write"] * 3
+
+
+def test_watch_refuses_a_young_unreadable_lock_like_the_drive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lock not yet whole is a driver starting up for LOCK_GRACE (review p3-r1)."""
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch)
+    (tmp_path / "drive.lock").write_text("")
+    code, out = _board(tmp_path, "--watch")
+    assert code == 2 and "starting up" in out and w.calls == []
+
+
+def test_watch_ignores_an_old_unreadable_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch, stop=1)
+    lock = tmp_path / "drive.lock"
+    lock.write_text("")
+    old = time.time() - LOCK_GRACE - 5
+    os.utime(lock, (old, old))
+    assert _board(tmp_path, "--watch")[0] == 0 and w.calls == ["collect", "write"]
+
+
+def test_any_collect_failure_warns_once_and_the_loop_goes_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch, stop=3)
+
+    def _boom(scope: Any, target: Path) -> None:
+        raise OSError("disk\nfull")
+
+    monkeypatch.setattr(triage_kanban_cmd, "recollect", _boom)
+    code, out = _board(tmp_path, "--watch")
+    assert code == 0, out
+    assert out.count("disk full") == 1 and w.calls == ["write"] * 3
+
+
+def test_a_render_that_fails_or_refuses_never_ends_the_watch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch, stop=3)
+    seen: list[int] = []
+
+    def _write(*a: Any, **kw: Any) -> Any:
+        seen.append(1)
+        if len(seen) == 1:
+            raise OSError("read-only")
+        triage_kanban_cmd._fail("no facts.json")
+
+    monkeypatch.setattr(triage_kanban_cmd, "write_board", _write)
+    code, out = _board(tmp_path, "--watch")
+    assert code == 0, out
+    assert len(seen) == 3 and w.calls == ["collect"] * 3
+    assert out.count("read-only") == 1 and out.count("no facts.json") == 1
+
+
+def test_watch_resumes_when_the_drive_lock_goes_and_re_arms_the_skip_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    w = _Watch(tmp_path, monkeypatch, stop=6)
+    lock = tmp_path / "drive.lock"
+
+    def _flip(n: int) -> None:
+        if n in (1, 4):
+            _lock(tmp_path, os.getpid())
+        if n in (2, 5):
+            lock.unlink()
+
+    w.on_sleep = _flip
+    code, out = _board(tmp_path, "--watch")
+    assert code == 0, out
+    assert (
+        w.calls == ["collect", "write"] * 4
+    )  # iterations 1, 3, 4 and 6; 2 and 5 find the lock held
+    assert out.count("skipping") == 2
 
 
 def test_a_count_of_batches_is_spelled_batches(tmp_path: Path) -> None:
