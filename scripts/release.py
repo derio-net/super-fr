@@ -288,11 +288,22 @@ def _plan_ceiling_widened(removed: list[str], added: list[str], new: str) -> boo
         return False
     if any(before.group(g) != after.group(g) for g in ("lead", "q", "trail")):
         return False
-    ceiling = f"<{_vtuple(new)[0] + 1}.0.0"
-    old_specs = [s.strip() for s in before.group("value").split(",") if s.strip()]
-    new_specs = [s.strip() for s in after.group("value").split(",") if s.strip()]
+    top = _vtuple(new)[0] + 1
+    ceiling = f"<{top}.0.0"
+    # Whitespace-free pieces: the repair re-joins with "," and writes each kept
+    # specifier as `str(Specifier(p))`, which drops inner spaces (`>= 4.20`).
+    old_specs = [re.sub(r"\s+", "", s) for s in before.group("value").split(",") if s.strip()]
+    new_specs = [re.sub(r"\s+", "", s) for s in after.group("value").split(",") if s.strip()]
+    bounds = [s.lstrip("<=") for s in old_specs if s.startswith("<")]
+    if not bounds or any(_major_of(b) is None or _major_of(b) >= top for b in bounds):
+        return False  # only a ceiling BELOW the new one widens; never a narrowing
     widened = [ceiling if s.startswith("<") else s for s in old_specs]
-    return new_specs == widened and new_specs != old_specs
+    return new_specs == widened
+
+
+def _major_of(bound: str) -> int | None:
+    match = re.match(r"\d+", bound)
+    return int(match.group()) if match else None
 
 
 def verify_staged(repo: Path, old: str, new: str, fragments: list[changes.Fragment]) -> None:

@@ -737,3 +737,72 @@ def test_the_default_migrate_command_reports_a_failure(tmp_path: Path) -> None:
     failure = release._run_migrate(tmp_path, run=run)
 
     assert failure is not None and "plans/x/_meta.yaml" in failure and "boom" in failure
+
+
+# The allowlist checked against what the REAL repair writes, not a fake's regex.
+@pytest.mark.parametrize(
+    "line",
+    [
+        "fr_version: '>=4.20.0,<5.0.0'",
+        'fr_version: ">=4.20.0,<5.0.0"',
+        "fr_version: '>=4.20.0, <5.0.0'",
+        "fr_version: '>= 4.20, < 5.0.0'",
+        "fr_version: '>=4.20.0,<=4.99.0'",
+        "fr_version: '>=4.20.0,<5.0.0,!=4.21.0'",
+    ],
+)
+def test_the_real_ceiling_repair_output_is_admitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, line: str
+) -> None:
+    from fr.artifacts import fr_version
+    from packaging.version import Version
+
+    monkeypatch.setattr(fr_version, "installed_fr_version", lambda: Version("5.0.0"))
+    meta = tmp_path / "_meta.yaml"
+    meta.write_text(f"slug: demo\n{line}\n")
+
+    fr_version.widen(meta)
+
+    after = meta.read_text().splitlines()[1]
+    assert after != line
+    assert release._plan_ceiling_widened([line], [after], "5.0.0")
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("fr_version: '>=4.20.0,<9.0.0'", "fr_version: '>=4.20.0,<6.0.0'"),  # a narrowing
+        ("fr_version: '>=4.20.0,<6.0.0'", "fr_version: '>=4.20.0,<6.0.0 '"),  # trail moved
+        ("fr_version: '>=4.20.0'", "fr_version: '>=4.20.0,<6.0.0'"),  # a ceiling added
+        ("fr_version: '>=4.20.0,<5.0.0'", 'fr_version: ">=4.20.0,<6.0.0"'),  # quoting moved
+        ("slug: demo", "slug: other"),  # not an fr_version line
+    ],
+    ids=["narrowing", "trail", "added-ceiling", "quoting", "other-key"],
+)
+def test_anything_but_a_ceiling_widening_is_refused(before: str, after: str) -> None:
+    assert not release._plan_ceiling_widened([before], [after], "5.0.0")
+
+
+def test_two_changed_plan_lines_are_refused() -> None:
+    lines = ["fr_version: '>=4.20.0,<5.0.0'", "fr_version: '>=4.20.0,<5.0.0'"]
+    widened = [s.replace("<5.0.0", "<6.0.0") for s in lines]
+    assert not release._plan_ceiling_widened(lines, widened, "5.0.0")
+
+
+def test_adding_or_deleting_a_live_plan_refuses(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-x", "major", "a breaking change")
+
+    def smuggle(n: int) -> None:
+        (world.clone / PLAN_META).unlink()
+        extra = world.clone / "docs/superpowers/plans/new/_meta.yaml"
+        extra.parent.mkdir(parents=True)
+        extra.write_text("fr_version: '>=5.0.0,<6.0.0'\n")
+
+    world.before_push = smuggle
+    assert world.run() != 0
+
+    err = capsys.readouterr().err
+    assert f"{PLAN_META} (D)" in err and "plans/new/_meta.yaml (A)" in err
+    assert world.origin_version() == BASE
