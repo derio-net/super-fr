@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr-debugging: Deliver now pushes the review journal entry and checks the branch is level with its upstream before relaying the close-out, so the merged PR carries it (#871)"
