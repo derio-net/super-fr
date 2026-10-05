@@ -1,0 +1,34 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-run-upgrade-midflight
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - kind: finding
+    id: p3-r1
+    phase: 3
+    review_scope: in
+    title: "supersede used the old cursor's unvalidated `run:` as a path segment (read, records dir, unlink, usage rename)"
+    body: "find_run_for_plan returns the `run:` string from inside the file; a crafted `run: ../…` steered the read, delete and rename outside docs/superpowers/runs, and a `../` id aliased usage_path onto run_path. Also the background security scan's path-traversal flag."
+  - kind: finding
+    id: p3-r2
+    phase: 3
+    review_scope: in
+    title: "old cursor located by a path rebuilt from its content id, not the file that matched"
+    body: "A file whose name disagrees with its `run:` sent the read, carry-forward and delete to a different file, and the same-day exemption could overwrite a different live run."
+  - kind: review
+    id: p3-review-1
+    phase: 3
+    title: "phase 3 review: p3-r1, p3-r2 (in)"
+    body: "Independent adversarial reviewer checked carry_forward against validate_run, done-vs-historical precedence (p2-r5 pinned), preview/refusals writing nothing, the one-commit supersede, and the prose/mirrors. Raised p3-r1 and p3-r2, both in scope."
+resolves:
+  - id: p3-r1
+    state: fixed
+    body: "adopt._owning_old_cursor validates the id with validate_run_id before any path is built; test_supersede_refuses_a_traversal_run_id_and_touches_nothing (fails without the fix) asserts every yaml under docs/superpowers is byte-identical and no commit was made."
+  - id: p3-r2
+    state: fixed
+    body: "_owning_old_cursor requires runs/<id>.yaml to exist, record `run: <id>` and name this plan in emitted.plan; otherwise one refusal naming the mismatch. Tests for a mismatch whose content id equals the derived new id (the other run is neither read, deleted nor overwritten) and for a missing runs/<id>.yaml; both fail without the fix."
+evidence:
+  review: p3-review-1
+  reviewer: a02d5f6e103b14a80
+  model: claude-opus-5-5
