@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fr.triage.batch import ForeignPr, QueueEntry
+from fr.triage.batch import ForeignPr, QueueEntry, batch_item_id
 from fr.triage.batch_drive import (
     CLOSEOUT_FALLBACK,
     Action,
@@ -29,8 +29,10 @@ from fr.triage.batch_drive import (
     find_run,
     housekeeping_branch,
     is_archived,
+    is_finished,
     summary_line,
     train_line,
+    wave_group,
 )
 from fr.triage.model import Batch, PullRequest
 
@@ -671,6 +673,95 @@ def test_archived_evidence_wins_over_a_hand_pr_and_only_the_selection_is_adopted
     snap = _snap([x, y], {"x": "merged", "y": "merged"}, archived=frozenset({"x", "y"}),
                  adopted={"x": hand}, selected=frozenset({"x"}))  # fmt: skip
     assert [(a.kind, a.batch, a.archived) for a in drive_pass(snap).actions] == [("adopt", "x", 0)]
+
+
+# ------------------------------------------------------------- wave groups
+
+
+def test_wave_group_names_the_workspace_a_wave_runs_in() -> None:
+    assert wave_group("drive", 2) == "drive-wave-2"
+    assert wave_group("bugfix", None) == "bugfix-no-wave"
+
+
+@pytest.mark.parametrize("prefix", ["", "   "])
+def test_wave_group_refuses_a_blank_prefix(prefix: str) -> None:
+    with pytest.raises(ValueError):
+        wave_group(prefix, 1)
+
+
+# ------------------------------------------------------- finished sessions (R7, R10)
+
+_CLOSEOUT = {"kind": "closeout", "at": "2026-10-02T11:00:00Z", "runner": "fake", "handle": "h"}
+
+
+def _finished(bid: str = "x", n: int = 1) -> Batch:
+    return _merged(bid, n, events=[{**_CLOSEOUT, "archived": 7}])
+
+
+def _sessions(bid: str = "x") -> frozenset[str]:
+    return frozenset({batch_item_id(REPO, bid), closeout_item_id(REPO, bid)})
+
+
+def test_is_finished_when_the_closeout_event_records_its_archive() -> None:
+    assert is_finished(_finished(), "merged", ())
+
+
+def test_is_finished_on_an_attributed_merged_archive_pr_with_no_archived() -> None:
+    b = _merged("x", 1, events=[_CLOSEOUT])
+    pr = _live(5, "h", state="MERGED", head_ref="chore/closeout-feat-batch-x", trusted=True)
+    assert is_finished(b, "merged", (pr,))
+
+
+@pytest.mark.parametrize("why", ["no event", "not landed", "open archive", "unattributed"])
+def test_is_finished_is_false_otherwise(why: str) -> None:
+    b = _merged("x", 1, events=[_CLOSEOUT])
+    stage = "merged"
+    prs: tuple[LivePr, ...] = ()
+    if why == "no event":
+        b = _merged("x", 1)
+    elif why == "not landed":
+        stage = "pr-open"
+    elif why == "open archive":
+        prs = (_live(5, "h", head_ref="chore/closeout-feat-batch-x", trusted=True),)
+    else:
+        prs = (_live(5, "h", state="MERGED", head_ref="chore/closeout-feat-batch-x"),)
+    assert not is_finished(b, stage, prs)  # type: ignore[arg-type]
+
+
+def _closing_snap(**kw: Any) -> Snapshot:
+    fin = _finished()
+    prop = _batch("p", 2)
+    return _snap([fin, prop], {"x": "merged", "p": "proposed"}, **kw)
+
+
+def test_a_finished_batchs_live_sessions_are_closed_after_the_dispatches() -> None:
+    got = drive_pass(_closing_snap(close_sessions=True, sessions=_sessions()))
+    assert _kinds(got.actions) == [("dispatch", "p"), ("close", "x")]
+
+
+def test_closing_adds_nothing_to_the_summary() -> None:
+    plain = drive_pass(_closing_snap())
+    closing = drive_pass(_closing_snap(close_sessions=True, sessions=_sessions()))
+    assert closing.summary == plain.summary
+
+
+def test_no_close_without_close_sessions_or_a_live_session() -> None:
+    assert not any(
+        a.kind == "close" for a in drive_pass(_closing_snap(sessions=_sessions())).actions
+    )
+    got = drive_pass(_closing_snap(close_sessions=True))
+    assert not any(a.kind == "close" for a in got.actions)
+
+
+def test_an_unselected_finished_batch_is_not_closed() -> None:
+    snap = _closing_snap(close_sessions=True, sessions=_sessions(), selected=frozenset({"p"}))
+    assert not any(a.kind == "close" for a in drive_pass(snap).actions)
+
+
+def test_an_unfinished_batch_is_not_closed() -> None:
+    b = _merged("x", 1, events=[_CLOSEOUT])
+    snap = _snap([b], {"x": "merged"}, close_sessions=True, sessions=_sessions())
+    assert not any(a.kind == "close" for a in drive_pass(snap).actions)
 
 
 # ------------------------------------------------------- the merge train (§A, §C)

@@ -402,6 +402,72 @@ def test_once_yes_dispatches_up_to_the_cap_with_one_line_each(
     assert out.rstrip().splitlines()[-1] == "in flight 2, merged 0, pending 1, closing 0"
 
 
+def test_a_driven_dispatch_carries_its_waves_group(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    (item,) = runner.dispatched
+    assert item.payload["group"] == "drive-wave-1"
+
+
+def test_workspace_prefix_renames_the_group(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once", "--yes", "--workspace-prefix", "bugfix")
+    assert code == 0, out
+    assert runner.dispatched[0].payload["group"] == "bugfix-wave-1"
+
+
+def test_the_closeout_item_carries_its_batchs_current_wave_group(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _merged(world, tmp_path)
+    _cursor(checkout, "2026-10-01-b1", "feat/batch-b1")
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes", "--workspace-prefix", "bugfix")
+    assert code == 0, out
+    (item,) = runner.dispatched
+    assert item.payload["kind"] == "closeout"
+    assert item.payload["group"] == "bugfix-wave-1"
+
+
+def test_the_closeout_probe_carries_the_same_group_as_the_closeout(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    # Review p1-r1: a group-less probe is what herdr's preflight still refuses with
+    # HERDR_WORKSPACE_ID unset, so the drive would exit 2 at the close-out it may start.
+    _merged(world, tmp_path)
+    _cursor(checkout, "2026-10-01-b1", "feat/batch-b1")
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes", "--workspace-prefix", "bugfix")
+    assert code == 0, out
+    probes = [i for items in runner.preflighted for i in items]
+    assert probes and all(i.payload.get("group") == "bugfix-wave-1" for i in probes)
+
+
+def test_a_driven_batch_with_no_wave_opens_in_the_no_wave_group(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    _state(tmp_path, world, _batch("b1", 1).replace("wave: 1", "wave: null"))
+    code, out = _drive(tmp_path, "--once", "--yes", "b1", "--workspace-prefix", "bugfix")
+    assert code == 0, out
+    assert runner.dispatched[0].payload["group"] == "bugfix-no-wave"
+
+
+@pytest.mark.parametrize("prefix", ["", "  "])
+def test_a_blank_workspace_prefix_is_refused(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, prefix: str
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once", "--yes", "--workspace-prefix", prefix)
+    assert code == 2 and "prefix" in out
+    assert runner.dispatched == []
+
+
 def test_the_same_action_reads_the_same_line_in_once_and_loop_mode(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, sleeps: list[float]
 ) -> None:
@@ -1660,6 +1726,271 @@ def test_a_failed_read_while_acting_on_a_merge_does_not_end_the_loop(
     assert isinstance(result.exception, _StopError), result.output
     assert result.output.count("unexpected EOF") == 1
     assert world.merged == [(101, "sha-101", "squash")]
+
+
+# ------------------------------------------------- closing finished sessions (#918)
+
+BATCH_ITEM = f"{REPO}/run/batch-b1"
+CLOSEOUT_ITEM = f"{REPO}/run/closeout-b1"
+
+
+class CloserRunner(FakeRunner):
+    """A runner that is a `SessionCloser`: records closes, answers a set outcome."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.closes: list[Any] = []
+        self.outcome = "closed"
+        self.outcomes: dict[str, str] = {}  # item id -> outcome, over `outcome`
+        self.close_raises: Exception | None = None
+
+    def close(self, item: Any) -> str:
+        self.calls.append("close")
+        self.closes.append(item)
+        if self.close_raises is not None:
+            raise self.close_raises
+        return self.outcomes.get(item.id, self.outcome)
+
+
+@pytest.fixture
+def closer(monkeypatch: pytest.MonkeyPatch) -> CloserRunner:
+    fake = CloserRunner()
+    fake.live = {BATCH_ITEM, CLOSEOUT_ITEM}
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", lambda name: fake)
+    return fake
+
+
+def _finished(world: World, tmp_path: Path, *, runner_name: str = "fake", extra: str = "") -> None:
+    closeout = (
+        f"      - {{kind: closeout, at: 2026-10-02T11:59:00Z, runner: {runner_name}, "
+        "handle: h, archived: 201}\n"
+    )
+    world.issues[1] = "closed"
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout), extra)
+
+
+def test_a_finished_batchs_sessions_are_closed_on_the_runner_each_event_recorded(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    _finished(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [i.id for i in closer.closes] == [BATCH_ITEM, CLOSEOUT_ITEM]
+    assert {i.payload["group"] for i in closer.closes} == {"drive-wave-1"}
+    assert len(_lines(out, "close")) == 1
+    assert "closed" in _lines(out, "close")[0]
+    assert len(closer.preflighted) == 1  # one preflight and one probe for the one runner
+    assert closer.calls.count("existing_dispatches") == 1
+
+
+def test_only_the_sessions_the_runner_holds_are_closed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    _finished(world, tmp_path)
+    closer.live = {CLOSEOUT_ITEM}
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [i.id for i in closer.closes] == [CLOSEOUT_ITEM]
+
+
+def test_a_hand_closeout_is_never_probed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    _finished(world, tmp_path, runner_name="hand")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    probed = {i.id for items in closer.preflighted for i in items}
+    assert probed == {BATCH_ITEM}
+    assert [i.id for i in closer.closes] == [BATCH_ITEM]
+
+
+def test_keep_sessions_probes_and_closes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    _finished(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes", "--keep-sessions")
+    assert code == 0, out
+    assert closer.closes == [] and closer.preflighted == []
+    assert "close " not in out
+
+
+def test_without_yes_nothing_is_probed_or_closed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    _finished(world, tmp_path)
+    code, out = _drive(tmp_path)
+    assert code == 0, out
+    assert closer.closes == [] and closer.preflighted == []
+
+
+def test_a_runner_that_cannot_close_is_never_asked(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _finished(world, tmp_path)
+    runner.live = {BATCH_ITEM, CLOSEOUT_ITEM}
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert runner.calls == []
+    assert _lines(out, "close") == []
+
+
+def test_a_runner_that_will_not_load_is_skipped_without_exit_2(
+    tmp_path: Path, world: World, checkout: DriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import typer
+
+    def refuse(name: str) -> Any:
+        raise typer.Exit(code=2)
+
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", refuse)
+    _finished(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert out.count("could not be loaded") == 1
+
+
+@pytest.mark.parametrize(
+    "error", [ImportError("no module named fr_herdr"), RuntimeError("bad env")]
+)
+def test_a_runner_whose_load_raises_is_skipped_with_one_warning(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+) -> None:
+    # Review p2-r1: an adapter's own import or from_env() failure is not a typer.Exit.
+    def broken(name: str) -> Any:
+        raise error
+
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", broken)
+    _finished(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert out.count("could not be loaded") == 1 and str(error) in out
+
+
+def test_a_runner_load_refusal_prints_one_warning_not_an_error(
+    tmp_path: Path, world: World, checkout: DriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Review p2-r1: `load_runner`'s refusal must not also print a red `error:` line.
+    def refuse(name: str) -> Any:
+        triage_batch_cmd._fail("runner `fake` is not installed")
+
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", refuse)
+    _finished(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "error:" not in out
+    assert out.count("is not installed") == 1
+
+
+def test_a_preflight_refusal_skips_the_runner_and_is_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    _finished(world, tmp_path)
+    closer.refusal = "not inside a herdr session"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert out.count("not inside a herdr session") == 1
+    assert closer.closes == []
+
+
+def test_a_busy_session_is_reported_once_and_changes_no_exit_code(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    _finished(world, tmp_path)
+    closer.outcome = "busy"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "busy, retried next pass" in out
+    assert out.count("busy, retried next pass") == 1
+
+
+def test_a_raised_close_is_printed_and_is_not_a_failed_write(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    _finished(world, tmp_path)
+    closer.close_raises = RuntimeError("herdr went away")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "herdr went away" in out
+
+
+def test_a_pass_whose_only_action_is_a_close_exits_as_it_would_without_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    cycle = _batch("b2", 2, after="[b3]") + _batch("b3", 3, after="[b2]")
+    world.issues[2] = world.issues[3] = "open"
+    _finished(world, tmp_path, extra=cycle)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert [i.id for i in closer.closes] == [BATCH_ITEM, CLOSEOUT_ITEM]
+    assert code == 3, out  # work remains and nothing was done, as without the close
+
+
+def test_a_repeated_busy_cause_is_reported_once_per_batch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    from fr.triage.batch_drive import Action
+
+    _finished(world, tmp_path)
+    closer.outcome = "busy"
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+    driver._probes = {BATCH_ITEM: (closer, _ProbeId(BATCH_ITEM))}  # type: ignore[dict-item]
+    action = Action("close", "b1", "x", items=(BATCH_ITEM,))
+    first = driver._close_sessions(action)
+    assert "busy, retried next pass" in first
+    assert driver._close_sessions(action) == ""
+    assert driver.failed_write is False
+
+
+def _close_driver(tmp_path: Path, closer: CloserRunner) -> Any:
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+    driver._probes = {i: (closer, _ProbeId(i)) for i in (BATCH_ITEM, CLOSEOUT_ITEM)}
+    return driver
+
+
+class _ProbeId:
+    def __init__(self, item_id: str) -> None:
+        self.id = item_id
+
+
+def test_a_busy_cause_is_not_reported_again_when_a_sibling_closed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    # Review p2-r2: pass 1 closes the batch tab while the close-out is busy; pass 2
+    # sees only the close-out, still busy: the same cause, so no second report.
+    from fr.triage.batch_drive import Action
+
+    _finished(world, tmp_path)
+    closer.outcomes = {CLOSEOUT_ITEM: "busy"}
+    driver = _close_driver(tmp_path, closer)
+    first = driver._close_sessions(Action("close", "b1", "x", items=(BATCH_ITEM, CLOSEOUT_ITEM)))
+    assert f"closed {BATCH_ITEM}" in first and "busy, retried next pass" in first
+    assert driver._close_sessions(Action("close", "b1", "x", items=(CLOSEOUT_ITEM,))) == ""
+
+
+def test_a_failed_close_is_reported_once_whatever_its_message(
+    tmp_path: Path, world: World, checkout: DriveCheckout, closer: CloserRunner
+) -> None:
+    from fr.triage.batch_drive import Action
+
+    _finished(world, tmp_path)
+    driver = _close_driver(tmp_path, closer)
+    action = Action("close", "b1", "x", items=(CLOSEOUT_ITEM,))
+    closer.close_raises = RuntimeError("socket timeout after 1.2s")
+    assert "socket timeout" in driver._close_sessions(action)
+    closer.close_raises = RuntimeError("socket timeout after 3.4s")
+    assert driver._close_sessions(action) == ""
+    assert driver.failed_write is False
 
 
 # ------------------------------------------------ the merge train (spec §B, §C)

@@ -197,3 +197,41 @@ def test_payload_keys_are_documented_beside_work_item() -> None:
     doc = wi.__doc__ or ""
     for key in RUN_PAYLOAD_KEYS:
         assert f"`{key}`" in doc, key
+
+
+# ------------------------------------------------------------- SessionCloser
+
+
+class _Closer:
+    def __init__(self, outcome: str) -> None:
+        self.outcome = outcome
+
+    def close(self, item: WorkItem) -> str:
+        return self.outcome
+
+
+def test_session_closer_is_a_runtime_protocol_a_plain_runner_is_not() -> None:
+    from fr_dispatch.protocols import SessionCloser
+
+    assert isinstance(_Closer("absent"), SessionCloser)
+    assert not isinstance(_RunRunner(), SessionCloser)
+
+
+def test_check_close_contract_passes_a_closer_that_reports_absent() -> None:
+    from fr_dispatch.testing import check_close_contract
+
+    check_close_contract(_Closer("absent"), run_item())  # type: ignore[arg-type]
+
+
+def test_check_close_contract_refuses_a_closer_that_closes_what_it_never_held() -> None:
+    from fr_dispatch.testing import check_close_contract
+
+    with pytest.raises(AssertionError, match="absent"):
+        check_close_contract(_Closer("closed"), run_item())  # type: ignore[arg-type]
+
+
+def test_check_close_contract_refuses_a_non_closer() -> None:
+    from fr_dispatch.testing import check_close_contract
+
+    with pytest.raises(AssertionError, match="SessionCloser"):
+        check_close_contract(_RunRunner(), run_item())  # type: ignore[arg-type]

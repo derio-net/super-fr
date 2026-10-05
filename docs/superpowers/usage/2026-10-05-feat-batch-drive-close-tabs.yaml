@@ -1,0 +1,63 @@
+schema_version: 1
+run: 2026-10-05-feat-batch-drive-close-tabs
+captures:
+- host: h-4e08ac9d
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-05T12:49:38+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  sessions:
+  - session: 08bef1b5-8ca7-4d19-93d3-d0d2343afbe9
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 350
+        cache_write: 714732
+        cache_read: 25705232
+        output: 86062
+        usd: null
+        usd_source: none
+      claude-sonnet-5-5:
+        input: 140
+        cache_write: 252650
+        cache_read: 6734228
+        output: 1035
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 125
+      other:
+        usd: null
+        turns: 62
+      paperwork:
+        usd: null
+        turns: 60
+    steps:
+      (outside run):
+        usd: null
+        turns: 6
+      brainstorm:
+        usd: null
+        turns: 29
+      spec-review:
+        usd: null
+        turns: 28
+      plan:
+        usd: null
+        turns: 9
+      implement:
+        usd: null
+        turns: 156
+      deliver:
+        usd: null
+        turns: 11
+    briefs:
+      step/spec-review: 2161
+      phase/1/implement-phase: 2935
+      phase/1/review-phase: 2667
+      phase/2/implement-phase: 3966
+      phase/2/review-phase: 3180

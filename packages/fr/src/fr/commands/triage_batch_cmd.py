@@ -47,6 +47,7 @@ import typer
 import yaml
 from pydantic import ValidationError
 from rich.markup import escape
+from rich.text import Text
 
 from fr._hosts import backend_for_url
 from fr.acceptance.ci import CI_CONFIG_PATHS
@@ -104,6 +105,7 @@ from fr.triage.batch_dispatch import (
 from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     DEFAULT_MAX_INFLIGHT,
+    DEFAULT_WORKSPACE_PREFIX,
     RUNS_DIR,
     Action,
     LivePr,
@@ -119,9 +121,11 @@ from fr.triage.batch_drive import (
     find_run,
     housekeeping_branch,
     is_archived,
+    is_finished,
     settle,
     summary_line,
     train_line,
+    wave_group,
 )
 from fr.triage.batch_merge import (
     HeadMovedError,
@@ -645,7 +649,13 @@ def _fresh_config(checkout: Checkout, facts: Facts, owner_repo: str) -> str:
 
 
 def _work_item(
-    owner_repo: str, batch: Batch, launch: Launch, brief: str, reserved: str | None, cwd: Path
+    owner_repo: str,
+    batch: Batch,
+    launch: Launch,
+    brief: str,
+    reserved: str | None,
+    cwd: Path,
+    group: str | None = None,
 ) -> WorkItem:
     """The run item (§3.C step 4); `tracking` stays None — a batch is many issues."""
     from fr_dispatch.work_item import WorkItem, run_item_id
@@ -659,6 +669,8 @@ def _work_item(
         "issues": list(batch.ids),
         "checkout": str(cwd),  # herdr's --cwd (decision p2-dispatch-handle)
     }
+    if group:
+        payload["group"] = group  # the runner group (herdr workspace); the driver's alone
     return WorkItem(
         id=run_item_id(owner_repo, f"batch-{batch.id}"),
         unit="run",
@@ -931,6 +943,7 @@ def dispatch_batch(
     handle: str | None = None,
     reserved_version: str | None = None,
     yes: bool = False,
+    group: str | None = None,
 ) -> None:
     """The body of `batch dispatch`, callable: one batch, one runner, one dispatch.
 
@@ -988,7 +1001,7 @@ def dispatch_batch(
         closing_refs=refs,
         reserved_version=reserved,
     )
-    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path)  # step 4
+    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path, group)  # step 4
     branch = batch_branch(batch)
     console.print(f"dispatch batch {batch.id} as {item.id}", markup=False)
     console.print(f"  runner: {runner_name}", markup=False)
@@ -1450,8 +1463,12 @@ class _Driver:
         checkouts: dict[str, Path | None],
         max_inflight: int,
         yes: bool,
+        workspace_prefix: str = DEFAULT_WORKSPACE_PREFIX,
+        keep_sessions: bool = False,
     ) -> None:
         self.scope, self.target, self.named = scope, target, named
+        self.workspace_prefix = workspace_prefix
+        self.keep_sessions = keep_sessions
         self.checkout_paths = checkouts
         self.max_inflight, self.yes = max_inflight, yes
         self.warned: set[str] = set()
@@ -1467,6 +1484,8 @@ class _Driver:
         self._clients: dict[str, GhClient] = {}
         self._checkouts: dict[str, Checkout] = {}
         self._runners: dict[str, Runner] = {}
+        self._unloadable: set[str] = set()  # runners that failed to load, reported once
+        self._probes: dict[str, tuple[Runner, Any]] = {}  # per pass: live item id -> its runner
         self._merge: dict[str, MergeContext] = {}
 
     # -------------------------------------------------------------- reaching out
@@ -1475,6 +1494,10 @@ class _Driver:
         if repo not in self._clients:
             self._clients[repo] = make_client(f"https://{_host_of(facts, repo)}/{repo}")
         return self._clients[repo]
+
+    def group_of(self, batch: Batch) -> str:
+        """The runner group of *batch*'s sessions: its CURRENT wave's workspace."""
+        return wave_group(self.workspace_prefix, batch.wave)
 
     def path_of(self, repo: str) -> Path | None:
         return self.checkout_paths.get(repo.lower())
@@ -1488,6 +1511,29 @@ class _Driver:
         if name not in self._runners:
             self._runners[name] = load_runner(name)
         return self._runners[name]
+
+    def _try_runner(self, name: str) -> Runner | None:
+        """Runner *name*, or None (reported once) when it cannot be loaded: closing is
+        best effort, so a load failure never ends the drive (R10)."""
+        if name in self._unloadable:
+            return None
+        # `load_runner` reports a refusal through `_fail` (a red `error:` and an exit);
+        # an adapter's own import or `from_env()` failure is any exception. Either is
+        # one warning here, with its reason (review p2-r1).
+        try:
+            with err_console.capture() as said:
+                return self.runner(name)
+        except typer.Exit:
+            reason = Text.from_ansi(said.get()).plain.strip().removeprefix("error:").strip()
+        except Exception as exc:  # noqa: BLE001 - closing is best effort
+            reason = f"{type(exc).__name__}: {exc}"
+        self._unloadable.add(name)
+        err_console.print(
+            f"[yellow]warning:[/yellow] runner `{escape(name)}` could not be loaded "
+            f"({escape(reason or 'no reason given')}); its sessions are not closed",
+            soft_wrap=True,
+        )
+        return None
 
     def merge_ctx(self, facts: Facts, repo: str) -> MergeContext:
         if repo not in self._merge:
@@ -1590,6 +1636,16 @@ class _Driver:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        closing_sessions = self.yes and not self.keep_sessions
+        sessions = frozenset[str]()
+        self._probes = {}
+        if closing_sessions:
+            finished = [
+                b
+                for b in chosen
+                if b.id in repos and is_finished(b, stages[b.id], archives.get(repos[b.id], ()))
+            ]
+            sessions = self._sessions(facts, finished, repos)
         return Snapshot(
             batches=tuple(judgements.batches),
             stages=stages,
@@ -1603,6 +1659,8 @@ class _Driver:
             archives=archives,
             existing=self._existing(facts, due, repos) if self.yes else frozenset(),
             warned=frozenset(self.warned),
+            close_sessions=closing_sessions,
+            sessions=sessions,
             selected=frozenset(ids),
             archived=frozenset(archived),
             adopted=adopted,
@@ -1728,7 +1786,14 @@ class _Driver:
                 repo=repos[b.id],
                 parent=None,
                 inputs=(),
-                payload={"kind": "closeout", "harness": launch.harness, "model": launch.model},
+                # The group the close-out itself carries: a runner's preflight reads it
+                # (herdr needs no workspace of its own for a grouped item, review p1-r1).
+                payload={
+                    "kind": "closeout",
+                    "harness": launch.harness,
+                    "model": launch.model,
+                    "group": self.group_of(b),
+                },
                 tracking=None,
             )
             by_runner.setdefault(str(launch.runner), []).append(probe)
@@ -1739,6 +1804,108 @@ class _Driver:
                 _fail(f"runner `{name}` refused: {refusal}")
             found |= runner.existing_dispatches(probes)
         return frozenset(found)
+
+    def _sessions(
+        self, facts: Facts, finished: list[Batch], repos: dict[str, str]
+    ) -> frozenset[str]:
+        """The sessions of finished batches that a closing runner holds live: each
+        item against the runner its own event recorded (the batch's last dispatch,
+        the close-out's own; a `hand` close-out has no session). One preflight and
+        one `existing_dispatches` per runner; a runner that cannot load, cannot close,
+        or refuses is skipped, never an exit (R10)."""
+        if not finished:
+            return frozenset()
+        from fr_dispatch.protocols import SessionCloser
+        from fr_dispatch.work_item import WorkItem
+
+        by_runner: dict[str, list[WorkItem]] = {}
+        for b in finished:
+            repo = repos[b.id]
+            group = self.group_of(b)
+            dispatch, closeout = last_dispatch(b), closeout_event(b)
+            wanted = [(batch_item_id(repo, b.id), dispatch.runner if dispatch else None)]
+            if closeout is not None and closeout.runner != "hand":
+                wanted.append((closeout_item_id(repo, b.id), closeout.runner))
+            for item_id, name in wanted:
+                if not name:
+                    continue
+                probe = WorkItem(
+                    id=item_id,
+                    unit="run",
+                    workflow=batch_workflow(b),
+                    repo=repo,
+                    parent=None,
+                    inputs=(),
+                    payload={"group": group},
+                    tracking=None,
+                )
+                by_runner.setdefault(str(name), []).append(probe)
+        for name, probes in by_runner.items():
+            runner = self._try_runner(name)
+            if runner is None or not isinstance(runner, SessionCloser):
+                continue
+            try:
+                refusal = runner.preflight(probes)
+                held = set() if refusal else runner.existing_dispatches(probes)
+            except Exception as exc:  # noqa: BLE001 - closing is best effort
+                refusal = str(exc) or type(exc).__name__
+                held = set()
+            if refusal:
+                self._report_once(f"closing\0{name}\0{refusal}",
+                                  f"runner `{name}` cannot close sessions: {refusal}")  # fmt: skip
+                continue
+            for probe in probes:
+                if probe.id in held:
+                    self._probes[probe.id] = (runner, probe)
+        return frozenset(self._probes)
+
+    def _report_once(self, key: str, message: str) -> bool:
+        """Print *message* the first time *key* is seen; whether it was printed."""
+        if key in self.warned:
+            return False
+        self.warned.add(key)
+        err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
+        return True
+
+    def _close_sessions(self, action: Action) -> str:
+        """Close *action*'s sessions. Never a failure: a busy or raised close is
+        reported once per batch and cause, and the pass goes on (R10). Returns the
+        outcome line, or "" for a cause already reported."""
+        closed: list[str] = []
+        busy: list[str] = []
+        failed: list[tuple[str, Exception]] = []
+        for item_id in action.items:
+            runner, probe = self._probes[item_id]
+            try:
+                outcome = str(runner.close(probe))  # type: ignore[attr-defined]
+            except Exception as exc:  # noqa: BLE001 - closing is best effort
+                failed.append((item_id, exc))
+                continue
+            (busy if outcome == "busy" else closed).append(item_id)
+        # A cause is the item and what kept it open (an exception by its type, never
+        # its message), so a sibling closing, or a timeout's figure, is not a new
+        # cause (review p2-r2). The bitwise `|` keeps every cause recorded.
+        fresh = False
+        for item_id in busy:
+            fresh |= self._report_cause(action.batch, f"{item_id}\0busy")
+        for item_id, error in failed:
+            fresh |= self._report_cause(action.batch, f"{item_id}\0{type(error).__name__}")
+        done = f"closed {', '.join(closed)}" if closed else ""
+        if (busy or failed) and not fresh:
+            return done  # every cause reported already: only what closed is news
+        parts = [done] if done else []
+        if busy:
+            parts.append(f"busy, retried next pass: {', '.join(busy)}")
+        if failed:
+            parts.append(f"failed to close {'; '.join(f'{i}: {e}' for i, e in failed)}")
+        return "; ".join(parts)
+
+    def _report_cause(self, batch: str, cause: str) -> bool:
+        key = f"close\0{batch}\0{cause}"
+        if key in self.warned:
+            return False
+        self.warned.add(key)
+        return True
 
     def _launch(self, facts: Facts, batch: Batch, repo: str) -> Launch:
         try:
@@ -1770,7 +1937,8 @@ class _Driver:
                 continue
             outcome, did, in_flight = self._act(action, facts, in_flight)
             acted = acted or did
-            _say(action_line(action, outcome))
+            if outcome or action.kind != "close":  # a close reported already stays quiet
+                _say(action_line(action, outcome))
         summary = settle(
             plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
         )
@@ -1789,6 +1957,8 @@ class _Driver:
         if action.kind in ("warn", "foreign"):
             self.warned.add(action.head)
             return action.detail, False, in_flight
+        if action.kind == "close":
+            return self._close_sessions(action), False, in_flight  # never `acted`
         if action.kind == "merge":
             behind = self._stopped.get(action.train)
             if behind is not None:  # an earlier head of this train did not merge (R3)
@@ -1832,6 +2002,7 @@ class _Driver:
                 batch,
                 checkout_path=self.path_of(repo),
                 yes=True,
+                group=self.group_of(batch),
             )
         after = _find(load_judgements(self.target / "judgements.yaml").batches, batch.id)
         event = last_dispatch(after)
@@ -1945,7 +2116,9 @@ class _Driver:
                               handle=item_id, run=run, archive=archive),
             )  # fmt: skip
             return f"recorded the live {item_id}", True
-        item = _closeout_item(repo, batch, launch, run=run, checkout=checkout.path)
+        item = _closeout_item(
+            repo, batch, launch, run=run, checkout=checkout.path, group=self.group_of(batch)
+        )
         runner = self.runner(str(launch.runner))
         if not runner.can_dispatch(item):
             _fail(f"runner `{launch.runner}` does not take run-unit work")
@@ -2008,7 +2181,13 @@ def _cursors(root: Path) -> list[object]:
 
 
 def _closeout_item(
-    repo: str, batch: Batch, launch: Launch, *, run: str | None, checkout: Path
+    repo: str,
+    batch: Batch,
+    launch: Launch,
+    *,
+    run: str | None,
+    checkout: Path,
+    group: str | None = None,
 ) -> WorkItem:
     """The close-out work item (§C): unit `run`, `payload.kind: closeout`, model from
     `resolve_launch`, checkout from the `--checkout` map."""
@@ -2024,6 +2203,8 @@ def _closeout_item(
         "issues": list(batch.ids),
         "checkout": str(checkout),
     }
+    if group:
+        payload["group"] = group
     return WorkItem(
         id=closeout_item_id(repo, batch.id),
         unit="run",
@@ -2051,6 +2232,21 @@ def batch_drive_command(
         int, typer.Option("--interval", min=1, help="Seconds between passes in loop mode.")
     ] = DEFAULT_INTERVAL,
     checkout: DriveCheckoutOpt = None,
+    workspace_prefix: Annotated[
+        str,
+        typer.Option(
+            "--workspace-prefix",
+            help="Prefix of the runner workspace each wave's sessions open in "
+            "(`<prefix>-wave-<n>`).",
+        ),
+    ] = DEFAULT_WORKSPACE_PREFIX,
+    keep_sessions: Annotated[
+        bool,
+        typer.Option(
+            "--keep-sessions",
+            help="Leave a finished batch's batch and close-out sessions open.",
+        ),
+    ] = False,
     yes: Annotated[
         bool, typer.Option("--yes", help="Act; without it, print one pass's plan and exit.")
     ] = False,
@@ -2064,6 +2260,8 @@ def batch_drive_command(
     Exit codes: 0 acted or everything is done; 3 nothing to do while work remains;
     2 a refusal (a runner's preflight included); 1 a forge write failed.
     """
+    if not workspace_prefix.strip():
+        _fail("--workspace-prefix must not be blank")
     scope = _scope(repo, org)
     target = state_dir(scope, dir_override)
     path = target / "judgements.yaml"
@@ -2075,7 +2273,14 @@ def batch_drive_command(
     names = {_batch_slug(scope, b.repo_name) for b in chosen}
     checkouts = _checkout_map(checkout, scope, names)
     driver = _Driver(
-        scope, target, named=batch_ids, checkouts=checkouts, max_inflight=max_inflight, yes=yes
+        scope,
+        target,
+        named=batch_ids,
+        checkouts=checkouts,
+        max_inflight=max_inflight,
+        yes=yes,
+        workspace_prefix=workspace_prefix,
+        keep_sessions=keep_sessions,
     )
     with drive_lock(target):
         while True:

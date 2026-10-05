@@ -285,6 +285,16 @@ def _no_model_judgements() -> str:
     )
 
 
+def test_a_manual_dispatch_carries_no_group(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    (item,) = runner.dispatched
+    assert "group" not in item.payload
+
+
 def test_dispatch_falls_back_to_the_user_orchestrator_binding(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
