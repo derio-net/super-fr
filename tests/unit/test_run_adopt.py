@@ -1183,7 +1183,9 @@ def test_adoption_leaves_a_phase_with_an_unauthorized_fix_pending(
          "resolves": "f-2", "title": "oos"},
         {"kind": "finding", "id": "f-2-fix", "state": "fixed", "resolves": "f-2", "title": "x"},
     ]  # fmt: skip
-    state, notes = _adopt_reviewed(tmp_path, repo_root, [_review_entry(1), _review_entry(2), *chain])
+    state, notes = _adopt_reviewed(
+        tmp_path, repo_root, [_review_entry(1), _review_entry(2), *chain]
+    )
 
     record = state.steps["implement"]  # type: ignore[attr-defined]
     assert units.unit_state(record, "phase/2/review-phase") in (None, "pending")

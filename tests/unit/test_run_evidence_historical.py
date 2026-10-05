@@ -205,6 +205,46 @@ def test_historical_is_refused_on_a_flat_spec_review_unit(tmp_path: Path) -> Non
     result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=historical")
 
     assert result.exit_code == 2, result.output
-    assert "reviewer=historical is accepted only on a phase review unit" in _squash(
-        result.output
+    assert "reviewer=historical is accepted only on a phase review unit" in _squash(result.output)
+
+
+# --- R9: reported as historical, never as debt ---------------------------------
+
+_SENTENCE = "reviewed before this cursor existed (journal rev-h) — reviewer not observed"
+
+
+def test_status_and_check_say_a_review_is_historical(tmp_path: Path) -> None:
+    repo, shipped = _at_the_review(tmp_path)
+    assert _review(repo, shipped, "review=rev-h", "reviewer=historical").exit_code == 0
+
+    status = _invoke(repo, shipped, ["run", "status", "r1"])
+    check = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert _SENTENCE in _squash(status.output), status.output
+    assert _SENTENCE in _squash(check.output), check.output
+
+
+def test_an_adopted_historical_review_is_not_debt(tmp_path: Path, repo_root: Path) -> None:
+    """The shipped `fr-goal` review member also declares `visual`, which an
+    inferred historical unit does not carry: that is not debt (R9)."""
+    from fr.test_support import build_plan_journal
+
+    from tests.unit import test_run_adopt as adopt
+
+    repo, shipped = adopt._repo(tmp_path, repo_root)
+    adopt._write_spec(repo)
+    plan_dir = adopt._write_plan(repo, phases=1, complete=1)
+    build_plan_journal(
+        repo, adopt.PLAN_SLUG, [{"kind": "review", "id": "rev-h", "phase": 1, "title": "r"}]
     )
+    state = adopt.adopt_run(repo, plan_dir, branch=adopt.BRANCH, shipped_root=shipped)
+
+    status = adopt._invoke(repo, shipped, ["run", "status", state.run])
+    check = adopt._invoke(repo, shipped, ["run", "check", state.run])
+
+    for out in (status.output, check.output):
+        assert _SENTENCE in _squash(out), out
+    # The implement member's own adopted debt is not this test's subject.
+    review_block = status.output.split("phase/1/review-phase")[1].split("journal-check")[0]
+    assert "unevidenced" not in review_block, status.output
+    assert "review-phase is done, unevidenced" not in check.output, check.output

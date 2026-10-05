@@ -62,7 +62,13 @@ from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
-from fr.run.historical import HISTORICAL_REVIEWER, findings_witness
+from fr.run.historical import (
+    HISTORICAL_HEADING,
+    HISTORICAL_REVIEWER,
+    findings_witness,
+    historical_reviews,
+    historical_sentence,
+)
 from fr.run.liveness import gate_pending as _gate_pending
 from fr.run.liveness import hold_on as _hold_on
 from fr.run.liveness import next_step_id as _next_step_id
@@ -3038,6 +3044,10 @@ def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str]
                 if not matches or unit_state != "done":
                     continue
                 held = units.evidence_of(record, key)
+                if held.get("reviewer") == HISTORICAL_REVIEWER:
+                    # R9: reviewed before this cursor existed — reported as
+                    # such by the caller, never as debt.
+                    continue
                 lacking = tuple(name for name in member.evidence if name not in held)
                 if lacking:
                     out[(step_id, key)] = lacking
@@ -4467,6 +4477,8 @@ def _render_unit_evidence(
     if evidence:
         shown = " ".join(f"{name}={eid}" for name, eid in sorted(evidence.items()))
         console.print(f"{indent}evidence: {shown}", soft_wrap=True)
+    if evidence.get("reviewer") == HISTORICAL_REVIEWER:
+        console.print(f"{indent}{historical_sentence(evidence.get('review', '?'))}", soft_wrap=True)
     lacking = unevidenced.get((step_id, key))
     if lacking:
         console.print(f"{indent}{_debt_phrase(record, key, lacking)}", soft_wrap=True)
@@ -5336,6 +5348,7 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     from fr.record.model import records_dir
     from fr.record.pr_body import (
         PR_BODY_NAME,
+        REQUIRED_SECTIONS,
         missing_sections,
         render_pr_body,
         shared_closing_keywords,
@@ -5360,7 +5373,10 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
-    missing = missing_sections(live)
+    required = (
+        (*REQUIRED_SECTIONS, HISTORICAL_HEADING) if historical_reviews(state) else REQUIRED_SECTIONS
+    )
+    missing = missing_sections(live, required=required)
     if missing:
         edit = pr_command(repo_root, "edit", ref=ref, body=rel)
         err_console.print(
@@ -6549,6 +6565,9 @@ def check_cmd(
             f"{step_id}: {key} is done, {_debt_phrase(state.steps[step_id], key, lacking)}",
             soft_wrap=True,
         )
+    # R9: a review made before this cursor existed — reported, never debt.
+    for step_id, key, entry in historical_reviews(state):
+        console.print(f"{step_id}: {key} {historical_sentence(entry)}", soft_wrap=True)
     if record is not None and record.state == "failed":
         err_console.print(f"[red]{state.cursor}: failed[/red]")
         raise typer.Exit(1)

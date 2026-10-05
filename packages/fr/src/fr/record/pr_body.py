@@ -55,10 +55,12 @@ run after merge can move."""
 _CLOSED_OUT = frozenset({"out-of-scope", "deferred"})
 
 
-def missing_sections(body: str) -> list[str]:
-    """The required headings `body` does not carry (a heading is a line)."""
+def missing_sections(body: str, required: Sequence[str] = REQUIRED_SECTIONS) -> list[str]:
+    """The `required` headings `body` does not carry (a heading is a line).
+    `deliver` adds `## Historical reviews` to the static set when the run has
+    any (spec 2026-10-05-run-upgrade-midflight §D, R9)."""
     lines = {line.strip() for line in body.splitlines()}
-    return [h for h in REQUIRED_SECTIONS if h not in lines]
+    return [h for h in required if h not in lines]
 
 
 # GitHub's closing keywords. Each closes the ONE reference directly after it.
@@ -260,9 +262,30 @@ def _cost(repo_root: Path, state: RunState) -> str:
     return "\n".join(rows) + sessions + note
 
 
+def _historical(state: RunState) -> str | None:
+    """Every phase reviewed before this cursor existed, by name (R9) — the
+    operator's review ok is given against this list, the human control the
+    historical bound's trust model rests on. `None` when there is none."""
+    from fr.run.historical import historical_reviews
+
+    def phase_of(key: str) -> int:
+        part = key.split("/")[1] if key.startswith("phase/") else ""
+        return int(part) if part.isdigit() else 0
+
+    found = sorted(historical_reviews(state), key=lambda h: (phase_of(h[1]), h[1]))
+    if not found:
+        return None
+    return "\n".join(
+        f"- phase {phase_of(key)} — journal {entry} (reviewed before this run's cursor "
+        "existed; reviewer not observed)"
+        for _, key, entry in found
+    )
+
+
 def render_pr_body(repo_root: Path, state: RunState) -> str:
-    """The PR body fr owns: every `REQUIRED_SECTIONS` heading, in order.
-    The agent may add a summary above it; it may not drop a section."""
+    """The PR body fr owns: every `REQUIRED_SECTIONS` heading, in order, plus
+    `## Historical reviews` when the run has any. The agent may add a summary
+    above it; it may not drop a section."""
     inside, outside = _findings(repo_root, state)
     parts = [
         f"{_RENDER_MARKER}{state.run}; edit above this line only -->",
@@ -270,6 +293,13 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         "\n".join(inside) if inside else "None.",
         "## Out-of-scope findings",
         render_out_of_scope(outside),
+    ]
+    historical = _historical(state)
+    if historical is not None:
+        from fr.run.historical import HISTORICAL_HEADING
+
+        parts += [HISTORICAL_HEADING, historical]
+    parts += [
         "## Post-merge verification owed",
         _post_merge_owed(repo_root, state),
     ]

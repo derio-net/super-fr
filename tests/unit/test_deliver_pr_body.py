@@ -213,3 +213,65 @@ def test_the_body_renders_post_merge_rows_and_tests_and_no_input_section(
     assert "req-r1" not in owed
     findings = body.split("## Findings")[1].split("## Out-of-scope findings")[0]
     assert "p1-f1" in findings
+
+
+# --- R9: historical reviews are listed by name (spec 2026-10-05 §D) -----------
+
+
+def _mark_historical(root: Path) -> None:
+    """Phase 1's review as adoption infers one: `reviewer=historical`."""
+    from fr.run import units
+    from fr.run.model import save_run_state
+
+    state = load_run_state(root, RUN)
+    record = units.with_evidence(
+        state.steps["implement"], "phase/1/review-phase", {"reviewer": "historical"}
+    )
+    save_run_state(root, state.model_copy(update={"steps": {**state.steps, "implement": record}}))
+    commit_all(root, "historical review")
+
+
+def test_the_body_lists_historical_reviews_when_a_unit_carries_one(tmp_path: Path) -> None:
+    from fr.record.pr_body import render_pr_body
+
+    root = _at_deliver(tmp_path)
+    assert "## Historical reviews" not in render_pr_body(root, load_run_state(root, RUN))
+    _mark_historical(root)
+
+    body = render_pr_body(root, load_run_state(root, RUN))
+
+    section = body.split("## Historical reviews")[1].split("## ")[0]
+    assert "phase 1 — journal r-p1" in section
+
+
+def test_missing_sections_reports_a_required_extra_heading() -> None:
+    from fr.record.pr_body import REQUIRED_SECTIONS, missing_sections
+
+    body = "\n\n".join(REQUIRED_SECTIONS)
+
+    assert missing_sections(body) == []
+    assert missing_sections(body, required=(*REQUIRED_SECTIONS, "## Historical reviews")) == [
+        "## Historical reviews"
+    ]
+
+
+def test_deliver_refuses_a_live_body_lacking_the_historical_section(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    root = _at_deliver(tmp_path)
+    _mark_historical(root)
+    live["body"] = "never read before the render"
+    _deliver(root)  # renders pr-body.md, refused
+    rendered = _body(root).read_text()
+    head, tail = rendered.split("## Historical reviews")
+    live["body"] = head + "## " + tail.split("## ", 1)[1]
+
+    _, out = _deliver(root)
+
+    assert out.exit_code == 2, out.output
+    assert "## Historical reviews" in out.output
+    live["body"] = rendered
+
+    _, out = _deliver(root)
+
+    assert out.exit_code == 0, out.output

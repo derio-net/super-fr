@@ -476,8 +476,7 @@ def _infer_historical_reviews(
             said.append(f"phase {n} owes visual evidence — its review stays pending.")
             continue
         refusals = [
-            historical_review_refusal(state, n, e, owes_visual=False)
-            for e in reversed(candidates)
+            historical_review_refusal(state, n, e, owes_visual=False) for e in reversed(candidates)
         ]
         chosen = next(
             (e for e, r in zip(reversed(candidates), refusals, strict=True) if r is None), None
@@ -492,9 +491,7 @@ def _infer_historical_reviews(
             continue
         unauth = [fid for fid in states if fid in unauthorized]
         if unauth:
-            said.append(
-                f"phase {n} has findings fixed without the operator: {', '.join(unauth)}."
-            )
+            said.append(f"phase {n} has findings fixed without the operator: {', '.join(unauth)}.")
             continue
         key = f"{item}/{review.id}"
         record = units.with_unit_state(record, key, "done")
@@ -522,8 +519,7 @@ def _infer_historical_reviews(
         cursor = ids[ids.index(cursor) + 1]
         steps[group.id] = record.model_copy(update={"state": "done"})
         said.append(
-            f"every phase was reviewed before this cursor existed — the cursor lands on "
-            f"{cursor!r}."
+            f"every phase was reviewed before this cursor existed — the cursor lands on {cursor!r}."
         )
     if notes is not None:
         notes.extend(said)
