@@ -9,3 +9,8 @@ Batch triage-state-integrity (#886 #954 #885 #888 #882 #889) was batched as one 
 ### h-954-live-collision · ruled-out · #954: same-named-repo key collision is not reachable through the CLI
 
 Hypothesis: owner-blind keys let two same-named repos in a group share judgements. Ruled out as a live bug: commands/triage_cmd.py _group_scope refuses (exit 2) a group whose repos share a name, and every triage/batch/origins command builds its scope through triage_cmd._scope; group facts.json is only written by collect behind that refusal. The only bypass is --dir onto another scope's facts, which is #886. What remains of #954 is a capability limit (a group cannot hold same-named repos), not a collision.
+
+<!-- fr:journal kind=ruled-out scope=debug id=h-885-shape-unchanged created=2026-10-05T21:08:14+00:00 -->
+### h-885-shape-unchanged · ruled-out · #885: repo/org facts shape DID move after schema 3; stamping 3 would break the old reader worse
+
+Hypothesis (from the issue): only groups changed shape, so repo/org could keep writing schema 3. Ruled out empirically: a current repo-scope facts.json restamped schema 3 and validated with v5.1.1's Facts (the last schema-3-only reader, extra=forbid) fails with 9 errors — prs[].checks/mergeable/merge_state (now nullable, written null), prs[].author/cross_repo (#939), config[*].post_merge (#876), config[*].pr_authors (#939), judged_prs (#906), viewer (#939). to_json dumps every field on every scope. Stamp 4 is the honest marker: it makes v5.1.1 refuse with 'unsupported schema 4; re-run collect' instead of 'invalid facts'.
