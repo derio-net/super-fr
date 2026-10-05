@@ -406,7 +406,12 @@ no pass ever opens a second PR for one wave.
 sets `merged: true`. Unlike `_archive`, it never merges the live head: an export PR's content
 is machine-written, nobody reviews it, and a commit someone else pushed to its branch must not
 reach the default branch (security review, p4-sec-unpinned-merge). The PR's changed files come
-from the live read (`LivePr` gains `files` when the snapshot reads an export PR).
+from git, never from the forge: after `fetch`, `Checkout.changed_paths(origin/<default>, <head>)`
+(`git diff --name-only --no-renames ref...head`) at the head being judged, the recorded one for a
+merge and the live one for an adoption. `--no-renames` lists a rename as a deletion plus an
+addition, so a rename's source path is checked too, and git does not truncate the list as the
+forge's `files` field does at 100 entries (p4-sec-file-list). A head git cannot read gives an
+unknown file list, which is never "all inside": the row warns and counts as blocked.
 
 The export branch prefix `chore/triage-state-` is not in `ARCHIVE_PREFIXES`, so archive
 attribution can never claim an export PR. Without `--yes`, both actions print as
