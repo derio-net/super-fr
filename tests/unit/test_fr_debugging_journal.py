@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FR_DEBUGGING = REPO_ROOT / "plugins/super-fr/skills/fr-debugging/SKILL.md"
 
@@ -34,3 +36,35 @@ def test_mentions_hypothesis_trail_kinds() -> None:
     """The rejected-hypotheses trail — the crash-safe payoff — must be recorded."""
     t = _text()
     assert "hypothesis" in t and "ruled-out" in t
+
+
+_COPIES = (
+    FR_DEBUGGING,
+    REPO_ROOT / ".opencode/skills/fr-debugging/SKILL.md",
+    REPO_ROOT / ".hermes/skills/fr/fr-debugging/SKILL.md",
+)
+
+
+def _deliver(path: Path) -> str:
+    text = path.read_text()
+    start = text.index("## 4. Deliver")
+    return text[start : text.index("\n## ", start + 1)]
+
+
+@pytest.mark.parametrize("skill", _COPIES, ids=lambda p: str(p.relative_to(REPO_ROOT)))
+def test_review_record_is_pushed_before_the_closeout_relay(skill: Path) -> None:
+    """gh#871: `fr journal add` commits locally and never pushes, so a review
+    recorded after the PR opened stays off the PR unless Deliver pushes it —
+    and checks the branch is level with its upstream — before stopping."""
+    deliver = _deliver(skill)
+    review = deliver.index("--kind review")
+    push = deliver.find("git push", review)
+    relay = deliver.index("closeout: fr pickup --branch")
+    assert review < push < relay, (
+        f"{skill.relative_to(REPO_ROOT)}: Deliver must `git push` after the review "
+        "record and before relaying the closeout line (gh#871)."
+    )
+    assert "@{u}..HEAD" in deliver[push:relay], (
+        f"{skill.relative_to(REPO_ROOT)}: Deliver must confirm the branch is level "
+        "with its upstream before the closeout relay (gh#871)."
+    )
