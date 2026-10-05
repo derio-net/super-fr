@@ -113,6 +113,12 @@ def check_command(repo: RepoOpt = None, org: OrgOpt = None, dir_override: DirOpt
     )
     for key in result.unknown:
         console.print(f"  {escape(key)}", soft_wrap=True)
+    console.print(
+        f"[bold]duplicate target outside the window ({len(result.duplicate_outside)})[/bold]"
+        " — `duplicate_of` names an issue the facts do not hold"
+    )
+    for key in result.duplicate_outside:
+        console.print(f"  {escape(key)}", soft_wrap=True)
 
 
 @origins_app.command("render")

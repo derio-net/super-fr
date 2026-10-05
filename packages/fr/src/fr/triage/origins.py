@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from fr.triage.collect import ORIGINS_ISSUE_LIST_FIELDS, REPO_LIMIT, Forge, parse_prs, scope_repos
 from fr.triage.components import CHROME_CSS, GUTTER_CSS, TOKENS_CSS, collapsed, page_header
@@ -61,7 +61,9 @@ GENERATED = (
     "leaderboards",
     "issues",
 )
-SCHEMA = 1
+FACTS_SCHEMA = 1  # origins-facts.json: unchanged by schema 2 of the classification
+CLASSIFICATION_SCHEMA = 2  # origins.yaml: what fr writes; 1 still loads
+CLASSIFICATION_READS = (1, 2)
 ISSUE_LIMIT = 1000
 PR_LIMIT = 1000
 DASH = "—"
@@ -217,7 +219,7 @@ def _origin_issue(repo: str, raw: dict[str, Any], closing: list[ClosingPr]) -> O
 
 
 def write_facts(path: Path, facts: OriginsFacts) -> None:
-    body = {"schema": SCHEMA, **facts.model_dump(mode="json")}
+    body = {"schema": FACTS_SCHEMA, **facts.model_dump(mode="json")}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(body, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -225,8 +227,8 @@ def write_facts(path: Path, facts: OriginsFacts) -> None:
 def load_origins_facts(path: Path) -> OriginsFacts:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or data.pop("schema", None) != SCHEMA:
-            raise TriageError(f"{path}: not origins facts of schema {SCHEMA}")
+        if not isinstance(data, dict) or data.pop("schema", None) != FACTS_SCHEMA:
+            raise TriageError(f"{path}: not origins facts of schema {FACTS_SCHEMA}")
         return OriginsFacts.model_validate(data)
     except (OSError, ValueError) as exc:
         raise TriageError(f"{path}: cannot read origins facts: {exc}") from exc
@@ -244,12 +246,31 @@ class Origin(_Strict):
     severity: Severity
     reason: str = Field(min_length=1)
     evidence: str | None = None
+    # Schema 2 (triage-pages-goal R10): optional on both schemas, like `kind` on judgements.
+    duplicate_of: str | None = None
+    fixed_by: str | None = None
+    introduced_in: str | None = None
 
     @model_validator(mode="after")
     def _regression_names_its_pr(self) -> Origin:
         if self.category == "regression" and not self.pr:
             raise ValueError("a regression must name the PR that broke it (`pr:`)")
         return self
+
+    @model_validator(mode="after")
+    def _duplicate_and_introduced_fit_the_category(self) -> Origin:
+        if self.duplicate_of and self.category != "duplicate":
+            raise ValueError("`duplicate_of` needs `category: duplicate`")
+        if self.introduced_in and self.category == "regression":
+            raise ValueError(
+                "`introduced_in` is refused on a regression: its `pr:` already names the PR"
+            )
+        return self
+
+    @field_validator("duplicate_of")
+    @classmethod
+    def _normalise_duplicate_of(cls, v: str | None) -> str | None:
+        return normalize_key(v) if v else v
 
 
 class Cause(_Strict):
@@ -272,8 +293,8 @@ def load_origins(path: Path) -> Origins:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError) as exc:
         raise TriageError(f"{path}: cannot read origins: {exc}") from exc
-    if not isinstance(data, dict) or data.pop("schema", None) != SCHEMA:
-        raise TriageError(f"{path}: origins.yaml needs `schema: {SCHEMA}`")
+    if not isinstance(data, dict) or data.pop("schema", None) not in CLASSIFICATION_READS:
+        raise TriageError(f"{path}: origins.yaml needs `schema: 1` or `schema: 2`")
     try:
         origins = Origins.model_validate(data)
     except ValidationError as exc:
@@ -286,6 +307,8 @@ def load_origins(path: Path) -> Origins:
 class OriginsCheck(_Strict):
     unclassified: list[OriginIssue]
     unknown: list[str]
+    # Issues whose `duplicate_of` names an issue the facts do not hold (outside the window).
+    duplicate_outside: list[str] = []
 
 
 def check_origins(facts: OriginsFacts, origins: Origins) -> OriginsCheck:
@@ -294,6 +317,11 @@ def check_origins(facts: OriginsFacts, origins: Origins) -> OriginsCheck:
     return OriginsCheck(
         unclassified=[i for i in facts.issues if i.key not in origins.issues],
         unknown=sorted(k for k in origins.issues if k not in held),
+        duplicate_outside=sorted(
+            k
+            for k, o in origins.issues.items()
+            if k in held and o.duplicate_of and o.duplicate_of not in held
+        ),
     )
 
 
@@ -560,15 +588,47 @@ def _leaderboards(facts: OriginsFacts, origins: Origins) -> str:
     )
 
 
+def _original_link(issue: OriginIssue, target: str, held: Mapping[str, OriginIssue]) -> str:
+    """The duplicate's original: its table row when in the window, else (same repo) the
+    duplicate's own url with the number replaced, else the key as plain text."""
+    if target in held:
+        frag = urllib.parse.quote(f"origin-{target}", safe="-_.")
+        return f'<a href="#{frag}">{esc(target)}</a>'
+    name, _, number = target.rpartition("#")
+    if (
+        number.isdigit()
+        and name == issue.repo.split("/", 1)[1].lower()
+        and issue.url.startswith("https://")
+    ):
+        base = issue.url.rsplit("/", 1)[0]
+        return f'<a href="{esc(base)}/{number}">{esc(target)}</a>'
+    return esc(target)
+
+
+def _related_pr(o: Origin | None) -> str:
+    if o is None:
+        return DASH
+    lines = [_pr_link(o.pr)] if o.pr or not (o.introduced_in or o.fixed_by) else []
+    if o.introduced_in:
+        lines.append(f"introduced in {_pr_link(o.introduced_in)}")
+    if o.fixed_by:
+        lines.append(f"fixed by {_pr_link(o.fixed_by)}")
+    return "<br>".join(lines)
+
+
 def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
     buttons = "".join(
         f'<button type="button" class="btn" data-filter="{v}" aria-pressed="false">{v}</button>'
         for v in ("all", *CATEGORIES, "unclassified")
     ).replace('data-filter="all" aria-pressed="false"', 'data-filter="all" aria-pressed="true"')
     rows = []
+    held = {i.key: i for i in facts.issues}
     for i in facts.issues:
         o = origins.issues.get(i.key)
         cat = o.category if o else "unclassified"
+        cat_cell = cat
+        if o and o.duplicate_of:
+            cat_cell = f"{cat} of {_original_link(i, o.duplicate_of, held)}"
         closed = (
             f"closed {i.reason or DASH} in {_hours(i.hours_to_close)}"
             if i.state == "closed"
@@ -581,12 +641,12 @@ def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
             else DASH
         )
         rows.append(
-            f'<tr data-category="{cat}" data-key="{esc(i.key)}">'
+            f'<tr data-category="{cat}" data-key="{esc(i.key)}" id="origin-{esc(i.key)}">'
             f'<td><a href="{esc(i.url) if i.url.startswith("https://") else "#"}">'
-            f'{esc(i.key)}</a></td><td class="wrap">{esc(i.title)}</td><td>{cat}</td>'
+            f'{esc(i.key)}</a></td><td class="wrap">{esc(i.title)}</td><td>{cat_cell}</td>'
             f"<td>{o.source if o else DASH}</td>"
             f'<td class="sev-{o.severity if o else "low"}">{o.severity if o else DASH}</td>'
-            f"<td>{_pr_link(o.pr if o else None)}</td>"
+            f"<td>{_related_pr(o)}</td>"
             f'<td>{closed}{f" by {esc(by)}" if by else ""}</td><td class="wrap">{detail}</td></tr>'
         )
     body = (

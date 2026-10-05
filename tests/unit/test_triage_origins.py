@@ -678,3 +678,152 @@ def test_a_bad_origins_yaml_fails_every_verb_that_reads_it(
     skill = Path("plugins/super-fr/skills/fr-origins/SKILL.md").read_text(encoding="utf-8")
     assert "fails every verb that reads it" in skill
     assert "prose-only" in skill
+
+
+# ------------------------------------------------ schema 2 (triage-pages-goal R10)
+
+
+def _write_classification(d: Path, body: str, *, schema: int = 2) -> None:
+    (d / "origins.yaml").write_text(f"schema: {schema}\n" + body, encoding="utf-8")
+
+
+def test_facts_stay_schema_1_and_origins_yaml_loads_1_and_2(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.origins import (
+        CLASSIFICATION_SCHEMA,
+        FACTS_SCHEMA,
+        load_origins,
+        load_origins_facts,
+    )
+
+    facts = _collect(monkeypatch, tmp_path)
+    assert facts["schema"] == FACTS_SCHEMA == 1
+    assert CLASSIFICATION_SCHEMA == 2
+    assert load_origins_facts(tmp_path / "origins-facts.json").scope
+    for schema in (1, 2):
+        (tmp_path / "origins.yaml").write_text(
+            classification_yaml().replace("schema: 1", f"schema: {schema}"), encoding="utf-8"
+        )
+        assert len(load_origins(tmp_path / "origins.yaml").issues) == 15
+    (tmp_path / "origins.yaml").write_text(
+        classification_yaml().replace("schema: 1", "schema: 3"), encoding="utf-8"
+    )
+    with pytest.raises(Exception, match="schema"):
+        load_origins(tmp_path / "origins.yaml")
+
+
+def test_duplicate_of_needs_the_duplicate_category(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    _write_classification(
+        tmp_path,
+        "issues:\n  widgets#3: {category: gap, source: hand, severity: low, reason: x,"
+        " duplicate_of: 'widgets#4'}\n",
+    )
+    r = _run(monkeypatch, "check", tmp_path)
+    assert r.exit_code == 2 and "duplicate" in r.output.replace("\n", " ")
+
+
+def test_introduced_in_on_a_regression_is_refused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    _write_classification(
+        tmp_path,
+        "issues:\n  widgets#2: {category: regression, source: hand, severity: low, reason: x,"
+        " pr: 'example-org/widgets#101', introduced_in: 'example-org/widgets#100'}\n",
+    )
+    r = _run(monkeypatch, "check", tmp_path)
+    assert r.exit_code == 2 and "introduced_in" in r.output.replace("\n", " ")
+
+
+def test_duplicate_of_is_normalised() -> None:
+    from fr.triage.origins import Origin
+
+    o = Origin(
+        category="duplicate", source="hand", severity="low", reason="x", duplicate_of="Widgets#4"
+    )
+    assert o.duplicate_of == "widgets#4"
+
+
+def test_check_reports_a_duplicate_target_outside_the_window(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    (tmp_path / "origins.yaml").write_text(
+        classification_yaml().replace("schema: 1", "schema: 2").replace(
+            "  widgets#6:\n    category: duplicate\n",
+            "  widgets#6:\n    duplicate_of: widgets#99\n    category: duplicate\n",
+        ),
+        encoding="utf-8",
+    )
+    r = _run(monkeypatch, "check", tmp_path)
+    assert r.exit_code == 0
+    out = r.output.replace("\n", " ")
+    assert "duplicate target outside the window (1)" in out and "widgets#6" in out
+
+
+def _dup_page(monkeypatch: pytest.MonkeyPatch, d: Path, extra_6: str, extra_14: str = "") -> str:
+    _collect(monkeypatch, d)
+    text = classification_yaml().replace("schema: 1", "schema: 2")
+    text = text.replace(
+        "  widgets#6:\n    category: duplicate\n", f"  widgets#6:\n    category: duplicate\n{extra_6}"
+    )
+    text = text.replace(
+        "  widgets#14:\n    category: duplicate\n",
+        f"  widgets#14:\n    category: duplicate\n{extra_14}",
+    )
+    (d / "origins.yaml").write_text(text, encoding="utf-8")
+    r = _run(monkeypatch, "render", d)
+    assert r.exit_code == 0, r.output
+    return (d / "origins.html").read_text(encoding="utf-8")
+
+
+def _row(page: str, key: str) -> str:
+    m = re.search(rf'<tr[^>]*id="origin-{re.escape(key)}".*?</tr>', page, flags=re.S)
+    assert m, f"no row {key}"
+    return m.group(0)
+
+
+def test_every_issue_row_has_an_anchor_and_a_duplicate_links_its_original(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _dup_page(
+        monkeypatch,
+        tmp_path,
+        "    duplicate_of: widgets#5\n",
+        "    duplicate_of: widgets#99\n",
+    )
+    assert 'id="origin-widgets#1"' in page
+    # original inside the window: anchor link to its row
+    assert 'href="#origin-widgets%235"' in _row(page, "widgets#6")
+    # outside the window, same repo: the duplicate's own url with the number replaced
+    assert f"https://github.com/{REPO}/issues/99" in _row(page, "widgets#14")
+
+
+def test_a_duplicate_of_another_repo_outside_the_window_is_plain_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _dup_page(monkeypatch, tmp_path, "    duplicate_of: gadgets#7\n")
+    row = _row(page, "widgets#6")
+    assert "gadgets#7" in row and "<a" not in row.split("duplicate")[-1].split("</td>")[0]
+
+
+def test_related_pr_cell_shows_introduced_in_and_fixed_by(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _dup_page(monkeypatch, tmp_path, "")
+    _collect(monkeypatch, tmp_path)
+    text = classification_yaml().replace("schema: 1", "schema: 2").replace(
+        "  widgets#3:\n    category: new-feature\n",
+        "  widgets#3:\n    category: new-feature\n    introduced_in: example-org/widgets#90\n"
+        "    fixed_by: example-org/widgets#91\n",
+    )
+    (tmp_path / "origins.yaml").write_text(text, encoding="utf-8")
+    assert _run(monkeypatch, "render", tmp_path).exit_code == 0
+    row = _row((tmp_path / "origins.html").read_text(encoding="utf-8"), "widgets#3")
+    assert "introduced in" in row and "widgets/pull/90" in row
+    assert "fixed by" in row and "widgets/pull/91" in row
+    assert "introduced in" not in _row(page, "widgets#3")
