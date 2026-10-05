@@ -120,6 +120,7 @@ from fr.triage.batch_drive import (
     find_run,
     housekeeping_branch,
     is_archived,
+    is_finished,
     settle,
     summary_line,
     wave_group,
@@ -1439,9 +1440,11 @@ class _Driver:
         max_inflight: int,
         yes: bool,
         workspace_prefix: str = DEFAULT_WORKSPACE_PREFIX,
+        keep_sessions: bool = False,
     ) -> None:
         self.scope, self.target, self.named = scope, target, named
         self.workspace_prefix = workspace_prefix
+        self.keep_sessions = keep_sessions
         self.checkout_paths = checkouts
         self.max_inflight, self.yes = max_inflight, yes
         self.warned: set[str] = set()
@@ -1455,6 +1458,8 @@ class _Driver:
         self._clients: dict[str, GhClient] = {}
         self._checkouts: dict[str, Checkout] = {}
         self._runners: dict[str, Runner] = {}
+        self._unloadable: set[str] = set()  # runners that failed to load, reported once
+        self._probes: dict[str, tuple[Runner, Any]] = {}  # per pass: live item id -> its runner
         self._merge: dict[str, MergeContext] = {}
 
     # -------------------------------------------------------------- reaching out
@@ -1480,6 +1485,22 @@ class _Driver:
         if name not in self._runners:
             self._runners[name] = load_runner(name)
         return self._runners[name]
+
+    def _try_runner(self, name: str) -> Runner | None:
+        """Runner *name*, or None (reported once) when it cannot be loaded: closing is
+        best effort, so a load failure never ends the drive (R10)."""
+        if name in self._unloadable:
+            return None
+        try:
+            return self.runner(name)
+        except typer.Exit:  # `load_runner` has already printed why
+            self._unloadable.add(name)
+            err_console.print(
+                f"[yellow]warning:[/yellow] runner `{escape(name)}` could not be loaded; "
+                "its sessions are not closed",
+                soft_wrap=True,
+            )
+            return None
 
     def merge_ctx(self, facts: Facts, repo: str) -> MergeContext:
         if repo not in self._merge:
@@ -1582,6 +1603,16 @@ class _Driver:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        closing_sessions = self.yes and not self.keep_sessions
+        sessions = frozenset[str]()
+        self._probes = {}
+        if closing_sessions:
+            finished = [
+                b
+                for b in chosen
+                if b.id in repos and is_finished(b, stages[b.id], archives.get(repos[b.id], ()))
+            ]
+            sessions = self._sessions(facts, finished, repos)
         return Snapshot(
             batches=tuple(judgements.batches),
             stages=stages,
@@ -1595,6 +1626,8 @@ class _Driver:
             archives=archives,
             existing=self._existing(facts, due, repos) if self.yes else frozenset(),
             warned=frozenset(self.warned),
+            close_sessions=closing_sessions,
+            sessions=sessions,
             selected=frozenset(ids),
             archived=frozenset(archived),
             adopted=adopted,
@@ -1739,6 +1772,102 @@ class _Driver:
             found |= runner.existing_dispatches(probes)
         return frozenset(found)
 
+    def _sessions(
+        self, facts: Facts, finished: list[Batch], repos: dict[str, str]
+    ) -> frozenset[str]:
+        """The sessions of finished batches that a closing runner holds live: each
+        item against the runner its own event recorded (the batch's last dispatch,
+        the close-out's own; a `hand` close-out has no session). One preflight and
+        one `existing_dispatches` per runner; a runner that cannot load, cannot close,
+        or refuses is skipped, never an exit (R10)."""
+        if not finished:
+            return frozenset()
+        from fr_dispatch.protocols import SessionCloser
+        from fr_dispatch.work_item import WorkItem
+
+        by_runner: dict[str, list[WorkItem]] = {}
+        for b in finished:
+            repo = repos[b.id]
+            group = self.group_of(b)
+            dispatch, closeout = last_dispatch(b), closeout_event(b)
+            wanted = [(batch_item_id(repo, b.id), dispatch.runner if dispatch else None)]
+            if closeout is not None and closeout.runner != "hand":
+                wanted.append((closeout_item_id(repo, b.id), closeout.runner))
+            for item_id, name in wanted:
+                if not name:
+                    continue
+                probe = WorkItem(
+                    id=item_id,
+                    unit="run",
+                    workflow=batch_workflow(b),
+                    repo=repo,
+                    parent=None,
+                    inputs=(),
+                    payload={"group": group},
+                    tracking=None,
+                )
+                by_runner.setdefault(str(name), []).append(probe)
+        for name, probes in by_runner.items():
+            runner = self._try_runner(name)
+            if runner is None or not isinstance(runner, SessionCloser):
+                continue
+            try:
+                refusal = runner.preflight(probes)
+                held = set() if refusal else runner.existing_dispatches(probes)
+            except Exception as exc:  # noqa: BLE001 - closing is best effort
+                refusal = str(exc) or type(exc).__name__
+                held = set()
+            if refusal:
+                self._report_once(f"closing\0{name}\0{refusal}",
+                                  f"runner `{name}` cannot close sessions: {refusal}")  # fmt: skip
+                continue
+            for probe in probes:
+                if probe.id in held:
+                    self._probes[probe.id] = (runner, probe)
+        return frozenset(self._probes)
+
+    def _report_once(self, key: str, message: str) -> bool:
+        """Print *message* the first time *key* is seen; whether it was printed."""
+        if key in self.warned:
+            return False
+        self.warned.add(key)
+        err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
+        return True
+
+    def _close_sessions(self, action: Action) -> str:
+        """Close *action*'s sessions. Never a failure: a busy or raised close is
+        reported once per batch and cause, and the pass goes on (R10). Returns the
+        outcome line, or "" for a cause already reported."""
+        closed: list[str] = []
+        busy: list[str] = []
+        failed: list[str] = []
+        for item_id in action.items:
+            runner, probe = self._probes[item_id]
+            try:
+                outcome = str(runner.close(probe))  # type: ignore[attr-defined]
+            except Exception as exc:  # noqa: BLE001 - closing is best effort
+                failed.append(f"{item_id}: {exc}")
+                continue
+            (busy if outcome == "busy" else closed).append(item_id)
+        parts = []
+        if closed:
+            parts.append(f"closed {', '.join(closed)}")
+        if busy:
+            parts.append(f"busy, retried next pass: {', '.join(busy)}")
+        if failed:
+            parts.append(f"failed to close {'; '.join(failed)}")
+        line = "; ".join(parts)
+        if not busy and not failed:
+            return line
+        return line if self._report_cause(action.batch, line) else ""
+
+    def _report_cause(self, batch: str, line: str) -> bool:
+        key = f"close\0{batch}\0{line}"
+        if key in self.warned:
+            return False
+        self.warned.add(key)
+        return True
+
     def _launch(self, facts: Facts, batch: Batch, repo: str) -> Launch:
         try:
             return resolve_launch(  # the clone's models.yaml, as dispatch_batch reads it (rg-8)
@@ -1766,7 +1895,8 @@ class _Driver:
                 continue
             outcome, did, in_flight = self._act(action, facts, in_flight)
             acted = acted or did
-            _say(action_line(action, outcome))
+            if outcome or action.kind != "close":  # a close reported already stays quiet
+                _say(action_line(action, outcome))
         summary = settle(plan.summary, unlanded=len(self._unlanded), held=self._held)
         _say(summary_line(summary))
         if not self.yes:
@@ -1783,6 +1913,8 @@ class _Driver:
         if action.kind in ("warn", "foreign"):
             self.warned.add(action.head)
             return action.detail, False, in_flight
+        if action.kind == "close":
+            return self._close_sessions(action), False, in_flight  # never `acted`
         if action.kind == "merge":
             return self._merge_batch(action, facts, judgements, batch, repo, in_flight)
         if action.kind == "closeout":
@@ -2045,6 +2177,13 @@ def batch_drive_command(
             "(`<prefix>-wave-<n>`).",
         ),
     ] = DEFAULT_WORKSPACE_PREFIX,
+    keep_sessions: Annotated[
+        bool,
+        typer.Option(
+            "--keep-sessions",
+            help="Leave a finished batch's batch and close-out sessions open.",
+        ),
+    ] = False,
     yes: Annotated[
         bool, typer.Option("--yes", help="Act; without it, print one pass's plan and exit.")
     ] = False,
@@ -2078,6 +2217,7 @@ def batch_drive_command(
         max_inflight=max_inflight,
         yes=yes,
         workspace_prefix=workspace_prefix,
+        keep_sessions=keep_sessions,
     )
     with drive_lock(target):
         while True:
