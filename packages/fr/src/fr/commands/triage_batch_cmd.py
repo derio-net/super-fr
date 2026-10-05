@@ -1733,16 +1733,17 @@ class _Driver:
         100 entries (p4-sec-file-list). They are git's diff of the head the decision is
         about (the recorded head, or the orphan's) against `origin/<default>`; an
         unreadable head reads as no files, which the decision refuses. An orphan's
-        `single_commit` is read through git too (p4-r8)."""
+        content is never read: the export reuses the PR, never its head (p4-r12)."""
         collected = {pr.number: pr for pr in facts.prs}
         prs: dict[tuple[str, str], LivePr] = {}
         orphans: dict[str, tuple[LivePr, ...]] = {}
         try:
             for repo in sorted(export_path):
                 allowed = allowed_authors(repo, facts)
-                recorded = {e.pr for e in judgements.exports if e.repo == repo}
+                # a PR whose entry is recorded closed is reusable once reopened (p4-r13)
+                recorded = {e.pr for e in judgements.exports if e.repo == repo and not e.closed}
                 found = tuple(
-                    self._orphan(repo, pr, allowed)
+                    self._orphan(pr, allowed)
                     for pr in facts.prs
                     if pr.repo == repo
                     and pr.state == "OPEN"
@@ -1787,24 +1788,17 @@ class _Driver:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         return prs, orphans
 
-    def _orphan(self, repo: str, pr: PullRequest, allowed: frozenset[str]) -> LivePr:
-        """An unrecorded open export PR as adoption judges it (p4-r3, p4-r8)."""
-        single = False
-        try:
-            checkout = self._reader(repo)
-            checkout.fetch()
-            single = checkout.single_commit_on(f"origin/{checkout.default_branch()}", pr.head_oid)
-        except TriageError:
-            pass  # unreadable: not one commit we can vouch for
+    @staticmethod
+    def _orphan(pr: PullRequest, allowed: frozenset[str]) -> LivePr:
+        """An unrecorded open export PR, as reuse judges it: open and trusted. Nothing
+        else of it is read, because nothing of it is kept (p4-r12)."""
         return LivePr(
             number=pr.number,
             state="OPEN",
             draft=pr.is_draft,
             head=pr.head_oid,
             head_ref=pr.head_ref,
-            files=self._export_files(repo, pr.head_oid),
             trusted=distrust(pr.author, pr.cross_repo, allowed) is None,
-            single_commit=single,
         )
 
     def _hand_closeout(self, facts: Facts, repo: str, batch: Batch) -> LivePr | None:
@@ -2329,10 +2323,6 @@ class _Driver:
         assert action.wave is not None
         if action.kind == "export":
             return self._export(action, facts, action.batch, action.wave)
-        if action.kind == "export-adopt":
-            # pinned to the head adopted: a later commit on the branch never merges
-            self._record_export(action.batch, _covers(action), pr=action.pr, head=action.head)
-            return f"recorded the open PR #{action.pr} at {action.head[:12]}; nothing pushed"
         if action.kind == "export-reconcile":  # merged outside the driver (p4-r1)
             assert action.pr is not None
             self._mark(action.batch, action.pr, merged=True)
@@ -2414,11 +2404,18 @@ class _Driver:
             suffix = f"; {_ignored_note(left, short=True)}" if left else ""
             if head is None:
                 self._record_export(repo, _covers(action), pr=None)
+                if action.pr is not None:  # p4-r13: left open, said once (never recorded)
+                    stale = (f"export PR #{action.pr} on {branch} is stale: the state on the "
+                             "default branch is already current; it can be closed")  # fmt: skip
+                    _say(action_line(Action("warn", repo, stale, pr=action.pr, wave=wave)))
                 return f"{rel} is unchanged; recorded with no PR{suffix}"
             try:
                 worktree.push(branch, force=True)
             except TriageError as exc:
                 _fail(f"export wave {wave}: {exc}", code=1)
+            if action.pr is not None:  # reuse (p4-r12): the PR now carries OUR commit
+                self._record_export(repo, _covers(action), pr=action.pr, head=head)
+                return f"pushed {head[:12]} to {branch}; reused PR #{action.pr}{suffix}"
             client = self.client(facts, repo)
             try:
                 number = client.pr_create(
@@ -2473,6 +2470,15 @@ def _ignored_note(paths: tuple[str, ...], *, short: bool = False) -> str:
         return f"{n} durable {files} ignored by the target repo not exported: {shown}"
     verb = "is" if n == 1 else "are"
     return f"{n} durable {files} {verb} ignored by the target repo and were not exported: {shown}"
+
+
+def _ignored_count(paths: tuple[str, ...]) -> str:
+    """The PR body's line about ignored files: a count, never a name (p4-r14). The
+    body is public; the names stay in the local line and warn."""
+    n = len(paths)
+    if n == 1:
+        return "1 durable file is ignored by this repo and was not exported."
+    return f"{n} durable files are ignored by this repo and were not exported."
 
 
 def _covers(action: Action) -> tuple[str, ...]:

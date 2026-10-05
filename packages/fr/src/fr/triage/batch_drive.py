@@ -64,13 +64,12 @@ ActionKind = Literal[
     "foreign",
     "close",
     "export",
-    "export-adopt",
     "export-merge",
     "export-reconcile",
     "export-closed",
 ]
 EXPORT_KINDS: frozenset[str] = frozenset(
-    {"export", "export-adopt", "export-merge", "export-reconcile", "export-closed"}
+    {"export", "export-merge", "export-reconcile", "export-closed"}
 )
 
 ARCHIVED_BY_UNKNOWN_PR = 0
@@ -95,9 +94,6 @@ class LivePr:
     # From the repo itself, by an allowed author (`fr.triage.batch.distrust`). False
     # unless the command checked it: an archive PR is attributed only when True (gh#936).
     trusted: bool = False
-    # An export PR whose head is exactly one commit on top of the default branch, as
-    # the driver pushes: the only head adoption pins (p4-r8). Set by the command.
-    single_commit: bool = False
 
 
 @dataclass(frozen=True)
@@ -148,8 +144,9 @@ class Snapshot:
     finished: frozenset[str] = frozenset()
     export_refused: frozenset[str] = frozenset()
     # repo -> the open PRs from the repo itself on any `chore/triage-state-wave-<N>`
-    # head that no export entry records: a pass that died between opening and
-    # recording (p4-r3). Cross-repo PRs never appear here (p4-r7).
+    # head that no live export entry records: a pass that died between opening and
+    # recording (p4-r3), or a reopened PR recorded closed. Cross-repo PRs never appear
+    # here (p4-r7). The export reuses one; it never adopts its content (p4-r12).
     export_orphans: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)
 
 
@@ -168,7 +165,7 @@ class Action:
     # export*, and a warn about one: the wave key (`batch` is then the repo); the
     # highest wave the export PR covers, which names its branch
     wave: str | None = None
-    covers: tuple[str, ...] = ()  # export, export-adopt: every wave the PR records
+    covers: tuple[str, ...] = ()  # export: every wave the PR records
 
 
 @dataclass(frozen=True)
@@ -427,7 +424,7 @@ class ExportTarget:
     wave: str
     covers: tuple[str, ...]
     recorded: Export | None  # the newest unmerged entry with a PR; None: not exported
-    orphan: LivePr | None = None  # unrecorded: the open PR to adopt, on wave `wave`'s head
+    orphan: LivePr | None = None  # unrecorded: the open PR to reuse, on wave `wave`'s head
 
 
 def export_wave_of(head_ref: str) -> str | None:
@@ -447,8 +444,8 @@ def export_target(
     """One export PR per repo covers every unexported finished wave. While one is
     unmerged, it is the target and a wave that finished since waits for a later pass,
     so no second PR is opened. With none recorded, an unrecorded open PR on any wave's
-    export head (*orphans*, highest wave first) is the target and covers the owed waves
-    up to its own (p4-r3). None: nothing is owed."""
+    export head (*orphans*, highest wave first) is reused: the export pushes onto its
+    branch and covers every owed wave (p4-r3, p4-r13). None: nothing is owed."""
     mine = [e for e in exports if e.repo == repo and not e.closed]  # closed: owed again
     unmerged = [e for e in mine if e.pr is not None and not e.merged]
     if unmerged:
@@ -463,8 +460,7 @@ def export_target(
     named = [(w, o) for o in orphans if (w := export_wave_of(o.head_ref)) is not None]
     if named:
         wave, orphan = max(named, key=lambda pair: _wave_order(pair[0]))
-        upto = tuple(w for w in owed if _wave_order(w) <= _wave_order(wave))
-        return ExportTarget(repo, wave, upto, None, orphan)
+        return ExportTarget(repo, wave, tuple(owed), None, orphan)
     return ExportTarget(repo, owed[-1], tuple(owed), None)
 
 
@@ -482,17 +478,14 @@ def _export_row(
     if done is None:
         if live is None or live.state != "OPEN":
             return Action("export", repo, f"to {root} on {head}", wave=wave), "closing"
-        why = "" if live.trusted else "is not trusted (not from this repo by an allowed author)"
-        if not why and not live.single_commit:  # p4-r8: the pinned head must be ours
-            why = "is not one commit on top of the default branch"
-        why = why or _outside(root, live.files)
-        if why:
-            return Action("warn", repo, f"PR #{live.number} on {head} {why}; it is never "
-                          "adopted or merged", pr=live.number, wave=wave), "blocked"  # fmt: skip
-        adopt = f"PR #{live.number} on {head} is open with no record; recording it"
-        return Action(
-            "export-adopt", repo, adopt, pr=live.number, head=live.head, wave=wave
-        ), "closing"
+        if not live.trusted:
+            return Action("warn", repo, f"PR #{live.number} on {head} is not trusted (not "
+                          "from this repo by an allowed author); it is never reused or merged",
+                          pr=live.number, wave=wave), "blocked"  # fmt: skip
+        # Reused, never adopted (p4-r12): the export pushes the driver's own commit onto
+        # this PR's branch, and the merge pins to that commit. Nothing of the PR's is kept.
+        reuse = f"to {root} on {head}, reusing open PR #{live.number}"
+        return Action("export", repo, reuse, pr=live.number, wave=wave), "closing"
     if live is None:
         return None, "closing"  # not read this pass: still owed
     if live.state == "MERGED":  # merged by hand, or a pass died before recording (p4-r1)
@@ -548,12 +541,8 @@ def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
         action, count = _export_row(
             repo, target.wave, target.recorded, live, snap.export_path[repo]
         )
-        if action is not None and action.kind == "export-adopt" and not target.covers:
-            action, count = Action("warn", repo, f"PR #{action.pr} on {export_branch(target.wave)} "
-                                   "covers none of the owed waves; close it", pr=action.pr,
-                                   wave=target.wave), "blocked"  # fmt: skip
         if action is not None:
-            if action.kind in ("export", "export-adopt"):
+            if action.kind == "export":
                 action = replace(action, covers=target.covers)
                 if len(target.covers) > 1:
                     action = replace(action, detail=f"{action.detail} (covers waves "

@@ -385,23 +385,3 @@ def test_commit_paths_never_forces_past_gitignore_and_ignored_names_what_it_left
         "docs/triage/scope/snapshots/s.json",
     )
     assert wt.ignored([]) == ()
-
-
-def test_single_commit_on_reads_one_commit_atop_the_default_branch(tmp_path: Path) -> None:
-    """p4-r8: the only head adoption may pin is one commit whose parent is on main."""
-    checkout = _repo(tmp_path)
-    clone = checkout.path
-    _git(clone, "fetch", "--quiet", "origin")
-    base = _git(clone, "rev-parse", "origin/main").strip()
-    (clone / "x.txt").write_text("1\n")
-    _git(clone, "add", ".")
-    _git(clone, "commit", "--quiet", "-m", "one")
-    one = _git(clone, "rev-parse", "HEAD").strip()
-    (clone / "x.txt").write_text("2\n")
-    _git(clone, "commit", "--quiet", "-am", "two")
-    two = _git(clone, "rev-parse", "HEAD").strip()
-
-    assert checkout.single_commit_on("origin/main", one)
-    assert not checkout.single_commit_on("origin/main", two)
-    assert not checkout.single_commit_on("origin/main", base)
-    assert not checkout.single_commit_on("origin/main", "0" * 40)

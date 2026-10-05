@@ -2364,22 +2364,32 @@ def test_an_export_that_changes_nothing_records_no_pr_and_opens_none(
     assert EXPORT_HEAD not in _git(clone, "branch", "-r")
 
 
-def test_an_open_export_pr_with_no_record_is_adopted_without_a_push(
+def test_an_orphan_is_reused_with_the_drivers_own_commit_never_its_foreign_one(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    sha = _export_pr(world, git_checkout.path)
+    """p4-r12: PR #40 on the export branch carries a single commit nobody here wrote.
+    The driver pushes ITS export over it, records #40 with that SHA, and the merge
+    pins to it: the foreign commit can never reach main."""
+    clone = git_checkout.path
+    foreign = _export_pr(world, clone, {f"{SCOPE_DIR}/judgements.yaml": "planted\n"})
     state = _finished_wave(tmp_path, world)
-    world.checks[40] = [{"name": "test", "bucket": "pending"}]
 
     code, out = _export_drive(state, "--once", "--yes")
 
     assert code == 0, out
-    assert f"export-adopt wave 1 {REPO}: recorded the open PR #40" in out
-    assert _exports(state) == [("1", 40, False)]
-    assert _heads(state) == [sha]  # the merge is pinned to the head it adopted
+    assert f"export wave 1 {REPO}: pushed" in out and "reused PR #40" in out
     assert not any(c.startswith("pr_create") for c in world.calls)
-    remote = _git(git_checkout.path, "ls-remote", "origin", f"refs/heads/{EXPORT_HEAD}")
-    assert remote.split()[0] == sha  # nothing pushed over it
+    _git(clone, "fetch", "--quiet", "origin")
+    tip = _git(clone, "rev-parse", f"origin/{EXPORT_HEAD}").strip()
+    assert tip != foreign and _heads(state) == [tip]
+    assert _exports(state) == [("1", 40, False)]
+    assert "planted" not in _git(clone, "show", f"{tip}:{SCOPE_DIR}/judgements.yaml")
+
+    world.prs[40]["head_oid"] = tip  # the forge follows the force-push
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert world.merged == [(40, tip, "squash")]  # pinned to the driver's own commit
 
 
 def test_a_green_recorded_export_pr_is_merged_at_its_recorded_head_and_recorded(
@@ -2472,20 +2482,6 @@ def test_an_unreadable_export_head_is_never_merged(
     assert code == 3, out
     assert "changed files are unknown" in out
     assert world.merged == []
-
-
-def test_a_file_outside_the_export_dir_blocks_the_adoption(
-    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
-) -> None:
-    _export_pr(world, git_checkout.path, {"packages/evil.py": "evil\n"})
-    state = _finished_wave(tmp_path, world)
-
-    code, out = _export_drive(state, "--once", "--yes")
-
-    assert code == 3, out
-    assert "packages/evil.py" in out and "never adopted or merged" in out
-    assert _exports(state) == []
-    assert not any(c.startswith(("pr_merge", "pr_create")) for c in world.calls)
 
 
 def test_a_refused_export_merge_exits_1(
@@ -2787,24 +2783,23 @@ def test_a_filesystem_error_while_exporting_is_a_warn_for_the_wave(
     assert _exports(state) == []
 
 
-def test_a_crash_after_opening_then_a_new_wave_adopts_and_opens_no_second_pr(
+def test_a_crash_after_opening_then_a_new_wave_opens_exactly_one_pr(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    """p4-r3: PR #40 on wave 1's branch was opened but never recorded; wave 2 has
-    finished since. It is adopted for wave 1, and wave 2 waits: no second PR."""
-    sha = _export_pr(world, git_checkout.path)
+    """p4-r3, p4-r13: PR #40 on wave 1's branch was opened but never recorded; wave 2
+    has finished since. #40 is reused for both waves; no second PR ever opens."""
+    _export_pr(world, git_checkout.path)
     state = _finished_wave(tmp_path, world, waves=(1, 2))
 
     code, out = _export_drive(state, "--once", "--yes")
 
     assert code == 0, out
-    assert f"export-adopt wave 1 {REPO}: recorded the open PR #40" in out
-    assert _exports(state) == [("1", 40, False)] and _heads(state) == [sha]
+    assert _exports(state) == [("1", 40, False), ("2", 40, False)]
     assert not any(c.startswith("pr_create") for c in world.calls)
-
     world.checks[40] = [{"name": "test", "bucket": "pending"}]
-    code, out = _export_drive(state, "--once", "--yes")
-    assert not any(c.startswith("pr_create") for c in world.calls)  # wave 2 still waits
+    _export_drive(state, "--once", "--yes")
+    assert not any(c.startswith("pr_create") for c in world.calls)
+    assert [n for n, p in world.prs.items() if p["head_ref"].startswith("chore/triage")] == [40]
 
 
 def test_a_fork_pr_on_the_export_branch_name_is_ignored(
@@ -2822,25 +2817,45 @@ def test_a_fork_pr_on_the_export_branch_name_is_ignored(
     assert _exports(state) == [("1", mine, False)]
 
 
-def test_an_orphan_with_more_than_one_commit_is_not_adopted(
+def test_a_reopened_pr_recorded_closed_is_reused(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout
 ) -> None:
-    """p4-r8: adoption pins the head, so it must be one commit atop the default branch."""
-    clone = git_checkout.path
-    _export_pr(world, clone)
-    _git(clone, "fetch", "--quiet", "origin")
-    _git(clone, "checkout", "--quiet", "-B", "more", f"origin/{EXPORT_HEAD}")
-    (clone / SCOPE_DIR / "extra.yaml").write_text("y\n", encoding="utf-8")
-    _git(clone, "add", ".")
-    _git(clone, "commit", "--quiet", "-m", "a second commit")
-    _git(clone, "push", "--quiet", "origin", f"more:{EXPORT_HEAD}")
-    _git(clone, "checkout", "--quiet", "main")
-    world.prs[40]["head_oid"] = _git(clone, "rev-parse", "more").strip()
-    state = _finished_wave(tmp_path, world)
+    """p4-r13: closed (recorded `closed: true`), then reopened by someone: the export
+    reuses it rather than calling pr_create, which would fail on the busy head."""
+    _export_pr(world, git_checkout.path)
+    closed = (
+        "  - {wave: '1', repo: derio-net/super-fr, at: '2026-10-01T13:00:00Z', pr: 40, "
+        "head: 'x', closed: true}\n"
+    )
+    state = _finished_wave(tmp_path, world, exports=closed)
 
     code, out = _export_drive(state, "--once", "--yes")
 
-    assert code == 3, out
-    assert "is not one commit on top of the default branch" in out
-    assert _exports(state) == []
+    assert code == 0, out
     assert not any(c.startswith("pr_create") for c in world.calls)
+    assert _exports(state) == [("1", 40, False)]
+    assert [e.closed for e in load_judgements(state / "judgements.yaml").exports] == [False]
+
+
+def test_a_reused_pr_with_nothing_to_export_is_left_open_with_one_stale_warn(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    from fr.triage.state_sync import export_state
+
+    _export_pr(world, git_checkout.path)
+    state = _finished_wave(tmp_path, world)
+    clone = git_checkout.path
+    export_state(state, clone, SCOPE_DIR)
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "already exported")
+    _git(clone, "push", "--quiet", "origin", "main")
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert code == 0, out
+    assert _exports(state) == [("1", None, False)]
+    (warn,) = _lines(out, "warn")
+    assert "PR #40" in warn and "stale" in warn
+    assert world.prs[40]["state"] == "OPEN"
+    code, out = _export_drive(state, "--once", "--yes")
+    assert _lines(out, "warn") == []  # said once
