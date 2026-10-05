@@ -29,6 +29,7 @@ from fr.triage.batch_drive import (
     housekeeping_branch,
     is_archived,
     summary_line,
+    wave_group,
 )
 from fr.triage.model import Batch, PullRequest
 
@@ -668,3 +669,17 @@ def test_archived_evidence_wins_over_a_hand_pr_and_only_the_selection_is_adopted
     snap = _snap([x, y], {"x": "merged", "y": "merged"}, archived=frozenset({"x", "y"}),
                  adopted={"x": hand}, selected=frozenset({"x"}))  # fmt: skip
     assert [(a.kind, a.batch, a.archived) for a in drive_pass(snap).actions] == [("adopt", "x", 0)]
+
+
+# ------------------------------------------------------------- wave groups
+
+
+def test_wave_group_names_the_workspace_a_wave_runs_in() -> None:
+    assert wave_group("drive", 2) == "drive-wave-2"
+    assert wave_group("bugfix", None) == "bugfix-no-wave"
+
+
+@pytest.mark.parametrize("prefix", ["", "   "])
+def test_wave_group_refuses_a_blank_prefix(prefix: str) -> None:
+    with pytest.raises(ValueError):
+        wave_group(prefix, 1)

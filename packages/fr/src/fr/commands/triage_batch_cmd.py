@@ -104,6 +104,7 @@ from fr.triage.batch_dispatch import (
 from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     DEFAULT_MAX_INFLIGHT,
+    DEFAULT_WORKSPACE_PREFIX,
     RUNS_DIR,
     Action,
     LivePr,
@@ -121,6 +122,7 @@ from fr.triage.batch_drive import (
     is_archived,
     settle,
     summary_line,
+    wave_group,
 )
 from fr.triage.batch_merge import (
     MergeContext,
@@ -642,7 +644,13 @@ def _fresh_config(checkout: Checkout, facts: Facts, owner_repo: str) -> str:
 
 
 def _work_item(
-    owner_repo: str, batch: Batch, launch: Launch, brief: str, reserved: str | None, cwd: Path
+    owner_repo: str,
+    batch: Batch,
+    launch: Launch,
+    brief: str,
+    reserved: str | None,
+    cwd: Path,
+    group: str | None = None,
 ) -> WorkItem:
     """The run item (§3.C step 4); `tracking` stays None — a batch is many issues."""
     from fr_dispatch.work_item import WorkItem, run_item_id
@@ -656,6 +664,8 @@ def _work_item(
         "issues": list(batch.ids),
         "checkout": str(cwd),  # herdr's --cwd (decision p2-dispatch-handle)
     }
+    if group:
+        payload["group"] = group  # the runner group (herdr workspace); the driver's alone
     return WorkItem(
         id=run_item_id(owner_repo, f"batch-{batch.id}"),
         unit="run",
@@ -928,6 +938,7 @@ def dispatch_batch(
     handle: str | None = None,
     reserved_version: str | None = None,
     yes: bool = False,
+    group: str | None = None,
 ) -> None:
     """The body of `batch dispatch`, callable: one batch, one runner, one dispatch.
 
@@ -985,7 +996,7 @@ def dispatch_batch(
         closing_refs=refs,
         reserved_version=reserved,
     )
-    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path)  # step 4
+    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path, group)  # step 4
     branch = batch_branch(batch)
     console.print(f"dispatch batch {batch.id} as {item.id}", markup=False)
     console.print(f"  runner: {runner_name}", markup=False)
@@ -1427,8 +1438,10 @@ class _Driver:
         checkouts: dict[str, Path | None],
         max_inflight: int,
         yes: bool,
+        workspace_prefix: str = DEFAULT_WORKSPACE_PREFIX,
     ) -> None:
         self.scope, self.target, self.named = scope, target, named
+        self.workspace_prefix = workspace_prefix
         self.checkout_paths = checkouts
         self.max_inflight, self.yes = max_inflight, yes
         self.warned: set[str] = set()
@@ -1450,6 +1463,10 @@ class _Driver:
         if repo not in self._clients:
             self._clients[repo] = make_client(f"https://{_host_of(facts, repo)}/{repo}")
         return self._clients[repo]
+
+    def group_of(self, batch: Batch) -> str:
+        """The runner group of *batch*'s sessions: its CURRENT wave's workspace."""
+        return wave_group(self.workspace_prefix, batch.wave)
 
     def path_of(self, repo: str) -> Path | None:
         return self.checkout_paths.get(repo.lower())
@@ -1794,6 +1811,7 @@ class _Driver:
                 batch,
                 checkout_path=self.path_of(repo),
                 yes=True,
+                group=self.group_of(batch),
             )
         after = _find(load_judgements(self.target / "judgements.yaml").batches, batch.id)
         event = last_dispatch(after)
@@ -1896,7 +1914,9 @@ class _Driver:
                               handle=item_id, run=run, archive=archive),
             )  # fmt: skip
             return f"recorded the live {item_id}", True
-        item = _closeout_item(repo, batch, launch, run=run, checkout=checkout.path)
+        item = _closeout_item(
+            repo, batch, launch, run=run, checkout=checkout.path, group=self.group_of(batch)
+        )
         runner = self.runner(str(launch.runner))
         if not runner.can_dispatch(item):
             _fail(f"runner `{launch.runner}` does not take run-unit work")
@@ -1959,7 +1979,7 @@ def _cursors(root: Path) -> list[object]:
 
 
 def _closeout_item(
-    repo: str, batch: Batch, launch: Launch, *, run: str | None, checkout: Path
+    repo: str, batch: Batch, launch: Launch, *, run: str | None, checkout: Path, group: str
 ) -> WorkItem:
     """The close-out work item (§C): unit `run`, `payload.kind: closeout`, model from
     `resolve_launch`, checkout from the `--checkout` map."""
@@ -1974,6 +1994,7 @@ def _closeout_item(
         "branch": last.branch if last else batch_branch(batch),
         "issues": list(batch.ids),
         "checkout": str(checkout),
+        "group": group,
     }
     return WorkItem(
         id=closeout_item_id(repo, batch.id),
@@ -2002,6 +2023,14 @@ def batch_drive_command(
         int, typer.Option("--interval", min=1, help="Seconds between passes in loop mode.")
     ] = DEFAULT_INTERVAL,
     checkout: DriveCheckoutOpt = None,
+    workspace_prefix: Annotated[
+        str,
+        typer.Option(
+            "--workspace-prefix",
+            help="Prefix of the runner workspace each wave's sessions open in "
+            "(`<prefix>-wave-<n>`).",
+        ),
+    ] = DEFAULT_WORKSPACE_PREFIX,
     yes: Annotated[
         bool, typer.Option("--yes", help="Act; without it, print one pass's plan and exit.")
     ] = False,
@@ -2015,6 +2044,8 @@ def batch_drive_command(
     Exit codes: 0 acted or everything is done; 3 nothing to do while work remains;
     2 a refusal (a runner's preflight included); 1 a forge write failed.
     """
+    if not workspace_prefix.strip():
+        _fail("--workspace-prefix must not be blank")
     scope = _scope(repo, org)
     target = state_dir(scope, dir_override)
     path = target / "judgements.yaml"
@@ -2026,7 +2057,13 @@ def batch_drive_command(
     names = {_batch_slug(scope, b.repo_name) for b in chosen}
     checkouts = _checkout_map(checkout, scope, names)
     driver = _Driver(
-        scope, target, named=batch_ids, checkouts=checkouts, max_inflight=max_inflight, yes=yes
+        scope,
+        target,
+        named=batch_ids,
+        checkouts=checkouts,
+        max_inflight=max_inflight,
+        yes=yes,
+        workspace_prefix=workspace_prefix,
     )
     with drive_lock(target):
         while True:

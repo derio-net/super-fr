@@ -58,7 +58,9 @@ tracker Issue to stamp), and a payload a run-capable runner must honour:
 - `issues` — the member issue keys, for the runner's bookkeeping.
 
 An optional `checkout` names the local clone to start the run in; a runner
-falls back to its own working directory. `RUN_PAYLOAD_KEYS` lists the six;
+falls back to its own working directory. An optional `group` names the runner
+group (a herdr workspace) the item's session belongs to; a runner without groups
+ignores it. `RUN_PAYLOAD_KEYS` lists the six;
 `fr_dispatch.testing.check_run_unit_contract` is the reusable test.
 """
 

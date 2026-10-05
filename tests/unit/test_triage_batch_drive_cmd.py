@@ -400,6 +400,48 @@ def test_once_yes_dispatches_up_to_the_cap_with_one_line_each(
     assert out.rstrip().splitlines()[-1] == "in flight 2, merged 0, pending 1, closing 0"
 
 
+def test_a_driven_dispatch_carries_its_waves_group(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    (item,) = runner.dispatched
+    assert item.payload["group"] == "drive-wave-1"
+
+
+def test_workspace_prefix_renames_the_group(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once", "--yes", "--workspace-prefix", "bugfix")
+    assert code == 0, out
+    assert runner.dispatched[0].payload["group"] == "bugfix-wave-1"
+
+
+def test_the_closeout_item_carries_its_batchs_current_wave_group(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _merged(world, tmp_path)
+    _cursor(checkout, "2026-10-01-b1", "feat/batch-b1")
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes", "--workspace-prefix", "bugfix")
+    assert code == 0, out
+    (item,) = runner.dispatched
+    assert item.payload["kind"] == "closeout"
+    assert item.payload["group"] == "bugfix-wave-1"
+
+
+@pytest.mark.parametrize("prefix", ["", "  "])
+def test_a_blank_workspace_prefix_is_refused(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, prefix: str
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once", "--yes", "--workspace-prefix", prefix)
+    assert code == 2 and "prefix" in out
+    assert runner.dispatched == []
+
+
 def test_the_same_action_reads_the_same_line_in_once_and_loop_mode(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, sleeps: list[float]
 ) -> None:

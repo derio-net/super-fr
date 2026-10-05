@@ -30,6 +30,7 @@ from fr.triage.batch import (
 )
 from fr.triage.model import Batch, CloseoutEvent
 
+DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
 """How long after a merge the close-out starts when no release commit followed it
 (a PR with no change fragment releases nothing)."""
@@ -221,6 +222,13 @@ def closeout_item_id(repo: str, batch_id: str) -> str:
     Spelled here like `batch_item_id`: `fr.triage` never imports `fr_dispatch`.
     """
     return f"{repo}/run/closeout-{batch_id}"
+
+
+def wave_group(prefix: str, wave: int | None) -> str:
+    """The runner group (a herdr workspace) a wave's sessions open in."""
+    if not prefix.strip():
+        raise ValueError("the workspace prefix must not be blank")
+    return f"{prefix}-wave-{wave}" if wave is not None else f"{prefix}-no-wave"
 
 
 def find_run(cursors: Iterable[object], branch: str) -> tuple[str, str | None] | None:
