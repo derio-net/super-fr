@@ -6293,9 +6293,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R3
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_board_views.py#test_the_board_is_ordered_since_needs_next_waves_then_the_folds
+      - super-fr:tests/unit/test_triage_board_views.py#test_since_last_report_is_a_table_of_transitions
+      - super-fr:tests/unit/test_triage_board_views.py#test_the_wave_table_has_a_tier_column_after_batch
+    status: ci
+    notes: 'Board first screen shipped (phase 2): transitions table, Tier column, closed
+      folds; browser-checked headless.'
     visual:
       states:
       - since-table-with-changes
