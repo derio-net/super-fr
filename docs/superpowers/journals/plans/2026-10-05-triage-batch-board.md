@@ -114,3 +114,58 @@ annotation removed; mypy clean.
 ### p1-r8-resolved · finding [fixed] · resolves p1-r8: matrix row cited only the focus CLI test (phase 1)
 
 fr acceptance set-status added unit=super-fr:tests/unit/test_fr_herdr_runner.py with updated notes.
+
+<!-- fr:journal kind=decision scope=plan id=p2-build-board-no-notes created=2026-10-05T21:09:03+00:00 phase=2 -->
+### p2-build-board-no-notes · decision · build_board takes no notes (phase 2)
+
+Page notes belong to the page (spec D passes them to render_board); Board carries scope and collected_at only.
+
+<!-- fr:journal kind=decision scope=plan id=p2-no-forge-url-guess created=2026-10-05T21:09:03+00:00 phase=2 -->
+### p2-no-forge-url-guess · decision · a member missing from the facts has no link (phase 2)
+
+Its Member has stage unknown and url None; the forge URL is never guessed.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-hint-partial-closeout-due created=2026-10-05T21:09:03+00:00 phase=2 -->
+### p2-hint-partial-closeout-due · discovery · a partial batch can read close-out due in Done (phase 2)
+
+partial is LANDED so drive_pass emits closeout for it; R6 puts the driver's action first, so the Done/partial card shows the action phrase, as specified.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-clipboard-timing created=2026-10-05T21:09:03+00:00 phase=2 -->
+### p2-clipboard-timing · discovery · copied appears after the clipboard promise resolves (phase 2)
+
+A capture script must wait for the confirmation before asserting button text; fixed in the script, not the page.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-05T21:09:03+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+a one-function extraction; _chosen now calls default_selection, nothing else repeated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-05T21:09:03+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the column table is already one ordered mapping (COLUMN_TITLES) with a stage map; no branch repeats
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-05T21:09:03+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+phrase tables and hint strings are already module constants beside the column table
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-10-05T21:09:03+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+kanban.py is ~370 lines, under the 400 split threshold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-10-05T21:09:03+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+esc, FONTS and _safe_url are imported from render.py, not copied
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t6 created=2026-10-05T21:09:03+00:00 phase=2 -->
+### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
+
+scope_args is the one scope-arg builder; focus builds no scope args, so the drive (phase 3) is its second caller
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t7 created=2026-10-05T21:09:03+00:00 phase=2 -->
+### no-refactor-p2-t7 · discovery · no-refactor-because P2.T7 (phase 2)
+
+browser check and matrix moves only; no code to clean
