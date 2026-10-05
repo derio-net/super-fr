@@ -15,6 +15,7 @@ from fr.triage.errors import TriageError
 from fr.triage.model import Judgements, load_judgements
 from fr.triage.snapshot import (
     KEEP,
+    Transition,
     diff_snapshots,
     latest_snapshot,
     store_snapshot,
@@ -221,6 +222,45 @@ def test_the_diff_lists_exactly_what_changed() -> None:
     assert ("open", before.figures["open"], after.figures["open"]) in d.figures_changed
     assert all(a != b for _, a, b in d.figures_changed)
     assert d.empty is False
+
+
+def test_the_diff_also_holds_one_structured_transition_per_change() -> None:
+    f1, jd1 = busy()
+    before = take_snapshot(f1, jd1, acceptance={"row-a": "skipped", "row-b": "ci"})
+    merged_draft = pr(11, "feat/batch-b-draft", state="MERGED")
+    issues = []
+    for i in f1.issues:
+        d = i.model_dump(mode="json")
+        if i.number in (3, 4):
+            d.update(state="closed", prs=[merged_draft])
+        issues.append(d)
+    issues.append(issue(14))
+    f2 = facts(issues, config={"example-org/widgets": {"post_merge": ["make", "deploy"]}})
+    after = take_snapshot(f2, jd1, acceptance={"row-a": "ci", "row-b": "ci", "row-c": "ci"})
+    d = diff_snapshots(before, after)
+    assert d is not None
+    by_change: dict[str, list[Transition]] = {}
+    for t in d.transitions:
+        by_change.setdefault(t.change, []).append(t)
+    # same count per kind as the string groups
+    assert len(by_change["merged-or-closed"]) == len(d.merged_or_closed)
+    assert len(by_change["filed"]) == len(d.filed)
+    assert len(by_change["batch-stage"]) == len(d.stage_changes)
+    assert len(by_change["acceptance"]) == len(d.acceptance_moved)
+    assert len(by_change["figure"]) == len(d.figures_changed)
+    assert set(by_change) <= {"merged-or-closed", "filed", "batch-stage", "acceptance", "figure"}
+    stage = by_change["batch-stage"][0]
+    assert (stage.item, stage.batch, stage.before, stage.after) == (
+        "b-draft",
+        "b-draft",
+        "pr-open",
+        "merged",
+    )
+    assert by_change["filed"][0].item == "widgets#14" and by_change["filed"][0].batch is None
+    assert {t.item for t in by_change["acceptance"]} == {"row-a", "row-c"}
+    moved = next(t for t in by_change["acceptance"] if t.item == "row-a")
+    assert (moved.before, moved.after) == ("skipped", "ci")
+    assert d.acceptance_note is None
 
 
 def test_an_identical_pair_has_an_empty_diff() -> None:

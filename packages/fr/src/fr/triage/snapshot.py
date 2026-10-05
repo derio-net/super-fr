@@ -14,7 +14,7 @@ an error and never as zeros: the diff then runs against the next older readable 
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -66,6 +66,20 @@ class Snapshot(_M):
 
 
 @dataclass(frozen=True)
+class Transition:
+    """One change between two snapshots, structured (spec 2026-10-05-triage-pages-goal §B).
+
+    *change* is `merged-or-closed`, `filed`, `batch-stage`, `acceptance` or `figure`;
+    *batch* is set on a batch-stage change so the board can link to the card."""
+
+    change: str
+    item: str
+    before: str
+    after: str
+    batch: str | None = None
+
+
+@dataclass(frozen=True)
 class SnapshotDiff:
     merged_or_closed: list[str]
     filed: list[str]
@@ -73,6 +87,7 @@ class SnapshotDiff:
     acceptance_moved: list[str]
     figures_changed: list[tuple[str, int, int]]
     acceptance_note: str | None = None  # set when the new board tracks no acceptance rows
+    transitions: list[Transition] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
@@ -246,14 +261,20 @@ def matrix_for_scope(scope_repo: str | None, cwd: Path) -> Path | None:
 
 
 def diff_snapshots(previous: Snapshot | None, new: Snapshot) -> SnapshotDiff | None:
-    """What changed from *previous* to *new*; None when there is no previous."""
+    """What changed from *previous* to *new*; None when there is no previous.
+
+    Each kind of change is found by ONE loop that appends both its string (the history
+    timeline renders those) and its `Transition` (the board's table), so the two cannot
+    drift."""
     if previous is None:
         return None
+    ts: list[Transition] = []
     done: list[str] = []
     for key, now in sorted(new.issues.items()):
         before = previous.issues.get(key)
         if before is not None and before.state == "open" and now.state == "closed":
             done.append(f"{key} closed")
+            ts.append(Transition("merged-or-closed", key, "open", "closed"))
     for key, now_pr in sorted(new.prs.items()):
         before_pr = previous.prs.get(key)
         if (
@@ -262,27 +283,33 @@ def diff_snapshots(previous: Snapshot | None, new: Snapshot) -> SnapshotDiff | N
             and now_pr.state in {"MERGED", "CLOSED"}
         ):
             done.append(f"PR {key} {now_pr.state.lower()}")
-    filed = [
-        key for key, now in sorted(new.issues.items()) if key not in previous.issues
-        and now.state == "open"
-    ]  # fmt: skip
-    stages = [
-        f"{bid}: {previous.batches.get(bid, 'new')} -> {stage}"
-        for bid, stage in sorted(new.batches.items())
-        if previous.batches.get(bid) != stage
-    ]
+            ts.append(Transition("merged-or-closed", f"PR {key}", "open", now_pr.state.lower()))
+    filed: list[str] = []
+    for key, now in sorted(new.issues.items()):
+        if key not in previous.issues and now.state == "open":
+            filed.append(key)
+            ts.append(Transition("filed", key, "", "open"))
+    stages: list[str] = []
+    for bid, stage in sorted(new.batches.items()):
+        old = previous.batches.get(bid)
+        if old != stage:
+            stages.append(f"{bid}: {old or 'new'} -> {stage}")
+            ts.append(Transition("batch-stage", bid, old or "new", stage, batch=bid))
     moved: list[str] = []
     if previous.acceptance is not None and new.acceptance is not None:
         for row, status in sorted(new.acceptance.rows.items()):
             old = previous.acceptance.rows.get(row)
             if old is None:
                 moved.append(f"{row}: added as {status}")
+                ts.append(Transition("acceptance", row, "", status))
             elif old != status:
                 moved.append(f"{row}: {old} -> {status}")
-    changed = [
-        (name, previous.figures.get(name, 0), value)
-        for name, value in new.figures.items()
-        if previous.figures.get(name, 0) != value
-    ]
+                ts.append(Transition("acceptance", row, old, status))
+    changed: list[tuple[str, int, int]] = []
+    for name, value in new.figures.items():
+        was = previous.figures.get(name, 0)
+        if was != value:
+            changed.append((name, was, value))
+            ts.append(Transition("figure", name, str(was), str(value)))
     note = ACCEPTANCE_UNTRACKED if new.acceptance is None else None
-    return SnapshotDiff(done, filed, stages, moved, changed, note)
+    return SnapshotDiff(done, filed, stages, moved, changed, note, ts)
