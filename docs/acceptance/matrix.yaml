@@ -6263,9 +6263,17 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R6
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_four_pages
+      - super-fr:tests/unit/test_triage_render.py#test_the_board_carries_its_nav_and_goal
+      - super-fr:tests/unit/test_triage_origins.py#test_the_origins_page_carries_its_nav_and_goal
+      - super-fr:tests/unit/test_triage_architecture.py#test_the_page_opens_with_its_nav_and_goal
+      - super-fr:tests/unit/test_triage_architecture.py#test_the_page_no_longer_shows_what_other_pages_own
+      - super-fr:tests/unit/test_triage_history.py#test_the_history_page_opens_with_its_nav_and_goal
+    status: ci
+    notes: 'Phase 1: all four pages carry nav and goal; architecture no longer duplicates
+      board/origins sections; visual evidence captured at 1280 and 390, light and dark'
     visual:
       states:
       - board-page
