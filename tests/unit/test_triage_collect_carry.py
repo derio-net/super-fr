@@ -289,7 +289,7 @@ def test_the_collect_command_views_on_a_second_run_too(tmp_path: Path, forge: Fa
 def test_a_duplicate_of_target_in_a_collected_repo_is_viewed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake = _forge(closed={(REPO, 8): _view(8)})
+    fake = _forge(closed={(REPO, 5): _view(5), (REPO, 8): _view(8)})
     monkeypatch.setattr(triage_cmd, "make_forge", lambda: fake)
     (tmp_path / "judgements.yaml").write_text(
         "schema: 3\ntiers: [{n: 1, title: T}]\nissues:\n"
