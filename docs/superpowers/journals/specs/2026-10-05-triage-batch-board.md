@@ -154,3 +154,6 @@ R5/R14/§D: command built with shlex.join over validated id + scope args, then H
 ### sr-11-resolved · finding [fixed] · resolves sr-11: Ambiguities: R4 harness/model source, R13 dead link, untested R1/R10/R12/R13, --open not in requirements
 
 R4: harness/model from stored launch, else facts.config_for(repo).defaults.launch marked (default), else —; R13 link only when board.html exists; R1 states --open; tests added for R1 no-batches, R10 timestamps, R12 interval, R13 link.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-05-triage-batch-board-p2 created=2026-10-05T20:27:51+00:00 -->
+### phase-split-2026-10-05-triage-batch-board-p2 · decision · ask: the board page itself (R1-R7, R10, R14, R15), reviewable apart from the session plumbing
