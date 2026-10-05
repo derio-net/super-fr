@@ -151,7 +151,7 @@ from fr.triage.model import (
     Launch,
     PostMergeEvent,
     Scope,
-    load_facts,
+    load_scope_facts,
     load_judgements,
     state_dir,
 )
@@ -314,7 +314,8 @@ def batch_list_command(
     dir_override: DirOpt = None,
 ) -> None:
     """Print one line per batch in judgements.yaml, or "no batches"."""
-    path = state_dir(_scope(repo, org), dir_override) / "judgements.yaml"
+    scope = _scope(repo, org)
+    path = state_dir(scope, dir_override) / "judgements.yaml"
     try:
         batches = load_judgements(path).batches if path.exists() else []
     except TriageError as exc:
@@ -322,9 +323,11 @@ def batch_list_command(
     if not batches:
         console.print("no batches")
         return
-    facts = (
-        load_facts(path.with_name("facts.json")) if path.with_name("facts.json").exists() else None
-    )
+    facts_path = path.with_name("facts.json")
+    try:
+        facts = load_scope_facts(facts_path, scope) if facts_path.exists() else None
+    except TriageError as exc:
+        _fail(str(exc))
     for b in batches:
         console.print(
             f"{b.id}  {plural(len(b.ids), 'issue')}  {b.title}{_wave_columns(b, batches, facts)}",

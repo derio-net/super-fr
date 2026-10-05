@@ -60,7 +60,15 @@ def _load(scope: Scope, dir_override: Path | None) -> tuple[Path, OriginsFacts, 
             f"`fr triage origins collect --{flag} {scope.target} --since YYYY-MM-DD` first"
         )
     try:
-        return target, load_origins_facts(facts_path), load_origins(target / CLASSIFICATION_FILE)
+        facts = load_origins_facts(facts_path)
+        # A `--dir` can point at another scope's facts (gh#886); `scope` is the target as
+        # collect recorded it, and repo names are case-insensitive.
+        if facts.scope.lower() != scope.target.lower():
+            raise TriageError(
+                f"{facts_path}: these origins facts are for {facts.scope}, not "
+                f"{scope.target}; collect this scope, or point --dir at its own state directory"
+            )
+        return target, facts, load_origins(target / CLASSIFICATION_FILE)
     except TriageError as exc:
         raise _fail(str(exc)) from exc
 
