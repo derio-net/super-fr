@@ -3,11 +3,14 @@ run: 2026-10-05-feat-batch-run-upgrade-midflight
 workflow: fr-goal@1
 branch: feat/batch-run-upgrade-midflight
 started: '2026-10-05T20:35:36+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-05T20:35:54+00:00'
+    state: done
+    at: '2026-10-05T21:02:07+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md
   spec-review:
     state: pending
   plan:

@@ -6215,3 +6215,47 @@ rows:
     status: ci
     notes: 'Phase 2 shipped: SessionCloser optional protocol + check_close_contract;
       a plain runner is not a SessionCloser and the drive never asks it.'
+  - id: run-reshape-drifted-cursor
+    capability: run-cursor
+    acceptance: An in-flight run whose shape gained a step ahead of its cursor can be
+      moved onto the current shape with every recorded step kept, and a reshape that
+      would skip or lose recorded work is refused with nothing changed
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: run-read-drifted-cursor
+    capability: run-cursor
+    acceptance: '`fr run gates` and the other read-only run commands answer from a drifted
+      cursor with a warning instead of refusing'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: adopt-supersede-carries-provenance
+    capability: run-adoption
+    acceptance: Adopting a plan that already has a run supersedes it on request, and
+      the operator's gate answers, dispatch history and evidence recorded by the old
+      cursor survive into the new one
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: historical-review-evidence
+    capability: run-evidence
+    acceptance: A phase reviewed before its run's cursor existed can be closed honestly
+      as a historical review — inferred by adoption from the plan journal or resolved
+      by hand — and is reported as historical, never as debt or failure
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
