@@ -1,0 +1,12 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-cost-evidence
+step: deliver
+outcome: done
+journal:
+  - {kind: discovery, id: deliver-merge-1042-model-semantics, title: "Merging main: #1042's binding guard asserted the substituted binding in Attempt.model", body: "This branch's R7 moved the dispatch-time binding to Attempt.bound; the two tests in test_run_binding_guard.py were updated to assert bound (3db8897ac). The full suite on the merged tree caught it; neither branch could alone."}
+resolves: []
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1041
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/8096ebf8-b0a5-4123-83fe-797c2f6f4890/scratchpad/full-suite.log
