@@ -94,8 +94,10 @@ steps:
     stdout: |
       1 out-of-scope finding(s): p1-wall-clock-tests-flake-under-host-load
   deliver:
-    state: running
-    at: '2026-10-06T21:05:57+00:00'
+    state: done
+    at: '2026-10-06T21:39:02+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1058
     units:
       step/deliver:
         attempts:
@@ -103,3 +105,9 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 36d26c83-85ad-42c7-81bc-305a59e44c4c
+          returned: '2026-10-06T21:38:54+00:00'
+          outcome: done
+        evidence:
+          tests: adopt-deliver-suite.log@e6f20a16343d
+          proportionality: ccb71a112b0ec0e43e5a8857ad71ca33bbf9f252:594721bdc1cfcb44b3d142ef88c01935a1fdd2bb019af4359ed29fbbfe501517
+          visual: none
