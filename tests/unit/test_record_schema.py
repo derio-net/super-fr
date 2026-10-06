@@ -209,12 +209,12 @@ def test_a_record_carrying_input_and_verify_parses() -> None:
               - {{kind: discovery, id: input-1, title: input, body: build X, input: true}}
             acceptance:
               - {{id: row-1, capability: c, acceptance: a, status: not-implemented,
-                 verify: post-merge}}
+                 verify: live}}
             """
         )
     )
     assert record.journal[0].input is True
-    assert record.acceptance[0].verify == "post-merge"
+    assert record.acceptance[0].verify == "live"
 
 
 def test_delegated_and_unconfirmed_are_refused_by_the_live_record() -> None:
@@ -227,8 +227,11 @@ def test_delegated_and_unconfirmed_are_refused_by_the_live_record() -> None:
         parse_record("resolves:\n  - {id: f1, state: unconfirmed, body: b}\n")
 
 
-def test_verify_accepts_post_merge_only() -> None:
+def test_verify_refuses_only_the_v3_spelling() -> None:
+    """Record 8 (spec 2026-10-06 §B): `verify` names a strategy; whether it
+    resolves is `apply_record`'s check, where the repo is known."""
     from fr.record.model import RecordError, parse_record
 
+    assert parse_record("acceptance: [{id: r, status: ci, verify: other}]\n").acceptance[0].verify
     with pytest.raises(RecordError, match="post-merge"):
-        parse_record("acceptance: [{id: r, status: ci, notes: n, verify: other}]\n")
+        parse_record("acceptance: [{id: r, status: ci, notes: n, verify: post-merge}]\n")

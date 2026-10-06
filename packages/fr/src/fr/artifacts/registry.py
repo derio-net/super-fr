@@ -468,8 +468,13 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # and the `unconfirmed` resolution (spec
             # `2026-09-29-spec-is-the-contract-design` §C), migration
             # `fr.artifacts.record_contract`, every hop reading through the
-            # frozen `fr.record.legacy.RecordV6`.
-            current_version=7,
+            # frozen `fr.record.legacy.RecordV6`; 7 -> 8 for
+            # `AcceptanceItem.verify` naming a strategy and its `scenario`/
+            # `issues`/`harnesses`/`walk` (spec
+            # `2026-10-06-verification-strategies-design` §B), migration
+            # `fr.artifacts.record_strategies`, read through the frozen
+            # `fr.record.legacy.RecordV7`.
+            current_version=8,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,

@@ -1,4 +1,8 @@
-"""The step record's shape BEFORE version 7 — frozen.
+"""The step record's shapes BEFORE version 8 — frozen.
+
+`RecordV6` reads versions 1 to 6; `RecordV7` (at the bottom) reads version 7,
+frozen when 7 -> 8 widened `AcceptanceItem.verify` (spec
+`2026-10-06-verification-strategies-design.md` §B).
 
 Record versions 1 through 6 only ever ADDED an optional, defaulted field, so
 one closed-world model reads all six. The 6 -> 7 migration (spec
@@ -235,3 +239,119 @@ def record_v6_from_data(data: dict[str, Any]) -> RecordV6:
         return RecordV6.model_validate({"schema_version": 1, **data})
     except ValidationError as e:
         raise RecordV6Error(str(e)) from e
+
+
+# --- version 7 ----------------------------------------------------------------
+#
+# The 7 -> 8 migration (spec `2026-10-06-verification-strategies-design.md` §B)
+# widens `AcceptanceItem.verify` from `Literal["post-merge"]` to a strategy name
+# and refuses the old spelling, so the live model no longer reads a v7 record
+# carrying it. `RecordV7` is version 7 exactly, frozen the same way and pinned by
+# `FROZEN_V7_CLASS_SHA256` (`tests/unit/test_record_acceptance_v8.py`). It reuses
+# the v6 classes whose v7 shape did not change — they are frozen already — and
+# freezes only what 6 -> 7 changed.
+
+ResolutionStateV7 = Literal["fixed", "refuted", "deferred", "out-of-scope"]
+
+
+class RecordV7Error(Exception):
+    """A file that does not read as a record of version 7."""
+
+
+class JournalItemV7(_StrictV6):
+    kind: JournalKindV6
+    id: StrictStr | None = None
+    title: StrictStr
+    body: StrictStr = ""
+    state: FindingStateV6 | None = None
+    phase: int | None = None
+    is_global: bool = Field(False, alias="global")
+    review_scope: ReviewScopeV6 | None = None
+    resolves: StrictStr | None = None
+    answered_by: AnsweredByV6 | None = None
+    tracked_by: StrictStr | None = None
+    out_of_scope: bool = False
+    input: bool = False
+
+
+class ResolutionV7(_StrictV6):
+    id: StrictStr
+    state: ResolutionStateV7
+    body: StrictStr = Field(min_length=1)
+    phase: int | None = None
+    tracked_by: StrictStr | None = None
+    answered_by: AnsweredByV6 | None = None
+
+    @model_validator(mode="after")
+    def _deferral_names_its_issue(self) -> ResolutionV7:
+        if self.state == "deferred" and not self.tracked_by:
+            raise ValueError(f"{self.id}: state deferred needs tracked_by (#N or a URL)")
+        if self.tracked_by is not None and self.state != "deferred":
+            raise ValueError(f"{self.id}: tracked_by is only for state deferred")
+        return self
+
+
+class RecordV7(_StrictV6):
+    schema_version: Literal[7] = 7
+    run: StrictStr | None = None
+    step: StrictStr | None = None
+    item: StrictStr | None = None
+    outcome: OutcomeV6 | None = None
+    shape: StrictStr | None = None
+    no_questions: bool = False
+    reason: StrictStr | None = None
+    questions: QuestionRoundsV6 | None = None
+    ticks: tuple[StrictStr | TickItemV6, ...] = ()
+    complete: CompleteItemV6 | None = None
+    refactor: dict[StrictStr, StrictStr] = {}
+    journal: tuple[JournalItemV7, ...] = ()
+    resolves: tuple[ResolutionV7, ...] = ()
+    acceptance: tuple[AcceptanceItemV6, ...] = ()
+    visual: tuple[VisualEvidenceV6, ...] = ()
+    emitted: dict[StrictStr, StrictStr] = {}
+    evidence: dict[StrictStr, StrictStr] = {}
+
+    @model_validator(mode="after")
+    def _ids_are_shaped(self) -> RecordV7:
+        if self.questions is not None and self.no_questions:
+            raise ValueError("questions and no_questions are mutually exclusive")
+        for tick in self.ticks:
+            if isinstance(tick, str) and not TICK_ID_RE_V6.match(tick):
+                raise ValueError(f"tick id must look like P<n>.T<m>.S<k>, got {tick!r}")
+        for task in self.refactor:
+            if not TASK_ID_RE_V6.match(task):
+                raise ValueError(f"refactor key must be a task id P<n>.T<m>, got {task!r}")
+            if not self.refactor[task].strip():
+                raise ValueError(f"refactor reason for {task} is empty")
+        return self
+
+
+FROZEN_V7_CLASS_SHA256: dict[str, str] = {
+    "JournalItemV7": "da99c22cb7bb1f66deda38584c62e70674cd191d0df509a686159bba38c5ebae",
+    "ResolutionV7": "c3652b24292aa764a7308fe5d1d8e013a97e6a9019c07041f881389ec1904b2c",
+    "RecordV7": "2b419526080813782feff466a37e2eafd73df4401a9e532dbe5995df92066904",
+}
+"""As `FROZEN_CLASS_SHA256`, for the classes version 7 froze."""
+
+
+def parse_record_v7(text: str) -> RecordV7:
+    """Parse + validate `text` as a record of version 7, or raise
+    `RecordV7Error` naming why — never a raw YAML or pydantic error."""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise RecordV7Error(f"not valid YAML: {e}") from e
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise RecordV7Error(f"top level must be a mapping, got {type(data).__name__}")
+    return record_v7_from_data(data)
+
+
+def record_v7_from_data(data: dict[str, Any]) -> RecordV7:
+    """Validate an already-loaded mapping as a record of version 7, or raise
+    `RecordV7Error`."""
+    try:
+        return RecordV7.model_validate(data)
+    except ValidationError as e:
+        raise RecordV7Error(str(e)) from e
