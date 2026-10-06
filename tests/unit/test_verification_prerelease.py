@@ -224,6 +224,41 @@ def test_the_workflow_accepts_a_branch_head_and_nothing_else_ref() -> None:
     assert steps.index(probe) < steps.index(next(s for s in steps if "git tag" in s.get("run", "")))
 
 
+def test_no_run_script_interpolates_an_expression_and_inputs_reach_the_shell_via_env() -> None:
+    for step in _steps():
+        assert "${{" not in step.get("run", ""), step
+    wf_text = WORKFLOW.read_text()
+    # every `inputs.` reference sits in an `env:` value or the checkout `with:` ref
+    for line in wf_text.splitlines():
+        if "inputs." in line and "${{" in line:
+            assert line.strip().split(":")[0] in {"BRANCH", "SHA", "ref"}, line
+
+
+def test_every_action_is_pinned_to_a_full_commit_sha() -> None:
+    import re
+
+    uses = [s["uses"] for s in _steps() if "uses" in s]
+    assert uses
+    for u in uses:
+        assert re.fullmatch(r"[\w./-]+@[0-9a-f]{40}", u), u
+
+
+def test_the_bash_slug_line_is_pinned_and_rc_tag_agrees_with_it() -> None:
+    from fr.commands.verification_cmd import rc_tag
+
+    run = next(s["run"] for s in _steps() if "slug=" in s.get("run", ""))
+    assert "          slug=${BRANCH//\\//-}\n".strip() in [ln.strip() for ln in run.splitlines()]
+    branch = "feat/a/b-c"
+    sha = "0123456789abcdef0123456789abcdef01234567"
+    out = subprocess.run(
+        ["bash", "-c", f'BRANCH={branch}; sha={sha}; sha12=${{sha:0:12}}; '
+         + next(ln.strip() for ln in run.splitlines() if ln.strip().startswith("slug="))
+         + '; echo "rc/${slug}/${sha12}"'],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()  # fmt: skip
+    assert out == rc_tag(branch, sha)
+
+
 def test_the_workflow_may_write_contents_and_read_the_rest() -> None:
     perms = _wf()["permissions"]
     assert perms["contents"] == "write"
