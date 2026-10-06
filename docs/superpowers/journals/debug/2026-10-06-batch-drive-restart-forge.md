@@ -14,3 +14,8 @@ Operator (2026-10-06): fix all three causes in this one PR, each failing-test-fi
 ### repro-failing-tests · repro · Batch drive-restart-forge: investigation
 
 tests/unit/test_triage_batch_drive_disruption.py: 18 fail + 3 error on main 2bee14589, each for the reported reason. #998: the merge path exits 2 with the live message '.fr/triage.yaml on the default branch is not valid triage config ... future_block Extra inputs are not permitted [type=extra_forbidden]' (check_config_fresh via merge_ctx/_fresh_config). #883: a driver killed after runner.dispatch, restarted once the tab ended, dispatches closeout-b1 twice (events at dispatch time: ['dispatch'] only). #921: a GitError from fetch (_released/_archived, merge_ctx) exits 2; a refused archive pr_merge exits 1; a rejected update push exits 2; gitseam._run passes no timeout; a skipped repo's proposed batch is dispatched.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-883 created=2026-10-06T13:58:29+00:00 -->
+### rc-883 · root-cause · Batch drive-restart-forge: investigation
+
+gh#883: _Driver._close_out appended the CloseoutEvent only after runner.dispatch returned. In the gap, the only dedupe was runner liveness (_existing -> existing_dispatches), which cannot see a tab that already ended, so a driver killed after dispatch and restarted later started a second close-out.
