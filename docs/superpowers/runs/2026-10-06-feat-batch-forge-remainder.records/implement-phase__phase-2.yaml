@@ -55,4 +55,4 @@ journal:
       fr-dispatch lives in plugins/super-fr-dispatch, which neither script mirrors, so its edit
       has no generated counterpart.
 resolves: []
-evidence: {}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a7f0f06a-d6c5-4034-aef8-2da990b37338/scratchpad/p2-suite.log}
