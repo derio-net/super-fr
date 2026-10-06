@@ -49,25 +49,19 @@ import json
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # noqa: F401  (tests patch `fr_herdr.runner.subprocess.run`)
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from fr_herdr import restart  # noqa: F401  (imported at module top level, never lazily: spec sr-13)
+from fr_herdr._herdr import HerdrError, _error_code, _run_herdr
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from fr_dispatch.protocols import CloseOutcome, SessionStatus
     from fr_dispatch.work_item import WorkItem
-
-
-class HerdrError(Exception):
-    """A herdr CLI call failed; the message carries herdr's own words, and *code* the
-    `.error.code` of herdr's JSON envelope when it printed one."""
-
-    def __init__(self, message: str, *, code: str | None = None) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 PANE_BUSY_TRIES = 15
@@ -99,38 +93,6 @@ HARNESSES: dict[str, Harness] = {
 }
 
 _NAME_UNSAFE = re.compile(r"[^a-z0-9_-]")
-
-
-def _run_herdr(args: list[str]) -> dict[str, Any]:
-    """Run `herdr <args>` and return its parsed JSON (`{}` for empty output)."""
-    try:
-        done = subprocess.run(["herdr", *args], capture_output=True, text=True, check=True)
-    except FileNotFoundError as exc:
-        raise HerdrError("herdr is not on PATH") from exc
-    except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
-        raise HerdrError(
-            f"herdr {' '.join(args[:2])} failed: {detail}", code=_error_code(detail)
-        ) from exc
-    out = done.stdout.strip()
-    if not out:
-        return {}
-    try:
-        parsed: dict[str, Any] = json.loads(out)
-    except ValueError:
-        return {"raw": out}
-    return parsed
-
-
-def _error_code(detail: str) -> str | None:
-    """`.error.code` of herdr's JSON error envelope, if *detail* is one."""
-    try:
-        envelope = json.loads(detail)
-    except ValueError:
-        return None
-    error = envelope.get("error") if isinstance(envelope, dict) else None
-    code = error.get("code") if isinstance(error, dict) else None
-    return str(code) if code is not None else None
 
 
 def agent_name(item_id: str) -> str:
