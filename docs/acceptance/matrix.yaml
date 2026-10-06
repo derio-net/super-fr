@@ -6446,3 +6446,32 @@ rows:
     status: not-implemented
     notes: ''
     verify: post-merge
+  - id: forge-calls-through-adapter
+    capability: forge-adapter
+    acceptance: Every forge call fr's packages make goes through the forge adapter;
+      a tripwire with no allowlist fails CI on any direct gh import or argv outside
+      the GitHub backend
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: isolation-lookups-every-forge
+    capability: forge-adapter
+    acceptance: The isolation lifecycle's default-branch and PR-for-branch lookups work
+      on GitHub, GitLab and Gitea through the forge adapter, with the same normalised
+      PR state
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-batch-self-hosted-host
+    capability: triage-batches
+    acceptance: Triage batch verbs talk to the forge instance the batch's repo lives
+      on, a self-hosted (GitHub Enterprise) instance included, never the SaaS default
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
