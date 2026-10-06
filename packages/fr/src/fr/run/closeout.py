@@ -131,6 +131,12 @@ def _out_of_scope_lines(repo_root: Path, scope: str, slug: str) -> list[str]:
 _NO_TRACKER = "no-tracker"
 
 
+def services_invalid_text(exc: Exception) -> str:
+    """The one wording for an unreadable services declaration — the brief and
+    `fr archive`'s open-ends step both print it."""
+    return f"the services declaration in .devcontainer/fr-profiles.yaml is invalid ({exc})"
+
+
 def _tracker_note(repo_root: Path) -> str | None:
     """`_NO_TRACKER` under `tracking: {type: none}`; a warning line when the
     services declaration cannot be read; None otherwise.
@@ -145,8 +151,8 @@ def _tracker_note(repo_root: Path) -> str | None:
         return _NO_TRACKER
     except ServicesError as exc:
         return (
-            f"the services declaration in .devcontainer/fr-profiles.yaml is invalid "
-            f"({exc}); the issue-filing lines below assume a tracker — fix it first"
+            f"{services_invalid_text(exc)}; the issue-filing lines below assume a "
+            "tracker — fix it first"
         )
     return None
 

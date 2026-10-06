@@ -376,23 +376,26 @@ def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> Path | str:
 
 @dataclass(frozen=True)
 class _ArchiveOpts:
-    """What the follow-ups need from the invocation (the issues selection is
-    added by the open-ends phase)."""
+    """What the follow-ups need from the invocation."""
 
     branch: str | None = None
+    issues: str | None = None
+    no_issues: bool = False
 
 
 def _after_moves(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
     """The follow-ups an archive that staged a move owes (spec 2026-10-06 §0).
 
-    A no-op on an empty log. Each step runs in its own try: one failure never
-    stops the next, and none of them changes the exit code the body chose."""
-    if not log:
-        return
-    for name, step in (
-        ("usage refresh", _refresh_usage),
-        ("matrix retarget", _retarget_matrix),
-    ):
+    The usage refresh and matrix retarget are no-ops on an empty log; the open
+    ends step also runs for an explicit `--issues <qids>` with nothing moved
+    (R9). Each step runs in its own try: one failure never stops the next, and
+    none of them changes the exit code the body chose."""
+    steps: list[tuple[str, Callable[[Path, MoveLog, _ArchiveOpts], None]]] = []
+    if log:
+        steps += [("usage refresh", _refresh_usage), ("matrix retarget", _retarget_matrix)]
+    if log or opts.issues is not None:
+        steps.append(("open ends", _open_ends_step))
+    for name, step in steps:
         try:
             step(repo_root, log, opts)
         except Exception as e:  # noqa: BLE001 — a follow-up never fails an archive
@@ -487,12 +490,109 @@ def _retarget_matrix(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         typer.echo(f"  retargeted: {row_id} · {old} → {new}")
 
 
+def _open_ends_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
+    """§C: list the open ends the moved journals leave behind, and — when the
+    flags or the operator say so — file one issue each and defer the finding
+    to it. Never raises on a forge error; never changes the exit code."""
+    import subprocess
+
+    from fr import archive_followups as af
+    from fr.artifacts import trigger
+    from fr.run.closeout import services_invalid_text
+    from fr.services import ServicesError, TrackerRequiredError, require_tracker
+
+    listed = af.open_ends(repo_root, af.journals_from_log(log.moves))
+    if listed:
+        typer.echo("  open ends:")
+        for end in listed:
+            typer.echo(f"    - {end.qid}: {end.title}")
+    elif opts.issues is None:
+        return
+    try:
+        require_tracker(repo_root)
+    except TrackerRequiredError:
+        typer.echo("  no tracker configured — left in the journal")
+        return
+    except ServicesError as exc:
+        err_console.print(
+            f"[yellow]warning:[/yellow] {escape(services_invalid_text(exc))}; "
+            "open ends left in the journal"
+        )
+        return
+    if opts.no_issues:
+        return
+    selection = opts.issues
+    if selection is None:
+        if not listed or not trigger.is_interactive():
+            return
+        answer = input("open issues for these? [y/N/select] ").strip().lower()
+        if answer in ("y", "yes"):
+            selection = "all"
+        elif answer == "select":
+            selection = input("ids to file (comma list): ").strip()
+        else:
+            return
+    chosen, refused = af.select(listed, selection, repo_root)
+    if refused:
+        err_console.print(
+            f"[yellow]warning:[/yellow] --issues refused, nothing filed — "
+            f"{escape('; '.join(refused))}"
+        )
+        return
+    if not chosen:
+        return
+    context = [
+        dst.as_posix()
+        for _src, dst in log.moves
+        if dst.parent in (IMPLEMENTED_REL / "specs", IMPLEMENTED_REL / "plans")
+    ]
+    for filed in af.file_open_ends(
+        repo_root, chosen, _make_gh_client(), _repo_slug(repo_root), context=context
+    ):
+        qid = filed.end.qid
+        if filed.url is None:
+            err_console.print(
+                f"[yellow]warning:[/yellow] could not file {qid} — {escape(filed.error or '')}"
+            )
+            continue
+        try:
+            path = af.write_back(filed)
+            subprocess.run(
+                ["git", "-C", str(repo_root), "add", "--", str(path)],
+                check=True,
+                capture_output=True,
+            )
+        except Exception as e:  # noqa: BLE001 — the issue exists; say the journal is behind
+            err_console.print(
+                f"[yellow]warning:[/yellow] filed {qid} as {filed.url} but could not defer "
+                f"the finding — {escape(str(e))}"
+            )
+            continue
+        typer.echo(f"  {'reused' if filed.reused else 'filed'}: {qid} -> {filed.url}")
+
+
+def _repo_slug(repo_root: Path) -> str:
+    """`org/repo` — the identity the matrix retarget uses (explicit matrix keys,
+    else the origin remote)."""
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.model import Matrix, parse_matrix
+    from fr.commands.acceptance_cmd import MATRIX_REL
+
+    path = repo_root / MATRIX_REL
+    matrix = parse_matrix(path.read_text()) if path.is_file() else Matrix()
+    return "/".join(resolve_identity(matrix, repo_root))
+
+
 def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
     """Run `fn` inside one move log, and `_after_moves` in a `finally` — on
     every entry mode and every exit path (spec 2026-10-06 §0)."""
 
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> None:
+        # A usage error fires before anything moves (R9).
+        if kwargs.get("issues") is not None and kwargs.get("no_issues"):
+            err_console.print("--issues and --no-issues are mutually exclusive")
+            raise typer.Exit(2)
         with recording_moves() as log:
             try:
                 fn(*args, **kwargs)
@@ -502,7 +602,15 @@ def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
                 except Exception:  # noqa: BLE001 — outside a repo there is nothing to follow up
                     pass
                 else:
-                    _after_moves(root, log, _ArchiveOpts(branch=kwargs.get("branch")))
+                    _after_moves(
+                        root,
+                        log,
+                        _ArchiveOpts(
+                            branch=kwargs.get("branch"),
+                            issues=kwargs.get("issues"),
+                            no_issues=bool(kwargs.get("no_issues")),
+                        ),
+                    )
 
     return wrapper
 
@@ -536,6 +644,19 @@ def archive_command(
         help="Archive every live artifact this MERGED branch added or modified "
         "(plans with their runs/usage/journals, specs, debug journals); "
         "anything not ready is printed as `held:`, never a failure.",
+    ),
+    issues: str | None = typer.Option(
+        None,
+        "--issues",
+        help="File one tracker issue per open end the archived journals leave behind: "
+        "`all`, or a comma list of qualified ids (<scope>/<slug>/<id>) — which also "
+        "works when nothing moved this run. Each filed finding is deferred to its "
+        "issue in its journal (staged, never committed).",
+    ),
+    no_issues: bool = typer.Option(
+        False,
+        "--no-issues",
+        help="List the open ends but file nothing (and do not prompt).",
     ),
 ) -> None:
     """Move a finished plan to implemented/plans/ (and its spec when ready).

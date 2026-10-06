@@ -7,24 +7,46 @@ token the issue marker, the closeout brief and `fr archive --issues` share:
 finding ids are unique only within one journal, and one `--branch` archive
 moves a spec journal and a plan journal.
 
-Pure reads — nothing here touches the forge or writes a journal."""
+Listing and selection are pure reads. `file_open_ends` is the one place that
+talks to the forge (through the `GhClient` it is handed), and `write_back` the
+one that appends to a journal."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fr.journal.model import (
     IMPLEMENTED_JOURNALS_REL,
     SCOPE_DIRS,
     JournalEntry,
     JournalParseError,
+    append_journal_entry,
     effective_finding_states,
+    journal_now,
     parse_journal,
+    resolution_entry,
     resolve_journal_read_path,
 )
 
-__all__ = ["OpenEnd", "journals_from_log", "open_ends", "select"]
+if TYPE_CHECKING:
+    from fr.ghclient import GhClient
+
+__all__ = [
+    "FOLLOW_UP_LABEL",
+    "Filed",
+    "OpenEnd",
+    "file_open_ends",
+    "journals_from_log",
+    "marker",
+    "open_ends",
+    "select",
+    "write_back",
+]
+
+FOLLOW_UP_LABEL = "follow-up"
 
 _OPEN_STATES = ("open", "out-of-scope")
 _DIR_TO_SCOPE = {d: s for s, d in SCOPE_DIRS.items()}
@@ -128,3 +150,104 @@ def _resolve_token(
     if hit is None:
         return None, "no open or out-of-scope finding with that id in that journal"
     return hit, ""
+
+
+def marker(end: OpenEnd) -> str:
+    """The body marker that identifies an end's issue (R11)."""
+    return f"<!-- fr:journal {end.qid} -->"
+
+
+@dataclass(frozen=True)
+class Filed:
+    end: OpenEnd
+    url: str | None = None
+    reused: bool = False
+    error: str | None = None
+
+
+def _issue_body(end: OpenEnd, repo_root: Path, context: list[str]) -> str:
+    try:
+        journal = end.path.relative_to(repo_root).as_posix()
+    except ValueError:
+        journal = end.path.as_posix()
+    lines = [end.body.strip() or end.title, "", f"Journal: `{journal}`"]
+    lines.extend(f"Context: `{c}`" for c in context)
+    lines += ["", marker(end)]
+    return "\n".join(lines)
+
+
+def _existing_markers(gh: GhClient, repo: str) -> dict[str, str]:
+    """`marker -> url` of the open issues that already carry one. Any error
+    (including a forge that cannot list) means no dedup — never a failure."""
+    try:
+        issues = gh.list_issues(repo, "open", 200, fields="number,url,body")
+    except Exception:  # noqa: BLE001 — dedup is best-effort by design (R11)
+        return {}
+    found: dict[str, str] = {}
+    for issue in issues:
+        body, url = str(issue.get("body") or ""), issue.get("url")
+        if not url:
+            continue
+        for m in re.finditer(r"<!-- fr:journal (\S+) -->", body):
+            found.setdefault(m.group(1), str(url))
+    return found
+
+
+def file_open_ends(
+    repo_root: Path,
+    ends: list[OpenEnd],
+    gh: GhClient,
+    repo: str,
+    *,
+    context: list[str] | None = None,
+) -> list[Filed]:
+    """One issue per end (R11): an open issue already carrying the end's
+    marker is reused; a label that cannot be ensured is dropped; an error on
+    one end is recorded on it and the rest proceed."""
+    if not ends:
+        return []
+    known = _existing_markers(gh, repo)
+    labels = frozenset({FOLLOW_UP_LABEL})
+    try:
+        gh.ensure_labels(repo, [FOLLOW_UP_LABEL])
+    except Exception:  # noqa: BLE001 — file without the label rather than not at all
+        labels = frozenset()
+    out: list[Filed] = []
+    for end in ends:
+        hit = known.get(end.qid)
+        if hit is not None:
+            out.append(Filed(end, url=hit, reused=True))
+            continue
+        try:
+            url = gh.create_issue(
+                repo,
+                title=end.title,
+                body=_issue_body(end, repo_root, context or []),
+                labels=labels,
+            )
+        except Exception as e:  # noqa: BLE001 — a forge error is per finding (R10)
+            out.append(Filed(end, error=str(e)))
+            continue
+        known[end.qid] = url
+        out.append(Filed(end, url=url))
+    return out
+
+
+def write_back(filed: Filed) -> Path:
+    """Append the `deferred` record for a filed (or reused) end to its journal
+    at its current location (R12), through the builder `fr journal resolve`
+    uses. Returns the journal path; the caller stages it."""
+    assert filed.url is not None
+    path = filed.end.path
+    entries = parse_journal(path.read_text())
+    target = next(e for e in entries if e.id == filed.end.id and e.resolves is None)
+    entry = resolution_entry(
+        target=target,
+        taken={e.id for e in entries},
+        created=journal_now(),
+        state="deferred",
+        body=f"Filed at archive as {filed.url}.",
+        tracked_by=filed.url,
+    )
+    append_journal_entry(path, filed.end.slug, entry)
+    return path

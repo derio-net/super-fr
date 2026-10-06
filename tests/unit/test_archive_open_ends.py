@@ -119,7 +119,6 @@ def test_open_ends_keeps_open_and_out_of_scope_and_drops_the_rest(tmp_path: Path
 
 def test_open_ends_reads_a_missing_or_unparseable_journal_as_empty(tmp_path: Path) -> None:
     from fr.archive_followups import open_ends
-
     from fr.journal.model import archived_journal_path
 
     path = archived_journal_path(tmp_path, "spec", "bad")
@@ -202,3 +201,310 @@ def test_select_refuses_a_qid_that_is_not_an_open_end(tmp_path: Path) -> None:
     for bad in ("plan/p/done", "plan/p/ghost", "plan/nojournal/x", "weird/p/x", "a/b/c/d"):
         chosen, refused = select([], bad, tmp_path)
         assert chosen == [] and len(refused) == 1, bad
+
+
+# --- T3: filing, write-back, and the open-ends step (R9-R12) ---
+
+import subprocess  # noqa: E402
+
+import pytest  # noqa: E402
+from fr.commands import archive_cmd  # noqa: E402
+from fr.ghclient import UnsupportedForgeOperation  # noqa: E402
+
+from tests.unit.fakes import FakeGhClient, FakeGhError  # noqa: E402
+from tests.unit.test_archive_cmd import _add_plan, _invoke, _repo, _seed  # noqa: E402
+
+SLUG = "2026-05-25-bookmarks"
+OWN = "acme/widgets"
+MATRIX = "schema_version: 4\norg: acme\nrepo: widgets\nrows: []\n"
+
+
+class DedupGh(FakeGhClient):
+    """A fake forge that can list its open issues."""
+
+    def __init__(self, existing: list[dict] | None = None) -> None:
+        super().__init__()
+        self.listed = existing or []
+        self.list_args: list[tuple] = []
+
+    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
+        self.list_args.append((repo, state, limit, fields))
+        return list(self.listed)
+
+
+class NoListGh(FakeGhClient):
+    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
+        raise UnsupportedForgeOperation("list_issues", "gitlab")
+
+
+def _created(gh: FakeGhClient) -> list[dict]:
+    return [kw for name, kw in gh.calls if name == "create_issue"]
+
+
+def _open_ends_repo(tmp_path: Path, *, extra: list[JournalEntry] | None = None) -> Path:
+    """A real git repo whose plan is archivable and whose plan journal carries
+    two open findings (one out-of-scope) and a fixed one."""
+    repo = _repo(tmp_path)
+    _add_plan(repo, SLUG, ticked=True)
+    (repo / "docs/acceptance").mkdir(parents=True)
+    (repo / "docs/acceptance/matrix.yaml").write_text(MATRIX)
+    _journal(
+        repo,
+        "plan",
+        SLUG,
+        [
+            _entry("plan", "f1", "first open"),
+            _entry("plan", "f2", "second, scoped out"),
+            _entry("plan", "f2-resolved", resolves="f2", out_of_scope=True),
+            _entry("plan", "f3", "was fixed", state="fixed"),
+            *(extra or []),
+        ],
+    )
+    _seed(repo)
+    return repo
+
+
+def _archived_journal(repo: Path) -> Path:
+    return repo / f"docs/superpowers/implemented/journals/plans/{SLUG}.md"
+
+
+def _states(repo: Path) -> dict[str, str]:
+    return dict(effective_finding_states(parse_journal(_archived_journal(repo).read_text())))
+
+
+def _archive(monkeypatch, repo: Path, gh: FakeGhClient, *flags: str):  # noqa: ANN001, ANN202
+    return _invoke(monkeypatch, repo, gh, ["archive", f"docs/superpowers/plans/{SLUG}", *flags])
+
+
+def _interactive(monkeypatch, answers: list[str]) -> list[str]:  # noqa: ANN001
+    asked: list[str] = []
+    monkeypatch.setattr("fr.artifacts.trigger.is_interactive", lambda **kw: True)
+
+    def fake_input(prompt: str = "") -> str:
+        asked.append(prompt)
+        return answers.pop(0)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    return asked
+
+
+def test_issues_all_files_every_end_marks_it_and_defers_the_finding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    gh = DedupGh()
+    result = _archive(monkeypatch, repo, gh, "--issues", "all")
+    assert result.exit_code == 0, result.output
+    made = _created(gh)
+    assert [m["title"] for m in made] == ["first open", "second, scoped out"]
+    assert all(m["repo"] == OWN and m["labels"] == frozenset({"follow-up"}) for m in made)
+    assert f"<!-- fr:journal plan/{SLUG}/f1 -->" in made[0]["body"]
+    assert "body of f1" in made[0]["body"]
+    assert f"docs/superpowers/implemented/journals/plans/{SLUG}.md" in made[0]["body"]
+    assert gh.list_args == [(OWN, "open", 200, "number,url,body")]
+    assert _states(repo) == {
+        "f1": "deferred",
+        "f2": "deferred",
+        "f3": "fixed",
+    }
+    entries = parse_journal(_archived_journal(repo).read_text())
+    rec = next(e for e in entries if e.resolves == "f1")
+    assert rec.tracked_by == f"https://github.com/{OWN}/issues/1"
+    assert "Filed at archive as" in rec.body
+    # staged, never committed
+    diff = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--quiet", "--", str(_archived_journal(repo))],
+        check=False,
+    )
+    assert diff.returncode == 0, "the journal rewrite must be staged"
+    assert "  open ends:" in result.output and f"plan/{SLUG}/f1: first open" in result.output
+
+
+def test_an_ensure_labels_failure_files_without_the_label(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class NoLabels(DedupGh):
+        def ensure_labels(self, repo, labels):  # noqa: ANN001, ANN201
+            raise FakeGhError("forbidden")
+
+    repo = _open_ends_repo(tmp_path)
+    gh = NoLabels()
+    result = _archive(monkeypatch, repo, gh, "--issues", "all")
+    assert result.exit_code == 0, result.output
+    assert [m["labels"] for m in _created(gh)] == [frozenset(), frozenset()]
+
+
+def test_an_open_issue_with_the_marker_is_reused_not_duplicated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    url = f"https://github.com/{OWN}/issues/77"
+    gh = DedupGh([{"number": 77, "url": url, "body": f"x <!-- fr:journal plan/{SLUG}/f1 --> y"}])
+    result = _archive(monkeypatch, repo, gh, "--issues", f"plan/{SLUG}/f1")
+    assert result.exit_code == 0, result.output
+    assert _created(gh) == []
+    rec = next(e for e in parse_journal(_archived_journal(repo).read_text()) if e.resolves == "f1")
+    assert rec.tracked_by == url
+    assert _states(repo)["f1"] == "deferred" and _states(repo)["f2"] == "out-of-scope"
+
+
+def test_dedup_falls_back_to_none_when_the_forge_cannot_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    gh = NoListGh()
+    result = _archive(monkeypatch, repo, gh, "--issues", "all")
+    assert result.exit_code == 0, result.output
+    assert len(_created(gh)) == 2
+
+
+def test_a_per_finding_create_failure_is_reported_and_the_rest_proceed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+
+    class FirstFails(DedupGh):
+        def create_issue(self, repo, *, title, body, labels):  # noqa: ANN001, ANN201
+            if title == "first open":
+                raise FakeGhError("boom")
+            return super().create_issue(repo, title=title, body=body, labels=labels)
+
+    gh = FirstFails()
+    result = _archive(monkeypatch, repo, gh, "--issues", "all")
+    assert result.exit_code == 0, result.output
+    assert f"warning: could not file plan/{SLUG}/f1" in result.output
+    assert _states(repo) == {"f1": "open", "f2": "deferred", "f3": "fixed"}
+
+
+def test_no_issues_only_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _open_ends_repo(tmp_path)
+    gh = DedupGh()
+    result = _archive(monkeypatch, repo, gh, "--no-issues")
+    assert result.exit_code == 0, result.output
+    assert _created(gh) == [] and f"plan/{SLUG}/f1: first open" in result.output
+    assert _states(repo)["f1"] == "open"
+
+
+def test_issues_and_no_issues_together_is_a_usage_error_before_any_move(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    result = _archive(monkeypatch, repo, DedupGh(), "--issues", "all", "--no-issues")
+    assert result.exit_code == 2, result.output
+    assert "--issues and --no-issues" in result.output
+    assert (repo / f"docs/superpowers/plans/{SLUG}").is_dir()
+    assert not _archived_journal(repo).exists()
+
+
+def test_non_interactive_with_no_flag_only_lists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    gh = DedupGh()
+    result = _archive(monkeypatch, repo, gh)  # CliRunner: not interactive
+    assert result.exit_code == 0, result.output
+    assert _created(gh) == [] and f"plan/{SLUG}/f2: second, scoped out" in result.output
+
+
+def test_interactive_yes_files_everything(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _open_ends_repo(tmp_path)
+    asked = _interactive(monkeypatch, ["y"])
+    gh = DedupGh()
+    result = _archive(monkeypatch, repo, gh)
+    assert result.exit_code == 0, result.output
+    assert len(asked) == 1 and "[y/N/select]" in asked[0]
+    assert len(_created(gh)) == 2
+
+
+def test_interactive_default_files_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _open_ends_repo(tmp_path)
+    _interactive(monkeypatch, [""])
+    gh = DedupGh()
+    assert _archive(monkeypatch, repo, gh).exit_code == 0
+    assert _created(gh) == []
+
+
+def test_interactive_select_files_the_chosen_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    _interactive(monkeypatch, ["select", "f2"])
+    gh = DedupGh()
+    result = _archive(monkeypatch, repo, gh)
+    assert result.exit_code == 0, result.output
+    assert [m["title"] for m in _created(gh)] == ["second, scoped out"]
+
+
+def test_tracking_none_only_lists_whatever_the_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    prof = repo / ".devcontainer"
+    prof.mkdir()
+    (prof / "fr-profiles.yaml").write_text(
+        "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\ntracking: {type: none}\n"
+    )
+    gh = DedupGh()
+    result = _archive(monkeypatch, repo, gh, "--issues", "all")
+    assert result.exit_code == 0, result.output
+    assert _created(gh) == []
+    assert "no tracker configured" in result.output
+    assert f"plan/{SLUG}/f1: first open" in result.output
+
+
+def test_an_invalid_services_declaration_only_lists_with_the_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    prof = repo / ".devcontainer"
+    prof.mkdir()
+    (prof / "fr-profiles.yaml").write_text("schema_version: 2\ntracking: {type: bogus}\n")
+    gh = DedupGh()
+    result = _archive(monkeypatch, repo, gh, "--issues", "all")
+    assert result.exit_code == 0, result.output
+    assert _created(gh) == []
+    assert "services declaration" in result.output and "invalid" in result.output
+
+
+def test_an_unknown_qid_refuses_before_anything_is_filed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    gh = DedupGh()
+    result = _archive(monkeypatch, repo, gh, "--issues", f"plan/{SLUG}/f1,plan/{SLUG}/ghost")
+    assert result.exit_code == 0, result.output  # archive's exit code is never changed
+    assert _created(gh) == []
+    assert "warning: --issues refused" in result.output and "ghost" in result.output
+    assert _states(repo)["f1"] == "open"
+
+
+def test_explicit_qids_file_even_when_nothing_moved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R9: the brief's command works after an earlier archive already moved the journal."""
+    repo = _open_ends_repo(tmp_path)
+    assert _archive(monkeypatch, repo, DedupGh(), "--no-issues").exit_code == 0
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "archived"], check=True)
+    gh = DedupGh()
+    result = _invoke(
+        monkeypatch,
+        repo,
+        gh,
+        ["archive", "--all", "--issues", f"plan/{SLUG}/f2"],
+    )
+    assert result.exit_code == 0, result.output
+    assert [m["title"] for m in _created(gh)] == ["second, scoped out"]
+    assert _states(repo)["f2"] == "deferred"
+
+
+def test_a_followup_failure_never_changes_the_exit_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    monkeypatch.setattr(
+        archive_cmd, "_open_ends_step", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x"))
+    )
+    result = _archive(monkeypatch, repo, DedupGh(), "--issues", "all")
+    assert result.exit_code == 0, result.output
+    assert "note: open ends skipped" in result.output
