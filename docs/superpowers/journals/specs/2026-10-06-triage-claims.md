@@ -211,3 +211,8 @@ R4's oldest-un-released-wins race, the exclusive host-id create, release timing 
 ### phase-split-2026-10-06-triage-claims-p2 · decision · ask: the driver integration (claims in every drive pass) is its own reviewable ask
 
 The drive pass is a separate surface from the claim core, reviewed against batch_drive's pure-pass contract.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-triage-claims-p3 created=2026-10-06T18:46:45+00:00 -->
+### phase-split-2026-10-06-triage-claims-p3 · decision · ask: the board, per-scope publishing and the skill (R13, R14, R16) are their own ask
+
+UI and publishing hook with visual evidence; independent of the driver phase.
