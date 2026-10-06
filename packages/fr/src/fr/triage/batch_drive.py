@@ -225,6 +225,7 @@ class Summary:
     closing: int
     blocked: int = 0
     queued: int = 0  # merge-train members not attempted this pass (the head excluded)
+    held: int = 0  # batches another scope's claim holds: waiting on that scope, not the operator
 
     @property
     def idle(self) -> bool:
@@ -233,13 +234,19 @@ class Summary:
 
     @property
     def done(self) -> bool:
-        """Idle and nothing blocked: every driven batch is finished."""
-        return self.idle and self.blocked == 0
+        """Idle and nothing blocked or held: every driven batch is finished."""
+        return self.idle and self.blocked == 0 and self.held == 0
 
     @property
     def waiting_on_operator(self) -> bool:
         """Idle, but a blocked batch remains: only the operator can move it (R7)."""
         return self.idle and self.blocked > 0
+
+    @property
+    def stalled(self) -> bool:
+        """Idle, with only blocked batches (the operator's) and held ones (another
+        scope's, R6) left: nothing this driver can move."""
+        return self.idle and (self.blocked > 0 or self.held > 0)
 
 
 def settle(summary: Summary, *, unlanded: int = 0, held: int = 0, queued: int = 0) -> Summary:
@@ -273,6 +280,8 @@ class Pass:
     actions: tuple[Action, ...]
     summary: Summary
     trains: tuple[Train, ...] = ()
+    # (batch id, the scope ids holding its members): the batches waiting on another scope
+    held_by: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 # ------------------------------------------------------------------ checks (R4)
@@ -853,14 +862,14 @@ def drive_pass(snap: Snapshot) -> Pass:
     # -1. A batch with a member another scope holds is left alone this pass (R6): one
     # `held` action, and no merge, update, close-out, archive or dispatch below.
     held_ids: set[str] = set()
-    held_blocked = 0
+    held_by: list[tuple[str, tuple[str, ...]]] = []
     for batch in snap.batches:
         members = held_members(batch.ids, snap.held)
         if not members:
             continue
         held_ids.add(batch.id)
         if batch in chosen and stages.get(batch.id) not in ("cancelled", "abandoned"):
-            held_blocked += 1
+            held_by.append((batch.id, tuple(sorted({c.signer for _, c in members}))))
             detail = "; ".join(held_line(k, c, snap.now) for k, c in members)
             actions.append(Action("held", batch.id, detail))
 
@@ -994,7 +1003,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
-    pending, blocked = 0, exports_blocked + archives_blocked + held_blocked
+    pending, blocked = 0, exports_blocked + archives_blocked
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed" or batch.id in held_ids:
             continue
@@ -1065,8 +1074,10 @@ def drive_pass(snap: Snapshot) -> Pass:
             closing=closing,
             blocked=blocked,
             queued=sum(len(t.queued) for t in trains),
+            held=len(held_by),
         ),
         trains=tuple(trains),
+        held_by=tuple(held_by),
     )
 
 
@@ -1092,7 +1103,9 @@ def summary_line(summary: Summary) -> str:
     )
     if summary.queued:
         line += f", queued {summary.queued}"
-    return line + (f", blocked {summary.blocked}" if summary.blocked else "")
+    if summary.blocked:
+        line += f", blocked {summary.blocked}"
+    return line + (f", held {summary.held}" if summary.held else "")
 
 
 def train_line(train: Train) -> str:

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from functools import cached_property
 from datetime import datetime, timedelta
+from functools import cached_property
 from typing import Literal
 
 from fr.ghclient import GhClient

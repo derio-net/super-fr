@@ -3792,3 +3792,124 @@ def test_after_a_lost_claim_the_batchs_other_members_are_not_claimed(
     _drive(tmp_path, "--once", "--yes")
     assert _markers(world, 2) == []
     assert [m.signer for m in _markers(world, 1)] == ["s-22222222"]
+
+
+def test_a_forge_error_in_a_claim_write_exits_1_and_the_pass_goes_on(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Review p2-r4: a failed write is reported per member, never a crash."""
+    _proposed(world, tmp_path, 2)
+    real = world.comment_issue
+
+    def _flaky(repo: str, number: int, body: str) -> None:
+        if number == 1:
+            raise GhError("HTTP 502", returncode=1)
+        real(repo, number, body)
+
+    monkeypatch.setattr(world, "comment_issue", _flaky)
+    result = _drive_named(tmp_path, "--once", "--yes")
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception  # an exit, not a crash
+    assert "claim super-fr#1 (b1): failed:" in result.output
+    assert [m.batch for m in _markers(world, 2)] == ["b2"]  # the rest of the pass went on
+
+
+def test_a_failed_record_of_released_claims_is_reported_and_tried_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Review p2-r4: the release is idempotent at the forge, so the next pass records it."""
+    from fr.triage.errors import TriageError
+
+    world.issues[1] = "open"
+    cancel = "      - {kind: cancel, at: 2026-10-01T12:00:00Z}\n"
+    _put(world, 1, _me(), "gone")
+    _state(tmp_path, world, _batch("gone", 1, events=_dispatch_event("gone") + cancel))
+    real = triage_batch_cmd._save
+    calls: list[int] = []
+
+    def _save_once_refused(*a: Any, **kw: Any) -> None:
+        calls.append(1)
+        if len(calls) == 1:
+            raise TriageError("disk full")
+        real(*a, **kw)
+
+    monkeypatch.setattr(triage_batch_cmd, "_save", _save_once_refused)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "could not record the released claims (disk full)" in out, out
+    assert "claims_released" not in _events(tmp_path, "gone")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _events(tmp_path, "gone").count("claims_released") == 1, out
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not _lines(out, "release")
+    assert _events(tmp_path, "gone").count("claims_released") == 1
+
+
+def test_a_merged_then_archived_batch_refreshes_then_releases_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r4: the claim is kept (refreshed) while the batch is merged and its
+    close-out runs, released and recorded once it is archived, and nothing is owed after."""
+    from fr.triage.batch import closeout_state
+
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
+    _put(world, 1, _me(), "b1", hours=7)  # past a quarter of the default expiry: due
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    _, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "refresh") == ["refresh super-fr#1 (b1): refreshed"], out
+    assert not _lines(out, "release")
+    assert "claims_released" not in _events(tmp_path, "b1")
+
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + ARCHIVED))
+    _, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "release") == ["release super-fr#1 (b1): released"], out
+    assert _events(tmp_path, "b1").count("claims_released") == 1
+    assert closeout_state(load_judgements(tmp_path / "judgements.yaml").batches[0]) == "archived"
+    _, out = _drive(tmp_path, "--once", "--yes")
+    assert not _lines(out, "release") and not _lines(out, "refresh")
+    assert _events(tmp_path, "b1").count("claims_released") == 1
+
+
+def test_a_held_batch_that_is_cancelled_gets_no_held_action(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r4: a cancelled batch is nothing to wait on."""
+    world.issues[1] = "open"
+    cancel = "      - {kind: cancel, at: 2026-10-01T12:00:00Z}\n"
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _state(tmp_path, world, _batch("gone", 1, events=_dispatch_event("gone") + cancel))
+    code, out = _drive(tmp_path, "--once")
+    assert not _lines(out, "held"), out
+
+
+def test_a_loop_with_only_held_batches_stops_naming_who_holds_them(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    sleeps: list[float],
+) -> None:  # fmt: skip
+    """Review p2-r5: a batch another scope holds waits on that scope, not the operator."""
+    world.issues.update({1: "open", 2: "open"})
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2, after="[zz]"))
+    code, out = _drive(tmp_path, "--yes")
+    assert code == 3, out
+    assert "held by another scope: b1 (s-22222222)" in out, out
+    assert "need the operator: b2" in out, out
+    assert "held 1" in out and "blocked 1" in out
+
+
+def test_a_loop_with_only_held_batches_names_no_operator_need(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    sleeps: list[float],
+) -> None:  # fmt: skip
+    world.issues[1] = "open"
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _state(tmp_path, world, _batch("b1", 1))
+    code, out = _drive(tmp_path, "--yes")
+    assert code == 3, out
+    assert "held by another scope: b1 (s-22222222)" in out
+    assert "need the operator" not in out
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out

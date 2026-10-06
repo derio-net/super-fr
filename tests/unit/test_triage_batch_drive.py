@@ -1594,3 +1594,22 @@ def test_a_merged_batch_keeps_refreshing_and_is_released_only_once_archived() ->
         )  # fmt: skip
     )
     assert _kinds(archived.actions)[0] == ("release", "m")
+
+
+def test_a_held_batch_is_counted_held_not_blocked_and_the_drive_stalls_on_it() -> None:
+    """Review p2-r5: waiting on another scope is not waiting on the operator."""
+    batches = [_batch("a", 1, ids=["super-fr#1"])]
+    held = {"super-fr#1": _claim()}
+    got = drive_pass(_snap(batches, {"a": "proposed"}, me="s-me", held=held))
+    assert (got.summary.held, got.summary.blocked) == (1, 0)
+    assert got.held_by == (("a", ("s-other",)),)
+    assert got.summary.stalled and not got.summary.done
+    assert not got.summary.waiting_on_operator
+    assert summary_line(got.summary).endswith(", held 1")
+
+
+def test_held_batches_do_not_stall_a_drive_that_has_other_work() -> None:
+    batches = [_batch("a", 1, ids=["super-fr#1"]), _batch("b", 3)]
+    held = {"super-fr#1": _claim()}
+    got = drive_pass(_snap(batches, {"a": "proposed", "b": "proposed"}, me="s-me", held=held))
+    assert got.summary.held == 1 and not got.summary.stalled

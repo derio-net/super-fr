@@ -40,7 +40,7 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -232,6 +232,20 @@ def claim_env(target: Path, facts: Facts) -> ClaimEnv:
             f"https://{_host_of(facts, owner_repo)}/{owner_repo}"
         ),
     )
+
+
+def _stalled_line(blocked: Sequence[str], held_by: Sequence[tuple[str, Sequence[str]]]) -> str:
+    """Why an idle loop stops: batches held by another scope wait on that scope (R6) and
+    are named apart from those that need the operator (R7)."""
+    if not held_by:
+        return (
+            f"stopped: only blocked batches remain ({', '.join(blocked)}); they need the operator"
+        )
+    held = ", ".join(f"{b} ({', '.join(who)})" for b, who in held_by)
+    parts = [f"held by another scope: {held}"]
+    if blocked:
+        parts.append(f"need the operator: {', '.join(blocked)}")
+    return "stopped: only held or blocked batches remain; " + "; ".join(parts)
 
 
 def _held_map(facts: Facts, me: str) -> dict[str, Claim]:
@@ -1799,6 +1813,7 @@ class _Driver:
         # found held (the pass stops acting on them), and the claim writes done so far
         self._claims: ClaimEnv | None = None
         self._held_now: dict[str, str] = {}
+        self.held_by: tuple[tuple[str, tuple[str, ...]], ...] = ()  # last pass: waiting on others
         self._claim_done = SyncResult()
 
     # -------------------------------------------------------------- reaching out
@@ -2510,6 +2525,7 @@ class _Driver:
                 + (f", so no close-out is planned for {', '.join(mine)}" if mine else ""),
             )  # fmt: skip
         plan = drive_pass(snap)
+        self.held_by = plan.held_by
         self._unfinished = unfinished_waves(snap)
         acted = False
         in_flight = sum(1 for b in snap.batches if snap.stages[b.id] in LIVE_STAGES)
@@ -3404,11 +3420,8 @@ def batch_drive_command(
             if driver.restart_to is not None:
                 restart = driver.restart_to
                 break
-            if summary.waiting_on_operator:
-                _say(
-                    f"stopped: only blocked batches remain ({', '.join(blocked)}); "
-                    "they need the operator"
-                )
+            if summary.stalled:
+                _say(_stalled_line(blocked, driver.held_by))
                 raise typer.Exit(code=3)
             _sleep(interval)
     if restart is not None:

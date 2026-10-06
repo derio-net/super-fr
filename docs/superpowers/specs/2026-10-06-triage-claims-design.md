@@ -268,6 +268,11 @@ re-read applies R17's filter, so an untrusted marker never wins R4 here either. 
   batch through the one judgements writer, so a later pass owes nothing.
 - The command executes `claim`/`refresh`/`release` through §D. A claim that
   turned into `Held` (R4) is reported, and the pass stops acting on that batch.
+- A held batch is waiting on the other scope, not on the operator: the summary counts
+  it as `held`, apart from `blocked`; the loop keeps running while it has anything else
+  to do, and when only held and/or blocked batches remain `--once` and the loop exit 3,
+  the closing message naming the held ones "held by another scope" with the holders'
+  scope ids, apart from those that "need the operator".
 - Export is untouched: an issue held elsewhere never enters this scope's
   batches, so no batch state about it is exported. Its judgement is exported like
   any other, because judging stays free.
