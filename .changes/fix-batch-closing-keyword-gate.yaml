@@ -1,0 +1,2 @@
+bump: patch
+summary: "deliver's closing-keyword gate no longer refuses prose whose keyword closes nothing (e.g. `fix colour #123`), and now catches a reference list wrapped onto the next line (`Closes #1,` / `#2`)"
