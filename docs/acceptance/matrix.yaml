@@ -5965,9 +5965,13 @@ rows:
       sizes, read-only
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_compare.py#test_cli_prints_two_tables_deterministically_and_writes_nothing
+      - super-fr:tests/unit/test_usage_compare.py#test_set_summary_takes_medians_and_counts_priced
+    status: ci
+    notes: 'R10: compare engine and CLI over fixtures incl. a pre-v5 cursor, medians,
+      n, dashes, determinism, read-only (phase 3)'
   - id: session-observer-protocol
     capability: transcript gates
     acceptance: Every transcript gate reads the harness through one session protocol
