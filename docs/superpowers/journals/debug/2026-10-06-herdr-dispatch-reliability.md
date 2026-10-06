@@ -9,3 +9,8 @@ Both seen live 2026-10-04/05 driving waves. #956: close-out sessions sat idle >2
 ### 8012f1b4a9d0 · hypothesis · Runner: dispatch confirms no handoff, so each herdr step races the one before
 
 HerdrRunner.dispatch runs tab create -> agent start -> agent prompt back-to-back. herdr 0.9.1 requires 'agent start --pane' to be at an interactive shell prompt and fails fast (agent_pane_busy) instead of waiting; and 'agent prompt' without --wait returns once text is sent, never checking that the agent left idle. herdr has the confirmation built in: 'agent prompt --wait' fails with agent_prompt_stalled when no working/blocked state follows within 5s. Covers #956 and #931 defect 1.
+
+<!-- fr:journal kind=hypothesis scope=debug id=eb173c9d1fc7 created=2026-10-06T15:33:03+00:00 -->
+### eb173c9d1fc7 · hypothesis · Driver: a runner dispatch failure is a typer.Exit that escapes the drive loop
+
+_Driver._close_out and dispatch_batch call _fail(..., code=1) on a runner exception, which raises typer.Exit. run_pass has no handler and batch_drive_command's loop catches only ForgeReadError, so one failed dispatch ends loop mode (unlike forge reads gh#910 and refused merges rg-4, which are reported once and retried). Covers #931 defect 2. This is a second, independent defect in fr, not fr_herdr.
