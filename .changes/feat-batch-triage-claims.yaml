@@ -1,0 +1,2 @@
+bump: minor
+summary: "fr triage claims: overlapping triage scopes and hosts coordinate on each issue with an fr:claimed label and a signed, expiring marker comment; new `fr triage claim` and `fr triage scope show` commands"
