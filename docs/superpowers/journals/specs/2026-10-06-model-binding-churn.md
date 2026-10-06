@@ -314,3 +314,6 @@ R1 now asks on a terminal (proposal, default yes) and refuses off one, matching 
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-model-binding-churn-p2 created=2026-10-06T17:42:52+00:00 -->
 ### phase-split-2026-10-06-model-binding-churn-p2 · decision · ask: run integration (R6-R9, R11) is its own reviewable ask — the dispatch guard and gated brief, separate from the engine + fr models CLI
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-06-model-binding-churn-p2 created=2026-10-06T17:42:53+00:00 -->
+### tier-2026-10-06-model-binding-churn-p2 · decision · hard: phase 2 changes the dispatch path every run relies on (both advance paths) with a multi-file write order whose failure mode is a silent substitution
