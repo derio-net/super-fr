@@ -29,3 +29,8 @@ batch_merge._merge: on a FORGE_ERRORS refusal, re-read pr_view; a head other tha
 ### f-884 · finding [fixed] · #884 fixed: the group cap tests prove group behaviour
 
 test_a_fifth_batch_is_held_by_four_in_flight_across_two_owners: 2+2 in flight across example-org/other-org, a fifth proposed under cap 4 -> held naming all four; control run at cap 5 dispatches it. test_a_dispatched_batch_in_one_repo_uses_the_cap_of_the_other now asserts the positive held line. Verified by mutation: per-repo and per-owner cap counting both turn the new test red; the shipped code keeps it green.
+
+<!-- fr:journal kind=finding scope=debug id=f-1025-12 created=2026-10-06T17:05:18+00:00 state=fixed -->
+### f-1025-12 · finding [fixed] · #1025 items 1-2 fixed: dispatch fetch and export writes
+
+Item 1: dispatch_batch/_reservation take read_errors=True from the driver only; a failed _fresh_config raises ForgeReadError(code=2) as merge_ctx does, so the loop skips the pass; batch dispatch by hand still exits 2. Item 2: every git/forge write failure in _export/_export_merge goes through _export_failed (failed_write, reported once per wave+cause, retried next pass; --once exits 1); a separate _export_failures counter keeps the export owed rather than blocked. Tests in test_triage_batch_drive_disruption.py (gh#1025 sections).
