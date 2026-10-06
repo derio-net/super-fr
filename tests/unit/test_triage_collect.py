@@ -705,3 +705,28 @@ def test_collect_counts_a_peer_hosts_marker_by_a_repo_member() -> None:
     assert [c.signer for c in next(i for i in facts.issues if i.number == 1).claims] == [
         "s-22222222"
     ]
+
+
+def test_collect_warns_once_per_issue_with_its_ignored_marker_counts(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """p1-r7: a peer whose markers are dropped is visible, not silent."""
+    forged = {"author": "stranger", "body": _CLAIM, "created_at": "2026-10-01T00:00:00Z", "id": 3}
+    broken = {
+        "author": "operator",
+        "body": "<!-- fr-claim:{not json} -->",
+        "created_at": "2026-10-01T00:00:00Z",
+        "id": 4,
+    }
+    forge = _claim_forge({("derio-net/super-fr", 1): [forged, broken, dict(forged, id=5)]})
+    collect_facts(forge, SUPER_FR, now=NOW)
+    err = capsys.readouterr().err
+    line = "fr triage: derio-net/super-fr#1: ignored 2 untrusted, 1 malformed claim marker(s)"
+    assert err.count(line) == 1
+    assert "super-fr#2" not in err
+
+
+def test_collect_is_quiet_when_every_marker_counts(capsys: pytest.CaptureFixture[str]) -> None:
+    ok = {"author": "operator", "body": _CLAIM, "created_at": "2026-10-01T00:00:00Z", "id": 3}
+    collect_facts(_claim_forge({("derio-net/super-fr", 1): [ok]}), SUPER_FR, now=NOW)
+    assert "claim marker" not in capsys.readouterr().err

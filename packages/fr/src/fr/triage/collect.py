@@ -12,6 +12,7 @@ implementing the reads, not an edit to the collector (spec
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -673,7 +674,15 @@ def _comment_facts(
         if str(c.get("body") or "").lstrip().startswith(BATCH_MARKER_PREFIX)
         and (stamp := str(c.get("created_at") or ""))  # no stamp is no time (r2p-f13)
     ]
-    claims = [to_issue_claim(c) for c in read_claims(comments, trusted).claims]
+    read = read_claims(comments, trusted)
+    if read.untrusted or read.malformed:
+        # Once per issue (p1-r7): a peer whose markers are dropped must be visible.
+        print(
+            f"fr triage: {repo}#{raw['number']}: ignored {read.untrusted} untrusted, "
+            f"{read.malformed} malformed claim marker(s)",
+            file=sys.stderr,
+        )
+    claims = [to_issue_claim(c) for c in read.claims]
     return (max(stamps) if stamps else None), claims
 
 
