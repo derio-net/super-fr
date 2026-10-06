@@ -3557,6 +3557,24 @@ rows:
       its own first fr run status read HELD BY agent ses_... with the tier agent recorded,
       matching opencode.db. The live run is evidence, not CI; the claim is fail-open,
       so parity dispatch-holder-identity stays partial.'
+  - id: run-tests-log-claude-code-self-detached
+    capability: Run cursor
+    acceptance: On Claude Code, a suite log written by a command that detached itself
+      with & (with or without run_in_background) is witnessed — for implement-phase
+      evidence.tests from the executor transcript and for deliver tests= from the orchestrator
+      — with the window running from the launch to the first later command that names
+      the log and prints its exit=0 line; a failed, unfinished or other-log exit line
+      yields no extension
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-06-run-evidence-witness.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_witness_detached.py
+    status: ci
+    notes: 'gh#1002. Live: a phase executor started the suite with run_in_background
+      AND a trailing &, the call ended in 0.4 s and the 8.5 min suite log was refused;
+      replayed against that transcript the fixed reader opens a window to the poll that
+      printed exit=0.'
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
@@ -5590,10 +5608,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_evidence_visual.py
       - super-fr:tests/unit/test_skill_visual_evidence.py
+      - super-fr:tests/unit/test_run_telemetry_visual.py#test_a_uv_run_flag_value_is_not_the_program
     status: ci
-    notes: 'Phase 3: gate half already required a named, executed script (test_a_named_script_*
-      in test_run_evidence_visual.py, phase 2); the skills-prefer-a-script prose half
-      lands here (test_skill_visual_evidence.py).'
+    notes: 'gh#999: the executes-the-script matcher skips the values of uv run flags
+      (uv run --with <pkg> python <script>), pinned in test_run_telemetry_visual.py.'
   - id: visual-evidence-live-run
     capability: fr-goal-evidence
     acceptance: On a live fr-goal run of a UI feature with a `visual` row, the executor,
