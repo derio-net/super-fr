@@ -33,6 +33,7 @@ from rich.console import Console
 
 import fr.bindings
 from fr.artifacts import trigger
+from fr.bindings.apply import apply_binding
 from fr.bindings.choose import Choice
 from fr.bindings.health import BindingHealth, check_bindings, propose_for
 from fr.bindings.probe import default_probe_cache
@@ -44,7 +45,6 @@ from fr.models import (
     default_models_path,
     load_models,
     resolved_config,
-    set_binding,
 )
 from fr.opencode_agents import MaterializeResult, default_config_home, materialize_agents
 
@@ -122,9 +122,8 @@ def _apply_binding(
     ``old`` — R11's loud line. `set` and `check` both end here, so a binding
     the operator accepts always takes effect in the run that made it."""
     path = default_models_path()
-    set_binding(path, harness, tier, model)
+    result = apply_binding(path, harness, tier, model, repo_cfg=_repo_cfg())
     console.print(f"set {harness}/{tier} → {model} ({path})")
-    result = materialize_agents(default_config_home(), models_cfg=_resolved_config())
     _report_changes(result)
     if old is not None and reason is not None and rule is not None:
         err_console.print(

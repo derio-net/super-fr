@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from fr.journal.model import journal_path, parse_journal
+from fr.journal.model import JournalEntry, append_journal_entry, journal_path, parse_journal
 from fr.run.model import load_run_state, run_path
 
 from tests.unit import binding_fakes as bf
@@ -290,7 +290,7 @@ def test_a_harness_other_than_opencode_is_never_probed(
 def test_a_failed_apply_restores_both_files_and_exits_2(
     env: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import fr.commands.run_cmd as run_cmd
+    import fr.bindings.apply as apply_mod
 
     models = bf.user_models(env, USER_STD)
     bf.install(monkeypatch, bf.ScriptedProber(CATALOGUE, dead={"prov/std": None}))
@@ -302,7 +302,7 @@ def test_a_failed_apply_restores_both_files_and_exits_2(
         path.write_text("half written")
         raise OSError("disk full")
 
-    monkeypatch.setattr(run_cmd, "set_binding", half_write)
+    monkeypatch.setattr(apply_mod, "set_binding", half_write)
 
     result = _advance(repo, shipped)
 
@@ -334,3 +334,183 @@ def test_a_run_with_no_plan_records_the_substitution_in_its_spec_journal(
     assert entry.kind == "decision"
     assert "decider: autonomous" in entry.body
     assert str(spec_journal.relative_to(repo)) in _head_files(repo)
+
+
+# ---------------------------------------- review p2: cost, partial applies, ids
+
+
+def test_a_live_binding_at_dispatch_reads_no_catalogue_and_probes_no_offer(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r1: the guard only needs a verdict. `std2` is a newer same-family
+    model (an offer `check` would probe); dispatch must not spend on it."""
+    bf.user_models(env, USER_STD)
+    prober = bf.ScriptedProber(CATALOGUE)
+    bf.install(monkeypatch, prober)
+    repo, shipped = _grouped(env)
+    _clear_probe_cache()  # `run start` cached the verdict; make dispatch ask
+    prober.probed.clear()
+    prober.catalogued.clear()
+
+    result = _advance(repo, shipped)
+
+    assert result.exit_code == 0, result.output
+    assert prober.catalogued == []
+    assert prober.probed == ["prov/std"]
+
+
+def test_a_dispatched_tier_agent_file_left_unrewritten_is_not_a_substitution(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r2: `materialize_agents` reports a file it cannot rewrite rather
+    than raising; for the tier being dispatched that is a failed apply."""
+    models = bf.user_models(env, USER_STD)
+    agent = bf.agent_file(env, "standard", "prov/std", anchor=False)
+    agent_bytes = agent.read_bytes()
+    bf.install(monkeypatch, bf.ScriptedProber(CATALOGUE, dead={"prov/std": None}))
+    repo, shipped = _grouped(env)
+    cursor = run_path(repo, "r1").read_bytes()
+    journal = _plan_journal(repo).read_bytes()
+
+    result = _advance(repo, shipped)
+
+    assert result.exit_code == 2, result.output
+    assert "SUBSTITUTION NOT APPLIED prov/std → prov/std2" in result.output
+    assert "mode: subagent" in result.output
+    assert "SUBSTITUTED opencode" not in result.output
+    assert models.read_text() == USER_STD
+    assert agent.read_bytes() == agent_bytes
+    assert _plan_journal(repo).read_bytes() == journal
+    assert run_path(repo, "r1").read_bytes() == cursor
+
+
+def test_a_raising_materialise_restores_and_rematerialises_the_old_binding(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r4: `materialize_agents` raising after `set_binding` wrote."""
+    import fr.bindings.apply as apply_mod
+
+    models = bf.user_models(env, USER_STD)
+    bf.install(monkeypatch, bf.ScriptedProber(CATALOGUE, dead={"prov/std": None}))
+    repo, shipped = _grouped(env)
+    cursor = run_path(repo, "r1").read_bytes()
+    journal = _plan_journal(repo).read_bytes()
+    real = apply_mod.materialize_agents
+    seen: list[str | None] = []
+
+    def flaky(config_home, *, models_cfg):
+        seen.append(models_cfg.get("opencode", {}).get("standard"))
+        if len(seen) == 1:
+            raise OSError("agent dir vanished")
+        return real(config_home, models_cfg=models_cfg)
+
+    monkeypatch.setattr(apply_mod, "materialize_agents", flaky)
+
+    result = _advance(repo, shipped)
+
+    assert result.exit_code == 2, result.output
+    assert "SUBSTITUTION NOT APPLIED prov/std → prov/std2: agent dir vanished" in result.output
+    assert seen == ["prov/std2", "prov/std"]  # the re-materialise is of the restored map
+    assert models.read_text() == USER_STD
+    assert _plan_journal(repo).read_bytes() == journal
+    assert run_path(repo, "r1").read_bytes() == cursor
+
+
+def test_a_flat_path_refusal_leaves_the_cursor_byte_identical(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r4: the flat path refuses before anything is saved, no brief."""
+    catalogue = [*CATALOGUE[:4], bf.ent("hard2", "h", "2026-04-01", 50.0)]
+    bf.user_models(env, USER_STD)
+    bf.install(monkeypatch, bf.ScriptedProber(catalogue, dead={"prov/hard": None}))
+    repo, shipped = _flat(env)
+    cursor = run_path(repo, "r1").read_bytes()
+
+    result = _advance(repo, shipped)
+
+    assert result.exit_code == 2, result.output
+    assert "prov/hard2" in result.output
+    assert "dispatch brief" not in result.output and '"run":' not in result.output
+    assert run_path(repo, "r1").read_bytes() == cursor
+    assert load_run_state(repo, "r1").steps["spec-review"].state != "running"
+
+
+def test_the_guard_runs_on_redispatch(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """p2-r4: `--redispatch` re-opens a unit, so it dispatches on a binding too."""
+    models = bf.user_models(env, USER_STD)
+    prober = bf.ScriptedProber(CATALOGUE)
+    bf.install(monkeypatch, prober)
+    repo, shipped = _grouped(env)
+    assert _advance(repo, shipped).exit_code == 0
+    prober.dead["prov/std"] = None
+    _clear_probe_cache()
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    assert "SUBSTITUTED opencode/standard: prov/std → prov/std2" in result.output
+    assert "standard: prov/std2" in models.read_text()
+
+
+def test_two_substitutions_of_one_tier_get_distinct_ids(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r3: the second substitution of `standard` in one run is `-2`."""
+    catalogue = [*CATALOGUE, bf.ent("std3", "s", "2026-06-01", 10.0)]
+    bf.user_models(env, USER_STD)
+    prober = bf.ScriptedProber(catalogue, dead={"prov/std": None, "prov/std3": None})
+    bf.install(monkeypatch, prober)
+    repo, shipped = _grouped(env)
+    assert _advance(repo, shipped).exit_code == 0  # std (dead) -> std2
+    done = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1"] + ["--state", "done"],
+    )
+    assert done.exit_code == 0, done.output
+    prober.dead["prov/std2"] = None
+    del prober.dead["prov/std3"]
+    _clear_probe_cache()
+
+    result = _advance(repo, shipped)  # peer-review: std2 (dead) -> std3
+
+    assert result.exit_code == 0, result.output
+    assert "prov/std2 → prov/std3" in result.output
+    ids = [e.id for e in parse_journal(_plan_journal(repo).read_text())]
+    assert ids.count("model-substitution-standard-1") == 1
+    assert ids.count("model-substitution-standard-2") == 1
+
+
+def test_a_substitution_id_never_reuses_a_taken_suffix(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r3: with only `-2` on file, a count-based id would be `-2` again."""
+    bf.user_models(env, USER_STD)
+    bf.install(monkeypatch, bf.ScriptedProber(CATALOGUE, dead={"prov/std": None}))
+    repo, shipped = _grouped(env)
+    append_journal_entry(
+        _plan_journal(repo),
+        PLAN_SLUG,
+        JournalEntry(
+            kind="decision",
+            scope="plan",
+            id="model-substitution-standard-2",
+            created="2026-10-06T00:00:00+00:00",
+            title="an earlier one",
+        ),
+    )
+    subprocess.run(["git", "-C", str(repo), "commit", "-qam", "seed"], check=True)
+
+    result = _advance(repo, shipped)
+
+    assert result.exit_code == 0, result.output
+    ids = [e.id for e in parse_journal(_plan_journal(repo).read_text())]
+    assert ids.count("model-substitution-standard-2") == 1
+    assert "model-substitution-standard-3" in ids
+
+
+def _clear_probe_cache() -> None:
+    import os
+    import shutil
+
+    shutil.rmtree(os.environ["FR_MODELS_CACHE_DIR"], ignore_errors=True)

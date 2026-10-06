@@ -6873,6 +6873,10 @@ _MEMBER_BRIEF_KEYS = {
     "for_each",
     "steps",
     "record",
+    # spec 2026-10-06-model-binding-churn R6: every agent-step brief carries
+    # them; a member is never `gate: operator`, so both are always null.
+    "dead_bindings",
+    "binding_offers",
 }
 """4.28.0's member brief, key for key: the spec is the contract, so no brief
 after brainstorm carries the operator's input (spec 2026-09-29 §A, R1)."""
@@ -6886,6 +6890,7 @@ def test_member_briefs_carry_no_operator_input(tmp_path: Path) -> None:
     brief = _brief_of(first.output)
     assert brief["step"] == "code"
     assert set(brief) == _MEMBER_BRIEF_KEYS
+    assert brief["dead_bindings"] is None and brief["binding_offers"] is None
     assert "same style, 680-720" not in first.output
 
     resolved = _invoke(

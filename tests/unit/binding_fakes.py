@@ -35,6 +35,7 @@ class ScriptedProber:
         self.dead = dead or {}
         self.unknown = unknown
         self.probed: list[str] = []
+        self.catalogued: list[str] = []
 
     def probe(self, model: str) -> ProbeResult:
         self.probed.append(model)
@@ -45,6 +46,7 @@ class ScriptedProber:
         return ProbeResult("live", "", None, 0.0)
 
     def catalogue(self, provider: str) -> list[CatalogueEntry]:
+        self.catalogued.append(provider)
         return [e for e in self.entries if e.provider == provider]
 
 
@@ -69,9 +71,12 @@ def user_models(tmp_path: Path, text: str) -> Path:
     return path
 
 
-def agent_file(tmp_path: Path, tier: str, model: str) -> Path:
-    """An installed OpenCode tier agent file, as `materialize_agents` finds it."""
+def agent_file(tmp_path: Path, tier: str, model: str, *, anchor: bool = True) -> Path:
+    """An installed OpenCode tier agent file, as `materialize_agents` finds it.
+    ``anchor=False`` drops the `mode: subagent` line, so the materialiser
+    reports the file as one it cannot rewrite."""
     path = tmp_path / ".config" / "opencode" / "agent" / f"fr-phase-executor-{tier}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"---\ndescription: executor\nmode: subagent\nmodel: {model}\n---\nbody\n")
+    mode = "mode: subagent\n" if anchor else ""
+    path.write_text(f"---\ndescription: executor\n{mode}model: {model}\n---\nbody\n")
     return path
