@@ -70,9 +70,37 @@ def test_a_keyword_that_closes_nothing_is_prose_not_a_shared_keyword(body: str) 
 
 
 @pytest.mark.parametrize(
+    ("line", "fixed"),
+    [
+        ("Closes GH-1 and #2", ["Closes GH-1", "Closes #2"]),
+        ("Closes #1 and gh-2", ["Closes #1", "Closes gh-2"]),
+    ],
+)
+def test_a_gh_reference_counts_as_the_close_it_is(line: str, fixed: list[str]) -> None:
+    """Review r1, verified live on PR #1032: `Closes GH-869 and #868` closes
+    only #869. Unread, `GH-1` hid the close that makes `#2` a shared keyword."""
+    from fr.record.pr_body import shared_closing_keywords
+
+    assert shared_closing_keywords(f"{line}\n") == [(line, fixed)]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Closes (#1) and (#2)\n",  # live: GitHub links nothing through a parenthesis
+    ],
+)
+def test_a_reference_github_does_not_close_shares_nothing(body: str) -> None:
+    from fr.record.pr_body import shared_closing_keywords
+
+    assert shared_closing_keywords(body) == []
+
+
+@pytest.mark.parametrize(
     ("body", "fixed"),
     [
         ("Closes #1,\n#2\n", ["Closes #1", "Closes #2"]),
+        ("Closes GH-1,\nGH-2\n", ["Closes GH-1", "Closes GH-2"]),
         ("Closes #1 and\n#2\n", ["Closes #1", "Closes #2"]),
         ("Fixes #1\n#2, #3\n", ["Fixes #1", "Fixes #2", "Fixes #3"]),
         ("Resolves #1,\n#2,\n#3\n", ["Resolves #1", "Resolves #2", "Resolves #3"]),
