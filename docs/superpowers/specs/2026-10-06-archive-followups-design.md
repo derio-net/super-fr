@@ -70,7 +70,7 @@ R7. A stale plan-dir ref stays an error in `fr acceptance check` (no plan archiv
 R8. Whenever an invocation has staged at least one move, `fr archive` lists every finding whose folded state is `open` or `out-of-scope` in the spec, plan and debug journals this invocation moved, each under its qualified id `<scope>/<slug>/<id>` with its title.
 R9. `fr archive --issues all` files one tracker issue per listed open end; `fr archive --issues <qid>[,<qid>…]` files exactly the named findings, each read from its journal wherever it lives (live or archived), whether or not this invocation moved anything; a bare `<id>` is accepted only when it names exactly one finding among the listed ones; an id that resolves to no open/out-of-scope finding, or to several, is refused before anything is filed. `--no-issues` only lists; `--issues` and `--no-issues` together are a usage error.
 R10. With neither flag, an interactive archive prompts once (`y`/`N`/`select`); a non-interactive one only lists. Under `tracking: none`, or a services declaration that cannot be read (with the same warning the closeout brief prints), archive only lists, whatever the flags. Filing never changes archive's exit code and never blocks the moves: a forge error is reported per finding and the rest proceed.
-R11. Each filed issue's body carries the finding's body, the journal path, the spec/plan paths when known, and a `fr:journal <scope>/<slug>/<id>` marker; when the forge can list issues, an open issue already carrying the marker is reused instead of a duplicate being created.
+R11. Each filed issue's body carries the finding's body, the journal path, the spec/plan paths when known, and a `fr:journal <scope>/<slug>/<id>` marker; when the forge can list issues, an open issue authored by the forge's own login (`viewer_login()`) whose body ends with that marker is reused instead of a duplicate being created; an issue anyone else wrote is never adopted, and a login that cannot be read means no reuse.
 R12. For each filed (or reused) issue, archive appends a `deferred` resolution record (`tracked_by` = the issue URL) to that finding's journal at its current location, built by the same builder `fr journal resolve --state deferred` uses, and stages it, so the journal folds the finding to `deferred`.
 R13. The closeout brief (`fr pickup --run`) lists the run's out-of-scope findings by qualified id and gives one `fr archive --branch <b> --issues <qid,…>` command (with `--no-issues` named as the way to file none), replacing the per-finding manual `fr journal resolve` lines; under `tracking: none` it keeps saying no tracker is configured. The shipped fr-goal skill's close-out prose (and its OpenCode/Hermes mirrors and the fr-goal explainer) describes this route.
 
@@ -185,8 +185,7 @@ unchanged.
 repo_root))`. That is the same identity the retarget uses. It falls back to
 the origin remote when there is no matrix, and it has a known two-segment
 limit for nested GitLab groups (`check.py:33-38`). Per end, the body holds the
-finding body, the journal path, the spec and plan paths (from the run
-cursor's `emitted`, when the log moved one), and `<!-- fr:journal
+finding body, the journal path, the finding's own spec or plan path (derived from its scope and slug, live or archived — never the whole move log), and `<!-- fr:journal
 <qid> -->`. `list_issues(repo, "open", 200, fields="number,url,body")` is read
 once per invocation. Any error (including `UnsupportedForgeOperation` on
 glab/tea) means no dedup. A marker hit is reused. Otherwise filing calls
