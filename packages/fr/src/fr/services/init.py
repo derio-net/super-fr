@@ -43,6 +43,11 @@ def issues_enabled_for(repo_root: Path, forge_type: str, host: str | None) -> bo
     repo = slug
     if forge_type == "github" and host and host != "github.com":
         repo = f"{host}/{slug}"  # GitHub Enterprise: gh takes HOST/OWNER/REPO
+        # The host already rides in the repo argument, so the client gets none:
+        # a client host would add GH_HOST and its hosts.yml trust gate to a
+        # probe the operator's own `--host` flag fully names (spec
+        # 2026-10-06-forge-remainder §4.E).
+        host = None
     return client_for_backend(forge_type, host=host).issues_enabled(repo)  # type: ignore[arg-type]
 
 
