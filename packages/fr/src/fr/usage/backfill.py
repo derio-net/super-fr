@@ -137,13 +137,38 @@ def refreshed_file(
     )
 
 
+def _worth_reading(usage: UsageFile, env: Mapping[str, str], max_age_days: int | None) -> bool:
+    """This host has an unpriced session in `usage`, captured within the bound."""
+    from fr.usage.capture import this_host, unpriced_sessions
+
+    mine = usage.host(this_host(usage.run, env))
+    if mine is None or not unpriced_sessions(mine):
+        return False
+    if max_age_days is None:
+        return True
+    try:
+        at = _dt.datetime.fromisoformat(mine.captured_at)
+    except ValueError:
+        return True
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=_dt.UTC)
+    return _dt.datetime.now(_dt.UTC) - at <= _dt.timedelta(days=max_age_days)
+
+
 def refresh_archived(
-    repo_root: Path, env: Mapping[str, str], *, skip: Callable[[Path], bool] | None = None
+    repo_root: Path,
+    env: Mapping[str, str],
+    *,
+    skip: Callable[[Path], bool] | None = None,
+    max_age_days: int | None = None,
 ) -> BackfillReport:
     """Re-read the unpriced sessions of every EXISTING archived usage file whose
     run cursor is archived (gh#756). Only refreshes — never writes a new file.
     A file `skip` returns True for is reported in `dirty`, not rewritten; a
-    per-run exception lands in `failed`."""
+    per-run exception lands in `failed`. The cursor is parsed only once the usage
+    file has an unpriced session of this host's; `max_age_days` leaves alone a
+    file whose this-host capture is older than that (the harness has pruned the
+    transcript by then), so a permanently unpriced session is not re-read forever."""
     from fr.artifacts.atomic import write_text_atomic
 
     report = BackfillReport()
@@ -154,13 +179,11 @@ def refresh_archived(
         if not target.exists():
             continue
         try:
-            raw = yaml.safe_load(cursor.read_text())
             usage = load_usage(target)
-            fresh = (
-                refreshed_file(usage, raw, env)
-                if usage is not None and isinstance(raw, dict)
-                else None
-            )
+            fresh = None
+            if usage is not None and _worth_reading(usage, env, max_age_days):
+                raw = yaml.safe_load(cursor.read_text())
+                fresh = refreshed_file(usage, raw, env) if isinstance(raw, dict) else None
             if fresh is not None and skip is not None and skip(target):
                 report.dirty.append(run_id)
                 continue

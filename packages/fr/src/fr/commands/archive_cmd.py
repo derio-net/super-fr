@@ -396,6 +396,23 @@ def _after_moves(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
             err_console.print(f"note: {name} skipped — {type(e).__name__}: {escape(str(e))}")
 
 
+USAGE_REFRESH_MAX_AGE_DAYS = 30
+"""Claude Code's default transcript retention: past it a session cannot be priced."""
+
+
+def _edited_in_worktree(repo_root: Path, path: Path) -> bool:
+    """True iff `path` differs between the worktree and the index. Staged-only
+    changes (a usage file this very invocation just `git mv`d) are not edits."""
+    import subprocess
+
+    rc = subprocess.run(
+        ["git", "-C", str(repo_root), "diff", "--quiet", "--", str(path)],
+        capture_output=True,
+        check=False,
+    ).returncode
+    return rc == 1
+
+
 def _refresh_usage(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
     """§A: price earlier closeouts' sessions and stage each refreshed file."""
     import os
@@ -403,7 +420,12 @@ def _refresh_usage(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
 
     from fr.usage.backfill import refresh_archived
 
-    report = refresh_archived(repo_root, os.environ, skip=lambda p: paths_dirty(repo_root, p))
+    report = refresh_archived(
+        repo_root,
+        os.environ,
+        skip=lambda p: _edited_in_worktree(repo_root, p),
+        max_age_days=USAGE_REFRESH_MAX_AGE_DAYS,
+    )
     for path in report.refreshed:
         subprocess.run(
             ["git", "-C", str(repo_root), "add", "--", str(path.relative_to(repo_root))],
