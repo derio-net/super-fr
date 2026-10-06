@@ -187,7 +187,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (pure `(tool, command|path) -> activity`), `rollup.py` (the harness's dollars
     split by fixed price ratios across activities and cursor step windows, plus
     turns), `render.py` (table / one HTML page, `—` for every missing figure).
-    CLI: `fr usage collect|report|backfill` (`commands/usage_cmd.py`); the
+    CLI: `fr usage collect|report|backfill|compare` (`commands/usage_cmd.py`;
+    `compare` — `usage/compare.py`, 2026-10-06 spec `cost-evidence` §F — is the
+    before/after tool: two sets of runs, selected by ISO date/timestamp or run id,
+    over committed usage files, cursors of every version and plan journals; pure
+    engine, read-only, `—` for any missing input); the
     cache lives under `$HOME/.cache/fr/usage/`, so `usage` is in
     `READ_ONLY_COMMANDS` (`backfill` only writes archive files: it creates
     missing ones and prices sessions an archived one captured while they were
