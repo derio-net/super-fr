@@ -131,8 +131,14 @@ class World:
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
 
-    def wait_required_checks(self, repo: str, number: int, **kw: Any) -> list[dict[str, Any]]:
-        raise AssertionError("the driver never waits for checks")
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """Every check, live: the same counts the collect reports for the PR."""
+        counts = self.all_checks.get(number, {"pass": 1, "fail": 0, "pending": 0})
+        return [
+            {"name": f"{bucket}-{i}", "bucket": bucket}
+            for bucket in ("pass", "fail", "pending")
+            for i in range(counts.get(bucket, 0))
+        ]
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         self.calls.append(f"pr_merge {number}")
@@ -626,6 +632,30 @@ def test_a_failing_check_warns_once_per_head_across_loop_passes(
     assert _lines(out, "warn") == ["warn b1: PR #101 CI failing at sha-101: lint"]
     assert world.merged == [(101, "sha-101", "squash")]
     assert sleeps[:2] == [5, 5]
+
+
+def test_a_ci_none_declared_mid_drive_reaches_the_merge_too(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#880 review: the merge context outlives a pass, so the `ci none` its R4
+    reads is the one each pass reads, not the one the first merge attempt saw."""
+    _pr_open(world, tmp_path)
+    world.refuse_merge = "protected"  # pass 1 builds the merge context, and stops
+    sleeps: list[float] = []
+
+    def _declare_ci_none(seconds: float) -> None:
+        sleeps.append(seconds)
+        world.refuse_merge = None
+        world.checks[101] = []
+        world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}
+        monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: True)
+        assert len(sleeps) < 5, "the loop did not end"
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _declare_ci_none)
+    world.config = None
+    code, out = _drive(tmp_path, "--yes", "--interval", "5")
+    assert world.merged == [(101, "sha-101", "squash")], out
 
 
 @pytest.mark.parametrize(

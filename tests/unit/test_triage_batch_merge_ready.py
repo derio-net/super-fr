@@ -26,6 +26,10 @@ from fr.triage.model import load_facts, load_judgements
 from tests.unit.test_triage_batch_merge import REPO, FakeCheckout, MergeForge, _setup
 
 
+def _never(seconds: float) -> None:
+    raise AssertionError("merge_ready never waits")
+
+
 def _ctx(tmp_path: Path, forge: MergeForge, checkout: FakeCheckout) -> tuple[MergeContext, list]:
     facts = load_facts(tmp_path / "facts.json")
     judgements = load_judgements(tmp_path / "judgements.yaml")
@@ -37,6 +41,7 @@ def _ctx(tmp_path: Path, forge: MergeForge, checkout: FakeCheckout) -> tuple[Mer
         scratch_root=tmp_path / "merge",
         method="squash",
         say=lambda line: None,
+        sleep=_never,
     )
     queue = pr_open_queue(judgements.batches, facts, judgements.issues)
     slots, _ = plan_queue(ctx, queue)
@@ -52,7 +57,6 @@ def test_a_ready_pr_merges_without_waiting(tmp_path: Path, monkeypatch: pytest.M
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
     assert merge_ready(ctx, slot, None) == MergeAttempt("merged", head="head-solo")
     assert forge.merged == [(1001, "head-solo", "squash")]
-    assert forge.waits == []
 
 
 def test_a_draft_is_reported_and_never_merged(
@@ -73,7 +77,7 @@ def test_pending_checks_are_reported_without_waiting(
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
     got = merge_ready(ctx, slot, None)
     assert (got.outcome, got.checks) == ("pending", ("test",))
-    assert forge.merged == [] and forge.waits == []
+    assert forge.merged == []
 
 
 def test_failing_checks_are_named(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -120,7 +124,7 @@ def test_a_pr_behind_its_base_is_updated_and_left_for_a_later_pass(
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
     got = merge_ready(ctx, slot, None)
     assert got.outcome == "updated"
-    assert forge.merged == [] and forge.waits == []
+    assert forge.merged == []
 
 
 def test_a_merge_emits_exactly_one_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

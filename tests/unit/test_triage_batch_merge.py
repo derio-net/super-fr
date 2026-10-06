@@ -50,7 +50,7 @@ class MergeForge:
         self.all_checks: dict[int, list[dict[str, Any]]] = {}  # default: the required
         self.refuse: dict[int, str] = {}
         self.merged: list[tuple[int, str, str]] = []
-        self.waits: list[int] = []
+        self.reads: list[int] = []  # each read of a PR's required checks
         self.methods: dict[str, Any] = {"default": "squash", "allowed": ["merge", "squash"]}
         self.method_reads = 0
 
@@ -73,15 +73,12 @@ class MergeForge:
         return dict(self.prs[number])
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        self.reads.append(number)
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
 
     def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         if number in self.all_checks:
             return list(self.all_checks[number])
-        return self.pr_required_checks(repo, number)
-
-    def wait_required_checks(self, repo: str, number: int, **kw: Any) -> list[dict[str, Any]]:
-        self.waits.append(number)
         return self.pr_required_checks(repo, number)
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
@@ -178,6 +175,11 @@ class FakeCheckout:
 
     def changed_paths(self, ref: str, head: str) -> frozenset[str]:
         return self.pr_paths.get(head, frozenset({"a.py"}))
+
+    def snapshot_paths(self, ref: str, paths: tuple[str, ...], dest: Path) -> None:
+        """origin/<default>'s CI: a workflow, so the repo is not `ci none` (R4)."""
+        (dest / ".github" / "workflows").mkdir(parents=True)
+        (dest / ".github" / "workflows" / "ci.yml").write_text("on: push\njobs: {}\n")
 
     def add_worktree(self, where: Path, ref: str) -> FakeWorktree:
         wt = FakeWorktree(self, where, ref)
@@ -394,7 +396,8 @@ def test_an_up_to_date_pr_holding_the_wrong_slot_is_re_versioned(
         "commit chore: re-slot version to 4.21.2",
         "push feat/batch-solo",
     ]
-    assert forge.waits == [1001]
+    # checked before the push, after it, and before merging the pushed head
+    assert forge.reads == [1001, 1001, 1001]
     assert forge.merged == [(1001, "new-1", "squash")]
     assert checkout.removed == [wt.path]  # step 4: removed after the merge
 

@@ -8,7 +8,6 @@ process spawning.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -170,26 +169,14 @@ class GhClient(Protocol):
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         """The PR's REQUIRED checks: `{name, bucket, state}`, where `bucket` is
-        pass | fail | pending | skipping | cancel. Empty when none are required."""
+        pass | fail | pending | skipping | cancel. Empty when none are required, or
+        when the head has no check yet: R4 (`batch_drive.checks_verdict`) tells
+        those apart by reading `pr_checks`."""
         ...
 
-    def wait_required_checks(
-        self,
-        repo: str,
-        number: int,
-        *,
-        interval: float = 30.0,
-        timeout: float = 3600.0,
-        grace: float = 120.0,
-        sleep: Callable[[float], None] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Poll `pr_required_checks` until none is pending, or *timeout* seconds of
-        waiting have passed; return the last answer either way (the caller reads
-        the buckets).
-
-        An empty answer is not trusted for the first *grace* seconds: right
-        after a push the forge has registered no check runs yet, so `[]` then
-        means "not started", not "none required" (review r2p-f10)."""
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """Every check on the PR's head, required or not, in the shape of
+        `pr_required_checks`. Empty when none is reported (yet)."""
         ...
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
@@ -249,17 +236,8 @@ class UnsupportedBatchOps:
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         raise self._unsupported("pr_required_checks")
 
-    def wait_required_checks(
-        self,
-        repo: str,
-        number: int,
-        *,
-        interval: float = 30.0,
-        timeout: float = 3600.0,
-        grace: float = 120.0,
-        sleep: Callable[[float], None] | None = None,
-    ) -> list[dict[str, Any]]:
-        raise self._unsupported("wait_required_checks")
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        raise self._unsupported("pr_checks")
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         raise self._unsupported("pr_merge")

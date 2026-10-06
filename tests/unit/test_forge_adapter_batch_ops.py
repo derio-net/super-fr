@@ -189,81 +189,6 @@ def test_pr_checks_reads_every_check_not_only_the_required_ones(
     assert "--required" not in fake.calls[0]
 
 
-def test_wait_required_checks_polls_until_nothing_is_pending(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    rounds = iter(
-        [
-            [{"name": "t", "bucket": "pending", "state": "IN_PROGRESS"}],
-            [{"name": "t", "bucket": "pass", "state": "SUCCESS"}],
-        ]
-    )
-    client = RealGhClient()
-    monkeypatch.setattr(client, "pr_required_checks", lambda repo, number: next(rounds))
-    slept: list[float] = []
-
-    final = client.wait_required_checks(REPO, 12, interval=5.0, timeout=60.0, sleep=slept.append)
-
-    assert final == [{"name": "t", "bucket": "pass", "state": "SUCCESS"}]
-    assert slept == [5.0]
-
-
-def test_wait_required_checks_gives_up_at_the_timeout_with_the_last_answer(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    pending = [{"name": "t", "bucket": "pending", "state": "IN_PROGRESS"}]
-    client = RealGhClient()
-    monkeypatch.setattr(client, "pr_required_checks", lambda repo, number: pending)
-    slept: list[float] = []
-
-    final = client.wait_required_checks(REPO, 12, interval=10.0, timeout=25.0, sleep=slept.append)
-
-    assert final == pending
-    assert sum(slept) <= 25.0
-    assert len(slept) == 2
-
-
-def test_wait_required_checks_waits_for_checks_to_appear_after_a_push(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Review r2p-f10: right after a push GitHub has registered no check runs
-    yet, so `[]` is not yet "no required checks". The wait polls through a
-    bounded grace period until checks appear."""
-    rounds = iter(
-        [
-            [],
-            [],
-            [{"name": "t", "bucket": "pending", "state": "QUEUED"}],
-            [{"name": "t", "bucket": "fail", "state": "FAILURE"}],
-        ]
-    )
-    client = RealGhClient()
-    monkeypatch.setattr(client, "pr_required_checks", lambda repo, number: next(rounds))
-    slept: list[float] = []
-
-    final = client.wait_required_checks(
-        REPO, 12, interval=5.0, timeout=60.0, grace=30.0, sleep=slept.append
-    )
-
-    assert final == [{"name": "t", "bucket": "fail", "state": "FAILURE"}]
-    assert slept == [5.0, 5.0, 5.0]
-
-
-def test_wait_required_checks_accepts_none_required_once_the_grace_passes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = RealGhClient()
-    monkeypatch.setattr(client, "pr_required_checks", lambda repo, number: [])
-    slept: list[float] = []
-
-    final = client.wait_required_checks(
-        REPO, 12, interval=10.0, timeout=600.0, grace=25.0, sleep=slept.append
-    )
-
-    assert final == []
-    assert sum(slept) >= 25.0 - 10.0 and sum(slept) <= 30.0
-
-
 def test_pr_required_checks_raises_on_a_pending_exit_with_no_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -372,7 +297,7 @@ _CALLS: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
     "list_prs_by_head": ((REPO, "feat/batch-x"), {}),
     "pr_view": ((REPO, 1), {}),
     "pr_required_checks": ((REPO, 1), {}),
-    "wait_required_checks": ((REPO, 1), {}),
+    "pr_checks": ((REPO, 1), {}),
     "pr_merge": ((REPO, 1), {"head_sha": "abc", "method": "merge"}),
     "closing_ref": ((REPO, 1), {}),
     "repo_merge_methods": ((REPO,), {}),

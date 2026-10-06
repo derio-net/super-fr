@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import json
 import re
-import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +25,10 @@ from fr.labels import LabelDef
 
 # `gh pr checks` exits 8 when any check is still pending; its JSON is on stdout.
 _CHECKS_PENDING_EXIT = 8
-_NO_REQUIRED_CHECKS = "no required checks"
+# gh's two "nothing here" answers, both exit 1: `no required checks reported`
+# (checks exist, none required) and `no checks reported` (the head has none at
+# all yet, as every head does for a moment after a push; gh#952, gh#947).
+_NO_CHECKS = ("no required checks reported", "no checks reported")
 _PR_URL = re.compile(r"/pull/(\d+)\s*$", re.MULTILINE)
 
 
@@ -301,13 +302,19 @@ class RealGhClient:
         }
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
-        args = ["pr", "checks", str(number), "--repo", repo, "--required"]
+        return self._checks(repo, number, required=True)
+
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        return self._checks(repo, number, required=False)
+
+    def _checks(self, repo: str, number: int, *, required: bool) -> list[dict[str, Any]]:
+        args = ["pr", "checks", str(number), "--repo", repo, *(["--required"] if required else [])]
         try:
             out = _gh._run_gh([*args, "--json", "name,bucket,state"])
         except _gh.GhError as exc:
             if exc.returncode == _CHECKS_PENDING_EXIT and exc.stdout.strip():
                 out = exc.stdout
-            elif _NO_REQUIRED_CHECKS in str(exc).lower():
+            elif any(phrase in str(exc).lower() for phrase in _NO_CHECKS):
                 return []
             else:
                 raise
@@ -316,29 +323,6 @@ class RealGhClient:
             {"name": c.get("name", ""), "bucket": c.get("bucket", ""), "state": c.get("state", "")}
             for c in raw
         ]
-
-    def wait_required_checks(
-        self,
-        repo: str,
-        number: int,
-        *,
-        interval: float = 30.0,
-        timeout: float = 3600.0,
-        grace: float = 120.0,
-        sleep: Callable[[float], None] | None = None,
-    ) -> list[dict[str, Any]]:
-        nap = sleep if sleep is not None else time.sleep
-        waited = 0.0
-        while True:
-            checks = self.pr_required_checks(repo, number)
-            # `[]` inside the grace period is "not registered yet" (r2p-f10).
-            settling = not checks and waited < grace
-            if not settling and not any(c["bucket"] == "pending" for c in checks):
-                return checks
-            if waited + interval > timeout:
-                return checks
-            nap(interval)
-            waited += interval
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         if method not in MERGE_METHODS:
