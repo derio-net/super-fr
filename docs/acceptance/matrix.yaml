@@ -7133,9 +7133,20 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R7
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claims.py#test_needs_refresh_past_a_quarter_and_always_when_expired
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_take_refuses_a_live_claim
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_take_releases_an_expired_claim_naming_the_taker_then_claims
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_release_of_another_scopes_expired_claim_names_the_releaser
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_claim_take_previews_then_takes_an_expired_claim
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_claim_release_own_any_time_foreign_only_expired
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_claims_expired
+    status: ci
+    notes: 'phase 1: scenario covers check''s expired_claims and the refusal naming
+      claim take; unit tests cover own-expired refresh, take and release against a fake
+      GhClient (R7, R8, R9)'
     verify: candidate
     scenario: tests/scenarios/triage-claims-expired.sh
   - id: triage-claims-writes
