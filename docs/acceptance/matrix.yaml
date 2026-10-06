@@ -7143,3 +7143,14 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: model-binding-probe-cache
+    capability: model-bindings
+    acceptance: Probe verdicts are cached per harness and model for 6 hours, set and
+      check always probe fresh, and a bound model's last-known catalogue entry keeps
+      its lineage after it leaves the catalogue
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
