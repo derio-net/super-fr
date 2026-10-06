@@ -69,6 +69,48 @@ def test_a_keyword_that_closes_nothing_is_prose_not_a_shared_keyword(body: str) 
     assert shared_closing_keywords(body) == []
 
 
+@pytest.mark.parametrize(
+    ("body", "fixed"),
+    [
+        ("Closes #1,\n#2\n", ["Closes #1", "Closes #2"]),
+        ("Closes #1 and\n#2\n", ["Closes #1", "Closes #2"]),
+        ("Fixes #1\n#2, #3\n", ["Fixes #1", "Fixes #2", "Fixes #3"]),
+        ("Resolves #1,\n#2,\n#3\n", ["Resolves #1", "Resolves #2", "Resolves #3"]),
+    ],
+)
+def test_a_reference_list_wrapped_onto_the_next_line_is_still_shared(
+    body: str, fixed: list[str]
+) -> None:
+    """gh#869, verified live on PR #1032: GitHub closes only `#869` for
+    `Closes #869,\\n#868`. The list's tail is on a line with no keyword, so a
+    line-at-a-time scan never saw it, and it stayed open after merge."""
+    from fr.record.pr_body import shared_closing_keywords
+
+    [(bad, got)] = shared_closing_keywords(body)
+
+    assert bad == body.strip() and got == fixed
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Closes\n#1, #2\n",  # live: GitHub links nothing across the break
+        "Closes:\n#1\n",
+        "Closes #1\nRefs #2\n",  # a new line that is not a reference continues nothing
+        "Closes #1\n\n#2 is next\n",  # a blank line ends the paragraph
+        "Closes #1,\n- #2\n",  # a list item is its own block
+        "Closes #1,\n```\n#2\n```\n",
+        "Closes #1\nCloses #2\n",
+    ],
+)
+def test_a_line_break_continues_nothing_but_a_wrapped_list(body: str) -> None:
+    """gh#869: a keyword split from its FIRST reference closes nothing on GitHub
+    (verified live), so it shares nothing — line-scoped reading is right there."""
+    from fr.record.pr_body import shared_closing_keywords
+
+    assert shared_closing_keywords(body) == []
+
+
 def test_the_fix_puts_every_reference_on_its_own_line_with_the_keyword_as_written() -> None:
     from fr.record.pr_body import shared_closing_keywords
 
