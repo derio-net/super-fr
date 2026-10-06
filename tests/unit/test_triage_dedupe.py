@@ -102,14 +102,16 @@ def test_one_shared_identifier_needs_a_nearby_title() -> None:
     b = _issue(2, "beta two", "`verify_tests_log` too")
     assert _run(a, b) == []
 
-    c = _issue(3, "tests log broken", "`verify_tests_log` breaks")
-    d = _issue(4, "tests log slow", "`verify_tests_log` too")
+    c = _issue(3, "tests log broken now", "`verify_tests_log` breaks")
+    d = _issue(4, "tests log slow lately", "`verify_tests_log` too")
     assert _reasons(_run(c, d)) == ["identifiers verify_tests_log"]
 
 
 def test_a_shared_module_or_file_name_never_counts() -> None:
     a = _issue(1, "alpha", "`fr/triage_cmd_pkg/batch_drive.py` and `batch_drive` and `own_thing_a`")
-    b = _issue(2, "beta", "batch_drive.py, `triage_cmd_pkg::run` and `batch_drive` plus `own_thing_b`")
+    b = _issue(
+        2, "beta", "batch_drive.py, `triage_cmd_pkg::run` and `batch_drive` plus `own_thing_b`"
+    )
 
     assert _run(a, b) == []
 
