@@ -204,3 +204,22 @@ def test_refresh_due_only_skips_a_fresh_heartbeat(gh: FakeGhClient) -> None:
     later = NOW + timedelta(hours=1)
     out = cw.refresh(gh, REPO, 1, me=ME, expiry=DAY, now=later, trusted=TRUSTED, due_only=True)
     assert out == cw.Done("none") and _ops(gh) == []
+
+
+def test_release_for_one_batch_never_releases_an_own_marker_naming_another(
+    gh: FakeGhClient,
+) -> None:
+    """p1-r3: the marker was rewritten in place to a live batch; the old batch's
+    release must leave it standing."""
+    _claim(gh, batch="new")
+    out = cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, batch="old")
+    assert out == cw.Done("none")
+    (m,) = _markers(gh)
+    assert (m.batch, m.released) == ("new", None)
+    assert "fr:claimed" in gh.issues[(REPO, 1)].labels
+
+
+def test_release_for_the_batch_its_marker_names_releases_it(gh: FakeGhClient) -> None:
+    _claim(gh, batch="new")
+    out = cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, batch="new")
+    assert out == cw.Done("released", 1001)

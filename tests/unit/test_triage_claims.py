@@ -301,3 +301,29 @@ def test_claim_trust_is_the_viewer_and_pr_authors_together() -> None:
     assert claim_trusted(config, "Operator") == frozenset({"release-bot", "operator"})
     assert claim_trusted(TriageConfig(), None) == frozenset()
     assert trusted_logins(config, "Operator") == frozenset({"release-bot"})
+
+
+# ------------------------------------------- releases are batch-scoped (review p1-r3)
+
+
+def test_an_abandoned_batchs_member_rebatched_elsewhere_is_not_released() -> None:
+    """Abandoned then re-batched: the key's claim now serves the live batch."""
+    cancel = CancelEvent(kind="cancel", at=T0 + timedelta(minutes=1))
+    batches = [
+        _batch("old", ["x#1", "x#2"], wave=1, events=[_dispatch(), cancel]),
+        _batch("new", ["x#1"], wave=2),
+    ]
+    stages: dict[str, Any] = {"old": "abandoned", "new": "proposed"}
+    assert owed_releases(batches, stages, archived=set()) == [("x#2", "old")]
+
+
+def test_a_rewritten_claim_survives_the_cancel_of_the_batch_it_used_to_name() -> None:
+    """Rewrite then cancel: the in-place rewrite moved x#1's claim to `b`; cancelling
+    `a` owes no release of it while `b` still owes the claim."""
+    cancel = CancelEvent(kind="cancel", at=T0 + timedelta(minutes=1))
+    batches = [
+        _batch("a", ["x#1"], wave=1, events=[cancel]),
+        _batch("b", ["x#1"], events=[_dispatch()]),
+    ]
+    stages: dict[str, Any] = {"a": "cancelled", "b": "dispatched"}
+    assert owed_releases(batches, stages, archived=set(), own=[("x#1", "b")]) == []

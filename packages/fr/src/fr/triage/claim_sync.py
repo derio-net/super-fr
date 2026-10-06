@@ -172,7 +172,15 @@ def execute(env: ClaimEnv, ops: Sequence[ClaimOp], now: datetime) -> SyncResult:
                     due_only=True,
                 )
             else:
-                out = cw.release(client, owner_repo, number, me=env.me, now=now, trusted=trusted)
+                out = cw.release(
+                    client,
+                    owner_repo,
+                    number,
+                    me=env.me,
+                    now=now,
+                    trusted=trusted,
+                    batch=op.batch,
+                )
         except _WRITE_ERRORS as exc:
             result.failed.append((op, str(exc)))
             continue

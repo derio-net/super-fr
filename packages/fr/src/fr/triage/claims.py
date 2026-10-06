@@ -312,20 +312,24 @@ def owed_releases(
     """(key, batch id) this scope owes a release (R10).
 
     Every member of a releasing batch that ever owed claims (a wave, or a dispatch),
-    minus the keys a `claims_released` event recorded since. Derived from the batch, not
+    minus the keys a `claims_released` event recorded since and the keys another,
+    non-releasing batch still owes a claim (the claim was rewritten to serve it: an
+    abandoned batch's member re-batched, a cancel after an in-place rewrite). Each
+    release names its batch, and `claim_writes.release` leaves an own marker naming
+    any other batch standing. Derived from the batch, not
     from facts: a merged batch's members are closed, and collect reads no closed issue's
     comments. *own* adds this scope's claims facts show on open issues that no batch owes
     any more, the members `batch edit --remove-issue` dropped and those of a proposed
     batch whose wave was cleared.
     """
+    owed = {k for k, _ in owed_claims(batches, stages, archived)}
     out: list[tuple[str, str]] = []
     for b in batches:
         stage = stages[b.id]
         ever = b.wave is not None or any(e.kind == "dispatch" for e in b.events)
         if ever and releasing(b, stage, b.id in archived):
             done = _released_keys(b)
-            out.extend((k, b.id) for k in b.ids if k not in done)
-    owed = {k for k, _ in owed_claims(batches, stages, archived)}
+            out.extend((k, b.id) for k in b.ids if k not in done and k not in owed)
     listed = set(out)
     for pair in own:
         if pair[0] not in owed and pair not in listed:

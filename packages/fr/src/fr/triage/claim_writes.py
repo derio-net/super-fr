@@ -154,14 +154,18 @@ def release(
     now: datetime,
     trusted: Collection[str],
     of: str | None = None,
+    batch: str | None = None,
 ) -> Outcome:
     """Edit the claim of *of* (default: this scope) to its released form; remove
     `fr:claimed` once no un-released claim, live or expired, remains (R10). Open or
     closed alike. Another scope's claim is released only once expired (R9), and its
-    released form names this scope as `released_by`."""
+    released form names this scope as `released_by`. With *batch*, the release is that
+    batch's: a marker naming any other batch serves it and is left standing (p1-r3)."""
     signer = of or me
     _, claims = _read(client, repo, number, trusted)
     target = _own(claims, signer)
+    if target is not None and batch is not None and target.batch != batch:
+        return Done("none")
     if target is not None and signer != me and now < target.expires:
         raise ClaimError(
             f"{repo}#{number}: the claim of {signer} (batch {target.batch}) is live until "
