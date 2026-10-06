@@ -14,3 +14,8 @@ test_an_archive_merge_updates_a_pr_that_changes_the_acceptance_matrix: main ahea
 ### 3aa271b5d035 · root-cause · #937: the overlap rule sees paths, the matrix holds paths as content
 
 _behind_only_routinely skips the update when no path the archive commit touched is a path the PR changed. matrix.yaml cites specs/plans by path in its content, so an archive move can dangle a ref with no path overlap.
+
+<!-- fr:journal kind=finding scope=debug id=f-937 created=2026-10-06T16:58:51+00:00 state=fixed -->
+### f-937 · finding [fixed] · #937 fixed: docs/acceptance/** overlaps every archive commit
+
+batch_merge._behind_only_routinely: a PR touching docs/acceptance/ is not routine-mergeable past an archive commit (_is_archive, now shared with routine_commit). Pinned by test_an_archive_merge_updates_a_pr_that_changes_the_acceptance_matrix; test_a_release_commit_alone_still_merges_a_pr_that_changes_the_matrix keeps a release routine.
