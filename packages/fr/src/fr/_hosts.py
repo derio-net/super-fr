@@ -103,6 +103,12 @@ def origin_hostname(repo_root: Path) -> str | None:
 _REMOTE_PATH_RE = re.compile(r"^(?:[\w+.-]+://)?(?:[^@/]+@)?[^/:]+(?::\d+)?[:/](.+?)(?:\.git)?/?$")
 
 
+def slug_from_url(url: str) -> str | None:
+    """The `owner/repo` path of a remote URL (https, ssh://, scp-like)."""
+    m = _REMOTE_PATH_RE.match(url.strip()) if url.strip() else None
+    return m.group(1) if m else None
+
+
 def origin_slug(repo_root: Path) -> str | None:
     """The `owner/repo` (GitLab: `group/sub/project`) path of `origin`, from
     `git remote get-url origin` — local, no network. None on any failure, so a

@@ -205,7 +205,7 @@ def prerelease_cmd(
     `prerelease.yml` workflow, then print the rc tag and the install source
     (`git+<remote>@<tag>`) the `prerelease` strategy installs from."""
     from fr import hostclient
-    from fr._hosts import origin_slug
+    from fr._hosts import slug_from_url
     from fr.ghclient import UnsupportedForgeOperation
     from fr.git import GitUnavailableError, git_answer, remote_name
     from fr.real_ghclient import workflow_run_args
@@ -220,22 +220,22 @@ def prerelease_cmd(
         remote = remote_name(repo_root)
         if remote is None or not isinstance(remote, str):
             raise refuse("no single git remote to cut a pre-release from")
-        sha = ""
-        for ref in (f"refs/remotes/{remote}/{branch}", f"refs/heads/{branch}"):
-            found = git_answer(repo_root, "rev-parse", "--verify", "--quiet", ref)
-            if found.returncode == 0 and found.stdout.strip():
-                sha = found.stdout.strip()
-                break
+        found = git_answer(repo_root, "ls-remote", remote, f"refs/heads/{branch}")
+        if found.returncode != 0:
+            raise refuse(f"git ls-remote {remote} failed: {found.stderr.strip()}")
+        sha = found.stdout.split()[0] if found.stdout.strip() else ""
         if not sha:
-            raise refuse(f"branch {branch!r} is not on {remote} or local — push it first")
-        url = git_answer(repo_root, "remote", "get-url", remote).stdout.strip()
+            raise refuse(f"branch {branch!r} is not on {remote} — push it first")
+        # The configured URL, not `remote get-url`: that one applies the
+        # user's `url.<base>.insteadOf` rewrites, which are not the public source.
+        url = git_answer(repo_root, "config", "--get", f"remote.{remote}.url").stdout.strip()
     except GitUnavailableError as e:
         raise refuse(str(e)) from e
 
-    slug = origin_slug(repo_root)
+    slug = slug_from_url(url)
     if slug is None:
         raise refuse("cannot read the origin repository slug")
-    inputs = {"branch": branch}
+    inputs = {"branch": branch, "sha": sha}
     tag = rc_tag(branch, sha)
     if dry_run:
         console.print("dry run: would dispatch", soft_wrap=True)

@@ -14,6 +14,9 @@ on:
       branch:
         description: "The PR branch to cut a pre-release of"
         required: true
+      sha:
+        description: "The remote head of the branch the dispatcher saw (the rc tag is cut at it)"
+        required: true
 
 permissions:
   contents: write
@@ -27,6 +30,16 @@ jobs:
         with:
           ref: ${{ inputs.branch }}
           fetch-depth: 0
+      - name: Refuse a branch head that is not the dispatched sha
+        env:
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          head=$(git rev-parse HEAD)
+          if [ "$head" != "$SHA" ]; then
+            echo "branch head ${head} is not the dispatched sha ${SHA}; re-run the dispatch" >&2
+            exit 1
+          fi
       - name: Tag the branch head and publish the pre-release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -35,11 +35,17 @@ def repo(tmp_path: Path) -> tuple[Path, str]:
     _git(root, "init", "-q", "-b", "main")
     _git(root, "config", "user.email", "t@example.com")
     _git(root, "config", "user.name", "t")
+    bare = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    # `origin` is configured as REMOTE (so the slug and printed source are the
+    # public form) while git really talks to the bare repo: `ls-remote` is real.
     _git(root, "remote", "add", "origin", REMOTE)
+    _git(root, "config", f"url.{bare}.insteadOf", REMOTE)
     (root / "a").write_text("a")
     _git(root, "add", "a")
     _git(root, "commit", "-q", "-m", "a")
     _git(root, "checkout", "-q", "-b", "feat/x")
+    _git(root, "push", "-q", "origin", "feat/x")
     return root, _git(root, "rev-parse", "HEAD")
 
 
@@ -68,6 +74,7 @@ def test_dry_run_prints_the_argv_the_rc_tag_and_the_install_source(repo, monkeyp
     assert result.exit_code == 0, result.output
     assert "gh workflow run prerelease.yml" in result.output
     assert "-f branch=feat/x" in result.output
+    assert f"-f sha={sha}" in result.output
     tag = f"rc/feat-x/{sha[:12]}"
     assert tag in result.output
     assert f"git+{REMOTE}@{tag}" in result.output
@@ -81,7 +88,9 @@ def test_without_dry_run_it_dispatches_through_the_client(repo, monkeypatch) -> 
     result = _invoke(root, ["verification", "prerelease", "--branch", "feat/x"], rec, monkeypatch)
 
     assert result.exit_code == 0, result.output
-    assert rec.calls == [("example-org/example-repo", "prerelease.yml", {"branch": "feat/x"})]
+    assert rec.calls == [
+        ("example-org/example-repo", "prerelease.yml", {"branch": "feat/x", "sha": sha})
+    ]
     assert f"git+{REMOTE}@rc/feat-x/{sha[:12]}" in result.output
 
 
@@ -110,6 +119,35 @@ def test_an_unknown_branch_is_refused(repo, monkeypatch) -> None:
     assert result.exit_code == 2
 
 
+def test_a_local_only_branch_is_refused(repo, monkeypatch) -> None:
+    root, _ = repo
+    _git(root, "checkout", "-q", "-b", "local-only")
+
+    result = _invoke(
+        root,
+        ["verification", "prerelease", "--branch", "local-only", "--dry-run"],
+        _Recorder(),
+        monkeypatch,
+    )
+
+    assert result.exit_code == 2
+    assert "push it first" in result.output
+
+
+def test_the_sha_is_the_remote_head_not_a_stale_local_one(repo, monkeypatch) -> None:
+    root, sha = repo
+    (root / "b").write_text("b")
+    _git(root, "add", "b")
+    _git(root, "commit", "-q", "-m", "b")  # local ahead of the remote, unpushed
+    rec = _Recorder()
+
+    result = _invoke(root, ["verification", "prerelease", "--branch", "feat/x"], rec, monkeypatch)
+
+    assert result.exit_code == 0, result.output
+    assert rec.calls[0][2]["sha"] == sha
+    assert f"rc/feat-x/{sha[:12]}" in result.output
+
+
 def test_the_pr_body_route_and_the_command_name_the_same_source_form(repo, monkeypatch) -> None:
     """The PR body's route says the command 'prints the rc's `<source>`' and
     feeds it to `.fr/candidate-install {prefix} {source}`: the printed source
@@ -126,8 +164,9 @@ def test_the_pr_body_route_and_the_command_name_the_same_source_form(repo, monke
 
 
 def test_dispatch_workflow_argv() -> None:
-    assert workflow_run_args("o/r", "prerelease.yml", {"branch": "feat/x"}) == [
-        "workflow", "run", "prerelease.yml", "--repo", "o/r", "-f", "branch=feat/x",
+    assert workflow_run_args("o/r", "prerelease.yml", {"branch": "feat/x", "sha": "ab"}) == [
+        "workflow", "run", "prerelease.yml", "--repo", "o/r",
+        "-f", "branch=feat/x", "-f", "sha=ab",
     ]  # fmt: skip
 
 
@@ -160,6 +199,19 @@ def test_the_workflow_triggers_only_on_dispatch_with_a_required_branch_input() -
     on = wf.get("on", wf.get(True))
     assert set(on) == {"workflow_dispatch"}
     assert on["workflow_dispatch"]["inputs"]["branch"]["required"] is True
+
+
+def _steps() -> list[dict[str, Any]]:
+    return [s for j in _wf()["jobs"].values() for s in j["steps"]]
+
+
+def test_the_workflow_takes_a_required_sha_and_refuses_a_head_that_is_not_it() -> None:
+    on = _wf().get("on", _wf().get(True))
+    assert on["workflow_dispatch"]["inputs"]["sha"]["required"] is True
+    guards = [s for s in _steps() if s.get("env", {}).get("SHA") == "${{ inputs.sha }}"]
+    assert guards, "no step receives inputs.sha through env:"
+    script = guards[0]["run"]
+    assert 'git rev-parse HEAD' in script and '"$SHA"' in script and "exit 1" in script
 
 
 def test_the_workflow_may_write_contents_and_read_the_rest() -> None:
