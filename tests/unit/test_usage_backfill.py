@@ -187,3 +187,177 @@ def test_a_run_naming_no_session_is_recorded_unavailable_never_empty(repo: Path)
     assert usage is not None
     (entry,) = usage.captures[0].sessions
     assert (entry.session, entry.unavailable) == ("", NO_SESSION_FOUND)
+
+
+# --- refresh_archived: the existing-file branch alone (spec 2026-10-06 §A, R1-R3) ---
+
+
+def _unpriced_then_exited(repo: Path, tmp_path: Path) -> Path:
+    """Backfill the transcript run while its session is still open (cost-state
+    stripped); returns the transcript, restorable to the exited state."""
+    transcript = next((tmp_path / "projects").rglob(f"{CC_SESSION}.jsonl"))
+    full = transcript.read_text()
+    transcript.write_text("".join(ln for ln in full.splitlines(True) if '"cost-state"' not in ln))
+    assert _backfill(repo).exit_code == 0
+    transcript.write_text(full)  # the session exits
+    return transcript
+
+
+def _refresh(repo: Path, skip=lambda _p: False):
+    import os
+
+    from fr.usage.backfill import refresh_archived
+
+    return refresh_archived(repo, os.environ, skip=skip)
+
+
+def test_refresh_archived_prices_an_unpriced_session_and_touches_nothing_else(
+    repo: Path, tmp_path: Path
+) -> None:
+    _unpriced_then_exited(repo, tmp_path)
+    old = archived_usage_path(repo, "2026-09-01-feat-old")
+    old_bytes = old.read_bytes()
+    runs_before = _hashes(repo)
+
+    report = _refresh(repo)
+
+    new = archived_usage_path(repo, "2026-09-21-feat-new")
+    assert report.refreshed == [new]
+    usage = load_usage(new)
+    assert usage is not None
+    entry = next(s for s in usage.captures[0].sessions if s.session == CC_SESSION)
+    assert any(m.usd_source == "exact" for m in entry.models.values())
+    assert old.read_bytes() == old_bytes, "an untouched (nothing to price) file stays"
+    assert _hashes(repo) == runs_before
+    assert not report.written and not report.failed
+
+
+def test_refresh_archived_leaves_a_priced_file_untouched(repo: Path, tmp_path: Path) -> None:
+    assert _backfill(repo).exit_code == 0  # transcript present: already priced
+    before = archived_usage_path(repo, "2026-09-21-feat-new").read_bytes()
+    report = _refresh(repo)
+    assert report.refreshed == []
+    assert archived_usage_path(repo, "2026-09-21-feat-new").read_bytes() == before
+
+
+def test_refresh_archived_never_creates_a_file_for_a_run_without_one(repo: Path) -> None:
+    report = _refresh(repo)
+    assert report.refreshed == [] and report.written == []
+    assert not archived_usage_path(repo, "2026-09-21-feat-new").exists()
+
+
+def test_refresh_archived_reports_an_unreadable_cursor_in_failed(
+    repo: Path, tmp_path: Path
+) -> None:
+    _unpriced_then_exited(repo, tmp_path)
+    cursor = repo / "docs/superpowers/implemented/runs/2026-09-21-feat-new.yaml"
+    cursor.write_text(": : not yaml [")
+    report = _refresh(repo)
+    assert [r for r, _ in report.failed] == ["2026-09-21-feat-new"]
+    assert report.refreshed == []
+
+
+def test_refresh_archived_skips_a_file_the_skip_predicate_names(repo: Path, tmp_path: Path) -> None:
+    _unpriced_then_exited(repo, tmp_path)
+    target = archived_usage_path(repo, "2026-09-21-feat-new")
+    before = target.read_bytes()
+    report = _refresh(repo, skip=lambda p: p == target)
+    assert report.refreshed == [] and report.dirty == ["2026-09-21-feat-new"]
+    assert target.read_bytes() == before
+
+
+def test_a_priced_usage_file_is_skipped_without_reading_its_cursor(repo: Path) -> None:
+    """p1-r1: the cursor is parsed only once the usage file has something to price."""
+    assert _backfill(repo).exit_code == 0  # transcript present: priced
+    cursor = repo / "docs/superpowers/implemented/runs/2026-09-21-feat-new.yaml"
+    cursor.write_text(": : not yaml [")
+    report = _refresh(repo)
+    assert report.failed == [] and report.refreshed == []
+    assert "2026-09-21-feat-new" in report.skipped
+
+
+def _age_capture(repo: Path, run: str, captured_at: str) -> None:
+    import re
+
+    p = archived_usage_path(repo, run)
+    p.write_text(re.sub(r"captured_at: .*", f"captured_at: '{captured_at}'", p.read_text()))
+
+
+def test_refresh_archived_honours_max_age_days_on_both_sides(repo: Path, tmp_path: Path) -> None:
+    """p1-r2: an unpriced file whose capture is older than the bound is not re-read."""
+    import datetime as dt
+    import os
+
+    from fr.usage.backfill import refresh_archived
+
+    _unpriced_then_exited(repo, tmp_path)
+    run = "2026-09-21-feat-new"
+    target = archived_usage_path(repo, run)
+    old = (dt.datetime.now(dt.UTC) - dt.timedelta(days=45)).isoformat()
+    _age_capture(repo, run, old)
+    before = target.read_bytes()
+
+    aged = refresh_archived(repo, os.environ, max_age_days=30)
+    assert aged.refreshed == [] and target.read_bytes() == before
+
+    unbounded = refresh_archived(repo, os.environ, max_age_days=None)
+    assert unbounded.refreshed == [target]
+
+
+def test_refresh_archived_refreshes_inside_the_age_bound(repo: Path, tmp_path: Path) -> None:
+    import datetime as dt
+    import os
+
+    from fr.usage.backfill import refresh_archived
+
+    _unpriced_then_exited(repo, tmp_path)
+    run = "2026-09-21-feat-new"
+    _age_capture(repo, run, (dt.datetime.now(dt.UTC) - dt.timedelta(days=5)).isoformat())
+    report = refresh_archived(repo, os.environ, max_age_days=30)
+    assert report.refreshed == [archived_usage_path(repo, run)]
+
+
+def _git(repo: Path, *args: str) -> None:
+    import subprocess
+
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@e", *args],
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_a_staged_but_unedited_usage_file_is_refreshed_and_a_worktree_edit_is_skipped(
+    repo: Path, tmp_path: Path
+) -> None:
+    """p1-r3: the archive's own staged `git mv` is not an uncommitted edit."""
+    import os
+
+    from fr.commands.archive_cmd import _edited_in_worktree
+    from fr.usage.backfill import refresh_archived
+
+    _unpriced_then_exited(repo, tmp_path)
+    target = archived_usage_path(repo, "2026-09-21-feat-new")
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "seed")
+    _git(repo, "mv", str(target.relative_to(repo)), str(target.relative_to(repo)) + ".x")
+    _git(repo, "mv", str(target.relative_to(repo)) + ".x", str(target.relative_to(repo)))
+    text = target.read_text()
+    target.write_text(text + "\n")  # staged below: index == worktree, differs from HEAD
+    _git(repo, "add", str(target.relative_to(repo)))
+    skip = lambda p: _edited_in_worktree(repo, p)  # noqa: E731
+    assert not _edited_in_worktree(repo, target)
+
+    # a real worktree edit on top of the staged file is skipped, never rewritten
+    staged = target.read_bytes()
+    target.write_bytes(staged + b"# mine\n")
+    assert _edited_in_worktree(repo, target)
+    report = refresh_archived(repo, os.environ, skip=skip, max_age_days=30)
+    assert report.refreshed == [] and report.dirty == ["2026-09-21-feat-new"]
+    assert target.read_bytes() == staged + b"# mine\n"
+
+    # staged-only (index == worktree): refreshed
+    target.write_bytes(staged)
+    report = refresh_archived(repo, os.environ, skip=skip, max_age_days=30)
+    assert report.refreshed == [target] and report.dirty == []

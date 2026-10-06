@@ -44,7 +44,7 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .meta, .hint, .notes { color: var(--muted); font-size: .85rem; }
 .notes { margin: 8px 0; padding-left: 18px; }
 .empty { margin: 32px 0; color: var(--muted); }
-.board { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px;
+.board { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px;
   align-items: start; margin-top: 16px; }
 .col { background: color-mix(in srgb, var(--line) 35%, transparent); border-radius: 8px;
   padding: 10px; min-width: 0; }

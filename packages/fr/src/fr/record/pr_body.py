@@ -99,32 +99,45 @@ def _one_ref_per_link(match: re.Match[str]) -> str:
     return text if _ISSUE_REF.search(text) else url
 
 
-def _closing_lines(
-    body: str, *, as_github: bool = False, keyword: re.Pattern[str] = _KEYWORD
-) -> Iterator[tuple[str, str, list[re.Match[str]], list[re.Match[str]]]]:
-    """`(raw line, cleaned line, keyword matches, reference matches)` for every line of `body`
-    that carries both a closing keyword and an issue reference. Code (fenced or
-    inline) is skipped, as GitHub skips it, and so is fr's own render below its
-    marker: a finding line carries a free-text title, a state word (`fixed`) and
-    `→ #N`, none of which closes.
+def _prose_lines(body: str, *, as_github: bool = False) -> Iterator[tuple[str, str] | None]:
+    """`(raw line, cleaned line)` for every line of `body` outside code, and
+    `None` for every line inside or opening/closing a fence — so a reader of
+    neighbouring lines (`shared_closing_keywords`) never joins across one.
+    Code (fenced or inline) is skipped, as GitHub skips it, and so is fr's own
+    render below its marker: a finding line carries a free-text title, a state
+    word (`fixed`) and `→ #N`, none of which closes.
 
     `as_github` reads the body as a merge does (review p3-r4): the WHOLE of it —
     a finding title below the marker reading `Fixes #959` closes #959 on merge
-    all the same — and `GH-<n>` references too."""
+    all the same."""
     fence: str | None = None  # the open fence's run, e.g. "````"
     scanned = body if as_github else body.split(_RENDER_MARKER, 1)[0]
-    pattern = _ISSUE_REF_GITHUB if as_github else _ISSUE_REF
     for raw in scanned.splitlines():
         m = _FENCE.match(raw)
         if fence is None and m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
             fence = m.group(1)
+            yield None
             continue
         if fence is not None:
             if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
                 if not m.group(2).strip():
                     fence = None
+            yield None
             continue
-        line = _LINK.sub(_one_ref_per_link, _CODE_SPAN.sub("", raw)).replace("*", "")
+        yield raw, _LINK.sub(_one_ref_per_link, _CODE_SPAN.sub("", raw)).replace("*", "")
+
+
+def _closing_lines(
+    body: str, *, as_github: bool = False, keyword: re.Pattern[str] = _KEYWORD
+) -> Iterator[tuple[str, str, list[re.Match[str]], list[re.Match[str]]]]:
+    """`(raw line, cleaned line, keyword matches, reference matches)` for every
+    line of `body` that carries both a closing keyword and an issue reference,
+    read as `_prose_lines` reads it. `as_github` also counts `GH-<n>`."""
+    pattern = _ISSUE_REF_GITHUB if as_github else _ISSUE_REF
+    for prose in _prose_lines(body, as_github=as_github):
+        if prose is None:
+            continue
+        raw, line = prose
         keywords = list(keyword.finditer(line))
         refs = list(pattern.finditer(line))
         if keywords and refs:
@@ -165,18 +178,65 @@ def referenced_refs(body: str) -> list[str]:
     ]
 
 
+_LIST_GLUE = re.compile(r"(?:[\s,&]|\band\b|\bor\b)*", re.IGNORECASE)
+"""What may sit between two references of one list: whitespace, `,`, `&`, `and`, `or`."""
+
+
+def _continues(line: str, following: str) -> bool:
+    """Whether `following` carries on the reference list that ends `line`: a
+    closing line whose last reference is followed only by list glue, and a next
+    line that opens, after glue, on a reference. Verified live on PR #1032:
+    GitHub links nothing across a break, so a keyword split from its FIRST
+    reference closes nothing and is left to its own line (`Closes\\n#5` shares
+    nothing); only the tail of a list that already closed its first reference
+    is a reference GitHub leaves open."""
+    refs = list(_ISSUE_REF_GITHUB.finditer(line))
+    if not (refs and _KEYWORD.search(line) and _LIST_GLUE.fullmatch(line, refs[-1].end())):
+        return False
+    glue = _LIST_GLUE.match(following)
+    return glue is not None and _ISSUE_REF_GITHUB.match(following, glue.end()) is not None
+
+
+def _wrapped_lines(body: str) -> Iterator[tuple[str, str]]:
+    """`(raw, cleaned)` for every prose line of `body` (`_prose_lines`), with the
+    lines a reference list wraps onto joined to the line it started on. A fence,
+    a blank line, a list item or any line that does not open on a reference ends
+    the list, and nothing joins across code."""
+    held: tuple[str, str] | None = None
+    for prose in _prose_lines(body):
+        if prose is not None and held is not None and _continues(held[1], prose[1]):
+            held = (f"{held[0].strip()}\n{prose[0].strip()}", f"{held[1]} {prose[1]}")
+            continue
+        if held is not None:
+            yield held
+        held = prose
+    if held is not None:
+        yield held
+
+
 def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
     """Every line of `body` that shares one closing keyword across several
     issue references (gh#821), with the lines that would close each of them.
 
     `Closes #a and #b` closes only `#a` on GitHub, so the rule is strict: on a
-    line carrying a closing keyword, every reference needs its own keyword
-    directly before it.
+    line that closes something, every reference needs its own keyword directly
+    before it. A line whose keywords close nothing — no reference directly after
+    any of them, as in `fix colour #123` — is prose, and shares nothing (gh#868).
+
+    A reference list that wraps onto the next line is read as one line (gh#869,
+    `_wrapped_lines`): GitHub closes only `#a` for `Closes #a,\\n#b`. References
+    are read as a merge reads them, `GH-<n>` included (review r1): `Closes GH-1
+    and #2` closes only GH-1.
     """
     out: list[tuple[str, list[str]]] = []
-    for raw, line, keywords, refs in _closing_lines(body):
+    for raw, line in _wrapped_lines(body):
+        keywords = list(_KEYWORD.finditer(line))
+        refs = list(_ISSUE_REF_GITHUB.finditer(line))
+        if not (keywords and refs):
+            continue
         starts = [0, *(r.end() for r in refs[:-1])]
-        if all(_KEYWORD_BEFORE.search(line[s : r.start()]) for s, r in zip(starts, refs)):
+        closes = [bool(_KEYWORD_BEFORE.search(line[s : r.start()])) for s, r in zip(starts, refs)]
+        if all(closes) or not any(closes):
             continue
         fixed = []
         for r in refs:

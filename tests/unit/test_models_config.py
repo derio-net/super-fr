@@ -95,3 +95,16 @@ def test_resolve_and_resolved_config_never_disagree() -> None:
             assert merged[harness][tier] == resolve(harness, tier, repo_cfg=repo, user_cfg=user), (
                 f"{harness}/{tier} disagrees"
             )
+
+
+def test_binding_layer_follows_the_falsy_is_unbound_rule() -> None:
+    from fr.models import binding_layer
+
+    repo = {"opencode": {"hard": "r/hard", "standard": ""}}
+    user = {"opencode": {"hard": "u/hard", "standard": "u/std", "mechanical": "u/mech"}}
+    assert binding_layer("opencode", "hard", repo_cfg=repo, user_cfg=user) == "repo"
+    # A falsy repo value is not a binding, so the user's reports as the source.
+    assert binding_layer("opencode", "standard", repo_cfg=repo, user_cfg=user) == "user"
+    assert binding_layer("opencode", "mechanical", repo_cfg=repo, user_cfg=user) == "user"
+    assert binding_layer("opencode", "orchestrator", repo_cfg=repo, user_cfg=user) is None
+    assert binding_layer("claude-code", "hard", repo_cfg=repo, user_cfg=user) is None

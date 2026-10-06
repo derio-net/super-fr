@@ -1031,12 +1031,19 @@ Test Plan, if it has one, named by path; this is different from the
 acceptance tests gathered during implementation — it may require opening the
 real application, observing production behavior, checking a dashboard, or
 performing an operation with access the isolated agent never had. Then each
-out-of-scope finding from both journals appears with its own `fr journal
-resolve … --state deferred --tracked-by` line, ready to run once you have
-filed the issue; a finding you do not file stays visibly out of scope rather
-than silently closed. The brief ends with `fr status` to confirm every phase
-is complete, and the exact commands to archive the plan, its journal, and its
-run record through a housekeeping PR — run from a *separate* workspace, never
+out-of-scope finding from both journals is listed by its qualified id
+(`<scope>/<slug>/<id>`) with its title, followed by one command,
+`fr archive --branch <b> --issues <ids>`. Archive itself files one tracker
+issue per id you keep (`--no-issues` files none, and under `tracking none`
+there is nowhere to file, so the findings stay in the journal and the PR
+body), and writes a `deferred` record pointing at each issue into that
+finding's journal, staged for the same housekeeping commit; a finding you do
+not file stays visibly out of scope rather than silently closed. The same
+archive run also prices any earlier closeout's session in its usage file and
+retargets the acceptance matrix's references to everything it moved, so
+neither is a separate step. The brief ends with `fr status` to confirm every
+phase is complete, and the exact commands to archive the plan, its journal,
+and its run record through a housekeeping PR — run from a *separate* workspace, never
 inside the just-merged feature branch — before tearing down isolation or
 leaving it for garbage collection to reap
 (`packages/fr/src/fr/run/closeout.py`,

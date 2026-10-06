@@ -25,7 +25,7 @@ step's `main_session`, or a v1-v4 `accounting` map — are carried instead, with
 from __future__ import annotations
 
 import datetime as _dt
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -63,6 +63,8 @@ class BackfillReport:
     skipped: list[str] = field(default_factory=list)
     """Runs that already had a usage file, left as they were."""
     failed: list[tuple[str, str]] = field(default_factory=list)
+    dirty: list[str] = field(default_factory=list)
+    """Runs whose usage file `refresh_archived`'s `skip` named, left as they were."""
 
 
 def _cursor_figures(raw: dict[str, Any]) -> list[SessionEntry]:
@@ -149,32 +151,78 @@ def refreshed_file(
     )
 
 
-def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
+def _worth_reading(usage: UsageFile, env: Mapping[str, str], max_age_days: int | None) -> bool:
+    """This host has an unpriced session in `usage`, captured within the bound."""
+    from fr.usage.capture import this_host, unpriced_sessions
+
+    mine = usage.host(this_host(usage.run, env))
+    if mine is None or not unpriced_sessions(mine):
+        return False
+    if max_age_days is None:
+        return True
+    try:
+        at = _dt.datetime.fromisoformat(mine.captured_at)
+    except ValueError:
+        return True
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=_dt.UTC)
+    return _dt.datetime.now(_dt.UTC) - at <= _dt.timedelta(days=max_age_days)
+
+
+def refresh_archived(
+    repo_root: Path,
+    env: Mapping[str, str],
+    *,
+    skip: Callable[[Path], bool] | None = None,
+    max_age_days: int | None = None,
+) -> BackfillReport:
+    """Re-read the unpriced sessions of every EXISTING archived usage file whose
+    run cursor is archived (gh#756). Only refreshes — never writes a new file.
+    A file `skip` returns True for is reported in `dirty`, not rewritten; a
+    per-run exception lands in `failed`. The cursor is parsed only once the usage
+    file has an unpriced session of this host's; `max_age_days` leaves alone a
+    file whose this-host capture is older than that (the harness has pruned the
+    transcript by then), so a permanently unpriced session is not re-read forever."""
     from fr.artifacts.atomic import write_text_atomic
-    from fr.usage.capture import this_host
 
     report = BackfillReport()
     runs = repo_root / ARCHIVED_RUNS_REL
     for cursor in sorted(runs.glob("*.yaml")) if runs.is_dir() else ():
         run_id = cursor.stem
         target = archived_usage_path(repo_root, run_id)
-        if target.exists():
-            try:
+        if not target.exists():
+            continue
+        try:
+            usage = load_usage(target)
+            fresh = None
+            if usage is not None and _worth_reading(usage, env, max_age_days):
                 raw = yaml.safe_load(cursor.read_text())
-                usage = load_usage(target)
-                fresh = (
-                    refreshed_file(usage, raw, env)
-                    if usage is not None and isinstance(raw, dict)
-                    else None
-                )
-            except Exception as e:  # noqa: BLE001 — one unreadable run is that run's failure
-                report.failed.append((run_id, f"{type(e).__name__}: {e}"))
+                fresh = refreshed_file(usage, raw, env) if isinstance(raw, dict) else None
+            if fresh is not None and skip is not None and skip(target):
+                report.dirty.append(run_id)
                 continue
-            if fresh is None:
-                report.skipped.append(run_id)
-            else:
+            if fresh is not None:
                 write_text_atomic(target, dump_usage(fresh))
-                report.refreshed.append(target)
+        except Exception as e:  # noqa: BLE001 — one unreadable run is that run's failure
+            report.failed.append((run_id, f"{type(e).__name__}: {e}"))
+            continue
+        if fresh is None:
+            report.skipped.append(run_id)
+        else:
+            report.refreshed.append(target)
+    return report
+
+
+def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
+    from fr.artifacts.atomic import write_text_atomic
+    from fr.usage.capture import this_host
+
+    report = refresh_archived(repo_root, env)
+    runs = repo_root / ARCHIVED_RUNS_REL
+    for cursor in sorted(runs.glob("*.yaml")) if runs.is_dir() else ():
+        run_id = cursor.stem
+        target = archived_usage_path(repo_root, run_id)
+        if target.exists():
             continue
         if usage_path(repo_root, run_id).exists():
             report.skipped.append(run_id)
@@ -205,4 +253,4 @@ def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
     return report
 
 
-__all__ = ["ARCHIVED_RUNS_REL", "BackfillReport", "backfill", "refreshed_file"]
+__all__ = ["ARCHIVED_RUNS_REL", "BackfillReport", "backfill", "refresh_archived", "refreshed_file"]

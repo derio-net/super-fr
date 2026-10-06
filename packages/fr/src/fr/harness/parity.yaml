@@ -548,3 +548,29 @@ surfaces:
               teardown, so capture-before-teardown is what keeps its figures
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
+
+  - id: model-binding-probe
+    kind: interaction
+    summary: A tier binding is probed live with the provider (`fr models set`/`check`, `fr run start`, and before every tiered dispatch in `fr run advance`); a dead one is replaced by fixed rules — asked of the operator on a terminal or at fr-goal's question gate, decided and journalled by fr mid-run within R4's autonomous bound, refused otherwise (spec 2026-10-06-model-binding-churn).
+    harnesses:
+      claude-code:
+        state: absent
+        scope_note: >-
+          not probed: `claude -p` is forbidden in package source
+          (no-claude-p-batch), and the Agent tool takes family aliases, so
+          bindings report `unprobed` and are never substituted
+      opencode:
+        state: partial
+        scope_note: >-
+          verified against a stub `opencode` and a scripted prober only
+          (tests/unit/test_run_binding_guard.py, tests/scenarios/model-binding-*.sh):
+          the dead-model classifier against a real provider and the
+          mid-session agent-file pickup after an autonomous substitution stay
+          unproven until the post-merge row `model-binding-live-opencode` runs
+      hermes:
+        state: absent
+        scope_note: >-
+          not probed: Hermes has no probe surface on the operator's hosts, so
+          bindings report `unprobed` and are never substituted
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
