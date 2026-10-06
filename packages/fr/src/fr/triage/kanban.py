@@ -95,6 +95,10 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "export-reconcile": "state export merged; the drive records it",
     "export-closed": "state export PR closed; the drive re-exports",
     "dedupe": "duplicate candidates to judge",  # names no batch; never a card hint
+    # Claim bookkeeping (triage-claims §3.F): what the drive writes before it acts.
+    "claim": "claims owed; the drive writes them",
+    "refresh": "claims due a refresh",
+    "release": "claims to release",
 }
 NEEDS_YOU = "needs you: session blocked"
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason

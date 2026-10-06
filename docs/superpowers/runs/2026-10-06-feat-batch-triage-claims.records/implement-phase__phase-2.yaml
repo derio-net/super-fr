@@ -1,0 +1,40 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-triage-claims
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2]
+refactor:
+  P2.T2: "The command layer is thin glue over claim_sync (plan_sync, execute, record_releases) and claim_env; the one extraction worth making, _claim_plan, was made in the GREEN step, so nothing was left to clean."
+journal:
+  - kind: decision
+    id: p2-claim-writes-are-not-progress
+    phase: 2
+    title: A claim, refresh or release write never counts as the pass having acted
+    body: |
+      `_claim_write` always returns did=False, so a pass whose only work was claim bookkeeping still exits 3
+      ("work remains, nothing moved") exactly as before; a write that wrote nothing (a blind refresh of a
+      closed member, a release with no marker) prints no line. Refreshes of members facts cannot see (closed
+      issues: collect reads no closed issue's comments) are owed only under --yes and never announced in a
+      plan. Releases are recorded through `record_releases` and `_save`; a recording the writer refuses (a
+      cyclic state file) is warned once and retried next pass, because the forge release is idempotent.
+  - kind: decision
+    id: p2-held-batches-block-the-summary
+    phase: 2
+    title: A held batch is reported once, skipped by every step, and counted blocked
+    body: |
+      drive_pass emits one `held` action per selected, non-cancelled batch with a member in `Snapshot.held`
+      and skips it in the merge train, close-out, archive and dispatch steps. A live one keeps counting
+      against --max-inflight (stage unchanged); a proposed one takes no slot. Each counts as `blocked`, so a
+      drive with nothing else left reads waiting-on-operator rather than done. A claim write that returns Held
+      at act time (R4) stops later actions for that batch in the same pass.
+  - kind: discovery
+    id: p2-yaml-rewrite-breaks-text-edit-tests
+    phase: 2
+    title: Recording claims_released rewrites judgements.yaml, so a test that text-patches it between passes breaks
+    body: |
+      `_finish` in test_triage_batch_drive_cmd.py replaced a dispatch-event line in the file text; once an
+      earlier pass records claims_released the file is re-serialised and the text no longer matches. It now
+      edits the parsed YAML. Existing archived-batch tests also see one extra claims_released event on the
+      pass after the close-out is recorded (the release is derived from the archived close-out).
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p2-full-suite.log}
