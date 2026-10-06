@@ -615,3 +615,53 @@ Assert no ${{ in run:, inputs via env, every uses: SHA-pinned, bash slug line eq
 ### p6-r4-resolved · finding [fixed] · resolves p6-r4: --dry-run succeeded on glab/tea (phase 6)
 
 Backend decided before dry-run; non-GitHub exits 2 UnsupportedForgeOperation; dry-run cases tested. d0079c899.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-red-order created=2026-10-06T15:20:24+00:00 phase=7 -->
+### p7-red-order · discovery · P7.T1.S1 test file was written after the scripts it drives, not before (phase 7)
+
+The scenarios were developed against a hand-installed prefix and checked one at a time,
+then tests/integration/test_scenarios.py wrapped them. The RED state (nothing exists) was
+therefore not observed as a failing run; the test does fail without .fr/candidate-install
+or a scenario, and test_every_scenario_script_has_a_test_here pins the set.
+
+<!-- fr:journal kind=decision scope=plan id=p7-scenario-boundaries created=2026-10-06T15:20:24+00:00 phase=7 -->
+### p7-scenario-boundaries · decision · scenarios assert only what a fresh fixture repo and the installed fr can show (phase 7)
+
+The six scripts reach no forge or runner. awaiting-live-triage drives `fr triage check` over
+tests/scenarios/fixtures/awaiting-live-facts.json, the model's own to_json output (a
+capture, not a hand construction); its close-out-brief half stays unit-tested because a
+brief needs a delivered run and a PR body. prerelease-command-shape points a LOCAL bare
+repo at a GitHub URL with url.insteadOf, so ls-remote is real and nothing is dispatched.
+spec-verification-section starts from a schema-3 matrix and runs `fr migrate artifacts --yes`
+to show verify: post-merge reads as live. All six pass with the operator's identity pin
+dropped (FR_HARNESS_FR), as the walk drops it too.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-skill-line-cap created=2026-10-06T15:20:24+00:00 phase=7 -->
+### p7-skill-line-cap · discovery · four skills sit at the 120-line cap, so new prose went in as long lines (phase 7)
+
+tests/unit/test_skill_validation.py caps SKILL.md at 120 lines and fr-acceptance,
+fr-brainstorming and fr-triage were at 120/119/120. The additions are single long
+paragraphs (the skills' existing style) with one hard-wrapped paragraph joined per file;
+the grammar and authoring detail live in docs/verification-strategies.md instead.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-git-source-with-set created=2026-10-06T15:20:24+00:00 phase=7 -->
+### p7-git-source-with-set · discovery · candidate-install names the runner packages literally for a git source (phase 7)
+
+A path source derives the --with set from the checkout's fr.runners entry points, as
+install.sh does. A git+url source has no checkout to scan, so the four packages are listed
+in the script (fr-dispatch rides along because workspace sources do not resolve from a
+subdirectory install); test_a_git_source_installs_every_package_from_its_subdirectory pins
+the list against runner_packages() with a uv stub. The git form is exercised through a
+stub only, never a real remote install.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-explainer-rendered created=2026-10-06T15:20:24+00:00 phase=7 -->
+### p7-explainer-rendered · discovery · the explainer was re-rendered, not owed (phase 7)
+
+The renderer was present; the unmodified 01-fr-goal.md re-rendered from / with --isolated
+was byte-identical to the committed html, and the edited page's html diff is only the new
+prose (steps 3 and 8).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t1 created=2026-10-06T15:20:24+00:00 phase=7 -->
+### no-refactor-p7-t1 · discovery · no-refactor-because P7.T1 (phase 7)
+
+new files only (an install script, six scenarios, one integration test file); nothing existing to clean
