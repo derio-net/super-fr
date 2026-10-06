@@ -24,6 +24,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.dep.outputs.page_url }}
+    outputs:
+      report: ${{ steps.report.outcome }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -70,8 +72,14 @@ jobs:
           path: _site
       - id: dep
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+  # A separate job, so the github-pages deployment record stays green when the
+  # site did go live: a failing step inside `deploy` would mark it failed.
+  report-status:
+    needs: deploy
+    if: needs.deploy.outputs.report == 'failure'
+    runs-on: ubuntu-latest
+    steps:
       - name: Fail the run when the report was not rendered
-        if: steps.report.outcome == 'failure'
         run: |
           echo "::error::The acceptance report was not rendered (see 'Render acceptance report'); the explainers deployed with a placeholder at /acceptance/."
           exit 1

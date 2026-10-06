@@ -136,10 +136,18 @@ def test_a_failed_render_publishes_a_placeholder_before_upload() -> None:
 
 
 def test_a_failed_render_still_fails_the_run_after_deploying() -> None:
+    # In its own job: a failing step inside the `environment:` job would mark the
+    # github-pages deployment itself failed, though the site went live.
+    jobs = _doc()["jobs"]
+    outcome = f"${{{{ steps.{_render()['id']}.outcome }}}}"
+    (key,) = [k for k, v in jobs["deploy"].get("outputs", {}).items() if v == outcome]
     deploy = _index(lambda s: "actions/deploy-pages" in s.get("uses", ""))
-    after = [s for i, s in _on_render_failure() if i > deploy]
-    assert len(after) == 1
-    assert "exit 1" in after[0]["run"]
+    assert deploy == len(_steps()) - 1
+    (gate,) = [j for name, j in jobs.items() if name != "deploy"]
+    assert gate["needs"] == "deploy"
+    assert "environment" not in gate
+    assert str(gate["if"]).strip() == f"needs.deploy.outputs.{key} == 'failure'"
+    assert any("exit 1" in s.get("run", "") for s in gate["steps"])
 
 
 def test_the_placeholder_says_the_report_was_not_rendered(tmp_path: Path) -> None:
