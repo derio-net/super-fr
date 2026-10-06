@@ -175,3 +175,84 @@ def test_a_run_naming_no_session_is_recorded_unavailable_never_empty(repo: Path)
     assert usage is not None
     (entry,) = usage.captures[0].sessions
     assert (entry.session, entry.unavailable) == ("", NO_SESSION_FOUND)
+
+
+# --- refresh_archived: the existing-file branch alone (spec 2026-10-06 §A, R1-R3) ---
+
+
+def _unpriced_then_exited(repo: Path, tmp_path: Path) -> Path:
+    """Backfill the transcript run while its session is still open (cost-state
+    stripped); returns the transcript, restorable to the exited state."""
+    transcript = next((tmp_path / "projects").rglob(f"{CC_SESSION}.jsonl"))
+    full = transcript.read_text()
+    transcript.write_text(
+        "".join(ln for ln in full.splitlines(True) if '"cost-state"' not in ln)
+    )
+    assert _backfill(repo).exit_code == 0
+    transcript.write_text(full)  # the session exits
+    return transcript
+
+
+def _refresh(repo: Path, skip=lambda _p: False):
+    import os
+
+    from fr.usage.backfill import refresh_archived
+
+    return refresh_archived(repo, os.environ, skip=skip)
+
+
+def test_refresh_archived_prices_an_unpriced_session_and_touches_nothing_else(
+    repo: Path, tmp_path: Path
+) -> None:
+    _unpriced_then_exited(repo, tmp_path)
+    old = archived_usage_path(repo, "2026-09-01-feat-old")
+    old_bytes = old.read_bytes()
+    runs_before = _hashes(repo)
+
+    report = _refresh(repo)
+
+    new = archived_usage_path(repo, "2026-09-21-feat-new")
+    assert report.refreshed == [new]
+    usage = load_usage(new)
+    assert usage is not None
+    entry = next(s for s in usage.captures[0].sessions if s.session == CC_SESSION)
+    assert any(m.usd_source == "exact" for m in entry.models.values())
+    assert old.read_bytes() == old_bytes, "an untouched (nothing to price) file stays"
+    assert _hashes(repo) == runs_before
+    assert not report.written and not report.failed
+
+
+def test_refresh_archived_leaves_a_priced_file_untouched(repo: Path, tmp_path: Path) -> None:
+    assert _backfill(repo).exit_code == 0  # transcript present: already priced
+    before = archived_usage_path(repo, "2026-09-21-feat-new").read_bytes()
+    report = _refresh(repo)
+    assert report.refreshed == []
+    assert archived_usage_path(repo, "2026-09-21-feat-new").read_bytes() == before
+
+
+def test_refresh_archived_never_creates_a_file_for_a_run_without_one(repo: Path) -> None:
+    report = _refresh(repo)
+    assert report.refreshed == [] and report.written == []
+    assert not archived_usage_path(repo, "2026-09-21-feat-new").exists()
+
+
+def test_refresh_archived_reports_an_unreadable_cursor_in_failed(
+    repo: Path, tmp_path: Path
+) -> None:
+    _unpriced_then_exited(repo, tmp_path)
+    cursor = repo / "docs/superpowers/implemented/runs/2026-09-21-feat-new.yaml"
+    cursor.write_text(": : not yaml [")
+    report = _refresh(repo)
+    assert [r for r, _ in report.failed] == ["2026-09-21-feat-new"]
+    assert report.refreshed == []
+
+
+def test_refresh_archived_skips_a_file_the_skip_predicate_names(
+    repo: Path, tmp_path: Path
+) -> None:
+    _unpriced_then_exited(repo, tmp_path)
+    target = archived_usage_path(repo, "2026-09-21-feat-new")
+    before = target.read_bytes()
+    report = _refresh(repo, skip=lambda p: p == target)
+    assert report.refreshed == [] and report.dirty == ["2026-09-21-feat-new"]
+    assert target.read_bytes() == before
