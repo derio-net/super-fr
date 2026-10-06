@@ -116,6 +116,10 @@ class WorkflowManifest(BaseModel):
     description: str = ""
     unit: Literal["run", "phase", "spec"]
     requires: tuple[str, ...] = ()
+    # The shape's default verification strategy (spec 2026-10-06 R5); resolved
+    # by `check_workflow`, not here — the name's meaning lives in
+    # `fr.verification.resolve`.
+    verification: str | None = None
     steps: tuple[Step, ...] = ()
 
 

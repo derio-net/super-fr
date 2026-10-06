@@ -38,6 +38,7 @@ description: TDD delivery of a one-phase goal — one spec+plan review, one code
 
 unit: run
 requires: [git, tests, scm]
+verification: candidate
 
 steps:
   - id: brainstorm

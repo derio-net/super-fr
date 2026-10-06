@@ -66,7 +66,7 @@ def _check_one(name: str, repo_root: Path, shipped_dir: Path) -> list[str]:
         manifest = resolve_workflow(name, repo_root, shipped_root=shipped_dir)
     except WorkflowError as e:
         return [str(e)]
-    return check_workflow(manifest)
+    return check_workflow(manifest, repo_root)
 
 
 @workflow_app.command("check")

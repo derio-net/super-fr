@@ -55,6 +55,7 @@ description: TDD feature delivery, goal to reviewed PR.
 
 unit: run
 requires: [git, tests, scm]
+verification: candidate
 
 steps:
   - id: brainstorm
