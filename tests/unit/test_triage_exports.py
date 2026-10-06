@@ -43,6 +43,12 @@ def test_the_writer_writes_schema_5_and_the_reader_reads_1_to_5() -> None:
     assert Judgements.model_validate({"schema": 4}).schema_ == 4
 
 
+def test_the_committed_schema_4_judgements_load_under_the_current_fr() -> None:
+    path = Path(__file__).parents[2] / "docs/triage/derio-net--super-fr/judgements.yaml"
+    got = load_judgements(path)
+    assert got.schema_ == 4 and got.schema_ in JUDGEMENTS_READS
+
+
 def test_exports_load_on_schema_4() -> None:
     got = Judgements.model_validate({"schema": 4, "exports": [EXPORT]})
     assert got.exports == [Export(wave="3", repo="example-org/widgets", at=AT, pr=41, merged=False)]

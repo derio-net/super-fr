@@ -451,7 +451,9 @@ def test_schema_5_facts_carry_mirrors_and_schema_4_files_still_read(tmp_path: Pa
         issues={REPO: []},
         prs={REPO: []},
         open_prs=[],
-        file_bodies={(REPO, CONFIG_PATH, "HEAD"): _CONFIG + 'mirrors: [["uv", "run", "sync.py"]]\n'},
+        file_bodies={
+            (REPO, CONFIG_PATH, "HEAD"): _CONFIG + 'mirrors: [["uv", "run", "sync.py"]]\n'
+        },
     )
     facts = collect_facts(forge, SCOPE, now=NOW)
     assert facts.schema_ == FACTS_SCHEMA == 5

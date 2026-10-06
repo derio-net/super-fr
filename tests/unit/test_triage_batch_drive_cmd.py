@@ -3285,6 +3285,29 @@ def test_a_conflict_sharing_a_path_with_an_earlier_one_this_pass_waits_behind_it
     assert "waits behind b1" in _lines(out, "merge")[1]
 
 
+def test_a_batch_that_waited_behind_a_blocker_is_handed_back_once_the_blocker_merges(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _three_ready(world, tmp_path)
+    messenger.status.update({f"{REPO}/run/batch-b{i}": "idle" for i in (1, 2, 3)})
+    train.script[101] = _conflict_error(paths=("src/a.py",))
+    train.script[102] = _conflict_error(head="sha-102", paths=("src/a.py", "x.py"), bid="b2",
+                                        number=102)  # fmt: skip
+    _drive(tmp_path, "--once", "--yes")
+    assert _conflicts(tmp_path, "b2") == []  # waited, nothing recorded
+    # b1's conflict is resolved and its PR merges; b2 is no longer behind anything
+    del train.script[101]
+    world.prs[101].update(state="MERGED", merged_at=NOW.isoformat())
+    world.issues[1] = "closed"
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    messenger.messages.clear()
+    _drive(tmp_path, "--once", "--yes")
+    assert f"{REPO}/run/batch-b2" in [t for t, _ in messenger.messages]
+    (event,) = _conflicts(tmp_path, "b2")
+    assert (event.head, event.delivered) == ("sha-102", "session")
+
+
 def test_conflict_brief_names_the_six_steps_and_the_declared_mirrors() -> None:
     from fr.triage.batch_dispatch import conflict_brief
     from fr.triage.model import Batch
