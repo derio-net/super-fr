@@ -1,0 +1,285 @@
+schema_version: 2
+phase:
+  number: 1
+  title: fr.bindings engine — live probe, catalogue, replacement rules — and `fr models
+    set/check`
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - model-binding-set-probe
+  - model-binding-replacement
+  - model-binding-check-report
+  - model-binding-probe-cache
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/bindings/*
+  - packages/fr/src/fr/models.py
+  - packages/fr/src/fr/commands/models_cmd.py
+  - tests/unit/test_bindings_*.py
+  - tests/unit/test_models_cmd.py
+  - tests/unit/test_models_config.py
+  - tests/fixtures/bindings/*
+  - tests/scenarios/model-binding-*.sh
+  - tests/scenarios/_stub_opencode.sh
+  - tests/integration/test_scenarios.py
+  - .changes/feat-batch-model-bindings.yaml
+  - docs/acceptance/*
+  estimate_lines: 1300
+tasks:
+- number: 1
+  title: SMOKE — the fr.bindings package imports and a trivial test is green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create packages/fr/src/fr/bindings/__init__.py (docstring module naming spec
+      2026-10-06-model-binding-churn) and tests/unit/test_bindings_probe.py with one test
+      asserting `import fr.bindings` succeeds. Add .changes/feat-batch-model-bindings.yaml
+      (`bump: minor`, summary: "Model bindings survive provider churn: OpenCode bindings are
+      probed live, dead ones are replaced by family then tier, asked at a terminal or the
+      fr-goal gate and decided-and-journaled mid-run (#591)"). Run
+      `uv run pytest tests/unit/test_bindings_probe.py -q --no-cov`: green. Commit.
+- number: 2
+  title: RED/GREEN — catalogue parser and snapshots (spec §A catalogue.py, R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Capture fixtures from the real CLI, never constructed: run
+      `opencode models github-copilot --verbose` from a scratch dir and save a trimmed copy
+      (3–5 blocks, keep the exact header-line + JSON-object shape) to
+      tests/fixtures/bindings/opencode-models-verbose.txt, noting the capture date and
+      provider in a sibling README line (provider is public; no third-party names). If
+      opencode is unavailable, stop and report blocked rather than compose one.
+      RED: tests/unit/test_bindings_catalogue.py — parse_catalogue(text) yields
+      CatalogueEntry(id, provider, family, release_date, price=cost.input+cost.output,
+      toolcall) per block; a malformed block is skipped and counted, never raises; a block
+      with no cost gives price None. SnapshotStore(path) round-trips entries and keeps the
+      last-known entry for a model after a later catalogue omits it. Run: fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/bindings/catalogue.py — frozen dataclass CatalogueEntry,
+      parse_catalogue(text) -> tuple[list[CatalogueEntry], int skipped], SnapshotStore over
+      $HOME/.cache/fr/models/snapshots.json (atomic write via fr.artifacts.atomic
+      write_text_atomic or tmp+replace; a corrupt file reads as empty with no raise).
+      Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: one `models_cache_dir()` helper (HOME-based, matching the spec path) shared
+      by snapshots and the probe cache; ruff + mypy clean.
+- number: 3
+  title: RED/GREEN — the OpenCode live probe and its cache (spec §A probe.py, R2,
+    R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Capture probe fixtures from the real CLI (scratch cwd): stdout+stderr of
+      `opencode run --pure --print-logs --log-level ERROR --format json -m <m> "Reply with exactly: OK"`
+      for one live model and one model the provider no longer serves (e.g.
+      github-copilot/gpt-6-sol, which on 2026-10-06 returned ProviderModelNotFoundError with a
+      `Did you mean` hint). Save under tests/fixtures/bindings/ trimmed to the relevant lines.
+      Add a third fixture from the issue's recorded text for the in-catalogue retired shape
+      (`Error: The requested model is not supported.`), labelled as transcribed from #591.
+      RED: tests/unit/test_bindings_probe.py — classify(stdout, stderr, returncode) gives
+      live on a `text` event; dead on ProviderModelNotFoundError or "model is not supported"
+      (case-insensitive) with that line as detail and the `Did you mean: <id>` hint parsed;
+      unknown on any other error, empty output or a timeout; and a test whose catalogue
+      entry says "status": "active" while stderr says not supported asserts dead (the
+      catalogue status is never read). OpenCodeProber with an injected `run_opencode`
+      seam: argv exactly as the spec states, cwd a fresh temp dir, 60 s timeout, missing CLI
+      → unknown. prober_for("opencode") is an OpenCodeProber; claude-code/hermes → None.
+      ProbeCache: TTL 6 h with an injected clock, fresh=True bypasses. Run: fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: packages/fr/src/fr/bindings/probe.py — Verdict Literal, ProbeResult(verdict,
+      detail, hint, at), Prober Protocol (probe, catalogue), OpenCodeProber, run_opencode
+      seam (subprocess.run, capture_output, text, timeout), classify, ProbeCache over
+      probes.json, prober_for. Tests green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: make the two dead-phrases one module constant with a comment pointing at the
+      fixtures; ruff + mypy clean.
+- number: 4
+  title: RED/GREEN — replacement rules and offers (spec §A choose.py, R4, R12)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_bindings_choose.py, pure (fake probe callable, in-memory entries):
+      family successor taken (newest live, same provider+family, newer release, toolcall);
+      a retired successor skipped for the next; tier rule when no family successor —
+      distinct from orchestrator and other bound tiers, keeps known-price ordering
+      mechanical ≤ standard ≤ hard, nearest price then newest, newest when the dead price
+      is unknown; tier rule never used for `orchestrator`; provider hint used only when the
+      dead model has neither entry nor snapshot and the hint is live; at most 5 probes;
+      NoChoice(reason, tried) when nothing qualifies. is_autonomous: family/tier with
+      price_ratio ≤ 2 → True; ratio 2.5, unknown ratio, or rule hint → False. offers():
+      newer same-family live toolcall model for a live binding; none for an unknown
+      family. Run: fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: packages/fr/src/fr/bindings/choose.py — Choice(model, rule, price_ratio),
+      NoChoice(reason, tried), choose_replacement(...), is_autonomous(choice),
+      offers(...). No I/O, no clock. Tests green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: extract the candidate filter (provider, toolcall, exclusions) into one helper
+      used by both rules; ruff + mypy clean.
+- number: 5
+  title: RED/GREEN — check_bindings and binding_layer (spec §A health.py)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_bindings_health.py with a fake Prober: check_bindings(harness,
+      repo_cfg, user_cfg, prober, tiers=None, fresh) returns one BindingHealth per bound
+      phase tier + orchestrator (tiers= narrows), each with verdict, layer (repo|user),
+      proposal (Choice|None), offers; an unprobed harness yields verdict "unprobed" and no
+      proposals; snapshots are written for every bound model seen in the catalogue.
+      tests/unit/test_models_config.py: binding_layer follows resolved_config's
+      falsy-is-unbound rule (a falsy repo value reports "user"). Run: fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: packages/fr/src/fr/bindings/health.py (BindingHealth dataclass,
+      check_bindings) and fr.models.binding_layer beside resolved_config. Tests green.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: none expected beyond naming; if none, record the reason in the step record's
+      refactor section. ruff + mypy clean.
+- number: 6
+  title: RED/GREEN — `fr models set` probes, `fr models check` (spec §B, R1, R5, R10,
+    R11)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: tests/unit/test_models_cmd.py (CliRunner, prober injected via a module-level
+      factory monkeypatched in tests, XDG_CONFIG_HOME/HOME in tmp): `set --harness opencode`
+      with a dead model off a terminal exits 2 naming the provider error and the proposal
+      and does not write models.yaml; on a terminal (is_interactive patched True) it
+      prompts and a yes persists the proposal and prints the R11 line
+      (old → new, reason retired, decider operator, rule); an unknown probe warns and
+      persists; `--no-probe` persists and says it skipped; `--harness claude-code` persists
+      and prints `not probed (live probing covers opencode only)`. `check`: one line per
+      binding with verdict/proposal/rule/ratio/offers; claude-code bindings `unprobed`;
+      off a terminal exits 1 with a dead binding and writes nothing; on a terminal accepts
+      a proposal (default yes) and declines an offer by default. Run: fails.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: models_cmd.py — `--no-probe` on set, new `check` command, one `_apply_binding`
+      helper (set_binding → materialize_agents → _report_changes → R11 line), interactive
+      prompts via typer.confirm gated on fr.artifacts.trigger.is_interactive(). Update the
+      module docstring. Tests green.
+  - id: P1.T6.S3
+    text: |-
+      REFACTOR: route `set`'s existing persist path through `_apply_binding` too so there is
+      one write path; ruff + mypy clean.
+- number: 7
+  title: Candidate scenarios against a stub opencode (spec
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      Write tests/scenarios/_stub_opencode.sh (sourced helper, underscore-prefixed so
+      test_every_scenario_script_has_a_test_here ignores it) that installs an executable
+      `opencode` stub into a fixture bin dir on PATH: `opencode models <p> --verbose` prints
+      a scripted catalogue (from the captured fixture's shape), `opencode run ... -m <m>`
+      emits a `text` event, the not-supported stderr, the ProviderModelNotFoundError +
+      hint stderr, or a server error, per model, from a table the scenario writes. Every
+      scenario exports HOME and XDG_CONFIG_HOME into the fixture so nothing touches the
+      operator's config or cache.
+  - id: P1.T7.S2
+    text: |-
+      Write tests/scenarios/model-binding-set-probe.sh,
+      tests/scenarios/model-binding-replacement.sh and tests/scenarios/model-binding-check.sh
+      covering exactly the stub states the spec's ## Verification lists for each row; add
+      one test per script to tests/integration/test_scenarios.py in the existing style.
+      Run `uv run pytest tests/integration/test_scenarios.py -q --no-cov -k model_binding`;
+      green.
+  - id: P1.T7.S3
+    text: |-
+      Flip rows: `fr acceptance set-status --id model-binding-set-probe --status ci --notes
+      "<why>" --level int=super-fr:tests/integration/test_scenarios.py#<test>` (same for
+      -replacement and -check-report), and `--id model-binding-probe-cache --status ci
+      --level unit=super-fr:tests/unit/test_bindings_probe.py#<cache test>` plus the
+      catalogue snapshot test. `uv run fr acceptance check` green. Run the full suite
+      (`uv run pytest -q --no-cov -n auto`) after the last code commit into a log outside
+      the repo; commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
