@@ -23,10 +23,10 @@ from fr.commands import triage_batch_cmd, triage_cmd, triage_kanban_cmd
 from fr.gh import GhError
 from fr.triage import drive_lock
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
-from fr.triage.merge_stops import load_stops
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
 from fr.triage.gitseam import Checkout
+from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
 
