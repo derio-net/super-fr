@@ -4860,9 +4860,12 @@ rows:
       key.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_skill_docs.py
+    status: ci
+    notes: Skills edited to document pages, fragments, fields and verbs; test added;
+      mirrors regenerated
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
