@@ -233,9 +233,10 @@ def _latest_runs(raw: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     its name (a status context: its context), as `gh pr checks` keys it; an
     entry carrying neither is counted on its own. A run not yet started has no
     real `startedAt` and is the newest, so a queued re-run reads pending rather
-    than its predecessor's result.
+    than its predecessor's result. Two runs no timestamp orders keep the worse
+    state, never whichever the rollup happened to list last.
     """
-    latest: dict[tuple[str, str], tuple[tuple[int, str], dict[str, Any]]] = {}
+    latest: dict[tuple[str, str], tuple[tuple[int, str, int], dict[str, Any]]] = {}
     anonymous: list[dict[str, Any]] = []
     for check in raw:
         name = check.get("name") or check.get("context")
@@ -247,24 +248,29 @@ def _latest_runs(raw: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
         if started.startswith("0001-"):  # GraphQL's zero time: never started
             started = ""
         done = str(check.get("status") or "COMPLETED").upper() == "COMPLETED"
-        rank = (1, "") if not started and not done else (0, started)
-        if key not in latest or rank >= latest[key][0]:
+        severity = _SEVERITY[_bucket(check)]
+        rank = (1, "", severity) if not started and not done else (0, started, severity)
+        if key not in latest or rank > latest[key][0]:
             latest[key] = (rank, check)
     return [check for _, check in latest.values()] + anonymous
+
+
+_SEVERITY = {"pass": 0, "pending": 1, "fail": 2}
+
+
+def _bucket(check: dict[str, Any]) -> str:
+    state = str(check.get("conclusion") or check.get("state") or "").upper()
+    if state in {"SUCCESS", "SUCCEEDED", "PASS", "PASSED", "SKIPPED", "NEUTRAL"}:
+        return "pass"
+    if state in {"FAILURE", "FAILED", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"}:
+        return "fail"
+    return "pending"
 
 
 def _checks(raw: Iterable[dict[str, Any]]) -> dict[str, int]:
     result = {"pass": 0, "fail": 0, "pending": 0}
     for check in _latest_runs(raw):
-        state = str(check.get("conclusion") or check.get("state") or "").upper()
-        bucket = (
-            "pass"
-            if state in {"SUCCESS", "SUCCEEDED", "PASS", "PASSED", "SKIPPED", "NEUTRAL"}
-            else "fail"
-            if state in {"FAILURE", "FAILED", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"}
-            else "pending"
-        )
-        result[bucket] += 1
+        result[_bucket(check)] += 1
     return result
 
 

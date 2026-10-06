@@ -364,3 +364,16 @@ def test_same_named_checks_of_different_workflows_and_status_contexts_stay_apart
     ]
     ((pr, _),) = parse_prs("example.com/repo", [_pr(1, checks=rollup)])
     assert pr.checks == {"pass": 4, "fail": 1, "pending": 0}
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_runs_no_timestamp_orders_keep_the_worse_state(reverse: bool) -> None:
+    """A tie never lets list order pick green over a failure (review of #1051)."""
+    from fr.triage.collect import parse_prs
+
+    rollup = [
+        {"__typename": "StatusContext", "context": "ci/ext", "state": "FAILURE"},
+        {"__typename": "StatusContext", "context": "ci/ext", "state": "SUCCESS"},
+    ]
+    ((pr, _),) = parse_prs("example.com/repo", [_pr(1, checks=rollup[::-1] if reverse else rollup)])
+    assert pr.checks == {"pass": 0, "fail": 1, "pending": 0}
