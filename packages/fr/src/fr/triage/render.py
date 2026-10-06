@@ -48,6 +48,7 @@ from fr.triage.views import (
     UNWAVED,
     batch_stages,
     batch_tier,
+    cancelled_waves,
     kind_counts,
     needs_you,
     next_up,
@@ -876,23 +877,30 @@ def wave_table(
 ) -> str:
     """One wave's table; *href_prefix* is put before each batch link's `#batch-<id>`, so the
     history page (another file) links to the board's cards."""
+    cols = ("Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
     rows = []
     for b in batches:
         stage = derive_batch_stage(b, facts)
         tier = batch_tier(b.ids, judgements.issues)
-        rows.append(
-            f'<tr data-batch="{esc(b.id)}"><td>'
-            f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a></td>'
-            f'<td class="n">{DASH if tier is None else tier}</td><td>{esc(b.skill)}</td>'
-            f'<td class="mono">{esc(", ".join(b.ids))}</td>'
-            f"<td>{inline(b.rationale)}</td><td>{esc(size_of(b.ids, judgements.issues))}</td>"
-            f"<td>{esc(', '.join(b.after) or '-')}</td>"
-            f'<td><span class="pill bstage-{stage}">{stage}</span></td></tr>'
+        cells = (
+            ("", f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a>'),
+            (' class="n"', f"{DASH if tier is None else tier}"),
+            ("", esc(b.skill)),
+            (' class="mono"', esc(", ".join(b.ids))),
+            ("", inline(b.rationale)),
+            ("", esc(size_of(b.ids, judgements.issues))),
+            ("", esc(", ".join(b.after) or "-")),
+            ("", f'<span class="pill bstage-{stage}">{stage}</span>'),
         )
-    cols = ("Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
+        # data-label names the column on each cell, for the stacked phone layout (gh#1001)
+        tds = "".join(
+            f'<td{attrs} data-label="{label}">{body}</td>'
+            for label, (attrs, body) in zip(cols, cells, strict=True)
+        )
+        rows.append(f'<tr data-batch="{esc(b.id)}">{tds}</tr>')
     head = "".join(f"<th>{c}</th>" for c in cols)
     return (
-        f'<div class="tablewrap"><table class="grid"><thead><tr>{head}</tr></thead>'
+        f'<div class="tablewrap"><table class="grid stack"><thead><tr>{head}</tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
 
@@ -949,7 +957,8 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         '<section class="decide waves" id="waves"><h2>Waves</h2>'
         f'<div id="closing-order"><h3>Closing order</h3><div class="counts">{chips}</div></div>'
     )
-    done = finished_waves(judgements.batches, batch_stages(facts, judgements))
+    stages = batch_stages(facts, judgements)
+    done = finished_waves(judgements.batches, stages)
     grouped = {k: v for k, v in waves(judgements).items() if k not in done}
     if grouped:
         picked = preselected_wave(facts, judgements, among=set(grouped))
@@ -967,6 +976,15 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         body = (
             '<p class="quiet">Every wave is finished: see '
             '<a href="history.html">the history page</a>.</p>' + (body if grouped else "")
+        )
+    if cancelled := sorted(cancelled_waves(judgements.batches, stages), key=int):
+        # gh#1000: a wave of cancelled batches is finished and leaves the tabs; say so.
+        names = ", ".join(f"Wave {k}" for k in cancelled)
+        verb = "was" if len(cancelled) == 1 else "were"
+        body += (
+            f'<p class="quiet">{names} {verb} cancelled: every batch in it was cancelled '
+            'or abandoned, so it left the board; see <a href="history.html">the history '
+            "page</a>.</p>"
         )
     return f"{head}{body}</section>"
 

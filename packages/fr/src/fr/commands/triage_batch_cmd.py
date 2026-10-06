@@ -155,6 +155,7 @@ from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.gitseam import Checkout
+from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     Batch,
     CancelEvent,
@@ -2190,6 +2191,7 @@ class _Driver:
             slots, _ = plan_queue(ctx, entries)
             if not slots:
                 self._unlanded.discard(batch.id)
+                clear_stop(self.target, batch.id)
                 return _MergeOutcome(
                     f"PR #{action.pr} is already merged", False, in_flight - 1, False
                 )
@@ -2211,6 +2213,9 @@ class _Driver:
             self.failed_write = True
             key = f"{batch.id}\0{action.head}\0{exc}"
             stops = _stops_train(exc)
+            if not isinstance(exc, HeadMovedError):  # a moved head is re-judged, not owed
+                stamp = datetime.now(UTC).isoformat(timespec="seconds")
+                record_stop(self.target, batch.id, MergeStop(action.head, str(exc), stamp))
             if key in self.reported:
                 again = f"stopped again at {action.head[:12]} (reported above)"
                 return _MergeOutcome(again, False, in_flight, stops)
@@ -2224,6 +2229,7 @@ class _Driver:
         stops = _stops_train(attempt)
         if attempt.outcome in ("merged", "already-merged"):
             self._unlanded.discard(batch.id)
+            clear_stop(self.target, batch.id)
             return _MergeOutcome(
                 f"merged PR #{action.pr} at {attempt.head[:12]}", True, in_flight - 1, stops
             )

@@ -18,7 +18,7 @@ not collected), so no row of that kind is produced — it is not invented
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -359,6 +359,19 @@ def unfinished_waves(facts: Facts, judgements: Judgements) -> set[str]:
     """The wave keys that still show on the board: every wave minus the finished ones."""
     done = finished_waves(judgements.batches, batch_stages(facts, judgements))
     return {str(b.wave) for b in judgements.batches if b.wave is not None} - done
+
+
+def cancelled_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> frozenset[str]:
+    """The finished waves that delivered nothing: every batch in them `cancelled` or
+    `abandoned` (gh#1000). `finished_waves` counts them finished, rightly, since nothing
+    in them will merge; the pages name them so they never pass for delivered work."""
+    batches = list(batches)
+    delivered = {
+        str(b.wave)
+        for b in batches
+        if b.wave is not None and stages.get(b.id) not in {"cancelled", "abandoned"}
+    }
+    return finished_waves(batches, stages) - delivered
 
 
 def preselected_wave(
