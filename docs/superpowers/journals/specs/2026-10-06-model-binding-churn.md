@@ -311,3 +311,6 @@ R1 now asks on a terminal (proposal, default yes) and refuses off one, matching 
 ### sr1-f12-resolved · finding [fixed] · resolves sr1-f12: The autonomous substitution writes files outside the repo before the cursor commit, with no rollback order
 
 §C specifies the write order: remember+append+note the journal entry, then write the binding and materialise; a binding-write failure restores models.yaml and the journal bytes and exits 2 loudly, so a substitution is recorded iff applied.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-model-binding-churn-p2 created=2026-10-06T17:42:52+00:00 -->
+### phase-split-2026-10-06-model-binding-churn-p2 · decision · ask: run integration (R6-R9, R11) is its own reviewable ask — the dispatch guard and gated brief, separate from the engine + fr models CLI
