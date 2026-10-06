@@ -115,24 +115,28 @@ def default_board_name(scope: Scope) -> str:
     return f"{scope.name} batches"
 
 
+_PLACEHOLDER = re.compile(r"\{(board|name|scope_id)\}")
+
+
 def publish_board(scope: Scope, config: ScopeConfig, board: Path) -> str | None:
     """Run the scope's `publish` command for the rendered *board* (R14); None when it
     succeeded or there is none, else the cause of the failure on one line.
 
     The argument list is run as is, with no shell: `{board}`, `{name}` and `{scope_id}`
-    are substituted inside each word, so a value is never parsed as syntax. A command
-    that does not finish in `PUBLISH_TIMEOUT` seconds is killed. Nothing here raises:
-    publishing is a view's afterthought and never changes a command's exit code."""
+    are substituted inside each word in one pass (a value that itself contains a
+    placeholder is not expanded again; other braces stay literal), so a value is never
+    parsed as syntax. The command runs with the operator's full environment and with
+    the scope's state directory (the board's own) as its working directory. A command
+    that does not finish in `PUBLISH_TIMEOUT` seconds is killed. A failing command
+    returns its cause rather than raising; `scope_id()` and `default_board_name()` can
+    raise `TriageError`, which the caller (`triage_kanban_cmd.publish`) turns into a
+    warning, so publishing never changes a command's exit code."""
     if not config.publish:
         return None
     values = {
-        "{board}": str(board),
-        "{name}": config.board_name or default_board_name(scope),
-        "{scope_id}": scope_id(scope),
+        "board": str(board),
+        "name": config.board_name or default_board_name(scope),
+        "scope_id": scope_id(scope),
     }
-    argv = []
-    for word in config.publish:
-        for placeholder, value in values.items():
-            word = word.replace(placeholder, value)
-        argv.append(word)
+    argv = [_PLACEHOLDER.sub(lambda m: values[m.group(1)], word) for word in config.publish]
     return run_publish(argv, board.parent, PUBLISH_TIMEOUT)

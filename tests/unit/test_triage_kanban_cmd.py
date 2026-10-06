@@ -615,3 +615,38 @@ def test_a_watch_publishes_each_iteration_and_warns_once_per_cause(
     watch.sleeps.clear()
     code, said = _board(tmp_path, "--watch", "--publish", "--interval", "7")
     assert said.count("could not publish the board") == 1 and len(watch.sleeps) == 3
+
+
+def test_publish_board_substitutes_in_a_single_pass(tmp_path: Path) -> None:
+    argv, out = _recorder(tmp_path)
+    config = ScopeConfig(
+        board_name="x{scope_id}", publish=[*argv, "{name}", "{unknown}", "a {name} b"]
+    )
+    assert publish_board(SCOPE, config, tmp_path / "b.html") is None
+    got = out.read_text(encoding="utf-8").split("\n")
+    assert got == ["x{scope_id}", "{unknown}", "a x{scope_id} b"]
+
+
+def test_publish_board_keeps_a_name_with_spaces_one_argument(tmp_path: Path) -> None:
+    argv, out = _recorder(tmp_path)
+    config = ScopeConfig(board_name="my  big board", publish=[*argv, "{name}"])
+    assert publish_board(SCOPE, config, tmp_path / "b.html") is None
+    assert out.read_text(encoding="utf-8") == "my  big board"
+
+
+def test_publish_runs_in_the_state_dir_with_the_operators_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    out = tmp_path / "seen.txt"
+    code = (
+        "import os, pathlib, sys;"
+        "pathlib.Path(sys.argv[1]).write_text(os.getcwd() + '\\n' + os.environ['FR_P3_PROBE'])"
+    )
+    monkeypatch.setenv("FR_P3_PROBE", "from-parent")
+    config = ScopeConfig(publish=[sys.executable, "-c", code, str(out)])
+    assert publish_board(SCOPE, config, state / "board.html") is None
+    cwd, probe = out.read_text(encoding="utf-8").split("\n")
+    assert Path(cwd).resolve() == state.resolve()
+    assert probe == "from-parent"
