@@ -19,3 +19,8 @@ _Driver._close_out and dispatch_batch call _fail(..., code=1) on a runner except
 ### 7abbf2338d65 · repro · Live: agent_pane_busy reproduced 1 in 6 fresh workspaces; a retry on the same pane succeeds
 
 Scratch herdr workspaces (herdr 0.9.1, cwd a trusted checkout, closed afterwards), 'agent start' run right after 'workspace create': trial 5 of 6 failed with {"error":{"code":"agent_pane_busy","message":"agent target pane <pane> is not an available shell"}}; 'agent start' on the same pane moments later succeeded. Confirms #931 defect 1 and that a bounded retry is the remedy. #956 (silent unsubmitted brief) did NOT reproduce in 6 trials (3 with 'agent prompt --wait', 3 without, ~4.9k-char brief) — timing-dependent. Without --wait, 'agent prompt' returned agent_status=idle: it confirms nothing, so a missed submit is silent by construction. With --wait it returned 'working', and herdr documents agent_prompt_stalled when no working/blocked follows within 5s.
+
+<!-- fr:journal kind=root-cause scope=debug id=bae2531e02ad created=2026-10-06T15:41:19+00:00 -->
+### bae2531e02ad · root-cause · Runner: HerdrRunner.dispatch confirms neither the pane nor the submit
+
+agent start is attempted once against a pane whose shell may not be up (herdr fails fast with agent_pane_busy), and agent prompt is fire-and-forget (no --wait), so a brief that lands unsubmitted reads as a successful dispatch. Fix: retry agent_pane_busy (bounded), submit with --wait --until working --until blocked, and on agent_prompt_stalled press Enter once and wait again before failing loudly.
