@@ -500,3 +500,17 @@ def test_focus_with_no_matching_tab_is_false_and_focuses_nothing(herdr: _Herdr) 
     herdr.listing = _tabs_of(("other", "idle", "w9:t1", "w9"))
     assert HerdrRunner.from_env().focus(item) is False
     assert herdr.calls == [["tab", "list"]]
+
+
+# ------------------------------------------------- session messaging (R23)
+
+
+def test_message_prompts_the_items_agent_with_the_text(herdr: _Herdr) -> None:
+    """Spec 2026-10-06-verification-strategies §G: `herdr agent prompt <name> <text>`."""
+    from fr_dispatch.protocols import SessionMessenger
+
+    item = _item()
+    runner = HerdrRunner.from_env()
+    assert isinstance(runner, SessionMessenger)
+    assert runner.message(item, "resolve the conflict") is None
+    assert herdr.calls == [["agent", "prompt", agent_name(item.id), "resolve the conflict"]]
