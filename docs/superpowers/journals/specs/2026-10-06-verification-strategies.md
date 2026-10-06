@@ -290,3 +290,6 @@ R7 matches §B (verify, override, strategy, shape); a spec line may give a reaso
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-verification-strategies-p3 created=2026-10-06T11:17:06+00:00 -->
 ### phase-split-2026-10-06-verification-strategies-p3 · decision · ask: the walk and deliver gates (R9, R11, R12, R15)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-verification-strategies-p4 created=2026-10-06T11:17:06+00:00 -->
+### phase-split-2026-10-06-verification-strategies-p4 · decision · ask: awaiting-live label and triage set (R17, R18), #822's backlog half
