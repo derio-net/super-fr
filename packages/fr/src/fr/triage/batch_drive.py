@@ -28,7 +28,7 @@ from fr.triage.batch import (
     batch_branch,
     batch_item_id,
 )
-from fr.triage.model import Batch, CloseoutEvent, Export
+from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
@@ -340,6 +340,60 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
         f"Close out batch {batch.id} ({batch.title}): its PR on {branch} has merged.\n"
         f"In {checkout}, run `{pickup}` and follow the brief it prints, in order."
     )
+
+
+# ------------------------------------------------- conflict hand-back (§G)
+
+HANDBACKS_PER_DISPATCH = 2
+"""R22: hand-backs a batch gets per dispatch; the next conflict is held."""
+
+ConflictKind = Literal["skip", "wait-behind", "held", "handback"]
+
+
+@dataclass(frozen=True)
+class ConflictDecision:
+    """What drive does with a real merge conflict (spec 2026-10-06-verification-
+    strategies §G): `behind` names the batch a `wait-behind` waits on."""
+
+    kind: ConflictKind
+    behind: str | None = None
+
+
+def conflict_decision(
+    events: Sequence[object],
+    head: str,
+    paths: Sequence[str],
+    earlier_in_pass: Sequence[tuple[str, Sequence[str]]],
+) -> ConflictDecision:
+    """The pure decision on a conflict at *head* refusing *paths* (R21, R22).
+
+    `skip`: a `conflict` event already exists for this head, so a restarted driver
+    never hands the same head back twice. `wait-behind`: a refused path is shared
+    with a conflict met earlier in this pass (*earlier_in_pass*, `(batch, paths)` in
+    train order), which is fixed first. `held`: two `session|fresh` hand-backs were
+    made since the batch's latest `dispatch` event (held ones never count). Else
+    `handback`.
+    """
+    if any(isinstance(e, ConflictEvent) and e.head == head for e in events):
+        return ConflictDecision("skip")
+    mine = set(paths)
+    for batch_id, theirs in earlier_in_pass:
+        if mine.intersection(theirs):
+            return ConflictDecision("wait-behind", behind=batch_id)
+    handed = 0
+    for event in reversed(events):
+        if isinstance(event, DispatchEvent):
+            break
+        if isinstance(event, ConflictEvent) and event.delivered != "held":
+            handed += 1
+    if handed >= HANDBACKS_PER_DISPATCH:
+        return ConflictDecision("held")
+    return ConflictDecision("handback")
+
+
+def conflict_item_id(repo: str, batch_id: str, n: int) -> str:
+    """`<OWNER>/<REPO>/run/conflict-<batch-id>-<n>`: the *n*th fresh conflict session."""
+    return f"{repo}/run/conflict-{batch_id}-{n}"
 
 
 def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:

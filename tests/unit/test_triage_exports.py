@@ -37,9 +37,9 @@ HEAD = (
 )
 
 
-def test_the_writer_writes_schema_4_and_the_reader_reads_1_to_4() -> None:
-    assert JUDGEMENTS_SCHEMA == 4
-    assert JUDGEMENTS_READS == (1, 2, 3, 4)
+def test_the_writer_writes_schema_5_and_the_reader_reads_1_to_5() -> None:
+    assert JUDGEMENTS_SCHEMA == 5
+    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5)
     assert Judgements.model_validate({"schema": 4}).schema_ == 4
 
 
@@ -63,7 +63,7 @@ def test_an_export_needs_an_aware_time() -> None:
         Export.model_validate({**EXPORT, "at": "2026-10-05T12:00:00"})
 
 
-def test_save_exports_replaces_only_the_exports_section_and_stamps_4(tmp_path: Path) -> None:
+def test_save_exports_replaces_only_the_exports_section_and_stamps_5(tmp_path: Path) -> None:
     path = tmp_path / "judgements.yaml"
     path.write_text(HEAD, encoding="utf-8")
     one = Export(wave="3", repo="example-org/widgets", at=AT)
@@ -71,8 +71,8 @@ def test_save_exports_replaces_only_the_exports_section_and_stamps_4(tmp_path: P
     got = save_exports(path, [one], read=[])
 
     text = path.read_text(encoding="utf-8")
-    assert text.startswith("schema: 4\n" + HEAD.removeprefix("schema: 3\n"))
-    assert yaml.safe_load(text[len("schema: 4\n" + HEAD.removeprefix("schema: 3\n")) :]).keys() == {
+    assert text.startswith("schema: 5\n" + HEAD.removeprefix("schema: 3\n"))
+    assert yaml.safe_load(text[len("schema: 5\n" + HEAD.removeprefix("schema: 3\n")) :]).keys() == {
         "exports"
     }
     assert got.exports == [one]

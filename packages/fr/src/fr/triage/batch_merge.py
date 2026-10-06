@@ -53,6 +53,16 @@ class HeadMovedError(MergeStopError):
     it (R3); any other `MergeStopError` is a refusal it steps over (R4)."""
 
 
+class MergeConflictError(MergeStopError):
+    """A real conflict: merge refused to resolve *paths* bringing *batch*'s PR at *head*
+    up to date (spec 2026-10-06-verification-strategies §G; R19). Not a moved head, so a
+    driver steps over it; it hands the conflict back to the batch's session."""
+
+    def __init__(self, message: str, *, batch: str, head: str, paths: Sequence[str]) -> None:
+        super().__init__(message)
+        self.batch, self.head, self.paths = batch, head, tuple(paths)
+
+
 class WorktreeSeam(Protocol):
     path: Path
 
@@ -446,11 +456,14 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
             refused = _unresolvable(ctx, wt, conflicted)
             if refused:
                 wt.abort_merge()
-                raise MergeStopError(
+                raise MergeConflictError(
                     f"PR #{pr.number} (batch {slot.step.batch.id}) conflicts with {ctx.main} "
                     f"in a change merge will not resolve: {', '.join(refused)} (only a version "
                     "file whose PR change is the version alone is resolved). The scratch "
-                    f"worktree is kept for inspection at {where}"
+                    f"worktree is kept for inspection at {where}",
+                    batch=slot.step.batch.id,
+                    head=head,
+                    paths=refused,
                 )
             wt.take_theirs(conflicted)
             relock = any(is_lockfile(p) for p in conflicted)

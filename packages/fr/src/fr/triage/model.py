@@ -43,12 +43,13 @@ from fr.triage.stage import Stage, derive_stage
 # loads, and the first collect upgrades it. Independent of JUDGEMENTS_SCHEMA.
 FACTS_SCHEMA: Literal[4] = 4
 FACTS_READS: tuple[int, ...] = (3, 4)
-# The version this fr WRITES: every engine write stamps 4 (spec
+# The version this fr WRITES: every engine write stamps 5 (spec
+# 2026-10-06-verification-strategies §G: the `conflict` event; 4 was
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[4] = 4
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4)
+JUDGEMENTS_SCHEMA: Literal[5] = 5
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -516,12 +517,36 @@ class PostMergeEvent(_Strict):
     at: AwareDatetime
 
 
+ConflictDelivery = Literal["session", "fresh", "held"]
+
+
+class ConflictEvent(_Strict):
+    """Drive met a real merge conflict at *head* and handed it back (spec
+    2026-10-06-verification-strategies §G; R20-R22). Needs judgements schema 5.
+    Written by the engine only.
+
+    `delivered`: `session`, the brief was sent to the batch's idle session; `fresh`, a
+    new conflict session was started; `held`, the hand-back bound was reached and the
+    operator owns it. `handle` is the item messaged (session) or the runner's handle
+    for the started item (fresh); None when held."""
+
+    kind: Literal["conflict"]
+    at: AwareDatetime
+    head: str
+    paths: list[str] = Field(min_length=1)  # the paths merge refused to resolve
+    delivered: ConflictDelivery
+    handle: str | None = None
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
+SCHEMA_5_EVENTS = frozenset({"conflict"})
+"""The event kinds only a schema 5 `judgements.yaml` may carry (verification-strategies §G)."""
 
 
 BatchEvent = Annotated[
-    DispatchEvent | CancelEvent | CloseoutEvent | PostMergeEvent, Field(discriminator="kind")
+    DispatchEvent | CancelEvent | CloseoutEvent | PostMergeEvent | ConflictEvent,
+    Field(discriminator="kind"),
 ]
 
 
@@ -633,7 +658,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -718,6 +743,12 @@ class Judgements(_Strict):
         if self.exports and self.schema_ < 4:
             raise ValueError(
                 f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
+            )
+        later = sorted({e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_5_EVENTS})
+        if self.schema_ < 5 and later:
+            raise ValueError(
+                f"`{'`, `'.join(later)}` events need schema 5, but this file is stamped "
+                f"schema {self.schema_}"
             )
         return self
 
