@@ -730,3 +730,8 @@ verify: live in fr-goal, fr-plan, fr-spec-reviewer, explainer (re-rendered, byte
 ### p7-r6-resolved · finding [fixed] · resolves p7-r6: docs/verification-strategies.md misdescribed prerelease and the staging example (phase 7)
 
 States the walk refuses source: prerelease and the PR body's manual route; the staging example says worktree build + scenarios run. eedc79536.
+
+<!-- fr:journal kind=finding scope=plan id=p2-tea-remove-labels-resolved-2 created=2026-10-06T16:39:10+00:00 state=fixed resolves=p2-tea-remove-labels -->
+### p2-tea-remove-labels-resolved-2 · finding [fixed] · resolves p2-tea-remove-labels: the spec says tea has no unlabel command, but the installed tea's `issues edit` has --remove-labels
+
+Duplicate of p2-r1, whose fix shipped in PR #1012 (hostclient.py ISSUE_COMMANDS["gitea"]["issue-unlabel"] uses --remove-labels; spec §E corrected). No issue filed: nothing is left to track.
