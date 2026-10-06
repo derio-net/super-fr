@@ -101,7 +101,7 @@ rows:
     status: not-implemented
     scenario: tests/scenarios/row-cand.sh
 YAML
-run_fr out plan self-review "$PLAN"
+run_fr out plan self-review "$PLAN";          require_exit 0 "$out"
 refuse_grep '^\[error\]' "$out" "a reasoned section with a scenario passes self-review"
 
 # A malformed section is refused naming the line.
