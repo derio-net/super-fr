@@ -109,7 +109,11 @@ R6. The GitHub adapter honours a host. Built with `host=`, every `gh`
     threaded: inside a checkout, `gh` already infers it from the remote, and an
     SSH-alias remote (`git@github-work:…`) would otherwise become a bogus
     `GH_HOST`. `client_for`'s warning about a declared host fr cannot thread now
-    fires only for Gitea.
+    fires only for Gitea. **The host gate is fail-closed.** `GH_HOST` is set only
+    for a host listed in gh's own `hosts.yml`, which means the operator ran `gh
+    auth login` for it. For any other host, every call on that client raises
+    `GhError` naming the host and the `gh auth login --hostname` fix. fr neither
+    points gh at the unknown host nor falls back to github.com.
 R7. The forge-adapter tripwire has no allowlist. Any `fr.gh` import or
     `["gh", …]` argv under `packages/*/src` outside the GitHub backend files
     fails CI.
@@ -262,6 +266,23 @@ client_for_backend(_hosts.backend_for_url(url),
   that context.
 - Nothing else in fr sets the var.
 
+**Trust gate (security, added during phase 1).** `gh help environment`:
+`GH_ENTERPRISE_TOKEN` "will be used when a command targets a GitHub Enterprise
+Server host". The hosts fr threads come from sources that are not fully trusted:
+a URL (`client_for_url`) and a cloned repo's committed
+`.devcontainer/fr-profiles.yaml` (`client_for`). So
+`GH_HOST=<attacker-chosen host>` would hand the operator's enterprise token to
+that host. The gate works as follows:
+
+- `fr.gh.known_hosts()` returns the top-level keys of gh's `hosts.yml`. It reads
+  `$GH_CONFIG_DIR/hosts.yml`, else `$XDG_CONFIG_HOME/gh/hosts.yml`, else
+  `~/.config/gh/hosts.yml`; an unreadable or missing file gives an empty set.
+- `_env()`/`host_scope` is the one place that enforces the gate. A host outside
+  `known_hosts()` raises `GhError` before any subprocess starts.
+- The check runs lazily, at call time.
+- Silently falling back to github.com would be #892's wrong-target write again,
+  so the gate refuses instead.
+
 **Reach (sr-f4).**
 
 - `client_for_backend(backend, host=)` passes `host` to `RealGhClient`, so
@@ -334,7 +355,9 @@ diff. `BACKEND` stays `{gh.py, real_ghclient.py, hostclient.py}`.
    and `None` for a SaaS URL. `make_client` returns exactly that client.
 3. **CI:** `RealGhClient(host="ghe.example")` puts `GH_HOST=ghe.example` on a
    `--repo` read (`_run_gh`), on `pr_body` (`view_pr_body`) and on a lookup's
-   default runner. `RealGhClient()` passes `env=None` on all three.
+   default runner. `RealGhClient()` passes `env=None` on all three. A host
+   missing from gh's `hosts.yml` raises `GhError` naming it, and no subprocess
+   starts.
 4. **CI:** after a `RealGhClient(host=…)` call returns, or raises, a bare
    `fr.gh` call carries no `GH_HOST`.
 5. **CI:** `client_for` on a checkout declaring `forge: {type: github, host:
