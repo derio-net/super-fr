@@ -40,18 +40,18 @@ board after each pass, through a command the operator configures for that scope.
 
 ## Requirements
 
-R1. Each triage scope on a host has a scope id `s-<sha256(<scope name> NUL <host id>)[:8]>`. The host id is a random token generated once and stored in `~/.config/fr/host-id`, and `FR_HOST_ID` overrides it. No hostname, path or scope name appears in a scope id. `fr triage scope show` prints the scope's name, id, state directory and scope config.
-R2. A claim on an issue is the `fr:claimed` label plus one hidden marker comment per signer, holding the signer's scope id, the batch id, claimed-at, heartbeat and expires-at, followed by one human-readable line. No hostname, path or scope name is written to the forge.
-R3. A claim is owed for every member of a batch with a wave from the moment the wave is set, and for every member of a wave-less batch at its dispatch. `batch create` and `batch edit` write the claims they make owed only with `--yes`; without it they print the owed claims and the command that writes them. `fr triage claim sync --yes` and every `batch drive --yes` pass write every owed claim before any other action, and `batch dispatch --yes` claims before any other forge write.
-R4. After writing a claim, the writer re-reads the issue's comments. When more than one live claim exists, the oldest marker comment wins; a writer that lost withdraws its own marker in the same call and reports the issue as held by the winner.
+R1. Each triage scope on a host has a scope id `s-<sha256(<scope name> NUL <host id>)[:8]>`. The host id is a random token created once, with exclusive-create semantics so two concurrent first uses agree on one id, in `~/.config/fr/host-id` (under fr's home override); `FR_HOST_ID` overrides it. No hostname, path or scope name appears in a scope id. `fr triage scope show` prints the scope's name, id, state directory and scope config.
+R2. A claim on an issue is the `fr:claimed` label plus a hidden marker comment holding the signer's scope id, the batch id, claimed-at, heartbeat and expires-at, followed by one human-readable line. A signer has at most one un-released marker per issue; claiming again after a release posts a new marker. No hostname, path or scope name is written to the forge.
+R3. A claim is owed for every member of a batch with a wave from the moment the wave is set, and for every member of a wave-less batch from its dispatch, until the claim is released (R10). `batch create` and `batch edit` gain `--yes`, which writes the claims the change makes owed (the judgements write happens with or without it); without it they print the owed claims and `fr triage claim sync --yes`. `claim sync --yes` and every `batch drive --yes` pass write every owed claim before any other action. `batch dispatch --yes` completes its claims, including R4's re-read, before the runner launch and before any other forge write. An own un-released claim naming another batch of this scope is edited in place to name the batch that now owes it.
+R4. After writing a claim, the writer re-reads the issue's comments. When more than one un-released claim exists, live or expired, the oldest marker comment wins; a writer that lost withdraws its own marker in the same call and reports the issue as held by the winner. An expired claim therefore still holds its issue until the operator takes or releases it.
 R5. `batch create`, and `batch edit` with `--add-issue` or `--wave`, refuse (exit 2, nothing written) an issue that facts show claimed by another scope, naming the holder, its batch and its expiry. For an expired claim the refusal names `fr triage claim take`.
-R6. Neither the driver nor `batch dispatch`, `batch merge` or `batch cancel` acts on a batch with a member claimed by another scope, live or expired. The driver emits one `held` action per such batch, naming each member and its holder, and leaves the batch alone that pass. The commands refuse with exit 2.
-R7. `fr triage check` reports two more sets: `held elsewhere` (open issues with another scope's live claim: key, holder, batch, expires-at) and `expired claims` (every claim, this scope's or another's, past its expires-at). Both appear in text and in `--json` (`held_elsewhere`, `expired_claims`), and `check` still exits 0.
-R8. Each `batch drive --yes` pass and `claim sync --yes` refresh this scope's own live claims by editing their marker comment in place (new heartbeat and expires-at) once the heartbeat is older than a quarter of the expiry. A refresh never posts a second marker. The expiry is 24 hours unless the scope config's `claim_expiry_hours` says otherwise, and it is written into the marker, so every reader judges expiry from the marker alone.
+R6. Neither the driver nor `batch dispatch` or `batch merge` acts on a batch with a member claimed by another scope, live or expired. The driver emits one `held` action per such batch, naming each member and its holder, and leaves the batch alone that pass; a held batch that is already dispatched still counts against `--max-inflight`. The commands refuse with exit 2. `batch cancel` is allowed on a held batch: it releases this scope's own claims and leaves the held members' `fr:in-progress` label and comments to their holder.
+R7. `fr triage check` reports three more sets: `held elsewhere` (open issues with another scope's un-released claim: key, holder, batch, expires-at), `expired claims` (every un-released claim, this scope's or another's, past its expires-at) and `claims owed` (members owed a claim by this scope that facts show unwritten). All three appear in text and in `--json` (`held_elsewhere`, `expired_claims`, `claims_owed`), and `fr triage claim list` shows the same three. `check` still exits 0.
+R8. Each `batch drive --yes` pass and `claim sync --yes` refresh this scope's own un-released claims, expired ones included, by editing their marker in place (new heartbeat and expires-at) once the heartbeat is older than a quarter of the expiry. A refresh never posts a second marker. When the re-read shows the marker released by another scope's take, the refresh does not resurrect it: the issue is reported held. The expiry is 24 hours unless the scope config's `claim_expiry_hours` says otherwise, and it is written into the marker, so every reader judges expiry from the marker alone.
 R9. An expired claim is never taken automatically. `fr triage claim take <key> --batch <id> --yes` replaces another scope's expired claim with this scope's claim for one of this scope's batches containing the issue; it is refused while the claim is live. `fr triage claim release <key> --yes` withdraws this scope's own claim at any time, and another scope's only once expired. Without `--yes` both print what they would write.
-R10. A claim is released (marker edited to its released form, `fr:claimed` removed once no live claim remains) when its batch is cancelled with `batch cancel --yes`, when the drive pass or `claim sync` sees the batch closed out (merged, partial or abandoned), when `batch edit --remove-issue --yes` drops the member, and when `batch edit --no-wave --yes` clears the wave of a proposed batch.
+R10. This scope's claims on a batch's members are released (marker edited to its released form; `fr:claimed` removed once no un-released claim, live or expired, remains) when the batch is cancelled, abandoned, or finished (its run archived), when `batch edit --remove-issue --yes` drops a member, and when `batch edit --no-wave --yes` clears the wave of a proposed batch. A merged batch keeps its claims, refreshed, until its close-out is archived. Releases are derived from the batch, read and written per member at release time whether the issue is open or closed, and recorded as a `claims_released` event on the batch so they are not repeated (judgements schema 6; schemas 1–5 still load).
 R11. A live batch of this scope with no claims yet (dispatched before this change) is claimed by the first `drive --yes` pass or `claim sync --yes`. When another scope already holds a member, R6 applies.
-R12. The GitHub client's `list_issue_comments` returns each comment's numeric id and its client gains `edit_issue_comment(repo, comment_id, body)`. `collect` reads the comments of every open issue labelled `fr:claimed` and records each signer's latest claim on the issue in facts (facts schema 6; schemas 3–5 still load).
+R12. The GitHub client's `list_issue_comments` returns each comment's numeric id and its client gains `edit_issue_comment(repo, comment_id, body)`. `collect` reads the comments of every open issue labelled `fr:claimed` and records each signer's latest un-released claim on the issue in facts (facts schema 6; schemas 3–5 still load).
 R13. `board.html` shows a "Held elsewhere" group listing the scope's issues claimed by other scopes, with holder, batch and expiry, marking expired claims. Each of this scope's batch cards shows when its claims expire.
 R14. A scope may carry a scope config, `<state dir>/scope.yaml`, with `claim_expiry_hours`, `board_name` and `publish`. `publish` is an argument list with `{board}`, `{name}` and `{scope_id}` placeholders. fr runs it after every `drive --yes` pass that rendered the board, and for each render of `fr triage board --publish` (each `--watch` iteration included), with a 120-second timeout. A failure or timeout warns once per cause and never changes an exit code. The default board name is `<repo> batches` for a repo scope, `<owner> batches` for an org scope, and `<scope name> batches` for a group scope.
 R15. The host id and the scope config never leave the host: they are not durable triage state, `fr triage state export` never copies them, and no target repo carries them.
@@ -104,6 +104,10 @@ R16. The fr-triage skill documents claims, the scope config and publishing, in i
 ### 2.2 Operator decisions (brainstorm, 2026-10-06)
 
 1. Claim at wave assignment (wave-less batches at dispatch).
+   Under the repo's rule that the forge is written only under `--yes`,
+   `batch create`/`edit --yes` writes the claim at that moment. Without `--yes`
+   the claim is owed, shown in `check`'s `claims owed`, and written by the next
+   `claim sync --yes` or drive pass (spec review sr-8).
 2. Expiry 24 hours, per-scope override.
 3. Take-over is operator-confirmed; expired claims are only reported.
 4. The heartbeat edits the marker in place, refreshed at a quarter of the expiry.
@@ -115,9 +119,11 @@ R16. The fr-triage skill documents claims, the scope config and publishing, in i
 
 ### A. Identity and scope config (`fr/triage/scope_config.py`, new)
 
-- `host_id()` returns `FR_HOST_ID` when set, else reads `~/.config/fr/host-id`,
-  creating it (16 random hex characters, written atomically, mode 0600) when
-  missing. An unreadable or malformed file raises `TriageError`, naming the path;
+- `host_id()` returns `FR_HOST_ID` when set, else reads `<home>/.config/fr/host-id`
+  (`<home>` through `fr.isolation.types._home()`, as `state_dir` does), creating
+  it when missing: 16 random hex characters written to a temporary file and
+  hard-linked into place, which fails when the file already exists, so the
+  process that loses a concurrent first use re-reads the winner's id (mode 0600). An unreadable or malformed file raises `TriageError`, naming the path;
   fr never silently mints a second identity over one it cannot read.
 - `scope_id(scope)` = `"s-" + sha256(f"{scope.name}\0{host_id()}")[:8]`, pattern
   `^s-[0-9a-f]{8}$`.
@@ -146,17 +152,26 @@ counted (a `warn` once per issue), never treated as a claim.
 
 - `Claim` model: `signer`, `batch`, `claimed`, `heartbeat`, `expires`,
   `comment_id: int`, `created_at` (the comment's, used for R4's ordering).
-- `claims_from_comments(comments) -> list[Claim]`: the latest live marker per
-  signer, dropping a signer whose latest marker is a released one.
-- `live(claim, now)`, `expired(claim, now)`, `holder(issue, me, now)` (the
-  winning foreign claim or None), `winner(claims)` (oldest `created_at`, then
-  lowest comment id), `needs_refresh(claim, now, expiry)` (heartbeat older than
-  expiry / 4).
-- `owed_claims(batches, stages)`: (key, batch) for every member of a batch with a
-  wave whose stage is not closed out, and for members of a wave-less batch that is
-  dispatched or later (R3, R11). `owed_releases(...)`: own claims whose batch is
-  closed out, missing, no longer lists the member, or is a proposed batch with no
-  wave (R10).
+- `claims_from_comments(comments) -> list[Claim]`: every signer's latest
+  un-released marker, live or expired, dropping a signer whose latest marker is a
+  released one.
+- `expired(claim, now)`, `holder(claims, me)` (the winning claim when it is
+  another scope's, else None: expiry never changes who holds, R4),
+  `winner(claims)` (oldest `created_at`, then lowest comment id), and
+  `needs_refresh(claim, now, expiry)` (heartbeat older than expiry / 4; an own
+  expired claim always needs one, R8).
+- `releasing(batch, stage, archived)`: true once the batch is cancelled,
+  abandoned, or finished (its run archived), the states in which no driver acts
+  on it again. `merged` and `partial` are not releasing: the close-out still
+  runs under the claim (#883 across hosts).
+- `owed_claims(batches, stages, archived)`: (key, batch) for every member of a
+  batch with a wave, and of a wave-less batch from `dispatched` on, while the
+  batch is not releasing (R3, R11). `owed_releases(...)`: (key, batch) for every
+  member of a releasing batch with no `claims_released` event, plus members that
+  `batch edit --remove-issue` dropped and the members of a proposed batch whose
+  wave was cleared (R10). Releases are derived from the batch side, never from
+  facts' claims: a merged batch's members are closed, and collect reads no
+  comments of closed issues.
 
 ### C. Forge (`fr/ghclient.py`, `fr/real_ghclient.py`, glab, tea, fakes)
 
@@ -177,13 +192,19 @@ counted (a `warn` once per issue), never treated as a claim.
 One module owns every claim write so the batch commands, the driver and the
 `claim` group share it:
 
-- `claim(client, repo, number, me, batch, expiry, now)`: ensure the label, add
-  `fr:claimed`, post the marker, re-read comments, and apply R4. When this scope
-  lost, it edits its own marker to the released form and returns `Held(winner)`;
-  the label stays, since the winner's claim is live.
-- `refresh(...)`: edit the marker in place with new `heartbeat`/`expires`.
-- `release(...)`: edit the marker to its released form; remove `fr:claimed` when
-  no other live claim remains in the re-read comments.
+- `claim(client, repo, number, me, batch, expiry, now)`: read the comments. When
+  this scope already has an un-released marker, edit it in place (a different
+  batch id is rewritten, R3; the hold was continuous, so its age stands).
+  Otherwise ensure the label, add `fr:claimed`, post a new marker, re-read and
+  apply R4 over every un-released claim, expired ones included. When this scope
+  lost, it edits its own new marker to the released form and returns
+  `Held(winner)`; the label stays, since the winner's claim is un-released.
+- `refresh(...)`: re-read; when the own marker is still un-released, edit it in
+  place with new `heartbeat`/`expires`; when another scope's take released it,
+  return `Held(taker)` and write nothing (R8).
+- `release(...)`: re-read; edit the own marker to its released form; remove
+  `fr:claimed` only when no un-released claim, live or expired, remains. Works the
+  same on a closed issue.
 - `take(...)`: refuses unless the foreign claim is expired; edits the foreign
   marker to its released form (adding `"released_by": <me>`), then `claim`.
 
@@ -192,16 +213,28 @@ older than the call. Writes go only through `GhClient`; git is not involved.
 
 ### E. Commands (`commands/triage_batch_cmd.py`, `commands/triage_claim_cmd.py` new)
 
-- `batch create` / `batch edit`: R5's refusal reads facts' claims. When the
-  change makes claims owed (a wave set, a member added to a batch with a wave) or
-  releases owed (`--remove-issue`, `--no-wave` on a proposed batch), `--yes`
-  writes them after `judgements.yaml` is written; without `--yes` it prints them
-  and `fr triage claim sync --yes`. A failed claim write exits 1 and names the
+- `batch create` / `batch edit`: R5's refusal reads facts' claims. Both gain
+  `--yes`. When the change makes claims owed (a wave set, a member added to a
+  batch with a wave) or releases owed (`--remove-issue`, `--no-wave` on a
+  proposed batch), `--yes` resolves the forge client and the scope id and writes
+  them after `judgements.yaml` is written; without `--yes` it prints them and
+  `fr triage claim sync --yes`, and until then `check`'s `claims owed` set shows
+  them (R7). `--yes` here differs from `dispatch`'s: the judgements write happens
+  either way, and only the claim writes wait on it. This keeps the repo's rule
+  that the forge is written only under `--yes` while the claim is still made at
+  wave assignment whenever the operator passes it, and the gap is visible when
+  they do not. A failed claim write exits 1 and names the
   issue; the judgements change stands, and `claim sync` finishes it.
-- `batch dispatch --yes`: claims every member before its other forge writes; a
-  member held elsewhere refuses the batch (exit 2) before anything is written.
-- `batch merge`, `batch cancel`: refuse a batch with a member held elsewhere
-  (R6). `batch cancel --yes` releases this scope's claims on its members.
+- `batch dispatch --yes`: claims every member, R4's re-read included, after the
+  compare-before-write checks (`triage_batch_cmd.py:1087-1101`) and before the
+  runner launch (`:1125`), which cannot be undone; a member held elsewhere refuses
+  the batch (exit 2) before any session starts or anything else is written.
+- `batch merge`: refuses a batch with a member held elsewhere (R6).
+- `batch cancel --yes`: allowed on a held batch. It releases this scope's claims
+  and skips the `fr:in-progress` removal and withdrawal comment on members another
+  scope holds. A proposed batch with a wave now holds claims, so cancel's
+  `touches_forge` becomes "not proposed, or proposed with this scope's claims
+  written", and that case also needs the client and the tracking gate.
 - `fr triage claim list` (this scope's claims, held-elsewhere, expired; from
   facts), `claim sync [--yes]` (owed claims, refreshes, owed releases),
   `claim take <key> --batch <id> [--yes]`, `claim release <key> [--yes]`.
@@ -216,7 +249,10 @@ older than the call. Writes go only through `GhClient`; git is not involved.
   claim, one `refresh` per owed refresh, one `release` per owed release (new
   `ActionKind`s), and one `held` per batch with a member held elsewhere (R6). A
   held batch produces no merge, update, closeout, archive or dispatch action that
-  pass, and is not counted against `--max-inflight`.
+  pass. A held batch whose stage is in `LIVE_STAGES` still counts against
+  `--max-inflight` (it may have a session running); only a proposed one does not.
+- After its releases, the command appends one `claims_released` event to the
+  batch through the one judgements writer, so a later pass owes nothing.
 - The command executes `claim`/`refresh`/`release` through §D. A claim that
   turned into `Held` (R4) is reported, and the pass stops acting on that batch.
 - Export is untouched: an issue held elsewhere never enters this scope's
@@ -245,8 +281,11 @@ older than the call. Writes go only through `GhClient`; git is not involved.
 - `_marker_at`'s single comment read is shared: an issue labelled
   `fr:in-progress` or `fr:claimed` is read once, giving both
   `dispatch_marker_at` and `claims`.
-- `judgements.yaml` does not change shape. Facts and judgements are not
-  registered artifact kinds, so no artifact migration is owed.
+- `judgements.yaml` gains the engine-written `claims_released` event (`at`,
+  `keys`): `JUDGEMENTS_SCHEMA` = 6, schemas 1–5 still load, and a schema-6-only
+  event in an older file is refused as the existing schema-3 and schema-5 events
+  are. Facts and judgements are not registered artifact kinds, so no artifact
+  migration is owed.
 
 ### I. Skill (`plugins/super-fr/skills/fr-triage/SKILL.md`, both mirrors)
 
@@ -278,12 +317,12 @@ and a new label).
 
 strategy: candidate
 
-- triage-claims-hands-off: candidate — the scenario feeds a facts fixture with an issue claimed by another scope; `check` lists it held elsewhere and `batch create` refuses it.
-- triage-claims-expiry: candidate — the scenario feeds an expired foreign claim; `check` lists it expired and `batch create`'s refusal names `claim take`.
-- triage-claims-identity: none — unit tests: scope ids are stable, host-qualified and carry no hostname (`FR_HOST_ID` and the stored file).
-- triage-claims-writes: none — forge writes; unit tests against a fake GhClient cover claim, race, refresh, release and take (scenarios reach no forge).
-- triage-claims-driver: none — `drive_pass` is pure; unit tests cover the claim, refresh, release and held actions.
-- triage-claims-board-publish: none — unit tests render the board's held group and run a fake publish command, including its timeout and failure.
+- triage-claims-hands-off: candidate — the scenario feeds a facts fixture with an issue claimed by another scope; `check` lists it held elsewhere and `batch create` refuses it. The driver's held action and the dispatch, merge and cancel refusals are unit-tested.
+- triage-claims-expiry: candidate — the scenario feeds an expired foreign claim; `check` lists it expired and `batch create`'s refusal names `claim take`. Own-expired refresh, take and release are unit-tested against a fake GhClient.
+- triage-claims-identity: none — unit tests: scope ids are stable, host-qualified and carry no hostname; concurrent first use yields one host id; `scope show` output; `state export` never copies `scope.yaml`.
+- triage-claims-writes: none — forge writes; unit tests against a fake GhClient cover claim, the race over expired claims, in-place batch rewrite, refresh, release on open and closed issues, the label rule, `create`/`edit --yes` and the comment-id parse; collect and the facts and judgements schema bumps are unit-tested.
+- triage-claims-driver: none — `drive_pass` is pure; unit tests cover the claim, refresh, release and held actions, release at archive (never at merged), the `claims_released` record and the `--max-inflight` count.
+- triage-claims-board-publish: none — unit tests render the board's held group and run a fake publish command (placeholders, timeout, failure, `board --publish`, default names); the skill mirrors are guarded by the existing sync tripwires.
 
 ## 5. Test Plan
 
