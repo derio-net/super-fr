@@ -29,3 +29,8 @@ gh#921 (2, 3, push comment) and the gh#998 exit: the drive loop has exactly one 
 ### rc-921-skipped · root-cause · Batch drive-restart-forge: investigation
 
 gh#921 (1): collect_facts records a failing repo under facts.skipped in org/group scope, but the drive never read skipped; the repo stays in facts.repos, so its batches resolved with no PRs and derive_batch_stage misread pr-open/merged as dispatched (and a proposed one would dispatch on default config).
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-998 created=2026-10-06T13:58:48+00:00 -->
+### rc-998 · root-cause · Batch drive-restart-forge: investigation
+
+gh#998: TriageConfig is extra=forbid and the driver reads .fr/triage.yaml from the default branch every pass (collect read_config, check_config_fresh). The driver's own merges land a new key before the release that knows it, so the older running process refused the file and exited.
