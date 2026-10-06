@@ -6515,9 +6515,13 @@ rows:
       that finishes a wave, and never acts on duplicates
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_wave_going_from_unfinished_to_finished_reports_the_candidates_last
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_driver_fills_the_dedupe_fields_and_carries_unfinished_waves
+    status: ci
+    notes: 'Unit level only: drive_pass is pure and a live wave cannot be finished on
+      demand.'
   - id: triage-dedupe-skill
     capability: triage-dedupe
     acceptance: The fr-triage skill teaches judging candidate groups into duplicate_of
