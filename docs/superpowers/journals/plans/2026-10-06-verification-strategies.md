@@ -342,3 +342,42 @@ rmtree in finally after log + fingerprint. 316e293f7.
 ### p3-r9-resolved · finding [fixed] · resolves p3-r9: git failure in walk_cmd gave a traceback (phase 3)
 
 GitUnavailableError refused with exit 2. 3e22530c8.
+
+<!-- fr:journal kind=decision scope=plan id=p4-batch-awaits-live created=2026-10-06T13:29:40+00:00 phase=4 -->
+### p4-batch-awaits-live · decision · a batch whose open members all await live is no next_up row and holds no wave open (phase 4)
+
+Spec names next_up and preselected_wave as excluding awaiting-live issues but
+those read batches and features. views.awaits_live(batch, facts) is true when a
+batch has open members and all carry fr:awaiting-live; such a batch is skipped in
+both next_up passes and in preselected_wave, and feature rows drop awaiting
+members. A merged batch is unaffected (its stage already says merged).
+
+<!-- fr:journal kind=decision scope=plan id=p4-refs-line-reader created=2026-10-06T13:29:40+00:00 phase=4 -->
+### p4-refs-line-reader · decision · Refs lines are read with the closing-keyword scanner, keyword swapped (phase 4)
+
+pr_body.referenced_refs reuses _closing_lines (code/fence/render-marker skipping,
+GH-n spellings) with a Refs keyword, and closeout.awaiting_live_lines normalizes
+through normalize_issue_ref. The label command comes from issue_command(issue-label);
+an unreadable PR or matrix is said in the brief, tracking none prints nothing.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-awaiting-live-label-single-source created=2026-10-06T13:29:40+00:00 phase=4 -->
+### p4-awaiting-live-label-single-source · discovery · walks.AWAITING_LIVE_LABEL now derives from labels.FR_AWAITING_LIVE (phase 4)
+
+Phase 3 had hard-coded the string in acceptance/walks.py; it now reads the
+registered LabelDef so the unlabel command and the label command cannot drift.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-install-atomic-flaky-under-load created=2026-10-06T13:29:40+00:00 phase=4 -->
+### p4-install-atomic-flaky-under-load · discovery · test_install_atomic::test_fr_stays_runnable_throughout_a_reinstall failed once in a loaded full run (phase 4)
+
+Failed in one -n auto run, passed alone (8/8) and in the immediately following
+full run (9270 passed). Unrelated to this phase; not investigated further.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-10-06T13:29:40+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+closing-keyword scanning was generalised in place (_closing_lines takes the keyword) rather than copied for Refs; nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-10-06T13:29:40+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+one is_awaiting_live predicate in check.py serves check, views and render; no second label test exists
