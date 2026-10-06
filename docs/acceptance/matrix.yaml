@@ -7117,9 +7117,11 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R10
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_model_binding_check
+    status: ci
+    notes: scenario covers all four verdicts, an unapplied offer and exit 1 off a terminal
     verify: candidate
     scenario: tests/scenarios/model-binding-check.sh
   - id: model-binding-run-integration
