@@ -336,3 +336,22 @@ def owed_releases(
             out.append(pair)
             listed.add(pair)
     return out
+
+
+def held_members(keys: Iterable[str], held: Mapping[str, Claim]) -> list[tuple[str, Claim]]:
+    """The members of *keys* another scope holds, in *keys*' order (R6)."""
+    return [(k, held[k]) for k in keys if k in held]
+
+
+def held_line(key: str, h: Claim, now: datetime) -> str:
+    """One held member in words, with the operator hint once its claim has expired (R6)."""
+    line = (
+        f"{key} is claimed by triage scope {h.signer} for batch {h.batch}, expires "
+        f"{h.expires.isoformat()}"
+    )
+    if expired(h, now):
+        line += (
+            f" (expired: only the operator takes it over with `fr triage claim take {key} "
+            "--batch <id> --yes`)"
+        )
+    return line

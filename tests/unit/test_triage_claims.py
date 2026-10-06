@@ -17,6 +17,8 @@ from fr.triage.claims import (
     Marker,
     claims_from_comments,
     expired,
+    held_line,
+    held_members,
     holder,
     needs_refresh,
     owed_claims,
@@ -327,3 +329,17 @@ def test_a_rewritten_claim_survives_the_cancel_of_the_batch_it_used_to_name() ->
     ]
     stages: dict[str, Any] = {"a": "cancelled", "b": "dispatched"}
     assert owed_releases(batches, stages, archived=set(), own=[("x#1", "b")]) == []
+
+
+def test_held_members_keeps_the_keys_order_and_only_held_ones() -> None:
+    held = {"r#2": _claim(OTHER, 1), "r#1": _claim(OTHER, 2)}
+    assert [k for k, _ in held_members(["r#1", "r#3", "r#2"], held)] == ["r#1", "r#2"]
+
+
+def test_held_line_names_the_holder_and_hints_the_takeover_only_once_expired() -> None:
+    c = _claim(OTHER, 1)
+    live = held_line("r#1", c, T0 + timedelta(hours=1))
+    assert "claimed by triage scope s-22222222 for batch b1" in live
+    assert "expired" not in live
+    late = held_line("r#1", c, T0 + DAY)
+    assert "expired: only the operator takes it over with `fr triage claim take r#1" in late

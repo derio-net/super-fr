@@ -30,7 +30,7 @@ from fr.triage.batch import (
     batch_item_id,
     last_dispatch,
 )
-from fr.triage.claims import Claim
+from fr.triage.claims import Claim, held_line, held_members
 from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
@@ -841,18 +841,6 @@ def _claim_actions(snap: Snapshot) -> list[Action]:
     return out
 
 
-def held_members(batch: Batch, snap: Snapshot) -> list[tuple[str, Claim]]:
-    """The members of *batch* another scope holds (R6), in the batch's order."""
-    return [(k, snap.held[k]) for k in batch.ids if k in snap.held]
-
-
-def _held_detail(members: Sequence[tuple[str, Claim]]) -> str:
-    return "; ".join(
-        f"{k} is claimed by triage scope {c.signer} (batch {c.batch}), expires "
-        f"{c.expires.isoformat()}" for k, c in members
-    )  # fmt: skip
-
-
 def drive_pass(snap: Snapshot) -> Pass:
     """One pass: report foreign PRs, merge, close out, archive, dispatch, close sessions,
     then report duplicate candidates of newly finished waves — in that order, so a slot a
@@ -867,13 +855,14 @@ def drive_pass(snap: Snapshot) -> Pass:
     held_ids: set[str] = set()
     held_blocked = 0
     for batch in snap.batches:
-        members = held_members(batch, snap)
+        members = held_members(batch.ids, snap.held)
         if not members:
             continue
         held_ids.add(batch.id)
         if batch in chosen and stages.get(batch.id) not in ("cancelled", "abandoned"):
             held_blocked += 1
-            actions.append(Action("held", batch.id, _held_detail(members)))
+            detail = "; ".join(held_line(k, c, snap.now) for k, c in members)
+            actions.append(Action("held", batch.id, detail))
 
     # 0. Report a PR on a batch branch that is not the batch's, once (gh#936). It
     # never reaches the queue, so it is never merged.

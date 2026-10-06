@@ -170,7 +170,7 @@ from fr.triage.claim_sync import (
     plan_sync,
     record_releases,
 )
-from fr.triage.claims import Claim, from_issue_claim, holder
+from fr.triage.claims import Claim, from_issue_claim, held_line, held_members, holder
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
@@ -234,41 +234,26 @@ def claim_env(target: Path, facts: Facts) -> ClaimEnv:
     )
 
 
-def held_members(keys: Iterable[str], facts: Facts, me: str) -> list[tuple[str, Claim]]:
-    """The members of *keys* another scope's un-released claim holds, from facts (R5, R6).
+def _held_map(facts: Facts, me: str) -> dict[str, Claim]:
+    """Each open issue another scope's un-released claim holds, from facts (R5, R6).
     Only open issues: collect reads no closed issue's comments."""
-    found = {i.key: i for i in facts.issues if i.state == "open"}
-    out: list[tuple[str, Claim]] = []
-    for key in keys:
-        issue = found.get(key)
-        if issue is not None:
+    out: dict[str, Claim] = {}
+    for issue in facts.issues:
+        if issue.state == "open":
             h = holder([from_issue_claim(c) for c in issue.claims], me)
             if h is not None:
-                out.append((key, h))
+                out[issue.key] = h
     return out
-
-
-def _held_line(key: str, h: Claim, now: datetime) -> str:
-    line = (
-        f"{key} is claimed by triage scope {h.signer} for batch {h.batch}, expires "
-        f"{h.expires.isoformat()}"
-    )
-    if now >= h.expires:
-        line += (
-            f" (expired: only the operator takes it over, `fr triage claim take {key} "
-            "--batch <id> --yes`)"
-        )
-    return line
 
 
 def _refuse_held(env: ClaimEnv, keys: Iterable[str], what: str) -> None:
     """Exit 2, nothing written, when another scope holds any of *keys* (R5, R6)."""
-    found = held_members(keys, env.facts, env.me)
+    found = held_members(keys, _held_map(env.facts, env.me))
     if found:
         now = _now()
         _fail(
             f"{what}: another triage scope holds "
-            + "; ".join(_held_line(k, h, now) for k, h in found)
+            + "; ".join(held_line(k, h, now) for k, h in found)
         )
 
 
@@ -353,7 +338,7 @@ def _claim_for_dispatch(env: ClaimEnv, batch: Batch) -> list[str]:
         now = _now()
         _fail(
             f"batch {batch.id!r} cannot be dispatched: another triage scope holds "
-            + "; ".join(_held_line(h.key, h.holder, now) for h in result.held)
+            + "; ".join(held_line(h.key, h.holder, now) for h in result.held)
             + ". Nothing was launched."
         )
     if result.failed:
@@ -686,7 +671,7 @@ def batch_cancel_command(
     env = claim_env(target, facts)
     # R6: a member another scope holds keeps its fr:in-progress label and comments;
     # they are its holder's. This scope's own claims are released (R10).
-    held = {k for k, _ in held_members(batch.ids, facts, env.me)}
+    held = {k for k, _ in held_members(batch.ids, _held_map(facts, env.me))}
     owes = batch.wave is not None or any(e.kind == "dispatch" for e in batch.events)
     claimed = any(_own_claim_batch(facts, k, env.me) for k in batch.ids)
     releases = owes or claimed
@@ -2082,7 +2067,7 @@ class _Driver:
         keys = {k for b in judgements.batches for k in b.ids}
         return {
             "me": env.me,
-            "held": {k: c for k, c in held_members(sorted(keys), facts, env.me)},
+            "held": dict(held_members(sorted(keys), _held_map(facts, env.me))),
             "claims_owed": owed("claim"),
             "refresh_owed": owed("refresh"),
             "releases_owed": owed("release"),
@@ -2689,7 +2674,7 @@ class _Driver:
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         if result.held:
-            line = _held_line(op.key, result.held[0].holder, _now())
+            line = held_line(op.key, result.held[0].holder, _now())
             self._held_now.setdefault(action.batch, line)
             return line, False
         if result.failed:
