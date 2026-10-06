@@ -1,0 +1,158 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Move log + usage refresh (#930) — the follow-up trigger
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - archive-prices-earlier-closeouts
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/archive.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/usage/backfill.py
+  - tests/unit/test_archive_*.py
+  - tests/unit/test_usage_backfill.py
+  - .changes/feat-batch-archive-followups.yaml
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: SMOKE — a trivial test of the new follow-up module is green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create tests/unit/test_archive_followups.py with one test asserting
+      `from fr.archive import MoveLog, recording_moves` imports (add the two names as
+      stubs in packages/fr/src/fr/archive.py). Run
+      `uv run pytest tests/unit/test_archive_followups.py -q --no-cov`; green. Add the
+      change fragment .changes/feat-batch-archive-followups.yaml (`bump: minor`, summary:
+      "fr archive prices earlier closeouts' sessions, retargets matrix refs it moved, and
+      files open findings as issues"). Commit.
+- number: 2
+  title: RED/GREEN — MoveLog via ContextVar in _git_mv (spec §0)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in test_archive_followups.py, inside `with recording_moves() as log:`,
+      archive_plan_dir on a tmp git repo fixture (reuse the helpers test_archive_cmd.py
+      uses) records (src_rel, dst_rel) pairs for the plan dir, its journal, run and usage;
+      outside the context nothing is recorded and _git_mv behaves exactly as before.
+      Run: fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: fr/archive.py — `MoveLog` (dataclass holding an ordered list of
+      (Path, Path)), `_MOVE_LOG: ContextVar[MoveLog | None]`, a `recording_moves()`
+      context manager, and `_git_mv` appends after a successful `git mv` when the var is
+      set. No public signature changes. Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: ruff + mypy clean on fr/archive.py; keep MoveLog's API to `moves` and
+      `__bool__`.
+- number: 3
+  title: RED/GREEN — _after_moves in a finally on every entry mode (spec §0)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: CLI tests (test_archive_followups.py, CliRunner as in test_archive_cmd.py) with
+      `_after_moves` monkeypatched to a spy: called once with a non-empty log for
+      plan_dir, --all, --sweep-only and --branch archives that move; called with a
+      non-empty log when a single-plan archive moves the plan dir and then exits 2 because
+      a follower move raises ArchiveError (monkeypatch archive_run_cursor to raise); not
+      acting (empty log) when nothing moved; the exit code unchanged in every case. Fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: archive_cmd.py — wrap each entry mode's body in `with recording_moves() as
+      log: try: … finally: _after_moves(repo_root, log, opts)`. `_after_moves` returns
+      immediately on an empty log and runs each follow-up step in its own try (steps added
+      by this and later phases); it never raises and never changes the exit code. Tests
+      green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: one `_ArchiveOpts` dataclass carries what the follow-ups need (the issues
+      selection is filled in by phase 3); ruff/mypy clean.
+- number: 4
+  title: RED/GREEN — refresh_archived + archive staging (spec §A, R1–R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: test_usage_backfill.py — `refresh_archived(repo_root, env, skip=...)` refreshes
+      an archived usage file whose unpriced session now reads with dollars (reuse the
+      existing gh#756 fixtures), leaves a priced one untouched, never creates a file for a
+      run without one, reports an unreadable cursor in `failed`, and skips a file `skip`
+      returns True for. `backfill()`'s existing tests stay green. Fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: extract the existing-file branch of backfill() into refresh_archived;
+      backfill calls it. Tests green.
+  - id: P1.T4.S3
+    text: |-
+      RED→GREEN: archive CLI test — an archive that moves something stages each
+      refreshed implemented/usage file (`git diff --cached --name-only`) and prints
+      `  priced: <path>`; a dirty usage file is skipped with a note; an exception in the
+      refresh prints a note and leaves the exit code unchanged; nothing moved → no refresh
+      call. Implement the refresh step of _after_moves (skip=paths_dirty).
+  - id: P1.T4.S4
+    text: |-
+      RED→GREEN: _note_unpriced's message says the next `fr archive` here will price the
+      session (or `fr usage backfill`) and no longer asks to commit; update the existing
+      test that pins the gh#756 text.
+  - id: P1.T4.S5
+    text: |-
+      REFACTOR + gate: `uv run ruff check packages/ tests/`, `uv run ruff format`, mypy on
+      packages/fr/src, and the archive/usage test files green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

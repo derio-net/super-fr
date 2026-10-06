@@ -1,0 +1,124 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Matrix retarget (#528) — refs follow what archive moved
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - archive-retargets-matrix-refs
+  tier: standard
+  files:
+  - packages/fr/src/fr/acceptance/retarget.py
+  - packages/fr/src/fr/acceptance/check.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - tests/unit/test_acceptance_retarget.py
+  - tests/unit/test_acceptance_archive_twin.py
+  - tests/unit/test_archive_followups.py
+  - docs/acceptance/*
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: RED/GREEN — retarget_text, anchored to origin/levels (spec §B)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_retarget.py — retarget_text(text, own, moves)
+      rewrites `own:<src>` → `own:<dst>` for a file move, and `own:<src>/x/y.yaml#frag` →
+      `own:<dst>/x/y.yaml#frag` for a plan-dir move, in `origin:` and `levels.<lv>:` block
+      lists; leaves notes/scenario/walks text, other-repo refs (`frank:<src>`), comments
+      and ordering byte-identical; returns `changes` as (row_id, old, new). Fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: packages/fr/src/fr/acceptance/retarget.py — a line-based walker tracking the
+      current row id and key block; it rewrites only `- <ref>` items under `origin:` or
+      under a level key of `levels:`, then re-parses with
+      fr.artifacts.structure._StrictLoader into Matrix and checks equality with the
+      original plus changes, else raises RetargetError. Tests green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: reuse split_ref from acceptance/model.py rather than re-parsing refs;
+      ruff/mypy clean.
+- number: 2
+  title: RED/GREEN — the retarget step in _after_moves (R4–R6)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: test_archive_followups.py — after a plan archive whose spec sweep moves the
+      spec, matrix refs to a file in the plan dir and to the spec are retargeted, the three
+      reports are regenerated (equal to render_committed_set) and all four staged, with
+      `  retargeted:` lines; a dirty matrix.yaml or report warns and touches nothing; no
+      matrix → no-op; a RetargetError warns and touches nothing; the single-plan
+      moved-then-exit-2 case still retargets. Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement the retarget step (own = resolve_identity(matrix, root)[1]; render
+      everything in memory first; write via write_text_atomic; git add). Tests green.
+- number: 3
+  title: RED/GREEN — reworded twin warning; plan refs stay errors (R7)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: test_acceptance_archive_twin.py pins the new warning text ("names an archived
+      path … survived an archive fr did not perform; retarget it") and that a stale
+      plan-dir ref is still an error. Fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: update _resolve_ref's warning text. Tests green.
+- number: 4
+  title: Zero baseline — retarget the pre-existing stale spec ref
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Run `uv run fr acceptance check` and note every twin warning (the
+      2026-09-27-spec-ref-writers spec ref is known). Retarget each with retarget_text (a
+      short `uv run python -c` with a live→implemented move), regenerate the reports with
+      `uv run fr acceptance report --deterministic`, and confirm `fr acceptance check`
+      prints no twin warning. Commit.
+  - id: P2.T4.S2
+    text: |-
+      REFACTOR + gate: ruff, ruff format, mypy, and the acceptance/archive test files
+      green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
