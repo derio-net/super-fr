@@ -5969,9 +5969,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_usage_compare.py#test_cli_prints_two_tables_deterministically_and_writes_nothing
       - super-fr:tests/unit/test_usage_compare.py#test_set_summary_takes_medians_and_counts_priced
+      - super-fr:tests/unit/test_usage_compare.py#test_steps_use_the_v2_main_split_where_it_exists
+      - super-fr:tests/unit/test_usage_compare.py#test_a_session_shared_by_two_runs_of_a_set_is_marked
     status: ci
-    notes: 'R10: compare engine and CLI over fixtures incl. a pre-v5 cursor, medians,
-      n, dashes, determinism, read-only (phase 3)'
+    notes: 'R10: --steps, shared-session marker, plan-folder phases and phaseless findings
+      pinned (phase 3 review fixes)'
   - id: session-observer-protocol
     capability: transcript gates
     acceptance: Every transcript gate reads the harness through one session protocol
