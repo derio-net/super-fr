@@ -50,22 +50,23 @@ where either issue lists the other in `distinct_from`.
 R5. `fr triage check` reports a `duplicates` set: every open issue judged a
 duplicate, with its original's state (`open`, `closed` or `missing`, plus a
 reason). For an open or closed original it prints the exact
-`gh issue close <n> --repo <OWNER/REPO> --duplicate-of <original>` command.
+`gh issue close <n> --repo <OWNER/REPO> --duplicate-of <original url>` command.
 For a missing one it names the dangling key and prints no command.
 R6. `fr triage collect` views every `duplicate_of` target that is not an open
 issue, the same way it views a judged key, so a closed original reads `closed`,
 not `missing`.
 R7. A judged duplicate is never in the `unplaced` set.
 R8. On the board, a judged duplicate whose original is an open issue in the facts
-is rendered inside its original's row, not in its own tier. Any other judged
-duplicate stays in its tier with a tag naming its original and that original's
-state.
+is rendered inside its original's row, not in its own tier. An open duplicate
+shows its close command there, and a closed one shows a `closed` tag and no
+command. Any other judged duplicate stays in its tier with a tag naming its
+original and that original's state.
 R9. The board has a "Possible duplicates" section listing the candidate groups
 with each pair's reasons, and it says so when there are none.
-R10. `fr triage batch drive` prints one `warn` line, giving the candidate-group
-count and the `fr triage check` command, in the pass whose archive merge
-finishes the last unfinished batch of a wave, when that count is not zero. The
-driver never judges and never writes a duplicate to the forge.
+R10. In loop mode, `fr triage batch drive` prints one `dedupe` line when it
+observes a wave go from unfinished to finished while the candidate set is not
+empty. The line gives the count and the scope-qualified `fr triage check`
+command. The driver never judges and never writes a duplicate to the forge.
 R11. The fr-triage skill teaches the loop: read the candidates, judge each group
 into `duplicate_of` or `distinct_from`, and leave the printed close commands to
 the operator. The skill's prose-only "link duplicates in `note`" goes away.
@@ -167,18 +168,22 @@ same cap `collect` already applies).
 
 1. **title**: the Jaccard similarity of the two title word sets is ≥ 0.5. Words
    are lowercased `[a-z0-9_]+` runs, minus a short stop list. A word is kept when
-   it is longer than two characters or is all digits, so `p0` and `p1`
-   phase-tracking titles differ.
+   it is longer than two characters or is all digits, so the phase-tracking
+   titles `…-0-agentic` and `…-1-agentic` differ (the rule the calibration ran).
 2. **identifiers**: the two issues share at least 2 rare identifiers, or share 1
    rare identifier and have a title Jaccard ≥ 0.25. An identifier is the leaf of
    a code-shaped token, i.e. the last `::`, `/` or `.` segment with any `:<line>`
    suffix and `()` removed. A token is code-shaped when it is backticked (no
    spaces; contains `_ . / ( :` or camelCase) or is a bare snake_case word. The
    leaf must contain `_` and be at least 8 characters long. It is never a file
-   name (a leaf with an extension) and never a name that appears as a path or
-   module segment anywhere in the scope, because module names link issues that
-   share a subsystem, not a defect. Rare means at most 3 open issues in the
-   scope name it.
+   name (a leaf with an extension) and never a module name. Module names are
+   collected over the same text set (titles and bodies of the open issues in
+   the universe) from every code-shaped token. For each token, every `::` or
+   `/` segment except the last, cut at its first `.`, is a module name, and so
+   is a file leaf's stem. A dotted leaf such as `fr.run.telemetry.x_y`
+   contributes only `x_y`. Module names are excluded because they link issues
+   that share a subsystem, not a defect. Rare means at most 3 open issues in
+   the universe name it (sr-10).
 3. **finding**: the two issues name the same journal finding id after the word
    `finding` (`finding r2-2`, ``finding `deliver-flaky-columns` ``), and both
    reference at least one same `#<n>`. A finding id contains a digit or a hyphen,
@@ -216,13 +221,29 @@ class Duplicate:
 
 `duplicates` covers every open issue in the facts that carries `duplicate_of`.
 The original is looked up through `facts.issues` (open, or closed after R6's
-view). If it is not found, the reason comes from `_unreachable_reason`, and
-otherwise reads "not in any collected repo". The command is built from facts,
+view). If it is not found, the state is `missing` and the reason is the first that
+applies, checked in order (sr-7):
+1. "a pull request, not an issue", when any PR list in the facts carries the
+   key;
+2. the `unviewed` reason;
+3. the `skipped` reason;
+4. "added since the last collect; run `fr triage collect` again", for a key in
+   a collected repo;
+5. "not in any collected repo".
+
+`_unreachable_reason`'s "judged after…" wording is not reused, because a target
+is not a judgement. The command is built from facts,
 `gh issue close <n> --repo <OWNER/REPO> --duplicate-of <original url>`, so it
 works across the repos of a group scope. A closed original gets the same
 command: "close both" means the duplicate must close too.
 
 `unplaced_issues` treats every judged duplicate as placed (R7).
+
+Collect's view list becomes `judged ∪ duplicate_targets()`. `classify`'s
+`unreachable` and `orphaned` sets still iterate judgement keys only, so an
+unviewed target that is not judged never enters them. The stderr `unviewed`
+report in `triage_cmd._report` and the `Unviewed` docstring are reworded from
+"judged" to "judged or named by `duplicate_of`" (sr-8).
 
 The text output adds two sections after `unplaced`. Under
 **duplicate candidates**, each group prints its keys, then one indented line
@@ -232,10 +253,12 @@ per pair with its reasons. Under **duplicates**, each entry prints
 
 ### D. Board (`fr/triage/render.py`)
 
-- The tier sections skip a judged duplicate whose original is an open issue in
-  the facts. Its original's row gets a `Duplicates` paragraph: one line per
-  duplicate, giving the key (linked), the title and the `gh` command in
-  `<code>`. The original's summary gets a `+N duplicate(s)` tag (R8).
+- The tier sections skip a judged duplicate (open or closed) whose original is
+  an open issue in the facts. Its original's row gets a `Duplicates` paragraph:
+  one line per duplicate, giving the key (linked) and the title. An open
+  duplicate also gets its `gh` command in `<code>`, and a closed one gets a
+  `closed` tag and no command (sr-6). The original's summary gets a
+  `+N duplicate(s)` tag (R8).
 - Any other judged duplicate (original closed or missing) keeps its row in its
   tier, with a `duplicate of <key> (<state>)` tag.
 - A new `Possible duplicates` section (`id="possible-duplicates"`) goes directly
@@ -248,20 +271,38 @@ per pair with its reasons. Under **duplicates**, each entry prints
 
 ### E. Driver (`fr/triage/batch_drive.py`, `commands/triage_batch_cmd.py`)
 
-`Snapshot` gains `duplicate_groups: int = 0`. The command computes it on each
-pass from the facts it just collected and the judgements it loaded.
+The trigger is an **observed** transition, a wave going from unfinished to
+finished. It is never inferred from a planned action: an `archive` action is a
+plan, and its merge may still fail (spec review sr-2, sr-3).
 
-`drive_pass` adds a step after the archive step. Let `finishing` be the set of
-batches with an `archive` action this pass. For each wave `w` (batches with a
-non-None `wave`), if some batch of `w` is in `finishing`, every other batch of
-`w` already `is_finished`, and `duplicate_groups > 0`, the step appends one
-`Action("warn", f"wave-{w}", "<n> duplicate candidate group(s) after wave <w>;
-run `fr triage check` to judge them")`.
+- **Wave members.** For wave `w`, the members are every batch in the state file
+  with `wave == w` whose stage is not `cancelled` or `abandoned`. A batch
+  outside `--selection` still counts, because a wave is finished globally, not
+  per selection. A wave with no members is never finished (sr-4).
+- **Finished.** `finished_waves(snap) -> frozenset[int]` is a pure helper in
+  `batch_drive.py`. It returns the waves whose members are all `is_finished`.
+- **`Snapshot`** gains three fields:
+  - `unfinished_waves: frozenset[int] | None = None` holds the waves that were
+    unfinished on this process's previous pass, or `None` on its first pass.
+  - `duplicate_groups: int = 0` is the candidate-group count.
+  - `dedupe_command: str = ""` is the scope-qualified check command, for
+    example `fr triage check --repo derio-net/super-fr`. The command builds it
+    from its own scope args, because the pure pass has none (sr-5).
+- **`drive_pass`**, as its last step, emits one action per wave `w` in
+  `finished_waves(snap) & (snap.unfinished_waves or ∅)`, in ascending order,
+  provided `duplicate_groups > 0`: `Action("dedupe", "", "<n> duplicate
+  candidate group(s) after wave <w> finished; run `<dedupe_command>` to judge
+  them")`. It uses a new `ActionKind` value, `dedupe`, which names no batch.
+- **The command** carries forward to the next pass the waves this pass's
+  snapshot found unfinished. `_act` handles `dedupe` before it resolves
+  `action.batch`, returning the detail and acting on nothing (sr-1). In plan
+  mode (no `--yes`), the line prints like any other action.
 
-The step is stateless. It fires on the transition, so `--once` and loop mode
-behave the same and neither repeats the line. A wave closed out by hand (an
-`adopt` and no archive action) does not trigger it. The next `check` still
-shows the candidates. Decision `d-driver-transition`.
+So loop mode reports each wave once, in the pass that first sees it finished.
+A wave already finished when the process starts is never reported. `--once`
+never reports, because every `--once` run is a first pass. This is stated
+rather than worked around: `check` and the board always show the candidates.
+Decision `d-driver-observed`.
 
 ### F. Skill (`plugins/super-fr/skills/fr-triage/SKILL.md`, and both mirrors)
 
@@ -308,6 +349,13 @@ No deployment step. The release ships it. Post-merge, operator-driven:
    --duplicate-of …` line. Nothing was written to the forge.
 3. `fr triage render --repo derio-net/super-fr --open`: the duplicate is nested
    under its original, and "Possible duplicates" lists the rest.
+4. Judge a duplicate of an issue that is already closed, then
+   `fr triage collect` and `check`: the original reads `closed`, not `missing`
+   (R6).
+
+R3's load refusals and R10's driver line are covered at unit level only
+(`drive_pass` is pure, and a live wave cannot be finished on demand). Their
+rows say so.
 
 ## Implementation Plans
 
@@ -317,4 +365,5 @@ No deployment step. The release ships it. Post-merge, operator-driven:
 
 Born at brainstorm, presented at spec review: `triage-dedupe-candidates` (R1,
 R2, R4), `triage-dedupe-judged` (R3, R5, R6, R7), `triage-dedupe-board` (R8,
-R9) and `triage-dedupe-driver` (R10).
+R9), `triage-dedupe-driver` (R10) and `triage-dedupe-skill` (R11, added at
+spec review, sr-12).
