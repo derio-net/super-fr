@@ -6821,9 +6821,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R17
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R18
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_awaiting_live_triage
+    status: ci
+    notes: scenario tests/scenarios/awaiting-live-triage.sh runs against a candidate
+      install in CI (tests/integration/test_scenarios.py)
+    scenario: tests/scenarios/awaiting-live-triage.sh
   - id: triage-drive-conflict-handback
     capability: triage
     acceptance: A real merge conflict is handed back once per head to the batch's live
