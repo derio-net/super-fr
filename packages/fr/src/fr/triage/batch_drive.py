@@ -30,6 +30,7 @@ from fr.triage.batch import (
     batch_item_id,
     last_dispatch,
 )
+from fr.triage.claims import Claim
 from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
@@ -74,6 +75,9 @@ ActionKind = Literal[
     "foreign",
     "close",
     "dedupe",
+    "claim",
+    "refresh",
+    "release",
     "export",
     "export-merge",
     "export-reconcile",
@@ -182,6 +186,14 @@ class Snapshot:
     # only for these is "not in `existing`" evidence that no tab holds it. Plan mode
     # reads no runner, so it probes none and never calls a close-out stale.
     closeout_probed: frozenset[str] = frozenset()
+    # Triage-claims §3.F. `me`: this scope's id; `held`: issue key -> the other scope's
+    # winning claim (R4, R6), from facts; the three `*_owed` lists are (key, batch id)
+    # pairs, from `claim_sync.plan_sync`: this module decides order, never what is owed.
+    me: str = ""
+    held: Mapping[str, Claim] = field(default_factory=dict)
+    claims_owed: tuple[tuple[str, str], ...] = ()
+    refresh_owed: tuple[tuple[str, str], ...] = ()
+    releases_owed: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -200,6 +212,7 @@ class Action:
     # highest wave the export PR covers, which names its branch
     wave: str | None = None
     covers: tuple[str, ...] = ()  # export: every wave the PR records
+    key: str = ""  # claim, refresh, release: the issue key
 
 
 @dataclass(frozen=True)
@@ -805,14 +818,62 @@ def _walk_train(
     return Train(repo, head, tuple(candidates), tuple(queued), tuple(stepped), numbers), merges
 
 
+def _claim_actions(snap: Snapshot) -> list[Action]:
+    """The claim writes of a pass, ahead of every other action (§3.F): claims, then
+    refreshes, then releases. A batch outside the selection is left alone; one the
+    snapshot does not know (a dropped member's old batch) is still released."""
+    known = {b.id for b in snap.batches}
+
+    def mine(bid: str) -> bool:
+        return snap.selected is None or bid in snap.selected or bid not in known
+
+    out: list[Action] = []
+    for kind, owed, why in (
+        ("claim", snap.claims_owed, "owed"),
+        ("refresh", snap.refresh_owed, "heartbeat due"),
+        ("release", snap.releases_owed, "no longer owed"),
+    ):
+        out.extend(
+            Action(kind, bid, why, key=key)  # type: ignore[arg-type]
+            for key, bid in owed
+            if mine(bid)
+        )
+    return out
+
+
+def held_members(batch: Batch, snap: Snapshot) -> list[tuple[str, Claim]]:
+    """The members of *batch* another scope holds (R6), in the batch's order."""
+    return [(k, snap.held[k]) for k in batch.ids if k in snap.held]
+
+
+def _held_detail(members: Sequence[tuple[str, Claim]]) -> str:
+    return "; ".join(
+        f"{k} is claimed by triage scope {c.signer} (batch {c.batch}), expires "
+        f"{c.expires.isoformat()}" for k, c in members
+    )  # fmt: skip
+
+
 def drive_pass(snap: Snapshot) -> Pass:
     """One pass: report foreign PRs, merge, close out, archive, dispatch, close sessions,
     then report duplicate candidates of newly finished waves — in that order, so a slot a
     merge frees is used in the same pass."""
-    actions: list[Action] = []
+    actions: list[Action] = _claim_actions(snap)
     stages = dict(snap.stages)
     merging: set[str] = set()
     chosen = tuple(b for b in snap.batches if snap.selected is None or b.id in snap.selected)
+
+    # -1. A batch with a member another scope holds is left alone this pass (R6): one
+    # `held` action, and no merge, update, close-out, archive or dispatch below.
+    held_ids: set[str] = set()
+    held_blocked = 0
+    for batch in snap.batches:
+        members = held_members(batch, snap)
+        if not members:
+            continue
+        held_ids.add(batch.id)
+        if batch in chosen and stages.get(batch.id) not in ("cancelled", "abandoned"):
+            held_blocked += 1
+            actions.append(Action("held", batch.id, _held_detail(members)))
 
     # 0. Report a PR on a batch branch that is not the batch's, once (gh#936). It
     # never reaches the queue, so it is never merged.
@@ -830,7 +891,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     by_repo: dict[str, list[QueueEntry]] = {}
     for entry in sorted(snap.queue, key=lambda e: _dispatch_key(e.batch)):
         bid = entry.batch.id
-        if snap.selected is not None and bid not in snap.selected:
+        if (snap.selected is not None and bid not in snap.selected) or bid in held_ids:
             continue
         by_repo.setdefault(snap.repos.get(bid, ""), []).append(entry)
     trains: list[Train] = []
@@ -846,7 +907,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     # (gh#990); starting one, or recording one under way, follows the selection.
     closing = 0
     for batch in snap.batches:
-        if stages.get(batch.id) not in LANDED or batch.id in merging:
+        if stages.get(batch.id) not in LANDED or batch.id in merging or batch.id in held_ids:
             continue
         if closeout_event(batch) is not None:
             continue
@@ -891,7 +952,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     archives_blocked = 0
     for batch in chosen:
         event = closeout_event(batch)
-        if event is None or stages.get(batch.id) not in LANDED:
+        if event is None or stages.get(batch.id) not in LANDED or batch.id in held_ids:
             continue
         archives = snap.archives.get(snap.repos.get(batch.id, ""), ())
         mine = [p for p in archives if attributed(p, batch, event)]
@@ -944,9 +1005,9 @@ def drive_pass(snap: Snapshot) -> Pass:
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
-    pending, blocked = 0, exports_blocked + archives_blocked
+    pending, blocked = 0, exports_blocked + archives_blocked + held_blocked
     for batch in sorted(chosen, key=_dispatch_key):
-        if stages.get(batch.id) != "proposed":
+        if stages.get(batch.id) != "proposed" or batch.id in held_ids:
             continue
         if batch.id in snap.awaiting:
             # No work, so not pending either: it never keeps a drive alive.
@@ -1028,6 +1089,8 @@ def action_line(action: Action, outcome: str | None = None) -> str:
     the same words in `--once` and loop mode."""
     if action.kind == "dedupe":  # names no batch
         return f"dedupe: {outcome or action.detail}"
+    if action.kind in ("claim", "refresh", "release"):
+        return f"{action.kind} {action.key} ({action.batch}): {outcome or action.detail}"
     if action.wave is not None:
         return f"{action.kind} wave {action.wave} {action.batch}: {outcome or action.detail}"
     return f"{action.kind} {action.batch}: {outcome or action.detail}"
