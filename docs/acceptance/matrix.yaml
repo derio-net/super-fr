@@ -7177,7 +7177,11 @@ rows:
       that constraint and the session-upkeep settings
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_preflight_refuses_outside_a_herdr_session
+      - super-fr:tests/unit/test_fr_triage_skill_runner_constraints.py#test_the_skill_states_the_herdr_only_rule
+      - super-fr:tests/unit/test_fr_triage_skill_runner_constraints.py#test_the_skill_names_the_session_upkeep_settings
+    status: ci
+    notes: refusal text and the fr-triage skill paragraph are pinned by tests
     verify: none
