@@ -481,6 +481,12 @@ def set_status_cmd(
         help="'owner/repo#n' issue whose promise the row carries, ADDED to its `issues` "
         "(repeatable; spec 2026-10-06 R13).",
     ),
+    scenario: str | None = typer.Option(
+        None,
+        "--scenario",
+        help="Repo-relative walk scenario for the row (spec 2026-10-06 R10); omit to keep "
+        "the row's existing one.",
+    ),
     walk: str | None = typer.Option(
         None,
         "--walk",
@@ -575,7 +581,7 @@ def set_status_cmd(
             notes=notes,
             verify=new_verify,
             visual=target.visual,  # set-status never touches `visual` (spec 2026-09-28 §A)
-            scenario=target.scenario,
+            scenario=scenario if scenario is not None else target.scenario,
             issues=target.issues + tuple(i for i in dict.fromkeys(issue) if i not in target.issues),
             harnesses=target.harnesses,
             walks=target.walks + ((new_walk,) if new_walk is not None else ()),
@@ -596,6 +602,7 @@ def set_status_cmd(
             levels={k: tuple(v) for k, v in additions.items()},
             verify=verify,  # None preserves; apply.py falls back to existing
             issues=tuple(issue),
+            scenario=scenario,
             walk=new_walk,
         ),
         f"chore(fr): acceptance — {row_id} {describe_move(target, new_row)}",

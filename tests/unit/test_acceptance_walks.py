@@ -139,6 +139,12 @@ def test_set_status_issue_adds_to_the_row(repo: Path) -> None:
     assert _target(repo).issues == ("o/r#1", "o/r#2")
 
 
+def test_set_status_scenario_sets_it_and_omitting_it_keeps_it(repo: Path) -> None:
+    assert _set("--scenario", "tests/scenarios/t.sh").exit_code == 0
+    assert _set("--issue", "o/r#1").exit_code == 0
+    assert _target(repo).scenario == "tests/scenarios/t.sh"
+
+
 def test_set_status_walk_appends_a_walk(repo: Path) -> None:
     out = _set(
         "--walk", "walk.log", "--harness", "claude-code", "--model", "opus", "--strategy", "live"

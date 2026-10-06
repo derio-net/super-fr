@@ -1457,6 +1457,11 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # Acceptance linkage (2026-07-04 acceptance-matrix spec, decision 2).
     issues.extend(_acceptance_link_issues(plan))
 
+    # The spec's `## Verification` (2026-10-06 verification-strategies §B):
+    # a malformed section, a post-merge/`none` row with no reason, an agent
+    # pre-merge row with no scenario.
+    issues.extend(_verification_issues(plan))
+
     # Walking-skeleton gate (fr-goal methodology restoration): the first
     # agentic phase is the delivery-infrastructure smoke.
     issues.extend(_skeleton_issues(plan))
@@ -1637,6 +1642,83 @@ def _workflow_issues(plan: Plan) -> list[ReviewIssue]:
         )
         for err in check_workflow(manifest, plan.repo_root)
     ]
+
+
+def _verification_issues(plan: Plan) -> list[ReviewIssue]:
+    """Spec 2026-10-06-verification-strategies §B (R6, R10), each refused by
+    name: a malformed `## Verification`; a row citing the spec whose effective
+    strategy is post-merge or `none` with no reason line in the section; a row
+    whose effective strategy is agent-driven and pre-merge with no `scenario`;
+    and a strategy that does not resolve. A spec with no section is the world
+    before strategies and passes unchanged. Same-repo specs only, as the
+    acceptance linkage check."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.requirements import load_spec_matrix, rows_citing
+    from fr.verification.model import RESERVED, StrategyError
+    from fr.verification.resolve import resolve_strategy
+    from fr.verification.rows import SpecVerification, spec_section_at
+    from fr.verification.spec_section import SectionError
+    from fr.workflow.model import WorkflowError
+    from fr.workflow.resolve import workflow_for_plan
+
+    root = plan.repo_root
+    spec_rel = plan.spec_path or plan.meta.spec
+    if root is None or not spec_rel or is_cross_repo_spec(spec_rel):
+        return []
+
+    def issue(message: str) -> ReviewIssue:
+        return ReviewIssue(severity="error", message=f"spec ## Verification: {message}")
+
+    try:
+        section = spec_section_at(root, spec_rel)
+    except SectionError as e:
+        return [issue(f"{spec_rel} {e}")]
+    if section is None:
+        return []
+    try:
+        shape = workflow_for_plan(plan).verification
+    except WorkflowError:
+        shape = None  # `_workflow_issues` reports the shape itself
+    try:
+        matrix, spec_ref = load_spec_matrix(root, spec_rel)
+    except AcceptanceError:
+        return []  # `_acceptance_link_issues` reports an unreadable matrix
+    verification = SpecVerification(root, section, shape)
+    out: list[ReviewIssue] = []
+    for row in rows_citing(matrix, spec_ref):
+        name = verification.strategy(row)
+        if name is None:
+            continue
+        if name == RESERVED:
+            if not verification.reason(row):
+                out.append(
+                    issue(
+                        f"row `{row.id}` is `none` with no reason — add "
+                        f"`- {row.id}: none — <what verifies it instead>`"
+                    )
+                )
+            continue
+        try:
+            manifest = resolve_strategy(name, root)
+        except StrategyError as e:
+            out.append(issue(f"row `{row.id}`: {e}"))
+            continue
+        if manifest.when == "post-merge" and not verification.reason(row):
+            out.append(
+                issue(
+                    f"row `{row.id}` is post-merge (`{name}`) with no reason — add "
+                    f"`- {row.id}: {name} — <why no pre-merge strategy applies>`"
+                )
+            )
+        if manifest.when == "pre-merge" and manifest.driver == "agent" and not row.scenario:
+            out.append(
+                issue(
+                    f"row `{row.id}` is walked by an agent before merge (`{name}`) but names "
+                    "no `scenario` — set one with `fr acceptance set-status "
+                    f"--id {row.id} ... --scenario <path>`"
+                )
+            )
+    return out
 
 
 def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
