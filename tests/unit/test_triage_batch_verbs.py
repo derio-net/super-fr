@@ -151,7 +151,7 @@ def test_create_writes_the_batch_at_the_current_schema(tmp_path: Path) -> None:
         ["super-fr#577", "super-fr#575"],
         "minor",
     )
-    assert _raw(tmp_path)["schema"] == 5
+    assert _raw(tmp_path)["schema"] == 6
 
 
 def test_create_stores_only_the_launch_values_given(tmp_path: Path) -> None:

@@ -39,6 +39,7 @@ from fr.triage.model import (
     TriageConfig,
     _check_schema,
     batch_marker,
+    trusted_logins,
     withdrawn_marker,
 )
 
@@ -145,10 +146,9 @@ def of_dispatch(pr: PullRequest, event: DispatchEvent) -> bool:
 def allowed_authors(repo: str, facts: Facts) -> frozenset[str]:
     """The logins whose PRs may be *repo*'s batch PRs, lowercased (gh#936): the
     repo's `.fr/triage.yaml` `pr_authors` when it lists any, else the user
-    `collect` ran as. Empty when neither is known, so nothing is trusted."""
-    listed = facts.config_for(repo).pr_authors
-    logins = listed or ([facts.viewer] if facts.viewer else [])
-    return frozenset(login.lower() for login in logins)
+    `collect` ran as. Empty when neither is known, so nothing is trusted. The same
+    set decides whose claim markers count (triage-claims R17)."""
+    return trusted_logins(facts.config_for(repo), facts.viewer)
 
 
 def distrust(author: str | None, cross_repo: bool | None, allowed: frozenset[str]) -> str | None:

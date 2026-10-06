@@ -29,7 +29,7 @@ from typing import Any, Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
 from fr.triage.batch import BatchStage
-from fr.triage.model import BATCH_ID_RE, Batch
+from fr.triage.model import BATCH_ID_RE, Batch, IssueClaim
 
 CLAIM_PREFIX = "<!-- fr-claim:"
 RELEASED_PREFIX = "<!-- fr-claim-released:"
@@ -205,6 +205,24 @@ def read_claims(comments: Iterable[Mapping[str, object]], trusted: Collection[st
         if m.released is None
     ]
     return ClaimRead(sorted(claims, key=_order), malformed, untrusted)
+
+
+def to_issue_claim(c: Claim) -> IssueClaim:
+    """*c* as facts record it."""
+    return IssueClaim(
+        signer=c.signer,
+        batch=c.batch,
+        claimed=_stamp(c.claimed),
+        heartbeat=_stamp(c.heartbeat),
+        expires=_stamp(c.expires),
+        comment_id=c.comment_id,
+        created_at=_stamp(c.created_at),
+    )
+
+
+def from_issue_claim(c: IssueClaim) -> Claim:
+    """A claim facts recorded, as the rules read it."""
+    return Claim.model_validate(c.model_dump())
 
 
 def claims_from_comments(

@@ -92,8 +92,8 @@ class _Forge(FakeForge):
 
 def test_facts_are_written_at_the_current_schema() -> None:
     forge = _Forge(issues={REPO: []}, prs={REPO: []}, open_prs=[])
-    assert FACTS_SCHEMA == 5
-    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 5
+    assert FACTS_SCHEMA == 6
+    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 6
 
 
 def test_a_linked_open_pr_gains_files_head_oid_checks_and_merge_state_from_the_join() -> None:
@@ -456,7 +456,7 @@ def test_schema_5_facts_carry_mirrors_and_schema_4_files_still_read(tmp_path: Pa
         },
     )
     facts = collect_facts(forge, SCOPE, now=NOW)
-    assert facts.schema_ == FACTS_SCHEMA == 5
+    assert facts.schema_ == FACTS_SCHEMA == 6
     assert facts.config_for(REPO).mirrors == [["uv", "run", "sync.py"]]
     path = tmp_path / "facts.json"
     doc = facts.to_json()
