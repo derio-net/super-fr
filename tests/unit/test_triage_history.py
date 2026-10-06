@@ -187,3 +187,12 @@ def test_the_command_without_facts_names_collect(tmp_path: Path) -> None:
     state.mkdir()
     result = _run(state)
     assert result.exit_code == 2 and "collect" in result.output
+
+
+def test_a_wave_whose_batches_were_all_cancelled_is_labelled_cancelled() -> None:
+    """gh#1000: such a wave is finished (nothing in it will merge), but it delivered
+    nothing, so it is not shown as if it had."""
+    page = _page(*_finished())
+    sect = page[page.index('id="finished-waves"') :]
+    assert re.search(r'id="history-wave-tab-1"[^>]*>Wave 1 · cancelled</button>', sect)
+    assert re.search(r'id="history-wave-tab-2"[^>]*>Wave 2</button>', sect)

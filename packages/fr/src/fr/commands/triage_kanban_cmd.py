@@ -48,6 +48,7 @@ from fr.triage.batch_drive import (
 from fr.triage.drive_lock import live_driver
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
+from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Judgements, Scope, state_dir
 from fr.triage.render import plural
 
@@ -285,7 +286,7 @@ def write_board(
     on disk now, with live session statuses. Returns the path written and its card count."""
     _, facts, judgements = _load_state(scope, target)
     statuses, notes = session_statuses(judgements, facts, prefix=prefix)
-    board = build_board(facts, judgements, statuses)
+    board = build_board(facts, judgements, statuses, stops=load_stops(target))
     page = render_board(
         board,
         scope_args=scope_args,

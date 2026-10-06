@@ -30,7 +30,7 @@ from fr.triage.fragments import Resolved, splice
 from fr.triage.model import Facts, Judgements
 from fr.triage.render import FONTS, esc, wave_table
 from fr.triage.snapshot import Snapshot, diff_snapshots
-from fr.triage.views import batch_stages, finished_waves, preselected_wave, waves
+from fr.triage.views import batch_stages, cancelled_waves, finished_waves, preselected_wave, waves
 
 DASH = "—"
 PAGE_FILE = "history.html"
@@ -144,7 +144,9 @@ def _timeline(snapshots: Sequence[tuple[datetime, Snapshot]]) -> str:
 
 def _finished_waves(facts: Facts, judgements: Judgements) -> str:
     head = '<section id="finished-waves"><h2>Finished waves</h2>'
-    done = finished_waves(judgements.batches, batch_stages(facts, judgements))
+    stages = batch_stages(facts, judgements)
+    done = finished_waves(judgements.batches, stages)
+    cancelled = cancelled_waves(judgements.batches, stages)
     grouped = {k: v for k, v in waves(judgements).items() if k in done}
     if not grouped:
         return f'{head}<p class="quiet">No wave is finished yet.</p></section>'
@@ -152,7 +154,11 @@ def _finished_waves(facts: Facts, judgements: Judgements) -> str:
     keys = list(grouped)
     selected = keys.index(str(picked)) if picked is not None else len(keys) - 1
     panels = [
-        (key, f"Wave {key}", wave_table(batches, facts, judgements, BOARD_FILE))
+        (
+            key,
+            f"Wave {key} · cancelled" if key in cancelled else f"Wave {key}",
+            wave_table(batches, facts, judgements, BOARD_FILE),
+        )
         for key, batches in grouped.items()
     ]
     return f"{head}{tabs('history-wave', 'Finished waves', panels, selected)}</section>"
