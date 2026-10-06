@@ -139,6 +139,9 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "prerelease-command-shape",
         "triage-claims-held",
         "triage-claims-expired",
+        "model-binding-set-probe",
+        "model-binding-replacement",
+        "model-binding-check",
     }
     assert on_disk == here
 
@@ -173,3 +176,15 @@ def test_triage_claims_held(installed: Path, tmp_path: Path) -> None:
 
 def test_triage_claims_expired(installed: Path, tmp_path: Path) -> None:
     _scenario("triage-claims-expired", installed, tmp_path)
+
+
+def test_model_binding_set_probe(installed: Path, tmp_path: Path) -> None:
+    _scenario("model-binding-set-probe", installed, tmp_path)
+
+
+def test_model_binding_replacement(installed: Path, tmp_path: Path) -> None:
+    _scenario("model-binding-replacement", installed, tmp_path)
+
+
+def test_model_binding_check(installed: Path, tmp_path: Path) -> None:
+    _scenario("model-binding-check", installed, tmp_path)

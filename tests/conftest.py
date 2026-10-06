@@ -200,6 +200,30 @@ def _opencode_db_off_the_operators_machine(monkeypatch: pytest.MonkeyPatch, tmp_
 
 
 @pytest.fixture(autouse=True)
+def _no_live_model_probe(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Keep the suite off the real `opencode` CLI and the operator's model cache.
+
+    `fr.bindings.prober_for` is the one factory every caller reaches a prober
+    through; here it returns a prober that answers every model live from an
+    empty catalogue, so a test that merely binds an OpenCode model is quiet. A
+    test of the probing itself monkeypatches the same name over this."""
+    import fr.bindings
+    from fr.bindings.probe import ProbeResult
+
+    class _AlwaysLive:
+        def probe(self, model: str) -> ProbeResult:
+            return ProbeResult("live", "", None, 0.0)
+
+        def catalogue(self, provider: str) -> list:
+            return []
+
+    monkeypatch.setattr(
+        fr.bindings, "prober_for", lambda harness: _AlwaysLive() if harness == "opencode" else None
+    )
+    monkeypatch.setenv("FR_MODELS_CACHE_DIR", str(tmp_path / "no-models-cache-here"))
+
+
+@pytest.fixture(autouse=True)
 def _sessions_dir_off_the_operators_machine(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

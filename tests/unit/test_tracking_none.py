@@ -76,15 +76,15 @@ def _closeout_repo(root: Path, profiles: str | None) -> None:
 def test_closeout_default_tracking_still_files_issues(tmp_path: Path) -> None:
     _closeout_repo(tmp_path, None)
     brief = closeout_brief(tmp_path, closeout_fixtures._state())
-    assert "file an issue" in brief
-    assert "--tracked-by" in brief
+    assert "fr archive --issues" in brief
+    assert "--issues spec/" in brief
 
 
 def test_closeout_tracking_none_prints_no_issue_filing(tmp_path: Path) -> None:
     _closeout_repo(tmp_path, NONE)
     brief = closeout_brief(tmp_path, closeout_fixtures._state())
-    assert "file an issue" not in brief
-    assert "--tracked-by" not in brief
+    assert "fr archive --issues" not in brief
+    assert "--issues spec/" not in brief
     assert "stay recorded in the journal and PR body; no tracker is configured" in brief
     assert "fr archive" in brief
 
@@ -397,8 +397,8 @@ def test_no_plan_under_tracking_none_files_nothing_but_still_closes_out(tmp_path
     del state.steps["plan"]
     brief = closeout_brief(tmp_path, state)
     assert "stay recorded in the journal and PR body; no tracker is configured" in brief
-    assert "file an issue" not in brief
-    assert "--tracked-by" not in brief
+    assert "fr archive --issues" not in brief
+    assert "--issues spec/" not in brief
     assert f"fr isolation up --branch chore/closeout-{state.run}" in brief
 
 
@@ -414,7 +414,7 @@ def test_f3_a_deferred_ci_does_not_make_closeout_blame_tracking(tmp_path: Path) 
     _closeout_repo(tmp_path, "schema_version: 2\nci:\n  type: jenkins\n  host: ci.example.com\n")
     brief = closeout_brief(tmp_path, closeout_fixtures._state())
     assert "WARNING" not in brief
-    assert "file an issue" in brief
+    assert "fr archive --issues" in brief
 
 
 def test_f5_malformed_warning_only_when_out_of_scope_findings_exist(tmp_path: Path) -> None:

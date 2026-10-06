@@ -1,2 +1,0 @@
-bump: patch
-summary: "triage drive: an archive merge updates a PR that changes the acceptance matrix, a head that moves just before the merge stops the train, a failed dispatch fetch or export write skips the pass, a close-out recorded but never started is warned once, big gh lists get time for their pages; the board puts a partial batch owed its close-out in its own Partial column"

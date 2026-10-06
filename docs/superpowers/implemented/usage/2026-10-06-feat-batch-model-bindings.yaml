@@ -1,0 +1,64 @@
+schema_version: 1
+run: 2026-10-06-feat-batch-model-bindings
+captures:
+- host: h-498b9c20
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-06T21:02:37+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: 63cfb522-ee1d-4d86-ab42-2a133eed737e
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 512
+        cache_write: 1299404
+        cache_read: 42327555
+        output: 104301
+        usd: null
+        usd_source: none
+      claude-sonnet-5-5:
+        input: 144
+        cache_write: 651381
+        cache_read: 8617921
+        output: 949
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 146
+      other:
+        usd: null
+        turns: 103
+      paperwork:
+        usd: null
+        turns: 70
+    steps:
+      (outside run):
+        usd: null
+        turns: 17
+      brainstorm:
+        usd: null
+        turns: 30
+      spec-review:
+        usd: null
+        turns: 33
+      plan:
+        usd: null
+        turns: 6
+      implement:
+        usd: null
+        turns: 216
+      deliver:
+        usd: null
+        turns: 13
+    briefs:
+      step/spec-review: 2179
+      phase/1/implement-phase: 3093
+      phase/1/review-phase: 4262
+      phase/2/implement-phase: 4675
+      phase/2/review-phase: 5005
