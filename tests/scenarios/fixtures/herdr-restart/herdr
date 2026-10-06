@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# A fake `herdr` for tests/scenarios/herdr-restart-idle.sh: it replays what herdr 0.9.1
+# printed live (tests/fixtures/herdr/restart/, copied here beside this script), logs every
+# call to $HERDR_FAKE_LOG, and answers no key-sending verb: a key sent is a failed scenario.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "$*" >> "$HERDR_FAKE_LOG"
+case "$1 $2" in
+  "agent list") cat "$here/agent-list.json" ;;
+  "tab list") echo '{"id":"cli:tab:list","result":{"tabs":[]}}' ;;
+  "pane process-info") cat "$here/process-info.json" ;;
+  "pane read")
+    case "$3" in
+      w2:p2W) cat "$here/screen-background.ansi" ;;
+      w2:p5Z) cat "$here/screen-suggestion.ansi" ;;
+      *) cat "$here/screen-empty.ansi" ;;
+    esac ;;
+  *) echo "fake herdr: unscripted call: $*" >&2; exit 64 ;;
+esac
