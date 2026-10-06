@@ -190,6 +190,11 @@ recorded runner:
 - A runner that is not a `SessionRestarter`, or that refuses, is reported once per driver
   process.
 - Any exception is caught and reported.
+- It runs from a `finally` around the pass's actions, so a pass that aborts after a
+  successful `post_merge` (a later close-out refused, a forge read error) still restarts
+  once for what it recorded. The `PostMergeEvent` is persisted at once and `post_merge`
+  is then no longer owed, so an in-memory restart skipped by the abort would be lost for
+  good; the `finally` is simpler than persisting the owed restart.
 
 The close-outs this pass started are fresh sessions and load the merged plugins on their
 own. The restart is for every other session, so it runs after them. A failed restart never

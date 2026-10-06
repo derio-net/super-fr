@@ -2253,33 +2253,36 @@ class _Driver:
         self._unfinished = unfinished_waves(snap)
         acted = False
         in_flight = sum(1 for b in snap.batches if snap.stages[b.id] in LIVE_STAGES)
-        for train in plan.trains:
-            _say(train_line(train))
-        for action in plan.actions:
-            if not self.yes:
-                _say(action_line(action))
-                continue
-            refused = self._export_refusals
-            outcome, did, in_flight = self._act(action, facts, in_flight)
-            acted = acted or did
-            if self._export_refusals > refused:  # refused before any write: a warning
-                action = replace(action, kind="warn")
-            if outcome or action.kind != "close":  # a close reported already stays quiet
-                _say(action_line(action, outcome))
-        summary = settle(
-            plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
-        )
-        if self._left_out:  # not done, only unread: the drive keeps waiting for them
-            summary = replace(summary, pending=summary.pending + len(self._left_out))
-        if self._export_refusals:  # still owed, but only the operator can move it
-            summary = replace(
-                summary,
-                closing=summary.closing - self._export_refusals,
-                blocked=summary.blocked + self._export_refusals,
+        try:  # a pass that aborts after a post_merge still restarts what it owes (p2-r1)
+            for train in plan.trains:
+                _say(train_line(train))
+            for action in plan.actions:
+                if not self.yes:
+                    _say(action_line(action))
+                    continue
+                refused = self._export_refusals
+                outcome, did, in_flight = self._act(action, facts, in_flight)
+                acted = acted or did
+                if self._export_refusals > refused:  # refused before any write: a warning
+                    action = replace(action, kind="warn")
+                if outcome or action.kind != "close":  # a close reported already stays quiet
+                    _say(action_line(action, outcome))
+            summary = settle(
+                plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
             )
-        _say(summary_line(summary))
+            if self._left_out:  # not done, only unread: the drive keeps waiting for them
+                summary = replace(summary, pending=summary.pending + len(self._left_out))
+            if self._export_refusals:  # still owed, but only the operator can move it
+                summary = replace(
+                    summary,
+                    closing=summary.closing - self._export_refusals,
+                    blocked=summary.blocked + self._export_refusals,
+                )
+            _say(summary_line(summary))
+        finally:
+            if self.yes:
+                self._restart_sessions()  # soft: never raises out of here
         if self.yes:
-            self._restart_sessions()
             self._write_board()
         else:
             _say("nothing done; re-run with --yes to act")
