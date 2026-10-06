@@ -51,6 +51,24 @@ def test_one_keyword_per_reference_passes(body: str) -> None:
     assert shared_closing_keywords(body) == []
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        "fix colour #123\n",
+        "This fixes the regression from #12, reported in #34\n",
+        "Fixed the race; see #12 and #34 for context\n",
+        "- resolves the flake that #7 and #8 reported\n",
+    ],
+)
+def test_a_keyword_that_closes_nothing_is_prose_not_a_shared_keyword(body: str) -> None:
+    """gh#868: GitHub closes a reference only when the keyword sits directly
+    before it. A line whose keyword is followed by no reference closes nothing,
+    so it shares nothing: it is prose, and refusing it blocks a valid deliver."""
+    from fr.record.pr_body import shared_closing_keywords
+
+    assert shared_closing_keywords(body) == []
+
+
 def test_the_fix_puts_every_reference_on_its_own_line_with_the_keyword_as_written() -> None:
     from fr.record.pr_body import shared_closing_keywords
 
