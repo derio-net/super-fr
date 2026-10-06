@@ -14,3 +14,8 @@ Real case (run 2026-10-05-feat-batch-triage-pages-goal, phase 2 executor): Bash 
 ### rc-1002 · root-cause · Claude Code wrote_since ignores self-detached writers
 
 telemetry.wrote_since never consults _detaches: a writer that backgrounds itself with & gets the window of its launcher (ack or immediate notice), never the suite. observed.py applies _detaches/_seen_exit only on the OpenCode path.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-999 created=2026-10-06T08:21:51+00:00 -->
+### rc-999 · root-cause · _program treats a value-taking uv run flag value as the program
+
+telemetry._program picks the first word not starting with - after uv run; --with/--python/--project etc. take a separate value word.
