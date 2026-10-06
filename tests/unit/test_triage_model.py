@@ -113,7 +113,7 @@ def test_an_unknown_cx_is_refused(tmp_path: Path) -> None:
 
 
 def test_schema_7_in_judgements_is_refused_naming_the_file(tmp_path: Path) -> None:
-    """Schemas 2 to 6 (batches; waves; exports; conflicts; claims) load; the next unknown one is refused."""
+    """Schemas 2 to 6 load (batches to claims); the next unknown one is refused."""
     path = _write(tmp_path / "judgements.yaml", JUDGEMENTS_YAML.replace("schema: 1", "schema: 7"))
 
     with pytest.raises(TriageError, match=str(path)) as exc:
