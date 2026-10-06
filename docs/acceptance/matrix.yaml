@@ -6687,13 +6687,13 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R7
     levels:
       unit:
-      - super-fr:tests/unit/test_triage_model.py#test_a_duplicate_chain_is_refused
       - super-fr:tests/unit/test_triage_check.py#test_an_open_duplicate_of_an_open_original_carries_the_close_command
       - super-fr:tests/unit/test_triage_check.py#test_a_judged_duplicate_is_never_unplaced
       - super-fr:tests/unit/test_triage_cli.py#test_a_duplicate_of_target_that_is_not_open_is_viewed_like_a_judged_key
+      - super-fr:tests/unit/test_triage_model.py#test_a_duplicate_chain_loads_so_check_can_report_it
     status: ci
-    notes: R3 load refusals, R5 sets and command, R6 collect view and R7 are unit-tested
-      only; no live forge write exists to exercise.
+    notes: 'Merged with main''s triage-pages-goal duplicate_of: a chain loads and is
+      reported by check''s duplicate_chained set instead of being refused at load.'
   - id: triage-dedupe-board
     capability: triage-dedupe
     acceptance: The triage board nests a judged duplicate under its open original and
