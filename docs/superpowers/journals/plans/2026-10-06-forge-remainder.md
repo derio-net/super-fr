@@ -221,3 +221,8 @@ Pre-existing. Isolation lookups never threaded GH_HOST, and inside a checkout gh
 ### p1-r4-resolved-2 · finding [deferred → #1013] · resolves p1-r4: _classify_error classifies by stderr text; the refusal reads as unknown
 
 Filed at closeout as #1013.
+
+<!-- fr:journal kind=finding scope=plan id=p1-x1-resolved-2 created=2026-10-06T11:10:43+00:00 state=open resolves=p1-x1 tracked_by=#1014 -->
+### p1-x1-resolved-2 · finding [deferred → #1014] · resolves p1-x1: GitLab host threading (gh#490) passes URL/config hosts to glab without a trust gate
+
+Filed at closeout as #1014.
