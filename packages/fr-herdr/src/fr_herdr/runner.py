@@ -125,8 +125,8 @@ class HerdrRunner:
             return "herdr is not on PATH"
         if os.environ.get("HERDR_ENV") != "1":
             return (
-                "not inside a herdr session (HERDR_ENV=1 is unset): herdr is never "
-                "driven from outside it"
+                "not inside a herdr session (HERDR_ENV=1 is unset): run `fr triage batch "
+                "drive` / `dispatch` from a herdr pane — herdr is never driven from outside it"
             )
         if not self.workspace_id and any(not i.payload.get("group") for i in items):
             return "HERDR_WORKSPACE_ID is unset, so there is no workspace to open a tab in"

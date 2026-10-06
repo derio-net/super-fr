@@ -104,6 +104,9 @@ def test_preflight_refuses_outside_a_herdr_session(
     monkeypatch.delenv("HERDR_ENV")
     message = HerdrRunner.from_env().preflight([_item()])
     assert message is not None and "HERDR_ENV" in message
+    # driver-sessions R9: the refusal says where to run the driver from
+    assert "fr triage batch drive" in message and "dispatch" in message
+    assert "herdr pane" in message
 
 
 def test_preflight_refuses_without_herdr_on_path(

@@ -99,6 +99,10 @@ file. Set `ranked_at` to today whenever you change a judgement. Keys are case-in
 
 **The board:** `fr triage board` writes `board.html` beside `triage.html`: a live Kanban of the batches in six lifecycle columns, each card showing its session status and a copyable jump command (`--refresh N` reloads the page every N seconds, default 30; `--open` opens it). Every `--yes` pass of `drive` re-renders it, so while a driver runs it stays fresh on its own; with no driver, `fr triage board --watch [--interval N]` re-collects and re-renders until interrupted (refused while a live drive holds the lock). `fr triage batch focus <id> [--closeout]` switches the terminal to a batch's live session through the runner that dispatched it. Once `board.html` exists, `fr triage render` links it from the Batches section.
 
+## Runner constraints and session upkeep
+
+The herdr runner works only from inside a herdr pane: outside one (`HERDR_ENV` unset) it refuses, so run `fr triage batch drive` and `dispatch` from a herdr pane; herdr is never driven from outside it. Two settings in the repo's `.fr/triage.yaml` keep the sessions the driver leaves behind healthy. `post_merge_restart: idle` (default `none`) restarts every idle Claude Code session once per pass that ran the repo's `post_merge`, after the close-outs it started, so they pick up what that step installed; `fr-herdr restart-idle` does the same by hand (a dry run until `--yes`; it never touches a pane that is working, holds a draft, or is the driver's own). `idle_session_minutes` (default 60) is how long a batch session may sit idle with no PR, or a close-out session idle with no archive PR, before the driver reports it once with a paste-ready `fr triage batch focus` command and the board marks its card as needing you; reporting never ends the drive.
+
 ## The shape of a judgement
 
 1. **Tier by what the failure costs**: lost work, then a failure that looks like success, then friction. Never by age, label, reporter or how loud the issue is.
