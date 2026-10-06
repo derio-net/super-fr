@@ -59,7 +59,7 @@ steps:
     - review-phase
     units:
       phase/1/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T18:03:16+00:00'
           agent: aa04c934d47072e37
@@ -67,6 +67,11 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 36d26c83-85ad-42c7-81bc-305a59e44c4c
+          returned: '2026-10-06T20:09:00+00:00'
+          outcome: done
+        evidence:
+          tests: adopt-suite.log@33fcf04768bf;tree=7b837a8b3fa532fbec7eb38ba8dbfd23e1d7ed4a21a0404beddf5049e62776ae
+          visual: none
   journal-check:
     state: pending
   deliver:
