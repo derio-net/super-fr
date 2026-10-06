@@ -556,7 +556,7 @@ def test_publish_board_returns_the_cause_of_each_failure(
         publish=[sys.executable, "-c", "import sys; sys.stderr.write('denied\\n'); sys.exit(3)"]
     )
     cause = publish_board(SCOPE, failing, tmp_path / "b")
-    assert cause and "exit 3" in cause and "denied" in cause
+    assert cause and "denied" in cause
     monkeypatch.setattr(scope_config, "PUBLISH_TIMEOUT", 0.3)
     slow = ScopeConfig(publish=[sys.executable, "-c", "import time; time.sleep(30)"])
     cause = publish_board(SCOPE, slow, tmp_path / "b")

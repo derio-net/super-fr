@@ -8,7 +8,8 @@ while this one module keeps it (review r2p-f11).
 
 What this module may run is closed: `git`, plus the commands a repo
 declares in its own `.fr/triage.yaml` (`version.set`, `version.relock`, run in a
-scratch worktree, and `post_merge`, run by the wave driver in the clone itself).
+scratch worktree, and `post_merge`, run by the wave driver in the clone itself) and
+the scope's `publish` argument list (`run_publish`, triage-claims R14).
 It never runs a forge CLI: every forge
 operation goes through the `GhClient` adapter (§3.J), and
 `tests/unit/test_forge_adapter_batch_ops.py` pins that this file names none.
@@ -492,3 +493,13 @@ class Worktree:
         driver's export branch, which a pass that died may have left behind)."""
         argv = ["push", *(["--force"] if force else []), "origin", f"HEAD:refs/heads/{branch}"]
         git(argv, self.path)
+
+
+def run_publish(argv: list[str], cwd: Path, timeout: float) -> str | None:
+    """Run the scope's `publish` argument list as is, with no shell (triage-claims R14), in
+    *cwd*. None when it exited 0, else the cause on one line (`_run`'s words). Never raises."""
+    try:
+        _run(argv, cwd, timeout=timeout)
+    except GitError as exc:
+        return " ".join(str(exc).split())
+    return None

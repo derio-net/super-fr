@@ -14,7 +14,6 @@ import hashlib
 import os
 import re
 import secrets
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -23,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from fr.isolation.types import _home
 from fr.triage.errors import TriageError
+from fr.triage.gitseam import run_publish
 from fr.triage.model import Scope
 
 PUBLISH_TIMEOUT = 120.0  # seconds; tests shorten it
@@ -135,15 +135,4 @@ def publish_board(scope: Scope, config: ScopeConfig, board: Path) -> str | None:
         for placeholder, value in values.items():
             word = word.replace(placeholder, value)
         argv.append(word)
-    try:
-        done = subprocess.run(  # noqa: S603 - an argument list, never a shell string
-            argv, capture_output=True, text=True, timeout=PUBLISH_TIMEOUT, check=False
-        )
-    except subprocess.TimeoutExpired:
-        return f"`{argv[0]}` timed out after {PUBLISH_TIMEOUT:g}s"
-    except OSError as exc:
-        return f"`{argv[0]}` could not run: {exc}"
-    if done.returncode == 0:
-        return None
-    tail = " ".join(done.stderr.split())[:200]
-    return f"`{argv[0]}` failed (exit {done.returncode})" + (f": {tail}" if tail else "")
+    return run_publish(argv, board.parent, PUBLISH_TIMEOUT)
