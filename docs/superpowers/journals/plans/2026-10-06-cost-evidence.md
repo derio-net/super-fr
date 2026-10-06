@@ -114,3 +114,62 @@ file.py:277-281 role from the phase/<n>/<member> segment; fixtures moved to the 
 ### p1b-r2-resolved · finding [fixed] · resolves p1b-r2: refreshed_file wrote v2-only token fields into archived files stamped schema_version 1 (phase 1)
 
 backfill._v1_steps: refreshed_file without an index writes usd/turns-only steps; test_a_refreshed_v1_file_validates_and_writes_no_token_fields_on_steps.
+
+<!-- fr:journal kind=decision scope=plan id=p2-phase-rows-phases-from-cursor-and-units created=2026-10-06T20:19:04+00:00 phase=2 -->
+### p2-phase-rows-phases-from-cursor-and-units · decision · phase_rows lists every phase found in the cursor's phase/<n>/{implement,review}-phase units or in a usage entry's units (phase 2)
+
+A phase with usage figures but no cursor unit (or the reverse) still gets a row, with `—` for what is missing,
+so a figure is never dropped from the per-phase table. Phases are matched by the unit key
+`phase/<n>/<member>` under any step (real cursors nest them under `implement`).
+
+<!-- fr:journal kind=decision scope=plan id=p2-mismatch-mark created=2026-10-06T20:19:04+00:00 phase=2 -->
+### p2-mismatch-mark · decision · the mismatch mark is a trailing `≠` on the ran cell, in both the CLI and the PR body (phase 2)
+
+`ran_text` renders `<model> ≠` when ran and bound differ by `fr.models.model_family`; an unobserved ran is `—`
+and never marked. The PR body's per-phase table carries a one-line legend for it.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-step-table-keeps-old-columns created=2026-10-06T20:19:04+00:00 phase=2 -->
+### p2-step-table-keeps-old-columns · discovery · the step table keeps its leading `step | turns | cost` columns and appends main/subagent columns (phase 2)
+
+Existing PR-body assertions and readers rely on `| <step> | <turns> | <cost> |` as the row prefix, so the role
+split is appended as six columns (`main|subagent` x `turns, cache-read / output, cost`) rather than replacing them.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-synth-tier-red-was-green created=2026-10-06T20:19:04+00:00 phase=2 -->
+### p2-synth-tier-red-was-green · discovery · the "synthesized attempt carrying tier/bound is refused" test passed before GREEN (phase 2)
+
+Before the fields existed, `Attempt(extra="forbid")` already refused `tier`/`bound` with a message naming the
+field, so that one RED test was not observed failing; after GREEN the refusal comes from the synthesized-attempt
+validator's list. The other P2.T1 tests were observed red.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-live-cursors-at-v9 created=2026-10-06T20:19:04+00:00 phase=2 -->
+### p2-live-cursors-at-v9 · discovery · this repo's two live run cursors are migrated to run v9; an fr older than this branch cannot read them (phase 2)
+
+`uv run fr migrate artifacts --yes` stamped 2026-10-06-feat-batch-cost-evidence.yaml and
+2026-10-06-feat-batch-verification-kinds.yaml at 9 (stamp only). Hooks running the base clone's installed fr
+(5.10.3) read a newer stamp than they know; drive this run with `uv run fr` from the worktree.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-explainer-updated created=2026-10-06T20:19:04+00:00 phase=2 -->
+### p2-explainer-updated · discovery · 01-fr-goal explainer updated for fr run cost's two tables and the tier/bound record; HTML regenerated (phase 2)
+
+The unmodified re-render with the --isolated renderer was byte-identical to the committed .html first; the
+regenerated page differs only by the two edited paragraphs.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-06T20:19:04+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+moving _model_family to fr.models.model_family was the only cleanup; _observed_model's one comparison now picks bound-or-model, nothing else duplicated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-06T20:19:04+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+a stamp-only migration module mirroring run_driver.py, plus a one-line _already_v8 delegating to _already_v7; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-06T20:19:04+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+the shared cell formatters (usd_text, count_text, compact_tokens, figure_cells, ran_text) were written into fr.run.cost in GREEN, so the CLI had no local copies left to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-10-06T20:19:04+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+pr_body renders through the same fr.run.cost formatters as the CLI (cost_markdown), so no duplicate remained; T5's tidy covered the old local usd/n helpers
