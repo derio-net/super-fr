@@ -61,7 +61,15 @@ from fr.journal.model import (
 from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
 from fr.run import units
-from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
+from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run, plan_phase_tags
+from fr.run.historical import (
+    HISTORICAL_HEADING,
+    HISTORICAL_REVIEWER,
+    findings_witness,
+    historical_review_lines,
+    historical_reviews,
+    historical_sentence,
+)
 from fr.run.liveness import gate_pending as _gate_pending
 from fr.run.liveness import hold_on as _hold_on
 from fr.run.liveness import next_step_id as _next_step_id
@@ -88,6 +96,7 @@ if TYPE_CHECKING:
     from fr.record.model import QuestionRounds, VisualEvidence
     from fr.run.telemetry import Round
 from fr.run.provenance import cleared_gates, gates
+from fr.run.reshape import ReshapeError, diff_ids, reshape
 from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.types import PHASE_TIERS
@@ -168,6 +177,10 @@ class _RunWrites:
     # p3-r10: the step-record engine prints its own one line naming the
     # commit, so `commit_records`' "fr: committed …" echo would be a second.
     quiet: bool = False
+    # `adopt --supersede`: the run this command replaced. Its subject names it
+    # (spec 2026-10-05-run-upgrade-midflight §C), so the replaced cursor is
+    # findable in history.
+    supersedes: str | None = None
 
     def remember(self, path: Path) -> None:
         """Keep `path`'s bytes as they are now, before this command writes it."""
@@ -179,6 +192,8 @@ class _RunWrites:
 
     def message(self) -> str:
         run = self.last.run if self.last is not None else "?"
+        if self.supersedes is not None:
+            return f"chore(fr): run {run} — adopt, supersedes {self.supersedes}"
         step = self.step or self.loaded_cursor or (self.last.cursor if self.last else None)
         parts = [self.verb]
         if step:
@@ -740,6 +755,11 @@ def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
     return [f"phase/{n}/{m.id}" for n in phases for m in group.steps]
 
 
+class _StepDriftError(RunStateError):
+    """The step list a cursor recorded differs from the manifest's — the one
+    refusal a read-only command downgrades to a warning (`_resolve_manifest_for_read`)."""
+
+
 def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowManifest:
     """The manifest this run was started against — name AND schema version.
 
@@ -749,17 +769,46 @@ def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowMan
     a step graph the cursor was never computed for. The suffix is a version
     stamp; a version stamp nobody checks is decoration.
     """
+    manifest = _resolve_manifest_checked_schema(repo_root, state)
+    _check_step_drift(state, manifest)
+    return manifest
+
+
+def _resolve_manifest_checked_schema(repo_root: Path, state: RunState) -> WorkflowManifest:
     name, _, recorded_schema = state.workflow.partition("@")
     manifest = resolve_workflow(name, repo_root)
     if recorded_schema and str(manifest.schema_version) != recorded_schema:
         raise RunStateError(
             f"run {state.run!r} was started against {state.workflow!r}, but "
             f"{name!r} now declares schema {manifest.schema_version}. A shape's "
-            "schema version changes its step grammar; start a new run rather than "
-            "advancing this one against a different one."
+            "schema version changes its step grammar; start a new run rather "
+            "than advancing this one against a different one."
         )
-    _check_step_drift(state, manifest)
     return manifest
+
+
+def _resolve_manifest_for_read(repo_root: Path, state: RunState) -> WorkflowManifest:
+    """`_resolve_manifest_for_state` for a command that only READS the cursor
+    (spec 2026-10-05-run-upgrade-midflight §B).
+
+    A step-list drift is printed as ONE warning and the manifest returned
+    anyway: refusing to say who cleared a gate because a later step was added
+    helps nobody. A schema-version mismatch still refuses — a different grammar
+    is not safe to read with. Mutating commands keep the strict resolver.
+    """
+    manifest = _resolve_manifest_checked_schema(repo_root, state)
+    try:
+        _check_step_drift(state, manifest)
+    except _StepDriftError as e:
+        err_console.print(f"[yellow]warning: {escape(str(e))}[/yellow]", soft_wrap=True)
+    return manifest
+
+
+def _reshape_hint(state: RunState) -> str:
+    return (
+        f" `fr run reshape {state.run}` moves the cursor onto the current list "
+        "when that loses nothing it recorded."
+    )
 
 
 def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
@@ -775,21 +824,18 @@ def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
     Reported as a DIFF, because "the workflow changed" is not actionable and
     "added: verify; removed: spec-review" is.
     """
-    recorded = set(state.steps)
-    current = {s.id for s in manifest.steps}
-    if recorded != current:
-        added = sorted(current - recorded)
-        removed = sorted(recorded - current)
+    added, removed = diff_ids(state.steps, (s.id for s in manifest.steps))
+    if added or removed:
         parts = []
         if added:
             parts.append(f"added: {', '.join(added)}")
         if removed:
             parts.append(f"removed: {', '.join(removed)}")
-        raise RunStateError(
+        raise _StepDriftError(
             f"run {state.run!r} was started against a different version of "
             f"{state.workflow!r} ({'; '.join(parts)}). A run's cursor is a position in "
             "a step list; start a new run rather than advancing this one against a "
-            "list it was never computed for."
+            "list it was never computed for." + _reshape_hint(state)
         )
     for step in manifest.steps:
         if not step.steps:
@@ -800,18 +846,18 @@ def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
             continue  # pre-nesting run file: top-level ids match, members unknowable
         current_members = [m.id for m in step.steps]
         if recorded_members != current_members:
-            added = sorted(set(current_members) - set(recorded_members))
-            removed = sorted(set(recorded_members) - set(current_members))
+            added, removed = diff_ids(recorded_members, current_members)
             parts = []
             if added:
                 parts.append(f"added: {', '.join(added)}")
             if removed:
                 parts.append(f"removed: {', '.join(removed)}")
-            raise RunStateError(
+            raise _StepDriftError(
                 f"run {state.run!r} was started against a different version of "
                 f"{state.workflow!r} (step {step.id!r} members changed: {'; '.join(parts)}). "
                 "A run's cursor is a position in a step list; start a new run rather "
                 "than advancing this one against a list it was never computed for."
+                + _reshape_hint(state)
             )
 
 
@@ -1807,7 +1853,16 @@ def _verified_evidence(
     # window for both (review p4-f1: a None window let any reviewer id pass).
     flat_record = state.steps.get(step.id) if target is not None and target.phase is None else None
     since = opened or (flat_record.at if flat_record is not None else None)
-    if "reviewer" in offered:
+    # `reviewer=historical` (spec 2026-10-05-run-upgrade-midflight §D, R7): a
+    # phase reviewed before this cursor existed. It skips ONLY the two checks
+    # that read this cursor's dispatches (`_verify_reviewer`, the reviewer
+    # return) and is held to the bound instead; the review-entry and findings
+    # checks below run unchanged. Every other reviewer value keeps every check.
+    historical = offered.get("reviewer") == HISTORICAL_REVIEWER
+    if historical:
+        assert target is not None  # phase-scoped, refused above otherwise
+        _refuse_unboundable_historical(key, target, offered)
+    if "reviewer" in offered and not historical:
         assert target is not None  # phase-scoped, refused above otherwise
         _verify_reviewer(
             key,
@@ -1863,6 +1918,10 @@ def _verified_evidence(
         _verify_review_entry(
             key, offered["review"], slug=slug, entries=entries, target=target, since=since
         )
+        if historical:
+            _verify_historical_bound(
+                key, repo_root, state, target=target, entry_id=offered["review"], entries=entries
+            )
     if state_value == "done" and "visual" in step.evidence:
         derive(
             "visual",
@@ -1883,7 +1942,8 @@ def _verified_evidence(
         assert review_journal is not None and target is not None
         slug, entries = review_journal
         findings_target = target
-        returned_phase = target.phase if "reviewer" in step.evidence else None
+        # A historical review has no dispatch in this cursor, so no return to read.
+        returned_phase = target.phase if "reviewer" in step.evidence and not historical else None
 
         def findings_witness() -> str:
             if returned_phase is not None:
@@ -1904,6 +1964,69 @@ def _verified_evidence(
     if refused:
         raise typer.Exit(2)
     return verified
+
+
+def _refuse_unboundable_historical(
+    key: str, target: _EvidenceTarget, offered: Mapping[str, str]
+) -> None:
+    """`reviewer=historical` where no bound can apply — or return. A flat unit
+    (spec-review) is refused: its review must postdate the step, and adoption
+    never leaves it open. A phase unit must name the `review` entry the bound
+    is checked against."""
+    if target.phase is None:
+        err_console.print(
+            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER} is accepted only on a "
+            "phase review unit; a spec review must be done by a reviewer dispatched after "
+            "the step opened.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if "review" not in offered:
+        err_console.print(
+            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER} needs --evidence "
+            "review=<entry-id>, the journal review it stands on.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+
+
+def _verify_historical_bound(
+    key: str,
+    repo_root: Path,
+    state: RunState,
+    *,
+    target: _EvidenceTarget,
+    entry_id: str,
+    entries: list[JournalEntry],
+) -> None:
+    """The review entry `entry_id` meets spec §D's bound for `target`'s phase
+    — or exit 2 naming the clause it fails."""
+    from fr.run.historical import historical_review_refusal
+    from fr.run.visual import VisualRefusedError, owed_for_unit
+
+    assert target.phase is not None
+    entry = next(e for e in entries if e.id == entry_id)  # `_verify_review_entry` found it
+    try:
+        owed = owed_for_unit(
+            repo_root, plan_rel=_emitted_plan(state), phase=target.phase, spec_rel=None
+        )
+    except VisualRefusedError as e:
+        _derived_refusal(key, e.lines)
+    attempt = units.last_attempt(state, key)
+    refusal = historical_review_refusal(
+        state,
+        target.phase,
+        entry,
+        owes_visual=bool(owed),
+        review_key=key,
+        review_dispatched=attempt.dispatched if attempt is not None else None,
+    )
+    if refusal is not None:
+        err_console.print(
+            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER}: {escape(refusal)}.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
 
 
 def _visual_witness(
@@ -2848,7 +2971,7 @@ def _closed_findings_witness(
             )
         raise typer.Exit(2)
     if not still_open:
-        return ",".join(states) or "none"
+        return findings_witness(states)
     err_console.print(
         f"[red]{key}: refused — {len(still_open)} finding(s) filed against {subject} "
         f"are still open: {', '.join(still_open)}.[/red]",
@@ -2915,7 +3038,10 @@ def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str]
     every caller is unchanged either way.
     """
     try:
-        manifest = _resolve_manifest_for_state(repo_root, state)
+        # Schema-checked only: a step-list drift does not make "which units owe
+        # evidence" unanswerable, and the caller (`status`/`check`) warns about
+        # the drift itself (spec 2026-10-05-run-upgrade-midflight §B).
+        manifest = _resolve_manifest_checked_schema(repo_root, state)
     except (RunStateError, WorkflowError, AdoptError, OSError):
         return {}
     out: dict[tuple[str, str], tuple[str, ...]] = {}
@@ -2931,6 +3057,10 @@ def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str]
                 if not matches or unit_state != "done":
                     continue
                 held = units.evidence_of(record, key)
+                if held.get("reviewer") == HISTORICAL_REVIEWER:
+                    # R9: reviewed before this cursor existed — reported as
+                    # such by the caller, never as debt.
+                    continue
                 lacking = tuple(name for name in member.evidence if name not in held)
                 if lacking:
                     out[(step_id, key)] = lacking
@@ -3016,7 +3146,29 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         # spec 2026-09-25 §5.C.3: the pre-filled step record — for a flat
         # step; a fan-out group's record is per member, in the member brief.
         "record": None if step.steps else _record_brief(state, step),
+        "unbound_tiers": _unbound_tiers(resolve_repo_root()),
     }
+
+
+def _unbound_tiers(repo_root: Path) -> list[str] | None:
+    """The phase tiers with no model bound for the harness `advance` runs
+    under, in `PHASE_TIERS` order — `None` when no harness is detected (or
+    `FR_HARNESS` is invalid, which the gate path reports itself): an empty
+    list would read as "every tier is bound". A malformed models.yaml raises,
+    as it already did from `_orchestrator_model_notice` at the top of every
+    `advance` — a broken config is reported, never read as "unbound".
+
+    gh#538: fr-goal's model-per-tier question was gated on a `fr models
+    resolve` the orchestrator had to REMEMBER to run, and on a real OpenCode
+    run with nothing bound it never ran it. fr answers it in one lookup, so the
+    brief states it and the question is triggered by data, not recall."""
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        return None
+    if harness is None:
+        return None
+    return [t for t in PHASE_TIERS if _resolved_model(repo_root, harness, t) is None]
 
 
 def _caller_evidence(step: Step) -> list[str]:
@@ -4106,6 +4258,98 @@ def start_cmd(
         err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
 
 
+@run_app.command("reshape")
+@_commits_run_writes("reshape")
+def reshape_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    yes: bool = typer.Option(
+        False, "--yes", help="Write the reshaped cursor (default: preview the diff only)."
+    ),
+) -> None:
+    """Move a drifted cursor onto the shape's current step list.
+
+    A run records its step list at `fr run start`; when the shape later gains or
+    loses a step every mutating command refuses it. Reshape inserts an added
+    step `pending` (only AFTER the cursor), drops a removed one that recorded
+    nothing, and refuses — exit 2, nothing written — when the rewrite would lose
+    something the run recorded (spec 2026-10-05-run-upgrade-midflight §A).
+    Dry-run by default; `--yes` writes one `chore(fr):` commit.
+    """
+    repo_root = resolve_repo_root()
+    state = _load_or_exit(repo_root, run_id)
+    try:
+        # Not `_resolve_manifest_checked_schema`: its refusal says "start a new
+        # run", and rule 1 of `reshape` names the way on (`adopt --supersede`).
+        manifest = resolve_workflow(state.workflow.partition("@")[0], repo_root)
+        new = reshape(state, manifest)
+    except (RunStateError, WorkflowError, ReshapeError) as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    added, removed = diff_ids(state.steps, new.steps)
+    members_changed = [
+        sid for sid in new.steps if sid in state.steps and new.steps[sid] != state.steps[sid]
+    ]
+    if new == state:
+        console.print(f"{state.run}: nothing to reshape")
+        return
+    parts = []
+    if added:
+        parts.append(f"added: {', '.join(added)}")
+    if removed:
+        parts.append(f"removed: {', '.join(removed)}")
+    if members_changed:
+        parts.append(f"members rewritten: {', '.join(members_changed)}")
+    console.print(f"{state.run}: {'; '.join(parts)}", soft_wrap=True)
+    if not yes:
+        console.print("(preview — re-run with --yes to write)")
+        return
+    _save_run_state(repo_root, new)
+    console.print(f"{state.run}: reshaped")
+
+
+def _print_supersede_preview(state: RunState, effects: Superseded, notes: list[str]) -> None:
+    console.print(
+        f"supersede: {effects.old} -> {state.run} (cursor: {state.cursor})", soft_wrap=True
+    )
+    for step, key, agent, session in effects.holds:
+        who = ", ".join(
+            part
+            for part in (f"agent {agent}" if agent else "", f"session {session}" if session else "")
+            if part
+        )
+        console.print(
+            f"  closes a hold on {step} {key} ({who or 'holder unrecorded'}) "
+            "as abandoned — that work is cut off",
+            soft_wrap=True,
+        )
+    if not effects.holds:
+        console.print("  no unit is held; nothing is cut off")
+    for note in notes:
+        console.print(f"  {note}", soft_wrap=True)
+    console.print("(preview — re-run with --yes to write)")
+
+
+def _note_supersede_writes(repo_root: Path, effects: Superseded) -> None:
+    """Name the removed and moved files for the closing commit. A removed path
+    git never tracked is left out: `git add` of a missing, untracked path fails
+    and would refuse the whole commit."""
+    writes = _RUN_WRITES.get()
+    if writes is None:
+        return
+    writes.supersedes = effects.old
+    for path in (*effects.removed, *effects.written):
+        if path.exists() or _is_tracked(repo_root, path):
+            writes.note(repo_root, path)
+
+
+def _is_tracked(repo_root: Path, path: Path) -> bool:
+    try:
+        rel = path.resolve().relative_to(repo_root.resolve()).as_posix()
+        return git_answer(repo_root, "ls-files", "--error-unmatch", "--", rel).returncode == 0
+    except (ValueError, GitUnavailableError):
+        return False
+
+
 @run_app.command("adopt")
 @_commits_run_writes("adopt")
 def adopt_cmd(
@@ -4124,6 +4368,17 @@ def adopt_cmd(
     pr: str | None = typer.Option(
         None, "--pr", help="URL of the PR delivering this work, if one is already open."
     ),
+    supersede: bool = typer.Option(
+        False,
+        "--supersede",
+        help=(
+            "Replace the plan's existing run with a freshly adopted one, carrying its gate "
+            "answers, units and evidence forward (preview unless --yes)."
+        ),
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", help="With --supersede over an existing run: write it (default: preview)."
+    ),
 ) -> None:
     """Give in-flight work a run cursor, inferred from artifacts that exist.
 
@@ -4138,9 +4393,17 @@ def adopt_cmd(
     Explicit by design. `fr migrate artifacts` *reports* which plans could be
     adopted, and adopts only with `--adopt`; nothing creates a run as a side
     effect of an unrelated command.
+
+    Over a plan that already has a run it refuses, naming `fr run reshape` and
+    `--supersede`. `--supersede` replaces that run (spec
+    2026-10-05-run-upgrade-midflight §C): the old cursor's gate answers, emitted
+    artifacts, units, attempts and evidence are carried into the fresh one, any
+    open attempt closed `abandoned`, its usage file moved to the new id. Dry-run
+    by default; `--yes` writes one commit.
     """
     repo_root = resolve_repo_root()
     notes: list[str] = []
+    effects = Superseded(old="")
     try:
         state = adopt_run(
             repo_root,
@@ -4150,11 +4413,19 @@ def adopt_cmd(
             workflow=workflow,
             pr_url=pr,
             notes=notes,
+            supersede=supersede,
+            dry_run=not yes,
+            superseded=effects,
         )
     except AdoptError as e:
         err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
+    if effects.old and not effects.written_new:
+        _print_supersede_preview(state, effects, notes)
+        return
     _note_record_write(repo_root, run_path(repo_root, state.run), state)
+    if effects.old:
+        _note_supersede_writes(repo_root, effects)
 
     console.print(f"adopted run {state.run} ({state.workflow}) \u2014 cursor: {state.cursor}")
     done = [sid for sid, rec in state.steps.items() if rec.state == "done"]
@@ -4311,6 +4582,8 @@ def _render_unit_evidence(
     if evidence:
         shown = " ".join(f"{name}={eid}" for name, eid in sorted(evidence.items()))
         console.print(f"{indent}evidence: {shown}", soft_wrap=True)
+    if evidence.get("reviewer") == HISTORICAL_REVIEWER:
+        console.print(f"{indent}{historical_sentence(evidence.get('review', '?'))}", soft_wrap=True)
     lacking = unevidenced.get((step_id, key))
     if lacking:
         console.print(f"{indent}{_debt_phrase(record, key, lacking)}", soft_wrap=True)
@@ -4363,6 +4636,12 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """
     repo_root = resolve_repo_root()
     state = _load_or_exit(repo_root, run_id)
+    try:
+        _resolve_manifest_for_read(repo_root, state)
+    except (RunStateError, WorkflowError) as e:
+        # status is how an operator finds out a cursor is unusable — it reports
+        # the problem and still prints what it can read.
+        err_console.print(f"[yellow]warning: {escape(str(e))}[/yellow]", soft_wrap=True)
 
     _render_cursor(state, console)
     _render_step_and_items(state, console, _unevidenced_units(repo_root, state))
@@ -5174,6 +5453,7 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     from fr.record.model import records_dir
     from fr.record.pr_body import (
         PR_BODY_NAME,
+        REQUIRED_SECTIONS,
         missing_sections,
         render_pr_body,
         shared_closing_keywords,
@@ -5198,7 +5478,14 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
-    missing = missing_sections(live)
+    required = (
+        (*REQUIRED_SECTIONS, HISTORICAL_HEADING) if historical_reviews(state) else REQUIRED_SECTIONS
+    )
+    missing = missing_sections(live, required=required)
+    # Review p2-r1: the heading alone is not the control — the operator's ok
+    # is given against the LIST, so every historical review must be named.
+    live_lines = {line.strip() for line in live.splitlines()}
+    missing += [line for line in historical_review_lines(state) if line not in live_lines]
     if missing:
         edit = pr_command(repo_root, "edit", ref=ref, body=rel)
         err_console.print(
@@ -6337,6 +6624,10 @@ def check_cmd(
         )
         raise typer.Exit(2)
     state = _load_or_exit(repo_root, run_id)
+    try:
+        _resolve_manifest_for_read(repo_root, state)  # warns once on a drifted cursor
+    except (RunStateError, WorkflowError):
+        pass  # check's verdict never depended on the manifest resolving
 
     record = state.steps.get(state.cursor)
     step_state = record.state if record is not None else "unknown"
@@ -6383,6 +6674,9 @@ def check_cmd(
             f"{step_id}: {key} is done, {_debt_phrase(state.steps[step_id], key, lacking)}",
             soft_wrap=True,
         )
+    # R9: a review made before this cursor existed — reported, never debt.
+    for step_id, key, entry in historical_reviews(state):
+        console.print(f"{step_id}: {key} {historical_sentence(entry)}", soft_wrap=True)
     if record is not None and record.state == "failed":
         err_console.print(f"[red]{state.cursor}: failed[/red]")
         raise typer.Exit(1)
@@ -6419,7 +6713,7 @@ def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     repo_root = resolve_repo_root()
     try:
         state = _load_or_exit(repo_root, run_id)
-        manifest = _resolve_manifest_for_state(repo_root, state)
+        manifest = _resolve_manifest_for_read(repo_root, state)
     except (RunStateError, WorkflowError, AdoptError) as e:
         err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e

@@ -25,6 +25,7 @@ from fr.triage.batch_drive import (
     checks_verdict,
     closeout_brief,
     closeout_item_id,
+    default_selection,
     drive_pass,
     find_run,
     housekeeping_branch,
@@ -1296,3 +1297,13 @@ def test_every_orphan_besides_the_reused_one_is_warned_stale_once() -> None:
         _three_waves(export_orphans={REPO: orphans}, warned=frozenset(a.head for a in stale))
     )
     assert not [a for a in again.actions if a.kind == "warn" and "stale" in a.detail]
+
+
+def test_default_selection_is_the_waved_batches() -> None:
+    waved, unwaved = _batch("a", 1, wave=1), _batch("b", 2, wave=None)
+    assert default_selection([waved, unwaved]) == frozenset({"a"})
+
+
+def test_default_selection_is_every_batch_when_none_has_a_wave() -> None:
+    a, b = _batch("a", 1, wave=None), _batch("b", 2, wave=None)
+    assert default_selection([a, b]) == frozenset({"a", "b"})

@@ -12,7 +12,7 @@ description: >
 
 ## Pages and state
 
-Four pages (`board/manifest.yaml`, etc.): render with `fr triage render`, `fr triage history render`. Use `fr triage state export --to <dir>` and `import --from <dir>` to version with `severity`, `duplicate_of`, `export:` config.
+Four pages, one question each: the board (`fr triage render`: what do I do next?), origins (`fr triage origins render`), architecture (`fr triage architecture render`) and history (`fr triage history render`: how did we get here?). Hand-written analysis lives in fragments listed in `<state>/<page>/manifest.yaml` (`board`, `origins`, `architecture`, `history`), never in an edited page. `fr triage state export --to <dir>` / `import --from <dir>` copy the durable state to and from a repo; `export: {path: <dir>}` in `.fr/triage.yaml` makes `batch drive` export each finished wave as a PR it merges when green.
 
 Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for `--org OWNER`, lowercased). `--repo A/B,C/D` is a group; two repos with same name are refused (keys are `<repo-name>#<n>`); batches stay single-repo.
 
@@ -51,8 +51,8 @@ Stages are derived by `check` and `render`, never stored. Never write facts your
 
 Open PRs are triaged in the same loop: each carries an intent anchor (closing issue, spec, debug journal, else
 `unanchored`) with CI/merge badges. Judge the diff against it: `delivers | partial | drift | unanchored` plus one line
-in `delivery_note`. Shallow by design: never a code review.
-To sync later, run the same loop: `check` names what arrived, shipped or went missing.
+in `delivery_note`. Shallow by design: never a code review. To sync later, run the same loop: `check` names what
+arrived, shipped or went missing.
 
 ## judgements.yaml
 
@@ -91,12 +91,12 @@ batches:                    # written by the `batch` verbs; judged keys, one rep
     ids: ["super-fr#435"]   # optional: rationale, order, wave, after, bump (patch|minor|major), skill, launch
 ```
 
-Set `export: {path: <repo-relative dir>}` in `.fr/triage.yaml` to export finished waves to that directory.
-
 Quote every title, description, detail, note and body: a `: ` inside unquoted text, or a leading `-`, breaks the
 file. Set `ranked_at` to today whenever you change a judgement. Keys are case-insensitive (two differing only by case conflict). `detail`, `note` and pattern `body` interpret only `` `code` `` and `**bold**`.
 **Schema 3:** 1 and 2 still load; the first batch write upgrades the file. The engine appends each batch's `events:` (`dispatch`, `cancel`, `post_merge`, `closeout`): never write them; its stage is derived. `batch create|edit --wave N --after ID` set a wave and dependencies (an unknown id, self or a cycle is refused); only a `merged` dependency is met, and a cancelled, abandoned or partial one blocks. `batch dispatch` runs a batch as `/fr-goal` or `/fr-debugging` (its `skill`) on the launch model, else the harness's orchestrator binding, and marks its issues taken; `batch merge` merges batch PRs in order; `batch cancel` withdraws one.
 **The driver:** `fr triage batch drive` runs the batches named, else those with a wave, else all, to completion: each pass treats a repo's ready PRs as a merge train: only the head of them (wave, then order, then id) is merged or, when behind its base, updated, the next one follows in the same pass once the head merged, and a failing or refused PR is stepped over; every pass prints a `train` line per repo and `queued N` for the members it did not attempt (readying a PR stays the operator's; a batch PR, or an archive PR, is one from the repo itself by an allowed author: `pr_authors` in `.fr/triage.yaml`, default the authenticated user, so a fork or foreign-author PR on a batch branch is never merged, only reported once and listed under Needs you now). It closes out each merged batch through its runner after the repo's `post_merge` argument list, merges its archive PR, and dispatches by wave up to `--max-inflight`. Each wave's sessions open in a herdr workspace of their own, `<prefix>-wave-<n>` (`<prefix>-no-wave` for a batch with no wave; `--workspace-prefix`, default `drive`); once a batch is finished (its archive PR merged) its batch and close-out sessions are closed, never one still working or blocked (it is retried next pass), and a wave workspace its last session empties closes with it; `--keep-sessions` leaves them open, and closing never changes an exit code. `--once` exits 0 acted or done, 3 waiting (blocked batches included: they need the operator), 2 refused; in loop mode a failed or timed-out forge read (each `gh` call is bounded) skips the pass, is reported once, and is read again after `--interval`; `--checkout REPO=PATH` names each clone; a second driver on the state directory is refused. A batch closed out by hand is recorded once as a `closeout` event and never closed out again: either its run is archived, or a PR from the repo itself by an allowed author is open or merged on `chore/closeout-<batch branch>`; an open one is then merged like any other archive PR.
+
+**The board:** `fr triage board` writes `board.html` beside `triage.html`: a live Kanban of the batches in six lifecycle columns, each card showing its session status and a copyable jump command (`--refresh N` reloads the page every N seconds, default 30; `--open` opens it). Every `--yes` pass of `drive` re-renders it, so while a driver runs it stays fresh on its own; with no driver, `fr triage board --watch [--interval N]` re-collects and re-renders until interrupted (refused while a live drive holds the lock). `fr triage batch focus <id> [--closeout]` switches the terminal to a batch's live session through the runner that dispatched it. Once `board.html` exists, `fr triage render` links it from the Batches section.
 
 ## The shape of a judgement
 

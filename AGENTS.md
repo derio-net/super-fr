@@ -107,7 +107,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` or `owner`, lowercased;
     `--dir` overrides): `facts.json` (collect), `judgements.yaml` (the
     agent's, shape in spec §3.D), `triage.html` (render). It is never
-    committed by default, so it is NOT an artifact kind. `collect.py`'s
+    committed by default, so it is NOT an artifact kind. This repo keeps a
+    durable copy of its own scope's inputs and history (judgements, origins,
+    subsystems, snapshots, the architecture fragments' sources) in
+    `docs/triage/`, moved by `docs/triage/sync.sh export|import`; the cache
+    stays the working copy (see `docs/triage/README.md`). `collect.py`'s
     `Forge` protocol (one implementation, `GhForge` over `fr.gh`) is the one
     place a second forge lands — a new class, not an edit to the collector.
     `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` (it never
@@ -398,8 +402,10 @@ read-only and fine to run anywhere. A hand-written `fr_version` floor
 name the predicted one: the base version plus this PR's highest fragment bump.
 
 On every push to `main`, `.github/workflows/release.yml` runs
-`scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`,
-`git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
+`scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`
+and then `fr migrate artifacts --yes` at the new number (at a major that widens
+this repo's own live plans' `fr_version` ceilings, which only the release can
+know; gh#861), `git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
 whole suite on that staged tree with `fr` installed at the new number**, and only
 then pushes it to `main` (the only commits that land there without a PR), tags
 it and publishes a GitHub Release whose notes are the fragment summaries. No CI

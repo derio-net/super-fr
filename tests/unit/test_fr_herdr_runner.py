@@ -412,3 +412,91 @@ def test_herdr_meets_the_close_contract(herdr: _Herdr) -> None:
 
     herdr.listing = _tabs(("w2:t1", "w2", "other", "idle"))
     check_close_contract(HerdrRunner.from_env(), _item())
+
+
+def test_the_live_captured_focus_fixtures_have_herdrs_result_types() -> None:
+    assert _fixture("workspace-focus.json")["result"]["type"] == "workspace_info"
+    assert _fixture("tab-focus.json")["result"]["type"] == "tab_info"
+
+
+# ------------------------------------------------- session status and focus
+
+
+def _tabs_of(*rows: tuple[str, str, str, str]) -> dict[str, Any]:
+    """A tab-list envelope from (label, status, tab_id, workspace_id) rows."""
+    base = _fixture("tab-list-all.json")["result"]["tabs"][0]
+    tabs = [
+        {**base, "label": label, "agent_status": status, "tab_id": tab, "workspace_id": ws}
+        for label, status, tab, ws in rows
+    ]
+    return {"result": {"type": "tab_list", "tabs": tabs}}
+
+
+def test_a_blocked_tab_outranks_an_idle_one(herdr: _Herdr) -> None:
+    item = _item()
+    herdr.listing = _tabs_of((item.id, "idle", "w9:t1", "w9"), (item.id, "blocked", "w9:t2", "w9"))
+    assert HerdrRunner.from_env().session_statuses([item]) == {item.id: "blocked"}
+
+
+def test_a_working_tab_outranks_an_idle_one(herdr: _Herdr) -> None:
+    item = _item()
+    herdr.listing = _tabs_of((item.id, "working", "w9:t1", "w9"), (item.id, "idle", "w9:t2", "w9"))
+    assert HerdrRunner.from_env().session_statuses([item]) == {item.id: "working"}
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "wins"),
+    [
+        ("working", "blocked", "blocked"),
+        ("idle", "working", "working"),
+        ("done", "idle", "idle"),
+        ("unknown", "done", "done"),
+    ],
+)
+def test_the_precedence_is_blocked_working_idle_done_unknown(
+    herdr: _Herdr, first: str, second: str, wins: str
+) -> None:
+    """R9's whole order, each adjacent pair in both tab orders."""
+    item = _item()
+    for a, b in ((first, second), (second, first)):
+        herdr.listing = _tabs_of((item.id, a, "w9:t1", "w9"), (item.id, b, "w9:t2", "w9"))
+        assert HerdrRunner.from_env().session_statuses([item]) == {item.id: wins}
+
+
+def test_an_item_with_no_tab_is_absent(herdr: _Herdr) -> None:
+    item = _item()
+    herdr.listing = _tabs_of(("other", "idle", "w9:t1", "w9"))
+    assert HerdrRunner.from_env().session_statuses([item]) == {item.id: "absent"}
+
+
+def test_an_unrecognised_agent_status_is_unknown(herdr: _Herdr) -> None:
+    item = _item()
+    herdr.listing = _tabs_of((item.id, "weird", "w9:t1", "w9"))
+    assert HerdrRunner.from_env().session_statuses([item]) == {item.id: "unknown"}
+
+
+def test_session_statuses_lists_tabs_once_for_several_items(herdr: _Herdr) -> None:
+    a = run_item("example-org/alpha", "batch-a")
+    b = run_item("example-org/alpha", "batch-b")
+    herdr.listing = _tabs_of((a.id, "done", "w9:t1", "w9"))
+    got = HerdrRunner.from_env().session_statuses([a, b])
+    assert got == {a.id: "done", b.id: "absent"}
+    assert herdr.calls == [["tab", "list"]]
+
+
+def test_focus_selects_the_workspace_then_the_tab(herdr: _Herdr) -> None:
+    item = _item()
+    herdr.listing = _tabs_of((item.id, "idle", "w9:t4", "w9"))
+    assert HerdrRunner.from_env().focus(item) is True
+    assert herdr.calls == [
+        ["tab", "list"],
+        ["workspace", "focus", "w9"],
+        ["tab", "focus", "w9:t4"],
+    ]
+
+
+def test_focus_with_no_matching_tab_is_false_and_focuses_nothing(herdr: _Herdr) -> None:
+    item = _item()
+    herdr.listing = _tabs_of(("other", "idle", "w9:t1", "w9"))
+    assert HerdrRunner.from_env().focus(item) is False
+    assert herdr.calls == [["tab", "list"]]

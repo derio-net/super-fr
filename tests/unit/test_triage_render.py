@@ -716,3 +716,15 @@ def test_a_duplicate_of_an_unknown_issue_is_plain_text_under_parked() -> None:
     assert parked
     text = parked.group(0)
     assert "duplicate of widgets#99" in text and "issues/99" not in text
+
+
+# ------------------------------------------------ the board link (batch-board R13)
+
+
+def test_the_batches_section_links_the_board_only_when_asked() -> None:
+    from tests.unit.triage_board_fixtures import busy
+
+    facts, judgements = busy()
+    assert 'href="board.html"' in render(facts, judgements, board=True)
+    assert "board.html" not in render(facts, judgements)
+    assert "board.html" not in render(facts, judgements, board=False)

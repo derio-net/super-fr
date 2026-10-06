@@ -371,7 +371,9 @@ UNRANKED_DESC = (
 
 def noun(n: int, word: str) -> str:
     """*word* as a count of *n* needs it: `repo` for one, `repos` otherwise."""
-    return word if n == 1 else f"{word}s"
+    if n == 1:
+        return word
+    return f"{word}es" if word.endswith(("ch", "sh", "s", "x")) else f"{word}s"
 
 
 def plural(n: int, word: str) -> str:
@@ -658,7 +660,7 @@ def _stage_filter(judgements: Judgements, facts: Facts) -> str:
     return f'<fieldset class="stage-filter" hidden><legend>Show stages</legend>{boxes}</fieldset>'
 
 
-def _batches(judgements: Judgements, facts: Facts) -> str:
+def _batches(judgements: Judgements, facts: Facts, *, board: bool = False) -> str:
     """The Batches fold (spec 2026-09-25-triage-batches §3.G); empty with no batches."""
     if not judgements.batches:
         return ""
@@ -673,9 +675,15 @@ def _batches(judgements: Judgements, facts: Facts) -> str:
         if steps
         else ""
     )
+    link = (
+        '<p class="tier-desc"><a href="board.html">Open the live board</a> '
+        "(<code>fr triage board</code>): the same batches as a Kanban, with session status.</p>"
+        if board
+        else ""
+    )
     inner = (
         '<section class="batches"><p class="tier-desc">Groups of judged issues delivered as '
-        "one run. Members also appear in their tiers, with a batch chip.</p>"
+        f"one run. Members also appear in their tiers, with a batch chip.</p>{link}"
         f"{_stage_filter(judgements, facts)}{cards}{order}</section>"
     )
     return collapsed("batches", "Batches", len(judgements.batches), inner)
@@ -894,13 +902,17 @@ def render(
     judgements: Judgements,
     since: SnapshotDiff | None = None,
     resolved: Resolved | None = None,
+    *,
+    board: bool = False,
 ) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes.
 
     *since* is the diff against the previous snapshot (`fr.triage.snapshot`); None means
     there is none, and the page says so. *resolved* is the board manifest
     (`<state>/board/manifest.yaml`, `fragments.resolve_manifest`): it orders the generated
-    sections and places authored fragments among them; None is the default order.
+    sections and places authored fragments among them; None is the default order. *board*
+    links the sibling `board.html` (the batch Kanban, `fr triage board`) from the Batches
+    section; the caller says whether one exists.
     """
     show_repo = facts.kind != "repo"
     result = classify(facts, judgements)  # the one classification, shared below
@@ -962,7 +974,7 @@ def render(
         "parked": lambda: _parked(facts, judgements),
         "patterns": lambda: _patterns(judgements),
         "prs": lambda: _prs_section(facts.prs, judgements, 1, facts.collected_at),
-        "batches": lambda: _batches(judgements, facts),
+        "batches": lambda: _batches(judgements, facts, board=board),
     }
     resolved = resolved or Resolved(order=[Entry(g) for g in GENERATED])
     sections = [s for s in splice(resolved, builders) if s]
