@@ -363,7 +363,34 @@ def validate_matrix(path: Path) -> list[str]:
     data, problems = _load_mapping(path)
     if problems or data is None:
         return problems
-    return _model_problems(Matrix, data)
+    problems = _model_problems(Matrix, data)
+    if problems:
+        return problems
+    return _matrix_strategy_problems(Matrix.model_validate(data), path.parents[2])
+
+
+def _matrix_strategy_problems(matrix: Any, repo_root: Path) -> list[str]:
+    """Each row's `verify` resolves to a strategy or is `none` (spec
+    2026-10-06-verification-strategies §B). It needs the repo, because a
+    strategy may be repo-authored (`fr.verification.resolve`)."""
+    from fr.verification.model import RESERVED, StrategyError
+    from fr.verification.resolve import resolve_strategy
+
+    out: list[str] = []
+    seen: dict[str, str | None] = {}
+    for row in matrix.rows:
+        name = row.verify
+        if name is None or name == RESERVED:
+            continue
+        if name not in seen:
+            try:
+                resolve_strategy(name, repo_root)
+                seen[name] = None
+            except StrategyError as e:
+                seen[name] = str(e)
+        if seen[name] is not None:
+            out.append(f"row {row.id}: verify {name!r} does not resolve ({seen[name]})")
+    return out
 
 
 # --- usage ---------------------------------------------------------------

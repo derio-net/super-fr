@@ -414,7 +414,12 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `fr.artifacts.matrix_verify`; `Matrix.schema_version` added with it.
             # 2 -> 3 for `Row.visual` (spec `2026-09-28-ui-visual-evidence-design`
             # §G), migration `fr.artifacts.matrix_visual`.
-            current_version=3,
+            # 3 -> 4: `Row.verify` names a strategy (`post-merge` becomes
+            # `live`) and rows gain `scenario`/`issues`/`harnesses`/`walks`
+            # (spec `2026-10-06-verification-strategies-design` §B), migration
+            # `fr.artifacts.matrix_strategies`, every hop reading through the
+            # frozen `fr.acceptance.legacy.MatrixV3`.
+            current_version=4,
             locator="docs/acceptance/matrix.yaml",
             stamp="`schema_version` in `matrix.yaml`",
             read_stamp=_read_yaml_stamp,

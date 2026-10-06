@@ -36,13 +36,10 @@ def _matrix(root: Path, text: str = _V2_MATRIX) -> Path:
     return path
 
 
-def test_the_matrix_kind_is_at_version_three() -> None:
-    assert artifact_kind("matrix").current_version == 3
-
-
-def test_the_chain_from_one_reaches_three_hop_by_hop() -> None:
+def test_the_two_to_three_hop_is_in_the_chain() -> None:
+    """The chain's full span is `test_migration_matrix_strategies`' to pin."""
     chain = MIGRATIONS.chain("matrix", PRE_FRAMEWORK_VERSION)
-    assert [(s.from_version, s.to_version) for s in chain] == [(1, 2), (2, 3)]
+    assert [(s.from_version, s.to_version) for s in chain][:2] == [(1, 2), (2, 3)]
 
 
 def test_a_v2_matrix_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
@@ -52,9 +49,11 @@ def test_a_v2_matrix_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == before.replace("schema_version: 2\n", "schema_version: 3\n")
+    # No `verify: post-merge` in the body, so the 3 -> 4 hop rewrites nothing either.
+    current = artifact_kind("matrix").current_version
+    assert path.read_text() == before.replace("schema_version: 2\n", f"schema_version: {current}\n")
     m = load_matrix(path)
-    assert m.schema_version == 3 and [r.id for r in m.rows] == ["a"]
+    assert m.schema_version == current and [r.id for r in m.rows] == ["a"]
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
@@ -80,4 +79,6 @@ def test_an_unreadable_v2_matrix_is_refused_byte_identical(tmp_path: Path) -> No
 
 def test_this_repos_own_matrix_is_current(repo_root: Path) -> None:
     kind = artifact_kind("matrix")
-    assert kind.read_version(repo_root / "docs" / "acceptance" / "matrix.yaml") == 3
+    assert (
+        kind.read_version(repo_root / "docs" / "acceptance" / "matrix.yaml") == kind.current_version
+    )
