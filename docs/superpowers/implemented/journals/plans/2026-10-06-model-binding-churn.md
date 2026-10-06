@@ -244,3 +244,8 @@ load_models raises ModelsError/YAMLError; _orchestrator_model_notice → _resolv
 ### p2-r7-resolved · finding [out-of-scope] · resolves p2-r7: corrupt models.yaml crashes fr run start after save (phase 2)
 
 Not caused by this change: a corrupt models.yaml already crashed fr run start via _orchestrator_model_notice → _resolved_model → load_models before this PR; the new _binding_health is never reached first. Worth its own fix (warn instead of crash in both notices).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved-2 created=2026-10-06T21:02:42+00:00 state=open resolves=p2-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1055 -->
+### p2-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1055] · resolves p2-r7: corrupt models.yaml crashes fr run start after save
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1055.
