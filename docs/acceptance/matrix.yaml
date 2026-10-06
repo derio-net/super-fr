@@ -6694,9 +6694,13 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_verification_strategy_resolution
+    status: ci
+    notes: scenario tests/scenarios/verification-strategy-resolution.sh runs against
+      a candidate install in CI (tests/integration/test_scenarios.py)
+    scenario: tests/scenarios/verification-strategy-resolution.sh
   - id: shipped-verification-strategies
     capability: verification
     acceptance: candidate, client-live, prerelease and live ship; candidate-family installs
