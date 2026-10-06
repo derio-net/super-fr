@@ -4907,12 +4907,21 @@ rows:
     verify: live
   - id: triage-batch-adopt-branch-rename
     capability: Backlog triage
-    acceptance: 'Adopting a session renames its branch to the batch branch everywhere fr keys on it (local, upstream, isolation record, marker, session indexes, run cursor), publishes it, supersedes an open PR with a new one on the batch branch, and tells the session''s agent, so the session keeps working on the renamed branch'
+    acceptance: Adopting a session renames its branch to the batch branch everywhere
+      fr keys on it (local, upstream, isolation record, marker, session indexes, run
+      cursor), publishes it, supersedes an open PR with a new one on the batch branch,
+      and tells the session's agent, so the session keeps working on the renamed branch
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R4
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_branch_rename.py#test_rename_moves_branch_record_marker_indexes_and_cursor
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_adopt_with_an_open_pr_moves_everything_in_order
+      - super-fr:tests/unit/test_triage_gitseam.py#test_publish_branch_pushes_it_and_sets_its_upstream
     status: not-implemented
-    notes: ''
+    notes: rename_branch is unit-tested over a real tmp repo and linked worktree; the
+      supersede over a fake forge. Stays not-implemented until the post-merge live sweep
+      shows a renamed session keep working on the batch branch.
     verify: live
   - id: triage-batch-adopt-refusals
     capability: Backlog triage
