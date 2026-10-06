@@ -398,8 +398,10 @@ read-only and fine to run anywhere. A hand-written `fr_version` floor
 name the predicted one: the base version plus this PR's highest fragment bump.
 
 On every push to `main`, `.github/workflows/release.yml` runs
-`scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`,
-`git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
+`scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`
+and then `fr migrate artifacts --yes` at the new number (at a major that widens
+this repo's own live plans' `fr_version` ceilings, which only the release can
+know; gh#861), `git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
 whole suite on that staged tree with `fr` installed at the new number**, and only
 then pushes it to `main` (the only commits that land there without a PR), tags
 it and publishes a GitHub Release whose notes are the fragment summaries. No CI

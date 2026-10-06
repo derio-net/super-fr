@@ -5097,10 +5097,14 @@ rows:
       - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_refuses_a_new_line_anchor_into_python
       - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_line_anchors_that_land_in_a_test
       - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_leaves_what_it_cannot_convert
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_accepts_a_unittest_dotted_anchor
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_a_line_anchor_inside_a_testcase_subclass
     status: ci
     notes: 'gh#531. Measured at fix time: 27 of 78 line anchors had slid onto another
       test or none; all re-pointed to the test git blame shows each was recorded for,
-      the other 48 converted by the repair.'
+      the other 48 converted by the repair. gh#965/gh#893: unittest''s spelling of a
+      test identity is read too — a Class.test anchor resolves, and the repair converts
+      a line inside a TestCase subclass not named Test*.'
   - id: acceptance-add-flush-left-rows
     capability: Acceptance matrix
     acceptance: 'fr acceptance add and set-status edit a matrix whose rows are flush-left
@@ -6299,3 +6303,146 @@ rows:
       checks), R8 adoption inference (done/pending with notes, cursor past the group)
       and R9 reporting (status/check sentence, no debt, PR-body section required on
       the live PR) are unit-tested in CI.
+  - id: triage-board-columns
+    capability: triage-batch-board
+    acceptance: '`fr triage board` writes board.html showing one card per batch in six
+      lifecycle columns (Proposed, Waiting, Running, PR open, Closing out, Done) with
+      counts, a blocked mark for unsatisfiable dependencies and a pill for cancelled/abandoned/partial,
+      linked from triage.html, readable in light and dark and at phone width.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+    status: ci
+    notes: board model, page and command unit-tested; browser-checked light, dark, 375px
+      (phase 2). triage.html link lands in phase 3
+    visual:
+      states:
+      - empty board
+      - every column populated
+      - waiting card blocked
+      - done card with cancelled pill
+      - dark theme
+      - phone width stacked columns
+  - id: triage-board-card-detail
+    capability: triage-batch-board
+    acceptance: A board card expands in place, scripts on or off, to show member issues,
+      PR and CI state, lifecycle details, the event timeline and a next-action hint
+      drawn from what the driver would do on the same facts.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: hints and card sections unit-tested; expand/collapse browser-checked
+    visual:
+      states:
+      - expanded card with PR and close-out
+      - expanded card without PR
+      interactions:
+      - expand and collapse a card
+  - id: triage-board-jump-focus
+    capability: triage-batch-board
+    acceptance: A card's jump button copies `fr triage batch focus <id>` (with --closeout
+      for the close-out session) and confirms; that command focuses the batch's live
+      herdr session, and refuses with exit 2 and a reason when there is no event, no
+      capable runner or no live session.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_focus.py
+      - super-fr:tests/unit/test_fr_herdr_runner.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: focus CLI and herdr unit-tested; copy button and clipboard fallback unit-tested
+      (command text) and browser-checked
+    visual:
+      states:
+      - copy confirmed on button
+      interactions:
+      - click jump button
+      - clipboard unavailable fallback
+  - id: triage-board-session-status
+    capability: triage-batch-board
+    acceptance: Each dispatched batch and started close-out shows its live session status
+      from the runner (working, blocked, idle, done, unknown, no session); a missing,
+      failing or incapable runner shows unknown with a page note and never fails the
+      render; a blocked session flags its card as needing the operator.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: session_statuses degrades to unknown plus a note for every failing runner;
+      herdr side tested in phase 1; blocked highlight browser-checked
+    visual:
+      states:
+      - blocked session card highlighted
+      - unknown status with page note
+  - id: triage-board-refresh
+    capability: triage-batch-board
+    acceptance: The board stays fresh without the operator re-rendering it — the drive
+      re-renders it after each pass (a render failure only warns), `fr triage board
+      --watch` re-collects and re-renders when no drive runs (refusing while one does),
+      and the page reloads on a configurable timer keeping expanded cards and scroll
+      position.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+    status: ci
+    notes: The drive re-renders board.html after every --yes pass and warns once per
+      cause when it cannot (tests/unit/test_triage_batch_drive_cmd.py); fr triage board
+      --watch re-collects and renders every interval and refuses under a live drive
+      lock (tests/unit/test_triage_kanban_cmd.py); the timer reload keeping expanded
+      cards was captured in Chrome (phase 3 visual record).
+    visual:
+      states:
+      - rendered and collected times shown
+      interactions:
+      - reload keeps expanded cards
+  - id: triage-board-untrusted-text
+    capability: triage-batch-board
+    acceptance: Forge- and judgement-sourced text on the board is escaped and never
+      reaches a script element, and the copied command is built only from the validated
+      batch id and scope options.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: hostile titles, hostile --dir and script-text constancy unit-tested
+  - id: triage-board-live-herdr
+    capability: triage-batch-board
+    acceptance: Inside herdr during a live drive, cards move columns as the drive acts,
+      the pasted jump command switches to the batch's tab in its wave workspace, and
+      a session waiting on a prompt shows blocked.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge

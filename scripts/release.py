@@ -13,10 +13,15 @@ every push to `main` (and by hand through `workflow_dispatch`):
    `--version` override wins and must be above the current version. A version
    whose tag already exists (a manual tag) is bumped past, never re-tagged.
 3. Refuse a stale `uv.lock` (`uv lock --check`), run `bump-version.py X.Y.Z`,
-   `git rm` the fragments, and verify the staged diff touches nothing but
-   `version_surfaces()` lines and those fragments: the commit is pushed with the
-   `GITHUB_TOKEN`, so no CI ever runs on it. Commit `release: vX.Y.Z` as
-   github-actions[bot], the summaries grouped by bump in the body.
+   then `fr migrate artifacts --yes` AT the new number (`_run_migrate`), `git rm`
+   the fragments, and verify the staged diff touches nothing but
+   `version_surfaces()` lines, those fragments and live plans' `fr_version`
+   ceilings widened to the new major's (`_plan_ceiling_widened`): the commit is
+   pushed with the `GITHUB_TOKEN`, so no CI ever runs on it. A plan's ceiling is
+   derived from the installed major, so only the release knows it, and a major
+   whose commit skipped the widening left this repo's own plans stale (gh#861).
+   Commit `release: vX.Y.Z` as github-actions[bot], the summaries grouped by
+   bump in the body.
 4. Test the committed tree AT the new version (`_run_staged_tests`), before the
    push. The diff check proves which lines changed, not how the code behaves
    at the new number; 5.0.0 shipped refusing its own plans (gh#854) because
@@ -107,6 +112,26 @@ def _run_gh(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["gh", *args], capture_output=True, text=True)
 
 
+def _run_migrate(
+    repo: Path, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+) -> str | None:
+    """`fr migrate artifacts --yes` in the locked env, i.e. at the bumped number: None when ok.
+
+    At a major this widens every live plan's `fr_version` ceiling; otherwise it
+    finds nothing to do. The verb never commits, so its writes ride the release
+    commit, where `verify_staged` admits the ceiling lines and nothing else.
+    """
+    r = run(
+        ["uv", "run", "--locked", "fr", "migrate", "artifacts", "--yes"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode == 0:
+        return None
+    return "\n".join(f"{r.stdout}\n{r.stderr}".strip().splitlines()[-_TAIL_LINES:])
+
+
 _FR_VERSION_PROBE = "import importlib.metadata as m; print(m.version('fr'))"
 _TAIL_LINES = 30
 
@@ -149,6 +174,7 @@ class Commands:
     lock_check: Callable[[Path], str | None] = _run_lock_check
     gh: Callable[[list[str]], subprocess.CompletedProcess[str]] = _run_gh
     test: Callable[[Path, str], str | None] = _run_staged_tests
+    migrate: Callable[[Path], str | None] = _run_migrate
 
 
 # -- git ---------------------------------------------------------------------
@@ -241,8 +267,48 @@ def commit_body(fragments: list[changes.Fragment]) -> str:
 # -- the release commit ----------------------------------------------------------
 
 
+LIVE_PLAN_META_RE = re.compile(r"^docs/superpowers/plans/[^/]+/_meta\.yaml$")
+"""A live plan's `_meta.yaml`; `implemented/` archives are frozen, never migrated."""
+
+_FR_VERSION_LINE_RE = re.compile(
+    r"^(?P<lead>fr_version\s*:\s*)(?P<q>['\"]?)(?P<value>[^'\"#\n]*)(?P=q)(?P<trail>[ \t]*)$"
+)
+
+
+def _plan_ceiling_widened(removed: list[str], added: list[str], new: str) -> bool:
+    """One `fr_version` line whose only change is its ceiling becoming `<{new major + 1}.0.0`.
+
+    The shape `fr.artifacts.fr_version.widen` writes, which this stdlib script
+    cannot import: same key, quoting and floor, the `<`/`<=` bound replaced.
+    """
+    if len(removed) != 1 or len(added) != 1:
+        return False
+    before, after = _FR_VERSION_LINE_RE.match(removed[0]), _FR_VERSION_LINE_RE.match(added[0])
+    if before is None or after is None:
+        return False
+    if any(before.group(g) != after.group(g) for g in ("lead", "q", "trail")):
+        return False
+    top = _vtuple(new)[0] + 1
+    ceiling = f"<{top}.0.0"
+    # Whitespace-free pieces: the repair re-joins with "," and writes each kept
+    # specifier as `str(Specifier(p))`, which drops inner spaces (`>= 4.20`).
+    old_specs = [re.sub(r"\s+", "", s) for s in before.group("value").split(",") if s.strip()]
+    new_specs = [re.sub(r"\s+", "", s) for s in after.group("value").split(",") if s.strip()]
+    bounds = [s.lstrip("<=") for s in old_specs if s.startswith("<")]
+    if not bounds or any(_major_of(b) is None or _major_of(b) >= top for b in bounds):
+        return False  # only a ceiling BELOW the new one widens; never a narrowing
+    widened = [ceiling if s.startswith("<") else s for s in old_specs]
+    return new_specs == widened
+
+
+def _major_of(bound: str) -> int | None:
+    match = re.match(r"\d+", bound)
+    return int(match.group()) if match else None
+
+
 def verify_staged(repo: Path, old: str, new: str, fragments: list[changes.Fragment]) -> None:
-    """The staged diff is only version values moving `old` -> `new`, plus removed fragments."""
+    """The staged diff is only version values moving `old` -> `new`, removed fragments,
+    and live plans' `fr_version` ceilings widened to `new`'s major."""
     consumed = {f.path.relative_to(repo).as_posix() for f in fragments}
     per_file: dict[str, int] = {}
     for s in vs.version_surfaces(repo):
@@ -252,12 +318,16 @@ def verify_staged(repo: Path, old: str, new: str, fragments: list[changes.Fragme
         status, path = line.split("\t", 1)
         if path in consumed and status == "D":
             continue
-        if path not in per_file or status != "M":
-            bad.append(f"{path} ({status})")
-            continue
         diff = _out(repo, "diff", "--cached", "-U0", "--", path).splitlines()
         removed = [d[1:] for d in diff if d.startswith("-") and not d.startswith("---")]
         added = [d[1:] for d in diff if d.startswith("+") and not d.startswith("+++")]
+        if path not in per_file and LIVE_PLAN_META_RE.match(path) and status == "M":
+            if not _plan_ceiling_widened(removed, added, new):
+                bad.append(f"{path} (a plan line other than its fr_version ceiling)")
+            continue
+        if path not in per_file or status != "M":
+            bad.append(f"{path} ({status})")
+            continue
         if (
             len(added) != per_file[path]
             or [r.replace(old, new) for r in removed] != added
@@ -266,7 +336,8 @@ def verify_staged(repo: Path, old: str, new: str, fragments: list[changes.Fragme
             bad.append(f"{path} (a line other than its version value)")
     if bad:
         raise ReleaseError(
-            "the release commit may carry only version values and consumed fragments "
+            "the release commit may carry only version values, consumed fragments and "
+            "widened live-plan ceilings "
             "(no CI runs on it); refusing — staged outside that set:\n"
             + "\n".join(f"  - {b}" for b in bad)
         )
@@ -281,6 +352,14 @@ def make_release_commit(repo: Path, plan: Plan, cmds: Commands) -> None:
             f"{stale}\n  fix: run `uv lock` in a PR"
         )
     cmds.bump(repo, plan.new)
+    failure = cmds.migrate(repo)
+    if failure is not None:
+        raise ReleaseError(
+            f"`fr migrate artifacts --yes` failed at {plan.new}, refusing to release a tree "
+            f"whose own artifacts are stale (main and the tags are untouched):\n{failure}\n"
+            f"  fix: land a PR that makes these artifacts migratable; the next push to main "
+            f"retries the release"
+        )
     for f in plan.fragments:
         _git(repo, "rm", "--quiet", "--", f.path.relative_to(repo).as_posix())
     _git(repo, "add", "-A")

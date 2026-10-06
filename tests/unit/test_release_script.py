@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -30,6 +31,8 @@ import version_surfaces as vs  # noqa: E402
 
 BASE = "4.23.0"
 BOT = "github-actions[bot]"
+PLAN_META = "docs/superpowers/plans/demo/_meta.yaml"
+ARCHIVED_META = "docs/superpowers/implemented/plans/old/_meta.yaml"
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -83,6 +86,8 @@ def _seed(repo: Path, version: str = BASE) -> None:
         "uv.lock": _lock(version),
         "README.md": "# demo\n",
         ".changes/README.md": "# fragments\n",
+        PLAN_META: "slug: demo\nfr_version: '>=4.20.0,<5.0.0'\nschema_version: 2\n",
+        ARCHIVED_META: "slug: old\nfr_version: '>=3.0.0,<4.0.0'\n",
     }
     for rel, text in files.items():
         path = repo / rel
@@ -113,6 +118,8 @@ class World:
         self.test_calls: list[tuple[str, str]] = []  # (version tested, origin's version then)
         self.test_failure: str | None = None
         self.before_push: Callable[[int], None] = lambda n: None
+        self.migrate_calls: list[str] = []  # the version on disk when migrate ran
+        self.migrate_failure: str | None = None
 
     # -- other people's pushes -------------------------------------------
     def land(self, rel: str, text: str, message: str = "a merged PR") -> None:
@@ -163,12 +170,23 @@ class World:
             self.gh_calls.append(list(args))
             return subprocess.CompletedProcess(["gh", *args], 0, "", "")
 
+        def migrate(repo: Path) -> str | None:
+            # What `fr migrate artifacts --yes` does at the bumped number: widen
+            # every LIVE plan's ceiling to the installed major's (never archives).
+            installed = next(iter({s.value for s in vs.version_surfaces(repo)}))
+            self.migrate_calls.append(installed)
+            ceiling = f"<{int(installed.split('.')[0]) + 1}.0.0"
+            for meta in (repo / "docs/superpowers/plans").glob("*/_meta.yaml"):
+                text = meta.read_text()
+                meta.write_text(re.sub(r"<\d+\.0\.0", ceiling, text))
+            return self.migrate_failure
+
         def test(repo: Path, new: str) -> str | None:
             self.test_calls.append((new, self.origin_version()))
             assert {s.value for s in vs.version_surfaces(repo)} == {new}
             return self.test_failure
 
-        return release.Commands(bump=bump, lock_check=lock_check, gh=gh, test=test)
+        return release.Commands(bump=bump, lock_check=lock_check, gh=gh, test=test, migrate=migrate)
 
     def run(self, *argv: str) -> int:
         return release.main(list(argv), repo=self.clone, commands=self.commands())
@@ -606,3 +624,185 @@ def test_the_default_test_command_reports_the_pytest_tail_when_red(tmp_path: Pat
     failure = release._run_staged_tests(tmp_path, "5.0.0", run=run)
 
     assert failure is not None and "415 failed" in failure
+
+
+# -- a major migrates this repo's own live plans in the release commit (#861) ---
+
+
+def test_a_major_release_widens_the_live_plans_ceiling_in_the_release_commit(
+    world: World,
+) -> None:
+    world.fragment("feat-x", "major", "a breaking change")
+
+    assert world.run() == 0
+
+    # Migrated AT the new number, so the repair widens to the new major's ceiling.
+    assert world.migrate_calls == ["5.0.0"]
+    assert "'>=4.20.0,<6.0.0'" in (world.origin_show(PLAN_META) or "")
+    # Archives record what shipped: never rewritten.
+    assert "<4.0.0" in (world.origin_show(ARCHIVED_META) or "")
+    assert world.origin_log()[0] == "release: v5.0.0"
+
+
+def test_a_minor_release_migrates_nothing_and_still_releases(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+
+    assert world.run() == 0
+
+    assert world.migrate_calls == ["4.24.0"]
+    assert "'>=4.20.0,<5.0.0'" in (world.origin_show(PLAN_META) or "")
+
+
+def test_a_failed_migration_refuses_the_release(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-x", "major", "a breaking change")
+    world.migrate_failure = "FAILED: docs/superpowers/plans/demo/_meta.yaml"
+    before = world.origin_log("%H")
+
+    assert world.run() == release.EXIT_REFUSED
+
+    assert "demo/_meta.yaml" in capsys.readouterr().err
+    assert world.origin_log("%H") == before
+    assert world.test_calls == []
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        ("fr_version: '>=4.20.0,<5.0.0'", "fr_version: '>=4.0.0,<6.0.0'"),  # the floor moved
+        ("fr_version: '>=4.20.0,<5.0.0'", "fr_version: '>=4.20.0,<7.0.0'"),  # not the new major
+        ("slug: demo", "slug: smuggled"),  # another line of a plan
+    ],
+    ids=["floor", "wrong-ceiling", "other-line"],
+)
+def test_a_plan_edit_other_than_the_ceiling_widening_refuses(
+    world: World, capsys: pytest.CaptureFixture[str], edit: tuple[str, str]
+) -> None:
+    world.fragment("feat-x", "major", "a breaking change")
+
+    def smuggle(n: int) -> None:
+        path = world.clone / PLAN_META
+        path.write_text(path.read_text().replace(*edit))
+
+    world.before_push = smuggle  # runs inside bump, before migrate and the check
+    original = world.commands()
+
+    def migrate_nothing(repo: Path) -> str | None:  # leave the smuggled edit as-is
+        return None
+
+    cmds = release.Commands(
+        bump=original.bump,
+        lock_check=original.lock_check,
+        gh=original.gh,
+        test=original.test,
+        migrate=migrate_nothing,
+    )
+    assert release.main([], repo=world.clone, commands=cmds) != 0
+
+    assert PLAN_META in capsys.readouterr().err
+    assert world.origin_version() == BASE
+
+
+def test_widening_an_archived_plan_refuses(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-x", "major", "a breaking change")
+
+    def smuggle(n: int) -> None:
+        path = world.clone / ARCHIVED_META
+        path.write_text(path.read_text().replace("<4.0.0", "<6.0.0"))
+
+    world.before_push = smuggle
+    assert world.run() != 0
+
+    assert ARCHIVED_META in capsys.readouterr().err
+    assert world.origin_version() == BASE
+
+
+def test_the_default_migrate_command_applies_fr_migrate_in_the_locked_env(
+    tmp_path: Path,
+) -> None:
+    run = _FakeRun("5.0.0")
+
+    assert release._run_migrate(tmp_path, run=run) is None
+
+    assert run.calls == [["uv", "run", "--locked", "fr", "migrate", "artifacts", "--yes"]]
+
+
+def test_the_default_migrate_command_reports_a_failure(tmp_path: Path) -> None:
+    def run(cmd: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, 2, "  FAILED: plans/x/_meta.yaml\n", "boom")
+
+    failure = release._run_migrate(tmp_path, run=run)
+
+    assert failure is not None and "plans/x/_meta.yaml" in failure and "boom" in failure
+
+
+# The allowlist checked against what the REAL repair writes, not a fake's regex.
+@pytest.mark.parametrize(
+    "line",
+    [
+        "fr_version: '>=4.20.0,<5.0.0'",
+        'fr_version: ">=4.20.0,<5.0.0"',
+        "fr_version: '>=4.20.0, <5.0.0'",
+        "fr_version: '>= 4.20, < 5.0.0'",
+        "fr_version: '>=4.20.0,<=4.99.0'",
+        "fr_version: '>=4.20.0,<5.0.0,!=4.21.0'",
+    ],
+)
+def test_the_real_ceiling_repair_output_is_admitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, line: str
+) -> None:
+    from fr.artifacts import fr_version
+    from packaging.version import Version
+
+    monkeypatch.setattr(fr_version, "installed_fr_version", lambda: Version("5.0.0"))
+    meta = tmp_path / "_meta.yaml"
+    meta.write_text(f"slug: demo\n{line}\n")
+
+    fr_version.widen(meta)
+
+    after = meta.read_text().splitlines()[1]
+    assert after != line
+    assert release._plan_ceiling_widened([line], [after], "5.0.0")
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("fr_version: '>=4.20.0,<9.0.0'", "fr_version: '>=4.20.0,<6.0.0'"),  # a narrowing
+        ("fr_version: '>=4.20.0,<6.0.0'", "fr_version: '>=4.20.0,<6.0.0 '"),  # trail moved
+        ("fr_version: '>=4.20.0'", "fr_version: '>=4.20.0,<6.0.0'"),  # a ceiling added
+        ("fr_version: '>=4.20.0,<5.0.0'", 'fr_version: ">=4.20.0,<6.0.0"'),  # quoting moved
+        ("slug: demo", "slug: other"),  # not an fr_version line
+    ],
+    ids=["narrowing", "trail", "added-ceiling", "quoting", "other-key"],
+)
+def test_anything_but_a_ceiling_widening_is_refused(before: str, after: str) -> None:
+    assert not release._plan_ceiling_widened([before], [after], "5.0.0")
+
+
+def test_two_changed_plan_lines_are_refused() -> None:
+    lines = ["fr_version: '>=4.20.0,<5.0.0'", "fr_version: '>=4.20.0,<5.0.0'"]
+    widened = [s.replace("<5.0.0", "<6.0.0") for s in lines]
+    assert not release._plan_ceiling_widened(lines, widened, "5.0.0")
+
+
+def test_adding_or_deleting_a_live_plan_refuses(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-x", "major", "a breaking change")
+
+    def smuggle(n: int) -> None:
+        (world.clone / PLAN_META).unlink()
+        extra = world.clone / "docs/superpowers/plans/new/_meta.yaml"
+        extra.parent.mkdir(parents=True)
+        extra.write_text("fr_version: '>=5.0.0,<6.0.0'\n")
+
+    world.before_push = smuggle
+    assert world.run() != 0
+
+    err = capsys.readouterr().err
+    assert f"{PLAN_META} (D)" in err and "plans/new/_meta.yaml (A)" in err
+    assert world.origin_version() == BASE

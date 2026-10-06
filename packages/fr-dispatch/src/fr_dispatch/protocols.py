@@ -138,6 +138,33 @@ class SessionCloser(Protocol):
         ...
 
 
+SessionStatus = Literal["working", "blocked", "idle", "done", "unknown", "absent"]
+"""One item's live session state: `absent` when the runner holds none."""
+
+
+@runtime_checkable
+class SessionInspector(Protocol):
+    """An optional protocol beside `Runner`, never part of it: report session state.
+
+    One read for all *items* (a runner lists its sessions once); every item
+    is a key of the result. A session in several parts reports the most urgent
+    one. Raising is a failed read.
+    """
+
+    def session_statuses(self, items: Sequence[WorkItem]) -> dict[str, SessionStatus]:
+        """Each item's id mapped to its session's status (`absent` when none)."""
+        ...
+
+
+@runtime_checkable
+class SessionFocuser(Protocol):
+    """An optional protocol beside `Runner`, never part of it: bring a session forward."""
+
+    def focus(self, item: WorkItem) -> bool:
+        """Focus the item's session; False when there is none. Raising is a failed focus."""
+        ...
+
+
 class Source(Protocol):
     """Where `WorkItem`s come from — the seam the future poller consumes
     (spec §4.H, guides part (b) of the brainstorm). **Nothing is extracted
