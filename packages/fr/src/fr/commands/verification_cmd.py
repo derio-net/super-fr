@@ -17,6 +17,7 @@ Exit codes: 0 clean, 2 any failure or a usage error.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import typer
@@ -90,3 +91,93 @@ def check_cmd(
 
     if had_errors:
         raise typer.Exit(2)
+
+
+@verification_app.command("walk")
+def walk_cmd(
+    run: str = typer.Option(..., "--run", help="The run whose spec's rows are walked."),
+    model: str = typer.Option(
+        ..., "--model", help="The model driving this walk (fr cannot detect one)."
+    ),
+    harness: str | None = typer.Option(None, "--harness", help="Override the detected harness."),
+    strategy: str | None = typer.Option(
+        None, "--strategy", help="The pre-merge strategy to walk (default: the run's)."
+    ),
+    client: Path | None = typer.Option(
+        None, "--client", help="Run the scenarios with this client repo as their cwd."
+    ),
+    row: list[str] = typer.Option([], "--row", help="Walk only this row (repeatable)."),
+) -> None:
+    """Install the candidate into a throwaway prefix, smoke it, run each row's
+    scenario, and write the log `deliver` verifies (spec §C)."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.harness import HarnessError
+    from fr.harness.detect import detect_harness
+    from fr.requirements import load_spec_matrix
+    from fr.run.code_tree import code_tree, dirty_code_paths
+    from fr.run.model import RunStateError, load_run_state
+    from fr.verification.rows import run_verification
+    from fr.verification.spec_section import SectionError
+    from fr.verification.walk import WalkError, plan_rows, run_walk
+
+    repo_root = resolve_repo_root()
+
+    def refuse(message: str) -> typer.Exit:
+        err_console.print(f"[red]refused:[/red] {message}", soft_wrap=True)
+        return typer.Exit(2)
+
+    try:
+        state = load_run_state(repo_root, run)
+        spec_rel, verification = run_verification(repo_root, state)
+        if spec_rel is None:
+            raise refuse(f"run {run!r} has not emitted a spec yet")
+        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
+        name = (
+            strategy
+            or (verification.section.strategy if verification.section is not None else None)
+            or verification.shape_default
+        )
+        if name is None:
+            raise refuse(
+                f"run {run!r} names no strategy — give --strategy or add a "
+                "`strategy:` line to the spec's `## Verification`"
+            )
+        manifest = resolve_strategy(name, repo_root)
+        if manifest.when != "pre-merge":
+            raise refuse(f"strategy {name!r} is {manifest.when}: there is nothing to walk")
+        rows = plan_rows(matrix, spec_ref, verification, name, row)
+        if not model.strip():
+            raise refuse("--model is required (fr cannot detect a model)")
+        dirty = dirty_code_paths(repo_root)
+        if dirty:
+            raise refuse(
+                f"{len(dirty)} uncommitted code path(s), e.g. {dirty[0]} — the log records "
+                "HEAD's code tree, so commit before walking"
+            )
+        detected = harness or detect_harness(os.environ) or "unknown"
+        path, log = run_walk(
+            repo_root=repo_root,
+            run=run,
+            manifest=manifest,
+            rows=rows,
+            model=model,
+            harness=detected,
+            code_tree=code_tree(repo_root),
+            client=client.resolve() if client is not None else None,
+        )
+    except (
+        RunStateError,
+        AcceptanceError,
+        SectionError,
+        StrategyError,
+        WalkError,
+        HarnessError,
+    ) as e:
+        raise refuse(str(e)) from e
+
+    for step in log.steps:
+        mark = "ok" if step.exit == 0 else f"FAILED (exit {step.exit})"
+        console.print(f"{step.name}: {mark}")
+    console.print(f"walk log: {path}", soft_wrap=True)
+    if not log.passed:
+        raise typer.Exit(1)

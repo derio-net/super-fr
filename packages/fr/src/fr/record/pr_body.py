@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,17 +29,24 @@ from fr.journal.model import (
 )
 
 if TYPE_CHECKING:
-    from fr.acceptance.model import Matrix
+    from fr.acceptance.model import Matrix, Row
     from fr.run.model import RunState
     from fr.verification.rows import SpecVerification
 
 __all__ = [
     "PR_BODY_NAME",
     "REQUIRED_SECTIONS",
+    "PrematureClose",
+    "closing_refs",
+    "holds_open_for_run",
     "missing_sections",
+    "normalize_issue_ref",
+    "pre_merge_owed_lines",
+    "premature_closes",
     "render_out_of_scope",
     "render_pr_body",
     "shared_closing_keywords",
+    "walk_command",
 ]
 
 PR_BODY_NAME = "pr-body.md"
@@ -46,13 +54,16 @@ PR_BODY_NAME = "pr-body.md"
 REQUIRED_SECTIONS = (
     "## Findings",
     "## Out-of-scope findings",
+    "## Pre-merge verification owed",
     "## Post-merge verification owed",
     "## Proportionality",
     "## Cost",
 )
 """The headings a delivered PR's body must carry, in order. `Post-merge
 verification owed` (spec 2026-09-28 §F) lists the acceptance rows only a live
-run after merge can move."""
+run after merge can move; `Pre-merge verification owed` (spec
+2026-10-06-verification-strategies §D, R12) the operator-driven ones to walk
+before it, each with its exact walk command."""
 
 _CLOSED_OUT = frozenset({"out-of-scope", "deferred"})
 
@@ -81,17 +92,14 @@ def _one_ref_per_link(match: re.Match[str]) -> str:
     return text if _ISSUE_REF.search(text) else url
 
 
-def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
-    """Every line of `body` that shares one closing keyword across several
-    issue references (gh#821), with the lines that would close each of them.
-
-    `Closes #a and #b` closes only `#a` on GitHub, so the rule is strict: on a
-    line carrying a closing keyword, every reference needs its own keyword
-    directly before it. Code (fenced or inline) is skipped, as GitHub skips it,
-    and so is fr's own render below its marker: a finding line carries a
-    free-text title, a state word (`fixed`) and `→ #N`, none of which closes.
-    """
-    out: list[tuple[str, list[str]]] = []
+def _closing_lines(
+    body: str,
+) -> Iterator[tuple[str, str, list[re.Match[str]], list[re.Match[str]]]]:
+    """`(raw line, cleaned line, keyword matches, reference matches)` for every line of `body`
+    that carries both a closing keyword and an issue reference. Code (fenced or
+    inline) is skipped, as GitHub skips it, and so is fr's own render below its
+    marker: a finding line carries a free-text title, a state word (`fixed`) and
+    `→ #N`, none of which closes."""
     fence: str | None = None  # the open fence's run, e.g. "````"
     for raw in body.split(_RENDER_MARKER, 1)[0].splitlines():
         m = _FENCE.match(raw)
@@ -106,8 +114,33 @@ def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
         line = _LINK.sub(_one_ref_per_link, _CODE_SPAN.sub("", raw)).replace("*", "")
         keywords = list(_KEYWORD.finditer(line))
         refs = list(_ISSUE_REF.finditer(line))
-        if not keywords or not refs:
-            continue
+        if keywords and refs:
+            yield raw, line, keywords, refs
+
+
+def closing_refs(body: str) -> list[tuple[str, str, str]]:
+    """`(line, keyword, ref)` for every issue reference on a closing-keyword
+    line of `body` — the keyword nearest before it, as written, and the
+    reference as written (`#n`, `owner/repo#n` or an issue URL). The same
+    code-fence, inline-code and fr-marker skipping as `shared_closing_keywords`."""
+    out: list[tuple[str, str, str]] = []
+    for raw, _line, keywords, refs in _closing_lines(body):
+        for r in refs:
+            before = [k for k in keywords if k.end() <= r.start()]
+            out.append((raw.strip(), (before[-1] if before else keywords[0]).group(1), r.group(0)))
+    return out
+
+
+def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
+    """Every line of `body` that shares one closing keyword across several
+    issue references (gh#821), with the lines that would close each of them.
+
+    `Closes #a and #b` closes only `#a` on GitHub, so the rule is strict: on a
+    line carrying a closing keyword, every reference needs its own keyword
+    directly before it.
+    """
+    out: list[tuple[str, list[str]]] = []
+    for raw, line, keywords, refs in _closing_lines(body):
         starts = [0, *(r.end() for r in refs[:-1])]
         if all(_KEYWORD_BEFORE.search(line[s : r.start()]) for s, r in zip(starts, refs)):
             continue
@@ -116,6 +149,59 @@ def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
             before = [k for k in keywords if k.end() <= r.start()]
             fixed.append(f"{(before[-1] if before else keywords[0]).group(1)} {r.group(0)}")
         out.append((raw.strip(), fixed))
+    return out
+
+
+_URL_REF = re.compile(r"^https?://[^/\s]+/(?P<path>.+?)(?:/-)?/issues/(?P<n>\d+)$")
+
+
+def normalize_issue_ref(ref: str, identity: tuple[str, str]) -> str | None:
+    """`owner/repo#n` for a reference as a PR body writes it — a bare `#n` takes
+    `identity` (`(org, repo)`, no forge call), an `owner/repo#n` is kept, and a
+    GitHub or GitLab issue URL (`.../issues/n`, `.../-/issues/n`) becomes the
+    same shape. `None` for anything else."""
+    if ref.startswith("#"):
+        return f"{identity[0]}/{identity[1]}{ref}"
+    url = _URL_REF.match(ref)
+    if url:
+        return f"{url.group('path')}#{url.group('n')}"
+    return ref if re.fullmatch(r"[\w.-]+/[\w.-]+#\d+", ref) else None
+
+
+@dataclass(frozen=True)
+class PrematureClose:
+    """A closing line whose issue a not-yet-verified post-merge row still holds
+    open (R15)."""
+
+    line: str
+    ref: str
+    rows: tuple[str, ...]
+
+    @property
+    def fix(self) -> str:
+        return f"Refs {self.ref}"
+
+
+def premature_closes(
+    live_body: str,
+    matrix: Matrix,
+    identity: tuple[str, str],
+    holds_open: Callable[[Row], bool],
+) -> list[PrematureClose]:
+    """Each closing-keyword line of `live_body` whose issue a row of `matrix`
+    cites while `holds_open(row)` — i.e. it is post-merge and not walk-verified.
+    Merging such a PR would close an issue its promise has not been verified
+    for; `Refs <ref>` mentions it without closing (spec §D, R15)."""
+    holding: dict[str, list[str]] = {}
+    for row in matrix.rows:
+        for issue in row.issues:
+            if holds_open(row):
+                holding.setdefault(issue, []).append(row.id)
+    out: list[PrematureClose] = []
+    for line, _keyword, written in closing_refs(live_body):
+        ref = normalize_issue_ref(written, identity)
+        if ref is not None and ref in holding:
+            out.append(PrematureClose(line, ref, tuple(holding[ref])))
     return out
 
 
@@ -188,15 +274,102 @@ def post_merge_owed_lines(
     return lines
 
 
-def _shape_default(repo_root: Path, state: RunState) -> str | None:
-    """The run's shape's default strategy, or `None` when it does not resolve."""
-    from fr.workflow.model import WorkflowError
-    from fr.workflow.resolve import resolve_workflow
+def walk_command(run: str, strategy: str, row_id: str) -> str:
+    """The exact walk an operator runs for one operator-driven row (R12)."""
+    return (
+        f"fr verification walk --run {run} --model <model> --strategy {strategy} "
+        f"--client <client-repo> --row {row_id}"
+    )
 
+
+def pre_merge_owed_lines(
+    matrix: Matrix, spec_ref: str, verification: SpecVerification, run: str
+) -> list[str]:
+    """One line per row citing the spec whose effective strategy is
+    operator-driven and pre-merge (spec §D, R12), each with its walk command; a
+    strategy that does not resolve is listed with the error, never dropped."""
+    from fr.requirements import rows_citing
+    from fr.verification.model import StrategyError
+    from fr.verification.resolve import resolve_strategy
+
+    lines: list[str] = []
+    for r in rows_citing(matrix, spec_ref):
+        name = verification.strategy(r)
+        if name is None or name == "none":
+            continue
+        try:
+            manifest = resolve_strategy(name, verification.repo_root)
+        except StrategyError as e:
+            lines.append(f"- `{r.id}` — {r.acceptance} — strategy does not resolve: {e}")
+            continue
+        if manifest.when == "pre-merge" and manifest.driver == "operator":
+            lines.append(f"- `{r.id}` — {r.acceptance} — `{walk_command(run, name, r.id)}`")
+    return lines
+
+
+def _pre_merge_owed(repo_root: Path, state: RunState) -> str:
+    """Every operator-driven pre-merge row citing the run's spec with its walk
+    command, then the Ready-checklist line the operator ticks after the walk —
+    or `None.` (spec §D, R12). `deliver` does not wait for the walk."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.requirements import load_spec_matrix, run_spec
+    from fr.verification.rows import shape_default, spec_verification
+    from fr.verification.spec_section import SectionError
+
+    spec_rel = run_spec(state)
+    if spec_rel is None or not (repo_root / MATRIX_REL).is_file():
+        return "None."
     try:
-        return resolve_workflow(state.workflow.partition("@")[0], repo_root).verification
-    except (WorkflowError, OSError):
-        return None
+        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
+        verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
+    except (AcceptanceError, SectionError) as e:
+        return f"Not available: {e}"
+    lines = pre_merge_owed_lines(matrix, spec_ref, verification, state.run)
+    if not lines:
+        return "None."
+    lines.append(
+        "- [ ] Ready: the walk above is run and recorded (`fr acceptance set-status "
+        "--walk <log> --harness <h> --model <m> --strategy <s> --notes ...`)"
+    )
+    return "\n".join(lines)
+
+
+def holds_open_for_run(
+    repo_root: Path, state: RunState, matrix: Matrix, spec_ref: str | None
+) -> Callable[[Row], bool]:
+    """`row -> whether it still holds its issues open`: its effective strategy
+    is post-merge and it is not walk-verified. A row citing the run's spec is
+    judged with that spec's section and the shape's default; any other row as
+    `fr.acceptance.walks.holds_open` does. A strategy fr cannot read holds the
+    issue open — a premature close is the worse error."""
+    from fr.acceptance.walks import holds_open, walk_verified
+    from fr.requirements import rows_citing, run_spec
+    from fr.verification.model import StrategyError
+    from fr.verification.rows import shape_default, spec_verification
+    from fr.verification.spec_section import SectionError
+
+    spec_rel = run_spec(state)
+    ours: set[str] = set()
+    verification = None
+    if spec_rel is not None and spec_ref is not None:
+        try:
+            verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
+            ours = {r.id for r in rows_citing(matrix, spec_ref)}
+        except (SectionError, OSError):
+            verification = None
+
+    def holds(row: Row) -> bool:
+        if verification is None or row.id not in ours:
+            return holds_open(row, repo_root)
+        if walk_verified(row):
+            return False
+        try:
+            return verification.is_post_merge(row)
+        except StrategyError:
+            return True
+
+    return holds
 
 
 def _post_merge_owed(repo_root: Path, state: RunState) -> str:
@@ -205,7 +378,7 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
     from fr.acceptance.model import AcceptanceError
     from fr.commands.acceptance_cmd import MATRIX_REL
     from fr.requirements import load_spec_matrix, run_spec
-    from fr.verification.rows import spec_verification
+    from fr.verification.rows import shape_default, spec_verification
     from fr.verification.spec_section import SectionError
 
     spec_rel = run_spec(state)
@@ -213,7 +386,7 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
         return "None."
     try:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
-        verification = spec_verification(repo_root, spec_rel, _shape_default(repo_root, state))
+        verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
     except (AcceptanceError, SectionError) as e:
         return f"Not available: {e}"
     lines = post_merge_owed_lines(matrix, spec_ref, verification)
@@ -326,6 +499,8 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
 
         parts += [HISTORICAL_HEADING, historical]
     parts += [
+        "## Pre-merge verification owed",
+        _pre_merge_owed(repo_root, state),
         "## Post-merge verification owed",
         _post_merge_owed(repo_root, state),
     ]

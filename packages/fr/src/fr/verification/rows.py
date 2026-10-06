@@ -19,8 +19,15 @@ from fr.verification.spec_section import Section, parse_section
 
 if TYPE_CHECKING:
     from fr.acceptance.model import Row
+    from fr.run.model import RunState
 
-__all__ = ["SpecVerification", "spec_verification", "spec_section_at"]
+__all__ = [
+    "SpecVerification",
+    "run_verification",
+    "shape_default",
+    "spec_section_at",
+    "spec_verification",
+]
 
 
 def spec_section_at(repo_root: Path, spec_rel: str | None) -> Section | None:
@@ -66,3 +73,25 @@ def spec_verification(
     """`SpecVerification` for the spec at `spec_rel` (`SectionError` when its
     section is malformed)."""
     return SpecVerification(repo_root, spec_section_at(repo_root, spec_rel), shape_default)
+
+
+def shape_default(repo_root: Path, state: RunState) -> str | None:
+    """The run's workflow shape's default strategy, or `None` when the shape
+    does not resolve or declares none."""
+    from fr.workflow.model import WorkflowError
+    from fr.workflow.resolve import resolve_workflow
+
+    try:
+        return resolve_workflow(state.workflow.partition("@")[0], repo_root).verification
+    except (WorkflowError, OSError):
+        return None
+
+
+def run_verification(repo_root: Path, state: RunState) -> tuple[str | None, SpecVerification]:
+    """`(spec_rel, SpecVerification)` for a run: the spec it emitted and that
+    spec's section bound to the shape's default (`SectionError` when the
+    section is malformed). `spec_rel` is `None` when the run emitted no spec."""
+    from fr.requirements import run_spec
+
+    spec_rel = run_spec(state)
+    return spec_rel, spec_verification(repo_root, spec_rel, shape_default(repo_root, state))

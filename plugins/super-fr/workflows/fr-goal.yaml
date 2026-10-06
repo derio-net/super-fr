@@ -208,4 +208,6 @@ steps:
     # `visual` (spec 2026-09-28-ui-visual-evidence §C): for the rows citing the
     # run's spec, screenshots captured and opened by the orchestrator itself
     # during delivery, on the delivered branch.
-    evidence: [tests, proportionality, visual]
+    # `walk` (2026-10-06-verification-strategies §C): the log `fr verification walk`
+    # wrote on this code tree; owed only when the spec asks for a pre-merge walk.
+    evidence: [tests, proportionality, visual, walk]
