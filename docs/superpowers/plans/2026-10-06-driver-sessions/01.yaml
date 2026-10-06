@@ -107,7 +107,7 @@ tasks:
       - a name-reuse refusal (the fixture code from P1.T1.S2) falls back to send-text;
       - an unnamed pane → send-text `claude <kept> --resume <id>` + enter;
       - 90 s without the same agent_session → fail;
-      - every failure after /exit carries `resume by hand: claude <kept> --resume <id>`.
+      - every failure after /exit carries the line `resume: claude <kept> --resume <id>` for the operator.
 
       And restart_idle:
       - a dry run sends no key;

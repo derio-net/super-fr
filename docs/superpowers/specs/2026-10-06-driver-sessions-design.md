@@ -109,7 +109,7 @@ Pure decisions are kept apart from the calls:
      `agent_session` value (90 s).
 
   Each step's `HerdrError` becomes `fail <step>: <herdr's words>`. Every failure after step 1
-  adds `resume by hand: claude <kept> --resume <id>`.
+  adds `resume: claude <kept> --resume <id>`, the command the operator runs to resume the pane.
 - `restart_idle(*, yes, exclude) -> RestartReport` lists, classifies and restarts serially,
   so one pane at a time leaves the foreground. It catches each pane's failure and goes on.
   The caller's pane is `HERDR_PANE_ID`.

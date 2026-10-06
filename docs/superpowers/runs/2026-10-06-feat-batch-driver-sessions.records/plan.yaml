@@ -1,0 +1,14 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-driver-sessions
+step: plan
+outcome: done
+journal:
+  - kind: decision
+    id: plan-shape
+    global: true
+    title: Three agentic phases, one per reviewable ask; no member issue is a tracking_issue
+    body: P1 restart engine + CLI + install (skeleton, #964 runner side); P2 protocol + config/facts 6 + once-per-pass driver restart (#964 driver side, review-size split); P3 idle-session rule, driver report, board, #878 docs. All standard tier.
+resolves: []
+emitted:
+  plan: docs/superpowers/plans/2026-10-06-driver-sessions
+evidence: {}
