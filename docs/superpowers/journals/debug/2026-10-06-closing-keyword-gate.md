@@ -19,3 +19,8 @@ Probed 2026-10-06 on draft PR #1032 by editing its body and reading closingIssue
 ### h0 · ruled-out · Ruled out: scanning whole paragraphs instead of lines
 
 A soft break renders as a space, so reading a paragraph as one line looks faithful, but under the strict rule it would refuse 'Closes #1\nRefs #2', the shape this repo's own PR bodies use (#860's did). The continuation must be narrower: a closing line whose tail after its last ref is only list separators, followed by a line that begins with a ref.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc created=2026-10-06T16:48:46+00:00 -->
+### rc · root-cause · The gate keyed on line co-occurrence of a keyword and a reference, not on an effective close and its list
+
+Confirms h1. `shared_closing_keywords` policed every line where a keyword and a ref co-occurred: a keyword that closes nothing (no ref directly after it) was refused (#868), and the physical line was the unit, so a ref list wrapped onto the next line had its tail unseen (#869). One cause, two symptoms; the evidence in e1 also shows a keyword split from its first ref closes nothing on GitHub, so that shape belongs with #868's prose, not with #869's hole.
