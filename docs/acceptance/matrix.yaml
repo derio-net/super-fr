@@ -4971,9 +4971,13 @@ rows:
       unit:
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_failure_at_each_step_exits_1_and_the_same_command_finishes_it
       - super-fr:tests/unit/test_isolation_branch_rename.py#test_a_partial_rename_is_finished
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_refusal_raised_inside_a_step_reports_and_exits_1
+      - super-fr:tests/unit/test_isolation_branch_rename.py#test_a_cursor_commit_that_fails_is_finished_by_the_next_call
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_pr_opened_in_the_same_second_still_belongs_to_the_dispatch
     status: ci
-    notes: A failure injected at each step of spec A.7 exits 1 naming what remains;
-      the same command re-run finishes it with no step done twice.
+    notes: 'Code review p1: a refusal inside a step reports and exits 1; a cursor commit
+      that failed is finished by the next call; the event stays of its PR in the same
+      second.'
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
