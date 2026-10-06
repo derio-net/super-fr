@@ -1,2 +1,0 @@
-bump: patch
-summary: "triage batches: a PR head with no checks registered yet is pending, not a failed forge read, so `batch drive` no longer skips its whole pass and `batch merge` no longer crashes after an update push; both merge paths now apply R4 (required checks, else every check, else `ci none`), so `batch merge` no longer merges a head with no CI evidence once a grace period runs out."

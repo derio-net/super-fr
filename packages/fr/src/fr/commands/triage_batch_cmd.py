@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import tempfile
 import time
@@ -134,6 +135,7 @@ from fr.triage.batch_drive import (
     settle,
     summary_line,
     train_line,
+    unfinished_waves,
     wave_group,
 )
 from fr.triage.batch_merge import (
@@ -148,6 +150,7 @@ from fr.triage.batch_merge import (
     run_queue,
 )
 from fr.triage.batch_version import read_source, reserve
+from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.errors import ForgeError, TriageError
@@ -1466,6 +1469,10 @@ class _Driver:
         self._unloadable: set[str] = set()  # runners that failed to load, reported once
         self._probes: dict[str, tuple[Runner, Any]] = {}  # per pass: live item id -> its runner
         self._merge: dict[str, MergeContext] = {}
+        # The waves this process's previous pass found unfinished; None before its first
+        # pass, so a wave already finished at start is never reported (R10).
+        self._unfinished: frozenset[str] | None = None
+        self._observed_last = False  # the one extra pass `observation_owed` grants
         self._export_refusals = 0  # per pass: owed exports refused before any write
 
     # -------------------------------------------------------------- reaching out
@@ -1643,6 +1650,9 @@ class _Driver:
             close_sessions=closing_sessions,
             sessions=sessions,
             selected=frozenset(ids),
+            unfinished_waves=self._unfinished,
+            duplicate_groups=len(candidates(facts, judgements)),
+            dedupe_command=shlex.join(["fr", "triage", "check", *self.scope_args]),
             archived=frozenset(archived),
             adopted=adopted,
             foreign={b.id: found for b in chosen if (found := tuple(foreign_batch_prs(b, facts)))},
@@ -2013,6 +2023,17 @@ class _Driver:
 
     # ------------------------------------------------------------------- execute
 
+    def observation_owed(self) -> bool:
+        """Whether a finishing loop owes one more pass before it exits (review p1-r4).
+
+        A pass that ends the drive may itself finish a wave (an archive merge, an adopted
+        close-out); only the NEXT pass observes it, so the loop runs that pass once, with
+        no nap, whenever some wave was unfinished when the last pass began (R10)."""
+        if self._observed_last or not self._unfinished:
+            return False
+        self._observed_last = True
+        return True
+
     def run_pass(self) -> tuple[bool, Summary, list[str]]:
         """One pass: re-collect, decide, act (with --yes) or print the plan.
         Returns whether it acted, the settled summary, and the blocked batch ids."""
@@ -2024,6 +2045,7 @@ class _Driver:
         self.failed_write = False
         snap = self.snapshot(facts, judgements, _now())
         plan = drive_pass(snap)
+        self._unfinished = unfinished_waves(snap)
         acted = False
         in_flight = sum(1 for b in snap.batches if snap.stages[b.id] in LIVE_STAGES)
         for train in plan.trains:
@@ -2081,6 +2103,8 @@ class _Driver:
 
     def _act(self, action: Action, facts: Facts, in_flight: int) -> tuple[str, bool, int]:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
+        if action.kind == "dedupe":  # names no batch: a report, never a forge write (sr-1)
+            return action.detail, False, in_flight
         if action.kind in EXPORT_KINDS:
             refusals = self._export_refusals
             line = self._export_act(action, facts)
@@ -2628,6 +2652,8 @@ def batch_drive_command(
                     return
                 raise typer.Exit(code=3)
             if summary.done:
+                if driver.observation_owed():
+                    continue  # the last wave's transition is seen only by one more pass
                 return
             if summary.waiting_on_operator:
                 _say(
