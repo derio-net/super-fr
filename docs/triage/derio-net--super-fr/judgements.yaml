@@ -4552,6 +4552,21 @@ batches:
     runner: herdr
     handle: w2J:p3
     branch: feat/batch-triage-dedupe
+  - kind: post_merge
+    at: '2026-10-06T12:02:45.821202Z'
+  - kind: closeout
+    at: '2026-10-06T12:02:52.762539Z'
+    runner: herdr
+    handle: w2J:p8
+    run: 2026-10-06-feat-batch-triage-dedupe
+    archive: chore/archive-2026-10-06-triage-dedupe
+  - kind: closeout
+    at: '2026-10-06T12:10:48.501157Z'
+    runner: herdr
+    handle: w2J:p8
+    run: 2026-10-06-feat-batch-triage-dedupe
+    archive: chore/archive-2026-10-06-triage-dedupe
+    archived: 1020
 - id: triage-pages-goal
   title: 'Triage pages: one goal per page, one home per fact, authored sections everywhere, driver exports
     the state'
@@ -5017,4 +5032,10 @@ exports:
   at: '2026-10-06T07:58:11.294760Z'
   pr: 997
   head: d1544670859dae192a785593b7e2f7ca5b3f6720
+  merged: true
+- wave: '5'
+  repo: derio-net/super-fr
+  at: '2026-10-06T11:52:25.888550Z'
+  pr: 1019
+  head: aa27f9c7cd7c124cd9db4baf0b787649ef71383b
   merged: true
