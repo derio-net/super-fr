@@ -1,0 +1,61 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-verification-kinds
+step: implement-phase
+item: phase/7
+outcome: done
+ticks: [P7.T1.S1, P7.T1.S2, P7.T2.S1, P7.T3.S1]
+refactor:
+  P7.T1: "new files only (an install script, six scenarios, one integration test file); nothing existing to clean"
+journal:
+  - kind: discovery
+    id: p7-red-order
+    phase: 7
+    title: P7.T1.S1 test file was written after the scripts it drives, not before
+    body: |
+      The scenarios were developed against a hand-installed prefix and checked one at a time,
+      then tests/integration/test_scenarios.py wrapped them. The RED state (nothing exists) was
+      therefore not observed as a failing run; the test does fail without .fr/candidate-install
+      or a scenario, and test_every_scenario_script_has_a_test_here pins the set.
+  - kind: decision
+    id: p7-scenario-boundaries
+    phase: 7
+    title: scenarios assert only what a fresh fixture repo and the installed fr can show
+    body: |
+      The six scripts reach no forge or runner. awaiting-live-triage drives `fr triage check` over
+      tests/scenarios/fixtures/awaiting-live-facts.json, the model's own to_json output (a
+      capture, not a hand construction); its close-out-brief half stays unit-tested because a
+      brief needs a delivered run and a PR body. prerelease-command-shape points a LOCAL bare
+      repo at a GitHub URL with url.insteadOf, so ls-remote is real and nothing is dispatched.
+      spec-verification-section starts from a schema-3 matrix and runs `fr migrate artifacts --yes`
+      to show verify: post-merge reads as live. All six pass with the operator's identity pin
+      dropped (FR_HARNESS_FR), as the walk drops it too.
+  - kind: discovery
+    id: p7-skill-line-cap
+    phase: 7
+    title: four skills sit at the 120-line cap, so new prose went in as long lines
+    body: |
+      tests/unit/test_skill_validation.py caps SKILL.md at 120 lines and fr-acceptance,
+      fr-brainstorming and fr-triage were at 120/119/120. The additions are single long
+      paragraphs (the skills' existing style) with one hard-wrapped paragraph joined per file;
+      the grammar and authoring detail live in docs/verification-strategies.md instead.
+  - kind: discovery
+    id: p7-git-source-with-set
+    phase: 7
+    title: candidate-install names the runner packages literally for a git source
+    body: |
+      A path source derives the --with set from the checkout's fr.runners entry points, as
+      install.sh does. A git+url source has no checkout to scan, so the four packages are listed
+      in the script (fr-dispatch rides along because workspace sources do not resolve from a
+      subdirectory install); test_a_git_source_installs_every_package_from_its_subdirectory pins
+      the list against runner_packages() with a uv stub. The git form is exercised through a
+      stub only, never a real remote install.
+  - kind: discovery
+    id: p7-explainer-rendered
+    phase: 7
+    title: the explainer was re-rendered, not owed
+    body: |
+      The renderer was present; the unmodified 01-fr-goal.md re-rendered from / with --isolated
+      was byte-identical to the committed html, and the edited page's html diff is only the new
+      prose (steps 3 and 8).
+resolves: []
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a4557f5a-3a30-4673-856d-3f9329d47f77/scratchpad/p7-suite.log}
