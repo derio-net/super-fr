@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr triage state export|import copies from descriptors opened with O_NOFOLLOW, so a path swapped for a symlink after the check is skipped, never followed or copied as a link (#1003)"
