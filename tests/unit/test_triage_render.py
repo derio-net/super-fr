@@ -552,3 +552,143 @@ def test_the_batches_section_links_the_board_only_when_asked() -> None:
     assert 'href="board.html"' in render(facts, judgements, board=True)
     assert "board.html" not in render(facts, judgements)
     assert "board.html" not in render(facts, judgements, board=False)
+
+
+# ------------------------------------------- duplicates on the board (triage-dedupe R8, R9)
+
+_REPO = "derio-net/super-fr"
+
+
+def _dupe_state(
+    issues: list[tuple[int, str, str]], judged: dict[int, dict[str, Any]]
+) -> tuple[Facts, Judgements]:
+    facts = Facts.model_validate(
+        {
+            "schema": 4,
+            "scope": "derio-net--super-fr",
+            "kind": "repo",
+            "collected_at": "2026-10-06T12:00:00+00:00",
+            "repos": [_REPO],
+            "issues": [
+                {
+                    "repo": _REPO,
+                    "number": n,
+                    "title": title,
+                    "state": state,
+                    "url": f"https://github.com/{_REPO}/issues/{n}",
+                }
+                for n, title, state in issues
+            ],
+        }
+    )
+    judgements = Judgements.model_validate(
+        {
+            "schema": 3,
+            "tiers": [{"n": 1, "title": "T1"}],
+            "issues": {f"super-fr#{n}": {"tier": 1, **j} for n, j in judged.items()},
+        }
+    )
+    return facts, judgements
+
+
+def _row_html(page: str, key: str) -> str:
+    m = re.search(rf'<details class="row"[^>]*data-key="{re.escape(key)}".*?</details>', page, re.S)
+    assert m is not None, f"no row for {key}"
+    return m.group(0)
+
+
+def _has_row(page: str, key: str) -> bool:
+    return re.search(rf'<details class="row"[^>]*data-key="{re.escape(key)}"', page) is not None
+
+
+_CMD = (
+    "gh issue close {n} --repo derio-net/super-fr "
+    "--duplicate-of https://github.com/derio-net/super-fr/issues/3"
+)
+
+
+def test_an_open_duplicate_nests_in_its_originals_row_with_the_close_command() -> None:
+    facts, judgements = _dupe_state(
+        [(3, "the original", "open"), (9, "the dupe", "open")],
+        {3: {}, 9: {"duplicate_of": "super-fr#3"}},
+    )
+    page = render(facts, judgements)
+
+    assert not _has_row(page, "super-fr#9")
+    original = _row_html(page, "super-fr#3")
+    assert "+1 duplicate<" in original and "+1 duplicates" not in original
+    assert "Duplicates" in original
+    assert 'href="https://github.com/derio-net/super-fr/issues/9"' in original
+    assert f"<code>{_CMD.format(n=9)}</code>" in original
+
+
+def test_two_duplicates_read_plural() -> None:
+    facts, judgements = _dupe_state(
+        [(3, "o", "open"), (8, "d1", "open"), (9, "d2", "open")],
+        {3: {}, 8: {"duplicate_of": "super-fr#3"}, 9: {"duplicate_of": "super-fr#3"}},
+    )
+    original = _row_html(render(facts, judgements), "super-fr#3")
+
+    assert "+2 duplicates" in original
+    assert _CMD.format(n=8) in original and _CMD.format(n=9) in original
+
+
+def test_a_closed_duplicate_of_an_open_original_nests_tagged_closed_with_no_command() -> None:
+    facts, judgements = _dupe_state(
+        [(3, "o", "open"), (9, "d", "closed")], {3: {}, 9: {"duplicate_of": "super-fr#3"}}
+    )
+    page = render(facts, judgements)
+    original = _row_html(page, "super-fr#3")
+
+    assert not _has_row(page, "super-fr#9")
+    assert "closed" in original.split("Duplicates", 1)[1]
+    assert "gh issue close" not in original
+
+
+@pytest.mark.parametrize(
+    ("issues", "state"),
+    [
+        ([(3, "o", "closed"), (9, "d", "open")], "closed"),
+        ([(9, "d", "open")], "missing"),
+    ],
+)
+def test_a_duplicate_whose_original_is_not_open_stays_in_its_tier_tagged(
+    issues: list[tuple[int, str, str]], state: str
+) -> None:
+    facts, judgements = _dupe_state(issues, {9: {"duplicate_of": "super-fr#3"}})
+    page = render(facts, judgements)
+
+    assert _has_row(page, "super-fr#9")
+    assert f"duplicate of super-fr#3 ({state})" in _row_html(page, "super-fr#9")
+
+
+def test_possible_duplicates_lists_each_group_escaped_before_the_backlog() -> None:
+    facts, judgements = _dupe_state(
+        [(1, "deliver gate refuses <X>", "open"), (2, "deliver gate refuses <X> again", "open")],
+        {},
+    )
+    page = render(facts, judgements)
+
+    m = re.search(r'<section[^>]*id="possible-duplicates".*?</section>', page, re.S)
+    assert m is not None
+    section = m.group(0)
+    assert 'href="https://github.com/derio-net/super-fr/issues/1"' in section
+    assert "super-fr#1" in section and "super-fr#2" in section and "title 0.75" in section
+    assert "<X>" not in section
+    assert page[m.end() :].startswith('\n<h2 class="backlog" id="backlog-by-tier">')
+
+
+def test_possible_duplicates_says_so_when_there_are_none() -> None:
+    facts, judgements = _dupe_state([(1, "alpha", "open"), (2, "wholly other", "open")], {})
+    page = render(facts, judgements)
+
+    assert 'id="possible-duplicates"' in page
+    assert "No candidate duplicates among the open issues." in page
+
+
+def test_the_board_with_duplicates_is_deterministic() -> None:
+    facts, judgements = _dupe_state(
+        [(3, "o", "open"), (9, "d", "open"), (1, "x y z", "open"), (2, "x y z again", "open")],
+        {3: {}, 9: {"duplicate_of": "super-fr#3"}},
+    )
+    assert render(facts, judgements) == render(facts, judgements)

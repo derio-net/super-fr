@@ -21,6 +21,7 @@ from __future__ import annotations
 import html
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from fr.triage.batch import batch_pr as find_batch_pr
@@ -43,6 +44,7 @@ from fr.triage.views import (
 
 if TYPE_CHECKING:
     from fr.triage.batch import MergeStep
+    from fr.triage.dedupe import CandidateGroup
     from fr.triage.model import Batch, Facts, Issue, Judgement, Judgements, PullRequest
     from fr.triage.snapshot import SnapshotDiff
 
@@ -133,6 +135,9 @@ details.row > summary::-webkit-details-marker { display: none; }
 .pill.stage-in-progress { background: transparent; color: var(--live);
   border: 1px solid var(--live); }
 .tag.batch { color: var(--live); border-color: var(--live); }
+.tag.dupe { color: var(--muted); border-style: dashed; }
+.possible-duplicates p, .possible-duplicates li, .detail ul.dupes li { overflow-wrap: anywhere; }
+.possible-duplicates ul.dupes, .detail ul.dupes { margin: 4px 0 8px; padding-left: 20px; }
 .batches { margin-top: 28px; }
 .batches h2 { margin: 0 0 10px; font-size: 1.15rem; }
 .batches article { background: var(--surface); border: 1px solid var(--line);
@@ -335,6 +340,59 @@ def _safe_url(url: str) -> str | None:
     return esc(url) if url.startswith("https://") else None
 
 
+@dataclass(frozen=True)
+class Nested:
+    """A judged duplicate rendered inside its open original's row (R8)."""
+
+    issue: Issue
+    command: str  # "" for a closed one: there is nothing left to close
+
+
+def _duplicates_block(duplicates: Sequence[Nested]) -> str:
+    lines = []
+    for d in duplicates:
+        url = _safe_url(d.issue.url)
+        link = (
+            f'<a href="{url}" rel="noopener noreferrer">{esc(d.issue.key)}</a>'
+            if url
+            else esc(d.issue.key)
+        )
+        closed = ' <span class="tag">closed</span>' if d.issue.state == "closed" else ""
+        cmd = f" <code>{esc(d.command)}</code>" if d.command else ""
+        lines.append(f"<li>{link} {esc(d.issue.title)}{closed}{cmd}</li>")
+    return (
+        f'<p class="dupes"><strong>Duplicates</strong></p><ul class="dupes">{"".join(lines)}</ul>'
+    )
+
+
+def _possible_duplicates(groups: Sequence[CandidateGroup], by_key: dict[str, Issue]) -> str:
+    head = '<h2 class="backlog">Possible duplicates</h2>'
+    if not groups:
+        body = '<p class="empty">No candidate duplicates among the open issues.</p>'
+    else:
+
+        def link(key: str) -> str:
+            issue = by_key.get(key)
+            url = _safe_url(issue.url) if issue else None
+            return f'<a href="{url}" rel="noopener noreferrer">{esc(key)}</a>' if url else esc(key)
+
+        blocks = []
+        for g in groups:
+            pairs = "".join(
+                f"<li>{link(p.a)} ~ {link(p.b)}: {esc('; '.join(p.reasons))}</li>" for p in g.pairs
+            )
+            blocks.append(
+                f'<div class="dupe-group"><p>{", ".join(link(k) for k in g.keys)}</p>'
+                f'<ul class="dupes">{pairs}</ul></div>'
+            )
+        body = (
+            '<p class="tier-desc">Proposed by the engine, not judged: set '
+            "<code>duplicate_of</code> or <code>distinct_from</code> to settle each.</p>"
+            + "".join(blocks)
+        )
+    return f'<section class="possible-duplicates" id="possible-duplicates">{head}{body}</section>'
+
+
 def _row(
     issue: Issue,
     *,
@@ -344,6 +402,8 @@ def _row(
     show_repo: bool,
     patterns: list[str],
     batches: Sequence[str] = (),
+    duplicates: Sequence[Nested] = (),
+    duplicate_tag: str = "",
 ) -> str:
     stage = issue.stage
     cx = judgement.cx if judgement else "-"
@@ -376,12 +436,18 @@ def _row(
         tags.append('<span class="tag ok">verified in code</span>')
     tags.extend(f'<span class="tag mono">PR #{pr.number}</span>' for pr in issue.prs)
     tags.extend(f'<span class="tag batch">batch {esc(b)}</span>' for b in batches)
+    if duplicates:
+        tags.append(f'<span class="tag dupe">+{plural(len(duplicates), "duplicate")}</span>')
+    if duplicate_tag:
+        tags.append(f'<span class="tag dupe">{esc(duplicate_tag)}</span>')
     detail: list[str] = []
     if judgement and judgement.detail:
         detail.append(f"<p>{inline(judgement.detail)}</p>")
     if judgement and judgement.note:
         detail.append(f'<p class="note"><strong>Note.</strong> {inline(judgement.note)}</p>')
     detail.extend(f'<p class="pattern">Pattern: {p}</p>' for p in patterns)
+    if duplicates:
+        detail.append(_duplicates_block(duplicates))
     if judgement is None and issue.body:
         excerpt = issue.body[:EXCERPT] + ("…" if len(issue.body) > EXCERPT else "")
         detail.append(f'<div class="body">{esc(excerpt)}</div>')
@@ -778,6 +844,22 @@ def render(
                 batches_by_key.setdefault(key, []).append(b.id)
     order = 0
 
+    commands = {d.key: d.command for d in result.duplicates}
+    nested: dict[str, list[Nested]] = {}  # original key -> the duplicates shown in its row
+    for key, j in judgements.issues.items():
+        original = by_key.get(j.duplicate_of) if j.duplicate_of else None
+        if key in by_key and original is not None and original.state == "open":
+            nested.setdefault(original.key, []).append(Nested(by_key[key], commands.get(key, "")))
+
+    nested_keys = {n.issue.key for ns in nested.values() for n in ns}
+
+    def duplicate_tag(key: str, j: Judgement | None) -> str:
+        """The tag of a judged duplicate that stays in its tier (original not open here)."""
+        if j is None or not j.duplicate_of or key in nested_keys:
+            return ""
+        original = by_key.get(j.duplicate_of)
+        return f"duplicate of {j.duplicate_of} ({original.state if original else 'missing'})"
+
     def row(issue: Issue, judgement: Judgement | None, tier: str) -> str:
         nonlocal order
         order += 1
@@ -789,11 +871,14 @@ def render(
             show_repo=show_repo,
             patterns=patterns_by_key.get(issue.key, []),
             batches=batches_by_key.get(issue.key, []),
+            duplicates=nested.get(issue.key, []),
+            duplicate_tag=duplicate_tag(issue.key, judgement),
         )
 
     sections = [
         _prs_section(facts.prs, judgements, 1, facts.collected_at),
         *([batches] if (batches := _batches(judgements, facts, board=board)) else []),
+        _possible_duplicates(result.candidates, by_key),
         '<h2 class="backlog" id="backlog-by-tier">Backlog by tier</h2>',
         _section(
             "unranked",
@@ -808,7 +893,7 @@ def render(
         rows = [
             row(by_key[key], j, str(tier.n))
             for key, j in judgements.issues.items()
-            if j.tier == tier.n and key in by_key
+            if j.tier == tier.n and key in by_key and key not in nested_keys
         ]
         sev = f"sev-{min(pos + 1, SEVERITIES)}"
         sections.append(
