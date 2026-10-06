@@ -12,7 +12,7 @@ description: >
 
 ## Pages and state
 
-Four pages answer your questions: **board** ("What do I do next?"), **origins** ("Where do defects come from?"), **architecture** ("What is the system?") and **history** ("How did we get here?"), each with fragments (`board/manifest.yaml`, etc.). Use `fr triage state export --to <dir>` and `import --from <dir>` to version the state.
+Four pages (`board/manifest.yaml`, etc.): render with `fr triage render`, `origins render`, `fr triage history render`. Use `export --to <dir>` and `import --from <dir>` to version state with `severity`, `duplicate_of`, `export:` config.
 
 Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for `--org OWNER`, lowercased). `--repo A/B,C/D` is a group; two repos with same name are refused (keys are `<repo-name>#<n>`); batches stay single-repo.
 
