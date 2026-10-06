@@ -77,7 +77,10 @@ def test_captured_open_pr_shape_parses_with_summary_and_unknown_merge() -> None:
     ((pr, refs),) = parse_prs("derio-net/super-fr", raw)
 
     assert pr.state == "OPEN"
-    assert pr.checks == {"pass": len(raw[0]["statusCheckRollup"]), "fail": 0, "pending": 0}
+    # Each check ran twice on the captured head: counted once (super-fr#1051).
+    distinct = {(c["workflowName"], c["name"]) for c in raw[0]["statusCheckRollup"]}
+    assert len(distinct) < len(raw[0]["statusCheckRollup"])
+    assert pr.checks == {"pass": len(distinct), "fail": 0, "pending": 0}
     assert pr.mergeable == raw[0]["mergeable"]
     assert pr.merge_state == raw[0]["mergeStateStatus"]
     assert pr.review is None  # captured reviewDecision is "" (no review)

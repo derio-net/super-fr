@@ -225,9 +225,37 @@ def _login(raw: dict[str, Any]) -> str | None:
     return str(login) if login else None
 
 
+def _latest_runs(raw: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One entry per check: the most recent run of each (super-fr#1051).
+
+    `statusCheckRollup` lists every run on the head commit, so a check re-run
+    green keeps its superseded failure beside it. A check is its workflow plus
+    its name (a status context: its context), as `gh pr checks` keys it; an
+    entry carrying neither is counted on its own. A run not yet started has no
+    real `startedAt` and is the newest, so a queued re-run reads pending rather
+    than its predecessor's result.
+    """
+    latest: dict[tuple[str, str], tuple[tuple[int, str], dict[str, Any]]] = {}
+    anonymous: list[dict[str, Any]] = []
+    for check in raw:
+        name = check.get("name") or check.get("context")
+        if not name:
+            anonymous.append(check)
+            continue
+        key = (str(check.get("workflowName") or ""), str(name))
+        started = str(check.get("startedAt") or "")
+        if started.startswith("0001-"):  # GraphQL's zero time: never started
+            started = ""
+        done = str(check.get("status") or "COMPLETED").upper() == "COMPLETED"
+        rank = (1, "") if not started and not done else (0, started)
+        if key not in latest or rank >= latest[key][0]:
+            latest[key] = (rank, check)
+    return [check for _, check in latest.values()] + anonymous
+
+
 def _checks(raw: Iterable[dict[str, Any]]) -> dict[str, int]:
     result = {"pass": 0, "fail": 0, "pending": 0}
-    for check in raw:
+    for check in _latest_runs(raw):
         state = str(check.get("conclusion") or check.get("state") or "").upper()
         bucket = (
             "pass"
