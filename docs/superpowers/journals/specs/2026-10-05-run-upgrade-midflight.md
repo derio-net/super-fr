@@ -266,3 +266,8 @@ Phase 3 serves R5-R6 plus R10 prose.
 ### tier-2026-10-05-run-upgrade-midflight-p2 · decision · hard: phase 2 changes the review-phase evidence gate every run relies on (#430/#497)
 
 A weakened gate fails silently; the bound needs judgement.
+
+<!-- fr:journal kind=finding scope=spec id=sr-12-resolved-2 created=2026-10-06T06:21:58+00:00 state=open resolves=sr-12 tracked_by=#988 -->
+### sr-12-resolved-2 · finding [deferred → #988] · resolves sr-12: fr pickup resolves the manifest strictly and fails on a drifted cursor
+
+Filed at closeout as #988.
