@@ -26,7 +26,7 @@
 # the last row of the same capability, and appends to the end of this file only
 # for a new capability — so keep `rows:` as the LAST top-level key.
 
-schema_version: 3
+schema_version: 4
 org: derio-net
 repo: super-fr
 rows:
@@ -4232,7 +4232,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
@@ -4532,7 +4532,7 @@ rows:
       min to deliver. Hit the 5.0.0 plan fr_version ceiling bug at the plan step; the
       agent widened _meta.yaml by hand and went on. Passes for this harness and model
       only (#822).'
-    verify: post-merge
+    verify: live
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
@@ -4807,7 +4807,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: drive-carry-keeps-settled-set
     capability: Backlog triage
     acceptance: After drive passes that carried facts over, fr triage check reports
@@ -4817,7 +4817,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: triage-severity-and-duplicates
     capability: Backlog triage
     acceptance: A judgement can carry severity and duplicate_of; triage check lists
@@ -5520,7 +5520,7 @@ rows:
       - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
     status: skipped
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
-    verify: post-merge
+    verify: live
   - id: pages-explainers-preserved
     capability: acceptance-matrix
     acceptance: Publishing the acceptance report keeps every explainer page at its current
@@ -5532,7 +5532,7 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py
     status: skipped
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
-    verify: post-merge
+    verify: live
   - id: pages-acceptance-report-discoverable
     capability: acceptance-matrix
     acceptance: The explainers landing page links to the published acceptance report
@@ -5607,7 +5607,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: visual-evidence-browser-check-prose
     capability: fr-goal-prose
     acceptance: 'fr-execute, fr-goal and the phase-executor agent carry a browser-check
@@ -5709,7 +5709,7 @@ rows:
       run in the chore/archive workspace it archived spec, plan, run, usage and both
       journals with no held: line, and fr status then reported no owed artifact from
       the branch. Manual live run, not in CI.'
-    verify: post-merge
+    verify: live
   - id: every-pr-flow-relays-closeout
     capability: Branch-keyed close-out
     acceptance: Every shipped skill that ends its flow at a PR it opens relays a close-out
@@ -5787,7 +5787,7 @@ rows:
     status: ci
     notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
       run in CI.
-    verify: post-merge
+    verify: live
   - id: profiles-services-no-tracker
     capability: fr-profiles services
     acceptance: 'Under tracking: none, no issue path fires: closeout prints no filing
@@ -5898,7 +5898,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: run-cost-positive-attribution
     capability: usage
     acceptance: fr run cost --recompute and fr archive's capture attribute a session
@@ -6080,7 +6080,7 @@ rows:
       the driver needed one manual restart (a hung forge read, then exit 2 on its failure)
       and #907''s CI one re-run (a setup-bun 503). Rerun owed after #909 (read timeouts)
       and #910 (retry failed reads in loop mode); see also #911, #912, #913.'
-    verify: post-merge
+    verify: live
   - id: drive-wave-workspaces
     capability: triage-batch-drive
     acceptance: The driver opens each batch's session, and its close-out, in a herdr
@@ -6133,7 +6133,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: drive-merge-train-head-only
     capability: triage-batch-drive
     acceptance: The drive acts only on the head of each repo's merge train — PRs behind
@@ -6189,7 +6189,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: drive-exports-finished-wave
     capability: triage-batch-drive
     acceptance: With export configured, once a wave is finished the driver opens one
@@ -6215,7 +6215,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
@@ -6656,7 +6656,7 @@ rows:
       (columns vs an independent gh oracle, cards moving on acting and non-acting passes,
       reloads keeping expansion, jump switching the tab, two blocked sessions shown
       as needs-you). Manual and post-merge only, so not in CI.'
-    verify: post-merge
+    verify: live
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin
@@ -6770,7 +6770,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: super-fr-candidate-contract
     capability: verification
     acceptance: super-fr provides .fr/candidate-install and scenario scripts, exercised
@@ -6823,4 +6823,4 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
