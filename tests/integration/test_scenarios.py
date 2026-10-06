@@ -94,6 +94,7 @@ def test_the_install_carries_every_runner_package(installed: Path) -> None:
 
 
 _UV_STUB = """#!/bin/sh
+if [ "$1 $2 $3" = "tool install --help" ]; then echo "      --with-executables-from <X>"; exit 0; fi
 for a in "$@"; do printf '%s\\n' "$a" >> "$UV_STUB_LOG"; done
 mkdir -p "$UV_TOOL_BIN_DIR"
 printf '#!/bin/sh\\necho "fr 9.9.9"\\n' > "$UV_TOOL_BIN_DIR/fr"
