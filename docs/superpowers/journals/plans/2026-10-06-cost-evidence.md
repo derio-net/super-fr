@@ -238,3 +238,78 @@ compare.py was written once against its tests; the only later change was widenin
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 the audit is a document, there was no code to refactor
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-06T21:40:21+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · compare counted phases only from cursor phase/<n>/ keys; pre-v5 cursors list a subset and manual markers were missed (phase 3)
+
+e.g. 2026-09-20-fix-isolation-reap-data-loss lists phase/1, its plan has 01-04.yaml; findings/phase and the #627 before median were wrong.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-06T21:40:21+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · findings/phase ignored the journal `phase` field and divided phaseless findings in (phase 3)
+
+compare.py _journal_counts never read e.phase.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-06T21:40:21+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · audit claimed the #793 window was all Opus 5.5; the unbounded before set includes Opus 5 runs (phase 3)
+
+Audit §2 and Data limit 4.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-06T21:40:21+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · audit omitted that per-run cost includes (outside run) and that a shared session counts under each run (phase 3)
+
+fix-497 and fix-532 usage files share one session id.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-06T21:40:21+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · §3 (#593) figures came from an uncommitted ad hoc script, not fr usage compare as R11 requires (phase 3)
+
+Spec R10/§F amended (246735304) to add --steps.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-06T21:40:21+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · fr-audit skill said 'Both are read-only … write only under the cache' over three rows (phase 3)
+
+SKILL.md:26-28 and mirrors.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-06T21:40:21+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · _journal_counts re-implemented the journal fold via private _record_state (phase 3)
+
+fr.journal.model._fold is the one walk.
+
+<!-- fr:journal kind=review scope=plan id=p3-review-r1 created=2026-10-06T21:40:21+00:00 phase=3 -->
+### p3-review-r1 · review · Phase 3 review (fr usage compare, cost-evidence audit) (phase 3)
+
+Independent review (feature-dev:code-reviewer, Opus) of 081a20a85..8c7e543ac against R10-R11 / §F-§G, checked against real archived cursors, plans, journals and usage files. Re-open counting verified real (not 0 by construction); timestamp selectors accepted. Raised p3-r1..r7, all in scope, all fixed with tests and the audit re-quoted from corrected output. No out-of-scope findings.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-06T21:40:21+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: compare counted phases only from cursor phase/<n>/ keys; pre-v5 cursors list a subset and manual markers were missed (phase 3)
+
+compare._plan_phase_count counts plan NN.yaml (live then archived), cursor fallback ^phase/(\d+)(/|$); test_pre_v5_cursor_reads_items_and_a_v1_usage_file, test_run_missing_its_usage_file_is_dashed_but_counted.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-06T21:40:21+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: findings/phase ignored the journal `phase` field and divided phaseless findings in (phase 3)
+
+phased findings divided by phases, phaseless in an `unphased` column; test_v8_row_counts_phases_turns_split_findings_and_reopens.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-06T21:40:21+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: audit claimed the #793 window was all Opus 5.5; the unbounded before set includes Opus 5 runs (phase 3)
+
+Audit §2 and Data limit 4 now say the #793 before median mixes Opus 5 and 5.5 runs; after set is Opus 5.5 only.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-06T21:40:21+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: audit omitted that per-run cost includes (outside run) and that a shared session counts under each run (phase 3)
+
+compare.mark_shared: shared column, per-set count and footnote; audit data limit for §1/§2; test_a_session_shared_by_two_runs_of_a_set_is_marked, test_unshared_sets_carry_no_footnote.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-06T21:40:21+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: §3 (#593) figures came from an uncommitted ad hoc script, not fr usage compare as R11 requires (phase 3)
+
+fr usage compare --steps (step_table/render_steps); audit §3 re-quoted from it, script removed; test_steps_* and test_cli_steps_prints_a_table_per_set.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-06T21:40:21+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: fr-audit skill said 'Both are read-only … write only under the cache' over three rows (phase 3)
+
+fr-audit SKILL.md reworded (compare writes nothing, --steps listed); both mirrors resynced.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-06T21:40:21+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: _journal_counts re-implemented the journal fold via private _record_state (phase 3)
+
+public fr.journal.model.finding_states_and_reopens on a shared _fold_full walk; test_the_journal_fold_reports_reopens_without_a_second_walk.
