@@ -6501,6 +6501,15 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
+  - id: triage-dedupe-skill
+    capability: triage-dedupe
+    acceptance: The fr-triage skill teaches judging candidate groups into duplicate_of
+      or distinct_from and leaves the printed close commands to the operator
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin

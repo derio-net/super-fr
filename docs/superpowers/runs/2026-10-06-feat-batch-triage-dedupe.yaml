@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-triage-dedupe
 workflow: fr-goal@1
 branch: feat/batch-triage-dedupe
 started: '2026-10-06T06:34:30+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,16 +12,23 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-06-triage-dedupe-design.md
   spec-review:
-    state: running
-    at: '2026-10-06T07:41:43+00:00'
+    state: done
+    at: '2026-10-06T07:47:33+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-10-06T07:41:43+00:00'
+          agent: a2609e2f81ff2b871
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
           model: claude-opus-5-5
           session: 0ff4fc40-6789-4cab-8c02-9ebb25134314
+          returned: '2026-10-06T07:47:33+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-r1
+          reviewer: a2609e2f81ff2b871
+          findings: sr-1,sr-2,sr-3,sr-4,sr-5,sr-6,sr-7,sr-8,sr-9,sr-10,sr-11,sr-12
   plan:
     state: pending
   plan-review:
