@@ -118,9 +118,6 @@ class GitForge:
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return [{"name": "test", "bucket": "pass", "state": "SUCCESS"}]
 
-    def wait_required_checks(self, repo: str, number: int, **kw: Any) -> list[dict[str, Any]]:
-        return self.pr_required_checks(repo, number)
-
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         branch = self.prs[number]
         assert self.pr_view(repo, number)["head_oid"] == head_sha, "--match-head-commit"

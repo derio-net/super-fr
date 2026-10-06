@@ -239,6 +239,43 @@ def test_a_command_executing_the_script_matches(tmp_path: Path, command: str) ->
     assert shell_named_since(t, "shots.cjs", SINCE) == parse_timestamp(AFTER)
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "uv run --with pyyaml python shots.cjs",
+        "uv run -w pyyaml python shots.cjs",
+        "uv run --with=pyyaml python shots.cjs",
+        "uv run --isolated --no-project --with markdown --with pyyaml python shots.cjs",
+        "uv run --python 3.12 --project /repo python shots.cjs",
+        "uv run -p 3.12 shots.cjs",
+        "fr isolation exec -- uv run --with pyyaml python shots.cjs",
+    ],
+)
+def test_a_uv_run_flag_value_is_not_the_program(tmp_path: Path, command: str) -> None:
+    """gh#999: `uv run --with <pkg> python <script>` ran the script — the
+    `--with` value is the flag's, not the program `uv run` executes."""
+    t = _transcript(tmp_path, _call(AFTER, name="Bash", tool_input={"command": command}))
+
+    assert shell_named_since(t, "shots.cjs", SINCE) == parse_timestamp(AFTER)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "uv run --with-requirements shots.cjs python other.py",
+        "uv run --env-file shots.cjs python other.py",
+    ],
+)
+def test_a_uv_run_flag_value_naming_the_script_is_not_a_run_of_it(
+    tmp_path: Path, command: str
+) -> None:
+    """The other half of gh#999: a value IS the flag's, so naming the script as
+    one does not execute it."""
+    t = _transcript(tmp_path, _call(AFTER, name="Bash", tool_input={"command": command}))
+
+    assert shell_named_since(t, "shots.cjs", SINCE) is False
+
+
 def test_npm_run_an_alias_is_not_recognised(tmp_path: Path) -> None:
     """The documented limit: an alias names no script — name it directly."""
     t = _transcript(tmp_path, _call(AFTER, name="Bash", tool_input={"command": "npm run shots"}))

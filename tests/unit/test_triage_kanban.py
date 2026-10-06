@@ -21,6 +21,7 @@ from fr.triage.kanban import (
     first_actions,
     pill_of,
 )
+from fr.triage.merge_stops import MergeStop
 from fr.triage.model import Facts, Judgements
 
 from tests.unit.triage_board_fixtures import (
@@ -317,6 +318,53 @@ def test_a_finished_batch_reads_finished_or_its_pill() -> None:
     assert _hint("m", f, jd) == "finished"
     f, jd = busy()
     assert _hint("z-cancelled", f, jd) == "cancelled"
+
+
+# ------------------------------------------------------------ merge stops (gh#987)
+
+CONFLICT = "PR #11 conflicts with origin/main in a change merge will not resolve: a.py, b.py"
+
+
+def _stopped(head: str) -> dict[str, MergeStop]:
+    return {"a": MergeStop(head=head, reason=CONFLICT, at="2026-10-01T12:00:00Z")}
+
+
+def test_a_merge_the_driver_stopped_on_needs_you_not_merge_ready() -> None:
+    """gh#987: the stop is an execution-time fact the pure pass cannot see, so the board
+    reads the driver's record of it, and the card says the opposite of "merge ready"."""
+    f, jd = _world(
+        [batch("a", [1], events=[dispatch("a")])], [issue(1, prs=[pr(11, "feat/batch-a")])]
+    )
+    card = build_board(f, jd, {}, stops=_stopped("sha-11")).card("a")
+    assert card.hint == f"needs you: merge stopped: {CONFLICT}"
+    assert card.needs_you
+
+
+def test_a_merge_stop_at_a_head_since_moved_no_longer_counts() -> None:
+    f, jd = _world(
+        [batch("a", [1], events=[dispatch("a")])], [issue(1, prs=[pr(11, "feat/batch-a")])]
+    )
+    card = build_board(f, jd, {}, stops=_stopped("sha-older")).card("a")
+    assert (card.hint, card.needs_you) == ("merge ready", False)
+
+
+def test_a_merge_stop_on_a_pr_no_longer_open_no_longer_counts() -> None:
+    merged = pr(11, "feat/batch-a", state="MERGED")
+    f, jd = _world([batch("a", [1], events=[dispatch("a")])], [issue(1, prs=[merged])])
+    assert not build_board(f, jd, {}, stops=_stopped("sha-11")).card("a").needs_you
+
+
+def test_a_batch_waiting_on_a_stopped_merge_says_so() -> None:
+    f, jd = _world(
+        [
+            batch("a", [1], wave=1, events=[dispatch("a")]),
+            batch("b", [2], wave=2, after=["a"]),
+        ],
+        [issue(1, prs=[pr(11, "feat/batch-a")]), issue(2)],
+    )
+    assert build_board(f, jd, {}, stops=_stopped("sha-11")).card("b").hint == (
+        "waits on a (merge stopped)"
+    )
 
 
 def test_first_actions_keeps_the_first_action_per_batch() -> None:

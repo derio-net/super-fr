@@ -26,6 +26,7 @@ from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
 from fr.triage.gitseam import Checkout
+from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
 
@@ -131,8 +132,14 @@ class World:
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
 
-    def wait_required_checks(self, repo: str, number: int, **kw: Any) -> list[dict[str, Any]]:
-        raise AssertionError("the driver never waits for checks")
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """Every check, live: the same counts the collect reports for the PR."""
+        counts = self.all_checks.get(number, {"pass": 1, "fail": 0, "pending": 0})
+        return [
+            {"name": f"{bucket}-{i}", "bucket": bucket}
+            for bucket in ("pass", "fail", "pending")
+            for i in range(counts.get(bucket, 0))
+        ]
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         self.calls.append(f"pr_merge {number}")
@@ -626,6 +633,30 @@ def test_a_failing_check_warns_once_per_head_across_loop_passes(
     assert _lines(out, "warn") == ["warn b1: PR #101 CI failing at sha-101: lint"]
     assert world.merged == [(101, "sha-101", "squash")]
     assert sleeps[:2] == [5, 5]
+
+
+def test_a_ci_none_declared_mid_drive_reaches_the_merge_too(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#880 review: the merge context outlives a pass, so the `ci none` its R4
+    reads is the one each pass reads, not the one the first merge attempt saw."""
+    _pr_open(world, tmp_path)
+    world.refuse_merge = "protected"  # pass 1 builds the merge context, and stops
+    sleeps: list[float] = []
+
+    def _declare_ci_none(seconds: float) -> None:
+        sleeps.append(seconds)
+        world.refuse_merge = None
+        world.checks[101] = []
+        world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}
+        monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: True)
+        assert len(sleeps) < 5, "the loop did not end"
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _declare_ci_none)
+    world.config = None
+    code, out = _drive(tmp_path, "--yes", "--interval", "5")
+    assert world.merged == [(101, "sha-101", "squash")], out
 
 
 @pytest.mark.parametrize(
@@ -2187,6 +2218,33 @@ def test_a_refused_head_is_reported_and_stepped_over(
     assert train.calls == [101, 102, 103]
     assert _lines(out, "merge")[0].startswith("merge b1: stopped: PR #101")
     assert code == 1
+
+
+def test_a_stopped_merge_is_recorded_for_the_board_and_cleared_when_it_lands(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    """gh#987: the board read "merge ready" for a merge the driver had stopped on, because
+    the stop lived only in the driver's memory. It is written down, at the head it stopped
+    at, and the board says the driver needs you; a later pass that merges it clears it."""
+    _three_ready(world, tmp_path)
+    train.script[101] = MergeStopError("PR #101: conflicts with origin/main: a.py")
+    _drive(tmp_path, "--once", "--yes")
+    stop = load_stops(tmp_path)["b1"]
+    assert (stop.head, stop.reason) == ("sha-101", "PR #101: conflicts with origin/main: a.py")
+    assert "needs you: merge stopped: PR #101" in (tmp_path / "board.html").read_text("utf-8")
+    del train.script[101]
+    _drive(tmp_path, "--once", "--yes")
+    assert "b1" not in load_stops(tmp_path)
+
+
+def test_a_moved_head_is_not_recorded_as_a_stop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    """A moved head is a hold the next pass re-judges, not something the operator owes."""
+    _three_ready(world, tmp_path)
+    train.script[101] = HeadMovedError("PR #101: head moved since the plan was printed")
+    _drive(tmp_path, "--once", "--yes")
+    assert load_stops(tmp_path) == {}
 
 
 @pytest.mark.parametrize(

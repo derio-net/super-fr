@@ -49,7 +49,6 @@ import yaml
 from pydantic import ValidationError
 from rich.markup import escape
 
-from fr._hosts import backend_for_url
 from fr.acceptance.ci import CI_CONFIG_PATHS
 from fr.commands import triage_kanban_cmd
 from fr.commands.triage_cmd import (
@@ -66,7 +65,7 @@ from fr.commands.triage_cmd import (
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
-from fr.hostclient import FORGE_ERRORS, client_for_backend
+from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.labels import FR_IN_PROGRESS
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.services import ServicesError, require_tracker
@@ -153,6 +152,7 @@ from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.gitseam import Checkout
+from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     Batch,
     CancelEvent,
@@ -183,8 +183,9 @@ DISPATCH_INSTALL_HINT = (
 
 
 def make_client(url: str) -> GhClient:
-    """The forge adapter for the repo *url* lives on (§3.J). Tests replace this."""
-    return client_for_backend(backend_for_url(url))
+    """The forge adapter for the repo *url* lives on, on its own instance (§3.J;
+    spec 2026-10-06-forge-remainder §4.D). Tests replace this."""
+    return client_for_url(url)
 
 
 def make_checkout(path: Path | None) -> Checkout:
@@ -1111,8 +1112,9 @@ def batch_merge_command(
 ) -> None:
     """Merge pr-open batch PRs in the computed order, re-slotting versions (§3.F).
 
-    Blocks in the foreground while required checks run; Ctrl-C and re-run
-    resumes at the first unmerged batch.
+    Blocks in the foreground while the checks run (R4: the required ones, else
+    every check; a head with none yet waits, unless the repo declares `ci none`);
+    Ctrl-C and re-run resumes at the first unmerged batch.
     """
     if method is not None and method not in MERGE_METHODS:
         _fail(f"--method must be one of {', '.join(sorted(MERGE_METHODS))}, got {method!r}")
@@ -1141,6 +1143,7 @@ def batch_merge_command(
         # freshness rule as dispatch (review r3-f3), before anything is read.
         _fresh_config(checkout, facts, owner_repo)
         chosen = choose_method(method, client.repo_merge_methods(owner_repo))
+        ci_none = ci_none_at(checkout)  # fetched by `_fresh_config`
     except UnsupportedForgeOperation as exc:
         _fail(str(exc))
     except TriageError as exc:
@@ -1153,6 +1156,7 @@ def batch_merge_command(
         scratch_root=target / "merge",
         method=chosen,
         say=lambda line: console.print(line, markup=False, soft_wrap=True),
+        ci_none=ci_none,
     )
     try:
         slots, merged = plan_queue(ctx, queue)
@@ -1217,6 +1221,14 @@ def recollect(scope: Scope, target: Path) -> None:
     except TriageError as exc:
         _fail(str(exc))
     _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
+
+
+def ci_none_at(checkout: Checkout) -> bool:
+    """Whether the clone's `origin/<default>`, as last fetched, declares `ci none` (R4)."""
+    ref = f"origin/{checkout.default_branch()}"
+    with tempfile.TemporaryDirectory(prefix="fr-ci-") as tmp:
+        checkout.snapshot_paths(ref, SERVICE_PATHS, Path(tmp))
+        return ci_is_none(Path(tmp))
 
 
 def ci_is_none(path: Path) -> bool:
@@ -1517,6 +1529,8 @@ class _Driver:
                 method=method,
                 say=lambda line: None,  # the driver prints one line per action itself
             )
+        # Read each pass, as the pass's own verdict is: the context outlives a pass.
+        self._merge[repo].ci_none = self._ci_none(repo)
         return self._merge[repo]
 
     # ------------------------------------------------------------------ snapshot
@@ -1794,10 +1808,7 @@ class _Driver:
             try:
                 checkout = self._reader(repo)
                 checkout.fetch()
-                ref = f"origin/{checkout.default_branch()}"
-                with tempfile.TemporaryDirectory(prefix="fr-ci-") as tmp:
-                    checkout.snapshot_paths(ref, SERVICE_PATHS, Path(tmp))
-                    self._ci[repo] = ci_is_none(Path(tmp))
+                self._ci[repo] = ci_none_at(checkout)
             except TriageError:
                 self._ci[repo] = False
         return self._ci[repo]
@@ -2166,6 +2177,7 @@ class _Driver:
             slots, _ = plan_queue(ctx, entries)
             if not slots:
                 self._unlanded.discard(batch.id)
+                clear_stop(self.target, batch.id)
                 return _MergeOutcome(
                     f"PR #{action.pr} is already merged", False, in_flight - 1, False
                 )
@@ -2187,6 +2199,9 @@ class _Driver:
             self.failed_write = True
             key = f"{batch.id}\0{action.head}\0{exc}"
             stops = _stops_train(exc)
+            if not isinstance(exc, HeadMovedError):  # a moved head is re-judged, not owed
+                stamp = datetime.now(UTC).isoformat(timespec="seconds")
+                record_stop(self.target, batch.id, MergeStop(action.head, str(exc), stamp))
             if key in self.reported:
                 again = f"stopped again at {action.head[:12]} (reported above)"
                 return _MergeOutcome(again, False, in_flight, stops)
@@ -2200,6 +2215,7 @@ class _Driver:
         stops = _stops_train(attempt)
         if attempt.outcome in ("merged", "already-merged"):
             self._unlanded.discard(batch.id)
+            clear_stop(self.target, batch.id)
             return _MergeOutcome(
                 f"merged PR #{action.pr} at {attempt.head[:12]}", True, in_flight - 1, stops
             )

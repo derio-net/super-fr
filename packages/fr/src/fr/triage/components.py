@@ -150,10 +150,23 @@ table.grid th { color: var(--muted); font-weight: 500; white-space: nowrap; }
 table.grid td.mono { overflow-wrap: anywhere; min-width: 7em; }
 table.grid.narrow { min-width: 0; }
 table.grid.narrow td { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  table.grid.stack { min-width: 0; }
+  table.grid.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; }
+  table.grid.stack tbody, table.grid.stack tr, table.grid.stack td { display: block; }
+  table.grid.stack tr { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  table.grid.stack td { border: 0; padding: 2px 0; text-align: left; min-width: 0;
+    overflow-wrap: anywhere; }
+  table.grid.stack td::before { content: attr(data-label); display: inline-block;
+    width: 6.5em; color: var(--muted); font-family: var(--sans); }
+}
 """
 """Wide data tables: a `.tablewrap` scrolls sideways, so a table keeps readable columns at
 phone width (a 390px page never scrolls as a whole) instead of wrapping letter by letter;
-`.narrow` is for a table of short columns that fits."""
+`.narrow` is for a table of short columns that fits. `.stack` goes further for a table
+whose rows read as records (the wave table, gh#1001): under 480px each row is a card and
+each cell is labelled from its `data-label`, so nothing scrolls at all."""
 
 GUTTER_CSS = """
 @media (max-width: 480px) {
