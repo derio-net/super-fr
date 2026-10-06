@@ -118,10 +118,10 @@ def conflict_brief(
     mirrors: Sequence[Sequence[str]],
 ) -> str:
     """The conflict hand-back brief (spec 2026-10-06-verification-strategies §G, R20):
-    the batch, its PR, the head and the paths merge refused, then the five steps. The
-    repo's `.fr/triage.yaml` `mirrors:` commands, when declared, are step 3's."""
+    the batch, its PR, the head and the paths merge refused, then the six steps. The
+    repo's `.fr/triage.yaml` `mirrors:` commands, when declared, are step 4's."""
     where = f"PR #{pr}" if pr is not None else "its PR"
-    regenerate = "3. Regenerate generated mirrors instead of hand-resolving them"
+    regenerate = "4. Regenerate generated mirrors instead of hand-resolving them"
     if mirrors:
         commands = "; ".join(f"`{shlex.join(argv)}`" for argv in mirrors)
         regenerate += f": run {commands}, then stage what they wrote."
@@ -132,13 +132,17 @@ def conflict_brief(
             f"Merge conflict on batch {batch.id} ({batch.title}): {where} on {branch}, at "
             f"head {head}, conflicts with {base} in a change the wave driver will not "
             f"resolve: {', '.join(paths)}.",
-            f"Resolve it on {branch} itself, in these five steps:",
-            f"1. `git fetch origin && git merge {base}` into {branch}. Do not rebase and "
+            f"Resolve it on {branch} itself, in these six steps:",
+            f"1. Enter the batch's workspace first: `fr isolation up --branch {branch}`. "
+            f"{branch} is checked out there, not in the clone you may have started in; "
+            "on an existing workspace the command resumes it, and a session already in "
+            "that workspace has nothing to do. Every later step runs in the workspace.",
+            f"2. `git fetch origin && git merge {base}` into {branch}. Do not rebase and "
             "do not force-push: the PR's history stays as it is.",
-            f"2. Resolve the conflicted paths: {', '.join(paths)}.",
+            f"3. Resolve the conflicted paths: {', '.join(paths)}.",
             regenerate,
-            "4. Run the test suite, and fix what the merge broke.",
-            f"5. Commit the merge and `git push origin {branch}`. The driver merges the PR "
+            "5. Run the test suite, and fix what the merge broke.",
+            f"6. Commit the merge and `git push origin {branch}`. The driver merges the PR "
             "once its checks are green.",
         ]
     )

@@ -3285,7 +3285,7 @@ def test_a_conflict_sharing_a_path_with_an_earlier_one_this_pass_waits_behind_it
     assert "waits behind b1" in _lines(out, "merge")[1]
 
 
-def test_conflict_brief_names_the_five_steps_and_the_declared_mirrors() -> None:
+def test_conflict_brief_names_the_six_steps_and_the_declared_mirrors() -> None:
     from fr.triage.batch_dispatch import conflict_brief
     from fr.triage.model import Batch
 
@@ -3308,6 +3308,22 @@ def test_conflict_brief_names_the_five_steps_and_the_declared_mirrors() -> None:
         base="origin/main", mirrors=(),
     )  # fmt: skip
     assert "sync-opencode" not in bare and "regenerate" in bare.lower()
+
+
+def test_the_fresh_conflict_brief_enters_the_batch_workspace_before_it_merges(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    train.script[101] = _conflict_error()
+    _drive(tmp_path, "--once", "--yes")
+    (item,) = runner.dispatched
+    brief = item.payload["brief"]
+    enter = brief.index("fr isolation up --branch feat/batch-b1")
+    assert enter < brief.index("git merge origin/main")
+    assert brief.index("1. ") < enter < brief.index("2. ")
+    # the session starts in the driver's clone, which the brief never moves off its branch
+    assert "git checkout" not in brief and "git switch" not in brief
 
 
 def test_triage_yaml_declares_mirrors_as_argument_lists() -> None:
