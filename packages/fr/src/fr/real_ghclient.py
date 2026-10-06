@@ -31,6 +31,16 @@ _NO_REQUIRED_CHECKS = "no required checks"
 _PR_URL = re.compile(r"/pull/(\d+)\s*$", re.MULTILINE)
 
 
+def workflow_run_args(repo: str, workflow: str, inputs: dict[str, str]) -> list[str]:
+    """The `gh` argv (without the leading `gh`) that dispatches *workflow* on
+    the default branch with *inputs*. One builder, so `fr verification
+    prerelease --dry-run` prints exactly what the real dispatch runs."""
+    argv = ["workflow", "run", workflow, "--repo", repo]
+    for key, value in inputs.items():
+        argv += ["-f", f"{key}={value}"]
+    return argv
+
+
 class RealGhClient:
     """Wraps `vk.gh` to satisfy the `GhClient` Protocol."""
 
@@ -371,6 +381,9 @@ class RealGhClient:
 
     def closing_ref(self, repo: str, number: int) -> str:
         return f"Closes {repo}#{number}"
+
+    def dispatch_workflow(self, repo: str, workflow: str, *, inputs: dict[str, str]) -> None:
+        _gh._run_gh(workflow_run_args(repo, workflow, inputs))
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         out = _gh._run_gh(

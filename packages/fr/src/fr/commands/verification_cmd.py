@@ -184,3 +184,73 @@ def walk_cmd(
     console.print(f"walk log: {path}", soft_wrap=True)
     if not log.passed:
         raise typer.Exit(1)
+
+
+PRERELEASE_WORKFLOW = "prerelease.yml"
+
+
+def rc_tag(branch: str, sha: str) -> str:
+    """`rc/<branch-slug>/<sha12>` — the tag `prerelease.yml` cuts (slug: `/` -> `-`)."""
+    return f"rc/{branch.replace('/', '-')}/{sha[:12]}"
+
+
+@verification_app.command("prerelease")
+def prerelease_cmd(
+    branch: str = typer.Option(..., "--branch", help="The PR branch to cut a pre-release of."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print the dispatch and the rc tag; call nothing."
+    ),
+) -> None:
+    """Cut an on-demand pre-release of BRANCH (spec §H, R24): dispatch the
+    `prerelease.yml` workflow, then print the rc tag and the install source
+    (`git+<remote>@<tag>`) the `prerelease` strategy installs from."""
+    from fr import hostclient
+    from fr._hosts import origin_slug
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.git import GitUnavailableError, git_answer, remote_name
+    from fr.real_ghclient import workflow_run_args
+
+    repo_root = resolve_repo_root()
+
+    def refuse(message: str) -> typer.Exit:
+        err_console.print(f"[red]refused:[/red] {message}", soft_wrap=True)
+        return typer.Exit(2)
+
+    try:
+        remote = remote_name(repo_root)
+        if remote is None or not isinstance(remote, str):
+            raise refuse("no single git remote to cut a pre-release from")
+        sha = ""
+        for ref in (f"refs/remotes/{remote}/{branch}", f"refs/heads/{branch}"):
+            found = git_answer(repo_root, "rev-parse", "--verify", "--quiet", ref)
+            if found.returncode == 0 and found.stdout.strip():
+                sha = found.stdout.strip()
+                break
+        if not sha:
+            raise refuse(f"branch {branch!r} is not on {remote} or local — push it first")
+        url = git_answer(repo_root, "remote", "get-url", remote).stdout.strip()
+    except GitUnavailableError as e:
+        raise refuse(str(e)) from e
+
+    slug = origin_slug(repo_root)
+    if slug is None:
+        raise refuse("cannot read the origin repository slug")
+    inputs = {"branch": branch}
+    tag = rc_tag(branch, sha)
+    if dry_run:
+        console.print("dry run: would dispatch", soft_wrap=True)
+        console.print("gh " + " ".join(workflow_run_args(slug, PRERELEASE_WORKFLOW, inputs)),
+                      soft_wrap=True)  # fmt: skip
+    else:
+        try:
+            hostclient.client_for(repo_root).dispatch_workflow(
+                slug, PRERELEASE_WORKFLOW, inputs=inputs
+            )
+        except UnsupportedForgeOperation as e:
+            raise refuse(str(e)) from e
+        except hostclient.FORGE_ERRORS as e:
+            raise refuse(f"the dispatch failed: {e}") from e
+        console.print(f"dispatched {PRERELEASE_WORKFLOW} for {branch}", soft_wrap=True)
+    console.print(f"rc tag (once the workflow has run): {tag}", soft_wrap=True)
+    console.print("install source for `{source}`:", soft_wrap=True)
+    console.print(f"git+{url}@{tag}", soft_wrap=True, markup=False)

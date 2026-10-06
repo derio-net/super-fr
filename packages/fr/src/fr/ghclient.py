@@ -213,6 +213,14 @@ class GhClient(Protocol):
         (one of `MERGE_METHODS`, or None) and the methods the repo allows."""
         ...
 
+    def dispatch_workflow(self, repo: str, workflow: str, *, inputs: dict[str, str]) -> None:
+        """Trigger a `workflow_dispatch` workflow of *repo* (by file name) with
+        *inputs*, on the repo's default branch. Fire and forget: the forge
+        answers once the dispatch is accepted, not when the run finishes. A
+        refusal raises with the forge's own message. Implemented for GitHub
+        only (`fr verification prerelease`, spec 2026-10-06-verification-strategies §H)."""
+        ...
+
     def issues_enabled(self, repo: str | None = None) -> bool | None:
         """Whether the forge has issues switched on for *repo* (`owner/repo`):
         True / False as the forge answers, None when it cannot say (no repo, a
@@ -272,3 +280,6 @@ class UnsupportedBatchOps:
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         raise self._unsupported("repo_merge_methods")
+
+    def dispatch_workflow(self, repo: str, workflow: str, *, inputs: dict[str, str]) -> None:
+        raise self._unsupported("dispatch_workflow")
