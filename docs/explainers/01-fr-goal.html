@@ -752,6 +752,18 @@ during the spec review rather than asking for another approval
 <p>Not every promise can be automated immediately. Any remaining acceptance debt
 stays visible in the final pull request instead of being quietly described as
 done (<code>plugins/super-fr/skills/fr-goal/SKILL.md:99-111</code>).</p>
+<p>The specification also says how the work will be <strong>verified before it merges</strong>,
+in a short <code>## Verification</code> section. You are asked once, early, because the
+answer decides what the agent has to prove at delivery and what only you can
+prove afterwards. A <em>verification strategy</em> is a named recipe: <code>candidate</code>
+installs the pull request's own build into a throwaway directory and runs a
+script per promise against a fresh scratch repository; <code>client-live</code> does the
+same install but leaves you to try it inside a real project; <code>prerelease</code> installs
+a build cut on demand from the branch; <code>live</code> is the old way, running the
+released build after merge. Your repository can add its own (a <code>staging</code> one,
+say) beside them — <code>docs/verification-strategies.md</code> shows how. A promise you
+mark <code>live</code>, or <code>none</code> (verified some other way), needs a one-line reason, written
+down so that "we will check it later" is a decision with a name and not a habit.</p>
 <h3>4. Turn the design into a checkable plan (<code>plan</code> and <code>plan-review</code>)</h3>
 <p>The specification says what success means; the plan says how to get there.
 <code>fr-goal</code> invokes <code>fr-plan</code> to divide the work into phases and small steps. It
@@ -993,10 +1005,27 @@ description back and refuses to finish while any of those sections is missing.
 That refusal exists because one pull request did ship without its out-of-scope
 section, and a section that must be remembered is a section that will
 eventually be forgotten.</p>
-<p>An acceptance row that only a live, operator-driven run can prove — the kind
-of claim no unit test can settle — is marked as such. It keeps nagging you
-after merge rather than blocking delivery, and the PR body lists it under its
-own heading so it is not forgotten either.</p>
+<p>When the specification asks for a pre-merge <code>candidate</code> verification, delivery
+owes one more piece of evidence besides the test log: a <strong>walk</strong>. The agent runs
+<code>fr verification walk</code> — a plain command, never wrapped in a pipe or a variable
+prefix, because <code>fr</code> only trusts a walk it can see being run as written. The walk
+installs the branch's build into a scratch directory through the repository's own
+<code>.fr/candidate-install</code>, so your real <code>fr</code> is never touched, then runs a baseline
+smoke (it installs, it reports a version, it answers in an empty repository) and
+each promise's script, and writes a log outside the repository. <code>deliver</code> accepts
+the log only if it belongs to this run and this strategy, covers exactly the code
+now on the branch, and has every step passing. A promise that would need you to
+drive it appears in the PR body under <strong>Pre-merge verification owed</strong>, with the exact
+command to run and a checkbox for you to tick once you have.</p>
+<p>A promise that only a live, operator-driven run can prove — the kind of claim no
+unit test can settle — is listed under <strong>Post-merge verification owed</strong> with its
+reason, and keeps nagging you after merge rather than blocking delivery. One more
+rule protects it: if that promise belongs to a GitHub issue, the pull request must
+say <code>Refs #n</code>, not <code>Closes #n</code>. Merging would otherwise close the issue on
+evidence nobody has seen yet, and <code>deliver</code> refuses a description that does. The
+issue is closed later, by you, when you record a passing walk
+(<code>fr acceptance set-status --walk</code>), which prints the close command rather than
+running it.</p>
 <p>Two of those sections deserve a word. The first is the <strong>proportionality
 report</strong> from <code>fr plan proportionality</code>: new files nothing refers to, files
 changed that no phase said it would touch, the diff's size against the

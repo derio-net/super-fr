@@ -670,6 +670,19 @@ Not every promise can be automated immediately. Any remaining acceptance debt
 stays visible in the final pull request instead of being quietly described as
 done (`plugins/super-fr/skills/fr-goal/SKILL.md:99-111`).
 
+The specification also says how the work will be **verified before it merges**,
+in a short `## Verification` section. You are asked once, early, because the
+answer decides what the agent has to prove at delivery and what only you can
+prove afterwards. A *verification strategy* is a named recipe: `candidate`
+installs the pull request's own build into a throwaway directory and runs a
+script per promise against a fresh scratch repository; `client-live` does the
+same install but leaves you to try it inside a real project; `prerelease` installs
+a build cut on demand from the branch; `live` is the old way, running the
+released build after merge. Your repository can add its own (a `staging` one,
+say) beside them — `docs/verification-strategies.md` shows how. A promise you
+mark `live`, or `none` (verified some other way), needs a one-line reason, written
+down so that "we will check it later" is a decision with a name and not a habit.
+
 ### 4. Turn the design into a checkable plan (`plan` and `plan-review`)
 
 The specification says what success means; the plan says how to get there.
@@ -944,10 +957,28 @@ That refusal exists because one pull request did ship without its out-of-scope
 section, and a section that must be remembered is a section that will
 eventually be forgotten.
 
-An acceptance row that only a live, operator-driven run can prove — the kind
-of claim no unit test can settle — is marked as such. It keeps nagging you
-after merge rather than blocking delivery, and the PR body lists it under its
-own heading so it is not forgotten either.
+When the specification asks for a pre-merge `candidate` verification, delivery
+owes one more piece of evidence besides the test log: a **walk**. The agent runs
+`fr verification walk` — a plain command, never wrapped in a pipe or a variable
+prefix, because `fr` only trusts a walk it can see being run as written. The walk
+installs the branch's build into a scratch directory through the repository's own
+`.fr/candidate-install`, so your real `fr` is never touched, then runs a baseline
+smoke (it installs, it reports a version, it answers in an empty repository) and
+each promise's script, and writes a log outside the repository. `deliver` accepts
+the log only if it belongs to this run and this strategy, covers exactly the code
+now on the branch, and has every step passing. A promise that would need you to
+drive it appears in the PR body under **Pre-merge verification owed**, with the exact
+command to run and a checkbox for you to tick once you have.
+
+A promise that only a live, operator-driven run can prove — the kind of claim no
+unit test can settle — is listed under **Post-merge verification owed** with its
+reason, and keeps nagging you after merge rather than blocking delivery. One more
+rule protects it: if that promise belongs to a GitHub issue, the pull request must
+say `Refs #n`, not `Closes #n`. Merging would otherwise close the issue on
+evidence nobody has seen yet, and `deliver` refuses a description that does. The
+issue is closed later, by you, when you record a passing walk
+(`fr acceptance set-status --walk`), which prints the close command rather than
+running it.
 
 Two of those sections deserve a word. The first is the **proportionality
 report** from `fr plan proportionality`: new files nothing refers to, files
