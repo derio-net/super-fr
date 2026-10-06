@@ -14,3 +14,8 @@ HerdrRunner.dispatch runs tab create -> agent start -> agent prompt back-to-back
 ### eb173c9d1fc7 · hypothesis · Driver: a runner dispatch failure is a typer.Exit that escapes the drive loop
 
 _Driver._close_out and dispatch_batch call _fail(..., code=1) on a runner exception, which raises typer.Exit. run_pass has no handler and batch_drive_command's loop catches only ForgeReadError, so one failed dispatch ends loop mode (unlike forge reads gh#910 and refused merges rg-4, which are reported once and retried). Covers #931 defect 2. This is a second, independent defect in fr, not fr_herdr.
+
+<!-- fr:journal kind=repro scope=debug id=7abbf2338d65 created=2026-10-06T15:40:59+00:00 -->
+### 7abbf2338d65 · repro · Live: agent_pane_busy reproduced 1 in 6 fresh workspaces; a retry on the same pane succeeds
+
+Scratch herdr workspaces (herdr 0.9.1, cwd a trusted checkout, closed afterwards), 'agent start' run right after 'workspace create': trial 5 of 6 failed with {"error":{"code":"agent_pane_busy","message":"agent target pane <pane> is not an available shell"}}; 'agent start' on the same pane moments later succeeded. Confirms #931 defect 1 and that a bounded retry is the remedy. #956 (silent unsubmitted brief) did NOT reproduce in 6 trials (3 with 'agent prompt --wait', 3 without, ~4.9k-char brief) — timing-dependent. Without --wait, 'agent prompt' returned agent_status=idle: it confirms nothing, so a missed submit is silent by construction. With --wait it returned 'working', and herdr documents agent_prompt_stalled when no working/blocked follows within 5s.
