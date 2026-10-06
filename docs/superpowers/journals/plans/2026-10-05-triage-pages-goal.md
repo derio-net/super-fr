@@ -658,3 +658,8 @@ Filed at closeout as #1002.
 ### p4-r11-resolved-2 · finding [deferred → #1003] · resolves p4-r11: local check-to-write race between the symlink check and copy2 in state_sync (local attacker only)
 
 Filed at closeout as #1003.
+
+<!-- fr:journal kind=finding scope=plan id=p4-archive-pr-base-unchecked-resolved-2 created=2026-10-06T08:02:15+00:00 state=open resolves=p4-archive-pr-base-unchecked tracked_by=#1004 -->
+### p4-archive-pr-base-unchecked-resolved-2 · finding [deferred → #1004] · resolves p4-archive-pr-base-unchecked: the wave driver's archive-PR merge path never checks the PR's base branch either
+
+Filed at closeout as #1004.
