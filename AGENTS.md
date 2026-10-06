@@ -34,6 +34,23 @@ uv workspace monorepo, version lockstepped across every manifest (see
   - **`fr models`** (`fr/models.py`, `commands/models_cmd.py`) — `tier → model`
     bindings (`~/.config/fr/models.yaml`, repo override > user) for fr-goal
     subagent dispatch; `PhaseHeader.tier` is the harness-neutral hint.
+  - **`fr.bindings`** (`fr/bindings/`, 2026-10-06 spec
+    `model-binding-churn`) — whether a bound model is still SERVED, beside
+    `fr/models.py` (which stays the config layer). `catalogue.py` parses
+    `opencode models --verbose` for lineage and price (never its `status`)
+    and keeps last-known snapshots; `probe.py` asks the provider live
+    (`live`/`dead`/`unknown`; `dead` only on positive provider evidence) and
+    caches verdicts for 6 h; `choose.py` is pure — R4's family → tier → hint
+    rules and `is_autonomous`, the one bound fr may act on unasked; `health.py`'s
+    `check_bindings` is the one report every caller reads; `wording.py` the one
+    substitution line and journal decision body. The cache lives under
+    `$HOME/.cache/fr/models/` (`FR_MODELS_CACHE_DIR` overrides). Only OpenCode is
+    probed: `prober_for` (the one factory, and the name tests monkeypatch) gives
+    `None` elsewhere, which reports `unprobed`. Callers: `fr models set/check`,
+    `fr run start`'s notice, the gated brief's `dead_bindings`/`binding_offers`,
+    and `run_cmd._guard_dispatch_binding`, which checks the exact tier both
+    dispatch paths open and substitutes a dead USER binding autonomously
+    (journal decision first, then the binding, restored on failure) or refuses.
   - **fr-goal subagent execution** (2026-07-22 spec): fr-goal dispatches each
     phase to the `plugins/super-fr/agents/fr-phase-executor` agent (serial,
     shared workspace); `scripts/ensure-phase-executor-allowlist.sh` (called by
