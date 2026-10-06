@@ -1,0 +1,35 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-model-bindings
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: review
+    id: p1-review-r1
+    phase: 1
+    title: "phase 1 independent review: 9 findings (p1-r1..p1-r9), all in scope, all fixed in 25c7c4bb6"
+    body: |
+      Reviewed spec R1–R5, R10, R12, R3 and §A/§B/## Verification against git diff 37724adaf..HEAD. Targeted unit tests (78) and the 3 model_binding scenarios passed. Conformance confirmed: R1 terminal/off-terminal, R2 never reads catalogue status, R4 rule order + 5-probe cap + is_autonomous, R5 report/exit 1, R10 unprobed, R11 line fields, the argument-injection guard (single --model=<id> token, validated before spawn, per-harness set refusal). Raised p1-r1..p1-r9; each verified against the code by the orchestrator, then fixed test-first in 25c7c4bb6; full suite after the fix: 9754 passed, 105 skipped.
+  - {kind: finding, id: p1-r1, phase: 1, review_scope: in, title: "ProbeCache crashes on corrupt entry types or unwritable HOME; write not atomic", body: "probe.py ProbeCache: ProbeResult(**raw) unvalidated (`at` a string raises TypeError in check/run start); unguarded mkdir/write_text raises OSError; non-atomic write. Fix: validate and treat bad entries as a miss, temp+os.replace, swallow OSError."}
+  - {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "SnapshotStore does not type-validate entries; its write can raise OSError", body: "catalogue.py SnapshotStore.get/remember: CatalogueEntry(**raw) unchecked, later TypeError in choose.py comparisons; OSError on a bad HOME crashes check_bindings. Fix: validate fields, guard writes."}
+  - {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "valid_model_id refuses real nested/@ opencode ids", body: "fr/bindings/__init__.py _MODEL excluded '/' and '@', refusing openrouter/anthropic/claude-3.5 and vertex/claude@20240620 — a regression for fr models set. Fix: provider = first segment, tail allows nested and versioned forms."}
+  - {kind: finding, id: p1-r4, phase: 1, review_scope: in, title: "fr models check can propose the same model for two dead tiers", body: "models_cmd.check_cmd/health.check_bindings computed all proposals from the original map; distinctness/ordering broken when two tiers die. Fix: choose sequentially, folding each pick in."}
+  - {kind: finding, id: p1-r5, phase: 1, review_scope: in, title: "set's dead path duplicates choose/catalogue logic and skips the R3 snapshot", body: "models_cmd.set_cmd hand-built choose_replacement and read the catalogue without SnapshotStore.remember. Fix: one shared proposer in health.py."}
+  - {kind: finding, id: p1-r6, phase: 1, review_scope: in, title: "hint rule may propose another provider's model", body: "choose.py:162 used a provider-qualified hint verbatim; R4 requires the same provider. Fix: require matching provider."}
+  - {kind: finding, id: p1-r7, phase: 1, review_scope: in, title: "prober catches only FileNotFoundError/TimeoutExpired", body: "probe.py probe/catalogue: PermissionError/OSError or UnicodeDecodeError would crash; R2/Risks say never a crash. Fix: catch them."}
+  - {kind: finding, id: p1-r8, phase: 1, review_scope: in, title: "validators in fr/bindings/__init__ with function-local circular imports", body: "probe.py imported fr.bindings inside methods. Fix: leaf module fr/bindings/ids.py, re-exported."}
+  - {kind: finding, id: p1-r9, phase: 1, review_scope: in, title: "missing tests for corrupt cache/snapshot, failed cache write, nested/@ ids", body: "The robustness cases p1-r1..r3 break on had no tests. Fix: add them alongside the fixes."}
+resolves:
+  - {id: p1-r1, state: fixed, body: "25c7c4bb6: ProbeCache._valid + write_json_atomic (temp + os.replace, OSError swallowed). Tests test_bindings_probe::test_a_corrupt_probe_cache_is_a_miss_never_a_crash, ::test_a_failing_cache_write_never_crashes_and_leaves_no_temp_file, ::test_the_cache_is_written_atomically_via_replace."}
+  - {id: p1-r2, state: fixed, body: "25c7c4bb6: SnapshotStore.get validates every field, remember uses write_json_atomic. Tests test_bindings_catalogue::test_corrupt_snapshot_fields_count_as_absent, ::test_a_failing_snapshot_write_never_crashes."}
+  - {id: p1-r3, state: fixed, body: "25c7c4bb6: fr/bindings/ids.py accepts nested and @-versioned ids, still refusing whitespace, '=' and a leading '-'. Test test_bindings_probe::test_a_model_id_must_be_provider_slash_model."}
+  - {id: p1-r4, state: fixed, body: "25c7c4bb6: check_bindings chooses sequentially in tier order, folding each pick in. Tests test_bindings_health::test_two_dead_tiers_never_get_the_same_replacement, test_models_cmd::TestCheck::test_two_dead_tiers_get_distinct_proposals, ::test_an_accepted_change_is_folded_into_the_next_choice."}
+  - {id: p1-r5, state: fixed, body: "25c7c4bb6: health.propose_for is the one proposer (catalogue read, snapshot remember, choose), used by set and check_bindings. Tests test_bindings_health::test_propose_for_remembers_the_snapshot_and_chooses, test_models_cmd::TestSetProposalSharesTheHealthChooser::test_a_dead_set_remembers_the_snapshot_of_the_dead_model."}
+  - {id: p1-r6, state: fixed, body: "25c7c4bb6: a provider-qualified hint is used only on the dead model's provider. Test test_bindings_choose::test_a_hint_naming_another_provider_is_not_used."}
+  - {id: p1-r7, state: fixed, body: "25c7c4bb6: probe/catalogue catch OSError and UnicodeDecodeError → unknown / []. Test test_bindings_probe::test_os_and_decode_errors_are_unknown_and_empty_never_a_crash."}
+  - {id: p1-r8, state: fixed, body: "25c7c4bb6: validators in leaf fr/bindings/ids.py, module-level import, re-exported. Test test_bindings_probe::test_the_validators_live_in_a_leaf_module_and_are_re_exported."}
+  - {id: p1-r9, state: fixed, body: "25c7c4bb6: the tests named under p1-r1..r4 cover the gap."}
+evidence:
+  review: p1-review-r1
+  reviewer: a016b05d9ef88d78f
+  model: claude-opus-5-5
