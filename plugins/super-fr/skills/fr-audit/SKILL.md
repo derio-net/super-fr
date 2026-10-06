@@ -11,11 +11,7 @@ description: >
 
 **Announce at start:** "I'm using fr-audit to audit <runs or sessions>."
 
-The numbers are not yours to compute. `fr usage` reads the harness's own session
-store, deduplicates it, classifies every tool call and splits the harness's own
-dollar figure. Your job is choosing what to compare and saying what the split
-means. Never add a figure by hand, never price tokens yourself, and never write
-`0` where the report says `—`.
+The numbers are not yours to compute. `fr usage` reads the harness store, classifies tool calls and splits the harness's dollar figure. Your job is choosing what to compare and saying what it means. Never add a figure by hand, never price tokens, never write `0` for `—`.
 
 ## The engine
 
@@ -69,7 +65,7 @@ cheap session. Never drop it from the comparison silently or count it as zero.
 
 ## Pages
 
-Four triage pages (`fr triage render`, `origins render`, `architecture render`, `history render`) answer: "What do I do next?" (board), "Where do defects come from?" (origins), "What is the system?" (architecture), and "How did we get here?" (history). Each holds hand-written analysis in fragments (`board/manifest.yaml`, etc.): the next render rebuilds generated sections and erases any hand edits to pages.
+Four triage pages answer: "What do I do next?" (board), "Where do defects come from?" (origins), "What is the system?" (architecture), "How did we get here?" (history). Each holds hand-written analysis in fragments: renders rebuild sections, erasing hand edits.
 **Audit page (measured).** `fr usage report --session <id>… --format html -o
 $HOME/.cache/fr/usage/<name>.html`. Report the pooled shares and the per-session
 range, name the sessions, and state what was unavailable.
