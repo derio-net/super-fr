@@ -44,6 +44,10 @@ def _hosted(
     @functools.wraps(method)
     def wrapper(self: RealGhClient, /, *args: _P.args, **kwargs: _P.kwargs) -> _R:
         with _gh.host_scope(self._host):
+            # The trust gate runs BEFORE the body: a soft-fail method catches
+            # `GhError` and would turn a refused host into "no PR" / "no
+            # file" (review p1-r1). `GhHostRefused` propagates instead.
+            _gh._env()
             return method(self, *args, **kwargs)
 
     wrapper.__fr_hosted__ = True  # type: ignore[attr-defined]

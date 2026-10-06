@@ -16,6 +16,7 @@ subprocess starts, and never falls back to github.com.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -120,7 +121,7 @@ def test_every_gh_method_is_hosted() -> None:
         for name, fn in vars(RealGhClient).items()
         if inspect.isfunction(fn)
         and not name.startswith("__")
-        and "_gh." in inspect.getsource(fn)
+        and re.search(r"\b_gh\.|\bfrom fr\.gh import|\bfrom fr import gh\b", inspect.getsource(fn))
         and not getattr(fn, "__fr_hosted__", False)
     ]
     assert unhosted == []
@@ -129,7 +130,8 @@ def test_every_gh_method_is_hosted() -> None:
 _REFUSAL = (
     "GitHub host 'evil.example' is not one gh is logged into; run "
     "`gh auth login --hostname evil.example` (fr will not point gh, or its "
-    "tokens, at an unknown host)"
+    "tokens, at an unknown host; a GH_ENTERPRISE_TOKEN alone does not "
+    "count as a login)"
 )
 
 
@@ -148,11 +150,38 @@ def test_an_unknown_host_fails_closed_on_the_view_pr_body_path(
     assert recorder.envs == []
 
 
-def test_an_unknown_host_never_falls_back_to_github_com(recorder: _Recorder) -> None:
-    """A fail-soft method still starts no subprocess: no silent github.com
-    target (#892's wrong-target write)."""
-    assert RealGhClient(host="evil.example").file_exists("o/r", "x") is False
+@pytest.mark.parametrize(
+    ("method", "args"),
+    [
+        ("list_linked_prs", ("o/r", 1)),
+        ("pr_status_by_url", ("https://evil.example/o/r/pull/1",)),
+        ("file_exists", ("o/r", "x")),
+        ("list_dir", ("o/r", "x")),
+        ("issues_enabled", ("o/r",)),
+    ],
+)
+def test_a_soft_fail_method_never_swallows_the_refusal(
+    recorder: _Recorder, method: str, args: tuple[Any, ...]
+) -> None:
+    """Review p1-r1: these methods turn a `GhError` into "no PR" / "no file" /
+    "unknown". A refused host must not read as a forge answer, and must start
+    no subprocess (no silent github.com target, #892's wrong-target write)."""
+    with pytest.raises(_gh.GhHostRefused) as exc:
+        getattr(RealGhClient(host="evil.example"), method)(*args)
+    assert str(exc.value) == _REFUSAL
     assert recorder.envs == []
+
+
+def test_a_nested_host_scope_restores_the_outer_host(recorder: _Recorder) -> None:
+    """Review p1-r3: `host_scope` restores the PREVIOUS value, not None."""
+    with _gh.host_scope("ghe.example"):
+        with _gh.host_scope(None):
+            _gh.list_issues(repo="o/r", state="open", limit=1)
+        _gh.list_issues(repo="o/r", state="open", limit=1)
+    _gh.list_issues(repo="o/r", state="open", limit=1)
+    assert recorder.envs[0] is None
+    assert recorder.envs[1] is not None and recorder.envs[1]["GH_HOST"] == "ghe.example"
+    assert recorder.envs[2] is None
 
 
 def test_building_a_client_touches_no_filesystem(

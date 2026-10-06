@@ -99,7 +99,10 @@ def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) 
         return RealGlabClient(host=host)
     if backend == "gitea":
         return RealTeaClient()
-    return RealGhClient(host=host)
+    # A SaaS host (github.com) is gh's own default, never a GH_HOST: threading
+    # it would demand a hosts.yml login that token-only CI does not have
+    # (review p1-r2).
+    return RealGhClient(host=_hosts.self_hosted_hostname(host))
 
 
 def client_for_url(url: str) -> GhClient:

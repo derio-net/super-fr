@@ -160,6 +160,17 @@ class TestClientForWarnsOnAnUnthreadedDeclaredHost:
         assert client._host == "ghe.example"
         assert capsys.readouterr().err == ""
 
+    def test_a_declared_saas_github_host_is_not_threaded(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Review p1-r2: `host: github.com` is gh's own default. Threading it
+        would demand a hosts.yml login that token-only CI does not have."""
+        repo = _repo_with_profiles(tmp_path, {"forge": "{type: github, host: github.com}"})
+        client = hostclient.client_for(repo)
+        assert isinstance(client, RealGhClient)
+        assert client._host is None
+        assert capsys.readouterr().err == ""
+
     def test_a_derived_host_for_an_unthreaded_backend_is_silent(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
