@@ -4,3 +4,8 @@
 ### e8703ea341c5 · repro · A check re-run green on the same head still counts as failing
 
 PR #1038, head f1919d4: `gh pr view --json statusCheckRollup` returns BOTH CI runs on that head — the 17:00 run (test (py3.11, 2), test (py3.14, 2), ci-ok = FAILURE) and the 19:53 run (all SUCCESS). `collect._checks` buckets every entry, so PullRequest.checks reads fail=3 forever and `checks_verdict` (no required checks on main) returns failing; the merge train never merges it.
+
+<!-- fr:journal kind=ruled-out scope=debug id=87c0c9aaea05 created=2026-10-06T20:17:29+00:00 -->
+### 87c0c9aaea05 · ruled-out · The drive's own gh pr checks path is not a second cause
+
+`GhClient.pr_checks`/`pr_required_checks` shell to `gh pr checks`, which already reports the latest run per check. On a branch with no required checks `checks_verdict` falls through to the collected `PullRequest.checks` counts — the only path that sees stale runs is `collect._checks`. The same counts feed views.py, render.py, kanban.py, so one fix covers them.
