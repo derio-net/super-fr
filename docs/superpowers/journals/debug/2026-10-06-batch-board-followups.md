@@ -14,3 +14,8 @@ Rendered the live super-fr board from a scratch copy of the triage state and ope
 ### fix-987 · finding [fixed] · Driver records merge stops; board reads them
 
 New fr.triage.merge_stops (merge-stops.json beside drive.lock, not judgements.yaml: a new event kind would break every older closed-world reader). _merge_batch records a stop at action.head unless HeadMovedError and clears on merge/already-merged. build_board(stops=) counts a stop only while the PR is OPEN at that head: hint 'needs you: merge stopped: <reason>', needs_you; a batch whose after names it waits on it (the pure pass otherwise planned its dispatch as if the merge landed). Tests: test_triage_kanban merge-stop tests, test_triage_merge_stops, test_a_stopped_merge_is_recorded_for_the_board_and_cleared_when_it_lands, test_a_moved_head_is_not_recorded_as_a_stop.
+
+<!-- fr:journal kind=finding scope=debug id=fix-1000 created=2026-10-06T08:35:54+00:00 state=fixed -->
+### fix-1000 · finding [fixed] · Cancelled waves are named
+
+views.cancelled_waves: finished waves whose every batch is cancelled or abandoned. The finished_waves predicate is unchanged (spec R8). History tab reads 'Wave N · cancelled'; the board's waves section says the wave was cancelled and left, with a link to history. Tests: test_a_wave_whose_batches_were_all_cancelled_is_labelled_cancelled, test_a_wave_that_left_the_board_because_it_was_cancelled_is_named.
