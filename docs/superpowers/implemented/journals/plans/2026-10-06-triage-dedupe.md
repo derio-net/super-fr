@@ -139,3 +139,8 @@ After the merge main's .tier-desc has no left margin; re-captured phone/desktop 
 ### p1-o1-resolved · finding [out-of-scope] · resolves p1-o1: fr's capture-script witness reads a value-taking uv flag as the program (phase 1)
 
 A limit of fr's run telemetry, not of triage dedupe; this change neither introduced nor touches it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-o1-resolved-2 created=2026-10-06T12:04:07+00:00 state=fixed resolves=p1-o1 -->
+### p1-o1-resolved-2 · finding [fixed] · resolves p1-o1: fr's capture-script witness reads a value-taking uv flag as the program
+
+Already filed as #999 (from run 2026-10-05-feat-batch-triage-pages-goal) and fixed on main by #1009 (_UV_VALUE_FLAGS in fr/run/telemetry.py); no new issue filed at closeout.
