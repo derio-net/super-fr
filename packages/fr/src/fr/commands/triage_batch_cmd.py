@@ -326,8 +326,13 @@ def _withdraw_unowed(env: ClaimEnv, batch: Batch, posted: list[str]) -> None:
 def _claim_for_dispatch(env: ClaimEnv, batch: Batch) -> list[str]:
     """Claim every member for *batch* before its launch (R3, R4); the keys whose marker
     this call posted. A member held elsewhere refuses the batch (exit 2) and a failed
-    write exits 1, both with nothing launched."""
-    ops = _claim_ops(batch, batch.ids, env.facts, env.me)
+    write exits 1, both with nothing launched.
+
+    Every member goes through the forge, including those facts show already claimed for
+    *batch* (p1-r4): facts are as old as the last collect, and a claim taken over since
+    must stop the launch. `claim` re-reads, reports Held, or rewrites the own marker in
+    place (a fresh heartbeat)."""
+    ops = [ClaimOp("claim", k, batch.id) for k in batch.ids]
     if not ops:
         return []
     try:

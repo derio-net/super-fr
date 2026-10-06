@@ -1087,6 +1087,7 @@ from tests.unit.triage_claim_fixtures import (  # noqa: E402
     FAR,
     LONG_AGO,
     OTHER,
+    PAST,
     held,
     marker,
     markers,
@@ -1145,3 +1146,32 @@ def test_a_claim_lost_at_dispatch_never_launches_the_runner(
     assert "fr:in-progress" not in gh.issues[(REPO, 577)].labels
     # a wave-less batch owes no claims until dispatched: the ones it made are withdrawn
     assert all(m.released is not None for m in markers(gh, REPO, 577))
+
+
+def test_dispatch_rereads_members_facts_show_claimed_and_refuses_one_taken_since(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """p1-r4: facts say this scope claims every member for the batch, but since the
+    collect another scope took #575 over. The forge, not facts, decides."""
+    from fr.triage.claims import render_marker
+
+    mine = marker(_me(), "lifecycle", expires=PAST)
+    put_marker(gh, REPO, 577, mine, 7)
+    put_marker(gh, REPO, 575, mine, 8)
+    gh.issue_comments[(REPO, 575)][0]["body"] = render_marker(
+        mine.model_copy(update={"released": PAST, "released_by": OTHER})
+    )
+    put_marker(gh, REPO, 575, marker(OTHER, "theirs", expires=FAR, at=PAST), 9, PAST)
+    facts = _facts(
+        issues=[
+            _issue(577, **held(mine, 7)),
+            _issue(575, **held(mine, 8)),
+            _issue(420),
+        ]
+    )
+    _state(tmp_path, facts)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2, out
+    assert OTHER in out and "super-fr#575" in out
+    assert "dispatch" not in runner.calls
+    assert runner.dispatched == []
