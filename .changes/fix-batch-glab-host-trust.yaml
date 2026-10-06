@@ -1,2 +1,0 @@
-bump: patch
-summary: fr no longer points glab or a GITLAB_TOKEN at a self-hosted GitLab glab is not logged into, the isolation lifecycle's forge lookups now run against the gated host (GH_HOST / GITLAB_HOST), and a host refusal is classified by its type, never retried
