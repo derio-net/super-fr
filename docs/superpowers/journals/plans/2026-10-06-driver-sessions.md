@@ -159,3 +159,18 @@ tab list captured live and redacted (restart/tab-list.json), served by the scena
 ### p1-r11-resolved · finding [fixed] · resolves p1-r11: install.sh passed --with-executables-from unconditionally, failing older uv (phase 1)
 
 Flag passed only when `uv tool install --help` lists it; fr-herdr linked from the tool env bin otherwise; tests in test_install_sh.py and candidate-install.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-schema-pins created=2026-10-06T21:19:22+00:00 phase=2 -->
+### p2-schema-pins · discovery · facts schema 6 moves every test pinning the written stamp (phase 2)
+
+Seven test files pinned facts schema 5 as the written stamp (collect, skeleton, cli, scope_groups x2, state_integrity, facts_schema3); all moved to 6. Spec amended nothing: section B and C matched what was built.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-06T21:19:22+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+a single small method plus a protocol; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-06T21:19:22+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+two config fields and a stamp bump; nothing to clean

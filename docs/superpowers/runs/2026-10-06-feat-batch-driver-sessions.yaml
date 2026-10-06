@@ -85,7 +85,7 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8,p1-r9,p1-r10,p1-r11
       phase/2/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T20:44:55+00:00'
           agent: a300053cc44bfbc9d
@@ -93,6 +93,11 @@ steps:
           harness: claude-code
           model: claude-sonnet-5-5
           session: 1f7d5832-5559-42d4-abe3-aa58f6893ee0
+          returned: '2026-10-06T21:19:23+00:00'
+          outcome: done
+        evidence:
+          tests: driver-sessions-p2-suite.log@c304f661c2b5;tree=365c89e9297affb783d10339934367716c13f7dc6bb8e9c98df54a2d1454352e
+          visual: none
   journal-check:
     state: pending
   deliver:
