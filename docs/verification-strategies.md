@@ -12,7 +12,7 @@ usable by one.
 |---|---|---|---|---|
 | `candidate` | pre-merge | agent | the PR's worktree | installs the PR's build into a throwaway prefix, runs each row's scenario in a fresh fixture repo |
 | `client-live` | pre-merge | operator | the PR's worktree | the same install; the operator drives the scenario inside a real client repo (`--client <path>`) |
-| `prerelease` | pre-merge | operator | an on-demand rc tag | installs from `fr verification prerelease --branch <b>`'s output |
+| `prerelease` | pre-merge | operator | an on-demand rc tag | installs from `fr verification prerelease --branch <b>`'s output; `fr verification walk` refuses it (it never runs a `source: prerelease` strategy), and the PR body prints a manual route for each row instead |
 | `live` | post-merge | operator | none | the released build, run by the operator after merge |
 
 `fr verification list` shows every strategy that resolves and where each came
@@ -68,20 +68,24 @@ on an agent-driven pre-merge strategy also needs a `scenario:` on its matrix row
 
 ### Example: a `staging` strategy
 
-Verify against a staging install the team already has, driven by an operator,
-with the walk only recording that the install and smoke worked:
+Verify the PR's build against a staging backend, driven by an operator. The
+install comes from the PR's worktree build (`{worktree}`; `source: worktree`,
+unless the manifest says otherwise). The walk still requires a `scenario:` on
+every row it covers and runs that scenario after the install and smoke, so the
+scenario is what reaches staging; the operator supplies the staging-wired
+client with `--client`:
 
 ```yaml
 # docs/superpowers/verifications/staging.yaml
 verification: staging
 schema: 1
-description: Install the PR's build, then the operator exercises it against the staging backend.
+description: Install the PR's worktree build, then run each row's scenario in a client wired to staging.
 when: pre-merge
 driver: operator
 install: .fr/candidate-install {prefix} {worktree}
 scenario: "{scenario}"
 source: worktree
-notes: Run with --client pointing at a checkout wired to staging.
+notes: Run with --client pointing at a checkout wired to staging; every covered row needs a scenario.
 ```
 
 Then `fr verification check staging` validates it, and the spec's section opts
@@ -121,6 +125,11 @@ records the code tree, strategy, harness, model and each step's exit status, and
 exits non-zero when any step fails. Run it as a bare command (`fr` or `uv run
 fr`, no env prefix, pipe or redirect): `deliver` only trusts a log it can tie to
 that command, to the run and strategy, and to the manifest's hash.
+
+`walk` refuses a strategy whose `source:` is `prerelease`: it never installs
+an rc. For those rows the PR body's `## Pre-merge verification owed` section
+prints a manual route instead (cut the rc with `fr verification prerelease`,
+install it through the install contract, run the row's scenario in the client).
 
 ## Writing a scenario
 
