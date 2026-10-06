@@ -1,0 +1,18 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-model-bindings
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1, P1.T6.S2, P1.T6.S3, P1.T7.S1, P1.T7.S2, P1.T7.S3]
+refactor:
+  P1.T5: "check_bindings was already one function over choose_replacement/offers; nothing to extract beyond naming."
+  P1.T7: "Scenario scripts share one sourced helper (_stub_opencode.sh) from the start; nothing duplicated to clean."
+journal:
+  - {kind: discovery, id: p1-opencode-run-needs-closed-stdin, phase: 1, title: "opencode run blocks forever when stdin is left open", body: "Capturing the probe fixtures, `opencode run` with an inherited stdin produced no output for 90 s and was killed by timeout (rc 124). With `</dev/null` it answers in seconds. run_opencode therefore passes stdin=DEVNULL. Also observed: a dead model (ProviderModelNotFoundError) exited 1, not 0 as the spec background says, so classify never reads the return code."}
+  - {kind: discovery, id: p1-argument-injection-guard, phase: 1, title: "Binding values can arrive from the tracked repo models.yaml and reach opencode's argv", body: "Coordinator-directed security fix. fr.bindings.valid_provider/valid_model_name/valid_model_id (provider ^[A-Za-z0-9][A-Za-z0-9._-]*$, model part ^[A-Za-z0-9][A-Za-z0-9._:-]*$). OpenCodeProber.probe returns unknown (`<m> is not a provider/model id`) and catalogue returns [] for an invalid value WITHOUT spawning; the model is passed as the single token --model=<id>. `fr models set` refuses (exit 2) an opencode id that is not provider/model, and for other harnesses a value starting with '-' or containing whitespace, before writing; claude-code bare ids such as claude-opus-5-5 still work. The stub opencode and fixtures README were updated for --model=. Existing opencode `set` tests that used bare names (m, s, h) now use p/m, p/s, p/h."}
+  - {kind: decision, id: p1-hint-only-without-lineage, phase: 1, title: "Provider hint is tried only when the dead model has no entry and no snapshot", body: "Spec R4 lists family, tier, hint in order but says the hint applies when neither rule above has inputs. Read literally: with no catalogue entry and no snapshot the family rule has no family and the tier rule has no dead price, so only the hint is tried (and a hinted pick is never autonomous). A dead model that does have lineage never uses the hint."}
+  - {kind: decision, id: p1-unknown-not-cached, phase: 1, title: "ProbeCache stores only live and dead verdicts", body: "An unknown (timeout, server error) is a transient failure; caching it for 6 h would hide recovery. fresh=True still bypasses for the others."}
+  - {kind: decision, id: p1-prober-seam, phase: 1, title: "fr.bindings.prober_for is the one monkeypatched factory; default_prober_for is its implementation", body: "Callers must use fr.bindings.prober_for(...) via the module attribute. tests/conftest.py autouse fixture replaces it with an always-live, empty-catalogue prober and sets FR_MODELS_CACHE_DIR (a new override of the $HOME/.cache/fr/models path) so the suite never touches the real opencode or an operator's cache. Phase 2 tests monkeypatch the same name."}
+  - {kind: discovery, id: p1-check-exit-and-repo-layer, phase: 1, title: "fr models check on a repo-layer dead binding", body: "check never rewrites docs/superpowers/models.yaml (R9): on a terminal it names the file and does not offer to apply; the dead binding still counts toward exit 1."}
+resolves: []
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/63cfb522-ee1d-4d86-ab42-2a133eed737e/scratchpad/p1-full-suite.log}
