@@ -104,3 +104,123 @@ Done as the step asks: `triage_batch_cmd.claim_env(target, facts)` is the one re
 ### no-refactor-p1-t9 · discovery · no-refactor-because P1.T9 (phase 1)
 
 Test scaffolding only: two scenario scripts on the existing _common.sh helpers and one fixture generator; nothing to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · R17 default trust (pr_authors else viewer) makes hosts on different GitHub accounts silently ignore each other's claims (phase 1)
+
+R17 default trust (pr_authors else viewer) makes hosts on different GitHub accounts silently ignore each other's claims.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · with pr_authors set the viewer is excluded from the trusted set, so every own claim is refused (phase 1)
+
+with pr_authors set the viewer is excluded from the trusted set, so every own claim is refused.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · owed_releases/release not batch-scoped: releasing an old batch releases a claim rewritten for a new live batch (phase 1)
+
+owed_releases/release not batch-scoped: releasing an old batch releases a claim rewritten for a new live batch.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · batch dispatch skips the R4 re-read for members already claimed for the batch (phase 1)
+
+batch dispatch skips the R4 re-read for members already claimed for the batch.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · release removes fr:claimed from a pre-edit read; refresh/rewrite never re-add it; orphan labels on error paths (phase 1)
+
+release removes fr:claimed from a pre-edit read; refresh/rewrite never re-add it; orphan labels on error paths.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · check's claims_owed also lists members held elsewhere (phase 1)
+
+check's claims_owed also lists members held elsewhere.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · malformed/untrusted marker counts are never surfaced (phase 1)
+
+malformed/untrusted marker counts are never surfaced.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=in -->
+### p1-r8 · finding [open] (reviewer: in scope) · cancel of a proposed wave'd batch with stale facts skips the release (phase 1)
+
+cancel of a proposed wave'd batch with stale facts skips the release.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=in -->
+### p1-r9 · finding [open] (reviewer: in scope) · R4 race test uses a back-dated rival and has no case where our older marker wins (phase 1)
+
+R4 race test uses a back-dated rival and has no case where our older marker wins.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10 created=2026-10-06T20:40:50+00:00 phase=1 state=open review_scope=out -->
+### p1-r10 · finding [open] (reviewer: out of scope) · batch merge with no ids refuses every queued batch when one is held (phase 1)
+
+Follows R6's literal wording ('the commands refuse with exit 2'); whether a default merge should skip held batches is a spec question, not a defect of this change.
+
+<!-- fr:journal kind=decision scope=plan id=p1-claim-trust-member created=2026-10-06T20:40:50+00:00 phase=1 -->
+### p1-claim-trust-member · decision · Claims trust org MEMBER association (accepted residual from a background security review) (phase 1)
+
+Trusting authorAssociation MEMBER also trusts an org member with read-only repo access. Kept: drivers usually get write access through team membership, which GitHub reports as MEMBER, and dropping it reintroduces p1-r1. GitHub computes the association server-side, so it can't be spoofed; strangers on public repos (NONE/CONTRIBUTOR/FIRST_TIME_CONTRIBUTOR) stay excluded, which is R17's threat. A claim coordinates trusted actors and is not a security boundary between them; pr_authors remains for repos that want an explicit list.
+
+<!-- fr:journal kind=review scope=plan id=p1-review-1 created=2026-10-06T20:40:50+00:00 phase=1 -->
+### p1-review-1 · review · phase 1 independent review: 9 in-scope findings fixed, 1 out of scope (phase 1)
+
+An independent reviewer (separate context, hard tier) read spec R1-R17, plan phase 1 and the diff f0e5b0fb1..HEAD, and ran the claim test files (343 passed, no real ~/.config writes). It confirmed the R4 race, refresh-not-resurrecting, in-place rewrite, release timing, dispatch-before-launch, held cancel, schema bumps, host-id exclusivity and R17 coverage. It raised p1-r1..p1-r9 (in) and p1-r10 (out). The orchestrator verified r1/r2 (model.py trusted_logins), r3 (claim_writes.release ignores the batch) and r5 (label removal decided pre-edit) against the code and gh's comment fields (authorAssociation present). All nine in-scope findings were fixed test-first in 66892d334..4be36b54c, and a new row triage-claims-trusted-authors (R17) was added. Full suite after the fixes: 9867 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: R17 default trust (pr_authors else viewer) makes hosts on different GitHub accounts silently ignore each other's claims (phase 1)
+
+claim_trusted: viewer ∪ pr_authors ∪ authorAssociation OWNER/MEMBER/COLLABORATOR; PR merge guard unchanged (66892d334).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: with pr_authors set the viewer is excluded from the trusted set, so every own claim is refused (phase 1)
+
+claim_trusted always includes the viewer (66892d334).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: owed_releases/release not batch-scoped: releasing an old batch releases a claim rewritten for a new live batch (phase 1)
+
+owed_releases drops keys still owed by a non-releasing batch; release(batch=) skips a marker naming another batch (6a6530956).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: batch dispatch skips the R4 re-read for members already claimed for the batch (phase 1)
+
+dispatch sends every member through claim_writes.claim before the runner launch (09ac39f65).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: release removes fr:claimed from a pre-edit read; refresh/rewrite never re-add it; orphan labels on error paths (phase 1)
+
+release re-reads after removal and restores; refresh/rewrite ensure the label; error paths clean an orphan label (87023cfea).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r6 -->
+### p1-r6-resolved · finding [fixed] · resolves p1-r6: check's claims_owed also lists members held elsewhere (phase 1)
+
+claims_owed skips held-elsewhere members (4d73a05c2).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: malformed/untrusted marker counts are never surfaced (phase 1)
+
+collect warns once per issue with the counts (74031e4ab).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r8 -->
+### p1-r8-resolved · finding [fixed] · resolves p1-r8: cancel of a proposed wave'd batch with stale facts skips the release (phase 1)
+
+cancel treats any batch with a wave as touching the forge (2de99fa80).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r9 -->
+### p1-r9-resolved · finding [fixed] · resolves p1-r9: R4 race test uses a back-dated rival and has no case where our older marker wins (phase 1)
+
+two-writer test with near-simultaneous created_at where ours is older (4be36b54c).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=open resolves=p1-r10 out_of_scope=true -->
+### p1-r10-resolved · finding [out-of-scope] · resolves p1-r10: batch merge with no ids refuses every queued batch when one is held (phase 1)
+
+Not caused by this change's code: it implements R6 as worded. A default merge skipping held batches would be a spec change.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r17-origin-not-on-matrix-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=fixed resolves=p1-r17-origin-not-on-matrix -->
+### p1-r17-origin-not-on-matrix-resolved · finding [fixed] · resolves p1-r17-origin-not-on-matrix: triage-claims-writes does not cite R17 yet (phase 1)
+
+R17 got its own row, triage-claims-trusted-authors (status ci, 9 unit refs), added with fr acceptance add (855dd503c).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r17-default-trust-across-users-resolved created=2026-10-06T20:40:50+00:00 phase=1 state=open resolves=p1-r17-default-trust-across-users out_of_scope=true -->
+### p1-r17-default-trust-across-users-resolved · finding [out-of-scope] · resolves p1-r17-default-trust-across-users: With no pr_authors, two hosts running as different forge users distrust each other's claims (phase 1)
+
+Duplicate of p1-r1, which the independent reviewer raised in scope and which was fixed in 66892d334; this executor-tagged out-of-scope entry is closed in favour of that one rather than reclassified.
