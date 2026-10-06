@@ -7,10 +7,13 @@ we leverage gh's existing auth.
 
 from __future__ import annotations
 
+import contextvars
+import os
 import shlex
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TypeVar
 from urllib.parse import quote
@@ -34,10 +37,84 @@ class GhError(Exception):
         self.stdout = stdout
 
 
+class GhHostRefusedError(GhError):
+    """The host trust gate refused a host gh is not logged into (spec
+    2026-10-06-forge-remainder §4.E). A subclass so a soft-fail method can
+    never mistake it for an ordinary forge miss: `RealGhClient` checks the
+    gate before any method body runs (review p1-r1)."""
+
+
 GH_TIMEOUT_SECONDS = 120.0
 """How long one `gh` call may take before it is killed and fails as a transient
 error. A stalled GraphQL call otherwise blocks its caller indefinitely: the wave
 driver's loop once sat 16 minutes on a single `gh issue list` (gh#909)."""
+
+
+_HOST: contextvars.ContextVar[str | None] = contextvars.ContextVar("fr_gh_host", default=None)
+"""The GitHub host the `gh` calls of the current context run against (spec
+2026-10-06-forge-remainder §4.E). Only `host_scope` sets it — in fr, only
+`RealGhClient(host=...)` — so a bare `fr.gh` call never sees a host."""
+
+
+def _hosts_yml() -> Path:
+    """gh's own `hosts.yml`: `$GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else
+    `~/.config/gh` — gh's lookup order."""
+    if config_dir := os.environ.get("GH_CONFIG_DIR"):
+        return Path(config_dir) / "hosts.yml"
+    if xdg := os.environ.get("XDG_CONFIG_HOME"):
+        return Path(xdg) / "gh" / "hosts.yml"
+    return Path.home() / ".config" / "gh" / "hosts.yml"
+
+
+def known_hosts() -> frozenset[str]:
+    """The hosts gh is logged into — the top-level keys of its `hosts.yml`, the
+    ones the operator ran `gh auth login` for (lowercased). A missing,
+    unreadable or malformed file is the empty set: nothing is trusted."""
+    import yaml
+
+    try:
+        data = yaml.safe_load(_hosts_yml().read_text())
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return frozenset()
+    if not isinstance(data, dict):
+        return frozenset()
+    return frozenset(str(k).lower() for k in data)
+
+
+def _env() -> dict[str, str] | None:
+    """The `env` for a `gh` subprocess: None (inherit, the SaaS path untouched)
+    when no host is in scope, else a copy of `os.environ` plus `GH_HOST`.
+
+    The ONE place the host trust gate is enforced, so every `gh` subprocess
+    path inherits it (plan journal `p1-gh-host-trust-gate`). `GH_HOST` makes gh
+    send `GH_ENTERPRISE_TOKEN` to that host, and the hosts fr threads come from
+    PR/issue URLs and a cloned repo's committed `fr-profiles.yaml` — neither
+    fully trusted. So a host gh is not logged into raises `GhError`, before any
+    subprocess starts, and never falls back to github.com (#892's wrong-target
+    write)."""
+    host = _HOST.get()
+    if host is None:
+        return None
+    if host.lower() not in known_hosts():
+        raise GhHostRefusedError(
+            f"GitHub host {host!r} is not one gh is logged into; run "
+            f"`gh auth login --hostname {host}` (fr will not point gh, or its "
+            "tokens, at an unknown host; a GH_ENTERPRISE_TOKEN alone does not "
+            "count as a login)"
+        )
+    return {**os.environ, "GH_HOST": host}
+
+
+@contextmanager
+def host_scope(host: str | None) -> Iterator[None]:
+    """Run the enclosed `gh` calls against `host` (None: gh's own resolution).
+    The previous value is restored on exit, raise or not, so a host can never
+    leak into a later call."""
+    token = _HOST.set(host)
+    try:
+        yield
+    finally:
+        _HOST.reset(token)
 
 
 def _run_gh(args: list[str]) -> str:
@@ -50,6 +127,7 @@ def _run_gh(args: list[str]) -> str:
             text=True,
             check=True,
             timeout=GH_TIMEOUT_SECONDS,
+            env=_env(),
         )
     except subprocess.TimeoutExpired as exc:
         raise GhError(
@@ -74,6 +152,7 @@ def view_pr_body(ref: str, *, cwd: Path | None = None) -> str:
             text=True,
             check=True,
             cwd=cwd,
+            env=_env(),
         )
     except FileNotFoundError as exc:
         raise GhError("gh is not installed") from exc

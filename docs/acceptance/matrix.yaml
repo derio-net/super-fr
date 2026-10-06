@@ -6675,6 +6675,53 @@ rows:
       reloads keeping expansion, jump switching the tab, two blocked sessions shown
       as needs-you). Manual and post-merge only, so not in CI.'
     verify: post-merge
+  - id: forge-calls-through-adapter
+    capability: forge-adapter
+    acceptance: Every forge call fr's packages make goes through the forge adapter;
+      a tripwire with no allowlist fails CI on any direct gh import or argv outside
+      the GitHub backend
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_forge_adapter.py#test_no_forge_call_bypasses_the_adapter
+      - super-fr:tests/unit/test_tripwire_forge_adapter.py#test_a_planted_gh_import_outside_the_backend_is_reported
+      - super-fr:tests/unit/test_forge_error_kind.py#test_the_bridge_guard_backs_off_on_any_forges_rate_limit
+    status: ci
+    notes: 'super-fr#742: the forge-adapter tripwire has no allowlist; the planted-module
+      test runs its real scan; the fr-vk guard classifies every forge''s errors.'
+  - id: isolation-lookups-every-forge
+    capability: forge-adapter
+    acceptance: The isolation lifecycle's default-branch and PR-for-branch lookups work
+      on GitHub, GitLab and Gitea through the forge adapter, with the same normalised
+      PR state
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_adapter_lookups.py#test_pr_for_branch_sends_todays_argv_and_normalises_the_record
+      - super-fr:tests/unit/test_forge_adapter_lookups.py#test_default_branch_sends_todays_argv_and_reads_the_bare_name
+      - super-fr:tests/unit/test_isolation_network_timeouts.py#test_default_branch_lookup_is_bounded_and_falls_back_on_timeout
+      - super-fr:tests/unit/test_isolation_forge_refusal.py#test_gc_skips_the_refused_workspace_and_finishes_the_sweep
+    status: ci
+    notes: 'super-fr#742: default_branch/pr_for_branch on gh, glab and tea through the
+      adapter, same argv and normalised shape; isolation runs them on its own runner,
+      and a refused host degrades per call site.'
+  - id: triage-batch-self-hosted-host
+    capability: triage-batches
+    acceptance: Triage batch verbs talk to the forge instance the batch's repo lives
+      on, a self-hosted (GitHub Enterprise) instance included, never the SaaS default
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hostclient.py#TestTriageBatchMakeClient::test_a_ghe_repo_url_keeps_its_host
+      - super-fr:tests/unit/test_gh_host.py#test_a_hosted_client_sets_gh_host_on_a_run_gh_path
+      - super-fr:tests/unit/test_gh_host.py#test_an_unknown_host_fails_closed_on_the_run_gh_path
+    status: ci
+    notes: 'super-fr#892: make_client resolves through hostclient.client_for_url, keeping
+      a self-hosted host; RealGhClient threads it as GH_HOST only for a host gh is logged
+      into (fail closed).'
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin

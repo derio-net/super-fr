@@ -35,9 +35,10 @@ choice lives ON THE ISSUE as labels — never in plan files.
 2. **Never-dispatched plan? Search the target repo for evidence the
    work already landed** (the stoa incident: 0/59 steps ticked, but 15
    merged PRs and the deliverable tree existed in the target repo).
-   Check merged PRs mentioning the plan/spec slug and the plan's
-   deliverable paths: `gh pr list --repo <target> --state merged
-   --search "<slug>"`, `gh api repos/<target>/contents/<path>`.
+   List the merged PRs matching the plan/spec slug, and read the file
+   at each of the plan's deliverable paths, on the target's forge (on
+   GitHub: `gh pr list --repo <target> --state merged --search "<slug>"`
+   and `gh api repos/<target>/contents/<path>`).
    Evidence found → STOP and reconcile with the operator; do not
    dispatch.
 3. The plan and its referenced spec MUST be merged to the default
@@ -88,7 +89,7 @@ fr apply <plan-dir> --format json
 |------|---------|--------|
 | 0 | Success or no diff | Relay URLs (if any) |
 | 2 | Usage error, completion-guard refusal (plan locally complete — `fr archive` it, or `--force` to override), or legacy layout (`fr migrate dirs --yes`) | Paste CLI error verbatim; pick the verb it names |
-| 4 | gh / network failure during apply | Check `gh auth status`, retry |
+| 4 | Forge CLI / network failure during apply | Check the forge CLI's auth (on GitHub, `gh auth status`), retry |
 | 5 | Plan parse error (`PlanSchemaError`) | Paste CLI error; inspect plan files |
 
 ## Idempotency

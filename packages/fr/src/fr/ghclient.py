@@ -8,6 +8,7 @@ process spawning.
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -36,6 +37,31 @@ class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec 
         super().__init__(
             f"`{op}` is not supported on the {backend} backend yet (tracked in {tracked_by})"
         )
+
+
+class CommandRunner(Protocol):
+    """How an adapter's lookup runs one CLI command (spec
+    2026-10-06-forge-remainder §4.B). The isolation lifecycle injects its own
+    `Runner`, so its network env and timeout apply; `None` means the adapter's
+    default, `run_cli`."""
+
+    def __call__(self, argv: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]: ...
+
+
+# The exit a shell gives a command it cannot find: what `run_cli` answers for a
+# missing binary, so a lookup reads it like any other failed call.
+_NOT_FOUND_EXIT = 127
+
+
+def run_cli(
+    argv: list[str], *, cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """The adapters' default `CommandRunner`. Never raises for a missing
+    binary: it comes back as exit 127, which every lookup reads as `None`."""
+    try:
+        return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, env=env)
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(argv, _NOT_FOUND_EXIT, stdout="", stderr=str(exc))
 
 
 class GhClient(Protocol):
@@ -213,6 +239,56 @@ class GhClient(Protocol):
         (one of `MERGE_METHODS`, or None) and the methods the repo allows."""
         ...
 
+    # ---- triage collect's reads (spec 2026-10-06-forge-remainder §4.A) ----
+    # Implemented for GitHub with `fr.gh`'s records unchanged; the glab/tea
+    # adapters raise `UnsupportedForgeOperation` for each (triage is
+    # GitHub-only by its own scope).
+
+    def list_repos(self, owner: str, limit: int) -> list[dict[str, Any]]:
+        """Every repo of *owner*, archived ones included (`{name, isArchived}`),
+        so the caller can count the raw list against *limit*."""
+        ...
+
+    def list_issues(
+        self, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
+        """One bulk issue list; *fields* None means the forge's default set."""
+        ...
+
+    def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
+
+    def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]: ...
+
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        """Raw text of *path* at *ref*; raises the backend's error when absent."""
+        ...
+
+    def viewer_login(self) -> str:
+        """The login the forge CLI is authenticated as."""
+        ...
+
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        """The RAW issue record (on GitHub, `gh issue view --json
+        ISSUE_VIEW_FIELDS`: title, url, label objects…) — distinct from the
+        projected `view_issue` that observe, apply and the bridge rely on."""
+        ...
+
+    def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
+        """The default branch of the repository checked out at *cwd*, as the
+        forge reports it; None when the CLI fails, is missing or prints
+        nothing usable. Never raises for a CLI failure (spec
+        2026-10-06-forge-remainder R2)."""
+        ...
+
+    def pr_for_branch(
+        self, branch: str, *, cwd: Path, run: CommandRunner | None = None
+    ) -> dict[str, Any] | None:
+        """The PR/MR whose head is *branch* in the repository at *cwd*:
+        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str, "mergedAt": str|None}`,
+        each forge's own state vocabulary coerced to that one. None when there
+        is none, or the CLI fails, is missing or prints something unparseable."""
+        ...
+
     def issues_enabled(self, repo: str | None = None) -> bool | None:
         """Whether the forge has issues switched on for *repo* (`owner/repo`):
         True / False as the forge answers, None when it cannot say (no repo, a
@@ -272,3 +348,28 @@ class UnsupportedBatchOps:
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         raise self._unsupported("repo_merge_methods")
+
+    # Triage collect's reads (spec 2026-10-06-forge-remainder §4.A).
+
+    def list_repos(self, owner: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_repos")
+
+    def list_issues(
+        self, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
+        raise self._unsupported("list_issues")
+
+    def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_prs")
+
+    def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_open_prs")
+
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        raise self._unsupported("read_file_at_ref")
+
+    def viewer_login(self) -> str:
+        raise self._unsupported("viewer_login")
+
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        raise self._unsupported("view_issue_record")
