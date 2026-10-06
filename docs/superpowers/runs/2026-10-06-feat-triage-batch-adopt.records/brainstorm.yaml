@@ -51,13 +51,13 @@ acceptance:
     acceptance: An operator can put an already-running herdr session under the wave driver for an existing batch without launching a second session; the driver then counts it in flight, finds its PR (even one opened before adoption), merges it, closes it out and closes its tab
     origin: [super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R1]
     status: not-implemented
-    verify: post-merge
+    verify: live
   - id: triage-batch-adopt-branch-rename
     capability: Backlog triage
     acceptance: Adopting a session renames its branch to the batch branch everywhere fr keys on it (local, upstream, remote with its PR, isolation record, marker, run cursor) and tells the session's agent, so the session keeps working on the renamed branch
     origin: [super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R4]
     status: not-implemented
-    verify: post-merge
+    verify: live
   - id: triage-batch-adopt-refusals
     capability: Backlog triage
     acceptance: Adopt prints its plan without --yes and, with --yes, refuses every unsafe case (wrong stage, foreign or unknown tab, working agent, mid-rebase worktree, existing target branch, missing version reservation) before writing anything
