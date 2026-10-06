@@ -29,3 +29,8 @@ Confirms h1. `shared_closing_keywords` policed every line where a keyword and a 
 ### f1 · finding [fixed] · Gate anchored on an effective close; wrapped reference lists read as one line
 
 `fr.record.pr_body`: `_prose_lines` (code-skipping scan, now with fence sentinels) split from `_closing_lines`, whose behaviour for `closing_refs`/`referenced_refs` is unchanged. `shared_closing_keywords` reads `_wrapped_lines` (a line whose last ref is followed only by list glue joins a next line that opens on a ref), and skips a line where no keyword closes a ref directly after it. Red first: 2f1172bef/the #868 commit before 2728f5b63. Full suite: 9694 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=debug id=e1-resolved created=2026-10-06T16:49:00+00:00 state=fixed resolves=e1 -->
+### e1-resolved · finding [fixed] · resolves e1: Live: GitHub never links a keyword across a line break, but a wrapped ref list leaves its tail open
+
+Fixed by f1 (2728f5b63): the wrapped-list tail is read with its line; the split-keyword shape stays prose, as the live evidence shows GitHub links nothing there.
