@@ -3,7 +3,7 @@ run: 2026-10-06-feat-triage-batch-adopt
 workflow: fr-goal-light@1
 branch: feat/triage-batch-adopt
 started: '2026-10-06T16:53:55+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-06T20:09:01+00:00'
+    state: done
+    at: '2026-10-06T21:05:52+00:00'
     members:
     - implement-phase
     - review-phase
@@ -73,13 +73,20 @@ steps:
           tests: adopt-suite.log@33fcf04768bf;tree=7b837a8b3fa532fbec7eb38ba8dbfd23e1d7ed4a21a0404beddf5049e62776ae
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T20:09:01+00:00'
           agent: aa98c794d63b75440
           harness: claude-code
           model: claude-opus-5-5
           session: 36d26c83-85ad-42c7-81bc-305a59e44c4c
+          returned: '2026-10-06T21:05:52+00:00'
+          outcome: done
+        evidence:
+          review: p1-review-1
+          reviewer: aa98c794d63b75440
+          visual: none
+          findings: p1-wall-clock-tests-flake-under-host-load,p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8,p1-r9,p1-r10,p1-r11
   journal-check:
     state: pending
   deliver:

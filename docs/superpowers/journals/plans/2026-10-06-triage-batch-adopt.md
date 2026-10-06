@@ -109,3 +109,123 @@ recorded_branch is the whole change; the three readers each call it once
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 no refactor step: skill prose, matrix rows, change fragment and the gate
+
+<!-- fr:journal kind=review scope=plan id=p1-review-1 created=2026-10-06T21:05:51+00:00 phase=1 -->
+### p1-review-1 · review · phase 1 code review: 11 findings p1-r1..p1-r11, all in scope (phase 1)
+
+Dispatched reviewer read diff ccb71a11..HEAD, ran 261 targeted tests (pass), checked R8 ordering, R10 resumability, shell safety (argv only), conventions (no version edits, fragment, skill 119 lines, mirrors in sync, import direction). Raised p1-r1..p1-r11, all in scope; all fixed in this step (c6f0f541, 9a37cc9a, 94d5c64c, spec §A).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · adopt copied/closed PRs and accepted a batch-branch PR without distrust()/pr_authors (phase 1)
+
+adopt copied/closed PRs and accepted a batch-branch PR without distrust()/pr_authors
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · first-run event `at` could exceed the new PR's second-truncated createdAt (phase 1)
+
+first-run event `at` could exceed the new PR's second-truncated createdAt
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · no refusal for --branch being the default branch (would rename and delete main) (phase 1)
+
+no refusal for --branch being the default branch (would rename and delete main)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · failed cursor commit not resumable (phase 1)
+
+failed cursor commit not resumable
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · marker/record rewrites non-atomic; marker not validated against toplevel (phase 1)
+
+marker/record rewrites non-atomic; marker not validated against toplevel
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · supersede-comment detection accepted any author (phase 1)
+
+supersede-comment detection accepted any author
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · delete_branch did not URL-quote the branch (phase 1)
+
+delete_branch did not URL-quote the branch
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r8 · finding [open] (reviewer: in scope) · failure inside a --yes step exited 2 without the done/remain report (phase 1)
+
+failure inside a --yes step exited 2 without the done/remain report
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r9 · finding [open] (reviewer: in scope) · R9 worktree refusals skipped when --branch already is the batch branch (phase 1)
+
+R9 worktree refusals skipped when --branch already is the batch branch
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r10 · finding [open] (reviewer: in scope) · test gaps (several agents, plain branch, dispatched/pr-open stage, loose resume assertion) (phase 1)
+
+test gaps (several agents, plain branch, dispatched/pr-open stage, loose resume assertion)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r11 created=2026-10-06T21:05:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r11 · finding [open] (reviewer: in scope) · --checkout single-path vs spec §A REPO=PATH, departure not journaled (phase 1)
+
+--checkout single-path vs spec §A REPO=PATH, departure not journaled
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: adopt copied/closed PRs and accepted a batch-branch PR without distrust()/pr_authors (phase 1)
+
+Fixed c6f0f541: both branches' PRs gated by the driver's trust rule before any write; fork and foreign-author cases tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: first-run event `at` could exceed the new PR's second-truncated createdAt (phase 1)
+
+Fixed c6f0f541: `at` truncated to seconds, floored at the last event, clamped to the created PR's createdAt; same-second and skewed-clock tests.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: no refusal for --branch being the default branch (would rename and delete main) (phase 1)
+
+Fixed c6f0f541: default branch and main-worktree branch refused before any write; rename/delete steps re-check.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: failed cursor commit not resumable (phase 1)
+
+Fixed 9a37cc9a: uncommitted cursor naming the new branch counts as not done and is committed on resume.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: marker/record rewrites non-atomic; marker not validated against toplevel (phase 1)
+
+Fixed 9a37cc9a: save_state atomic for every caller; marker for another toplevel is not rewritten.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r6 -->
+### p1-r6-resolved · finding [fixed] · resolves p1-r6: supersede-comment detection accepted any author (phase 1)
+
+Fixed c6f0f541: only the operator's own comment counts.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: delete_branch did not URL-quote the branch (phase 1)
+
+Fixed 94d5c64c: quoted, tested with `#`.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r8 -->
+### p1-r8-resolved · finding [fixed] · resolves p1-r8: failure inside a --yes step exited 2 without the done/remain report (phase 1)
+
+Fixed c6f0f541: any failure after the first write reports and exits 1.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r9 -->
+### p1-r9-resolved · finding [fixed] · resolves p1-r9: R9 worktree refusals skipped when --branch already is the batch branch (phase 1)
+
+Fixed 9a37cc9a/c6f0f541: refusals apply; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r10 -->
+### p1-r10-resolved · finding [fixed] · resolves p1-r10: test gaps (several agents, plain branch, dispatched/pr-open stage, loose resume assertion) (phase 1)
+
+Fixed c6f0f541/9a37cc9a: all four covered, exact resume counts.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r11-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=fixed resolves=p1-r11 -->
+### p1-r11-resolved · finding [fixed] · resolves p1-r11: --checkout single-path vs spec §A REPO=PATH, departure not journaled (phase 1)
+
+Fixed in the spec: §A now states adopt takes dispatch's single-path --checkout, because a batch is always one repo.
+
+<!-- fr:journal kind=finding scope=plan id=p1-wall-clock-tests-flake-under-host-load-resolved created=2026-10-06T21:05:51+00:00 phase=1 state=open resolves=p1-wall-clock-tests-flake-under-host-load out_of_scope=true -->
+### p1-wall-clock-tests-flake-under-host-load-resolved · finding [out-of-scope] · resolves p1-wall-clock-tests-flake-under-host-load: Two wall-clock-budget tests fail in the full suite under heavy host load and pass alone (phase 1)
+
+Not caused by this change: test_run_idle_guard::test_fails_open_when_fr_hangs_and_does_not_hang_with_it and test_records_commit::...stuck_index_lock_quickly assert wall-clock limits and failed only at host load 130-226; both pass alone (logs adopt-fail6.log, adopt-idle-guard-rerun.log). Neither touches adopt code. Worth an issue: wall-clock tests flake under host load.
