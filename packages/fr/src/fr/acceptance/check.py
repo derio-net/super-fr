@@ -121,8 +121,8 @@ def _resolve_ref(row_id: str, ref: str, base: Path, result: CheckResult) -> None
     twin = archive_twin(path)
     if twin and (base / twin).exists():
         result.warnings.append(
-            f"row {row_id}: {ref} moved to {twin} (spec archived) — links "
-            f"auto-resolve; update the matrix ref when convenient"
+            f"row {row_id}: {ref} names an archived path (now {twin}) — it "
+            f"survived an archive fr did not perform; retarget it"
         )
         return
     result.errors.append(f"row {row_id}: ref does not resolve: {ref}")

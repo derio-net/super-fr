@@ -43,10 +43,13 @@ def test_the_writer_writes_schema_5_and_the_reader_reads_1_to_5() -> None:
     assert Judgements.model_validate({"schema": 4}).schema_ == 4
 
 
-def test_the_committed_schema_4_judgements_load_under_the_current_fr() -> None:
+def test_the_committed_judgements_load_under_the_current_fr() -> None:
+    # The driver's wave export rewrites this file at whatever schema the exporting fr
+    # writes (4 at #976, 5 since #995), so pin only that the current fr reads it, never
+    # a version: a version pin turns every schema bump's first export PR red.
     path = Path(__file__).parents[2] / "docs/triage/derio-net--super-fr/judgements.yaml"
     got = load_judgements(path)
-    assert got.schema_ == 4 and got.schema_ in JUDGEMENTS_READS
+    assert got.schema_ in JUDGEMENTS_READS
 
 
 def test_exports_load_on_schema_4() -> None:

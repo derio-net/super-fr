@@ -27,6 +27,7 @@ from fr.triage.batch import (
     ForeignPr,
     QueueEntry,
     batch_item_id,
+    last_dispatch,
     recorded_branch,
 )
 from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
@@ -35,6 +36,10 @@ DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
 """How long after a merge the close-out starts when no release commit followed it
 (a PR with no change fragment releases nothing)."""
+STALE_CLOSEOUT = timedelta(minutes=15)
+"""How long a recorded close-out may go with no live tab and no archive PR before the
+driver says so (gh#1025): long enough to cover the record-then-start window of gh#883
+and a runner's own lag in reporting a tab it just opened."""
 
 DEFAULT_MAX_INFLIGHT = 4
 
@@ -173,6 +178,10 @@ class Snapshot:
     # The batches whose open members all await their live walk (`batch_awaits_live`):
     # a planned one is held, never dispatched (spec §F, R18).
     awaiting: frozenset[str] = frozenset()
+    # The batches with a recorded close-out whose item `existing` was read for (gh#1025):
+    # only for these is "not in `existing`" evidence that no tab holds it. Plan mode
+    # reads no runner, so it probes none and never calls a close-out stale.
+    closeout_probed: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -287,6 +296,34 @@ def checks_verdict(
     if not all_checks.get("pass", 0):
         return "pending", ("no check reported yet",)
     return "green", ()
+
+
+def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Action | None:
+    """A close-out recorded but, it seems, never started (gh#1025): the event is older
+    than `STALE_CLOSEOUT`, the runner holds no tab for it and no archive PR names it.
+    A driver killed between the record (gh#883) and the tab leaves exactly this, and
+    the batch would read `closing` forever. Said once; the operator decides."""
+    if snap.now - event.at < STALE_CLOSEOUT:
+        return None
+    item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
+    if item in snap.existing:
+        return None
+    key = f"stale-closeout\0{batch.id}\0{event.at.isoformat()}"
+    if key in snap.warned:
+        return None
+    since = event.at.strftime("%Y-%m-%dT%H:%M")
+    last = last_dispatch(batch)
+    pickup = (
+        f"--run {event.run}"
+        if event.run
+        else f"--branch {last.branch if last else batch_branch(batch)}"
+    )
+    return Action(
+        "warn", batch.id,
+        f"close-out {item} was recorded at {since}Z but no runner holds it and no archive "
+        f"PR names it; run it by hand: `fr pickup {pickup}`",
+        head=key,
+    )  # fmt: skip
 
 
 def closeout_due(*, released: bool, merged_at: datetime | None, now: datetime) -> bool:
@@ -866,6 +903,10 @@ def drive_pass(snap: Snapshot) -> Pass:
                 actions.append(Action("adopt", batch.id, f"archive PR #{landed.number} merged",
                                       pr=landed.number, archived=landed.number))  # fmt: skip
             continue
+        if not mine and batch.id in snap.closeout_probed:
+            stale = _stale_closeout(batch, event, snap)
+            if stale is not None:
+                actions.append(stale)
         ready = [p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"]
         default = snap.default_branch.get(snap.repos.get(batch.id, ""), "")
         good = next((p for p in ready if default and not _wrong_base(p, default)), None)

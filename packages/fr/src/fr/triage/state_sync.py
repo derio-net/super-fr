@@ -6,7 +6,8 @@ the three YAML files, each page's manifest directory (manifest and fragment file
 the stored snapshots and the authored fragment sources. Facts files and the rendered
 pages are rebuilt from the forge and never travel, in either direction.
 
-Copies keep the source's mtime (`shutil.copy2`) and never delete a destination file.
+Copies keep the source's mode and mtime (as `shutil.copy2` did) and never delete a
+destination file.
 A destination file byte-identical to its source is skipped as `identical`: it is
 neither copied nor overwritten. Import skips a state file whose mtime is newer than
 the repo copy's unless forced. That check reads file mtimes only, and git keeps none:
@@ -17,7 +18,9 @@ overwritten (p4-r5). Export before you pull, or compare first.
 A symlink is never followed, in either direction and at any depth, and a destination
 that is (or sits under) a symlink is never written through: export feeds a commit the
 driver pushes, and import reads a cloned repo (p4-sec-symlink-follow). Both are
-skipped and reported.
+skipped and reported. The copy itself opens every component with `O_NOFOLLOW` from
+its parent's descriptor, so a path swapped for a symlink after those checks is
+skipped the same way rather than followed (gh#1003).
 
 The repo-side root is `<base>/<rel>`, and only *rel* (the parts fr appends: the scope
 name, the configured export path) is checked by `contained`: no `..`, no symlinked
@@ -27,9 +30,11 @@ base itself is trusted as given: on macOS `/var` and `/tmp` are symlinks.
 
 from __future__ import annotations
 
+import errno
 import filecmp
 import os
 import shutil
+import stat
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -141,6 +146,84 @@ def _same(a: Path, b: Path) -> bool:
         return False  # unreadable: never "identical"; the copy reports the error
 
 
+class _SymlinkError(Exception):
+    """A path component turned out to be a symlink when it was opened."""
+
+
+def _open(name: str, flags: int, *, dir_fd: int, mode: int = 0o777) -> int:
+    """`os.open` of *name* under *dir_fd* with `O_NOFOLLOW`: `_SymlinkError` when the
+    refusal was a symlink, the `OSError` itself otherwise."""
+    try:
+        return os.open(name, flags | os.O_NOFOLLOW | os.O_CLOEXEC, mode, dir_fd=dir_fd)
+    except OSError as exc:
+        try:
+            link = stat.S_ISLNK(os.lstat(name, dir_fd=dir_fd).st_mode)
+        except OSError:
+            raise exc from None
+        if link:
+            raise _SymlinkError(name) from None
+        raise
+
+
+def _open_dir(root: Path, parts: tuple[str, ...], *, create: bool) -> int:
+    """A descriptor for `root/<parts>`, each part opened from its parent's descriptor
+    and never through a symlink; *create* makes the missing ones, *root* included.
+    *root* is trusted as given, like the base `contained` leaves alone."""
+    if create:
+        root.mkdir(parents=True, exist_ok=True)
+    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        for part in parts:
+            if create:
+                try:
+                    os.mkdir(part, dir_fd=fd)
+                except FileExistsError:
+                    pass
+            child = _open(part, os.O_RDONLY | os.O_DIRECTORY, dir_fd=fd)
+            os.close(fd)
+            fd = child
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+def _copy(src: Path, dest: Path, rel: str) -> str | None:
+    """Copy `src/rel` to `dest/rel` from descriptors, keeping the source's mode and
+    times as `shutil.copy2` did; the skip reason when a component is a symlink by the
+    time it is opened, None once copied. The checks before it read the tree by name,
+    so a path swapped after them must still never be followed (gh#1003)."""
+    *dirs, name = PurePosixPath(rel).parts
+    try:
+        parent = _open_dir(src, tuple(dirs), create=False)
+        try:  # O_NONBLOCK: a fifo swapped in must not hang the open
+            source = _open(name, os.O_RDONLY | os.O_NONBLOCK, dir_fd=parent)
+        finally:
+            os.close(parent)
+    except _SymlinkError:
+        return SYMLINK
+    with os.fdopen(source, "rb") as reader:
+        info = os.fstat(reader.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError(errno.EINVAL, "not a regular file")
+        try:
+            parent = _open_dir(dest, tuple(dirs), create=True)
+            try:
+                target = _open(
+                    name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, dir_fd=parent, mode=0o600
+                )
+            finally:
+                os.close(parent)
+        except _SymlinkError:
+            return SYMLINK_DEST
+        with os.fdopen(target, "wb") as writer:
+            shutil.copyfileobj(reader, writer)
+            writer.flush()
+            os.fchmod(writer.fileno(), stat.S_IMODE(info.st_mode))
+            os.utime(writer.fileno(), ns=(info.st_atime_ns, info.st_mtime_ns))
+    return None
+
+
 def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
     copied: list[str] = []
     skipped: list[Skipped] = []
@@ -159,11 +242,13 @@ def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
             skipped.append(Skipped(rel, NEWER))
             continue
         try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target, follow_symlinks=False)
+            refused = _copy(src, dest, rel)
         except OSError as exc:  # p4-r10: a clean refusal naming the file, never a traceback
             why = exc.strerror or type(exc).__name__
             raise TriageError(f"cannot copy {rel} to {dest}: {why}") from exc
+        if refused:
+            skipped.append(Skipped(rel, refused))
+            continue
         copied.append(rel)
     return SyncReport(copied=tuple(copied), skipped=tuple(skipped))
 

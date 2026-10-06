@@ -49,7 +49,7 @@ from fr.journal.model import (
     appended_journal_text,
     journal_path,
     parse_journal,
-    resolution_record_id,
+    resolution_entry,
     spec_journal_slug,
 )
 from fr.record.model import StepRecord, allowed_sections, present_sections
@@ -249,11 +249,6 @@ _STAMP = frozenset({"created"})
 _STAMP_AND_ID = frozenset({"created", "id"})
 
 
-_CARRIED_OPEN = frozenset({"deferred", "out-of-scope"})
-"""Resolution states written `state=open` plus a header token, so an older fr
-reads the finding as open (fail closed) rather than failing to parse."""
-
-
 def _journal_writes(
     ctx: _Context, record: StepRecord, overlay: _Overlay, repo_root: Path
 ) -> tuple[list[JournalEntry], dict[str, int], list[str]]:
@@ -364,18 +359,15 @@ def _journal_writes(
     for res in record.resolves:
         target_entry = finding(res.id)
         try:
-            entry = JournalEntry(
-                kind="finding",
+            entry = resolution_entry(
+                target=target_entry,
                 scope=scope,  # type: ignore[arg-type]
-                id=resolution_record_id(res.id, taken),
+                taken=taken,
                 created=stamp,
-                phase=res.phase if res.phase is not None else ctx.phase,
-                title=f"resolves {res.id}: {target_entry.title}",
+                state=res.state,
                 body=res.body,
-                state="open" if res.state in _CARRIED_OPEN else res.state,  # type: ignore[arg-type]
-                resolves=res.id,
+                phase=res.phase if res.phase is not None else ctx.phase,
                 tracked_by=res.tracked_by,
-                out_of_scope=res.state == "out-of-scope",
                 answered_by=res.answered_by,
             )
         except ValueError as e:

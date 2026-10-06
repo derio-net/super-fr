@@ -4,11 +4,12 @@ captures:
 - host: h-0a246dfc
   harness: claude-code
   mode: devcontainer
-  captured_at: '2026-10-04T09:04:18+00:00'
+  captured_at: '2026-10-06T20:31:45+00:00'
   at:
   - resolve:brainstorm
   - deliver
   - closeout
+  - backfill
   sessions:
   - session: 5a61e23e-3e96-437f-bd16-01a8661a14b8
     role: main
@@ -18,43 +19,50 @@ captures:
         cache_write: 389750
         cache_read: 16993276
         output: 61837
-        usd: null
-        usd_source: none
+        usd: 8.062769600000003
+        usd_source: exact
       claude-sonnet-5-5:
         input: 54
         cache_write: 222596
         cache_read: 2318721
         output: 363
-        usd: null
-        usd_source: none
+        usd: 1.4600037000000006
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.0011979999999999998
+        usd_source: exact
     activity:
       implementation:
-        usd: null
+        usd: 3.4223314975312764
         turns: 69
       other:
-        usd: null
+        usd: 3.252753036189317
         turns: 42
       paperwork:
-        usd: null
+        usd: 2.848886766279402
         turns: 35
     steps:
       (outside run):
-        usd: null
+        usd: 2.2171142286703525
         turns: 23
       brainstorm:
-        usd: null
+        usd: 1.1779534003071155
         turns: 17
       spec-review:
-        usd: null
+        usd: 1.1454547761153588
         turns: 26
       plan:
-        usd: null
+        usd: 0.7978770704886877
         turns: 9
       implement:
-        usd: null
+        usd: 3.6819699211646877
         turns: 62
       deliver:
-        usd: null
+        usd: 0.5036019032537951
         turns: 6
     briefs:
       a0bdb0d8ca051c1e9: 1814

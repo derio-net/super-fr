@@ -4,56 +4,65 @@ captures:
 - host: h-0a060526
   harness: claude-code
   mode: devcontainer
-  captured_at: '2026-10-06T15:52:28+00:00'
+  captured_at: '2026-10-06T20:31:53+00:00'
   at:
   - resolve:brainstorm
   - deliver
+  - closeout
+  - backfill
   sessions:
   - session: a4557f5a-3a30-4673-856d-3f9329d47f77
     role: main
     models:
       claude-opus-5-5:
-        input: 1680
-        cache_write: 2765210
-        cache_read: 130721786
-        output: 169668
-        usd: null
-        usd_source: none
+        input: 1810
+        cache_write: 3089320
+        cache_read: 145547317
+        output: 184815
+        usd: 67.40039359999993
+        usd_source: exact
       claude-sonnet-5-5:
         input: 634
         cache_write: 1808310
         cache_read: 35079565
         output: 3998
-        usd: null
-        usd_source: none
+        usd: 16.220505699999993
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.024170999999999998
+        usd_source: exact
     activity:
       implementation:
-        usd: null
-        turns: 711
+        usd: 40.92279085710511
+        turns: 732
       other:
-        usd: null
-        turns: 259
+        usd: 25.93400571536829
+        turns: 297
       paperwork:
-        usd: null
-        turns: 186
+        usd: 16.788273727526576
+        turns: 191
     steps:
       (outside run):
-        usd: null
-        turns: 3
+        usd: 7.38603226402882
+        turns: 67
       brainstorm:
-        usd: null
+        usd: 4.078893451172046
         turns: 56
       spec-review:
-        usd: null
+        usd: 3.2019362102465534
         turns: 52
       plan:
-        usd: null
+        usd: 0.936195907810865
         turns: 6
       implement:
-        usd: null
+        usd: 66.15058167100938
         turns: 999
       deliver:
-        usd: null
+        usd: 1.891430795732384
         turns: 12
     briefs:
       a9745e2c6be5d5f4c: 2215
@@ -78,3 +87,4 @@ captures:
       phase/7/implement-phase: 7057
       phase/7/review-phase: 3177
       adb1b8fa15b281db8: 5731
+      aa008e24c5069dcb6: 5079

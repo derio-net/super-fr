@@ -4,7 +4,16 @@
               materialize it into any on-disk OpenCode agent files it affects
               (spec 2026-09-20-opencode-tier-binding-reaches-dispatch §3.A) —
               a binding a caller answers must take effect in the run that
-              made it, not wait for the next install.
+              made it, not wait for the next install. On OpenCode it first
+              probes the model live (spec 2026-10-06-model-binding-churn R1);
+              a model the provider no longer serves is refused, or on a
+              terminal replaced by a proposal the operator accepts.
+              ``--no-probe`` skips the probe and says so.
+- ``check``   report every bound harness's bindings — live, dead, unknown or
+              unprobed — with a proposed replacement for each dead one and any
+              upgrade offer for a live one; on a terminal, ask whether to apply
+              each (R5). Off a terminal it only reports, and exits 1 on a dead
+              binding.
 - ``get``     print the raw config (or one harness's tiers).
 - ``resolve`` print the model for a harness+tier (repo override > user);
               prints nothing + exits 0 when unbound, so fr-goal can detect
@@ -17,9 +26,18 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 import typer
 from rich.console import Console
 
+import fr.bindings
+from fr.artifacts import trigger
+from fr.bindings.apply import apply_binding
+from fr.bindings.choose import Choice
+from fr.bindings.health import BindingHealth, check_bindings, propose_for
+from fr.bindings.probe import default_probe_cache
+from fr.bindings.wording import Substitution, proposal_text, substitution_line
 from fr.commands.common import resolve_repo_root
 from fr.models import (
     REPO_MODELS_REL,
@@ -27,7 +45,6 @@ from fr.models import (
     default_models_path,
     load_models,
     resolved_config,
-    set_binding,
 )
 from fr.opencode_agents import MaterializeResult, default_config_home, materialize_agents
 
@@ -91,6 +108,30 @@ def _report_changes(result: MaterializeResult) -> None:
             console.print(f"  {change.path}: model: {change.new_model}")
 
 
+def _apply_binding(
+    harness: str,
+    tier: str,
+    model: str,
+    *,
+    old: str | None = None,
+    reason: Literal["retired", "upgrade"] | None = None,
+    rule: str | None = None,
+) -> None:
+    """THE one write path for an accepted binding: `set_binding`, then
+    `materialize_agents`, then `_report_changes`, then — when this replaces
+    ``old`` — R11's loud line. `set` and `check` both end here, so a binding
+    the operator accepts always takes effect in the run that made it."""
+    path = default_models_path()
+    result = apply_binding(path, harness, tier, model, repo_cfg=_repo_cfg())
+    console.print(f"set {harness}/{tier} → {model} ({path})")
+    _report_changes(result)
+    if old is not None and reason is not None and rule is not None:
+        err_console.print(
+            substitution_line(Substitution(harness, tier, old, model, reason, "operator", rule)),
+            style="bold yellow",
+        )
+
+
 @models_app.command("set")
 def set_cmd(
     harness: str = typer.Option(..., "--harness", help="e.g. claude-code | opencode | hermes."),
@@ -102,14 +143,128 @@ def set_cmd(
         "start`/`advance`, which warn on a mismatch; never dispatched to).",
     ),
     model: str = typer.Option(..., "--model", help="Concrete model id for this harness+tier."),
+    no_probe: bool = typer.Option(
+        False,
+        "--no-probe",
+        help="Persist without asking the provider whether it still serves the model.",
+    ),
 ) -> None:
     """Persist a binding to ~/.config/fr/models.yaml, then materialize it
-    into any on-disk OpenCode agent files it affects."""
-    path = default_models_path()
-    set_binding(path, harness, tier, model)
-    console.print(f"set {harness}/{tier} → {model} ({path})")
-    result = materialize_agents(default_config_home(), models_cfg=_resolved_config())
-    _report_changes(result)
+    into any on-disk OpenCode agent files it affects. On OpenCode the model
+    is probed live first; a dead one is refused (or, on a terminal, offered a
+    replacement)."""
+    # A binding value reaches an argv (and can come from a tracked file), so an
+    # option-shaped one is refused before anything is written. OpenCode ids must be
+    # provider/model; other harnesses take bare names (`claude-opus-5-5`) and are
+    # refused only for a leading '-' or whitespace.
+    if harness == "opencode":
+        ok, shape = fr.bindings.valid_model_id(model), "provider/model"
+    else:
+        ok = not model.startswith("-") and not any(c.isspace() for c in model) and bool(model)
+        shape = "a name with no leading '-' and no whitespace"
+    if not ok:
+        err_console.print(f"error: {model!r} is not a valid model id (expected {shape})")
+        raise typer.Exit(code=2)
+    prober = None if no_probe else fr.bindings.prober_for(harness)
+    if no_probe:
+        err_console.print(f"probe skipped (--no-probe): {harness}/{tier} → {model} is unchecked")
+    elif prober is None:
+        console.print("not probed (live probing covers opencode only)")
+    else:
+        result = prober.probe(model)
+        if result.verdict == "unknown":
+            err_console.print(
+                f"WARNING: probe inconclusive for {model} ({result.detail}); persisting anyway",
+                style="yellow",
+            )
+        elif result.verdict == "dead":
+            chosen = propose_for(
+                tier,
+                model,
+                result.hint,
+                {**_resolved_config().get(harness, {}), tier: model},
+                prober,
+            )
+            err_console.print(f"error: the provider does not serve {model}: {result.detail}")
+            proposal = chosen if isinstance(chosen, Choice) else None
+            if proposal is None:
+                err_console.print(f"no replacement found ({chosen.reason})")  # type: ignore[union-attr]
+            else:
+                err_console.print(f"proposed replacement: {proposal_text(proposal)}")
+            if proposal is None or not trigger.is_interactive():
+                raise typer.Exit(code=2)
+            if not typer.confirm(
+                f"bind {harness}/{tier} to {proposal.model} instead?", default=True
+            ):
+                raise typer.Exit(code=2)
+            _apply_binding(
+                harness, tier, proposal.model, old=model, reason="retired", rule=proposal.rule
+            )
+            return
+    _apply_binding(harness, tier, model)
+
+
+def _bound_harnesses(only: str | None) -> list[str]:
+    harnesses = sorted(_resolved_config())
+    return [h for h in harnesses if only is None or h == only]
+
+
+def _health_line(harness: str, h: BindingHealth) -> str:
+    line = f"{harness}/{h.tier}: {h.model} — {h.verdict}"
+    if h.verdict in ("unknown", "dead") and h.detail:
+        line += f" ({h.detail})"
+    if h.proposal is not None:
+        line += f" → {proposal_text(h.proposal)}"
+    elif h.no_choice is not None:
+        line += f" → no replacement ({h.no_choice.reason}; tried {len(h.no_choice.tried)})"
+    for o in h.offers:
+        line += f" — offer: {o.offer}"
+    return line
+
+
+@models_app.command("check")
+def check_cmd(
+    harness: str | None = typer.Option(None, "--harness", help="Limit to one harness."),
+) -> None:
+    """Report every binding's live state, with a replacement for each dead one
+    and any upgrade offer. On a terminal, ask whether to apply each; off a
+    terminal only report, and exit 1 when a binding is dead."""
+    repo_cfg, user_cfg = _repo_cfg(), load_models(default_models_path())
+    if not _bound_harnesses(harness):
+        console.print("no bindings")
+        return
+    interactive = trigger.is_interactive()
+    dead_left = False
+    for name in _bound_harnesses(harness):
+        prober = fr.bindings.prober_for(name)
+        cache = default_probe_cache() if prober is not None else None
+        for h in check_bindings(name, repo_cfg, user_cfg, prober, fresh=True, cache=cache):
+            console.print(_health_line(name, h))
+            if h.verdict not in ("dead", "live"):
+                continue
+            # (new, reason, rule, default answer)
+            wants: tuple[str, Literal["retired", "upgrade"], str, bool] | None = None
+            if h.proposal is not None:
+                wants = (h.proposal.model, "retired", h.proposal.rule, True)
+            elif h.offers:
+                wants = (h.offers[0].offer, "upgrade", "family", False)
+            fixed = False
+            if wants is not None and interactive:
+                if h.layer == "repo":
+                    err_console.print(
+                        f"  {name}/{h.tier} comes from {REPO_MODELS_REL}, a tracked file fr "
+                        "never rewrites; fix it there",
+                        style="yellow",
+                    )
+                else:
+                    new, reason, rule, default = wants
+                    if typer.confirm(f"  bind {name}/{h.tier} to {new}?", default=default):
+                        _apply_binding(name, h.tier, new, old=h.model, reason=reason, rule=rule)
+                        fixed = True
+            if h.verdict == "dead" and not fixed:
+                dead_left = True
+    if dead_left:
+        raise typer.Exit(code=1)
 
 
 @models_app.command("get")

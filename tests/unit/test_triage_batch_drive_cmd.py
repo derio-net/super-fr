@@ -2525,8 +2525,10 @@ class GitDriveCheckout(Checkout):
         return REPO
 
 
-@pytest.fixture
-def git_checkout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World) -> GitDriveCheckout:
+@pytest.fixture(name="git_checkout")
+def git_checkout_fixture(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World
+) -> GitDriveCheckout:
     world.config = EXPORT_CONFIG
     origin = tmp_path / "git" / "origin.git"
     origin.parent.mkdir()
