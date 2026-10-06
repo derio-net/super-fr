@@ -1,0 +1,99 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-triage-claims
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: finding
+  id: p3-r1
+  title: capture script never rendered a card with an expired own claim, and did not assert no horizontal
+    scroll
+  body: capture script never rendered a card with an expired own claim, and did not assert no horizontal
+    scroll.
+  review_scope: in
+  phase: 3
+- kind: finding
+  id: p3-r2
+  title: publish_board substituted placeholders sequentially, re-expanding a value that contains another
+    placeholder
+  body: publish_board substituted placeholders sequentially, re-expanding a value that contains another
+    placeholder.
+  review_scope: in
+  phase: 3
+- kind: finding
+  id: p3-r3
+  title: publish_board docstring claimed nothing raises while scope_id/default_board_name can raise TriageError
+  body: publish_board docstring claimed nothing raises while scope_id/default_board_name can raise TriageError.
+  review_scope: in
+  phase: 3
+- kind: finding
+  id: p3-r4
+  title: publish runs with the inherited env and cwd = state dir, undocumented and untested
+  body: publish runs with the inherited env and cwd = state dir, undocumented and untested.
+  review_scope: in
+  phase: 3
+- kind: decision
+  id: p3-publish-in-gitseam
+  phase: 3
+  title: The publish command runs through gitseam.run_publish
+  body: gitseam is the one module triage starts processes from (a tripwire bans subprocess elsewhere),
+    and it already runs repo-declared commands (post_merge). An operator-declared publish argv is the
+    same kind of call. The reviewer judged this the right home; the git-specific names (GitError) are
+    a known misfit, not renamed here.
+- kind: review
+  id: p3-review-1
+  phase: 3
+  title: 'phase 3 independent review: 4 in-scope findings fixed; visual states checked on fresh shots'
+  body: 'An independent reviewer (separate context, standard tier) checked R13/R14/R16/R17 against §3.G/§3.I
+    and the diff f7e106aa9..HEAD: held group and card expiry, the shared held formatter, page tokens and
+    gutter, publish with no shell, a 120 s timeout and warn-once, default names, and skill accuracy with
+    mirrors in sync. It judged the gitseam home legitimate. It raised p3-r1..p3-r4 (in); all fixed (40b96ffc7,
+    75d565cf6, capture script). On a follow-up it re-ran the updated capture into its own directory and
+    opened six fresh shots covering every named state and interaction; scrollWidth was 400 at phone width.
+    Full suite: 9924 passed, 105 skipped.'
+resolves:
+- id: p3-r1
+  state: fixed
+  body: Capture now renders the expired own-claim card and asserts scrollWidth <= 400 at phone width;
+    the reviewer re-ran it and opened fresh shots (script outside the repo).
+- id: p3-r2
+  state: fixed
+  body: Single-pass regex substitution; x{scope_id} and unknown braces stay literal, a spaced name stays
+    one argument (40b96ffc7).
+- id: p3-r3
+  state: fixed
+  body: Docstring states what raises and that the caller warns (40b96ffc7).
+- id: p3-r4
+  state: fixed
+  body: Documented in run_publish/publish_board, spec §3.G and the fr-triage skill (mirrors synced); a
+    test pins cwd and env (75d565cf6).
+evidence:
+  review: p3-review-1
+  reviewer: a26b5671c776c2fc2
+  model: claude-opus-5-5
+visual:
+- row: triage-claims-board-publish
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/cap.py
+  shots:
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/held-1280-light.png
+    shows:
+    - held-elsewhere-group
+    - expired-claim-marked
+    - card-claim-expiry
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/empty-1280-light.png
+    shows:
+    - held-elsewhere-empty
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/expired-1280-light.png
+    shows:
+    - card-claim-expiry
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/expired-400-dark.png
+    shows:
+    - phone-width
+    - dark-theme
+    - card-claim-expiry
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/held-1280-light-link-hover.png
+    shows:
+    - open-held-issue-link
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/held-link-clicked.png
+    shows:
+    - open-held-issue-link
