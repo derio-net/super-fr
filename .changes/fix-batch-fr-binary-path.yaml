@@ -1,2 +1,0 @@
-bump: minor
-summary: "A harness's shell and its hooks now run the same fr: the hooks/plugin pin the fr they resolved (FR_HARNESS_FR, via a new SessionStart hook on Claude Code and shell.env on OpenCode), and fr refuses at CLI entry when the shell reached a different one through PATH (a venv fr warns); new `fr --identity`, bypass FR_SKIP_IDENTITY=1 (super-fr#746)."
