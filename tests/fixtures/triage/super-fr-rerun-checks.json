@@ -1,0 +1,352 @@
+[
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:53:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522255029/job/112470359502",
+    "name": "status",
+    "startedAt": "2026-10-06T19:53:21Z",
+    "status": "COMPLETED",
+    "workflowName": "PR spec status (self)"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:01:57Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365765",
+    "name": "lint",
+    "startedAt": "2026-10-06T17:01:45Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:54:05Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470381539",
+    "name": "lint",
+    "startedAt": "2026-10-06T19:53:53Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:00:17Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027097/job/112394362958",
+    "name": "matrix",
+    "startedAt": "2026-10-06T16:59:54Z",
+    "status": "COMPLETED",
+    "workflowName": "acceptance-report"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:54:13Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260462/job/112470377719",
+    "name": "matrix",
+    "startedAt": "2026-10-06T19:53:56Z",
+    "status": "COMPLETED",
+    "workflowName": "acceptance-report"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:01:09Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365499",
+    "name": "typecheck",
+    "startedAt": "2026-10-06T17:00:52Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:55:21Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382088",
+    "name": "typecheck",
+    "startedAt": "2026-10-06T19:55:04Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:05:18Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365870",
+    "name": "test (py3.11, 1)",
+    "startedAt": "2026-10-06T17:01:15Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:57:49Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382312",
+    "name": "test (py3.11, 1)",
+    "startedAt": "2026-10-06T19:54:46Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:04:56Z",
+    "conclusion": "FAILURE",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365655",
+    "name": "test (py3.11, 2)",
+    "startedAt": "2026-10-06T17:00:47Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:59:02Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382419",
+    "name": "test (py3.11, 2)",
+    "startedAt": "2026-10-06T19:54:31Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:02:59Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365723",
+    "name": "test (py3.11, 3)",
+    "startedAt": "2026-10-06T17:00:47Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:58:04Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382280",
+    "name": "test (py3.11, 3)",
+    "startedAt": "2026-10-06T19:54:25Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:03:22Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365667",
+    "name": "test (py3.11, 4)",
+    "startedAt": "2026-10-06T17:00:12Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:57:30Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382395",
+    "name": "test (py3.11, 4)",
+    "startedAt": "2026-10-06T19:54:35Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:03:11Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365924",
+    "name": "test (py3.14, 1)",
+    "startedAt": "2026-10-06T17:01:16Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:56:58Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382176",
+    "name": "test (py3.14, 1)",
+    "startedAt": "2026-10-06T19:54:19Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:02:02Z",
+    "conclusion": "FAILURE",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365473",
+    "name": "test (py3.14, 2)",
+    "startedAt": "2026-10-06T17:00:11Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:57:21Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382592",
+    "name": "test (py3.14, 2)",
+    "startedAt": "2026-10-06T19:54:52Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:03:26Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365794",
+    "name": "test (py3.14, 3)",
+    "startedAt": "2026-10-06T17:00:48Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:56:36Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382459",
+    "name": "test (py3.14, 3)",
+    "startedAt": "2026-10-06T19:54:48Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:03:22Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365799",
+    "name": "test (py3.14, 4)",
+    "startedAt": "2026-10-06T17:01:15Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:56:30Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470381864",
+    "name": "test (py3.14, 4)",
+    "startedAt": "2026-10-06T19:54:15Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:01:08Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365392",
+    "name": "validate-artifacts",
+    "startedAt": "2026-10-06T17:00:53Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:54:28Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382017",
+    "name": "validate-artifacts",
+    "startedAt": "2026-10-06T19:54:15Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:00:45Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365440",
+    "name": "opencode-plugin-test",
+    "startedAt": "2026-10-06T17:00:07Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:54:49Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470381946",
+    "name": "opencode-plugin-test",
+    "startedAt": "2026-10-06T19:54:10Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:00:06Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365038",
+    "name": "version-sync",
+    "startedAt": "2026-10-06T16:59:56Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:54:43Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470382059",
+    "name": "version-sync",
+    "startedAt": "2026-10-06T19:54:31Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:00:25Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112394365493",
+    "name": "change-fragment",
+    "startedAt": "2026-10-06T17:00:12Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:54:28Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112470381943",
+    "name": "change-fragment",
+    "startedAt": "2026-10-06T19:54:15Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:05:19Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112397009526",
+    "name": "coverage",
+    "startedAt": "2026-10-06T17:05:19Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:59:18Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112472789412",
+    "name": "coverage",
+    "startedAt": "2026-10-06T19:59:05Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T17:05:24Z",
+    "conclusion": "FAILURE",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37500027587/job/112397008382",
+    "name": "ci-ok",
+    "startedAt": "2026-10-06T17:05:22Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  },
+  {
+    "__typename": "CheckRun",
+    "completedAt": "2026-10-06T19:59:26Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/37522260695/job/112472907766",
+    "name": "ci-ok",
+    "startedAt": "2026-10-06T19:59:22Z",
+    "status": "COMPLETED",
+    "workflowName": "CI"
+  }
+]

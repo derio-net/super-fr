@@ -44,3 +44,9 @@ date above. Never hand-edit a record to fit a test.
   594 607 631 640 647 724 725 868 869 454 458, one JSON list, each body cut to 2,000
   characters (collect's `BODY_LIMIT`). The duplicate-candidate calibration set
   (`tests/unit/test_triage_dedupe.py`).
+- `super-fr-rerun-checks.json` — captured live on **2026-10-06** with
+  `gh pr view 1038 --repo derio-net/super-fr --json statusCheckRollup`, the
+  `statusCheckRollup` list alone, whole and unedited (35 check runs). Head
+  `f1919d4` carries two CI runs: the 17:00 one failed `test (py3.11, 2)`,
+  `test (py3.14, 2)` and `ci-ok`, the 19:53 one passed everything. The
+  superseded-run case (super-fr#1051, `tests/unit/test_triage_open_prs.py`).
