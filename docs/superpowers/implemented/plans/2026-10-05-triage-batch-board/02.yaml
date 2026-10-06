@@ -1,0 +1,254 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The board — model, page and `fr triage board` (R1–R7, R10, R14, R15)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-board-columns
+  - triage-board-card-detail
+  - triage-board-session-status
+  - triage-board-untrusted-text
+  - triage-board-jump-focus
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_kanban.py
+  - tests/unit/test_triage_kanban_render.py
+  - tests/unit/test_triage_kanban_cmd.py
+  - tests/unit/triage_fixtures.py
+  - tests/unit/test_triage_batch_drive.py
+  - docs/acceptance/*
+  estimate_lines: 1400
+tasks:
+- number: 1
+  title: default_selection shared by the drive and the board (spec §C)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED in tests/unit/test_triage_batch_drive.py: `default_selection([waved, unwaved])` is
+      `frozenset({waved.id})`; with no waved batch it is every id. Red on import.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add pure `default_selection(batches) -> frozenset[str]` to fr/triage/batch_drive.py and make
+      `triage_batch_cmd._chosen`'s unnamed branch use it. Run
+      `uv run pytest tests/unit/test_triage_batch_drive.py tests/unit/test_triage_batch_drive_cmd.py -q --no-cov` — green.
+  - id: P2.T1.S3
+    text: |-
+      No further refactor expected (a one-function extraction); record the reason.
+- number: 2
+  title: Columns (spec §C; R2)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_kanban.py — `column_of` for: no events + no `after` → proposed; no
+      events + an unmerged dep → waiting (blocked False); + a cancelled dep → waiting, blocked True; +
+      an unknown dep → blocked True; dispatched → running; open PR → pr-open; merged, no closeout event
+      → closing-out; merged + started close-out → closing-out; merged + closeout event with `archived`
+      → done; merged + a MERGED `chore/closeout-<branch>` PR in facts → done; cancelled / abandoned /
+      partial → done with the pill word. Build facts/judgements with tests/unit/triage_fixtures.py
+      helpers (extend them there if a helper is missing). Red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement `Column`, `column_of` and `pill_of` in fr/triage/kanban.py from
+      `derive_batch_stage`, `dependency_state` and `closeout_state` (spec §C). Green.
+  - id: P2.T2.S3
+    text: |-
+      Refactor the column table into one ordered mapping if the branches repeat; else record why.
+- number: 3
+  title: Hints (spec §C; R6)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED in test_triage_kanban.py: `hint_for` with a `blocked` status → "needs you: session blocked";
+      one fixture per `drive_pass` action kind the driver can emit for a batch (dispatch, merge, warn CI
+      failing, closeout, archive, blocked, held, adopt, foreign, close) → its phrase; each fallback of
+      R6 (proposed "queued", unselected proposed "not driven", waiting "waits on a, b", running
+      "session running, no PR yet", draft "PR draft", pending CI "CI pending", "awaiting review",
+      closing-out "archive PR pending" / "close-out not recorded", done "finished" or pill). Red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: `first_actions(facts, judgements) -> dict[batch_id, Action]` (one `drive_pass` over
+      `drive_snapshot(...)` replaced with `selected=default_selection(...)` via `dataclasses.replace`),
+      a phrase table keyed on `Action.kind`, and `hint_for(...)` with the R6 order. Green.
+  - id: P2.T3.S3
+    text: |-
+      Refactor phrase tables to module constants beside the column table; else record why.
+- number: 4
+  title: Cards and the board (spec §C; R2–R4, R7)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED in test_triage_kanban.py: `build_board(facts, judgements, statuses, notes=())` returns six
+      columns in R2 order with counts; cards sorted by (wave is None, wave, id); each Card carries
+      members (title, url, issue stage via `Issue.stage`), the batch PR fields (url, draft, checks,
+      mergeable, review), lifecycle (wave, `after` with `dependency_state`, branch, reserved version,
+      runner, skill, rationale), harness/model from `batch.launch` else
+      `facts.config_for(repo).defaults.launch` flagged default else None, events oldest first, status
+      (`statuses.get(item id, "unknown")` when dispatched, None otherwise), closeout status (None for a
+      `hand` close-out), `show_jump` per R3 (dispatch event and status != absent), `show_closeout_jump`
+      likewise. Red.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: implement `Card`, `Board`, `build_board` in kanban.py — pure, no clock, no fr_dispatch import. Green.
+  - id: P2.T4.S3
+    text: |-
+      Refactor: split kanban.py if it passes ~400 lines (e.g. hints into kanban_hints.py); else record why.
+- number: 5
+  title: The page (spec §D; R3–R5, R10, R14, R15)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: tests/unit/test_triage_kanban_render.py over a full fixture board: R1 empty page text;
+      six columns with counts; `<details id="card-<id>">` per card; every R4 section present; "(default)"
+      marking; no close-out button for a hand close-out; jump `<code>` text equals
+      `shlex.join(["fr","triage","batch","focus",id,*scope_args])` escaped, and `--closeout` variant;
+      a hostile `--dir` ("/tmp/a b;rm -rf ~") is shell-quoted then HTML-escaped; hostile titles
+      (`<script>`, `"><img onerror>`) escaped and absent from the `<script>` element's text; the
+      `<script>` body equals the module constant; `data-refresh="30"` and `"0"`; rendered/collected
+      times shown; page notes rendered; byte-identical output for identical inputs; CSS contains
+      `TOKENS_CSS`, `GUTTER_CSS` and a `max-width: 720px` stacking rule. Red.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: fr/triage/kanban_render.py `render_board(board, *, scope_args, rendered_at, refresh,
+      notes)` following render.py's rules (CSS/JS constants, `html.escape`, `_safe_url`-style href
+      check, no facts text in `<script>`); constant JS for copy (clipboard API, fallback select of
+      the `<code>`, button text "copied"), reload timer from `document.body.dataset.refresh`, and
+      expanded/scroll restore in localStorage keyed by `location.pathname`, every access try/catch. Green.
+  - id: P2.T5.S3
+    text: |-
+      Refactor shared escaping/link helpers by importing them from render.py rather than copying; else record why.
+- number: 6
+  title: Statuses and `fr triage board` (spec §E; R1, R7, R10)
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      RED: tests/unit/test_triage_kanban_cmd.py with CliRunner and a state dir from triage_fixtures:
+      `fr triage board --repo o/r --dir <tmp>` writes board.html and prints its path; no batches →
+      page says none; `--refresh 0` sets data-refresh 0; `session_statuses` → unknown + one note and
+      NO `error:` on stderr for an unloadable runner, a failed preflight, a runner lacking
+      `session_statuses`, and one that raises; hand close-outs never probed; probe items carry the
+      group; a fake inspector's statuses reach the page; the copied command carries `--dir` only when
+      given. Red.
+  - id: P2.T6.S2
+    text: |-
+      GREEN: in triage_kanban_cmd.py add `session_statuses(...)`, `write_board(...)` (atomic write via
+      `fr.artifacts.atomic.write_text_atomic` or the triage module's own atomic writer if one exists),
+      and the `board` command on `triage_app` with `--refresh` (default 30, min 0) and `--open`; the
+      command passes `datetime.now(UTC)` as rendered_at. Green. Run
+      `uv run pytest tests/unit -q --no-cov -n auto -k "triage or herdr"` — green.
+  - id: P2.T6.S3
+    text: |-
+      Refactor shared scope-arg building into one function used by board and focus; else record why.
+- number: 7
+  title: Browser check and matrix (visual rows)
+  steps:
+  - id: P2.T7.S1
+    text: |-
+      Render a fixture board covering every column, a blocked card, an unknown-status note, a
+      cancelled pill, a full expanded card with PR and close-out and one without PR, into a git-ignored
+      dir the host sees (not the container /tmp). With a headless browser (Playwright), capture: light
+      and dark themes, a 375px-wide phone viewport (columns stacked, no horizontal scroll —
+      `document.documentElement.scrollWidth <= innerWidth`), a card expanded and collapsed, a jump
+      button clicked (text "copied") and with the clipboard API removed (the `<code>` selected), and a
+      reload keeping a card expanded. Open every screenshot and fill the record's `visual:` section
+      for triage-board-columns, triage-board-card-detail, triage-board-jump-focus,
+      triage-board-session-status.
+  - id: P2.T7.S2
+    text: |-
+      Move rows with `fr acceptance set-status` (notes required; `--level unit=super-fr:<test file>`):
+      triage-board-columns, triage-board-card-detail, triage-board-session-status,
+      triage-board-untrusted-text → ci; triage-board-jump-focus → ci (adding the render test).
+      Run the full suite `uv run pytest -q --no-cov -n auto` after the last code commit. Commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T5.S3:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T6.S1:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T6.S2:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T6.S3:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T7.S1:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+    P2.T7.S2:
+      state: x
+      ticked_at: '2026-10-05T21:09:03+00:00'
+      note: null
+  completion:
+    at: '2026-10-05T21:09:03+00:00'
+    note: null
+    observed_prs: []

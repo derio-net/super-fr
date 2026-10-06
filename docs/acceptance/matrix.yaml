@@ -5097,10 +5097,14 @@ rows:
       - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_refuses_a_new_line_anchor_into_python
       - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_line_anchors_that_land_in_a_test
       - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_leaves_what_it_cannot_convert
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_accepts_a_unittest_dotted_anchor
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_a_line_anchor_inside_a_testcase_subclass
     status: ci
     notes: 'gh#531. Measured at fix time: 27 of 78 line anchors had slid onto another
       test or none; all re-pointed to the test git blame shows each was recorded for,
-      the other 48 converted by the repair.'
+      the other 48 converted by the repair. gh#965/gh#893: unittest''s spelling of a
+      test identity is read too — a Class.test anchor resolves, and the repair converts
+      a line inside a TestCase subclass not named Test*.'
   - id: acceptance-add-flush-left-rows
     capability: Acceptance matrix
     acceptance: 'fr acceptance add and set-status edit a matrix whose rows are flush-left
@@ -6215,6 +6219,233 @@ rows:
     status: ci
     notes: 'Phase 2 shipped: SessionCloser optional protocol + check_close_contract;
       a plain runner is not a SessionCloser and the drive never asks it.'
+  - id: run-reshape-drifted-cursor
+    capability: run-cursor
+    acceptance: An in-flight run whose shape gained a step ahead of its cursor can be
+      moved onto the current shape with every recorded step kept, and a reshape that
+      would skip or lose recorded work is refused with nothing changed
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_reshape.py#test_a_step_added_after_the_cursor_is_inserted_pending_in_manifest_order
+      - super-fr:tests/unit/test_run_reshape.py#test_a_step_added_at_or_behind_the_cursor_refuses
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_yes_rewrites_the_cursor_in_one_chore_commit
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_a_refusal_exits_2_and_writes_nothing
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_reshape_across_a_schema_change_refuses_naming_supersede
+    status: ci
+    notes: fr run reshape implemented; a schema-change refusal names adopt --supersede
+      (review p1-r1)
+  - id: run-read-drifted-cursor
+    capability: run-cursor
+    acceptance: '`fr run gates` and the other read-only run commands answer from a drifted
+      cursor with a warning instead of refusing'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_gates_answers_a_drifted_cursor_with_one_warning
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_status_answers_a_drifted_cursor_with_one_warning
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_a_schema_mismatch_still_refuses_gates
+      - super-fr:tests/unit/test_run_reshape_cmd.py#test_check_answers_a_drifted_cursor_with_one_warning
+    status: ci
+    notes: gates/status/check answer a drifted cursor with one warning (check now tested,
+      review p1-r2); schema mismatch still refuses gates
+  - id: adopt-supersede-carries-provenance
+    capability: run-adoption
+    acceptance: Adopting a plan that already has a run supersedes it on request, and
+      the operator's gate answers, dispatch history and evidence recorded by the old
+      cursor survive into the new one
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_carry_forward_copies_gate_provenance_and_missing_emitted_keys
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_carry_forward_carries_every_old_unit_with_attempts_and_evidence
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_supersede_yes_replaces_the_run_in_one_commit_and_carries_provenance
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_supersede_preview_lists_the_closed_holds_and_writes_nothing
+      - super-fr:tests/unit/test_run_adopt_supersede.py#test_a_review_the_old_cursor_resolved_keeps_its_real_evidence
+    status: ci
+    notes: 'Phase 3: carry_forward (gate/answered_by, emitted, every unit with attempts
+      and evidence, open holds abandoned) and adopt --supersede (preview, --yes one
+      commit, usage moved, refusals, same-day overwrite) are covered by unit tests that
+      run in CI; p2-r5 ordering pinned.'
+  - id: historical-review-evidence
+    capability: run-evidence
+    acceptance: A phase reviewed before its run's cursor existed can be closed honestly
+      as a historical review — inferred by adoption from the plan journal or resolved
+      by hand — and is reported as historical, never as debt or failure
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_historical.py#test_a_review_between_the_implement_return_and_started_is_accepted
+      - super-fr:tests/unit/test_run_evidence_historical.py#test_a_review_created_after_the_run_started_is_refused
+      - super-fr:tests/unit/test_run_evidence_historical.py#test_a_review_created_before_the_implement_return_is_refused
+      - super-fr:tests/unit/test_run_evidence_historical.py#test_a_phase_owing_visual_evidence_is_refused
+      - super-fr:tests/unit/test_run_evidence_historical.py#test_historical_is_refused_on_a_flat_spec_review_unit
+      - super-fr:tests/unit/test_run_adopt.py#test_adoption_marks_journal_reviewed_phases_done_as_historical
+      - super-fr:tests/unit/test_run_adopt.py#test_adoption_leaves_a_phase_with_an_open_finding_pending
+      - super-fr:tests/unit/test_run_adopt.py#test_adoption_leaves_a_phase_with_an_unauthorized_fix_pending
+      - super-fr:tests/unit/test_run_adopt.py#test_adoption_leaves_a_phase_with_no_review_entry_pending
+      - super-fr:tests/unit/test_run_adopt.py#test_adoption_leaves_a_phase_owing_visual_evidence_pending
+      - super-fr:tests/unit/test_run_evidence_historical.py#test_status_and_check_say_a_review_is_historical
+      - super-fr:tests/unit/test_run_evidence_historical.py#test_an_adopted_historical_review_is_not_debt
+      - super-fr:tests/unit/test_deliver_pr_body.py#test_the_body_lists_historical_reviews_when_a_unit_carries_one
+      - super-fr:tests/unit/test_deliver_pr_body.py#test_deliver_refuses_a_live_body_lacking_the_historical_section
+    status: ci
+    notes: R7 by-hand bound (all three clauses, flat refusal, unchanged entry/findings
+      checks), R8 adoption inference (done/pending with notes, cursor past the group)
+      and R9 reporting (status/check sentence, no debt, PR-body section required on
+      the live PR) are unit-tested in CI.
+  - id: triage-board-columns
+    capability: triage-batch-board
+    acceptance: '`fr triage board` writes board.html showing one card per batch in six
+      lifecycle columns (Proposed, Waiting, Running, PR open, Closing out, Done) with
+      counts, a blocked mark for unsatisfiable dependencies and a pill for cancelled/abandoned/partial,
+      linked from triage.html, readable in light and dark and at phone width.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+    status: ci
+    notes: board model, page and command unit-tested; browser-checked light, dark, 375px
+      (phase 2). triage.html link lands in phase 3
+    visual:
+      states:
+      - empty board
+      - every column populated
+      - waiting card blocked
+      - done card with cancelled pill
+      - dark theme
+      - phone width stacked columns
+  - id: triage-board-card-detail
+    capability: triage-batch-board
+    acceptance: A board card expands in place, scripts on or off, to show member issues,
+      PR and CI state, lifecycle details, the event timeline and a next-action hint
+      drawn from what the driver would do on the same facts.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: hints and card sections unit-tested; expand/collapse browser-checked
+    visual:
+      states:
+      - expanded card with PR and close-out
+      - expanded card without PR
+      interactions:
+      - expand and collapse a card
+  - id: triage-board-jump-focus
+    capability: triage-batch-board
+    acceptance: A card's jump button copies `fr triage batch focus <id>` (with --closeout
+      for the close-out session) and confirms; that command focuses the batch's live
+      herdr session, and refuses with exit 2 and a reason when there is no event, no
+      capable runner or no live session.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_focus.py
+      - super-fr:tests/unit/test_fr_herdr_runner.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: focus CLI and herdr unit-tested; copy button and clipboard fallback unit-tested
+      (command text) and browser-checked
+    visual:
+      states:
+      - copy confirmed on button
+      interactions:
+      - click jump button
+      - clipboard unavailable fallback
+  - id: triage-board-session-status
+    capability: triage-batch-board
+    acceptance: Each dispatched batch and started close-out shows its live session status
+      from the runner (working, blocked, idle, done, unknown, no session); a missing,
+      failing or incapable runner shows unknown with a page note and never fails the
+      render; a blocked session flags its card as needing the operator.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: session_statuses degrades to unknown plus a note for every failing runner;
+      herdr side tested in phase 1; blocked highlight browser-checked
+    visual:
+      states:
+      - blocked session card highlighted
+      - unknown status with page note
+  - id: triage-board-refresh
+    capability: triage-batch-board
+    acceptance: The board stays fresh without the operator re-rendering it — the drive
+      re-renders it after each pass (a render failure only warns), `fr triage board
+      --watch` re-collects and re-renders when no drive runs (refusing while one does),
+      and the page reloads on a configurable timer keeping expanded cards and scroll
+      position.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+    status: ci
+    notes: The drive re-renders board.html after every --yes pass and warns once per
+      cause when it cannot (tests/unit/test_triage_batch_drive_cmd.py); fr triage board
+      --watch re-collects and renders every interval and refuses under a live drive
+      lock (tests/unit/test_triage_kanban_cmd.py); the timer reload keeping expanded
+      cards was captured in Chrome (phase 3 visual record).
+    visual:
+      states:
+      - rendered and collected times shown
+      interactions:
+      - reload keeps expanded cards
+  - id: triage-board-untrusted-text
+    capability: triage-batch-board
+    acceptance: Forge- and judgement-sourced text on the board is escaped and never
+      reaches a script element, and the copied command is built only from the validated
+      batch id and scope options.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: hostile titles, hostile --dir and script-text constancy unit-tested
+  - id: triage-board-live-herdr
+    capability: triage-batch-board
+    acceptance: Inside herdr during a live drive, cards move columns as the drive acts,
+      the pasted jump command switches to the batch's tab in its wave workspace, and
+      a session waiting on a prompt shows blocked.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin

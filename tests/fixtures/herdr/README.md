@@ -19,3 +19,7 @@
   scratch workspace was closed again). Redaction: every workspace label other
   than `super-fr` became `example-ws-<n>`, every tab label that was not a
   batch item id or a bare `|` became `example-tab-<n>`; shape unchanged.
+- `workspace-focus.json`, `tab-focus.json` — captured live 2026-10-05 (herdr
+  0.9.1) from `herdr workspace focus <focused workspace_id>` and `herdr tab focus
+  <focused tab_id>` (focusing what was already focused, so nothing moved for the
+  operator). Redaction: the tab label became `example-tab-1`; shape unchanged.

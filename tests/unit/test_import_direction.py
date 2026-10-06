@@ -28,7 +28,7 @@ def _imports_of(package_dir: Path) -> dict[Path, set[str]]:
 # The sanctioned soft points (spec §Architecture; 2026-09-25-triage-batches
 # §3.C): `fr apply --to` and `fr triage batch dispatch` import fr_dispatch
 # behind an importlib.util.find_spec guard. No other fr module may.
-_SOFT_POINTS = ("apply_cmd.py", "triage_batch_cmd.py")
+_SOFT_POINTS = ("apply_cmd.py", "triage_batch_cmd.py", "triage_kanban_cmd.py")
 _SOFT_TARGET = "fr_dispatch"
 
 # Every workspace package but `fr` itself, read from disk (gh#643): a hand
@@ -165,3 +165,14 @@ def test_fr_herdr_tripwire_catches_a_triage_import(tmp_path: Path) -> None:
     assert _FR_TRIAGE_IMPORT_RE.search("from fr.triage.model import Batch\n")
     assert _FR_TRIAGE_IMPORT_RE.search("import fr.triage\n")
     assert not _FR_TRIAGE_IMPORT_RE.search("from fr.triaged import x\n")
+
+
+def test_board_status_equals_session_status() -> None:
+    """`fr.triage.kanban` may not import `fr_dispatch`, so it keeps its own copy of
+    the vocabulary; this is what stops the two drifting."""
+    from typing import get_args
+
+    from fr.triage.kanban import BoardStatus
+    from fr_dispatch.protocols import SessionStatus
+
+    assert get_args(BoardStatus) == get_args(SessionStatus)

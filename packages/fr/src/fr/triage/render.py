@@ -296,7 +296,9 @@ UNRANKED_DESC = (
 
 def noun(n: int, word: str) -> str:
     """*word* as a count of *n* needs it: `repo` for one, `repos` otherwise."""
-    return word if n == 1 else f"{word}s"
+    if n == 1:
+        return word
+    return f"{word}es" if word.endswith(("ch", "sh", "s", "x")) else f"{word}s"
 
 
 def plural(n: int, word: str) -> str:
@@ -560,7 +562,7 @@ def _merge_step(step: MergeStep) -> str:
     return f'<li data-batch="{esc(step.batch.id)}">{" · ".join(parts)}</li>'
 
 
-def _batches(judgements: Judgements, facts: Facts) -> str:
+def _batches(judgements: Judgements, facts: Facts, *, board: bool = False) -> str:
     """The Batches section (spec 2026-09-25-triage-batches §3.G); empty with no batches."""
     if not judgements.batches:
         return ""
@@ -574,10 +576,16 @@ def _batches(judgements: Judgements, facts: Facts) -> str:
         if steps
         else ""
     )
+    link = (
+        '<p class="tier-desc"><a href="board.html">Open the live board</a> '
+        "(<code>fr triage board</code>): the same batches as a Kanban, with session status.</p>"
+        if board
+        else ""
+    )
     return (
         '<section class="batches"><h2>Batches</h2>'
         '<p class="tier-desc">Groups of judged issues delivered as one run. Members also '
-        f"appear in their tiers, with a batch chip.</p>{cards}{order}</section>"
+        f"appear in their tiers, with a batch chip.</p>{link}{cards}{order}</section>"
     )
 
 
@@ -743,11 +751,18 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
     return f"{head}{body}{_features_table(judgements, facts)}{_parked(facts, judgements)}</section>"
 
 
-def render(facts: Facts, judgements: Judgements, since: SnapshotDiff | None = None) -> str:
+def render(
+    facts: Facts,
+    judgements: Judgements,
+    since: SnapshotDiff | None = None,
+    *,
+    board: bool = False,
+) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes.
 
     *since* is the diff against the previous snapshot (`fr.triage.snapshot`); None means
-    there is none, and the page says so.
+    there is none, and the page says so. *board* links the sibling `board.html` from the
+    Batches section (the caller says whether one exists).
     """
     show_repo = facts.kind != "repo"
     result = classify(facts, judgements)  # the one classification, shared below
@@ -778,7 +793,7 @@ def render(facts: Facts, judgements: Judgements, since: SnapshotDiff | None = No
 
     sections = [
         _prs_section(facts.prs, judgements, 1, facts.collected_at),
-        *([batches] if (batches := _batches(judgements, facts)) else []),
+        *([batches] if (batches := _batches(judgements, facts, board=board)) else []),
         '<h2 class="backlog" id="backlog-by-tier">Backlog by tier</h2>',
         _section(
             "unranked",

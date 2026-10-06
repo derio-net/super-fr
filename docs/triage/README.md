@@ -1,0 +1,52 @@
+# Triage state for this repo
+
+`fr triage` keeps its state outside every repo, in `~/.cache/fr/triage/<scope>/`. That
+is the right default for a consumer repo, but it makes this repo's own triage history
+live on one machine. This folder is the durable copy for `derio-net/super-fr`: what is
+needed to regenerate the backlog board, the defect-origins page and the architecture
+page, and the history that cannot be regenerated.
+
+## What is here
+
+`derio-net--super-fr/` holds inputs and history only:
+
+| Path | Written by | Why it is kept |
+|---|---|---|
+| `judgements.yaml` | the `fr-triage` skill, plus the `batch` verbs | tiers, themes, batches and their events; the board and the subsystem cards read it |
+| `origins.yaml` | the `fr-origins` skill | one classification per issue since 2026-09-22; the 09-24 → 09-29 entries are the 2026-10-02 page's, imported |
+| `subsystems.yaml` | by hand | the architecture page's 15 subsystem cards: globs, `then_ref`, themes |
+| `architecture/manifest.yaml` | by hand | section order, generated sections then authored fragments |
+| `snapshots/` | `fr triage render` | one per render; the board's "Since last report" and the architecture timeline. Not reproducible |
+| `authored-src/` | by hand | the sources of the architecture page's authored fragments (below) |
+
+Left out on purpose, because fr rebuilds them: `facts.json`, `origins-facts.json`, the
+rendered `*.html` pages and the built fragments `architecture/*.html`.
+
+### authored-src/
+
+- `pipeline.py` draws the pipeline-and-driver diagram with open issues pinned on steps. The
+  pins are a table in the script; the build stops if a pinned issue has closed.
+- `build.py` runs `pipeline.py` and writes the other three fragments: the 2026-10-02
+  closing order with its outcome (looked up with `gh`), the 2026-10-02 origins analysis,
+  and the history to 2026-10-02.
+- `old/` are the three hand-built pages published on 2026-10-02, the only source of their
+  diagrams and analysis. `extracted/` holds their sections with styles inlined, made by
+  running `extract.js` in a browser on those pages; `build.py` reads these, not `old/`.
+
+## Regenerating the pages
+
+```bash
+docs/triage/sync.sh import                    # repo -> ~/.cache (skips newer cache files)
+fr triage collect --repo derio-net/super-fr --pr-limit 1000
+fr triage origins collect --repo derio-net/super-fr --since 2026-09-22
+fr triage check --repo derio-net/super-fr          # unranked: judge with the fr-triage skill
+fr triage origins check --repo derio-net/super-fr  # unclassified: the fr-origins skill
+python3 ~/.cache/fr/triage/derio-net--super-fr/authored-src/build.py
+fr triage render --repo derio-net/super-fr
+fr triage origins render --repo derio-net/super-fr
+fr triage architecture render --repo derio-net/super-fr --now-ref origin/main
+docs/triage/sync.sh export                    # ~/.cache -> repo; commit through a PR
+```
+
+The cache stays the working copy because `fr triage batch drive` writes `judgements.yaml`
+on every pass. Export after a triage session or a finished wave, not mid-drive.

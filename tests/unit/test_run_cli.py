@@ -1090,8 +1090,9 @@ def test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields(tmp_pat
 
     step_fields = set(Step.model_fields) - {"id", "run"}
     # `run`/`workflow`/`step` are the run-identity keys the brief adds on top,
-    # and `record` the pre-filled step record (spec 2026-09-25 §5.C.3).
-    assert set(brief) == step_fields | {"run", "workflow", "step", "record"}
+    # `record` the pre-filled step record (spec 2026-09-25 §5.C.3), and
+    # `unbound_tiers` the active harness's unbound tiers (gh#538).
+    assert set(brief) == step_fields | {"run", "workflow", "step", "record", "unbound_tiers"}
 
 
 # --- gh#653: the brief and the records dir must match what resolve accepts --
@@ -6800,3 +6801,72 @@ def test_an_unparseable_spec_journal_does_not_block_a_member_dispatch(tmp_path: 
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
     assert result.exit_code == 0, result.output
     assert _brief_of(result.output)["step"] == "code"
+
+
+# --- gh#538: the gate brief carries the active harness's unbound tiers ------
+#
+# fr-goal §1 asked the model-per-tier question "if `fr models resolve` is
+# unbound" — a check the orchestrator had to remember to run. On a real
+# OpenCode run with every tier unbound it never ran it, so the question was
+# never asked. fr knows the answer in one lookup, so the brief now states it
+# and the question is triggered by data in front of the model, not by recall.
+
+
+def _gated_brief_as(
+    tmp_path: Path, harness_env: dict[str, str | None], models_yaml: str | None = None
+) -> dict:
+    config_home = tmp_path / "xdg"
+    if models_yaml is not None:
+        (config_home / "fr").mkdir(parents=True)
+        (config_home / "fr" / "models.yaml").write_text(models_yaml)
+    env = {"XDG_CONFIG_HOME": str(config_home), **harness_env}
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    _invoke_as_harness(
+        repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"], env
+    )
+    result = _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], env)
+    assert result.exit_code == 0, result.output
+    return _brief_of(result.output)
+
+
+def test_gate_brief_lists_every_tier_when_none_is_bound(tmp_path: Path) -> None:
+    """gh#538's own scenario: OpenCode, nothing bound anywhere."""
+    from fr.types import PHASE_TIERS
+
+    brief = _gated_brief_as(tmp_path, {"FR_HARNESS": "opencode"})
+    assert brief["unbound_tiers"] == list(PHASE_TIERS)
+
+
+def test_gate_brief_lists_only_the_active_harnesss_unbound_tiers(tmp_path: Path) -> None:
+    """A tier binds FOR a harness: claude-code's bindings say nothing about
+    OpenCode's, and a bound tier drops out of the list."""
+    models = (
+        "claude-code: {mechanical: m1, standard: m2, hard: m3}\n"
+        "opencode: {mechanical: github-copilot/x}\n"
+    )
+    brief = _gated_brief_as(tmp_path, {"FR_HARNESS": "opencode"}, models)
+    assert brief["unbound_tiers"] == ["standard", "hard"]
+
+
+def test_gate_brief_lists_no_tier_when_every_one_is_bound(tmp_path: Path) -> None:
+    models = "opencode: {mechanical: a, standard: b, hard: c}\n"
+    brief = _gated_brief_as(tmp_path, {"FR_HARNESS": "opencode"}, models)
+    assert brief["unbound_tiers"] == []
+
+
+def test_gate_brief_says_null_when_the_harness_is_unknown(tmp_path: Path) -> None:
+    """No harness detected: fr cannot tell which bindings apply, and an empty
+    list would read as "all bound". `null` is the honest answer."""
+    brief = _gated_brief_as(tmp_path, {})
+    assert brief["unbound_tiers"] is None
+
+
+def test_fr_goal_triggers_the_tier_question_from_the_brief() -> None:
+    """The skill's trigger is the brief's key, not a remembered lookup."""
+    skill = (
+        Path(__file__).resolve().parents[2] / "plugins/super-fr/skills/fr-goal/SKILL.md"
+    ).read_text()
+    assert "unbound_tiers" in skill
+    assert "a model-per-tier one if `fr models resolve` is unbound" not in skill
