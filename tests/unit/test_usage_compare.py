@@ -189,6 +189,12 @@ def test_select_by_date_splits_on_started(repo: Path) -> None:
     assert after == ["2026-10-01-feat-new", "2026-10-02-feat-bare"]
 
 
+def test_select_by_timestamp_splits_within_a_day(repo: Path) -> None:
+    assert select_runs(repo, "2026-10-01T09:00:00Z", before=False)[0] == "2026-10-01-feat-new"
+    assert "2026-10-01-feat-new" not in select_runs(repo, "2026-10-01T10:00:01Z", before=False)
+    assert "2026-10-01-feat-new" in select_runs(repo, "2026-10-01T10:00:01Z", before=True)
+
+
 def test_select_by_run_id_is_that_one_run(repo: Path) -> None:
     assert select_runs(repo, "2026-10-02-feat-bare", before=True) == ["2026-10-02-feat-bare"]
 

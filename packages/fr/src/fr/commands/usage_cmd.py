@@ -227,10 +227,16 @@ def backfill_cmd(repo: RepoOpt = None) -> None:
 @usage_app.command("compare")
 def compare_cmd(
     before: Annotated[
-        str, typer.Option("--before", help="ISO date (runs started before it) or a run id.")
+        str,
+        typer.Option(
+            "--before", help="ISO date or timestamp (runs started before it) or a run id."
+        ),
     ],
     after: Annotated[
-        str, typer.Option("--after", help="ISO date (runs started on or after it) or a run id.")
+        str,
+        typer.Option(
+            "--after", help="ISO date or timestamp (runs started at or after it) or a run id."
+        ),
     ],
     repo: RepoOpt = None,
 ) -> None:
