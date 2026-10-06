@@ -1,0 +1,86 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-driver-sessions
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: Operator brief (batch driver-sessions), verbatim
+    body: |
+      /fr-goal Driver sessions stay current and portable: idle sessions restart on new plugins, and the driver runs outside herdr
+
+      Batch `driver-sessions` of derio-net/super-fr: 3 issues, delivered as ONE pull request.
+
+      ## super-fr#964: fr-herdr: restart idle Claude sessions in place so they load new plugins (wave driver post_merge)
+      Long drives leave running Claude sessions on the plugins they started with; post_merge installs a new fr they never load.
+      Note: Herdr runner reliability, see the pattern.
+
+      ## super-fr#878: herdr runner only dispatches inside a herdr session, so `fr triage batch drive` inherits that
+      The herdr runner's preflight needs `HERDR_ENV`/`HERDR_WORKSPACE_ID`, so the driver can only run inside a herdr session.
+
+      ## super-fr#1029: Drive: report a batch or close-out session idle with no progress past a threshold
+      The driver never reports a batch or close-out session that stays idle with no progress; #1028 fixed the unsubmitted brief, this is #956's second half.
+      Note: Split from super-fr#956. Batch driver-sessions.
+
+      ## Why these belong together
+      Wave 9 feature 1: stale sessions after post_merge cost hand-offs all of 2026-10-06. After drive-board-lows (same driver files).
+
+      ## Delivery rules
+      - Work on branch `feat/batch-driver-sessions`.
+      - Open a draft PR as soon as the spec is committed. Its body contains these lines, one per member, so every member closes when it merges:
+        Closes derio-net/super-fr#964
+        Closes derio-net/super-fr#878
+        Closes derio-net/super-fr#1029
+      - Do not name any member issue as a phase `tracking_issue` in the plan: the bridge would then own that issue's `fr:` labels.
+  - {kind: decision, id: q1-outside-herdr, title: "#878: document only", body: "Operator chose to keep the herdr runner's inside-herdr refusal and document it (refusal text + fr-triage skill), over accepting a reachable server or an explicit-session opt-in."}
+  - {kind: decision, id: q2-restart-scope, title: "#964: restart every idle Claude pane", body: "The restart covers every idle/done claude pane in herdr (the operator's other sessions too), minus drafts, dialogs, background work, no transcript and the caller's pane."}
+  - {kind: decision, id: q3-restart-verb, title: "#964: fr-herdr console script", body: "The operator-facing verb is a console script, fr-herdr restart-idle, shipped by the fr-herdr package; the driver reaches the same engine through an optional runner protocol."}
+  - {kind: decision, id: q4-driver-opt-in, title: "#964: post_merge_restart config key", body: "The wave driver opts in through .fr/triage.yaml post_merge_restart: idle (default none); super-fr's own config turns it on."}
+  - {kind: decision, id: q5-idle-threshold, title: "#1029: 60-minute default threshold", body: "Stateless rule (runner says idle/done, event older than threshold, no PR / no archive PR), reported once and shown on the board; default idle_session_minutes 60, configurable per repo."}
+  - {kind: decision, id: q6-verification, title: "Verification: candidate + live rows", body: "Run strategy candidate (walk with a fake herdr); the live in-place restart row is verify live, walked by the operator after merge."}
+resolves: []
+acceptance:
+  - id: herdr-restart-idle
+    capability: herdr runner
+    acceptance: Inside herdr, fr-herdr restart-idle lists every Claude pane with ok / skip <reason> / fail <reason> and a summary, is a dry run unless --yes, never sends a key to a pane it skips (busy, draft, background work, no transcript, own or excluded pane), goes on past a failed pane, and refuses outside herdr
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R1, super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R2, super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R4, super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R5]
+    status: not-implemented
+    verify: candidate
+  - id: herdr-restart-idle-live
+    capability: herdr runner
+    acceptance: A restarted pane resumes the same Claude session id in the same pane and tab, with the same label, herdr agent name and --model, and a pane at the exit dialog is reported, never answered
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R3]
+    status: not-implemented
+    verify: live
+  - id: drive-post-merge-restart
+    capability: Backlog triage
+    acceptance: With post_merge_restart idle in the repo's triage config, the wave driver restarts idle sessions after a successful post_merge and before the close-out, reports the outcome, and never holds the close-out or ends the drive over a restart failure or a runner that cannot restart
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R6]
+    status: not-implemented
+    verify: none
+  - id: drive-idle-session-report
+    capability: Backlog triage
+    acceptance: The wave driver reports once a batch session idle with no PR, or a close-out session idle with no archive PR, past the repo's idle_session_minutes (default 60), naming the focus command, without ending the drive
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R7]
+    status: not-implemented
+    verify: none
+  - id: board-idle-session
+    capability: Backlog triage
+    acceptance: The triage board marks a card needs-you, saying why, when its batch or close-out session has sat idle past the threshold with nothing to show for it
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R8]
+    status: not-implemented
+    verify: none
+    visual:
+      states: [idle-batch-card-needs-you, idle-closeout-card-needs-you, idle-card-with-pr-not-flagged]
+      interactions: []
+  - id: herdr-outside-refusal
+    capability: herdr runner
+    acceptance: Outside a herdr session the herdr runner refuses and tells the operator to run drive or dispatch from a herdr pane, and the fr-triage skill documents that constraint and the session-upkeep settings
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R9]
+    status: not-implemented
+    verify: none
+emitted:
+  spec: docs/superpowers/specs/2026-10-06-driver-sessions-design.md
+evidence: {}
