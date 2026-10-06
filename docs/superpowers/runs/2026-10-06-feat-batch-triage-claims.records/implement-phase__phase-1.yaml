@@ -1,0 +1,26 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-10-06-feat-batch-triage-claims --step implement-phase --item phase/1 --record docs/superpowers/runs/2026-10-06-feat-batch-triage-claims.records/implement-phase__phase-1.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 8
+run: 2026-10-06-feat-batch-triage-claims
+step: implement-phase
+item: phase/1
+outcome: done            # done | failed | blocked
+ticks: [P1.T1.S1]              # step ids you completed, e.g. [P1.T1.S1]
+#   this phase: P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1, P1.T6.S2, P1.T7.S1, P1.T7.S2, P1.T8.S1, P1.T8.S2, P1.T8.S3, P1.T9.S1, P1.T9.S2
+refactor: {}             # P<n>.T<m>: "why there was nothing to clean"
+#   owed by tasks with no refactor step: P1.T4, P1.T6, P1.T7, P1.T9
+journal: []
+#   - {kind: decision|discovery|finding, id: <id>, title: <line>, body: <md>}
+#     a finding also takes review_scope: in|out (state defaults to open)
+#     a plan-journal entry also takes phase: <n> or global: true
+#     a spec-journal discovery holding the operator's brief takes input: true
+resolves: []
+#   - {id: <finding>, state: fixed|refuted|deferred|out-of-scope, body: <why>}
+evidence: {}
+# visual:              # one entry per owed `visual` acceptance row
+#   - row: <row-id>
+#     script: <capture script, optional — re-run it this unit>
+#     shots:           # git-ignored or outside the repo; opened this unit
+#       - {path: <image>, shows: [<state or interaction>, ...]}
+
