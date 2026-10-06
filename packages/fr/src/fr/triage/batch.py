@@ -22,6 +22,7 @@ import yaml
 from pydantic import ValidationError
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.labels import FR_AWAITING_LIVE
 from fr.triage.errors import TriageError
 from fr.triage.model import (
     JUDGEMENTS_READS,
@@ -236,8 +237,13 @@ def derive_batch_stage(batch: Batch, facts: Facts) -> BatchStage:
     if pr.state == "CLOSED":
         return "abandoned"
     found = {i.key: i for i in facts.issues}
-    # A member missing from the facts is not known to be closed.
-    all_closed = all(k in found and found[k].state == "closed" for k in batch.ids)
+    # A member missing from the facts is not known to be closed. One that awaits its
+    # live walk counts as closed: a Refs PR merged its fix and left it open on purpose
+    # (spec 2026-10-06-verification-strategies §F, R17), so the batch is done.
+    all_closed = all(
+        k in found and (found[k].state == "closed" or FR_AWAITING_LIVE.name in found[k].labels)
+        for k in batch.ids
+    )
     return "merged" if all_closed else "partial"
 
 

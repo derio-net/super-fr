@@ -293,7 +293,7 @@ def check_command(
     as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
     """Report unranked issues and PRs, settled, orphaned, unreachable, stale, unplaced,
-    duplicate candidates and duplicates.
+    duplicate candidates, duplicates, awaiting live and more.
 
     Always exits 0.
     """
@@ -345,6 +345,12 @@ def check_command(
         "feature group or parked"
     )
     for i in result.unplaced:
+        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+    console.print(
+        f"[bold]awaiting live[/bold] ({len(result.awaiting_live)}) — open, fr:awaiting-live: "
+        "merged, a post-merge row still awaits its walk; not ranked or proposed"
+    )
+    for i in result.awaiting_live:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
     console.print(
         f"[bold]no severity[/bold] ({len(result.no_severity)}) — open, judged, no severity"

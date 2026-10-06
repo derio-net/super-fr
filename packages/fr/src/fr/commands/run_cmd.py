@@ -95,6 +95,7 @@ if TYPE_CHECKING:
 
     from fr.record.model import QuestionRounds, VisualEvidence
     from fr.run.telemetry import Round
+    from fr.verification.walk import WalkOwed
 from fr.run.provenance import cleared_gates, gates
 from fr.run.reshape import ReshapeError, diff_ids, reshape
 from fr.run.units import UnitAttempt
@@ -914,7 +915,7 @@ def _rebind_shape(
             f"shape: {target!r} refused — it begins with {begins!r}, not {step_id!r}; "
             "a run rebinds only onto a shape that begins with the step being resolved."
         )
-    errors = check_workflow(rebound)
+    errors = check_workflow(rebound, repo_root)
     if errors:
         raise RunStateError(f"shape: {target!r} refused — not a valid workflow: {errors[0]}")
     return rebound
@@ -1553,6 +1554,7 @@ _VERIFIABLE_EVIDENCE = (
     "proportionality",
     "visual",
     "single-phase",
+    "walk",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
@@ -1573,7 +1575,12 @@ _PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings"})
 # log, which `deliver` may later reuse (`tests: reuse`) while the code tree it
 # covered is unchanged. Where a step DECLARES it (`deliver`) it stays mandatory
 # exactly as before; the shipped manifests do not change.
-_OFFERED_EVIDENCE = frozenset({"tests"})
+_OFFERED_EVIDENCE = frozenset({"tests", "walk"})
+# `walk` (2026-10-06-verification-strategies §C, R11) is `deliver`'s witness of
+# the pre-merge strategy: a log `fr verification walk` wrote, on HEAD's code
+# tree. It is owed only when the run's spec gives the run or a row an
+# agent-driven pre-merge strategy (`fr.verification.walk.walk_owed`); when it is
+# not, omitting it or saying `walk=none` is accepted.
 _DERIVED_FROM = {
     "findings": "from the reviewed journal: every finding filed against the phase "
     "(plan journal) or the spec (spec journal) must be fixed, refuted, deferred or "
@@ -1619,6 +1626,11 @@ def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
 
 
 def _evidence_hint(name: str, target: _EvidenceTarget | None) -> str:
+    if name == "walk":
+        return (
+            "<path-to-walk-log>, the log `fr verification walk --run <run> --model <m>` "
+            "wrote on this code tree"
+        )
     if name == "tests":
         return (
             "<path-to-log>, naming the output file of the full suite you ran "
@@ -1817,8 +1829,21 @@ def _verified_evidence(
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    # The owed predicate runs BEFORE rule 2: `walk` is the one obligation a run
+    # may omit, because it is owed only when the spec asks for a pre-merge walk
+    # (§C) — which is how an in-flight run, or one with no `## Verification`,
+    # delivers unchanged.
+    walk_owed = None
+    if "walk" in offered or (state_value == "done" and "walk" in step.evidence):
+        walk_owed = _walk_obligation(key, repo_root, state)
     missing = (
-        [n for n in step.evidence if n not in offered and n not in _DERIVED_EVIDENCE]
+        [
+            n
+            for n in step.evidence
+            if n not in offered
+            and n not in _DERIVED_EVIDENCE
+            and not (n == "walk" and walk_owed is not None and not walk_owed.owed)
+        ]
         if state_value == "done"
         else []
     )
@@ -1885,6 +1910,11 @@ def _verified_evidence(
         verified["tests"] = _reuse_tests_witness(key, repo_root, state)
     elif "tests" in offered:
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
+    if "walk" in offered:
+        assert walk_owed is not None
+        verified["walk"] = _verify_walk(
+            key, offered["walk"], repo_root, state, walk_owed, opened=opened
+        )
     # Every DERIVED witness is evaluated, and every refusal printed, before the
     # resolve is refused (gh#768): one environmental blocker (no fetchable
     # remote) used to exit first and hide each witness declared after it.
@@ -2470,6 +2500,170 @@ def _wrote_before(
     return opened_at is not None and any(
         e >= opened_at and s - slack <= modified <= e + slack for s, e in earlier or ()
     )
+
+
+def _walk_obligation(key: str, repo_root: Path, state: RunState) -> WalkOwed:
+    """What walk `deliver` owes for this run (§C), or exit 2.
+
+    Fail-closed: a section, matrix or strategy fr cannot read means fr cannot
+    tell whether a walk is owed, and a gate that cannot decide does not pass.
+    R10: an owed row that names no scenario is refused BY ID, before anything is
+    asked of the log.
+    """
+    from fr.acceptance.model import AcceptanceError
+    from fr.requirements import load_spec_matrix
+    from fr.verification.model import StrategyError
+    from fr.verification.rows import run_verification
+    from fr.verification.spec_section import SectionError
+    from fr.verification.walk import WalkOwed, walk_owed
+
+    try:
+        spec_rel, verification = run_verification(repo_root, state)
+        if spec_rel is None:
+            return WalkOwed()
+        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
+        owed = walk_owed(matrix, spec_ref, verification, repo_root)
+    except (AcceptanceError, SectionError, StrategyError, OSError) as e:
+        err_console.print(
+            f"[red]{key}: cannot tell whether a pre-merge walk is owed — {escape(str(e))}[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    unscripted = [r.id for r in owed.rows if not r.scenario]
+    if unscripted:
+        err_console.print(
+            f"[red]{key}: refused — row {unscripted[0]!r} has an agent-driven pre-merge "
+            "strategy and names no `scenario` (set it with `fr acceptance set-status "
+            "--scenario`).[/red]",
+            soft_wrap=True,
+        )
+        for other in unscripted[1:]:
+            err_console.print(f"  also unscripted: {other}", markup=False)
+        raise typer.Exit(2)
+    return owed
+
+
+def _verify_walk(
+    key: str, value: str, repo_root: Path, state: RunState, owed: WalkOwed, *, opened: str | None
+) -> str:
+    """`value` is `none` (accepted only when no walk is owed) or a log
+    `fr verification walk` wrote on HEAD's code tree, every step passing and
+    every owed row covered — or exit 2 naming the cause. Returns the witness,
+    `<log>@<sha256[:12]>`.
+
+    Attributed as `tests=` is (review p3-r1): the header is the log's own
+    claim, so it must also sit in this run's walk dir and — where the
+    transcript is readable — have been written inside the run window of a
+    command of YOURS that ran `fr verification walk --run <run>` since this
+    unit opened. Unobservable: recorded `unobserved=walk`, never silent.
+    """
+    from fr.run.code_tree import code_tree, dirty_code_paths
+    from fr.verification.model import StrategyError
+    from fr.verification.resolve import strategy_identity
+    from fr.verification.walk import WalkError, check_walk_log, parse_walk_log, walk_log_dir
+
+    if value == "none":
+        if owed.owed:
+            wanted = [r.id for r in owed.rows] or [owed.run_strategy or "?"]
+            err_console.print(
+                f"[red]{key}: --evidence walk=none — a pre-merge walk is owed "
+                f"({', '.join(wanted)}); run `fr verification walk` and name its log.[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        return "none"
+    given = Path(value).expanduser()
+    named = given if given.is_absolute() else repo_root / given
+    # The REAL path, symlinks followed, must sit in this run's walk dir, and
+    # the name itself must be a regular file — a link placed there is not a
+    # log the walk wrote (security review of p3-r1).
+    path = Path(os.path.realpath(named))
+    # `$HOME` may itself sit behind a link (macOS `/var`); the run's own dir
+    # may not — it is compared unresolved under the resolved walks root.
+    directory = Path(os.path.realpath(walk_log_dir(state.run).parent)) / state.run
+    if named.is_symlink():
+        err_console.print(
+            f"[red]{key}: --evidence walk={value} is a symlink — name the log "
+            f"`fr verification walk --run {state.run}` wrote.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if not path.is_relative_to(directory) or not path.is_file():
+        err_console.print(
+            f"[red]{key}: --evidence walk={value} is not a regular file in {directory} — "
+            f"name the log `fr verification walk --run {state.run}` wrote.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    try:
+        data = path.read_bytes()
+        log = parse_walk_log(data.decode())
+        problems = check_walk_log(
+            log,
+            owed,
+            code_tree(repo_root),
+            run=state.run,
+            manifest=strategy_identity(log.strategy, repo_root),
+        )
+        dirty = dirty_code_paths(repo_root)
+        modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
+    except (OSError, UnicodeDecodeError, WalkError, GitUnavailableError, StrategyError) as e:
+        err_console.print(
+            f"[red]{key}: --evidence walk={value}: {escape(str(e))}[/red]", soft_wrap=True
+        )
+        raise typer.Exit(2) from e
+    if dirty:
+        problems.append(f"uncommitted code since the walk ({dirty[0]}...)")
+    problems += _walk_provenance(key, state.run, modified, opened=opened)
+    if problems:
+        err_console.print(f"[red]{key}: --evidence walk={value} is refused:[/red]", soft_wrap=True)
+        for problem in problems:
+            err_console.print(f"  - {problem}", markup=False, soft_wrap=True)
+        raise typer.Exit(2)
+    return _log_witness(path, data, repo_root)
+
+
+def _walk_provenance(
+    key: str, run: str, modified: _dt.datetime, *, opened: str | None
+) -> list[str]:
+    """Why the walk log, modified at `modified`, is not one a command of
+    yours wrote during this unit (empty when it is) — only a command that is
+    exactly the walk counts (`walks_run`). Unobservable:
+    `unobserved=walk`, warned — and a log older than the unit is still
+    refused."""
+    from fr.run.observed import walks_run
+    from fr.run.telemetry import orchestrator_ran_since, parse_timestamp
+
+    windows = (
+        orchestrator_ran_since(os.environ, lambda command: walks_run(command, run), opened)
+        if opened
+        else None
+    )
+    # One second of slack either side, as `tests=` (review r1-1).
+    slack = _dt.timedelta(seconds=1)
+    if windows is not None:
+        if any(s - slack <= modified <= e + slack for s, e in windows):
+            return []
+        why = (
+            "no command of yours ran it"
+            if not windows
+            else "its bytes were not written by the command of yours that ran it"
+        )
+        return [
+            f"{why} — `fr verification walk --run {run}` must run in this session since "
+            f"this unit opened at {opened}, and write the log you name"
+        ]
+    opened_at = parse_timestamp(opened)
+    if opened_at is not None and modified < opened_at - slack:
+        return [f"the log predates this unit (opened {opened}) — walk again"]
+    _note_unobserved("walk")
+    err_console.print(
+        f"[yellow]{key}: could not verify who ran the walk — "
+        f"{_why_unobservable('commands')}; recorded unverified "
+        "(evidence: unobserved=walk).[/yellow]",
+        soft_wrap=True,
+    )
+    return []
 
 
 def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None) -> str:
@@ -4135,7 +4329,7 @@ def start_cmd(
     # started a run — and a `cli` step with no command exits 0, i.e. a green
     # step that did nothing. Cheap, and it runs before isolation is ensured,
     # so a bad shape costs no worktree and no container.
-    shape_errors = check_workflow(manifest)
+    shape_errors = check_workflow(manifest, repo_root)
     if shape_errors:
         err_console.print(f"[red]workflow {workflow!r} is not valid:[/red]")
         for err in shape_errors:
@@ -4167,7 +4361,7 @@ def start_cmd(
         except WorkflowError as e:
             err_console.print(f"[red]{escape(str(e))}[/red]")
             raise typer.Exit(2) from e
-        shape_errors = check_workflow(manifest)
+        shape_errors = check_workflow(manifest, workspace)
         if shape_errors:
             err_console.print(f"[red]workflow {workflow!r} is not valid in {workspace}:[/red]")
             for err in shape_errors:
@@ -5512,6 +5706,7 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    _refuse_premature_closes(repo_root, state, live)
     from fr.record.apply import _is_tracked
 
     tracked = _is_tracked(repo_root, body_path)
@@ -5519,6 +5714,55 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     body_path.unlink()
     if tracked:
         _note_record_write(repo_root, body_path)
+
+
+def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> None:
+    """R15: a live PR body that closes, fixes or resolves an issue a post-merge,
+    not-walk-verified row cites would close it on merge, before the promise it
+    carries has been verified. Printed with the `Refs <ref>` that mentions it
+    without closing; exit 2. A repo whose matrix cites no issue is never asked
+    (the reference's repo identity needs a remote or matrix keys)."""
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.model import AcceptanceError, load_matrix
+    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.record.pr_body import holds_open_for_run, premature_closes
+    from fr.requirements import load_spec_matrix, run_spec
+
+    path = repo_root / MATRIX_REL
+    if not path.is_file():
+        return
+    try:
+        matrix = load_matrix(path)
+        if not any(row.issues for row in matrix.rows):
+            return
+        identity = resolve_identity(matrix, repo_root)
+        spec_rel = run_spec(state)
+        spec_ref = load_spec_matrix(repo_root, spec_rel)[1] if spec_rel is not None else None
+    except AcceptanceError as e:
+        err_console.print(
+            f"[red]refused: cannot check the PR body's closing keywords against the "
+            f"acceptance matrix — {escape(str(e))}[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    found = premature_closes(
+        live, matrix, identity, holds_open_for_run(repo_root, state, matrix, spec_ref)
+    )
+    if not found:
+        return
+    lines = "\n".join(
+        f"  {p.line!r} closes {p.ref}, which row {', '.join(p.rows)} still holds open "
+        f"(post-merge, not yet walk-verified) — write instead: {p.fix}"
+        for p in found
+    )
+    err_console.print(
+        "refused: the PR body closes an issue whose promise is not verified until after "
+        "merge. Mention it without closing (`Refs <ref>`); the close command is printed "
+        f"when the walk is recorded (`fr acceptance set-status --walk`):\n{lines}",
+        markup=False,
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
 
 
 def _answered_by_or_exit(value: str | None) -> AnsweredBy | None:

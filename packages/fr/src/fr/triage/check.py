@@ -28,6 +28,11 @@ Pure: facts and judgements in, sets out. The command only formats them.
   marker's forge `createdAt` to `collected_at`, so every machine agrees and no
   clock is read; a marker time that cannot be read is skipped, never raised.
   Reported, never acted on;
+- **awaiting live** — an open issue labelled `fr:awaiting-live`: its fix has merged
+  and a post-merge acceptance row still waits for its walk (spec
+  2026-10-06-verification-strategies §F, R18). It is not ranked or proposed as work,
+  so it is in neither unranked, unplaced, no severity nor stale dispatch, and the
+  board shows it in a group of its own;
 - **duplicate candidates** — groups of open issues the engine (`fr.triage.dedupe`)
   proposes as duplicates, with each flagged pair's reasons. A proposal, never a
   verdict: the fr-triage skill judges each into `duplicate_of` or `distinct_from`;
@@ -46,10 +51,18 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
-from fr.labels import FR_IN_PROGRESS
+from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS
 from fr.triage.batch import is_open
 from fr.triage.dedupe import CandidateGroup, candidates
-from fr.triage.model import Facts, Issue, Judgements, PullRequest, issue_key, normalize_key
+from fr.triage.model import (
+    Batch,
+    Facts,
+    Issue,
+    Judgements,
+    PullRequest,
+    issue_key,
+    normalize_key,
+)
 
 SETTLED_STAGES = frozenset({"closed", "merged"})
 
@@ -104,6 +117,7 @@ class CheckResult:
     # Judgements whose `duplicate_of` target is itself a duplicate: a chain or a cycle
     # leaves no original on the board for its members (review p3-r2).
     duplicate_chained: list[str] = field(default_factory=list)
+    awaiting_live: list[Issue] = field(default_factory=list)
     candidates: list[CandidateGroup] = field(default_factory=list)
     duplicates: list[Duplicate] = field(default_factory=list)
 
@@ -131,6 +145,7 @@ class CheckResult:
             "no_severity": [row(i) for i in self.no_severity],
             "duplicate_unknown": list(self.duplicate_unknown),
             "duplicate_chained": list(self.duplicate_chained),
+            "awaiting_live": [row(i) for i in self.awaiting_live],
             "duplicate_candidates": [
                 {
                     "keys": list(g.keys),
@@ -257,6 +272,9 @@ def stale_dispatches(facts: Facts) -> list[Stale]:
             i.state != "open"
             or any(p.state in {"OPEN", "MERGED"} for p in i.prs)
             or FR_IN_PROGRESS.name not in i.labels
+            # Its fix merged through a Refs PR, which links no closing PR: it awaits
+            # its live walk, which is not a stale dispatch (spec §F, R18).
+            or is_awaiting_live(i)
         ):
             continue
         marker = _aware(i.dispatch_marker_at)
@@ -276,6 +294,23 @@ def stale_dispatches(facts: Facts) -> list[Stale]:
     return out
 
 
+def is_awaiting_live(issue: Issue) -> bool:
+    """Whether `issue` is open and carries `fr:awaiting-live`."""
+    return issue.state == "open" and FR_AWAITING_LIVE.name in issue.labels
+
+
+def batch_awaits_live(batch: Batch, facts: Facts) -> bool:
+    """Whether every open member of *batch* awaits its live walk (at least one is
+    open): such a batch is no work, so the driver holds it (spec §F, R18)."""
+    members = [i for i in facts.issues if i.key in batch.ids and i.state == "open"]
+    return bool(members) and all(is_awaiting_live(i) for i in members)
+
+
+def awaiting_live_issues(facts: Facts) -> list[Issue]:
+    """The awaiting-live set: see the module docstring."""
+    return [i for i in facts.issues if is_awaiting_live(i)]
+
+
 def unplaced_issues(facts: Facts, judgements: Judgements) -> list[Issue]:
     """The unplaced set: see the module docstring."""
     placed: set[str] = set()
@@ -285,14 +320,22 @@ def unplaced_issues(facts: Facts, judgements: Judgements) -> list[Issue]:
     for feature in judgements.features:
         placed.update(feature.ids)
     placed.update(k for k, j in judgements.issues.items() if j.kind == "parked" or j.duplicate_of)
-    return [i for i in facts.issues if i.state == "open" and i.key not in placed]
+    return [
+        i
+        for i in facts.issues
+        if i.state == "open" and i.key not in placed and not is_awaiting_live(i)
+    ]
 
 
 def classify(facts: Facts, judgements: Judgements) -> CheckResult:
     """Sort issues into their sets and report open PRs without a judgement."""
     judged = {normalize_key(k) for k in judgements.issues}
     found = {i.key: i for i in facts.issues}
-    unranked = [i for i in facts.issues if i.state == "open" and i.key not in judged]
+    unranked = [
+        i
+        for i in facts.issues
+        if i.state == "open" and i.key not in judged and not is_awaiting_live(i)
+    ]
     unranked_prs = [
         pr for pr in facts.prs if pr.state == "OPEN" and issue_key(pr.repo, pr.number) not in judged
     ]
@@ -333,7 +376,10 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
         no_severity=[
             i
             for i in facts.issues
-            if i.state == "open" and i.key in judged and judgements.issues[i.key].severity is None
+            if i.state == "open"
+            and i.key in judged
+            and judgements.issues[i.key].severity is None
+            and not is_awaiting_live(i)
         ],
         duplicate_unknown=sorted(
             k
@@ -348,6 +394,7 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
             and t.duplicate_of
         ),
         settled_prs=settled_prs,
+        awaiting_live=awaiting_live_issues(facts),
         candidates=candidates(facts, judgements),
         duplicates=duplicates(facts, judgements),
     )

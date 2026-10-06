@@ -43,6 +43,7 @@ from fr.commands.triage_cmd import triage_app
 from fr.commands.undispatch_cmd import undispatch_command
 from fr.commands.usage_cmd import usage_app
 from fr.commands.validate_cmd import validate_app
+from fr.commands.verification_cmd import verification_app
 from fr.commands.workflow_cmd import workflow_app
 
 app = typer.Typer(
@@ -78,6 +79,7 @@ app.add_typer(models_app, name="models")
 app.add_typer(harness_app, name="harness")
 app.add_typer(hermes_app, name="hermes")
 app.add_typer(workflow_app, name="workflow")
+app.add_typer(verification_app, name="verification")
 app.add_typer(run_app, name="run")
 app.add_typer(validate_app, name="validate")
 app.add_typer(triage_app, name="triage")

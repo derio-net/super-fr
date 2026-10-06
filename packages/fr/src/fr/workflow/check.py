@@ -21,6 +21,8 @@ the group's `emits` feed later top-level steps.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fr.capabilities import CAPABILITIES
 from fr.workflow.artifacts import IMPLIED_INPUTS_BY_UNIT
 from fr.workflow.model import Step, WorkflowManifest
@@ -38,8 +40,15 @@ def _flatten(steps: tuple[Step, ...]) -> list[tuple[Step, Step | None]]:
     return flat
 
 
-def check_workflow(manifest: WorkflowManifest) -> list[str]:
-    """Every problem with `manifest`, as human-readable strings. Empty = clean."""
+def check_workflow(manifest: WorkflowManifest, repo_root: Path | None) -> list[str]:
+    """Every problem with `manifest`, as human-readable strings. Empty = clean.
+
+    `repo_root` is where a repo-authored verification strategy would live, and
+    it is required so no caller can forget it: a caller that omitted it once
+    refused a repo-authored strategy that `fr workflow check` accepted. Pass
+    `None` only where no repo exists; then only shipped strategies satisfy
+    `verification:`.
+    """
     flat = _flatten(manifest.steps)
     errors: list[str] = []
     errors.extend(_duplicate_step_ids(flat))
@@ -49,7 +58,22 @@ def check_workflow(manifest: WorkflowManifest) -> list[str]:
     errors.extend(_cycles(flat))
     errors.extend(_unknown_capabilities(manifest.requires))
     errors.extend(_for_each_unit_conflicts(manifest))
+    errors.extend(_unresolvable_verification(manifest, repo_root))
     return errors
+
+
+def _unresolvable_verification(manifest: WorkflowManifest, repo_root: Path | None) -> list[str]:
+    """`verification: <name>` must resolve to a strategy (spec 2026-10-06 R5)."""
+    if manifest.verification is None:
+        return []
+    from fr.verification.model import StrategyError
+    from fr.verification.resolve import resolve_strategy
+
+    try:
+        resolve_strategy(manifest.verification, repo_root)
+    except StrategyError as e:
+        return [f"verification: {e}"]
+    return []
 
 
 def _duplicate_step_ids(flat: list[tuple[Step, Step | None]]) -> list[str]:

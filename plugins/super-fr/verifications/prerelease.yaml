@@ -1,0 +1,12 @@
+# Shipped strategy `prerelease` — spec 2026-10-06-verification-strategies §A (R3).
+# Pre-merge and operator-driven: install from an on-demand pre-release of the
+# PR branch (`fr verification prerelease --branch <b>`), source = the rc tag.
+verification: prerelease
+schema: 1
+description: Install from an on-demand pre-release of the PR branch; the operator drives the scenario.
+when: pre-merge
+driver: operator
+install: .fr/candidate-install {prefix} {source}
+scenario: "{scenario}"
+source: prerelease
+notes: Scenario runs in the client repo when `--client` is given, else in a fresh fixture repo.

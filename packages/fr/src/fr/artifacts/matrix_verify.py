@@ -8,9 +8,10 @@ the first time the matrix kind moves past 1 — which is why `Matrix` gains
 default, which is what every v1 row already means, so this rewrites no body:
 the runner writes the stamp (above `rows:`, which stays the last top-level key
 `fr acceptance add` appends under) once `fn` returns. `fn` only refuses to
-stamp a matrix that does not read as the live `Matrix` — a stamped broken file
-would claim a shape it does not have. Nothing is removed or moved, so no frozen
-legacy model is owed.
+stamp a matrix that does not read as a matrix — a stamped broken file would
+claim a shape it does not have. It reads through the FROZEN
+`fr.acceptance.legacy.MatrixV3`, never the live model: the 3 -> 4 hop
+(`fr.artifacts.matrix_strategies`) changed what the live `Row.verify` accepts.
 """
 
 from __future__ import annotations
@@ -37,12 +38,17 @@ def guard_matrix(path: Path) -> None:
     """Refuse to let the runner stamp a matrix that does not parse. Shared by
     every stamp-only matrix hop (`fr.artifacts.matrix_visual`, spec
     2026-09-28-ui-visual-evidence-design.md §G) — no version number in the
-    message, since naming one would misreport whichever other hop uses it."""
-    from fr.acceptance.model import AcceptanceError, parse_matrix
+    message, since naming one would misreport whichever other hop uses it.
+
+    Reads through the FROZEN `fr.acceptance.legacy.MatrixV3` (versions 1 to
+    3), never the live `Matrix`: the 3 -> 4 hop changed `Row.verify`, so the
+    live model is no longer a superset of the bodies these hops read (spec
+    2026-10-06-verification-strategies §B, artifact-versioning rule)."""
+    from fr.acceptance.legacy import MatrixV3Error, parse_matrix_v3
 
     try:
-        parse_matrix(path.read_text())
-    except (OSError, AcceptanceError) as e:
+        parse_matrix_v3(path.read_text())
+    except (OSError, MatrixV3Error) as e:
         raise UnreadableMatrixError(
             f"{path}: not a readable matrix, so fr will not stamp it ({e}). "
             "Fix the file by hand — it is left on its current version and will be retried."

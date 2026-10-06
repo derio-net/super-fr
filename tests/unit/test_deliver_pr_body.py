@@ -121,6 +121,7 @@ def test_no_out_of_scope_findings_renders_none(tmp_path: Path) -> None:
 
     assert render_out_of_scope([]) == "None."
     assert missing_sections("## Findings\n## Out-of-scope findings\nNone.\n") == [
+        "## Pre-merge verification owed",
         "## Post-merge verification owed",
         "## Proportionality",
         "## Cost",
@@ -168,6 +169,7 @@ def test_the_required_sections_carry_no_input_section() -> None:
     assert REQUIRED_SECTIONS == (
         "## Findings",
         "## Out-of-scope findings",
+        "## Pre-merge verification owed",
         "## Post-merge verification owed",
         "## Proportionality",
         "## Cost",
@@ -196,7 +198,7 @@ def test_the_body_renders_post_merge_rows_and_tests_and_no_input_section(
         root,
         [
             row("docs/spec.md", status="skipped"),
-            row("docs/spec.md", rid="live-run", status="not-implemented", verify="post-merge"),
+            row("docs/spec.md", rid="live-run", status="not-implemented", verify="live"),
         ],
     )
     live["body"] = "never read before the render"

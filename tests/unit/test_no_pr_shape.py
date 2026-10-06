@@ -79,7 +79,7 @@ def test_the_fixture_shape_is_permanent_and_mentions_no_pr() -> None:
 def test_it_passes_check_workflow() -> None:
     from fr.workflow.check import check_workflow
 
-    assert check_workflow(_shape()) == []
+    assert check_workflow(_shape(), None) == []
 
 
 def test_it_requires_no_repo_tracked_input() -> None:

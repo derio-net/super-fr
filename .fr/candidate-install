@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# super-fr's candidate-install contract (spec 2026-10-06-verification-strategies R8):
+#
+#   .fr/candidate-install <prefix> <source>
+#
+# Installs the build under <source> into <prefix> and touches nothing outside it
+# (UV_TOOL_DIR and UV_TOOL_BIN_DIR both live under <prefix>, so the operator's
+# own `fr` link is never relinked, gh#683). <source> is a worktree path, or
+# `git+<url>@<ref>` for a remote ref (what a pre-release prints). The LAST line
+# of stdout names the tool: `fr`, found at <prefix>/bin/fr.
+#
+# The --with set mirrors scripts/install.sh: every workspace package that
+# registers an `fr.runners` entry point (tests/integration/test_scenarios.py
+# pins the git list below against that derivation).
+set -euo pipefail
+
+if [ "$#" -ne 2 ]; then
+  echo "usage: .fr/candidate-install <prefix> <source>" >&2
+  exit 2
+fi
+prefix="$1"
+source="$2"
+mkdir -p "$prefix"
+prefix="$(cd "$prefix" && pwd)"
+export UV_TOOL_DIR="$prefix/uv-tools"
+export UV_TOOL_BIN_DIR="$prefix/bin"
+
+with=()
+case "$source" in
+  git+*)
+    # `git+<url>@<ref>`: no checkout to scan, so the runner packages are named
+    # here; fr-dispatch rides along because their workspace sources do not
+    # resolve from a subdirectory install.
+    base="${source%%#*}"
+    from="$base#subdirectory=packages/fr"
+    for pkg in fr-dispatch fr-vk fr-cncd fr-herdr; do
+      with+=(--with "$pkg @ $base#subdirectory=packages/$pkg")
+    done
+    ;;
+  *)
+    if [ ! -d "$source/packages/fr" ]; then
+      echo "candidate-install: no packages/fr under $source" >&2
+      exit 2
+    fi
+    source="$(cd "$source" && pwd)"
+    from="$source/packages/fr"
+    for pyproject in "$source"/packages/*/pyproject.toml; do
+      if grep -q '^\[project\.entry-points\."fr\.runners"\]' "$pyproject"; then
+        with+=(--with "$(dirname "$pyproject")")
+      fi
+    done
+    ;;
+esac
+
+uv tool install --force "${with[@]}" "$from" >&2
+"$prefix/bin/fr" --version >&2
+echo fr

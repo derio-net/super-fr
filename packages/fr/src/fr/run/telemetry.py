@@ -1278,6 +1278,29 @@ def orchestrator_wrote_since(
     not the drift this gate closes (relaying someone else's green), and
     closing it needs a per-repo test-runner declaration fr does not have.
     """
+    return _orchestrator_windows(env, since, lambda view, start: view.wrote_windows(log, start))
+
+
+def orchestrator_ran_since(
+    env: Mapping[str, str], matches: Callable[[str], bool], since: str
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """`orchestrator_wrote_since` for a command that names no `>` target: the
+    run windows of every main-thread shell command, issued at or after `since`
+    and run to completion, whose command line `matches` — e.g.
+    `fr.run.observed.walks_run`, the `walk=` witness (spec 2026-10-06 §C).
+    Same three values, same harnesses, same limit: it proves the orchestrator
+    issued such a command, not what else that command line did."""
+    return _orchestrator_windows(env, since, lambda view, start: view.ran_windows(matches, start))
+
+
+def _orchestrator_windows(
+    env: Mapping[str, str],
+    since: str,
+    windows: Callable[[Any, _dt.datetime], list[tuple[_dt.datetime, _dt.datetime]] | None],
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """`windows(view, start)` over this session's view (or OpenCode's every
+    top-level session, when no session id was exported) — `None` where none
+    can be read."""
     from fr.run.observed import observed_session, opencode_unscoped
 
     start = parse_timestamp(since)
@@ -1286,12 +1309,12 @@ def orchestrator_wrote_since(
     opencode = detect_harness(env) == OpenCodeReader.harness
     view = observed_session(env)
     if view is not None:
-        return view.wrote_windows(log, start)
+        return windows(view, start)
     if opencode and current_session(env):
         # A session id the database does not hold: the wrong database
         # (gh#740, review p1-r2) — never widened to every top-level session.
         return None
-    return opencode_unscoped(env).wrote_windows(log, start) if opencode else None
+    return windows(opencode_unscoped(env), start) if opencode else None
 
 
 def wrote_since(
@@ -1306,6 +1329,24 @@ def wrote_since(
     file. A subagent's transcript (`witness_transcript`) is ALL sidechain, so
     it is read with `main_thread=False` (spec 2026-09-29-fr-goal-light-path
     §D: a phase unit's suite log is witnessed by its holder's transcript)."""
+    return ran_since(
+        transcript, lambda command: _writes(command, log), since, main_thread=main_thread, log=log
+    )
+
+
+def ran_since(
+    transcript: Path,
+    matches: Callable[[str], bool],
+    since: str,
+    *,
+    main_thread: bool,
+    log: Path | None = None,
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """`wrote_since` for any command line `matches` accepts — the one reader
+    both the write-target and the command-match witnesses go through. Only a
+    write-target witness passes `log`: a self-detached writer's window is then
+    closed at the later `exit=0` line naming that log (gh#1002); a pure
+    command-match witness has no log to look for, so it never closes one."""
     start = parse_timestamp(since)
     if start is None:
         return None
@@ -1334,7 +1375,7 @@ def wrote_since(
                 and isinstance(block.get("id"), str)
             ):
                 commands[block["id"]] = (stamp, command)
-                if _writes(command, log):
+                if matches(command):
                     issued[block["id"]] = stamp
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
     closed: dict[str, tuple[_dt.datetime, _dt.datetime]] = {}
@@ -1417,7 +1458,7 @@ def wrote_since(
     calls.sort(key=lambda c: (c.began, c.ended))
     for tool_use_id, (began, ended) in closed.items():
         command = commands[tool_use_id][1]
-        if _detaches(command):
+        if log is not None and _detaches(command):
             seen = _seen_exit(_BashCall(began, ended, command, 0, ""), calls, log)
             if seen is not None:
                 windows.append((began, seen))

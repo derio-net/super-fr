@@ -3238,6 +3238,349 @@ def test_extra_orphans_are_warned_stale_once_each(
     assert _exports(state) == [("1", 40, False)]
 
 
+# ------------------------------------- conflict hand-back (spec 2026-10-06 §G, R19-R23)
+
+
+class MessengerRunner(FakeRunner):
+    """A runner that reports session state and takes messages (`SessionMessenger`)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.status: dict[str, str] = {}
+        self.messages: list[tuple[str, str]] = []
+
+    def session_statuses(self, items: Any) -> dict[str, str]:
+        self.calls.append("session_statuses")
+        return {i.id: self.status.get(i.id, "absent") for i in items}
+
+    def message(self, item: Any, text: str) -> None:
+        self.messages.append((item.id, text))
+
+
+@pytest.fixture
+def messenger(monkeypatch: pytest.MonkeyPatch) -> MessengerRunner:
+    fake = MessengerRunner()
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", lambda name: fake)
+    return fake
+
+
+BATCH_ITEM_B1 = f"{REPO}/run/batch-b1"
+
+
+def _conflict_error(head: str = "sha-101", paths: tuple[str, ...] = ("src/a.py",), bid: str = "b1",
+                    number: int = 101) -> Any:  # fmt: skip
+    from fr.triage.batch_merge import MergeConflictError
+
+    return MergeConflictError(
+        f"PR #{number} (batch {bid}) conflicts with origin/main in a change merge will not "
+        f"resolve: {', '.join(paths)}",
+        batch=bid, head=head, paths=paths,
+    )  # fmt: skip
+
+
+def _conflict_yaml(head: str, delivered: str, minute: int) -> str:
+    return (
+        f"      - {{kind: conflict, at: '2026-10-01T11:{minute:02d}:00Z', head: {head}, "
+        f"paths: [src/a.py], delivered: {delivered}}}\n"
+    )
+
+
+def _one_conflicted(world: World, tmp_path: Path, events: str = "") -> None:
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + events))
+    if events:
+        path = tmp_path / "judgements.yaml"
+        path.write_text(path.read_text("utf-8").replace("schema: 3\n", "schema: 5\n"), "utf-8")
+
+
+def _conflicts(tmp_path: Path, bid: str = "b1") -> list[Any]:
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == bid)
+    return [e for e in batch.events if e.kind == "conflict"]
+
+
+def _needs(tmp_path: Path) -> list[Any]:
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    facts = load_facts(tmp_path / "facts.json")
+    return [n for n in needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
+            if n.kind == "merge-conflict"]  # fmt: skip
+
+
+def test_a_conflict_is_messaged_to_the_idle_batch_session(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _conflict_error()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((target, text),) = messenger.messages
+    assert target == BATCH_ITEM_B1, out
+    assert "b1" in text and "PR #101" in text and "sha-101" in text and "src/a.py" in text
+    (event,) = _conflicts(tmp_path)
+    assert (event.head, event.paths, event.delivered) == ("sha-101", ["src/a.py"], "session")
+    assert event.handle == BATCH_ITEM_B1
+    assert messenger.dispatched == []
+    (line,) = _lines(out, "merge")
+    assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 5
+
+
+@pytest.mark.parametrize("status", ["absent", "done"])
+def test_a_conflict_with_no_live_session_starts_a_fresh_one(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge, status: str,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = status
+    train.script[101] = _conflict_error()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [], out
+    (item,) = messenger.dispatched
+    assert item.id == f"{REPO}/run/conflict-b1-1"
+    assert item.unit == "run"
+    payload = item.payload
+    assert payload["kind"] == "conflict"
+    assert payload["branch"] == "feat/batch-b1"
+    assert (payload["harness"], payload["model"]) == ("claude", "claude-opus-5-5")
+    assert payload["checkout"] == str(checkout.path)
+    assert "src/a.py" in payload["brief"]
+    (event,) = _conflicts(tmp_path)
+    assert (event.delivered, event.handle) == ("fresh", "w2:p1K")
+
+
+def test_a_runner_without_the_messenger_protocol_always_starts_a_fresh_session(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    train.script[101] = _conflict_error()
+    _drive(tmp_path, "--once", "--yes")
+    (item,) = runner.dispatched
+    assert item.id == f"{REPO}/run/conflict-b1-1" and item.payload["kind"] == "conflict"
+    assert [e.delivered for e in _conflicts(tmp_path)] == ["fresh"]
+
+
+@pytest.mark.parametrize("status", ["working", "blocked"])
+def test_a_busy_session_gets_nothing_and_no_event(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge, status: str,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = status
+    train.script[101] = _conflict_error()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [] and messenger.dispatched == []
+    assert _conflicts(tmp_path) == []
+    assert f"its session is {status}" in _lines(out, "merge")[0]
+    messenger.status[BATCH_ITEM_B1] = "idle"  # a later pass delivers it
+    _drive(tmp_path, "--once", "--yes")
+    assert [t for t, _ in messenger.messages] == [BATCH_ITEM_B1]
+
+
+def test_the_message_goes_to_the_latest_fresh_conflict_session(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, _conflict_yaml("sha-old", "fresh", 1))
+    conflict_item = f"{REPO}/run/conflict-b1-1"
+    messenger.status.update({BATCH_ITEM_B1: "idle", conflict_item: "idle"})
+    train.script[101] = _conflict_error()
+    _drive(tmp_path, "--once", "--yes")
+    assert [t for t, _ in messenger.messages] == [conflict_item]
+
+
+def test_a_second_fresh_session_takes_the_next_number(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, _conflict_yaml("sha-old", "fresh", 1))
+    train.script[101] = _conflict_error()
+    _drive(tmp_path, "--once", "--yes")
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/conflict-b1-2"]
+
+
+def test_a_restarted_driver_never_hands_the_same_head_back_twice(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _conflict_error()
+    _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes")  # a new process: no in-memory state
+    assert len(messenger.messages) == 1, out
+    assert len(_conflicts(tmp_path)) == 1
+    assert "handed back" not in _lines(out, "merge")[0]
+
+
+def test_a_live_fresh_session_from_a_killed_pass_is_recorded_not_restarted(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    runner.live.add(f"{REPO}/run/conflict-b1-1")
+    train.script[101] = _conflict_error()
+    _drive(tmp_path, "--once", "--yes")
+    assert runner.dispatched == []
+    assert [(e.delivered, e.handle) for e in _conflicts(tmp_path)] == [
+        ("fresh", f"{REPO}/run/conflict-b1-1")
+    ]
+
+
+def test_the_third_conflict_is_held_and_needs_the_operator(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _one_conflicted(
+        world, tmp_path, _conflict_yaml("sha-1", "session", 1) + _conflict_yaml("sha-2", "fresh", 2)
+    )
+    messenger.status.update({BATCH_ITEM_B1: "idle", f"{REPO}/run/conflict-b1-1": "idle"})
+    train.script[101] = _conflict_error()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [] and messenger.dispatched == [], out
+    assert [e.delivered for e in _conflicts(tmp_path)] == ["session", "fresh", "held"]
+    assert "held" in _lines(out, "merge")[0]
+    (need,) = _needs(tmp_path)
+    assert need.ref == "b1" and "sha-101" in need.text
+    # a fourth pass at the same head is a skip: still one held event, still one need
+    _drive(tmp_path, "--once", "--yes")
+    assert len(_conflicts(tmp_path)) == 3 and len(_needs(tmp_path)) == 1
+
+
+def test_a_held_conflict_is_cleared_by_a_merge_a_cancel_or_a_new_dispatch(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runner: FakeRunner,
+) -> None:
+    held = _conflict_yaml("sha-3", "held", 3)
+    _one_conflicted(world, tmp_path, held)
+    assert len(_needs(tmp_path)) == 1
+    # a new dispatch resets the count
+    redispatch = (
+        "      - {kind: dispatch, at: '2026-10-01T12:00:00Z', runner: fake, handle: h, "
+        "branch: feat/batch-b1}\n"
+    )
+    _one_conflicted(world, tmp_path, held + redispatch)
+    assert _needs(tmp_path) == []
+    # a cancel closes the batch
+    _one_conflicted(world, tmp_path, held + "      - {kind: cancel, at: '2026-10-01T12:00:00Z'}\n")
+    assert _needs(tmp_path) == []
+    # a merge closes it too
+    _one_conflicted(world, tmp_path, held)
+    world.prs[101].update(state="MERGED", merged_at=NOW.isoformat())
+    world.issues[1] = "closed"
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    assert _needs(tmp_path) == []
+
+
+def test_a_conflict_sharing_a_path_with_an_earlier_one_this_pass_waits_behind_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _three_ready(world, tmp_path)
+    messenger.status.update({f"{REPO}/run/batch-b{i}": "idle" for i in (1, 2, 3)})
+    train.script[101] = _conflict_error(paths=("src/a.py",))
+    train.script[102] = _conflict_error(head="sha-102", paths=("src/a.py", "x.py"), bid="b2",
+                                        number=102)  # fmt: skip
+    train.script[103] = _conflict_error(head="sha-103", paths=("docs/c.md",), bid="b3",
+                                        number=103)  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert [t for t, _ in messenger.messages] == [BATCH_ITEM_B1, f"{REPO}/run/batch-b3"], out
+    assert _conflicts(tmp_path, "b2") == []
+    assert "waits behind b1" in _lines(out, "merge")[1]
+
+
+def test_a_batch_that_waited_behind_a_blocker_is_handed_back_once_the_blocker_merges(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _three_ready(world, tmp_path)
+    messenger.status.update({f"{REPO}/run/batch-b{i}": "idle" for i in (1, 2, 3)})
+    train.script[101] = _conflict_error(paths=("src/a.py",))
+    train.script[102] = _conflict_error(head="sha-102", paths=("src/a.py", "x.py"), bid="b2",
+                                        number=102)  # fmt: skip
+    _drive(tmp_path, "--once", "--yes")
+    assert _conflicts(tmp_path, "b2") == []  # waited, nothing recorded
+    # b1's conflict is resolved and its PR merges; b2 is no longer behind anything
+    del train.script[101]
+    world.prs[101].update(state="MERGED", merged_at=NOW.isoformat())
+    world.issues[1] = "closed"
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    messenger.messages.clear()
+    _drive(tmp_path, "--once", "--yes")
+    assert f"{REPO}/run/batch-b2" in [t for t, _ in messenger.messages]
+    (event,) = _conflicts(tmp_path, "b2")
+    assert (event.head, event.delivered) == ("sha-102", "session")
+
+
+def test_conflict_brief_names_the_six_steps_and_the_declared_mirrors() -> None:
+    from fr.triage.batch_dispatch import conflict_brief
+    from fr.triage.model import Batch
+
+    batch = Batch.model_validate({"id": "b1", "title": "Fix it", "ids": ["super-fr#1"]})
+    text = conflict_brief(
+        batch, pr=101, head="sha-101abcdef0123", paths=("src/a.py", "uv.lock"),
+        branch="feat/batch-b1", base="origin/main",
+        mirrors=(["uv", "run", "scripts/sync-opencode.py"],
+                 ["uv", "run", "scripts/sync hermes.py"]),
+    )  # fmt: skip
+    for needle in ("b1", "PR #101", "sha-101abcdef0123", "src/a.py, uv.lock", "feat/batch-b1"):
+        assert needle in text
+    assert "git merge origin/main" in text
+    assert "rebase" in text and "force-push" in text
+    assert "regenerate" in text.lower() and "test suite" in text and "git push" in text
+    assert "uv run scripts/sync-opencode.py" in text
+    assert "uv run 'scripts/sync hermes.py'" in text
+    bare = conflict_brief(
+        batch, pr=101, head="sha-101", paths=("src/a.py",), branch="feat/batch-b1",
+        base="origin/main", mirrors=(),
+    )  # fmt: skip
+    assert "sync-opencode" not in bare and "regenerate" in bare.lower()
+
+
+def test_the_fresh_conflict_brief_enters_the_batch_workspace_before_it_merges(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    train.script[101] = _conflict_error()
+    _drive(tmp_path, "--once", "--yes")
+    (item,) = runner.dispatched
+    brief = item.payload["brief"]
+    enter = brief.index("fr isolation up --branch feat/batch-b1")
+    assert enter < brief.index("git merge origin/main")
+    assert brief.index("1. ") < enter < brief.index("2. ")
+    # the session starts in the driver's clone, which the brief never moves off its branch
+    assert "git checkout" not in brief and "git switch" not in brief
+
+
+def test_triage_yaml_declares_mirrors_as_argument_lists() -> None:
+    assert TriageConfig().mirrors == []
+    got = TriageConfig.model_validate({"mirrors": [["uv", "run", "scripts/sync.py"]]})
+    assert got.mirrors == [["uv", "run", "scripts/sync.py"]]
+    from pydantic import ValidationError
+
+    for bad in ("uv run x", ["uv run x"], [[]]):
+        with pytest.raises(ValidationError):
+            TriageConfig.model_validate({"mirrors": bad})
+
+
+def test_the_conflict_brief_carries_the_repos_mirrors(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge,
+) -> None:  # fmt: skip
+    world.config = {"mirrors": [["uv", "run", "scripts/sync-opencode.py"]]}
+    _one_conflicted(world, tmp_path)
+    train.script[101] = _conflict_error()
+    _drive(tmp_path, "--once", "--yes")
+    (item,) = runner.dispatched
+    assert "uv run scripts/sync-opencode.py" in item.payload["brief"]
+
+
 @pytest.mark.parametrize(("unfinished", "passes"), [(frozenset({"1"}), 2), (frozenset(), 1)])
 def test_a_finishing_loop_runs_one_observation_pass_only_when_a_wave_was_unfinished(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,

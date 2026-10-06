@@ -1359,6 +1359,20 @@ def test_default_selection_is_every_batch_when_none_has_a_wave() -> None:
     assert default_selection([a, b]) == frozenset({"a", "b"})
 
 
+def test_a_batch_whose_members_all_await_a_live_walk_is_held_not_dispatched() -> None:
+    """p4-r2 (spec 2026-10-06-verification-strategies §F, R18): a planned batch whose
+    open members all await their live walk is no work. It is `held`, saying why, and
+    it does not count as pending, so it never keeps a drive alive."""
+    a, b = _batch("a", 1), _batch("b", 2)
+
+    got = drive_pass(_snap([a, b], {"a": "proposed", "b": "proposed"}, awaiting=frozenset({"b"})))
+
+    assert _kinds(got.actions) == [("dispatch", "a"), ("held", "b")]
+    held = got.actions[1]
+    assert "await" in held.detail and "live walk" in held.detail
+    assert got.summary.pending == 0
+
+
 # ------------------------------------------- dedupe: a wave finishing (triage-dedupe R10)
 
 _CLOSEOUT_DONE = {

@@ -71,6 +71,10 @@ class ObservedSession(Protocol):
         self, log: Path, since: _dt.datetime
     ) -> list[tuple[_dt.datetime, _dt.datetime]] | None: ...
 
+    def ran_windows(
+        self, matches: Callable[[str], bool], since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None: ...
+
 
 _TIER_SUFFIXES = ("-mechanical", "-standard", "-hard")
 
@@ -174,6 +178,13 @@ class ClaudeCodeSession:
 
         return wrote_since(self.transcript, log, _iso(since), main_thread=self.main_thread)
 
+    def ran_windows(
+        self, matches: Callable[[str], bool], since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+        from fr.run.telemetry import ran_since
+
+        return ran_since(self.transcript, matches, _iso(since), main_thread=self.main_thread)
+
 
 # --- OpenCode -------------------------------------------------------------
 
@@ -267,7 +278,21 @@ def _query(db: Path, sql: str, params: tuple[object, ...]) -> list[tuple[Any, ..
 def _wrote_windows(
     db: Path, log: Path, start: _dt.datetime, session: str | None
 ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
-    """The `(start, end)` of every `bash` part that WROTE `log`, started at or
+    from fr.run.telemetry import _writes
+
+    return _ran_windows(db, lambda command: _writes(command, log), start, session, log=log)
+
+
+def _ran_windows(
+    db: Path,
+    matches: Callable[[str], bool],
+    start: _dt.datetime,
+    session: str | None,
+    *,
+    log: Path | None = None,
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """The `(start, end)` of every `bash` part whose command `matches` (for the
+    write-target witness: WROTE `log`), started at or
     after `start`, completed with exit 0 — in `session`, or (`None`) in any
     TOP-LEVEL session (a `task` subagent is a child session, `parent_id` set).
     `None` when the database cannot be read.
@@ -279,9 +304,10 @@ def _wrote_windows(
     `None` (unobserved), never `[]`, which refuses as "nobody wrote it".
     Activity is read from `part`, not `session.time_updated`, which nothing
     shows OpenCode bumps per part. Exit 0 stands in for Claude Code's
-    `is_error`, which a non-zero exit sets.
+    `is_error`, which a non-zero exit sets. A detached writer's window is
+    extended only when there is a `log` to read its `exit=` line from.
     """
-    from fr.run.telemetry import _BashCall, _detaches, _seen_exit, _writes
+    from fr.run.telemetry import _BashCall, _detaches, _seen_exit
 
     since_ms = int(start.timestamp() * 1000)
     active = _query(db, "SELECT 1 FROM part WHERE time_updated >= ? LIMIT 1", (since_ms,))
@@ -328,10 +354,10 @@ def _wrote_windows(
     calls.sort(key=lambda c: (c.began, c.ended))
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
     for call in calls:
-        if call.exit_code != 0 or not _writes(call.command, log):
+        if call.exit_code != 0 or not matches(call.command):
             continue
         windows.append((call.began, call.ended))
-        if _detaches(call.command):
+        if log is not None and _detaches(call.command):
             seen = _seen_exit(call, calls, log)
             if seen is not None:
                 windows.append((call.began, seen))
@@ -519,11 +545,18 @@ class OpenCodeSession:
             return None
         return _wrote_windows(self.db, log, since, self.session)
 
+    def ran_windows(
+        self, matches: Callable[[str], bool], since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+        if not self._known():
+            return None
+        return _ran_windows(self.db, matches, since, self.session)
+
 
 @dataclass(frozen=True)
 class OpenCodeUnscoped:
     """OpenCode with no session id (the plugin not delivered, or older than
-    `shell.env`): serves `wrote_windows` only, reading every TOP-LEVEL session
+    `shell.env`): serves `wrote_windows` and `ran_windows` only, reading every TOP-LEVEL session
     active since — today's reading, which keeps `deliver-tests-provenance`
     enforced without the plugin (spec §A). Weaker than one session; still proof
     that an orchestrator's own shell command produced the bytes."""
@@ -535,11 +568,93 @@ class OpenCodeUnscoped:
     ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
         return _wrote_windows(self.db, log, since, None)
 
+    def ran_windows(
+        self, matches: Callable[[str], bool], since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+        return _ran_windows(self.db, matches, since, None)
+
 
 def opencode_unscoped(env: Mapping[str, str]) -> OpenCodeUnscoped:
     from fr.run.telemetry import OpenCodeReader
 
     return OpenCodeUnscoped(OpenCodeReader().database(env))
+
+
+# --- what a command line runs ------------------------------------------------
+
+_NEVER_IN_A_WALK = ("$(", "`", "<<", "\n", "#")
+"""Text a walk command never carries: command substitution, a here-doc, a
+second line, a comment. Present anywhere — quoted or not — and it is not one."""
+_OPERATOR_CHARS = frozenset("();<>|&")
+
+
+def walks_run(command: str, run: str) -> bool:
+    """Is `command` EXACTLY a run of `fr verification walk --run <run>`? The
+    command-match witness beside the write-target one
+    (`fr.run.telemetry._writes`): the walk writes its own log, so the command
+    names no `>` target to match.
+
+    An allowlist, not a denylist of writers (no list of the ways a shell can
+    write a file is complete — security review of p3-r1). After shlex-splitting,
+    the command is one of:
+
+    (a) `<fr> verification walk <args…>`
+    (b) `cd <path> && <fr> verification walk <args…>`
+
+    where `<fr>` is ONLY `fr` or `uv run fr`, and the args hold exactly one
+    `--run`, equal to `run`. A command that ran a different program cannot
+    vouch for the walk, so there is no env-assignment prefix (`PATH=…`,
+    `FR_SHIPPED_VERIFICATIONS_DIR=…`), no `env`, no path to some `fr`, no uv
+    flag (`--project`, `--with`, `--python`). Anything else is not a walk:
+    another segment, any other operator (redirect, pipe, `;`, `||`, background
+    `&`, subshell, braces), command substitution, a here-doc, a comment,
+    unbalanced quotes.
+
+    The residual this cannot close: a process the agent started EARLIER (in
+    the background) can still write the log during this command's window. That
+    is the trust boundary the `tests` witness already has — the gate proves the
+    orchestrator ran the walk then, not that nothing else wrote meanwhile.
+    """
+    import shlex
+
+    if any(text in command for text in _NEVER_IN_A_WALK):
+        return False
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except ValueError:
+        return False
+    segments: list[list[str]] = [[]]
+    for token in tokens:
+        if token == "&&":
+            segments.append([])
+        elif token and set(token) <= _OPERATOR_CHARS:
+            return False
+        else:
+            segments[-1].append(token)
+    if len(segments) == 2 and len(segments[0]) == 2 and segments[0][0] == "cd":
+        segments = segments[1:]
+    return len(segments) == 1 and _is_walk(segments[0], run)
+
+
+def _is_walk(words: list[str], run: str) -> bool:
+    """`words` is `fr verification walk <args…>` or `uv run fr verification
+    walk <args…>` — nothing before it, no other `fr` — with exactly one
+    `--run`, equal to `run`."""
+    if words[:3] == ["uv", "run", "fr"]:
+        words = words[2:]
+    if words[:3] != ["fr", "verification", "walk"]:
+        return False
+    runs: list[str | None] = []
+    args = words[3:]
+    for i, arg in enumerate(args):
+        if arg == "--run":
+            runs.append(args[i + 1] if i + 1 < len(args) else None)
+        elif arg.startswith("--run="):
+            runs.append(arg.removeprefix("--run="))
+    return runs == [run]
 
 
 _ROOT_HOPS = 32

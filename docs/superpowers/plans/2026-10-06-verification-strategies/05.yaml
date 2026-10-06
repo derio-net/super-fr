@@ -1,0 +1,127 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Drive — hand real merge conflicts back to the batch's session
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-drive-conflict-handback
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/batch_merge.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/batch_dispatch.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - tests/unit/test_triage_batch_*.py
+  - tests/unit/test_triage_views*.py
+  - tests/unit/test_triage_model*.py
+  - packages/fr-herdr/tests/*
+  - tests/unit/test_herdr*.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: RED/GREEN — structured conflict and ConflictEvent (judgements 4→5)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: batch_merge tests — an unresolvable conflict raises MergeConflictError
+      (a MergeStopError) carrying batch, head and the refused paths, message unchanged.
+      Model tests — ConflictEvent (kind conflict; at, head, paths, delivered
+      session|fresh|held, handle) round-trips; a judgements file with a conflict event
+      under schema 4 is refused; fr reads 1–5 and writes 5.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: batch_merge._update raises the subclass; triage/model.py event + schema gate
+      (pattern of SCHEMA_3_EVENTS at model.py:519). Green.
+- number: 2
+  title: RED/GREEN — pure conflict_decision
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_batch_conflict.py — conflict_decision(events, head,
+      paths, earlier_in_pass): `skip` when a conflict event exists for this head;
+      `wait-behind <b>` when a refused path is shared with an earlier conflict this pass;
+      `held` once two session|fresh hand-backs exist since the latest dispatch event (held
+      events never count; a new dispatch resets); else `handback`. Clock-free, pure.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: batch_drive.conflict_decision. Green.
+- number: 3
+  title: RED/GREEN — SessionMessenger protocol and herdr implementation
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      RED: fr_dispatch protocol test — SessionMessenger is a runtime_checkable optional
+      protocol beside SessionInspector, not a CAPABILITIES entry (CAPABILITIES unchanged).
+      herdr tests (stub _run_herdr): message(item, text) runs
+      `herdr agent prompt <agent_name(item.id)> <text>`.
+  - id: P5.T3.S2
+    text: |-
+      GREEN: protocols.py and fr_herdr/runner.py. Green (run the fr-herdr package tests).
+- number: 4
+  title: RED/GREEN — executor hand-back, brief, needs-you
+  steps:
+  - id: P5.T4.S1
+    text: |-
+      RED: drive command tests with a fake runner and the existing git fixture helpers:
+      on MergeConflictError the executor calls conflict_decision with the conflicts seen
+      earlier in this pass's train; `handback` + target session idle -> message sent,
+      ConflictEvent delivered=session appended (through batch.save_batches); target absent
+      or done, or a runner without SessionMessenger -> a run-unit item
+      `<repo>/run/conflict-<id>-<n>` (payload.kind conflict, branch, harness, model,
+      checkout) dispatched, delivered=fresh; target working or blocked -> nothing sent,
+      no event; the message target is the latest fresh conflict item if any, else the
+      dispatch item; a restarted driver (new process state) does not resend for the same
+      head; third conflict -> delivered=held and views.needs_you lists `merge-conflict`
+      until merge, cancel or a new dispatch. conflict_brief names batch, PR, head, paths,
+      the five R20 steps and `.fr/triage.yaml` `mirrors:` commands when declared.
+  - id: P5.T4.S2
+    text: |-
+      GREEN: triage_batch_cmd.py (_merge_batch catch at :2184-2194), batch_dispatch
+      .conflict_brief, triage config model `mirrors`, views.needs_you + NEED_LABELS. Green;
+      full fast suite; ruff; mypy (all five packages); commit.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T14:11:23+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T14:11:23+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T14:11:23+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-10-06T14:11:23+00:00'
+      note: null
+    P5.T3.S1:
+      state: x
+      ticked_at: '2026-10-06T14:11:23+00:00'
+      note: null
+    P5.T3.S2:
+      state: x
+      ticked_at: '2026-10-06T14:11:23+00:00'
+      note: null
+    P5.T4.S1:
+      state: x
+      ticked_at: '2026-10-06T14:11:23+00:00'
+      note: null
+    P5.T4.S2:
+      state: x
+      ticked_at: '2026-10-06T14:11:23+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T14:11:23+00:00'
+    note: null
+    observed_prs: []

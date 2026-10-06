@@ -51,7 +51,7 @@ def test_the_light_shape_resolves_from_the_shipped_dirs_and_checks_clean() -> No
     manifest = resolve_workflow("fr-goal-light", REPO_ROOT)
 
     assert manifest.workflow == "fr-goal-light"
-    assert check_workflow(manifest) == []
+    assert check_workflow(manifest, None) == []
     assert [s.id for s in manifest.steps] == LIGHT_IDS
     (implement,) = [s for s in manifest.steps if s.id == "implement"]
     assert [m.id for m in implement.steps] == ["implement-phase", "review-phase"]

@@ -237,7 +237,7 @@ def test_the_745_shape_fails_floor_and_ceiling_and_warns_on_the_manual_step(
     warns = _warns(issues)
     assert len(warns) == 1
     assert warns[0].startswith("phase 4 is a single operator step")
-    assert "verify: post-merge" in warns[0]
+    assert "verify: live" in warns[0]
 
 
 def test_a_multi_step_trailing_manual_phase_is_not_warned(tmp_path: Path) -> None:

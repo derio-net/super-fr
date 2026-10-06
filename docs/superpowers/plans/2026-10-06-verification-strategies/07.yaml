@@ -1,0 +1,101 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Dogfood and docs — install contract, scenarios, skills, mirrors, explainer,
+    fragment
+  tag: agentic
+  depends_on:
+  - 3
+  - 4
+  - 5
+  - 6
+  tracking_issue: null
+  acceptance:
+  - super-fr-candidate-contract
+  tier: standard
+  files:
+  - .fr/candidate-install
+  - tests/scenarios/*
+  - tests/integration/test_scenarios.py
+  - plugins/super-fr/skills/**
+  - .opencode/**
+  - .hermes/**
+  - docs/verification-strategies.md
+  - docs/explainers/01-fr-goal.*
+  - docs/acceptance/*
+  - .changes/feat-batch-verification-kinds.yaml
+  - AGENTS.md
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: RED/GREEN — super-fr's install contract and scenario scripts
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED: tests/integration/test_scenarios.py — runs `.fr/candidate-install <tmp-prefix>
+      <worktree>` (asserts the operator's fr link unchanged — the conftest gh#683 guard
+      applies) and then every tests/scenarios/*.sh with PATH=<prefix>/bin:$PATH in a fresh
+      git fixture; each must exit 0. Fails: nothing exists.
+  - id: P7.T1.S2
+    text: |-
+      GREEN: .fr/candidate-install (bash, executable): `<prefix> <source>`; source a path
+      -> `uv tool install --force --from <source>/packages/fr fr` plus the same `--with`
+      set install.sh builds from fr.runners packages (install.sh:94-99, :790-791) pointing
+      at <source>/packages/<pkg>; source `git+<url>@<ref>` -> the same with
+      `#subdirectory=packages/<pkg>`; UV_TOOL_DIR/UV_TOOL_BIN_DIR under <prefix>; last
+      line prints `fr`. Scenarios (one per candidate row in the spec's ## Verification):
+      verification-strategy-resolution.sh, shipped-verification-strategies.sh,
+      spec-verification-section.sh, walk-recording-prints-close.sh,
+      awaiting-live-triage.sh, prerelease-command-shape.sh — each drives the installed
+      `fr` against the fixture cwd and asserts output with grep. Set each matrix row's
+      `scenario:` via `uv run fr acceptance set-status --id <row> --status skipped
+      --notes "scenario + CI integration test" --level int=super-fr:tests/integration/test_scenarios.py#test_<row>`
+      (use the scenario field through `fr acceptance` once P2 added it). Green.
+- number: 2
+  title: Skills, mirrors, AGENTS.md, author docs
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      Update plugins/super-fr/skills/fr-brainstorming (standing verification question,
+      `## Verification` section), fr-goal (§1 question, §8 walk evidence + Pre-merge
+      section + Refs rule, Test Plan now post-merge rows only), fr-acceptance (--issue,
+      --walk, walk-verified, close command, verify strategies), fr-triage (awaiting-live
+      set, conflict hand-back in "The driver"), using harness-neutral prose (the
+      tool-neutrality tripwire). Write docs/verification-strategies.md (authoring a
+      strategy, the staging example manifest). Add AGENTS.md pointers for fr/verification.
+      Run `uv run --no-project python scripts/sync-opencode.py` AND
+      `uv run --no-project python scripts/sync-hermes.py`; tripwires green.
+- number: 3
+  title: Explainer, change fragment, full gate
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      Update docs/explainers/01-fr-goal.md for verification strategies and the walk at
+      deliver; re-render per .claude/rules/explainers-currency.md (from `/`, with
+      `--isolated`, after confirming the unmodified render is byte-identical). If the
+      renderer is unavailable, state in the step note that regeneration is owed. Add
+      .changes/feat-batch-verification-kinds.yaml (bump: minor, one-line summary). Run the
+      full suite into a log, ruff format/check, mypy, `uv run fr acceptance check`,
+      `uv run fr validate artifacts`; commit.
+state:
+  steps:
+    P7.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T15:20:24+00:00'
+      note: null
+    P7.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T15:20:24+00:00'
+      note: null
+    P7.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T15:20:24+00:00'
+      note: null
+    P7.T3.S1:
+      state: x
+      ticked_at: '2026-10-06T15:20:24+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T15:20:24+00:00'
+    note: null
+    observed_prs: []

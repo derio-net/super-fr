@@ -1,0 +1,65 @@
+{
+  "batch_prs": [],
+  "collected_at": "2026-10-02T12:00:00+00:00",
+  "config": {},
+  "issues": [
+    {
+      "body": "",
+      "closed_at": null,
+      "created_at": "2026-09-20T09:00:00Z",
+      "dispatch_marker_at": null,
+      "labels": [
+        "fr:awaiting-live"
+      ],
+      "number": 1,
+      "prs": [],
+      "repo": "example-org/widgets",
+      "state": "open",
+      "title": "issue 1",
+      "updated_at": null,
+      "url": "https://github.com/example-org/widgets/issues/1"
+    },
+    {
+      "body": "",
+      "closed_at": null,
+      "created_at": "2026-09-20T09:00:00Z",
+      "dispatch_marker_at": null,
+      "labels": [
+        "fr:awaiting-live"
+      ],
+      "number": 2,
+      "prs": [],
+      "repo": "example-org/widgets",
+      "state": "closed",
+      "title": "issue 2",
+      "updated_at": null,
+      "url": "https://github.com/example-org/widgets/issues/2"
+    },
+    {
+      "body": "",
+      "closed_at": null,
+      "created_at": "2026-09-20T09:00:00Z",
+      "dispatch_marker_at": null,
+      "labels": [],
+      "number": 3,
+      "prs": [],
+      "repo": "example-org/widgets",
+      "state": "open",
+      "title": "issue 3",
+      "updated_at": null,
+      "url": "https://github.com/example-org/widgets/issues/3"
+    }
+  ],
+  "judged_prs": [],
+  "kind": "repo",
+  "prs": [],
+  "repos": [
+    "example-org/widgets"
+  ],
+  "schema": 4,
+  "scope": "example-org--widgets",
+  "skipped": [],
+  "unviewed": [],
+  "viewer": "operator",
+  "warnings": []
+}

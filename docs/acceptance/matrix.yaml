@@ -26,7 +26,7 @@
 # the last row of the same capability, and appends to the end of this file only
 # for a new capability — so keep `rows:` as the LAST top-level key.
 
-schema_version: 3
+schema_version: 4
 org: derio-net
 repo: super-fr
 rows:
@@ -4250,7 +4250,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
@@ -4550,7 +4550,7 @@ rows:
       min to deliver. Hit the 5.0.0 plan fr_version ceiling bug at the plan step; the
       agent widened _meta.yaml by hand and went on. Passes for this harness and model
       only (#822).'
-    verify: post-merge
+    verify: live
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
@@ -4828,7 +4828,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: drive-carry-keeps-settled-set
     capability: Backlog triage
     acceptance: After drive passes that carried facts over, fr triage check reports
@@ -4838,7 +4838,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: triage-severity-and-duplicates
     capability: Backlog triage
     acceptance: A judgement can carry severity and duplicate_of; triage check lists
@@ -5541,7 +5541,7 @@ rows:
       - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
     status: skipped
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
-    verify: post-merge
+    verify: live
   - id: pages-explainers-preserved
     capability: acceptance-matrix
     acceptance: Publishing the acceptance report keeps every explainer page at its current
@@ -5553,7 +5553,7 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py
     status: skipped
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
-    verify: post-merge
+    verify: live
   - id: pages-acceptance-report-discoverable
     capability: acceptance-matrix
     acceptance: The explainers landing page links to the published acceptance report
@@ -5628,7 +5628,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: visual-evidence-browser-check-prose
     capability: fr-goal-prose
     acceptance: 'fr-execute, fr-goal and the phase-executor agent carry a browser-check
@@ -5730,7 +5730,7 @@ rows:
       run in the chore/archive workspace it archived spec, plan, run, usage and both
       journals with no held: line, and fr status then reported no owed artifact from
       the branch. Manual live run, not in CI.'
-    verify: post-merge
+    verify: live
   - id: every-pr-flow-relays-closeout
     capability: Branch-keyed close-out
     acceptance: Every shipped skill that ends its flow at a PR it opens relays a close-out
@@ -5808,7 +5808,7 @@ rows:
     status: ci
     notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
       run in CI.
-    verify: post-merge
+    verify: live
   - id: profiles-services-no-tracker
     capability: fr-profiles services
     acceptance: 'Under tracking: none, no issue path fires: closeout prints no filing
@@ -5919,7 +5919,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: run-cost-positive-attribution
     capability: usage
     acceptance: fr run cost --recompute and fr archive's capture attribute a session
@@ -6111,7 +6111,7 @@ rows:
       the driver needed one manual restart (a hung forge read, then exit 2 on its failure)
       and #907''s CI one re-run (a setup-bun 503). Rerun owed after #909 (read timeouts)
       and #910 (retry failed reads in loop mode); see also #911, #912, #913.'
-    verify: post-merge
+    verify: live
   - id: drive-wave-workspaces
     capability: triage-batch-drive
     acceptance: The driver opens each batch's session, and its close-out, in a herdr
@@ -6164,7 +6164,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: drive-merge-train-head-only
     capability: triage-batch-drive
     acceptance: The drive acts only on the head of each repo's merge train — PRs behind
@@ -6220,7 +6220,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: drive-exports-finished-wave
     capability: triage-batch-drive
     acceptance: With export configured, once a wave is finished the driver opens one
@@ -6246,7 +6246,7 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
-    verify: post-merge
+    verify: live
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
@@ -6687,7 +6687,7 @@ rows:
       (columns vs an independent gh oracle, cards moving on acting and non-acting passes,
       reloads keeping expansion, jump switching the tab, two blocked sessions shown
       as needs-you). Manual and post-merge only, so not in CI.'
-    verify: post-merge
+    verify: live
   - id: triage-dedupe-candidates
     capability: triage-dedupe
     acceptance: fr triage check lists candidate duplicate groups among open issues,
@@ -6875,3 +6875,202 @@ rows:
       check FR_HARNESS_FR in the shell, then reproduce the zsh .zshenv skew. Pieces
       verified 2026-10-05 on macOS: the pin survives zsh -c .zshenv while fr moves;
       the refusal fires.'
+  - id: verification-strategy-resolution
+    capability: verification
+    acceptance: A named verification strategy resolves repo-first then shipped, a repo-authored
+      one is usable, a shape declares the default, and a malformed manifest is refused
+      by fr verification check
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_cmd.py#test_the_shipped_shapes_declare_candidate_and_it_resolves
+      - super-fr:tests/unit/test_verification_cmd.py#test_a_workflow_manifest_accepts_an_optional_verification_default
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_verification_strategy_resolution
+    status: ci
+    notes: scenario covers resolution and check; unit tests added for a shape declaring
+      the default (shipped shapes declare candidate and it resolves)
+    scenario: tests/scenarios/verification-strategy-resolution.sh
+  - id: shipped-verification-strategies
+    capability: verification
+    acceptance: candidate, client-live, prerelease and live ship; candidate-family installs
+      go to a throwaway prefix through the repo's install contract and never touch the
+      operator's install
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R8
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_shipped_verification_strategies
+    status: ci
+    notes: scenario tests/scenarios/shipped-verification-strategies.sh runs against
+      a candidate install in CI (tests/integration/test_scenarios.py)
+    scenario: tests/scenarios/shipped-verification-strategies.sh
+  - id: spec-verification-section
+    capability: verification
+    acceptance: 'A spec''s ## Verification section sets the run''s strategy and per-row
+      overrides; a post-merge row without a reason fails self-review; legacy verify
+      post-merge rows read as live'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_self_review_verification.py#test_a_post_merge_or_none_row_without_a_reason_fails
+      - super-fr:tests/unit/test_migration_matrix_strategies.py#test_post_merge_becomes_live_and_nothing_else_moves
+      - super-fr:tests/unit/test_record_post_merge_consumers.py#test_the_pr_body_lists_live_rows_with_their_reason_or_a_legacy_note
+      - super-fr:tests/unit/test_verification_spec_section.py#test_parse_section_reads_strategy_and_row_lines
+      - super-fr:tests/unit/test_verification_spec_section.py#test_then_the_spec_override_line_for_that_row
+      - super-fr:tests/unit/test_verification_spec_section.py#test_then_the_spec_strategy_line
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_spec_verification_section
+    status: ci
+    notes: 'scenario covers the section and self-review; unit tests added for the section
+      setting the run''s strategy and per-row overrides (precedence: row verify, spec
+      override line, spec strategy line, shape default)'
+    scenario: tests/scenarios/spec-verification-section.sh
+  - id: candidate-walk-gates-deliver
+    capability: verification
+    acceptance: fr verification walk installs the PR build side by side, runs the smoke
+      and the run's row scenarios, and deliver refuses until a passing walk log covering
+      HEAD's code tree and every owed row is cited
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: premerge-owed-pr-section
+    capability: verification
+    acceptance: The PR body lists operator-driven pre-merge walks with their command
+      and a ready-checklist line, and post-merge rows with their reason
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: closes-refused-while-awaiting-walk
+    capability: verification
+    acceptance: deliver refuses a Closes/Fixes/Resolves line for an issue a not-yet-walk-verified
+      post-merge row cites, naming the line and printing Refs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: walk-recording-prints-close
+    capability: verification
+    acceptance: set-status records a walk naming harness, model and strategy; once every
+      row citing an issue is walk-verified it prints the close command (nothing under
+      tracking none)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R14
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_walks.py#test_the_walk_that_verifies_the_last_open_row_prints_the_close_commands
+      - super-fr:tests/unit/test_acceptance_walks.py#test_nothing_is_printed_under_tracking_none
+      - super-fr:tests/unit/test_acceptance_walks.py#test_set_status_walk_appends_a_walk
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_walk_recording_prints_close
+    status: ci
+    notes: scenario tests/scenarios/walk-recording-prints-close.sh runs against a candidate
+      install in CI (tests/integration/test_scenarios.py)
+    scenario: tests/scenarios/walk-recording-prints-close.sh
+  - id: prerelease-on-demand
+    capability: verification
+    acceptance: fr verification prerelease cuts an rc tag and GitHub pre-release of
+      a branch without touching main or any version surface; other forges refuse
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: super-fr-candidate-contract
+    capability: verification
+    acceptance: super-fr provides .fr/candidate-install and scenario scripts, exercised
+      in CI, so its own PRs can run a candidate walk
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R25
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_walk.py#test_the_walk_refuses_a_repo_without_the_install_contract_naming_it
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_the_install_prints_fr_and_the_tool_runs
+      - super-fr:tests/integration/test_scenarios.py#test_the_install_carries_every_runner_package
+      - super-fr:tests/integration/test_scenarios.py#test_a_git_source_installs_every_package_from_its_subdirectory
+      - super-fr:tests/integration/test_scenarios.py#test_the_install_refuses_a_source_without_the_package
+      - super-fr:tests/integration/test_scenarios.py#test_every_scenario_script_has_a_test_here
+    status: ci
+    notes: 'install contract exercised in CI: tests/integration/test_scenarios.py installs
+      .fr/candidate-install into a tmp prefix (runs, carries every runner package, git
+      source uses subdirectories, refuses a source without the package) and runs every
+      scenario script; the missing-contract refusal is covered by test_verification_walk'
+  - id: prerelease-command-shape
+    capability: verification
+    acceptance: fr verification prerelease --dry-run prints the workflow dispatch for
+      a branch and its rc tag, and refuses on a non-GitHub forge
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_prerelease_command_shape
+    status: ci
+    notes: scenario tests/scenarios/prerelease-command-shape.sh runs against a candidate
+      install in CI (tests/integration/test_scenarios.py)
+    scenario: tests/scenarios/prerelease-command-shape.sh
+  - id: awaiting-live-triage
+    capability: triage
+    acceptance: Issues labelled fr:awaiting-live are listed as their own set, never
+      ranked, proposed or reported unplaced; the close-out brief prints the label command
+      for Refs'd issues
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R18
+    levels:
+      unit:
+      - super-fr:tests/unit/test_closeout_awaiting_live.py#test_a_refsd_issue_a_waiting_row_cites_gets_the_label_command
+      - super-fr:tests/unit/test_closeout_awaiting_live.py#test_the_brief_creates_the_label_once_per_repo_before_its_add_lines
+      - super-fr:tests/unit/test_triage_awaiting_live.py#test_check_lists_open_labelled_issues_and_keeps_them_out_of_unranked_and_unplaced
+      - super-fr:tests/unit/test_triage_awaiting_live.py#test_needs_you_never_calls_one_unplaced
+      - super-fr:tests/unit/test_triage_awaiting_live.py#test_an_awaiting_live_batch_is_not_next_up_and_holds_no_wave_open
+      - super-fr:tests/unit/test_triage_awaiting_live.py#test_an_awaiting_live_feature_member_is_not_next_up
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_awaiting_live_triage
+    status: ci
+    notes: 'scenario covers the listing; unit tests cover the rest: the close-out brief
+      prints the label command for Refs''d issues (test_closeout_awaiting_live), and
+      awaiting-live issues are never ranked, proposed (next_up) or reported unplaced
+      (test_triage_awaiting_live)'
+    scenario: tests/scenarios/awaiting-live-triage.sh
+  - id: triage-drive-conflict-handback
+    capability: triage
+    acceptance: A real merge conflict is handed back once per head to the batch's live
+      session or a fresh one, later overlapping conflicts wait behind the first, and
+      after two hand-backs without a merge the batch is listed under needs you
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R19
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R20
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R21
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R22
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R23
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-drive-conflict-handback-live
+    capability: triage
+    acceptance: On a real wave, a conflicted batch's live herdr session receives the
+      hand-back brief, resolves, and pushes, and the train merges it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R20
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live

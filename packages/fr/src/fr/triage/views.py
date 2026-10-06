@@ -27,9 +27,11 @@ from fr.triage.batch import (
     batch_repo,
     derive_batch_stage,
     foreign_batch_prs,
+    is_open,
     pr_open_queue,
 )
 from fr.triage.batch_drive import (
+    AWAITING_LIVE_HOLD,
     CLOSEOUT_FALLBACK,
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
@@ -39,12 +41,13 @@ from fr.triage.batch_drive import (
     checks_verdict,
     closeout_event,
     drive_pass,
+    held_conflict,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
-from fr.triage.check import classify, stale_dispatches
+from fr.triage.check import batch_awaits_live, classify, is_awaiting_live, stale_dispatches
 from fr.triage.model import Batch, Facts, Judgement, Judgements, PullRequest, Severity
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
@@ -114,6 +117,7 @@ def drive_snapshot(
         max_inflight=max_inflight,
         merged_at=merged_at,
         foreign={b.id: found for b in batches if (found := tuple(foreign_batch_prs(b, facts)))},
+        awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
     )
 
 
@@ -123,6 +127,7 @@ def drive_snapshot(
 @dataclass(frozen=True)
 class Need:
     # ready-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch | unplaced
+    # | merge-conflict
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
     text: str
@@ -137,6 +142,7 @@ NEED_LABELS = {
     "post-merge": "post_merge not done",
     "stale-dispatch": "Stale dispatch",
     "unplaced": "Unplaced issue",
+    "merge-conflict": "Merge conflict",
 }
 
 
@@ -221,6 +227,17 @@ def needs_you(facts: Facts, judgements: Judgements) -> list[Need]:
                  "succeeded (it failed, or no driver is running)", f"#batch-{b.id}")
         )  # fmt: skip
 
+    for b in judgements.batches:
+        held = held_conflict(b)
+        if held is None or not is_open(b, facts):
+            continue
+        out.append(
+            Need("merge-conflict", b.id,
+                 f"batch {b.id} conflicts at {held.head} in {', '.join(held.paths)}, and its "
+                 "hand-backs are spent: resolve it, or dispatch or cancel the batch",
+                 f"#batch-{b.id}")
+        )  # fmt: skip
+
     for s in stale_dispatches(facts):
         out.append(
             Need("stale-dispatch", s.key,
@@ -303,10 +320,16 @@ def next_up(
         wave = f"wave {b.wave}" if b.wave is not None else "no wave"
         rows.append(row(b, f"{wave}{order}{deps}", False))
 
-    blocked = {a.batch for a in plan.actions if a.kind == "blocked"}
+    # The driver's own hold is the one rule (spec §F, R18): a batch that awaits a live
+    # walk is no work, so it is neither started nor waiting.
+    skipped = {
+        a.batch
+        for a in plan.actions
+        if a.kind == "blocked" or (a.kind == "held" and a.detail == AWAITING_LIVE_HOLD)
+    }
     in_flight = sum(1 for b in judgements.batches if snap.stages.get(b.id) in IN_FLIGHT)
     for b in sorted(judgements.batches, key=dispatch_key):
-        if snap.stages.get(b.id) != "proposed" or b.id in started or b.id in blocked:
+        if snap.stages.get(b.id) != "proposed" or b.id in started or b.id in skipped:
             continue
         unmerged = [d for d in b.after if snap.stages.get(d) != "merged"]
         if unmerged:
@@ -316,7 +339,11 @@ def next_up(
         rows.append(row(b, reason, True))
 
     for feature in sorted(judgements.features, key=lambda f: (f.rank, f.title)):
-        open_ids = [i.key for i in facts.issues if i.state == "open" and i.key in feature.ids]
+        open_ids = [
+            i.key
+            for i in facts.issues
+            if i.state == "open" and i.key in feature.ids and not is_awaiting_live(i)
+        ]
         if not open_ids:
             continue
         why = (f": {feature.why}" if feature.why else "") + (
@@ -382,14 +409,21 @@ def preselected_wave(
     With *among* (wave keys), only those waves are considered: the board passes the
     unfinished ones, the history page the finished ones (triage-pages-goal R8)."""
     waved = [
-        (b.wave, derive_batch_stage(b, facts))
+        (b.wave, derive_batch_stage(b, facts), b)
         for b in judgements.batches
         if b.wave is not None and (among is None or str(b.wave) in among)
     ]
     if not waved:
         return None
-    live = [n for n, stage in waved if stage not in {"merged", "cancelled"}]
-    return max(live) if live else max(n for n, _ in waved)
+    # A planned batch whose members all await their live walk is no work: the driver
+    # holds it (`AWAITING_LIVE_HOLD`), so it holds no wave open either. A merged one
+    # needs no such rule, since its awaiting members count as closed.
+    live = [
+        n
+        for n, stage, b in waved
+        if stage not in {"merged", "cancelled"} and not batch_awaits_live(b, facts)
+    ]
+    return max(live) if live else max(n for n, _, _ in waved)
 
 
 def kind_counts(facts: Facts, judgements: Judgements) -> dict[str, int]:

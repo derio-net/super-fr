@@ -59,9 +59,7 @@ fr isolation up --branch <feature-branch> [--profile <name>]
 
 ## 1. Brainstorm
 
-Run `superpowers:brainstorming` as usual — understand the context and goal,
-explore the codebase (in the worktree), propose approaches, refine into a
-design.
+Run `superpowers:brainstorming` as usual — understand the context and goal, explore the codebase (in the worktree), propose approaches, refine into a design.
 
 Before exploring, record the operator's brief **verbatim** as a spec-journal entry, for
 the record: the goal text as typed, or the issue's title and body plus any
@@ -77,6 +75,8 @@ after brainstorm reads it: the spec is the contract.
 - **Under fr-goal:** the sized-round contract applies instead — collect every
   operator-owned decision into one round, rarely two (fr-goal's rules win
   while it drives).
+
+**The standing verification question.** Every brainstorm asks it once: *how will this be verified before it merges?* Run `fr verification list` (repo-authored strategies first, then the shipped `candidate`, `client-live`, `prerelease`, `live`), recommend one, and record the answer in the spec's `## Verification` section: an optional `strategy: <name>` line (default: the workflow shape's), then one `- <row-id>: <strategy|none> — <reason>` line per overridden row. The reason is required when a line's strategy is post-merge (`live`) or `none` (post-merge: why no pre-merge strategy applies; `none`: what verifies the row instead) and optional otherwise; prose alone counts as no section. A row on an agent-driven pre-merge strategy needs a `scenario:` (`fr acceptance set-status --scenario`), and any strategy that installs a build needs the repo's executable `.fr/candidate-install` — if it has none, say so rather than choosing `candidate`. Only behaviour a released build alone can show goes to the Test Plan as a post-merge row. Authoring a strategy: `docs/verification-strategies.md`.
 
 ## 2. Hand off
 
@@ -101,7 +101,7 @@ isolation workspace stays up — cleanup belongs to whoever finishes the run
 One acceptance row per requirement, or per closely related group of
 requirements — an `acceptance:` entry of the brainstorm record (`status:
 not-implemented`, `origin: [<repo>:<new-spec-path>#R<n>]`, `verify:
-post-merge` when only a live run can prove it), or with no run
+live` when only a live run can prove it, or any strategy the §1 question settled), or with no run
 `fr acceptance add --origin <repo>:<spec>#R<n> …` (run `fr acceptance init`
 first if the repo has no matrix; it commits what it writes). A row states what the product does, never how the pipeline runs ("delivered in one phase", "a browser check was done"): a process directive is not a row, and a level ref into `docs/superpowers/` is refused. A UI row also carries `visual`: states and interactions, limits included (ask about any the design leaves unstated). **The brainstorm ENDS by presenting the
 rows to the operator with a one-line defense each** — the business claim,

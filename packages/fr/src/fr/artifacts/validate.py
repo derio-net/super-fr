@@ -141,7 +141,7 @@ def _workflow_issues(repo_root: Path) -> list[ValidationIssue]:
             continue
         out.extend(
             ValidationIssue(kind=WORKFLOW_LABEL, path=path, message=message)
-            for message in check_workflow(manifest)
+            for message in check_workflow(manifest, repo_root)
         )
     return out
 

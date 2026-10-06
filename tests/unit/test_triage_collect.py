@@ -372,7 +372,7 @@ def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
 
     loaded = load_facts(path)
 
-    assert facts.to_json()["schema"] == 4
+    assert facts.to_json()["schema"] == 5
     assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 

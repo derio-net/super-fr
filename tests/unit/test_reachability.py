@@ -92,7 +92,7 @@ def test_the_shipped_phase_dispatch_shape_is_what_keeps_the_old_gate_alive() -> 
     from fr.workflow.reachability import required_inputs
     from fr.workflow.shapes import FR_GOAL_PHASE_DISPATCH
 
-    assert check_workflow(FR_GOAL_PHASE_DISPATCH) == []
+    assert check_workflow(FR_GOAL_PHASE_DISPATCH, None) == []
     assert required_inputs(FR_GOAL_PHASE_DISPATCH) == frozenset({"spec", "plan"})
 
 

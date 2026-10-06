@@ -49,13 +49,12 @@ cannot surprise anyone.
 
 from __future__ import annotations
 
-import atexit
-import contextlib
 import os
-from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr import _shipped
+from fr._shipped import MARKETPLACE_ROOT
 from fr.workflow.model import WorkflowError, WorkflowManifest, parse_manifest
 
 if TYPE_CHECKING:
@@ -63,15 +62,6 @@ if TYPE_CHECKING:
 
 REPO_WORKFLOWS_REL = Path("docs") / "superpowers" / "workflows"
 SHIPPED_WORKFLOWS_REL = Path("plugins") / "super-fr" / "workflows"
-
-MARKETPLACE_ROOT = Path(".claude") / "plugins" / "marketplaces" / "derio-net--super-fr"
-"""The Claude Code marketplace-clone convention every "shipped resource"
-lookup in this package uses (`fr.plan_validator_wrapper`,
-`fr.isolation.local`). Public (no leading `_`) so a test can build the
-expected default path by composing this constant instead of retyping the
-literal string — one rename, one place to fix, given this repo has already
-survived one marketplace rename (AGENTS.md, "Marketplace names are
-`<org>--<repo>`")."""
 
 
 def default_shipped_workflows_dir() -> Path:
@@ -88,23 +78,6 @@ def default_shipped_workflows_dir() -> Path:
     return Path.home() / MARKETPLACE_ROOT / SHIPPED_WORKFLOWS_REL
 
 
-_RESOURCE_STACK = contextlib.ExitStack()
-atexit.register(_RESOURCE_STACK.close)
-"""Keeps an `as_file` extraction alive for the process's lifetime.
-
-A zipped install has no real `fr/workflows/` directory; `as_file` makes one,
-and it exists only until its context closes. Callers read the manifests after
-`packaged_shipped_workflows_dir()` returns, so the context has to outlive the
-call — process lifetime is the honest scope, and `atexit` cleans it up.
-"""
-
-_PACKAGED_DIR_CACHE: Path | None = None
-_PACKAGED_DIR_CACHED = False
-"""Memoised: on a zipped install `as_file` extracts, which is not free, and
-this is consulted on every shape lookup. Two names rather than a sentinel
-object because `None` is a legitimate cached ANSWER ("this install ships no
-packaged workflows"), not merely "not looked up yet"."""
-
 PACKAGED_WORKFLOWS_DIRNAME = "workflows"
 """The wheel-internal copy of `plugins/super-fr/workflows/`, as `fr/workflows/`.
 
@@ -120,32 +93,11 @@ data, not code), so `resources.files("fr.workflows")` would raise
 def packaged_shipped_workflows_dir() -> Path | None:
     """The shipped manifests that travel inside the `fr` wheel, or `None`.
 
-    Materialised through `importlib.resources.as_file`, not by assuming the
-    package lives on the filesystem: a zipped wheel (`zipimport`, a PEX, a
-    frozen bundle) has no real directory, and `as_file` extracts one. The
-    extraction is registered on an `atexit`-scoped `ExitStack` rather than
-    closed immediately, because the caller reads the files AFTER this returns
-    — closing the context first would delete the very directory being handed
-    back.
-
-    `None` when the install has no `fr/workflows/` data (an older wheel, or a
-    loader that cannot produce a path at all). Callers treat that as "this
-    source contributes nothing", never as an error.
+    The materialisation (zip-safe `as_file`, process-lifetime extraction) is
+    `fr._shipped.packaged_dir`'s; `None` means "this source contributes
+    nothing", never an error.
     """
-    global _PACKAGED_DIR_CACHE, _PACKAGED_DIR_CACHED
-    if _PACKAGED_DIR_CACHED:
-        return _PACKAGED_DIR_CACHE
-
-    resolved: Path | None = None
-    try:
-        root = resources.files("fr") / PACKAGED_WORKFLOWS_DIRNAME
-        if root.is_dir():
-            resolved = Path(_RESOURCE_STACK.enter_context(resources.as_file(root)))
-    except (ModuleNotFoundError, FileNotFoundError, TypeError, OSError):
-        resolved = None
-    _PACKAGED_DIR_CACHE = resolved if (resolved and resolved.is_dir()) else None
-    _PACKAGED_DIR_CACHED = True
-    return _PACKAGED_DIR_CACHE
+    return _shipped.packaged_dir(PACKAGED_WORKFLOWS_DIRNAME)
 
 
 def shipped_workflow_dirs(shipped_root: Path | None = None) -> list[Path]:
@@ -161,20 +113,12 @@ def shipped_workflow_dirs(shipped_root: Path | None = None) -> list[Path]:
     resolver would not (or the reverse) is exactly how "`--all` is green but
     the run fails" happens.
     """
-    dirs: list[Path] = []
-    if shipped_root is not None:
-        dirs.append(shipped_root)
-    else:
-        override = os.environ.get("FR_SHIPPED_WORKFLOWS_DIR")
-        if override:
-            dirs.append(Path(override))
-    packaged = packaged_shipped_workflows_dir()
-    if packaged is not None:
-        dirs.append(packaged)
-    marketplace = Path.home() / MARKETPLACE_ROOT / SHIPPED_WORKFLOWS_REL
-    if marketplace not in dirs:
-        dirs.append(marketplace)
-    return dirs
+    return _shipped.shipped_dirs(
+        env_var="FR_SHIPPED_WORKFLOWS_DIR",
+        plugin_rel=SHIPPED_WORKFLOWS_REL,
+        packaged=packaged_shipped_workflows_dir(),
+        shipped_root=shipped_root,
+    )
 
 
 def resolve_workflow(
@@ -187,8 +131,9 @@ def resolve_workflow(
     the operator sees exactly where to put an override — and, when the shape
     was expected to be shipped, which installation is missing it.
     """
-    repo_path = repo_root / REPO_WORKFLOWS_REL / f"{name}.yaml"
-    candidates = [repo_path] + [d / f"{name}.yaml" for d in shipped_workflow_dirs(shipped_root)]
+    candidates = _shipped.lookup_candidates(
+        name, repo_root / REPO_WORKFLOWS_REL, shipped_workflow_dirs(shipped_root)
+    )
 
     for path in candidates:
         if path.is_file():

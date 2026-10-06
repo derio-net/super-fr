@@ -1,0 +1,13 @@
+# Shipped strategy `candidate` — spec 2026-10-06-verification-strategies §A (R3).
+# Pre-merge and agent-driven: install the PR's build into a throwaway prefix
+# through the repo's install contract, then run scripted scenarios against a
+# fresh fixture repo. No release is needed.
+verification: candidate
+schema: 1
+description: Install the PR's build into a throwaway prefix and run scripted scenarios in a fresh fixture repo.
+when: pre-merge
+driver: agent
+install: .fr/candidate-install {prefix} {worktree}
+scenario: "{scenario}"
+source: worktree
+notes: Needs the repo's executable `.fr/candidate-install <prefix> <source>`; a repo without it cannot use this strategy.

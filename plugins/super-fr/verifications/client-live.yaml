@@ -1,0 +1,12 @@
+# Shipped strategy `client-live` — spec 2026-10-06-verification-strategies §A (R3).
+# Pre-merge and operator-driven: the same candidate install as `candidate`, but
+# the operator drives the scenario inside a real client repo.
+verification: client-live
+schema: 1
+description: Install the PR's build into a throwaway prefix; the operator drives the scenario inside a real client repo.
+when: pre-merge
+driver: operator
+install: .fr/candidate-install {prefix} {worktree}
+scenario: "{scenario}"
+source: worktree
+notes: Run with `--client <path>` so scenarios use that client repo as their working directory.

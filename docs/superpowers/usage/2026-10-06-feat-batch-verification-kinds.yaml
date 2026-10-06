@@ -1,0 +1,80 @@
+schema_version: 1
+run: 2026-10-06-feat-batch-verification-kinds
+captures:
+- host: h-0a060526
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-06T15:52:28+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  sessions:
+  - session: a4557f5a-3a30-4673-856d-3f9329d47f77
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 1680
+        cache_write: 2765210
+        cache_read: 130721786
+        output: 169668
+        usd: null
+        usd_source: none
+      claude-sonnet-5-5:
+        input: 634
+        cache_write: 1808310
+        cache_read: 35079565
+        output: 3998
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 711
+      other:
+        usd: null
+        turns: 259
+      paperwork:
+        usd: null
+        turns: 186
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+      brainstorm:
+        usd: null
+        turns: 56
+      spec-review:
+        usd: null
+        turns: 52
+      plan:
+        usd: null
+        turns: 6
+      implement:
+        usd: null
+        turns: 999
+      deliver:
+        usd: null
+        turns: 12
+    briefs:
+      a9745e2c6be5d5f4c: 2215
+      a5718b2e38fd77aea: 1858
+      step/spec-review: 2291
+      phase/1/implement-phase: 2222
+      phase/1/review-phase: 2576
+      phase/2/implement-phase: 3234
+      phase/2/review-phase: 3193
+      phase/3/implement-phase: 3009
+      phase/3/review-phase: 3193
+      a9bcedbfe664fb29f: 5288
+      phase/4/implement-phase: 2944
+      phase/4/review-phase: 2681
+      a3b53e8119340e891: 4731
+      phase/5/implement-phase: 3560
+      phase/5/review-phase: 3664
+      a258efb3f363e5f5b: 3464
+      phase/6/implement-phase: 3305
+      phase/6/review-phase: 2697
+      adbbd7e65eda5e6ff: 3802
+      phase/7/implement-phase: 7057
+      phase/7/review-phase: 3177
+      adb1b8fa15b281db8: 5731

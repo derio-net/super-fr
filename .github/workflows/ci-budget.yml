@@ -19,6 +19,7 @@ on:
       - Deploy explainers to Pages
       - PR spec status (self)
       - Pinned CLIs
+      - Prerelease
     types: [completed]
   workflow_dispatch:
     inputs:
