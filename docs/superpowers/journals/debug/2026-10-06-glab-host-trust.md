@@ -39,3 +39,8 @@ Background security review flagged parser differentials in glab.py and real_glab
 ### 5a70ec3e4c79 · hypothesis · The argument gate is the wrong shape: a deny-list mirroring a foreign parser
 
 Two fixes to the argument host gate (af50241a1, 3c7dea1d6) each left a differential the next security review found. Probed live (glab 1.89) after the third flag: bundled shorthand -wR<url>/-cR<url> redirect; a leading-space repo " HOST/g/p" is trimmed by glab into a known host; a positional branch "-R<url>" is parsed as a flag; GITLAB_REPO env redirects (ambient operator env, not attacker input); a flag VALUE starting with -R stays a value; a positional after -- stays a positional. Verdict: each deny-list rule models one more corner of glab parser; replace with an allow-list of what fr writes, needing no model of glab at all.
+
+<!-- fr:journal kind=finding scope=debug id=glab-argv-allow-list created=2026-10-06T14:42:29+00:00 state=fixed -->
+### glab-argv-allow-list · finding [fixed] · Argument gate replaced by an allow-list (fix attempt 3 of 3 on this sub-bug)
+
+Commit after 3c7dea1d6: fr.glab.check_argv admits a dash token only as one of fr own 11 value-taking flags (or the value after one), a --repo value only as a strict GitLab path not led by a known host, an api endpoint only under projects/. Called by _run_glab and by the runner lookups default_branch / pr_for_branch. Red-first tests for every probed shape; the deny-list false positive (a --message body starting -R) is gone. Full suite 9251 passed. If another bypass is found, stop and ask before a fourth attempt (the batch rule).
