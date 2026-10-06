@@ -7135,9 +7135,19 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R9
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_dead_user_binding_is_substituted_before_a_grouped_dispatch
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_flat_tiered_step_gets_the_same_guard
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_dead_binding_with_no_autonomous_pick_refuses_and_writes_nothing
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_dead_repo_layer_binding_refuses_naming_the_file
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_failed_apply_restores_both_files_and_exits_2
+      - super-fr:tests/unit/test_run_cli.py#test_a_gated_brief_lists_dead_bindings_and_offers
+      - super-fr:tests/unit/test_run_cli.py#test_run_start_names_each_dead_binding_and_offer_and_never_blocks
+    status: ci
+    notes: Unit tests over the start notice, the gated brief keys and _guard_dispatch_binding
+      on both dispatch paths with a scripted prober (phase 2 of 2026-10-06-model-binding-churn)
+      run in CI; the live OpenCode proof stays with model-binding-live-opencode
     verify: none
   - id: model-binding-live-opencode
     capability: model-bindings
