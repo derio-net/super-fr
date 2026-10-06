@@ -167,3 +167,57 @@ def test_the_kanban_card_says_why_an_awaiting_live_batch_is_held() -> None:
     f, jd = _batches()
 
     assert action_phrase(first_actions(f, jd)["b-live"]) == "held: its members await a live walk"
+
+
+def _refs_merged(*, dependent: bool = True):
+    """Wave 1: `a-plain` merged with its member closed. Wave 2: `b-refs` merged through
+    a Refs PR, so its member stays open and awaits live; `c-after` depends on it."""
+    from tests.unit.triage_board_fixtures import dispatch, pr
+
+    merged = {"state": "MERGED", "merged_at": "2026-10-01T12:00:00Z"}
+    pa = pr(20, "feat/batch-a-plain", **merged)
+    pb = pr(21, "feat/batch-b-refs", **merged)
+    f = facts(
+        [
+            issue(1, state="closed", prs=[pa]),
+            issue(2, labels=[LIVE]),  # Refs'd, not closed: no linked closing PR
+            issue(3),
+        ],
+        batch_prs=[pa, pb],
+    )
+    jd = judgements(
+        {"widgets#1": j(), "widgets#2": j(), "widgets#3": j()},
+        [
+            batch("a-plain", [1], wave=1, events=[dispatch("a-plain")]),
+            batch("b-refs", [2], wave=2, events=[dispatch("b-refs")]),
+            *([batch("c-after", [3], wave=3, after=["b-refs"])] if dependent else []),
+        ],
+    )
+    return f, jd
+
+
+def test_a_batch_merged_through_a_refs_pr_derives_merged_not_partial() -> None:
+    """p4-r3: an awaiting-live member counts as closed, so the batch is `merged`."""
+    from fr.triage.batch import derive_batch_stage
+
+    f, jd = _refs_merged()
+
+    assert derive_batch_stage(jd.batches[1], f) == "merged"
+
+
+def test_a_batch_after_a_refs_merged_batch_is_not_blocked() -> None:
+    from fr.triage.batch_drive import drive_pass
+    from fr.triage.views import drive_snapshot
+
+    f, jd = _refs_merged()
+
+    kinds = [(a.kind, a.batch) for a in drive_pass(drive_snapshot(f, jd)).actions]
+
+    assert ("dispatch", "c-after") in kinds
+    assert not [k for k in kinds if k[0] == "blocked"]
+
+
+def test_a_wave_of_merged_but_awaiting_batches_is_preselected_like_any_merged_wave() -> None:
+    f, jd = _refs_merged(dependent=False)
+
+    assert preselected_wave(f, jd) == 2

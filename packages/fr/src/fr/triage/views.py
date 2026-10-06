@@ -381,16 +381,21 @@ def preselected_wave(
     With *among* (wave keys), only those waves are considered: the board passes the
     unfinished ones, the history page the finished ones (triage-pages-goal R8)."""
     waved = [
-        (b.wave, derive_batch_stage(b, facts))
+        (b.wave, derive_batch_stage(b, facts), b)
         for b in judgements.batches
-        if b.wave is not None
-        and (among is None or str(b.wave) in among)
-        and not batch_awaits_live(b, facts)
+        if b.wave is not None and (among is None or str(b.wave) in among)
     ]
     if not waved:
         return None
-    live = [n for n, stage in waved if stage not in {"merged", "cancelled"}]
-    return max(live) if live else max(n for n, _ in waved)
+    # A planned batch whose members all await their live walk is no work: the driver
+    # holds it (`AWAITING_LIVE_HOLD`), so it holds no wave open either. A merged one
+    # needs no such rule, since its awaiting members count as closed.
+    live = [
+        n
+        for n, stage, b in waved
+        if stage not in {"merged", "cancelled"} and not batch_awaits_live(b, facts)
+    ]
+    return max(live) if live else max(n for n, _, _ in waved)
 
 
 def kind_counts(facts: Facts, judgements: Judgements) -> dict[str, int]:
