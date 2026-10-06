@@ -52,6 +52,8 @@ case "$source" in
     ;;
 esac
 
-uv tool install --force "${with[@]}" "$from" >&2
+# `--with` exposes only the main package's scripts; fr-herdr's `restart-idle` console
+# script lands in <prefix>/bin beside fr with this (spec 2026-10-06-driver-sessions §A).
+uv tool install --force "${with[@]}" --with-executables-from fr-herdr "$from" >&2
 "$prefix/bin/fr" --version >&2
 echo fr
