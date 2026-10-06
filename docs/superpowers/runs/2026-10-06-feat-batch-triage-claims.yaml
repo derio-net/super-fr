@@ -147,4 +147,12 @@ steps:
     stdout: |
       3 out-of-scope finding(s): p1-r17-default-trust-across-users, p1-r10, p2-r6
   deliver:
-    state: pending
+    state: running
+    at: '2026-10-06T22:28:42+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-06T22:28:42+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: cbb16f1b-fd32-46c2-b21b-5d302376757e
