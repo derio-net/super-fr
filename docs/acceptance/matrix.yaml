@@ -6684,3 +6684,134 @@ rows:
       check FR_HARNESS_FR in the shell, then reproduce the zsh .zshenv skew. Pieces
       verified 2026-10-05 on macOS: the pin survives zsh -c .zshenv while fr moves;
       the refusal fires.'
+  - id: verification-strategy-resolution
+    capability: verification
+    acceptance: A named verification strategy resolves repo-first then shipped, a repo-authored
+      one is usable, a shape declares the default, and a malformed manifest is refused
+      by fr verification check
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: shipped-verification-strategies
+    capability: verification
+    acceptance: candidate, client-live, prerelease and live ship; candidate-family installs
+      go to a throwaway prefix through the repo's install contract and never touch the
+      operator's install
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: spec-verification-section
+    capability: verification
+    acceptance: 'A spec''s ## Verification section sets the run''s strategy and per-row
+      overrides; a post-merge row without a reason fails self-review; legacy verify
+      post-merge rows read as live'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: candidate-walk-gates-deliver
+    capability: verification
+    acceptance: fr verification walk installs the PR build side by side, runs the smoke
+      and the run's row scenarios, and deliver refuses until a passing walk log covering
+      HEAD's code tree and every owed row is cited
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: premerge-owed-pr-section
+    capability: verification
+    acceptance: The PR body lists operator-driven pre-merge walks with their command
+      and a ready-checklist line, and post-merge rows with their reason
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: closes-refused-while-awaiting-walk
+    capability: verification
+    acceptance: deliver refuses a Closes/Fixes/Resolves line for an issue a not-yet-walk-verified
+      post-merge row cites, naming the line and printing Refs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: walk-recording-prints-close
+    capability: verification
+    acceptance: set-status records a walk naming harness, model and strategy; once every
+      row citing an issue is walk-verified it prints the close command (nothing under
+      tracking none)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R14
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: prerelease-on-demand
+    capability: verification
+    acceptance: fr verification prerelease cuts an rc tag and GitHub pre-release of
+      a branch without touching main or any version surface; other forges refuse
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
+  - id: super-fr-candidate-contract
+    capability: verification
+    acceptance: super-fr provides .fr/candidate-install and scenario scripts, exercised
+      in CI, so its own PRs can run a candidate walk
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R25
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: awaiting-live-triage
+    capability: triage
+    acceptance: Issues labelled fr:awaiting-live are listed as their own set, never
+      ranked, proposed or reported unplaced; the close-out brief prints the label command
+      for Refs'd issues
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R18
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-drive-conflict-handback
+    capability: triage
+    acceptance: A real merge conflict is handed back once per head to the batch's live
+      session or a fresh one, later overlapping conflicts wait behind the first, and
+      after two hand-backs without a merge the batch is listed under needs you
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R19
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R20
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R21
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R22
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R23
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-drive-conflict-handback-live
+    capability: triage
+    acceptance: On a real wave, a conflicted batch's live herdr session receives the
+      hand-back brief, resolves, and pushes, and the train merges it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R20
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
