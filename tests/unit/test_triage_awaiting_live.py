@@ -142,3 +142,28 @@ def test_an_awaiting_live_issue_still_in_progress_is_not_a_stale_dispatch() -> N
     assert [s.key for s in stale_dispatches(f)] == ["widgets#2"]
     assert [s.key for s in classify(f, jd).stale] == ["widgets#2"]
     assert [n.ref for n in needs_you(f, jd) if n.kind == "stale-dispatch"] == ["widgets#2"]
+
+
+def test_the_driver_holds_an_awaiting_live_batch_and_next_up_reads_its_hold() -> None:
+    """p4-r2: one rule. The driver holds a wholly-awaiting batch (never dispatches it)
+    and the board's Next up derives from that same action list."""
+    from fr.triage.batch_drive import drive_pass
+    from fr.triage.views import drive_snapshot
+
+    f, jd = _batches()
+
+    plan = drive_pass(drive_snapshot(f, jd))
+
+    assert [(a.kind, a.batch) for a in plan.actions] == [
+        ("dispatch", "a-ordinary"),
+        ("held", "b-live"),
+    ]
+    assert [r.ref for r in next_up(f, jd) if r.kind == "batch"] == ["a-ordinary"]
+
+
+def test_the_kanban_card_says_why_an_awaiting_live_batch_is_held() -> None:
+    from fr.triage.kanban import action_phrase, first_actions
+
+    f, jd = _batches()
+
+    assert action_phrase(first_actions(f, jd)["b-live"]) == "held: its members await a live walk"

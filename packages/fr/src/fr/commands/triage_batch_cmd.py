@@ -149,6 +149,7 @@ from fr.triage.batch_merge import (
     run_queue,
 )
 from fr.triage.batch_version import read_source, reserve
+from fr.triage.check import batch_awaits_live
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.errors import ForgeError, TriageError
@@ -1639,6 +1640,7 @@ class _Driver:
             export_default=export_default,
             finished=done_waves,
             export_refused=export_refused,
+            awaiting=frozenset(b.id for b in judgements.batches if batch_awaits_live(b, facts)),
         )
 
     def _default_branch(self, repo: str) -> str:

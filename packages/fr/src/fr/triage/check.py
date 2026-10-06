@@ -46,7 +46,15 @@ from typing import Any
 
 from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS
 from fr.triage.batch import is_open
-from fr.triage.model import Facts, Issue, Judgements, PullRequest, issue_key, normalize_key
+from fr.triage.model import (
+    Batch,
+    Facts,
+    Issue,
+    Judgements,
+    PullRequest,
+    issue_key,
+    normalize_key,
+)
 
 SETTLED_STAGES = frozenset({"closed", "merged"})
 
@@ -197,6 +205,13 @@ def stale_dispatches(facts: Facts) -> list[Stale]:
 def is_awaiting_live(issue: Issue) -> bool:
     """Whether `issue` is open and carries `fr:awaiting-live`."""
     return issue.state == "open" and FR_AWAITING_LIVE.name in issue.labels
+
+
+def batch_awaits_live(batch: Batch, facts: Facts) -> bool:
+    """Whether every open member of *batch* awaits its live walk (at least one is
+    open): such a batch is no work, so the driver holds it (spec §F, R18)."""
+    members = [i for i in facts.issues if i.key in batch.ids and i.state == "open"]
+    return bool(members) and all(is_awaiting_live(i) for i in members)
 
 
 def awaiting_live_issues(facts: Facts) -> list[Issue]:

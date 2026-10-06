@@ -28,6 +28,7 @@ from fr.triage.batch import (
     last_dispatch,
 )
 from fr.triage.batch_drive import (
+    AWAITING_LIVE_HOLD,
     Action,
     closeout_event,
     closeout_item_id,
@@ -238,6 +239,8 @@ def action_phrase(action: Action) -> str:
     """One line for what the driver would do with the batch."""
     if action.kind == "blocked":
         return f"blocked: {action.detail}"
+    if action.kind == "held" and action.detail == AWAITING_LIVE_HOLD:
+        return "held: its members await a live walk"
     return _ACTION_PHRASES[action.kind]
 
 

@@ -30,6 +30,7 @@ from fr.triage.batch import (
     pr_open_queue,
 )
 from fr.triage.batch_drive import (
+    AWAITING_LIVE_HOLD,
     CLOSEOUT_FALLBACK,
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
@@ -44,7 +45,7 @@ from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
-from fr.triage.check import classify, is_awaiting_live, stale_dispatches
+from fr.triage.check import batch_awaits_live, classify, is_awaiting_live, stale_dispatches
 from fr.triage.model import Batch, Facts, Judgement, Judgements, PullRequest, Severity
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
@@ -114,6 +115,7 @@ def drive_snapshot(
         max_inflight=max_inflight,
         merged_at=merged_at,
         foreign={b.id: found for b in batches if (found := tuple(foreign_batch_prs(b, facts)))},
+        awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
     )
 
 
@@ -270,14 +272,6 @@ def batch_tier(keys: Sequence[str], issues: Mapping[str, Judgement]) -> int | No
     return min(tiers) if tiers else None
 
 
-def awaits_live(batch: Batch, facts: Facts) -> bool:
-    """A batch whose open members all await their live walk (at least one does): it
-    is no work to propose, and it holds no wave open (spec
-    2026-10-06-verification-strategies §F, R18)."""
-    members = [i for i in facts.issues if i.key in batch.ids and i.state == "open"]
-    return bool(members) and all(is_awaiting_live(i) for i in members)
-
-
 def next_up(
     facts: Facts, judgements: Judgements, *, max_inflight: int = DEFAULT_MAX_INFLIGHT
 ) -> list[NextRow]:
@@ -306,19 +300,21 @@ def next_up(
 
     for bid in started:
         b = by_id[bid]
-        if awaits_live(b, facts):
-            continue
         order = f", merge order {b.order}" if b.order is not None else ""
         deps = f", after {', '.join(b.after)} merged" if b.after else ", no dependencies"
         wave = f"wave {b.wave}" if b.wave is not None else "no wave"
         rows.append(row(b, f"{wave}{order}{deps}", False))
 
-    blocked = {a.batch for a in plan.actions if a.kind == "blocked"}
+    # The driver's own hold is the one rule (spec §F, R18): a batch that awaits a live
+    # walk is no work, so it is neither started nor waiting.
+    skipped = {
+        a.batch
+        for a in plan.actions
+        if a.kind == "blocked" or (a.kind == "held" and a.detail == AWAITING_LIVE_HOLD)
+    }
     in_flight = sum(1 for b in judgements.batches if snap.stages.get(b.id) in IN_FLIGHT)
     for b in sorted(judgements.batches, key=dispatch_key):
-        if snap.stages.get(b.id) != "proposed" or b.id in started or b.id in blocked:
-            continue
-        if awaits_live(b, facts):
+        if snap.stages.get(b.id) != "proposed" or b.id in started or b.id in skipped:
             continue
         unmerged = [d for d in b.after if snap.stages.get(d) != "merged"]
         if unmerged:
@@ -389,7 +385,7 @@ def preselected_wave(
         for b in judgements.batches
         if b.wave is not None
         and (among is None or str(b.wave) in among)
-        and not awaits_live(b, facts)
+        and not batch_awaits_live(b, facts)
     ]
     if not waved:
         return None

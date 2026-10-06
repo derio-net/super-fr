@@ -37,6 +37,10 @@ CLOSEOUT_FALLBACK = timedelta(minutes=10)
 
 DEFAULT_MAX_INFLIGHT = 4
 
+AWAITING_LIVE_HOLD = "its members await a live walk: no work to dispatch"
+"""The `held` detail of a planned batch whose open members all carry `fr:awaiting-live`
+(spec 2026-10-06-verification-strategies §F, R18): the one rule the board reads too."""
+
 IN_FLIGHT: frozenset[BatchStage] = frozenset({"dispatched", "pr-open"})
 LANDED: frozenset[BatchStage] = frozenset({"merged", "partial"})
 ARCHIVE_PREFIXES = ("chore/archive-", "chore/closeout-")
@@ -153,6 +157,9 @@ class Snapshot:
     export_orphans: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)
     # repo -> its default branch: the only base an export PR may have (p4-r15)
     export_default: Mapping[str, str] = field(default_factory=dict)
+    # The batches whose open members all await their live walk (`batch_awaits_live`):
+    # a planned one is held, never dispatched (spec §F, R18).
+    awaiting: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -781,6 +788,10 @@ def drive_pass(snap: Snapshot) -> Pass:
     pending, blocked = 0, exports_blocked
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed":
+            continue
+        if batch.id in snap.awaiting:
+            # No work, so not pending either: it never keeps a drive alive.
+            actions.append(Action("held", batch.id, AWAITING_LIVE_HOLD))
             continue
         dead = [
             f"{d} is {stages.get(d, 'unknown')}"
