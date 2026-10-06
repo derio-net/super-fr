@@ -19,3 +19,8 @@ New fr.triage.merge_stops (merge-stops.json beside drive.lock, not judgements.ya
 ### fix-1000 · finding [fixed] · Cancelled waves are named
 
 views.cancelled_waves: finished waves whose every batch is cancelled or abandoned. The finished_waves predicate is unchanged (spec R8). History tab reads 'Wave N · cancelled'; the board's waves section says the wave was cancelled and left, with a link to history. Tests: test_a_wave_whose_batches_were_all_cancelled_is_labelled_cancelled, test_a_wave_that_left_the_board_because_it_was_cancelled_is_named.
+
+<!-- fr:journal kind=finding scope=debug id=fix-1001 created=2026-10-06T08:35:56+00:00 state=fixed -->
+### fix-1001 · finding [fixed] · Wave table stacks into labelled cards under 480px
+
+wave_table cells carry data-label and the table is 'grid stack'; GRID_CSS adds a <=480px block that turns rows into cards with the column name before each value. Verified live at 390px: wrapper scrollWidth == clientWidth (343), nothing wraps mid-id. test_the_phone_gutter_is_sixteen_pixels now reads every phone media block. Test: test_the_wave_table_stacks_into_labelled_cards_at_phone_width.
