@@ -160,3 +160,34 @@ the forge table was widened in place with PR/issue views derived from it rather 
 ### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
 
 one self-contained check function beside the acceptance-link check, using the same seam; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-06T12:23:33+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · tea gets a manual unlabel line though `tea issues edit --remove-labels` exists (phase 2)
+
+hostclient.py:71-73 printed "# tea has no unlabel command …" and issue_command carried a
+`startswith("#")` no-quote branch for it. The spec's premise was wrong: the installed tea's
+`issues edit --help` lists --remove-labels (and --repo), the subcommand issue-label already uses.
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-10-06T12:23:33+00:00 phase=2 -->
+### p2-review · review · Phase 2 independent code review — 1 finding (p2-r1, in scope, fixed) (phase 2)
+
+Independent reviewer reviewed 4e4b49d88..HEAD against spec §B/§E, 02.yaml and the
+artifact-versioning rule. Judged the recorded departures: (a) record 7→8 rewriting
+verify post-merge→live is correct and necessary (a stamp-only hop leaves an unreadable v8);
+(b) set-status --scenario justified by self-review's R10 refusal; (c) --repo on issue commands
+correct; (d) tea → p2-r1. Verified sound: MatrixV3 inlines its vocabularies and is hash-pinned;
+every matrix hop reads through it; 3→4 is one atomic write, byte-identical on refusal, chain
+[2,3,4] asserted; registry at matrix 4 / record 8; no string compare of post-merge left outside
+legacy/migration modules; walk_verified and issues_now_closable match R14/R16.
+Received: p2-r1 verified on the installed tea (`tea issues edit --help`), fixed with a red-first
+test; the spec's §E tea sentence corrected to match.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-06T12:23:33+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: tea gets a manual unlabel line though `tea issues edit --remove-labels` exists (phase 2)
+
+tea unlabel is `tea issues edit {number} --repo {repo} --remove-labels {label}`; the manual-line branch and comment are gone; test pin updated (red first); spec §E corrected.
+
+<!-- fr:journal kind=finding scope=plan id=p2-tea-remove-labels-resolved created=2026-10-06T12:23:33+00:00 phase=2 state=open resolves=p2-tea-remove-labels out_of_scope=true -->
+### p2-tea-remove-labels-resolved · finding [out-of-scope] · resolves p2-tea-remove-labels: the spec says tea has no unlabel command, but the installed tea's `issues edit` has --remove-labels (phase 2)
+
+Same fact as p2-r1, which carries the fix in scope; this executor-filed duplicate is closed without its own fix.
