@@ -93,6 +93,7 @@ def _snap(
     live = live if live is not None else {
         e.batch.id: _live(e.pr.number, e.pr.head_oid) for e in queue
     }  # fmt: skip
+    kw.setdefault("default_branch", {REPO: "main"})
     return Snapshot(
         batches=tuple(batches),
         stages=stages,  # type: ignore[arg-type]
@@ -484,7 +485,9 @@ def _closed(bid: str, n: int, *, archive: str | None = None, run: str | None = N
 
 
 def _archive(n: int, head_ref: str, **kw: Any) -> LivePr:
-    return _live(n, f"h{n}", head_ref=head_ref, trusted=kw.pop("trusted", True), **kw)
+    """An archive PR candidate based on the default branch, as `_snap` names it."""
+    return _live(n, f"h{n}", head_ref=head_ref, trusted=kw.pop("trusted", True),
+                 base=kw.pop("base", "main"), **kw)  # fmt: skip
 
 
 def test_an_attributed_ready_green_archive_pr_is_merged() -> None:
@@ -983,7 +986,7 @@ def _export_snap(
         batches,
         stages,
         export_path={REPO: "docs/triage"} if export_path is None else export_path,
-        export_default={REPO: "main"},
+        default_branch={REPO: "main"},
         exports=tuple(exports),
         export_prs=prs or {},
         finished=finished,
@@ -1107,7 +1110,7 @@ def _three_waves(**kw: Any) -> Snapshot:
     ]
     stages = {b.id: "merged" for b in batches}
     kw.setdefault("finished", frozenset({"1", "2", "10"}))
-    kw.setdefault("export_default", {REPO: "main"})
+    kw.setdefault("default_branch", {REPO: "main"})
     return _snap(batches, stages, export_path={REPO: "docs/triage"}, **kw)
 
 
@@ -1285,7 +1288,7 @@ def test_a_crash_then_a_new_wave_reuses_the_orphan_and_opens_no_second_pr() -> N
     batches = [_finished("a", 1), _merged("b", 2, wave=2, events=[{**_CLOSEOUT, "archived": 8}])]
     snap = _snap(
         batches, {"a": "merged", "b": "merged"}, export_path={REPO: "docs/triage"},
-        export_default={REPO: "main"},
+        default_branch={REPO: "main"},
         finished=frozenset({"1", "2"}), export_orphans={REPO: (_trusted(40, wave="1"),)},
     )  # fmt: skip
     got = drive_pass(snap)

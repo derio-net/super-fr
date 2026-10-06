@@ -121,6 +121,7 @@ from fr.triage.batch_drive import (
     Snapshot,
     Summary,
     action_line,
+    attributed,
     checks_verdict,
     closeout_brief,
     closeout_due,
@@ -1541,6 +1542,9 @@ class _Driver:
         # repos, left out of the pass because their PRs and config were not read (gh#921)
         self._unread: dict[str, str] = {}
         self._left_out: dict[str, str] = {}
+        # per pass, plan mode only: repo -> why its clone could not be read, so the
+        # checks that needed it were skipped, never guessed (gh#991)
+        self._clone_unread: dict[str, str] = {}
         self.restart_to: str | None = None  # a newer fr post_merge installed (gh#998)
 
     # -------------------------------------------------------------- reaching out
@@ -1640,6 +1644,7 @@ class _Driver:
         merged_at: dict[str, datetime] = {}
         released: set[str] = set()
         archived: set[str] = set()
+        unverified: set[str] = set()
         adopted: dict[str, LivePr] = {}
         archives: dict[str, tuple[LivePr, ...]] = {}
         due: list[Batch] = []
@@ -1663,9 +1668,14 @@ class _Driver:
                     head_ref=e.pr.head_ref,
                     trusted=True,  # the queue holds `batch_pr`s only (gh#936)
                 )
-            for b in chosen:
+            # Every landed batch, selected or not: adopting a finished close-out is
+            # bookkeeping (gh#990). Only the selection is read further.
+            for b in judgements.batches:
                 if stages[b.id] not in ("merged", "partial") or b.id not in repos:
                     continue
+                if repos[b.id] in unread:
+                    continue
+                mine = b.id in ids
                 event = closeout_event(b)
                 if event is None:
                     repo = repos[b.id]
@@ -1676,21 +1686,31 @@ class _Driver:
                         if pr is not None
                         else ""
                     )  # fmt: skip
-                    if self._archived(repo, merge):
+                    gone = self._archived(repo, merge)
+                    if gone is None:  # plan mode, an unreadable clone (gh#991)
+                        unverified.add(b.id)
+                        continue
+                    if gone:
                         archived.add(b.id)
                         continue
                     hand = self._hand_closeout(facts, repo, b)
-                    if hand is not None:
+                    if hand is not None and (mine or hand.state == "MERGED"):
                         adopted[b.id] = hand
+                        continue
+                    if not mine:
                         continue
                     when = _parse_at(pr.merged_at if pr else None)
                     merged_at[b.id] = when or self._first_seen.setdefault(b.id, now)
-                    if self._released(repo, merge):
+                    shipped = self._released(repo, merge)
+                    if shipped is None:
+                        unverified.add(b.id)
+                        continue
+                    if shipped:
                         released.add(b.id)
                     if closeout_due(released=b.id in released, merged_at=merged_at[b.id], now=now):
                         due.append(b)
                     continue
-                if event.archived is not None:
+                if event.archived is not None or not mine:
                     continue  # its archive PR was merged by the driver: finished
                 archives[repos[b.id]] = (
                     *archives.get(repos[b.id], ()),
@@ -1705,7 +1725,7 @@ class _Driver:
         export_prs, export_orphans = self._export_reads(
             facts, judgements, repos, done_waves, export_path
         )
-        export_default = {r: self._default_branch(r) for r in export_path}
+        default_branch = {r: self._default_branch(r) for r in {*export_path, *archives}}
         closing_sessions = self.yes and not self.keep_sessions
         sessions = frozenset[str]()
         self._probes = {}
@@ -1742,7 +1762,8 @@ class _Driver:
             exports=tuple(judgements.exports),
             export_prs=export_prs,
             export_orphans=export_orphans,
-            export_default=export_default,
+            default_branch=default_branch,
+            unverified=frozenset(unverified),
             finished=done_waves,
             export_refused=export_refused,
         )
@@ -1901,14 +1922,23 @@ class _Driver:
                 checkout = self._reader(repo)
                 checkout.fetch()
                 self._ci[repo] = ci_none_at(checkout)
-            except TriageError:
-                self._ci[repo] = False
+            except TriageError as exc:
+                self._ci[repo] = False  # an unreadable declaration is not `none`
+                self._unreadable(repo, exc)
         return self._ci[repo]
 
-    def _archived(self, repo: str, merge_commit: str) -> bool:
+    def _unreadable(self, repo: str, exc: TriageError) -> None:
+        """Record, in plan mode, that *repo*'s clone could not be read: the pass reports
+        it once instead of presenting a guess as the plan (gh#991). With --yes a read
+        that fails is fatal to the pass already."""
+        if not self.yes:
+            self._clone_unread.setdefault(repo, str(exc))
+
+    def _archived(self, repo: str, merge_commit: str) -> bool | None:
         """Whether the batch merged by *merge_commit* was closed out already: the run
         artifacts it added are all gone from `origin/<default>` (`is_archived`), as
-        `fr archive` leaves them, whether a driver or a hand ran the close-out."""
+        `fr archive` leaves them, whether a driver or a hand ran the close-out. None in
+        plan mode when the clone cannot be read: unknown, never "not archived" (gh#991)."""
         try:
             checkout = self._reader(repo)
             checkout.fetch()
@@ -1919,9 +1949,10 @@ class _Driver:
         except TriageError as exc:
             if self.yes:  # a fetch on a degraded forge: read again next pass (gh#921)
                 raise ForgeReadError(str(exc), code=2) from exc
-            return False
+            self._unreadable(repo, exc)
+            return None
 
-    def _released(self, repo: str, merge_commit: str) -> bool:
+    def _released(self, repo: str, merge_commit: str) -> bool | None:
         try:
             checkout = self._reader(repo)
             checkout.fetch()
@@ -1929,7 +1960,8 @@ class _Driver:
         except TriageError as exc:
             if self.yes:  # as `_archived` (gh#921)
                 raise ForgeReadError(str(exc), code=2) from exc
-            return False
+            self._unreadable(repo, exc)
+            return None
 
     def _archive_prs(
         self, facts: Facts, repo: str, batch: Batch, event: CloseoutEvent
@@ -1962,7 +1994,15 @@ class _Driver:
             for found in _live_head_prs(client, repo, head, allowed):
                 if found.state != "OPEN" or found.number not in out:
                     out[found.number] = found
-        return list(out.values())
+        # The base, read fresh as the export reads it (p4-r15): an archive PR is merged
+        # only into the default branch (gh#1004). Only an open one this batch owns can
+        # be merged, so only those cost a read.
+        return [
+            replace(p, base=str(client.pr_view(repo, p.number).get("base_ref") or ""))
+            if p.state == "OPEN" and attributed(p, batch, event)
+            else p
+            for p in out.values()
+        ]
 
     def _existing(
         self, facts: Facts, closing: list[Batch], repos: dict[str, str]
@@ -2129,6 +2169,7 @@ class _Driver:
             )
         _, facts, judgements = _load_state(self.scope, self.target)
         self._ci, self._unlanded, self._held = {}, set(), 0
+        self._clone_unread = {}
         self._stopped, self._queued = {}, 0
         self._export_refusals = 0
         self.failed_write = False
@@ -2140,6 +2181,13 @@ class _Driver:
                 f"{repo} was not read this pass ({why}); "
                 + (f"its batches {', '.join(mine)} are left out until it is"
                    if mine else "its batches are left out until it is"),
+            )  # fmt: skip
+        for repo, why in sorted(self._clone_unread.items()):
+            mine = sorted(b for b in snap.unverified if snap.repos.get(b) == repo)
+            self._report_once(
+                f"clone\0{repo}\0{why}",
+                f"cannot read {repo}'s clone ({why}); archive/release checks skipped"
+                + (f", so no close-out is planned for {', '.join(mine)}" if mine else ""),
             )  # fmt: skip
         plan = drive_pass(snap)
         self._unfinished = unfinished_waves(snap)
