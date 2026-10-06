@@ -3080,3 +3080,27 @@ def test_extra_orphans_are_warned_stale_once_each(
     (stale,) = [ln for ln in _lines(out, "warn") if "stale" in ln]
     assert "PR #45" in stale and "safe to close" in stale and "PR #40" in stale
     assert _exports(state) == [("1", 40, False)]
+
+
+@pytest.mark.parametrize(("unfinished", "passes"), [(frozenset({"1"}), 2), (frozenset(), 1)])
+def test_a_finishing_loop_runs_one_observation_pass_only_when_a_wave_was_unfinished(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, unfinished: frozenset[str], passes: int,
+) -> None:  # fmt: skip
+    """Review p1-r4: the pass that ends the drive may finish the last wave itself (an
+    adopt, an archive merge); only one more pass observes it, so the loop runs it once."""
+    from fr.triage.batch_drive import Summary
+
+    _proposed(world, tmp_path, 1)
+    calls: list[int] = []
+
+    def _done_pass(self: Any) -> tuple[bool, Summary, list[str]]:
+        calls.append(1)
+        self._unfinished = unfinished if len(calls) == 1 else frozenset()
+        return False, Summary(in_flight=0, merged=1, pending=0, closing=0), []
+
+    monkeypatch.setattr(triage_batch_cmd._Driver, "run_pass", _done_pass)
+    code, _ = _drive(tmp_path, "--yes", "--checkout", f"{REPO}={checkout.path}")
+
+    assert code == 0
+    assert len(calls) == passes

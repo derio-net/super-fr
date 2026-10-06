@@ -41,15 +41,17 @@ _EXT = r"(?:py|md|ts|sh|ya?ml|json|toml|html)"
 _BARE = re.compile(rf"\b[A-Za-z_][A-Za-z0-9]*_[A-Za-z0-9_]+(?:\.{_EXT}\b)?")
 _FILE_LEAF = re.compile(rf"\.{_EXT}$")
 _LINE_SUFFIX = re.compile(r":\d+(-\d+)?$")
+# A finding id carries a digit (`r2-2`, `d028f3cc945a`) or is backticked
+# (`deliver-flaky-columns`): "finding out-of-scope" is prose, never an id (review p1-r2).
 _FINDING = re.compile(
-    r"finding[s]?\s+[`*]*([a-z0-9]+(?:-[a-z0-9]+)+|[a-z0-9]*\d[a-z0-9]*)\b", re.IGNORECASE
+    r"finding[s]?\s+(?:`([a-z0-9][a-z0-9_-]*)`|\**([a-z0-9-]*\d[a-z0-9-]*)\b)", re.IGNORECASE
 )
 _REF = re.compile(r"(?<![\w/])#(\d+)\b")
 
 
 @dataclass(frozen=True)
 class Pair:
-    a: str  # keys, a < b
+    a: str  # keys, a before b in `key_order`
     b: str
     reasons: tuple[str, ...]  # e.g. "title 0.62", "identifiers verify_tests_log"
 
@@ -116,6 +118,17 @@ def _text(issue: Issue) -> str:
     return f"{issue.title}\n{issue.body}"
 
 
+def _findings(text: str) -> frozenset[str]:
+    return frozenset((tick or bare).lower() for tick, bare in _FINDING.findall(text))
+
+
+def key_order(key: str) -> tuple[str, int]:
+    """`<repo>#<n>` ordered by repo, then by number as an integer: `#9` before `#10`
+    (review p1-r6). Every key ordering in this module goes through it."""
+    repo, _, number = key.rpartition("#")
+    return (repo, int(number) if number.isdigit() else -1)
+
+
 # ------------------------------------------------------------------ signals
 
 
@@ -171,12 +184,12 @@ def _components(pairs: list[Pair]) -> list[CandidateGroup]:
         members.setdefault(find(p.a), []).append(p)
     groups = [
         CandidateGroup(
-            keys=tuple(sorted({k for p in ps for k in (p.a, p.b)})),
-            pairs=tuple(sorted(ps, key=lambda p: (p.a, p.b))),
+            keys=tuple(sorted({k for p in ps for k in (p.a, p.b)}, key=key_order)),
+            pairs=tuple(sorted(ps, key=lambda p: (key_order(p.a), key_order(p.b)))),
         )
         for ps in members.values()
     ]
-    return sorted(groups, key=lambda g: g.keys[0])
+    return sorted(groups, key=lambda g: key_order(g.keys[0]))
 
 
 def candidates(facts: Facts, judgements: Judgements) -> list[CandidateGroup]:
@@ -211,12 +224,12 @@ def candidates(facts: Facts, judgements: Judgements) -> list[CandidateGroup]:
                 title=issue.title,
                 words=_words(issue.title),
                 idents=frozenset(parsed[issue.key]),
-                findings=frozenset(f.lower() for f in _FINDING.findall(issue.body)),
-                refs=frozenset(_REF.findall(issue.body)),
+                findings=_findings(_text(issue)),
+                refs=frozenset(_REF.findall(_text(issue))),
                 theme=theme_key(judged.theme) if judged else "",
             )
         )
-    docs.sort(key=lambda d: d.key)
+    docs.sort(key=lambda d: key_order(d.key))
 
     skip = _distinct(judgements)
     known_modules = frozenset(modules)

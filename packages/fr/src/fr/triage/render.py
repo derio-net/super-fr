@@ -440,6 +440,10 @@ def _duplicates_block(duplicates: Sequence[Nested]) -> str:
     )
 
 
+PAIRS_SHOWN = 10
+"""Pairs listed per candidate group on the board; the rest read "+N more"."""
+
+
 def _possible_duplicates(groups: Sequence[CandidateGroup], by_key: dict[str, Issue]) -> str:
     if not groups:
         body = '<p class="empty">No candidate duplicates among the open issues.</p>'
@@ -452,9 +456,12 @@ def _possible_duplicates(groups: Sequence[CandidateGroup], by_key: dict[str, Iss
 
         blocks = []
         for g in groups:
+            shown, hidden = g.pairs[:PAIRS_SHOWN], len(g.pairs) - PAIRS_SHOWN
             pairs = "".join(
-                f"<li>{link(p.a)} ~ {link(p.b)}: {esc('; '.join(p.reasons))}</li>" for p in g.pairs
+                f"<li>{link(p.a)} ~ {link(p.b)}: {esc('; '.join(p.reasons))}</li>" for p in shown
             )
+            if hidden > 0:  # `fr triage check --json` keeps every pair (review p1-r8)
+                pairs += f'<li class="more">+{hidden} more</li>'
             blocks.append(
                 f'<div class="dupe-group"><p>{", ".join(link(k) for k in g.keys)}</p>'
                 f'<ul class="dupes">{pairs}</ul></div>'

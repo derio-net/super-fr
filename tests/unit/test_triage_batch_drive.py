@@ -1337,7 +1337,11 @@ def _wave(bid: str, n: int, wave: int, *, done: bool) -> Batch:
 def test_unfinished_waves_are_the_wave_keys_finished_does_not_hold() -> None:
     """The dedupe step reads `snap.finished` (main's one `finished_waves` predicate);
     `unfinished_waves` is only its complement over the state file's wave keys."""
-    done, open_, loose = _wave("a", 1, 2, done=True), _wave("b", 2, 3, done=False), _batch("c", 3, wave=None)
+    done, open_, loose = (
+        _wave("a", 1, 2, done=True),
+        _wave("b", 2, 3, done=False),
+        _batch("c", 3, wave=None),
+    )
     stages = {"a": "merged", "b": "merged", "c": "proposed"}
     snap = _snap([done, open_, loose], stages, finished=frozenset({"2"}))
 

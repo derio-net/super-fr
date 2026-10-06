@@ -856,6 +856,19 @@ def test_possible_duplicates_lists_each_group_escaped_before_the_backlog() -> No
     assert page[m.end() :].lstrip().startswith('<details id="backlog-by-tier"')
 
 
+def test_a_large_candidate_group_lists_ten_pairs_then_a_count() -> None:
+    """Review p1-r8: 30 near-identical issues gave 406 pair lines; the board caps them."""
+    facts, judgements = _dupe_state(
+        [(n, "deliver gate refuses X", "open") for n in range(1, 7)], {}
+    )
+    page = render(facts, judgements)
+
+    m = re.search(r'<details id="possible-duplicates".*?</details>', page, re.S)
+    assert m is not None
+    assert m.group(0).count(" ~ ") == 10  # 6 issues make 15 pairs
+    assert "+5 more" in m.group(0)
+
+
 def test_possible_duplicates_says_so_when_there_are_none() -> None:
     facts, judgements = _dupe_state([(1, "alpha", "open"), (2, "wholly other", "open")], {})
     page = render(facts, judgements)

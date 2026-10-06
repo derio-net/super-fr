@@ -1460,6 +1460,7 @@ class _Driver:
         # The waves this process's previous pass found unfinished; None before its first
         # pass, so a wave already finished at start is never reported (R10).
         self._unfinished: frozenset[str] | None = None
+        self._observed_last = False  # the one extra pass `observation_owed` grants
         self._export_refusals = 0  # per pass: owed exports refused before any write
 
     # -------------------------------------------------------------- reaching out
@@ -2010,6 +2011,17 @@ class _Driver:
             _fail(str(exc))
 
     # ------------------------------------------------------------------- execute
+
+    def observation_owed(self) -> bool:
+        """Whether a finishing loop owes one more pass before it exits (review p1-r4).
+
+        A pass that ends the drive may itself finish a wave (an archive merge, an adopted
+        close-out); only the NEXT pass observes it, so the loop runs that pass once, with
+        no nap, whenever some wave was unfinished when the last pass began (R10)."""
+        if self._observed_last or not self._unfinished:
+            return False
+        self._observed_last = True
+        return True
 
     def run_pass(self) -> tuple[bool, Summary, list[str]]:
         """One pass: re-collect, decide, act (with --yes) or print the plan.
@@ -2624,6 +2636,8 @@ def batch_drive_command(
                     return
                 raise typer.Exit(code=3)
             if summary.done:
+                if driver.observation_owed():
+                    continue  # the last wave's transition is seen only by one more pass
                 return
             if summary.waiting_on_operator:
                 _say(

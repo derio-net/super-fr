@@ -68,6 +68,7 @@ def test_the_calibration_fixture_groups_the_known_duplicates() -> None:
         (640, 647),
         (724, 725),
         (868, 869),
+        (454, 458),  # captured for the calibration: a shared finding id and reference (p1-r9)
     ):
         keys = tuple(f"super-fr#{n}" for n in known)
         assert keys in groups, f"{keys} not grouped; got {sorted(groups)}"
@@ -149,6 +150,41 @@ def test_the_word_after_finding_must_look_like_an_id() -> None:
     assert _run(a, b) == []
 
 
+def test_a_hyphenated_word_after_finding_is_prose_not_an_id() -> None:
+    """Review p1-r2: "finding out-of-scope" is how pipeline-filed issues talk."""
+    a = _issue(1, "alpha", "a finding out-of-scope in #723")
+    b = _issue(2, "beta", "the finding out-of-scope from #723")
+    assert _run(a, b) == []
+
+
+def test_a_backticked_finding_id_needs_no_digit() -> None:
+    a = _issue(1, "alpha", "finding `deliver-flaky-columns`, PR #641")
+    b = _issue(2, "beta", "journal finding `deliver-flaky-columns` (#641)")
+    assert _reasons(_run(a, b)) == ["finding deliver-flaky-columns (#641)"]
+
+
+def test_the_finding_and_reference_may_sit_in_the_title() -> None:
+    """Review p1-r3: the text is the title plus the body (spec §3.B)."""
+    a = _issue(1, "finding r2-2 (#723): alpha", "")
+    b = _issue(2, "beta", "journal finding r2-2, see #723")
+    assert _reasons(_run(a, b)) == ["finding r2-2 (#723)"]
+
+
+def test_keys_order_by_number_not_text() -> None:
+    """Review p1-r6: `#9` sorts before `#10` in groups, pairs and the group order."""
+    groups = _run(
+        _issue(10, "deliver gate refuses X"),
+        _issue(9, "deliver gate refuses X again"),
+        _issue(100, "other words entirely here"),
+        _issue(20, "other words entirely here too"),
+    )
+    assert [g.keys for g in groups] == [
+        ("super-fr#9", "super-fr#10"),
+        ("super-fr#20", "super-fr#100"),
+    ]
+    assert (groups[0].pairs[0].a, groups[0].pairs[0].b) == ("super-fr#9", "super-fr#10")
+
+
 def test_the_same_theme_with_fairly_close_titles_flags_a_pair() -> None:
     a = _issue(1, "aaa bbb ccc ddd eee fff ggg")
     b = _issue(2, "aaa bbb ccc hhh iii jjj kkk")
@@ -218,9 +254,9 @@ def test_groups_join_by_connectivity_and_are_sorted() -> None:
 
     groups = _run(*issues)
 
-    assert [g.keys for g in groups] == [
-        ("super-fr#10", "super-fr#20", "super-fr#30"),
+    assert [g.keys for g in groups] == [  # numeric key order (p1-r6): #5 before #10
         ("super-fr#5", "super-fr#7"),
+        ("super-fr#10", "super-fr#20", "super-fr#30"),
     ]
     assert groups == _run(*reversed(issues))
     for g in groups:
