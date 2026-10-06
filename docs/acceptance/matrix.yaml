@@ -5982,9 +5982,14 @@ rows:
       its split read as not observed
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_usage_split_v2.py#test_a_v1_file_is_stamped_two_and_its_body_is_untouched
+      - super-fr:tests/unit/test_migration_usage_split_v2.py#test_an_unparseable_body_is_refused_and_left_byte_identical
+      - super-fr:tests/unit/test_migration_usage_split_v2.py#test_a_fresh_file_is_born_stamped_with_the_current_version
+    status: ci
+    notes: 'Unit-pinned by this PR: 1->2 stamp-only migration, refusal of an unparseable
+      body, fresh files born at 2.'
   - id: cost-evidence-usage-compare
     capability: usage
     acceptance: fr usage compare reports two sets of runs side by side (phases, turns,
