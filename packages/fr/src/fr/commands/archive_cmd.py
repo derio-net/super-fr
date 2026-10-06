@@ -389,7 +389,10 @@ def _after_moves(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
     stops the next, and none of them changes the exit code the body chose."""
     if not log:
         return
-    for name, step in (("usage refresh", _refresh_usage),):
+    for name, step in (
+        ("usage refresh", _refresh_usage),
+        ("matrix retarget", _retarget_matrix),
+    ):
         try:
             step(repo_root, log, opts)
         except Exception as e:  # noqa: BLE001 — a follow-up never fails an archive
@@ -437,6 +440,44 @@ def _refresh_usage(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         err_console.print(f"note: usage for {run_id} has uncommitted changes — not refreshed")
     for run_id, why in report.failed:
         err_console.print(f"note: usage for {run_id} not refreshed — {escape(why)}")
+
+
+def _retarget_matrix(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
+    """§B: matrix refs follow what this invocation moved; the three committed
+    reports are regenerated and everything is staged. Every render happens in
+    memory before the first write, so a refusal touches no file."""
+    import subprocess
+
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.model import parse_matrix
+    from fr.acceptance.report import render_committed_set
+    from fr.acceptance.retarget import retarget_text
+    from fr.artifacts.atomic import write_text_atomic
+    from fr.commands.acceptance_cmd import MATRIX_REL
+
+    matrix_path = repo_root / MATRIX_REL
+    if not matrix_path.is_file():
+        return
+    text = matrix_path.read_text()
+    matrix = parse_matrix(text)
+    own = resolve_identity(matrix, repo_root)[1]
+    new_text, changes = retarget_text(text, own, log.moves)
+    if not changes:
+        return
+    renders = render_committed_set(parse_matrix(new_text), repo_root)
+    targets = {str(MATRIX_REL): new_text, **renders}
+    dirty = [rel for rel in targets if _edited_in_worktree(repo_root, repo_root / rel)]
+    if dirty:
+        raise RuntimeError(f"{', '.join(dirty)} has uncommitted changes — not retargeted")
+    for rel, content in targets.items():
+        write_text_atomic(repo_root / rel, content)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "add", "--", *targets],
+        check=True,
+        capture_output=True,
+    )
+    for row_id, old, new in changes:
+        typer.echo(f"  retargeted: {row_id} · {old} → {new}")
 
 
 def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
