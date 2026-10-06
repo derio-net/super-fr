@@ -42,6 +42,7 @@ from fr.usage.file import (
     dump_usage,
     load_usage,
     session_entry,
+    unit_index,
     units_by_agent,
     upsert_capture,
     usage_path,
@@ -115,7 +116,7 @@ def refreshed_file(
     if mine is None or not stale:
         return None
     harness_of = {session: harness for harness, session in sessions_of(raw)}
-    windows, units = windows_from_cursor(raw), units_by_agent(raw)
+    windows, units, index = windows_from_cursor(raw), units_by_agent(raw), unit_index(raw)
     sessions: list[SessionEntry] = []
     for entry in mine.sessions:
         if entry.session in stale:
@@ -125,7 +126,9 @@ def refreshed_file(
             except Exception:  # noqa: BLE001 — an unreadable session stays as recorded
                 record = None
             if record is not None and record.unavailable is None and record.cost.usd is not None:
-                entry = session_entry(record, windows, rekey=units)
+                # the split is re-priced, never lost; an entry without one stays so
+                keep = index if (entry.steps_by_role or entry.units) else None
+                entry = session_entry(record, windows, keep, rekey=units)
         sessions.append(entry)
     if tuple(sessions) == mine.sessions:
         return None

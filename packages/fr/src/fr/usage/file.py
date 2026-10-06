@@ -40,6 +40,7 @@ from fr.usage.split import (
     by_role_and_step,
     by_unit_and_role,
     step_role_of,
+    tokens_by_step,
 )
 
 USAGE_REL = Path("docs") / "superpowers" / "usage"
@@ -359,10 +360,15 @@ def session_entry(
         for name in sorted(activities)
     }
     step_names = list(dict.fromkeys([*result.turns_by_step, *result.by_step]))
+    step_tokens = tokens_by_step(record, windows)
     steps = {
         name: Figure(
             usd=sum(result.by_step.get(name, {}).values()) if priced else None,
             turns=result.turns_by_step.get(name, 0),
+            input=step_tokens.get(name, Acc()).input,
+            cache_write=step_tokens.get(name, Acc()).cache_write,
+            cache_read=step_tokens.get(name, Acc()).cache_read,
+            output=step_tokens.get(name, Acc()).output,
         )
         for name in step_names
     }

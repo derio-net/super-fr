@@ -116,8 +116,20 @@ def test_backfill_prices_an_archived_session_once_it_has_exited(
     assert entry.models and all(m.usd_source == "exact" for m in entry.models.values())
     assert capture.at[-2:] == ("closeout", "backfill")
     assert capture.mode == "devcontainer"
-    # a refreshed entry is re-priced, never re-shaped (cost-evidence spec R6)
-    assert not entry.steps_by_role and not entry.units
+    # the closeout capture's split is re-priced, never lost (cost-evidence spec §B, p1-r1-1)
+    assert entry.steps_by_role, "the split a live capture wrote survives the refresh"
+    fields = ("turns", "input", "cache_write", "cache_read", "output")
+    for role in entry.steps_by_role.values():
+        assert all(f.usd is not None for f in role.values()), "re-priced: usd set"
+    for step, whole in entry.steps.items():
+        parts = [r[step] for r in entry.steps_by_role.values() if step in r]
+        for name in fields:
+            assert sum(getattr(p, name) for p in parts) == getattr(whole, name), (step, name)
+        spent = sum(p.usd for p in parts)
+        if step == "(outside run)":
+            assert spent <= whole.usd + 1e-9  # the remainder is the difference
+        else:
+            assert spent == pytest.approx(whole.usd)
 
 
 @pytest.mark.usefixtures("complete_live_pr")

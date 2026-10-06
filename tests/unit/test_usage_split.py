@@ -53,6 +53,11 @@ def test_message_dollars_equals_what_rollup_attributes_and_returns_the_remainder
     assert len(dollars) == len(MESSAGES)
     assert remainder == pytest.approx(0.5)  # the billed model no message carries
     assert sum(dollars) + remainder == pytest.approx(3.0)
+    # dollars are proportional to price-weighted tokens: twice the tokens, twice the dollars
+    one = Message(model="m1", tokens=Tokens(input=10, cache_read=100, output=10))
+    two = Message(model="m1", tokens=Tokens(input=20, cache_read=200, output=20))
+    (d1, d2), _ = message_dollars(_record((one, two)))
+    assert d2 == pytest.approx(2 * d1) and d1 > 0
     assert sum(rollup([record]).by_model.values()) == pytest.approx(sum(dollars) + remainder)
 
 
@@ -76,7 +81,9 @@ def test_steps_by_role_sum_back_to_each_step_priced() -> None:
     for step, whole in entry.steps.items():
         zero = Figure(usd=0.0, turns=0, input=0, cache_write=0, cache_read=0, output=0)
         m, s = main.get(step, zero), sub.get(step, zero)
-        assert _add(m, s, "turns") == whole.turns
+        for name in FIELDS:  # every field, tokens included (p1-r1-5)
+            assert getattr(whole, name) is not None, (step, name)
+            assert _add(m, s, name) == getattr(whole, name), (step, name)
         expected = whole.usd - (remainder if step == OUTSIDE else 0.0)
         assert _add(m, s, "usd") == pytest.approx(expected)
     assert main["brainstorm"].output == 10
@@ -301,3 +308,110 @@ def test_the_split_round_trips_through_the_file_and_carries_no_unit_without_an_i
     assert parse_usage(text).captures[0].sessions[0] == entry
     bare = session_entry(record, windows_from_cursor(CURSOR))
     assert bare.steps_by_role == {} and bare.units == {}
+
+
+# --- refreshed_file: a split is kept, an absence stays one (p1-r1-1) ----------
+
+
+def _refresh(monkeypatch: pytest.MonkeyPatch, entry: SessionEntry) -> SessionEntry:
+    import fr.usage.backfill as backfill
+    from fr.usage.capture import this_host
+    from fr.usage.file import Capture, UsageFile, upsert_capture
+
+    env = {"FR_HOSTNAME": "somewhere"}
+    priced = _record(MESSAGES, usd=3.0)
+    monkeypatch.setattr(backfill, "read_session", lambda *a, **k: priced)
+    usage = upsert_capture(
+        UsageFile(run="r"),
+        Capture(
+            host=this_host("r", env),
+            harness="claude-code",
+            mode="host-worktree",
+            captured_at="2026-10-06T12:00:00+00:00",
+            at=("closeout",),
+            sessions=(entry,),
+        ),
+    )
+    raw = {**UNIT_CURSOR, "steps": {**UNIT_CURSOR["steps"], **CURSOR["steps"]}}
+    refreshed = backfill.refreshed_file(usage, raw, env)
+    assert refreshed is not None
+    return refreshed.captures[0].sessions[0]
+
+
+def test_a_refresh_reprices_an_existing_split_and_never_adds_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    windows = windows_from_cursor(CURSOR)
+    unpriced = _record(MESSAGES, usd=None)
+    with_split = session_entry(unpriced, windows, INDEX)
+    assert with_split.steps_by_role and all(
+        f.usd is None for r in with_split.steps_by_role.values() for f in r.values()
+    )
+    after = _refresh(monkeypatch, with_split)
+    assert after.steps_by_role.keys() == with_split.steps_by_role.keys()
+    assert all(f.usd is not None for r in after.steps_by_role.values() for f in r.values())
+
+    bare = session_entry(unpriced, windows)  # an old entry that never had a split
+    again = _refresh(monkeypatch, bare)
+    assert again.steps_by_role == {} and again.units == {}
+    assert all(m.usd is not None for m in again.models.values())
+
+
+# --- cross-unit overlap, order independence, per-unit dollars (p1-r1-2, p1-r1-3) --
+
+
+def _overlap_cursor(*, reverse: bool) -> dict:
+    a = [
+        _att(f"{T}10:10:00+00:00", f"{T}10:50:00+00:00", "a1"),
+        _att(f"{T}10:25:00+00:00", f"{T}10:40:00+00:00", "a2"),  # A re-dispatched
+    ]
+    b = [_att(f"{T}10:20:00+00:00", f"{T}10:30:00+00:00", "b1")]
+    units = {"phase/1/implement-phase": {"attempts": a}, "phase/2/implement-phase": {"attempts": b}}
+    if reverse:
+        units = {k: {"attempts": list(reversed(v["attempts"]))} for k, v in reversed(units.items())}
+    return _cursor(**{"implement-phase": {"units": units}})
+
+
+def test_two_different_overlapping_units_attribute_to_the_latest_dispatch_in_any_order() -> None:
+    messages = (_msg(f"{T}10:22:00Z"), _msg(f"{T}10:27:00Z"), _msg(f"{T}10:45:00Z"))
+    results = []
+    for reverse in (False, True):
+        index = unit_index(_overlap_cursor(reverse=reverse))
+        _, entry = _entry_for(*messages, index=index)
+        results.append({u: r["orchestrator"].turns for u, r in sorted(entry.units.items())})
+    forward, backward = results
+    # 10:22 is in A's first attempt and B: B was dispatched later. 10:27 is in A's
+    # first, A's retry and B: the retry (10:25) is the latest. 10:45 only A's first.
+    assert forward == {"phase/1/implement-phase": 2, "phase/2/implement-phase": 1}
+    assert backward == forward
+    index = unit_index(_overlap_cursor(reverse=False))
+    _, entry = _entry_for(_msg(f"{T}10:22:00Z"), _msg(f"{T}10:27:00Z"), index=index)
+    assert entry.units["phase/2/implement-phase"]["orchestrator"].output == 10  # the 10:22 one
+    assert entry.units["phase/1/implement-phase"]["orchestrator"].turns == 1  # the 10:27 one
+
+
+def test_each_unit_role_dollars_are_the_sum_of_its_messages_dollars() -> None:
+    placed = {
+        0: ("step/spec-review", "orchestrator"),
+        1: ("phase/1/implement-phase", "executor"),
+        2: ("phase/1/implement-phase", "orchestrator"),
+        3: ("(unattributed)", "subagent"),
+        4: ("step/spec-review", "agent"),
+    }
+    messages = (
+        _msg(f"{T}10:05:00Z", out=10),
+        _msg(f"{T}10:20:00Z", agent_id="ex1", out=300),
+        _msg(f"{T}10:12:00Z", out=1000),
+        _msg(f"{T}10:25:00Z", agent_id="nobody", out=70),
+        _msg(f"{T}10:06:00Z", agent_id="sr1", out=5000),
+    )
+    record, entry = _entry_for(*messages)
+    dollars, _ = message_dollars(record)
+    assert len(set(dollars)) == len(dollars)  # different weights, different dollars
+    expected: dict[tuple[str, str], float] = {}
+    for i, key in placed.items():
+        expected[key] = expected.get(key, 0.0) + dollars[i]
+    actual = {(u, r): f.usd for u, roles in entry.units.items() for r, f in roles.items()}
+    assert actual.keys() == expected.keys()
+    for key, usd in expected.items():
+        assert actual[key] == pytest.approx(usd), key

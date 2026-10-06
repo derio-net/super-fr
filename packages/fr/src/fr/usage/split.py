@@ -90,6 +90,17 @@ def is_subagent(message: Message) -> bool:
     return message.agent_id is not None or message.agent != "main"
 
 
+def tokens_by_step(record: UsageRecord, windows: Sequence[Window]) -> dict[str, Acc]:
+    """`{step: token figures}` over every message — what `steps` carries beside
+    its dollars and turns, so the role split can sum back to it field by field."""
+    out: dict[str, Acc] = {}
+    for message in record.messages:
+        step = step_of(message, windows)
+        if step is not None:
+            out.setdefault(step, Acc()).add(message, 0.0)
+    return out
+
+
 def by_role_and_step(
     record: UsageRecord,
     windows: Sequence[Window],
