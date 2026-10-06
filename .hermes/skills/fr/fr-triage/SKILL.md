@@ -8,23 +8,22 @@ description: >
 
 # fr-triage
 
-**Announce at start:** "I'm using fr-triage to triage <repo or org>."
-
-You can already rank issues; `fr triage` keeps your ranking in a file, so a refresh costs only the delta.
+**Announce:** "I'm using fr-triage to triage <repo or org>." You rank issues; `fr triage` keeps your ranking in a file.
 
 ## Pages and state
 
-Four pages answer your questions: **board** ("What do I do next?"), **origins** ("Where do defects come from?"), **architecture** ("What is the system?") and **history** ("How did we get here?"), each with authored fragments in manifests (`board/manifest.yaml`, etc.). Use `fr triage state export --to <dir>` and `fr triage state import --from <dir>` to keep state in a repo.
+Four pages answer your questions: **board** ("What do I do next?"), **origins** ("Where do defects come from?"), **architecture** ("What is the system?") and **history** ("How did we get here?"), rendered by `fr triage render`, `origins render`, `architecture render`, `fr triage history render`, each with fragments. Use `fr triage state export --to <dir>` and `import --from <dir>` to version the state.
 
-Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for `--org OWNER`, lowercased). Pass the same scope option to every command. `--repo A/B,C/D` is a group (one board, one `--max-inflight` cap); two repos with the same name are refused (keys are `<repo-name>#<n>`); batches stay single-repo.
+Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for `--org OWNER`, lowercased). `--repo A/B,C/D` is a group; two repos with same name are refused (keys are `<repo-name>#<n>`); batches stay single-repo.
 
 | File | Written by | Holds |
 |---|---|---|
-| `facts.json` | `fr triage collect` | what the forge says: open issues, labels, linked PRs (no stages) |
-| `judgements.yaml` | **you**, plus the `batch` verbs for `batches:` | tiers, per-issue rankings and `kind`, patterns, `features`, batches |
-| `triage.html`, `snapshots/` | `fr triage render` | the board, built from both; a snapshot per render (latest 30), none if identical to the latest: a re-render keeps the diff against the last different one |
+| `facts.json` | `fr triage collect` | forge data: issues, labels, PRs |
+| `judgements.yaml` | **you**, plus `batch` verbs | tiers, rankings, `kind`, patterns, batches |
+| `triage.html` | `fr triage render` | board, latest 30 snapshots |
 
 Stages are derived by `check` and `render`, never stored. Never write facts yourself.
+
 ## The loop (a re-run of it is the sync)
 
 1. **Collect.** `fr triage collect --repo OWNER/REPO` (or `--org OWNER`). If the **PR list** hit its limit, re-run
@@ -118,5 +117,4 @@ file. Set `ranked_at` to today whenever you change a judgement. Keys are case-in
 
 ## Privacy
 
-The state directory is outside every repo on purpose. When the scope is outside the operator's own org, keep its
-facts, judgements and board local — never in a commit, PR, journal or issue (`.claude/rules/third-party-privacy.md`).
+State is outside every repo. Keep facts, judgements and board local when the scope is not the operator's org (`.claude/rules/third-party-privacy.md`).
