@@ -7210,9 +7210,17 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R13
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R14
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R16
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py#test_held_elsewhere_lists_issues_another_scope_claims_with_holder_batch_and_expiry
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_held_elsewhere_group_names_issue_holder_batch_and_expiry
+      - super-fr:tests/unit/test_triage_kanban_cmd.py#test_board_publish_publishes_after_the_render_with_the_default_name
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_drive_pass_publishes_the_board_it_rendered
+      - super-fr:tests/unit/test_triage_skill_docs.py#test_fr_triage_skill_documents_claims_scope_config_and_publishing_in_every_copy
+    status: ci
+    notes: Board Held elsewhere group and card expiry, per-scope publish, and the skill's
+      Claims paragraph shipped in phase 3; visual states captured in the phase 3 step
+      record.
     verify: none
     visual:
       states:
