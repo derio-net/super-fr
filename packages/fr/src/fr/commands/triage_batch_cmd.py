@@ -1181,6 +1181,17 @@ def _open_prs(client: GhClient, owner_repo: str, head: str) -> list[dict[str, An
     return [p for p in client.list_prs_by_head(owner_repo, head) if p.get("state") == "OPEN"]
 
 
+def _untrusted(record: Mapping[str, Any], allowed: frozenset[str]) -> str | None:
+    """`distrust` over a `list_prs_by_head` record: why the PR is not the repo's own
+    by an allowed author, or None when it is (gh#936)."""
+    author = record.get("author")
+    login = author.get("login") if isinstance(author, dict) else None
+    cross = record.get("isCrossRepository")
+    return distrust(
+        str(login) if login else None, cross if isinstance(cross, bool) else None, allowed
+    )
+
+
 def _pr_time(record: Mapping[str, Any] | None) -> datetime | None:
     stamp = record.get("createdAt") if record else None
     try:
@@ -1257,12 +1268,21 @@ def adopt_batch(
     # 4. The git side and the PRs (R9's branch and worktree refusals).
     checkout = _open_checkout(checkout_path, owner_repo)
     try:
+        default = checkout.default_branch()
+        if old == default:
+            _fail(f"--branch {old} is {owner_repo}'s default branch: adopt never renames it")
+        if new == default:
+            _fail(f"batch branch {new} is {owner_repo}'s default branch: refusing")
         worktree = (checkout.worktree_of(old) if old != new else None) or checkout.worktree_of(new)
         if worktree is None:
             _fail(f"no worktree of {checkout.path} has {old} (or {new}) checked out")
-        renames = (
-            rename_branch(checkout.path, worktree, old, new, dry_run=True) if old != new else []
-        )
+        if Path(worktree).resolve() == Path(checkout.main_worktree()).resolve():
+            _fail(
+                f"{old} is checked out in the main worktree {worktree}: adopt renames only a "
+                "linked worktree's branch"
+            )
+        # Planned even when *old* is *new*: R9's worktree refusals hold either way.
+        renames = rename_branch(checkout.path, worktree, old, new, dry_run=True)
         pending_local = old != new and checkout.has_branch(old)
         remote_old = old != new and checkout.remote_branch_exists(old)
         remote_new = checkout.remote_branch_exists(new)
@@ -1272,17 +1292,31 @@ def adopt_batch(
         _fail(str(exc))
     if remote_new and pending_local:
         _fail(f"branch {new} is already on origin and is not this adoption's: refusing")
+    allowed = allowed_authors(owner_repo, facts)
     try:
         old_open = _open_prs(client, owner_repo, old) if old != new else []
         new_open = _open_prs(client, owner_repo, new)
-        old_pr = max(old_open, key=lambda p: int(p["number"]), default=None)
-        new_pr = max(new_open, key=lambda p: int(p["number"]), default=None)
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    except FORGE_ERRORS as exc:
+        _fail(f"cannot read {owner_repo}'s PRs: {exc}")
+    # A head NAME is chosen by whoever opens the PR, a fork included (gh#936): an
+    # untrusted PR is never copied, commented on or closed, nor taken as ours.
+    for head, open_prs, what in ((old, old_open, "adopt never supersedes it"),
+                                 (new, new_open, "it is not this adoption's")):  # fmt: skip
+        for p in open_prs:
+            if (why := _untrusted(p, allowed)) is not None:
+                _fail(f"open PR #{p['number']} on {head} is not trusted ({why}): {what}; refusing")
+    old_pr = max(old_open, key=lambda p: int(p["number"]), default=None)
+    new_pr = max(new_open, key=lambda p: int(p["number"]), default=None)
+    try:
         old_view = client.pr_view(owner_repo, int(old_pr["number"])) if old_pr else None
         commented = bool(
             old_pr
             and new_pr
             and any(
-                str(c.get("body", "")).startswith(f"Superseded by #{new_pr['number']}")
+                str(c.get("author") or "").lower() in allowed
+                and str(c.get("body", "")).startswith(f"Superseded by #{new_pr['number']}")
                 for c in client.list_issue_comments(owner_repo, int(old_pr["number"]))
             )
         )
@@ -1297,10 +1331,14 @@ def adopt_batch(
         reserved = last.reserved_version
     else:
         reserved = _reservation(checkout, facts, judgements, batch, owner_repo)
-    at = _now_after(batch)
+    # Whole seconds, as the forge's createdAt is: a PR opened in the same second as
+    # the event is still of it (`of_dispatch`, created >= at). Never before the last event.
+    floor = batch.events[-1].at if batch.events else None
+    at = _now_after(batch).replace(microsecond=0)
+    at = max(at, floor) if floor is not None else at
     opened = _pr_time(new_pr)
     if opened is not None and opened < at:  # a re-run: that PR was opened by this adoption
-        at = max(opened, batch.events[-1].at) if batch.events else opened
+        at = max(opened, floor) if floor is not None else opened
     event = DispatchEvent(
         kind="dispatch", at=at, runner=runner_name, handle=tab, branch=new,
         reserved_version=reserved,
@@ -1349,8 +1387,13 @@ def adopt_batch(
         return
 
     # 7. Each step not done yet, in §A.7's order (R10).
-    state: dict[str, Any] = {"pr": new_pr}
+    state: dict[str, Any] = {"pr": new_pr, "event": event, "after": after}
     done: list[str] = []
+
+    def _not_default(*names: str) -> None:  # refused above; held again at each write
+        for name in names:
+            if name == default:
+                raise RuntimeError(f"{name} is the default branch: refusing to touch it")
 
     def _pr_ref() -> str | None:
         pr = state["pr"]
@@ -1364,11 +1407,28 @@ def adopt_batch(
             draft=bool(old_view.get("draft")),
         )  # fmt: skip
         state["pr"] = made
+        # The forge's clock decides `of_dispatch`: an event later than the PR it
+        # opened would disown it, so the event moves down to its createdAt (p1-r2).
+        created = next((p for p in _open_prs(client, owner_repo, new)
+                        if int(p["number"]) == int(made["number"])), None)  # fmt: skip
+        opened = _pr_time(created)
+        if opened is not None and opened < state["event"].at:
+            moved = state["event"].model_copy(
+                update={"at": max(opened, floor) if floor is not None else opened}
+            )
+            state["event"], state["after"] = moved, _with_event(judgements, batch, moved)
+
+    def _rename() -> None:
+        _not_default(old, new)
+        rename_branch(checkout.path, worktree, old, new)
+
+    def _delete_old() -> None:
+        _not_default(old)
+        client.delete_branch(owner_repo, old)
 
     steps: list[tuple[str, Callable[[], object]]] = []
     if renames:
-        steps.append((f"rename {old} to {new}",
-                      lambda: rename_branch(checkout.path, worktree, old, new)))  # fmt: skip
+        steps.append((f"rename {old} to {new}", _rename))
     if publish:
         steps.append((f"publish {new}", lambda: checkout.publish_branch(new)))
     if old_pr is not None:
@@ -1384,14 +1444,15 @@ def adopt_batch(
             steps.append((f"comment on #{number}", _comment))
         steps.append((f"close #{number}", lambda: client.close_pr(owner_repo, number)))
     if remote_old:
-        steps.append((f"delete remote branch {old}", lambda: client.delete_branch(owner_repo, old)))
+        steps.append((f"delete remote branch {old}", _delete_old))
     steps.append((f"adopt tab {tab}", lambda: runner.adopt(probe, tab)))
     if not recorded:
         steps.append(("record the dispatch event",
-                      lambda: _save(target, after, facts, read=judgements.batches)))  # fmt: skip
+                      lambda: _save(target, state["after"], facts,
+                                    read=judgements.batches)))  # fmt: skip
 
     def _marks() -> None:
-        failed = _forge_writes(client, owner_repo, _find(after, batch.id), probe.id)
+        failed = _forge_writes(client, owner_repo, _find(state["after"], batch.id), probe.id)
         if failed:
             raise RuntimeError("; ".join(failed))
 
@@ -1402,12 +1463,15 @@ def adopt_batch(
     for i, (what, act) in enumerate(steps):
         try:
             act()
-        except typer.Exit:
-            raise
         except Exception as exc:  # each step's own failure: report it, the rest remain
+            if isinstance(exc, typer.Exit) and exc.exit_code == 0:
+                raise
+            # A refusal inside a step (`_fail`) printed its words already; exit 2 is
+            # for refusals before any write, so it too ends in this report (p1-r8).
+            detail = "refused, as printed above" if isinstance(exc, typer.Exit) else exc
             remaining = [w for w, _ in steps[i:]]
             _fail(
-                f"adopt stopped at: {what}: {exc}. Done: {'; '.join(done) or 'nothing'}. "
+                f"adopt stopped at: {what}: {detail}. Done: {'; '.join(done) or 'nothing'}. "
                 f"Still remain: {'; '.join(remaining)}. Re-run the same command to finish: "
                 f"`fr triage batch adopt {batch.id} --tab {tab} --branch {old} --yes`",
                 code=1,
@@ -1802,17 +1866,7 @@ def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[st
     each `trusted` only from *repo* itself by an *allowed* author (gh#936)."""
     out: list[LivePr] = []
     for rec in client.list_prs_by_head(repo, head):
-        author = rec.get("author")
-        login = author.get("login") if isinstance(author, dict) else None
-        cross = rec.get("isCrossRepository")
-        trusted = (
-            distrust(
-                str(login) if login else None,
-                cross if isinstance(cross, bool) else None,
-                allowed,
-            )
-            is None
-        )
+        trusted = _untrusted(rec, allowed) is None
         out.append(
             LivePr(
                 number=int(rec.get("number", 0)),

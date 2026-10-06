@@ -9,7 +9,8 @@ worktrees, and `rename_branch` a fake acting on that clone (the real one is
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,14 +18,16 @@ import pytest
 from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.isolation.types import IsolationError
+from fr.triage.batch import of_dispatch
 from fr.triage.gitseam import GitError
-from fr.triage.model import DispatchEvent, load_judgements
+from fr.triage.model import DispatchEvent, PullRequest, load_judgements
 from fr_dispatch.protocols import AdoptTarget
 from fr_dispatch.work_item import WorkItem
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
 from tests.unit.test_triage_batch_dispatch import (
+    DISPATCHED,
     ITEM,
     MEMBERS,
     REPO,
@@ -32,6 +35,7 @@ from tests.unit.test_triage_batch_dispatch import (
     FakeCheckout,
     FakeRunner,
     _facts,
+    _pr,
     _state,
 )
 
@@ -58,6 +62,9 @@ class AdoptRunner(FakeRunner):
                 status="working",
             ),  # fmt: skip
         }
+        # tab -> the agents it holds, when a test sets them: describe reports the
+        # single one, or None for none or several (the protocol's contract).
+        self.tab_agents: dict[str, list[str]] = {}
         self.adopted: list[tuple[str, str]] = []
         self.messages: list[tuple[str, str]] = []
         self.fail_adopt: Exception | None = None
@@ -65,7 +72,11 @@ class AdoptRunner(FakeRunner):
 
     def describe(self, tab: str) -> AdoptTarget | None:
         self.calls.append("describe")
-        return self.targets.get(tab)
+        target = self.targets.get(tab)
+        if target is not None and tab in self.tab_agents:
+            held = self.tab_agents[tab]
+            target = replace(target, agent=held[0] if len(held) == 1 else None)
+        return target
 
     def list_sessions(self) -> list[AdoptTarget]:
         self.calls.append("list_sessions")
@@ -112,6 +123,9 @@ class AdoptCheckout(FakeCheckout):
     def worktree_of(self, branch: str) -> Path | None:
         return self.worktrees.get(branch)
 
+    def main_worktree(self) -> Path:
+        return self.path
+
     def remote_branch_exists(self, branch: str) -> bool:
         return (REPO, branch) in self.remote
 
@@ -139,6 +153,10 @@ class FakeRename:
         if self.refusal:
             raise IsolationError(self.refusal)
         local = self.checkout.local
+        if old == new:  # nothing to move: only the refusals apply
+            if old not in local:
+                raise IsolationError(f"no branch {old}")
+            return []
         if old in local and new in local:
             raise IsolationError(f"branch {new} already exists and is not {old} renamed")
         if old not in local and new not in local:
@@ -163,6 +181,7 @@ def _isolate_models_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
 @pytest.fixture
 def gh(monkeypatch: pytest.MonkeyPatch) -> FakeGhClient:
     client = FakeGhClient()
+    client.comment_author = "operator"  # the facts' viewer: the authenticated user
     for n in (*MEMBERS, 420):
         client.add_issue(REPO, n)
     monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: client)
@@ -291,10 +310,11 @@ def test_a_tab_labelled_with_another_batchs_item_id_is_refused(world: Any) -> No
     _refused(*world, *_args("--yes"), match="batch-other")
 
 
-@pytest.mark.parametrize("why", ["no agent", "several agents"])
-def test_a_tab_without_exactly_one_agent_is_refused(world: Any, why: str) -> None:
+@pytest.mark.parametrize("agents", [[], ["w7:p5", "w7:p6"]], ids=["no agent", "several agents"])
+def test_a_tab_without_exactly_one_agent_is_refused(world: Any, agents: list[str]) -> None:
     runner = world[2]
-    runner.targets[TAB] = AdoptTarget(tab=TAB, label="x", group=None, agent=None, status="idle")
+    runner.tab_agents[TAB] = agents
+    assert runner.describe(TAB).agent is None
     _refused(*world, *_args("--yes"), match="exactly one agent")
 
 
@@ -462,7 +482,8 @@ def test_a_failure_at_each_step_exits_1_and_the_same_command_finishes_it(
     code, out = _adopt(tmp_path, *_args("--yes"))
     assert code == 0, out
 
-    assert len([c for c in rename.calls if not c[2] and c[0] == OLD]) <= 2
+    real_renames = [c for c in rename.calls if not c[2] and c[0] == OLD]
+    assert len(real_renames) == (2 if step == "rename" else 1)
     assert checkout.local == {"main", NEW}
     assert checkout.published.count(NEW) == 1
     creates = [n for n, _ in gh.calls if n == "create_pr"]
@@ -515,3 +536,133 @@ def test_label_refs_parses_repo_issue_refs() -> None:
 def test_the_help_says_it_is_not_the_drivers_closeout_adopt() -> None:
     result = CliRunner().invoke(app, ["triage", "batch", "adopt", "--help"])
     assert "close-out" in result.output
+
+
+# ------------------------------------------------------- review findings (phase 1)
+
+
+@pytest.mark.parametrize("stage", ["dispatched", "pr-open"])
+def test_a_dispatched_or_pr_open_batch_is_refused(
+    tmp_path: Path, gh: FakeGhClient, runner: AdoptRunner, checkout: AdoptCheckout,
+    rename: FakeRename, stage: str,
+) -> None:  # fmt: skip
+    """p1-r10: the real stages, not a monkeypatched one (its event names another tab)."""
+    _state(tmp_path, _facts(prs=[_pr()]) if stage == "pr-open" else _facts(), DISPATCHED)
+    _refused(tmp_path, gh, runner, checkout, rename, *_args("--yes"), match=f"is {stage}")
+
+
+UNTRUSTED = {
+    "fork": {"cross_repo": True},
+    "foreign author": {"author": "mallory"},
+    "never read": {"author": None},
+}
+
+
+@pytest.mark.parametrize("how", sorted(UNTRUSTED))
+def test_an_untrusted_open_pr_on_the_old_branch_is_refused(world: Any, how: str) -> None:
+    """p1-r1: a head-name match is not trust — never copy, comment on or close it."""
+    gh = world[1]
+    gh.add_pr(REPO, 90, title="evil", body="pwn", head_ref=OLD, **UNTRUSTED[how])
+    _refused(*world, *_args("--yes"), match="#90")
+    assert ("pr_view", {"repo": REPO, "number": 90}) not in gh.calls
+
+
+@pytest.mark.parametrize("how", sorted(UNTRUSTED))
+def test_an_untrusted_open_pr_on_the_batch_branch_is_refused(
+    world: Any, old_pr: dict[str, Any], how: str
+) -> None:
+    """p1-r1: only a trusted PR on the batch branch is this adoption's own."""
+    world[1].add_pr(REPO, 95, head_ref=NEW, **UNTRUSTED[how])
+    _refused(*world, *_args("--yes"), match="#95")
+
+
+def test_an_allowed_author_in_another_case_is_trusted(world: Any, old_pr: dict[str, Any]) -> None:
+    old_pr["author"] = "Operator"
+    code, out = _adopt(world[0], *_args("--yes"))
+    assert code == 0, out
+
+
+def test_a_pr_opened_in_the_same_second_still_belongs_to_the_dispatch(
+    world: Any, old_pr: dict[str, Any]
+) -> None:
+    """p1-r2: GitHub's createdAt is whole seconds; the event must not be later."""
+    tmp_path, gh = world[0], world[1]
+    code, out = _adopt(tmp_path, *_args("--yes"))
+    assert code == 0, out
+    (event,) = _events(tmp_path)
+    assert event.at.microsecond == 0
+    rec = gh.prs[(REPO, 100)]
+    pr = PullRequest(repo=REPO, number=100, title="t", state="OPEN", is_draft=True,
+                     url=rec["url"], head_ref=NEW, created_at=rec["created_at"])  # fmt: skip
+    assert of_dispatch(pr, event)
+
+
+def test_a_forge_clock_behind_ours_clamps_the_event_to_the_prs_creation(
+    world: Any, old_pr: dict[str, Any]
+) -> None:
+    """p1-r2: the created PR's createdAt, when earlier, is the event's time."""
+    tmp_path, gh = world[0], world[1]
+    behind = (datetime.now(UTC) - timedelta(seconds=30)).replace(microsecond=0)
+    gh.pr_created_at = behind.isoformat()
+    code, out = _adopt(tmp_path, *_args("--yes"))
+    assert code == 0, out
+    (event,) = _events(tmp_path)
+    assert event.at == behind
+
+
+def test_the_default_branch_is_refused(world: Any) -> None:
+    """p1-r3: adopting `main` would rename and delete the default branch."""
+    checkout = world[3]
+    checkout.worktrees["main"] = checkout.path.parent / "wt-main"
+    _refused(*world, *_args("--yes", branch="main"), match="default branch")
+
+
+def test_a_branch_checked_out_in_the_main_worktree_is_refused(world: Any) -> None:
+    """p1-r3: only a linked worktree's branch is renamed."""
+    checkout = world[3]
+    checkout.worktrees[OLD] = checkout.path
+    _refused(*world, *_args("--yes"), match="main worktree")
+
+
+def test_a_supersede_comment_by_someone_else_does_not_count(world: Any) -> None:
+    """p1-r6: only the authenticated user's comment marks the step done."""
+    tmp_path, gh = world[0], world[1]
+    gh.add_pr(REPO, 90, title="Lifecycle work", head_ref=OLD)
+    gh.add_pr(REPO, 101, head_ref=NEW)
+    gh.issue_comments[(REPO, 90)] = [
+        {"author": "mallory", "body": "Superseded by #101 — fake", "created_at": "x"}
+    ]
+    code, out = _adopt(tmp_path, *_args("--yes"))
+    assert code == 0, out
+    mine = [kw for n, kw in gh.calls if n == "comment_issue" and kw["number"] == 90]
+    assert len(mine) == 1 and mine[0]["body"].startswith("Superseded by #101")
+
+
+def test_a_refusal_raised_inside_a_step_reports_and_exits_1(
+    world: Any, old_pr: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1-r8: after the first write, every failure is the Done / remain report."""
+    real = triage_batch_cmd._save
+
+    def refusing(*a: Any, **kw: Any) -> None:
+        if kw.get("dry_run"):
+            return real(*a, **kw)
+        triage_batch_cmd._fail("judgements.yaml changed since it was read")
+
+    monkeypatch.setattr(triage_batch_cmd, "_save", refusing)
+    code, out = _adopt(world[0], *_args("--yes"))
+    assert code == 1, out
+    assert "Done:" in out and "remain" in out and "re-run" in out.lower()
+
+
+def test_the_batch_branch_as_branch_still_gets_the_worktree_refusals(world: Any) -> None:
+    """p1-r9: --branch already the batch branch skips the rename, not R9."""
+    tmp_path, gh, runner, checkout, rename = world
+    checkout.local = {"main", NEW}
+    checkout.worktrees = {NEW: tmp_path / "wt"}
+    rename.refusal = "wt is mid-rebase"
+    before = (tmp_path / "judgements.yaml").read_bytes()
+    code, out = _adopt(tmp_path, *_args("--yes", branch=NEW))
+    assert code == 2 and "mid-rebase" in out, out
+    assert (tmp_path / "judgements.yaml").read_bytes() == before
+    assert _writes(gh) == [] and runner.adopted == []

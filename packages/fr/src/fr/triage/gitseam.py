@@ -216,6 +216,14 @@ class Checkout:
                 return where
         return None
 
+    def main_worktree(self) -> Path:
+        """The repository's main (non-linked) worktree, wherever this checkout is: the
+        first entry of `git worktree list`."""
+        for line in git(["worktree", "list", "--porcelain"], self.path).splitlines():
+            if line.startswith("worktree "):
+                return Path(line.removeprefix("worktree ")).resolve()
+        return self.path.resolve()
+
     def publish_branch(self, branch: str) -> None:
         """Push local *branch* to origin and make that its upstream (batch adopt, §C)."""
         git(

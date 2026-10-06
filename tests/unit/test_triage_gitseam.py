@@ -416,3 +416,12 @@ def test_has_branch_reads_local_refs(tmp_path: Path) -> None:
     checkout = _repo(tmp_path)
     assert checkout.has_branch("main")
     assert not checkout.has_branch("feat/none")
+
+
+def test_main_worktree_is_the_primary_checkout_even_from_a_linked_one(tmp_path: Path) -> None:
+    """Batch adopt refuses a branch checked out in the main worktree (p1-r3)."""
+    checkout = _repo(tmp_path)
+    linked = tmp_path / "linked"
+    _git(checkout.path, "worktree", "add", "--quiet", "-b", "feat/x", str(linked))
+    assert checkout.main_worktree() == checkout.path.resolve()
+    assert Checkout(linked).main_worktree() == checkout.path.resolve()

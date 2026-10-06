@@ -65,6 +65,8 @@ class FakeGhClient:
         # When set, every PR create_pr opens is stamped with this creation time;
         # otherwise with the real clock, as the forge would.
         self.pr_created_at: str | None = None
+        # Who `comment_issue` posts as: the authenticated user.
+        self.comment_author: str = "fr"
 
     # ---- preload helpers (test setup) ----
 
@@ -79,6 +81,8 @@ class FakeGhClient:
             "base_ref": "main",
             "url": f"https://github.com/{repo}/pull/{number}",
             "created_at": "2026-10-01T00:00:00Z",
+            "author": "operator",
+            "cross_repo": False,
             **fields,
         }
         self.prs[(repo, number)] = record
@@ -193,7 +197,7 @@ class FakeGhClient:
         self._gate()
         self.calls.append(("comment_issue", {"repo": repo, "number": number, "body": body}))
         self.issue_comments.setdefault((repo, number), []).append(
-            {"author": "fr", "body": body, "created_at": "2026-09-26T00:00:00Z"}
+            {"author": self.comment_author, "body": body, "created_at": "2026-09-26T00:00:00Z"}
         )
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
@@ -202,7 +206,7 @@ class FakeGhClient:
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         """`gh pr list --head` records (`number, title, state, isDraft, createdAt, url,
-        headRefName`)."""
+        headRefName, author, isCrossRepository`)."""
         self.calls.append(("list_prs_by_head", {"repo": repo, "branch": branch}))
         return [
             {
@@ -213,6 +217,8 @@ class FakeGhClient:
                 "createdAt": p["created_at"],
                 "url": p["url"],
                 "headRefName": p["head_ref"],
+                "author": {"login": p["author"]},
+                "isCrossRepository": p["cross_repo"],
             }
             for (r, _), p in sorted(self.prs.items())
             if r == repo and p["head_ref"] == branch
@@ -245,7 +251,8 @@ class FakeGhClient:
         self._next_pr_number += 1
         made = self.add_pr(
             repo, number, title=title, body=body, draft=draft, head_ref=head, base_ref=base,
-            created_at=self.pr_created_at or datetime.now(UTC).isoformat(),
+            # whole seconds, as GitHub's createdAt is
+            created_at=self.pr_created_at or datetime.now(UTC).replace(microsecond=0).isoformat(),
         )  # fmt: skip
         return {"number": number, "url": made["url"]}
 
