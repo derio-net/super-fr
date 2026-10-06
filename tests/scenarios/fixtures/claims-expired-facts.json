@@ -1,0 +1,61 @@
+{
+  "schema": 6,
+  "scope": "example-org--widgets",
+  "kind": "repo",
+  "collected_at": "2026-10-06T00:00:00Z",
+  "repos": [
+    "example-org/widgets"
+  ],
+  "issues": [
+    {
+      "repo": "example-org/widgets",
+      "number": 1,
+      "title": "claimed elsewhere",
+      "state": "open",
+      "labels": [
+        "fr:claimed"
+      ],
+      "url": "https://github.com/example-org/widgets/issues/1",
+      "created_at": null,
+      "updated_at": null,
+      "closed_at": null,
+      "body": "",
+      "prs": [],
+      "dispatch_marker_at": null,
+      "claims": [
+        {
+          "signer": "s-aaaaaaaa",
+          "batch": "their-batch",
+          "claimed": "2026-09-01T00:00:00Z",
+          "heartbeat": "2026-09-01T00:00:00Z",
+          "expires": "2026-09-02T00:00:00Z",
+          "comment_id": 101,
+          "created_at": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    {
+      "repo": "example-org/widgets",
+      "number": 2,
+      "title": "free",
+      "state": "open",
+      "labels": [],
+      "url": "https://github.com/example-org/widgets/issues/2",
+      "created_at": null,
+      "updated_at": null,
+      "closed_at": null,
+      "body": "",
+      "prs": [],
+      "dispatch_marker_at": null,
+      "claims": []
+    }
+  ],
+  "prs": [],
+  "skipped": [],
+  "unviewed": [],
+  "warnings": [],
+  "batch_prs": [],
+  "judged_prs": [],
+  "config": {},
+  "viewer": "operator"
+}
