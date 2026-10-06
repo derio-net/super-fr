@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from fr.gh import GhError
+from fr.gh import GhError, GhHostRefusedError
 from fr.glab import GlabError
 from fr.hostclient import forge_error_kind
 from fr.tea import TeaError
@@ -31,6 +31,8 @@ from fr.tea import TeaError
         (TeaError("HTTP 502 Bad Gateway"), "warn"),
         (GlabError("permission denied"), "unknown"),
         (ValueError("429 rate limit"), "unknown"),
+        # The host trust gate's refusal is no rate limit: never backed off (review p2-r2).
+        (GhHostRefusedError("GitHub host 'ghe.example' is not one gh is logged into"), "unknown"),
     ],
 )  # fmt: skip
 def test_forge_error_kind_classifies_every_backend(exc: BaseException, kind: str) -> None:
@@ -82,5 +84,19 @@ def test_the_bridge_guard_reraises_a_non_rate_limit_glab_error(
         raise GlabError("permission denied", stderr="403 Forbidden")
 
     with pytest.raises(GlabError):
+        bridge_cli._gh_rate_limit_guard(boom)
+    assert pushed == []
+
+
+def test_the_bridge_guard_reraises_the_host_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review p2-r2: a refused host is surfaced, never swallowed as a back-off."""
+    from fr_vk import bridge_cli
+
+    pushed = _pushed(monkeypatch)
+
+    def boom() -> Any:
+        raise GhHostRefusedError("GitHub host 'ghe.example' is not one gh is logged into")
+
+    with pytest.raises(GhHostRefusedError):
         bridge_cli._gh_rate_limit_guard(boom)
     assert pushed == []

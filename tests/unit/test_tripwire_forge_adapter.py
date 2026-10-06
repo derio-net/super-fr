@@ -54,10 +54,19 @@ def offences(source: str) -> list[str]:
     return found
 
 
-def _sources() -> dict[str, str]:
+def _sources(root: Path = PACKAGES) -> dict[str, str]:
     return {
-        path.relative_to(PACKAGES).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted(PACKAGES.glob("*/src/**/*.py"))
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(root.glob("*/src/**/*.py"))
+    }
+
+
+def _bypasses(root: Path = PACKAGES) -> dict[str, list[str]]:
+    """Every non-backend module under *root*'s `*/src` with a direct `gh` use."""
+    return {
+        rel: hits
+        for rel, text in _sources(root).items()
+        if rel not in BACKEND and (hits := offences(text))
     }
 
 
@@ -79,11 +88,7 @@ def test_the_scan_ignores_prose_and_other_forges() -> None:
 
 
 def test_no_forge_call_bypasses_the_adapter() -> None:
-    offenders = {
-        rel: hits
-        for rel, text in _sources().items()
-        if rel not in BACKEND and (hits := offences(text))
-    }
+    offenders = _bypasses()
     assert not offenders, (
         "direct `gh` use outside the GitHub backend — route it through "
         "`fr.hostclient.client_for(repo_root)` (add the operation to the "
@@ -93,8 +98,12 @@ def test_no_forge_call_bypasses_the_adapter() -> None:
 
 
 def test_a_planted_gh_import_outside_the_backend_is_reported(tmp_path: Path) -> None:
-    """Test Plan 1: with no allowlist, a non-backend module importing `fr.gh`
-    is caught by the same scan `test_no_forge_call_bypasses_the_adapter` runs."""
-    plant = tmp_path / "plant.py"
-    plant.write_text("from fr import gh\n\ngh.viewer_login()\n", encoding="utf-8")
-    assert offences(plant.read_text(encoding="utf-8")) == ["line 1: import of fr.gh"]
+    """Test Plan 1, through the REAL scan (review p2-r3): with no allowlist, a
+    non-backend module importing `fr.gh` is reported, and a backend file is not."""
+    src = tmp_path / "fr" / "src" / "fr"
+    src.mkdir(parents=True)
+    (src / "plant.py").write_text("from fr import gh\n\ngh.viewer_login()\n", encoding="utf-8")
+    (src / "gh.py").write_text(
+        'import subprocess\nsubprocess.run(["gh", "api"])\n', encoding="utf-8"
+    )
+    assert _bypasses(tmp_path) == {"fr/src/fr/plant.py": ["line 1: import of fr.gh"]}
