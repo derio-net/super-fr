@@ -184,3 +184,8 @@ prose and mirrors only
 ### p2-r5-resolved-2 · finding [fixed] · resolves p2-r5: spec's supersede ordering (carry after inference) hides carried implement returns from clause 2 at adoption (phase 3)
 
 adopt --supersede passes the old cursor to the inference (clause 2 sees its implement attempts, review_key excluded) and applies carried units after it; two tests pin it: an older journal review stays pending with a note, and a review the old cursor resolved keeps its real evidence.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved-3 created=2026-10-06T05:42:16+00:00 state=fixed resolves=p2-r5 answered_by=operator -->
+### p2-r5-resolved-3 · finding [fixed] · resolves p2-r5: spec's supersede ordering (carry after inference) hides carried implement returns from clause 2 at adoption
+
+Operator approved recording p2-r5 as fixed: phase 3 implemented it (spec §D amended; clause 2 checked against the old cursor's implement attempts; two tests pin it).
