@@ -456,3 +456,62 @@ Excluded; check.py docstring lists every excluded set. 224165148.
 ### p4-r7-resolved · finding [fixed] · resolves p4-r7: referenced_refs read fr's render and matched prose 'ref' (phase 4)
 
 as_github=False, plural-only refs keyword, docstring corrected (GH-n Refs no longer labelled — accepted narrow loss). d31f8b2a8.
+
+<!-- fr:journal kind=decision scope=plan id=p5-conflict-checkout-is-the-clone created=2026-10-06T14:11:23+00:00 phase=5 -->
+### p5-conflict-checkout-is-the-clone · decision · a fresh conflict session's checkout is the repo clone, as a close-out's is (phase 5)
+
+§G says "the batch worktree as checkout". The driver has no batch worktree of its
+own: dispatch_batch passes the repo clone (`--checkout` map) as payload.checkout,
+and the batch session makes its own fr-isolation workspace for the branch. The
+conflict item does the same as the close-out (`self.checkout(repo).path`), and
+its brief names the branch, so `fr isolation up --branch <branch>` resumes the
+batch's workspace. The merge scratch worktree is not used: it is driver-owned and
+removed after a merge.
+
+<!-- fr:journal kind=decision scope=plan id=p5-conflict-delivery-rules created=2026-10-06T14:11:23+00:00 phase=5 -->
+### p5-conflict-delivery-rules · decision · session delivery needs both SessionInspector and SessionMessenger; `unknown` waits like working (phase 5)
+
+A runner that can message but cannot report status gets the fresh path: messaging
+a session of unknown state could answer a permission prompt. A status of `unknown`
+sends nothing and records nothing, like `working`/`blocked`; only `absent`/`done`
+start a fresh session. A failed status read or send is one line, no event, retried
+next pass. A fresh item already live in the runner (a pass killed between dispatch
+and its event) is recorded, not restarted. The message target is the latest fresh
+conflict item since the latest dispatch (else the dispatch item); the fresh item
+number counts every fresh event, so ids never repeat across re-dispatches.
+
+<!-- fr:journal kind=decision scope=plan id=p5-conflict-keeps-exit-1 created=2026-10-06T14:11:23+00:00 phase=5 -->
+### p5-conflict-keeps-exit-1 · decision · a conflict still sets failed_write, so `--once` exits 1 even when handed back (phase 5)
+
+The merge was refused, exactly as before this phase; the hand-back is reported on
+the same `stopped:` line (suffixed with what was done) and counts as acted. Skipped
+repeats keep the `stopped again at` line.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-mirrors-in-facts-without-facts-bump created=2026-10-06T14:11:23+00:00 phase=5 -->
+### p5-mirrors-in-facts-without-facts-bump · discovery · TriageConfig.mirrors lands in facts.json without a FACTS_SCHEMA bump (phase 5)
+
+Facts.to_json dumps defaults, so every new facts.json carries `mirrors: []` per
+configured repo and an older fr reading it refuses "invalid facts" (re-collect
+fixes it). This follows the precedent of `export` (pages-goal), which also added a
+TriageConfig key under facts schema 4; gh#885's reasoning would argue for a bump.
+Judgements moved 4 -> 5 as planned; docs/triage's schema-4 file still loads.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-10-06T14:11:23+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+an exception subclass and one event model on the SCHEMA_3_EVENTS pattern; nothing duplicated to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-10-06T14:11:23+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+one pure function written once against its tests; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t3 created=2026-10-06T14:11:23+00:00 phase=5 -->
+### no-refactor-p5-t3 · discovery · no-refactor-because P5.T3 (phase 5)
+
+a one-method protocol and a one-call herdr method; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t4 created=2026-10-06T14:11:23+00:00 phase=5 -->
+### no-refactor-p5-t4 · discovery · no-refactor-because P5.T4 (phase 5)
+
+the refactor was done in GREEN: the stop-line reporting moved out of _merge_batch into _stopped_line so the conflict path reuses it, and _fresh_conflict takes the launch and branch _hand_back already resolved instead of re-resolving them
