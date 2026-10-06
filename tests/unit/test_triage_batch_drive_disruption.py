@@ -181,6 +181,38 @@ def test_a_batch_the_runner_fails_to_dispatch_does_not_end_the_loop_and_is_repor
     assert _events(tmp_path, "b1") == ["dispatch"]
 
 
+class _CodedError(Exception):
+    """A runner error carrying a stable cause code, as `fr_herdr.HerdrError` does."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def test_one_cause_on_a_different_pane_each_pass_is_still_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Each retry opens a new tab, so herdr's message names a new pane every pass: the
+    cause is its code, not its words."""
+    _proposed(world, tmp_path, 1)
+    tries: list[str] = []
+    real = runner.dispatch
+
+    def _dispatch(item: Any) -> str | None:
+        tries.append(item.id)
+        if len(tries) <= 2:
+            raise _CodedError(f"pane w2:p{len(tries)} is not an available shell", "agent_pane_busy")
+        return real(item)
+
+    runner.dispatch = _dispatch  # type: ignore[method-assign]
+    _naps_until(monkeypatch, 3)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("is not an available shell") == 1
+    assert len(runner.dispatched) == 1
+
+
 def test_once_exits_1_on_a_failed_batch_dispatch_and_the_pass_goes_on(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:

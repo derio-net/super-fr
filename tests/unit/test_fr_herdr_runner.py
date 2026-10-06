@@ -230,9 +230,7 @@ def test_a_pane_whose_shell_is_not_up_yet_is_retried(
 ) -> None:
     """gh#931: `agent start` right after `tab create` can find the shell still starting."""
     busy = _refusal("agent-start-pane-busy.json")
-    monkeypatch.setattr(
-        herdr_runner, "_run_herdr", _refusing(herdr, {"agent start": [busy, busy]})
-    )
+    monkeypatch.setattr(herdr_runner, "_run_herdr", _refusing(herdr, {"agent start": [busy, busy]}))
     assert HerdrRunner.from_env().dispatch(_item()) == "w2:p1K"
     verbs = [c[:2] for c in herdr.calls]
     assert verbs == [["tab", "create"], *[["agent", "start"]] * 3, ["agent", "prompt"]]
