@@ -550,3 +550,23 @@ FACTS_SCHEMA 5, FACTS_READS (3,4,5); gh#885 comment names mirrors and notes expo
 ### p5-r3-resolved · finding [fixed] · resolves p5-r3: missing tests: committed schema-4 judgements load; wait-behind batch retried after its blocker merges (phase 5)
 
 Both tests added (behaviour already correct, so green on first run). 9d82b6ac7.
+
+<!-- fr:journal kind=decision scope=plan id=p6-prerelease-source-line created=2026-10-06T14:54:15+00:00 phase=6 -->
+### p6-prerelease-source-line · decision · the command prints the install source as a bare line `git+<remote>@<tag>`; PR-body route needed no change (phase 6)
+
+pr_body.prerelease_route says the command prints the rc's `<source>`, which feeds `.fr/candidate-install {prefix} {source}`. The command prints that exact form (remote = `git remote get-url`, tag `rc/<slug>/<sha12>`, sha = the branch head, remote-tracking ref first) on a line of its own, pinned by a test. Same tag shape as prerelease.yml (slug `/`->`-`, sha12 of HEAD).
+
+<!-- fr:journal kind=discovery scope=plan id=p6-workflow-permissions created=2026-10-06T14:54:15+00:00 phase=6 -->
+### p6-workflow-permissions · discovery · prerelease.yml needs pull-requests: read beside contents: write (phase 6)
+
+The release notes name the PR via `gh pr list --head`, which needs pull-requests: read. The structure test asserts contents: write and every other permission read-only. checkout is pinned by SHA (test_tripwire_actions_pinned). The workflow was never run (only parsed).
+
+<!-- fr:journal kind=discovery scope=plan id=p6-install-atomic-flaky-again created=2026-10-06T14:54:15+00:00 phase=6 -->
+### p6-install-atomic-flaky-again · discovery · test_install_atomic::test_fr_stays_runnable_throughout_a_reinstall failed in two loaded full runs, passes alone and in the final run (phase 6)
+
+Same load-sensitive flake as p4-install-atomic-flaky-under-load; the final suite log is green.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-10-06T14:54:15+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+one new GhClient method and one thin subcommand; the argv builder (workflow_run_args) was written once and shared by the real client and --dry-run, nothing to clean
