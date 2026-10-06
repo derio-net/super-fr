@@ -35,20 +35,21 @@ Stages are derived by `check` and `render`, never stored. Never write facts your
      the repo is gone. This is the only set you may act on without the forge.
    - **unreachable**: collect could not settle it; the reason is printed. Transient (rate limit, 5xx, lost
      access): **never prune on it**. "Judged after the last collect" means collect again; not-found is a deleted
-     issue or typo'd number: confirm with `gh issue view`, then fix the number or recommend removing it.
+     issue or typo'd number: confirm on the forge (on GitHub, `gh issue view`), then fix the number or recommend removing it.
    - **stale dispatch**: a batch dispatch with no PR after `stale_dispatch_days`. Report it.
    - **unplaced**: open, in no open batch, no `features` group and not `kind: parked` (a cancelled batch's members
      count). Place each: a batch, a feature group, or park it; a judged duplicate is never listed. **no severity**: open and judged, no `severity`; set one. **duplicate target unknown** / **duplicate chained**: a `duplicate_of` the forge would not show, or one naming another duplicate; fix the key.
-   - **duplicate candidates**: groups of open issues the engine proposes as duplicates, each pair with its reasons (close titles, shared rare identifiers, a shared finding id and issue reference, same theme). A proposal, not a verdict: judge every group (step 3). **duplicates**: each open issue judged `duplicate_of`, with its original's state (`open`, `closed`, `missing`) and, unless missing, the exact `gh issue close N --repo OWNER/REPO --duplicate-of <url>`: report it to the operator, never run it.
-3. **Judge the unranked.** Read each from `facts.json` (bodies stop at 2,000 characters; `gh issue view` when cut
-   off) and the code; a first run creates the file with `schema: 3` and `tiers`. Compare against ALL judgements.
+   - **duplicate candidates**: groups of open issues the engine proposes as duplicates, each pair with its reasons (close titles, shared rare identifiers, a shared finding id and issue reference, same theme). A proposal, not a verdict: judge every group (step 3). **duplicates**: each open issue judged `duplicate_of`, with its original's state (`open`, `closed`, `missing`) and, unless missing, the exact close command (on GitHub, `gh issue close N --repo OWNER/REPO --duplicate-of <url>`): report it to the operator, never run it.
+3. **Judge the unranked.** Read each from `facts.json` (bodies stop at 2,000 characters; read the issue on the forge when cut
+   off: on GitHub, `gh issue view`) and the code; a first run creates the file with `schema: 3` and `tiers`. Compare against ALL judgements.
    Then judge each **duplicate candidate** group: re-read its issues, and set `duplicate_of: <original>` on each duplicate (the original is the issue with the fuller evidence, else the older one), or `distinct_from: [<other>]` when they differ, so the pair is not proposed again.
 4. **Render.** `fr triage render --repo OWNER/REPO --open` writes `triage.html` and a snapshot. The board reads: **Since last report**
    (the diff from the previous snapshot), **Needs you now** (computed, never typed: green drafts, failing CI, blocked batches,
    stale dispatches, unfinished `post_merge`, unplaced issues), **Next up** (the driver's own order), **Waves** (tabs, closing
    order, features, parked), then the backlog by tier. Report back the board's path, what changed, what needs the operator
-   and the `gh` commands you recommend.
-5. **Batch.** Propose groups of judged issues to ship as one run and one PR (`fr triage batch suggest` is input, never the answer); create the accepted ones with `fr triage batch create <id> --title T --issue KEY...`.
+   and the forge commands you recommend (on GitHub, `gh …`).
+5. **Batch.** Propose groups of judged issues to ship as one run and one PR (`fr triage batch suggest` is input,
+   never the answer); create the accepted ones with `fr triage batch create <id> --title T --issue KEY...`.
 
 Open PRs are triaged in the same loop: each carries an intent anchor (closing issue, spec, debug journal, else `unanchored`) with CI/merge badges. Judge the diff against it: `delivers | partial | drift | unanchored` plus one line in `delivery_note`. Shallow by design: never a code review.
 To sync later, run the same loop: `check` names what arrived, shipped or went missing.
@@ -107,9 +108,9 @@ file. Set `ranked_at` to today whenever you change a judgement. Keys are case-in
    structured `duplicate_of` field (or `distinct_from` for a pair that only looks alike), never as prose in
    `note`, and name the batch when issues share a subsystem. A shared root cause across three or more issues becomes a
    `patterns` entry.
-5. **Forge actions are unrun commands.** A close, a dedupe (`gh issue close N --duplicate-of <url>`, which `check`
-   prints for every judged duplicate) or a relabel is the exact `gh` command in `note` or your
-   report, for the operator to run. Never act on the forge unasked. `batch dispatch|merge|cancel|drive` act only
+5. **Forge actions are unrun commands.** A close, a dedupe (on GitHub, `gh issue close N --duplicate-of <url>`, which `check`
+   prints for every judged duplicate) or a relabel is the exact forge CLI command (on GitHub, `gh …`) in
+   `note` or your report, for the operator to run. Never act on the forge unasked. `batch dispatch|merge|cancel|drive` act only
    with `--yes` (without it they print the plan; `drive` with no ids plans the batches with a wave, else all); pass
    `--yes` only when the operator asked for that action in this session.
 

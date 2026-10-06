@@ -30,9 +30,10 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr.hostclient import client_for_backend
 from fr.triage.batch import last_dispatch
 from fr.triage.check import classify
-from fr.triage.collect import PR_LIMIT, CollectStats, Forge, GhForge, collect_facts_counted
+from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.model import (
@@ -88,8 +89,11 @@ DirOpt = Annotated[
 
 
 def make_forge() -> Forge:
-    """The forge `collect` reads. Tests replace this factory, never subprocess."""
-    return GhForge()
+    """The forge `collect` reads. Tests replace this factory, never subprocess.
+
+    GitHub's adapter: triage is GitHub-only by its own scope, and with no
+    checkout to resolve a backend from, that is the honest default."""
+    return ClientForge(client_for_backend("github"))
 
 
 def _group_scope(parts: list[str]) -> Scope:

@@ -12,8 +12,11 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Literal, cast, get_args
+from urllib.parse import urlparse
 
 from fr import _hosts
+from fr import gh as _gh
 from fr.gh import GhError
 from fr.ghclient import GhClient
 from fr.glab import GlabError
@@ -26,6 +29,34 @@ from fr.tea import TeaError
 # class per backend CLI. A caller that collects per-item forge failures catches
 # exactly these, so a programming error is never reported as a forge failure.
 FORGE_ERRORS: tuple[type[Exception], ...] = (GhError, GlabError, TeaError)
+
+ForgeErrorKind = Literal["rate_limit", "info", "warn", "unknown"]
+_KINDS = frozenset(get_args(ForgeErrorKind))
+
+
+def forge_error_kind(exc: BaseException) -> ForgeErrorKind:
+    """Classify any forge error for retry / back-off (spec
+    2026-10-06-forge-remainder §4.C): `rate_limit` (back off the whole tick),
+    `info` (the target is gone), `warn` (transient) or `unknown`.
+
+    A `GhError` is `fr.gh._classify_error`'s call. A `GlabError` / `TeaError`
+    gets the same text rules over its stderr and message, with GitLab's and
+    Gitea's 429 counted as a rate limit beside GitHub's 403. Anything that is
+    not a forge error is `unknown`."""
+    if isinstance(exc, GhError):
+        kind = _gh._classify_error((exc.stderr or "") + " " + str(exc))
+        return cast("ForgeErrorKind", kind) if kind in _KINDS else "unknown"
+    if not isinstance(exc, (GlabError, TeaError)):
+        return "unknown"
+    text = ((exc.stderr or "") + " " + str(exc)).lower()
+    if ("403" in text or "429" in text) and "rate limit" in text:
+        return "rate_limit"
+    if "404" in text or "not found" in text:
+        return "info"
+    if any(pat in text for pat in _gh._TRANSIENT_PATTERNS):
+        return "warn"
+    return "unknown"
+
 
 # The command fr names when it tells an agent to open, edit or ready a PR,
 # per backend (gh#742: a refusal that says `gh pr create` on a GitLab
@@ -91,13 +122,31 @@ def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) 
     PROVENANCE-BLIND: it never reads config and cannot tell a declared
     `host:` from one derived from a remote or a PR URL, which is exactly
     why `client_for` — not this — owns the warning about a host fr cannot
-    honour (gh-486; spec §4.D). Only the GitLab adapter threads it; `gh`
-    and `tea` resolve their own hosts (§1 non-goals)."""
+    honour (gh-486; spec §4.D). The GitLab adapter threads it to `glab`,
+    the GitHub one as `GH_HOST` (spec 2026-10-06-forge-remainder §4.E);
+    `tea` still resolves its own host."""
     if backend == "gitlab":
         return RealGlabClient(host=host)
     if backend == "gitea":
         return RealTeaClient()
-    return RealGhClient()
+    # A SaaS host (github.com) is gh's own default, never a GH_HOST: threading
+    # it would demand a hosts.yml login that token-only CI does not have
+    # (review p1-r2).
+    return RealGhClient(host=_hosts.self_hosted_hostname(host))
+
+
+def client_for_url(url: str) -> GhClient:
+    """The client for the forge AND instance *url* lives on — the backend from
+    the URL's path shape (else its hostname), and a host only when it is not a
+    recognized SaaS domain (spec 2026-10-06-forge-remainder §4.D). For callers
+    holding a URL and no checkout: `fr_vk.pr_state` and the triage batch verbs.
+
+    A self-hosted GitLab URL with no MR path shape still reads as github
+    here; triage facts are GitHub-only, so it cannot arise from them."""
+    return client_for_backend(
+        _hosts.backend_for_url(url),
+        host=_hosts.self_hosted_hostname(urlparse(url).hostname),
+    )
 
 
 def client_for(repo_root: Path) -> GhClient:
@@ -120,10 +169,16 @@ def client_for(repo_root: Path) -> GhClient:
     remote (`_hosts.declared_host` vs `_hosts.host_for`). That distinction
     is what spec §4.D's warning rests on, so it must stay here rather than
     move down into `client_for_backend`.
+
+    GitHub is given only the DECLARED host (spec 2026-10-06-forge-remainder
+    §4.E): inside a checkout `gh` infers the host from the remote itself, and
+    a derived origin host may be an SSH alias, which must never become
+    `GH_HOST`. GitLab keeps the derived host too. Only Gitea, which threads
+    no host at all, still warns about a declared one.
     """
     backend = _hosts.detect_backend(repo_root)
     declared = _hosts.declared_host(repo_root)
-    if declared and backend != "gitlab" and (declared, backend) not in _WARNED_DECLARED_HOSTS:
+    if declared and backend == "gitea" and (declared, backend) not in _WARNED_DECLARED_HOSTS:
         _WARNED_DECLARED_HOSTS.add((declared, backend))
         print(
             f"warning: host {declared!r} is declared in "
@@ -132,4 +187,6 @@ def client_for(repo_root: Path) -> GhClient:
             "applies instead. See gh-486.",
             file=sys.stderr,
         )
+    if backend == "github":
+        return client_for_backend(backend, host=declared)
     return client_for_backend(backend, host=_hosts.host_for(repo_root))

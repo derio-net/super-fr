@@ -23,9 +23,8 @@ import logging
 import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol
-from urllib.parse import urlparse
 
-from fr import _hosts, hostclient
+from fr import hostclient
 
 from fr_vk import _cardref
 from fr_vk.workspaces import MCPArchiver, archive_for_card
@@ -85,15 +84,6 @@ def _normalize_issues(resp: Any) -> list[dict[str, Any]]:
 Closer = Callable[[str, str, "GhClient"], None]
 
 
-def _client_for_url(url: str) -> GhClient:
-    """The client for the forge AND host *url* lives on — `pr_observe`'s own
-    resolution (backend from the path shape, a host only when self-hosted)."""
-    return hostclient.client_for_backend(
-        _hosts.backend_for_url(url),
-        host=_hosts.self_hosted_hostname(urlparse(url).hostname),
-    )
-
-
 def _default_close_gh_issue(repo: str, issue_number: str, client: GhClient) -> None:
     """`edit_issue_state(..., state="CLOSED")` on the resolved *client*.
     Non-fatal on failure: the forge's own close-on-merge already ran, so a
@@ -142,7 +132,7 @@ def _close_linked_gh_issue(
             issue_num,
         )
         return
-    closer(title_repo, str(issue_num), _client_for_url(pr_url))
+    closer(title_repo, str(issue_num), hostclient.client_for_url(pr_url))
 
 
 def tick(
@@ -347,5 +337,5 @@ def _client_for_card(card: dict[str, Any], repo: str, tag: str) -> GhClient:
     if isinstance(pr_url, str):
         m = _REPO_FROM_URL_RE.match(pr_url)
         if m and m.group(1) == repo:
-            return _client_for_url(pr_url)
+            return hostclient.client_for_url(pr_url)
     return hostclient.client_for_backend(_cardref.BACKEND_FOR_TAG.get(tag, "github"))
