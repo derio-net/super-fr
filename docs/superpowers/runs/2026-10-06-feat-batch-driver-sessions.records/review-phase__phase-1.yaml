@@ -1,0 +1,140 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-driver-sessions
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+- kind: finding
+  id: p1-r1
+  title: restart_idle classified every pane from one initial agent list, so a pane that turned working
+    during earlier serial restarts still got /exit
+  body: restart_idle classified every pane from one initial agent list, so a pane that turned working
+    during earlier serial restarts still got /exit
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r2
+  title: has_draft failed open when no line started exactly with the prompt glyph
+  body: has_draft failed open when no line started exactly with the prompt glyph
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r3
+  title: only the first input line was checked, so a multi-line draft with an empty first line was missed
+  body: only the first input line was checked, so a multi-line draft with an empty first line was missed
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r4
+  title: the named relaunch did not retry agent_pane_busy like the runner does
+  body: the named relaunch did not retry agent_pane_busy like the runner does
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r5
+  title: only HerdrError was caught, so an OSError or non-dict herdr answer aborted the run and lost the
+    resume line
+  body: only HerdrError was caught, so an OSError or non-dict herdr answer aborted the run and lost the
+    resume line
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r6
+  title: spec §A/R2 were not amended for the live discoveries
+  body: spec §A/R2 were not amended for the live discoveries
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r7
+  title: a lone background subagent was caught only by one captured panel glyph
+  body: a lone background subagent was caught only by one captured panel glyph
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r8
+  title: the resume confirmation could accept a stale pre-exit agent-list entry
+  body: the resume confirmation could accept a stale pre-exit agent-list entry
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r9
+  title: the relaunch and resume line assumed the shell cwd equals the claude cwd
+  body: the relaunch and resume line assumed the shell cwd equals the claude cwd
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r10
+  title: HERDR_PANE_ID was not recorded and the tab list shape was never captured
+  body: HERDR_PANE_ID was not recorded and the tab list shape was never captured
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r11
+  title: install.sh passed --with-executables-from unconditionally, failing older uv
+  body: install.sh passed --with-executables-from unconditionally, failing older uv
+  review_scope: in
+  phase: 1
+- kind: discovery
+  id: p1-install-atomic-load-flake
+  phase: 1
+  title: test_fr_stays_runnable_throughout_a_reinstall failed once (1/225 fr calls) under full -n auto
+    load
+  body: Seen once in the fix round's first full-suite run; the fr link swap itself is unchanged by this
+    branch (only a separate fr-herdr link is added after each fr swap). Six reruns of the file under -n
+    6 all passed and the final full suite was green. Recorded as a load-sensitive window in the test,
+    not a defect of this change.
+- kind: review
+  id: review-p1
+  phase: 1
+  title: 'phase 1 independent review: 11 findings, all in scope, all fixed'
+  body: 'Independent reviewer (separate context) raised p1-r1..p1-r11, all in scope; each verified against
+    the code and fixed with a test by a fix round (head 82bb4c1fd); full suite green: 9792 passed, 105
+    skipped (/private/tmp/claude-502/driver-sessions-p1-review-suite.log).'
+resolves:
+- id: p1-r1
+  state: fixed
+  body: Each pane's agent-list entry is re-read right before classifying it (`gone` if absent); tests
+    test_r1_*.
+- id: p1-r2
+  state: fixed
+  body: Prompt located after stripping SGR, as the last prompt line under a rule; no prompt -> skip `no-prompt`;
+    test_r2_*.
+- id: p1-r3
+  state: fixed
+  body: Every input-box line up to the closing rule is checked, faint state carried across lines; live-captured
+    fixture; test_r3_*.
+- id: p1-r4
+  state: fixed
+  body: Shared start_agent retry moved into _herdr.py, used by runner and restart; test_r4_*.
+- id: p1-r5
+  state: fixed
+  body: Per-pane catches broadened to Exception mapped to fail/skip unreadable with the resume line kept;
+    _run_herdr always returns a dict; test_r5_*.
+- id: p1-r6
+  state: fixed
+  body: 'Spec R2, §A and Install amended: background-work rule, no-process/no-prompt/gone/unreadable skips,
+    raw pane read, absent name, status re-read, retry, broad catch, resume process check, cwd handling,
+    HERDR_PANE_ID, name reuse, conditional install flag.'
+- id: p1-r7
+  state: fixed
+  body: Captured a subagent-only screen in a scratch tab (fixture screen-subagent.json); herdr also reports
+    `working` while it runs, a second guard; test_r7_*.
+- id: p1-r8
+  state: fixed
+  body: Resume also requires a foreground claude in process-info; test_r8_*.
+- id: p1-r9
+  state: fixed
+  body: Shell cwd read after exit; `cd <claude cwd>` sent before relaunch when it differs; the resume
+    line carries the cd; test_r9_*.
+- id: p1-r10
+  state: fixed
+  body: tab list captured live and redacted (restart/tab-list.json), served by the scenario's fake herdr,
+    labels asserted; README notes HERDR_PANE_ID; test_r10_*.
+- id: p1-r11
+  state: fixed
+  body: Flag passed only when `uv tool install --help` lists it; fr-herdr linked from the tool env bin
+    otherwise; tests in test_install_sh.py and candidate-install.
+evidence:
+  review: review-p1
+  reviewer: ae38db34994e08c96
+  model: claude-opus-5-5
