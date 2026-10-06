@@ -1,26 +1,78 @@
-# Step record. Fill it as you work and commit it with your work; then
-#   fr run resolve 2026-10-06-feat-batch-triage-claims --step implement-phase --item phase/1 --record docs/superpowers/runs/2026-10-06-feat-batch-triage-claims.records/implement-phase__phase-1.yaml
-# applies all of it in one commit (spec 2026-09-25 §5.C).
+# Step record (phase 1). Applied by the orchestrator's one
+#   fr run resolve 2026-10-06-feat-batch-triage-claims --step implement-phase --item phase/1 --record <this file>
 schema_version: 8
 run: 2026-10-06-feat-batch-triage-claims
 step: implement-phase
 item: phase/1
-outcome: done            # done | failed | blocked
-ticks: [P1.T1.S1]              # step ids you completed, e.g. [P1.T1.S1]
-#   this phase: P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1, P1.T6.S2, P1.T7.S1, P1.T7.S2, P1.T8.S1, P1.T8.S2, P1.T8.S3, P1.T9.S1, P1.T9.S2
-refactor: {}             # P<n>.T<m>: "why there was nothing to clean"
-#   owed by tasks with no refactor step: P1.T4, P1.T6, P1.T7, P1.T9
-journal: []
-#   - {kind: decision|discovery|finding, id: <id>, title: <line>, body: <md>}
-#     a finding also takes review_scope: in|out (state defaults to open)
-#     a plan-journal entry also takes phase: <n> or global: true
-#     a spec-journal discovery holding the operator's brief takes input: true
-resolves: []
-#   - {id: <finding>, state: fixed|refuted|deferred|out-of-scope, body: <why>}
-evidence: {}
-# visual:              # one entry per owed `visual` acceptance row
-#   - row: <row-id>
-#     script: <capture script, optional — re-run it this unit>
-#     shots:           # git-ignored or outside the repo; opened this unit
-#       - {path: <image>, shows: [<state or interaction>, ...]}
+outcome: done
+ticks:
+- P1.T1.S1
+- P1.T2.S1
+- P1.T2.S2
+- P1.T2.S3
+- P1.T3.S1
+- P1.T3.S2
+- P1.T3.S3
+- P1.T4.S1
+- P1.T4.S2
+- P1.T5.S1
+- P1.T5.S2
+- P1.T5.S3
+refactor:
+  P1.T2: fr.artifacts.atomic.write_text_atomic replaces into place (os.replace), which overwrites; the
+    host id needs exclusive create (link fails when the file exists), so the helper does not fit the link-into-place
+    shape.
+  P1.T3: The batch markers' grammar is `<prefix><item-id> -->` matched by startswith; the claim marker
+    is a JSON payload validated by a model. They share nothing beyond the HTML-comment wrapper, so a shared
+    helper would add indirection without removing code. BatchStage is imported from fr.triage.batch rather
+    than redeclared.
+  P1.T4: Two small additions (an id parsed by one regex, one PATCH call) and the mixin method; no duplication
+    arose.
+  P1.T5: The read-parse-decide sequence is already one helper (`_read` + `_own` + `holder`) used by every
+    write; take reuses claim; nothing further to fold.
+journal:
+- kind: decision
+  id: p1-trusted-claim-authors
+  phase: 1
+  title: Only trusted authors' claim markers count (R17)
+  body: 'Security review (orchestrator scope addition): on a public repo any account can comment, and
+    under
 
+    R4 (oldest un-released marker wins, an expired one still holds) a stranger''s back-dated `fr-claim`
+
+    marker would lock every scope out of the issue. So `read_claims`/`claims_from_comments` take
+
+    `trusted` (the repo''s allowed authors, `fr.triage.batch.allowed_authors`: `pr_authors`, default
+
+    `Facts.viewer`, compared case-insensitively) and ignore and count any other author''s marker
+
+    (`ClaimRead.untrusted`). Every claim_writes call takes `trusted` and every re-read applies it; a
+
+    claim whose own posted marker is by an untrusted author withdraws it and raises ClaimError,
+
+    because no reader would count it. Spec gained R17, the Non-goals'' security bullet, and §3.B/§3.D.
+
+    '
+- kind: decision
+  id: p1-claim-precheck-and-stray-releases
+  phase: 1
+  title: claim() checks R4 before posting; owed_releases also covers own stray claims
+  body: '`claim_writes.claim` reads first and returns Held without writing when another scope already
+
+    holds the issue; R4''s post-then-re-read still decides races (tested by a racing fake). An own
+
+    losing marker found at that read is withdrawn. `claims.owed_releases` takes `own` (this
+
+    scope''s claims facts show) and adds those on keys no batch owes any more: that is how the
+
+    members `batch edit --remove-issue` dropped and a proposed batch whose wave was cleared are
+
+    released by a later `claim sync` when the edit ran without `--yes`. Releases of releasing
+
+    batches stay derived from the batch (only batches that ever owed claims: a wave or a dispatch),
+
+    and a `claims_released` event counts only after the batch''s last other event, so a redispatch
+
+    owes claims (and later releases) again.
+
+    '

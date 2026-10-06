@@ -1,0 +1,182 @@
+"""Claim writes against the fake GhClient (spec 2026-10-06-triage-claims §3.D; R2-R4, R8-R10, R17)."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from fr.triage import claim_writes as cw
+from fr.triage.claims import Marker, parse_marker, render_marker
+
+from tests.unit.fakes import FakeGhClient
+
+REPO = "derio-net/widgets"
+ME = "s-11111111"
+OTHER = "s-22222222"
+NOW = datetime(2026, 9, 26, 0, 0, tzinfo=UTC)
+DAY = timedelta(hours=24)
+TRUSTED = frozenset({"fr"})
+
+
+@pytest.fixture
+def gh() -> FakeGhClient:
+    client = FakeGhClient()
+    client.add_issue(REPO, 1)
+    return client
+
+
+def _foreign(
+    gh: FakeGhClient,
+    *,
+    at: datetime,
+    expires: datetime,
+    cid: int = 1,
+    author: str = "fr",
+    signer: str = OTHER,
+    number: int = 1,
+) -> None:
+    body = render_marker(
+        Marker(signer=signer, batch="theirs", claimed=at, heartbeat=at, expires=expires)
+    )
+    gh.issue_comments.setdefault((REPO, number), []).append(
+        {"author": author, "body": body, "created_at": at.isoformat(), "id": cid}
+    )
+    gh.issues[(REPO, number)].labels.add("fr:claimed")
+
+
+def _markers(gh: FakeGhClient, number: int = 1) -> list[Marker]:
+    out = []
+    for c in gh.issue_comments.get((REPO, number), []):
+        m = parse_marker(c["body"])
+        if m is not None:
+            out.append(m)
+    return out
+
+
+def _ops(gh: FakeGhClient) -> list[str]:
+    return [name for name, _ in gh.calls if name != "list_issue_comments"]
+
+
+def _claim(gh: FakeGhClient, batch: str = "mine", number: int = 1) -> cw.Outcome:
+    return cw.claim(gh, REPO, number, me=ME, batch=batch, expiry=DAY, now=NOW, trusted=TRUSTED)
+
+
+def test_claim_adds_the_label_and_posts_one_marker(gh: FakeGhClient) -> None:
+    out = _claim(gh)
+    assert out == cw.Done("posted", 1001)
+    assert "fr:claimed" in gh.issues[(REPO, 1)].labels
+    (m,) = _markers(gh)
+    assert (m.signer, m.batch, m.expires, m.released) == (ME, "mine", NOW + DAY, None)
+    assert _ops(gh) == ["ensure_labels", "edit_issue_labels", "comment_issue"]
+
+
+def test_a_claim_on_an_issue_already_held_writes_nothing(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - 3 * DAY, expires=NOW - 2 * DAY)
+    out = _claim(gh)
+    assert isinstance(out, cw.Held) and out.claim.signer == OTHER
+    assert _ops(gh) == []
+
+
+def test_a_claim_racing_an_older_expired_foreign_marker_loses_and_withdraws(
+    gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    post = gh.comment_issue
+
+    def racing(repo: str, number: int, body: str) -> None:
+        # The rival's (older, expired) marker lands between our read and our post.
+        _foreign(gh, at=NOW - 3 * DAY, expires=NOW - 2 * DAY)
+        post(repo, number, body)
+
+    monkeypatch.setattr(gh, "comment_issue", racing)
+    out = _claim(gh)
+    assert isinstance(out, cw.Held) and out.claim.signer == OTHER
+    theirs, mine = _markers(gh)
+    assert theirs.released is None
+    assert mine.signer == ME and mine.released is not None
+    assert "fr:claimed" in gh.issues[(REPO, 1)].labels
+
+
+def test_an_untrusted_older_marker_never_wins(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - 3 * DAY, expires=NOW + DAY, author="stranger")
+    out = _claim(gh)
+    assert out == cw.Done("posted", 1001)
+    assert _markers(gh)[1].released is None
+
+
+def test_an_own_marker_naming_another_batch_is_rewritten_in_place(gh: FakeGhClient) -> None:
+    _claim(gh, batch="old")
+    gh.calls.clear()
+    out = _claim(gh, batch="new")
+    assert out == cw.Done("rewritten", 1001)
+    (m,) = _markers(gh)
+    assert m.batch == "new"
+    assert "comment_issue" not in _ops(gh)
+
+
+def test_refresh_edits_in_place(gh: FakeGhClient) -> None:
+    _claim(gh)
+    later = NOW + timedelta(hours=7)
+    out = cw.refresh(gh, REPO, 1, me=ME, expiry=DAY, now=later, trusted=TRUSTED)
+    assert out == cw.Done("refreshed", 1001)
+    (m,) = _markers(gh)
+    assert (m.claimed, m.heartbeat, m.expires) == (NOW, later, later + DAY)
+
+
+def test_refresh_never_resurrects_a_marker_another_scope_took(gh: FakeGhClient) -> None:
+    _claim(gh)
+    # another scope took it: our marker released by them, theirs posted after
+    (c,) = gh.issue_comments[(REPO, 1)]
+    mine = parse_marker(c["body"])
+    assert mine is not None
+    c["body"] = render_marker(mine.model_copy(update={"released": NOW, "released_by": OTHER}))
+    _foreign(gh, at=NOW + timedelta(hours=1), expires=NOW + 2 * DAY, cid=2000)
+    gh.calls.clear()
+    out = cw.refresh(gh, REPO, 1, me=ME, expiry=DAY, now=NOW + DAY, trusted=TRUSTED)
+    assert isinstance(out, cw.Held) and out.claim.signer == OTHER
+    assert _ops(gh) == []
+
+
+@pytest.mark.parametrize("state", ["OPEN", "CLOSED"])
+def test_release_edits_to_released_and_removes_the_label_when_none_remain(
+    gh: FakeGhClient, state: str
+) -> None:
+    gh.issues[(REPO, 1)].state = state
+    _claim(gh)
+    out = cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED)
+    assert out == cw.Done("released", 1001)
+    (m,) = _markers(gh)
+    assert m.released == NOW
+    assert "fr:claimed" not in gh.issues[(REPO, 1)].labels
+
+
+def test_release_keeps_the_label_while_an_expired_claim_remains(gh: FakeGhClient) -> None:
+    _claim(gh)
+    _foreign(gh, at=NOW + timedelta(minutes=1), expires=NOW - DAY, cid=2000)
+    cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED)
+    assert "fr:claimed" in gh.issues[(REPO, 1)].labels
+
+
+def test_take_refuses_a_live_claim(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - DAY, expires=NOW + DAY)
+    with pytest.raises(cw.ClaimError, match="live"):
+        cw.take(gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=TRUSTED)
+    assert _ops(gh) == []
+
+
+def test_take_releases_an_expired_claim_naming_the_taker_then_claims(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - 3 * DAY, expires=NOW - DAY)
+    out = cw.take(gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=TRUSTED)
+    assert out == cw.Done("posted", 1001)
+    theirs, mine = _markers(gh)
+    assert theirs.released == NOW and theirs.released_by == ME
+    assert mine.signer == ME and mine.released is None
+
+
+def test_take_refuses_when_no_other_scope_holds_the_issue(gh: FakeGhClient) -> None:
+    with pytest.raises(cw.ClaimError, match="no other scope"):
+        cw.take(gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=TRUSTED)
+
+
+def test_an_own_marker_the_trusted_set_does_not_cover_is_refused(gh: FakeGhClient) -> None:
+    with pytest.raises(cw.ClaimError, match="not an allowed author"):
+        cw.claim(gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=frozenset())
