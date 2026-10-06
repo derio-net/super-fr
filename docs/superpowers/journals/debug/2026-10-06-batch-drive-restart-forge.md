@@ -4,3 +4,8 @@
 ### h-one-root-cause · hypothesis · Batch drive-restart-forge: investigation
 
 Batch drive-restart-forge (#883, #921, #998) was placed as ONE root cause. Reading triage_batch_cmd.py/_Driver says it is not. (1) #883: _close_out appends CloseoutEvent only AFTER runner.dispatch; the restart dedupe in the gap is runner liveness (_existing / existing_dispatches), so a tab that ended before a restart is invisible. (2) #921 item 1: collect_facts drops a failing repo into facts.skipped in org scope; the drive never reads skipped, so its batches derive stages with no PRs (pr-open/merged read as dispatched). (3) #921 items 2-3, the push-rejection comment, and #998: the loop's only per-pass error boundary is ForgeReadError; git fetch failures (_archived/_released/merge_ctx), the archive merge refusal, a rejected update push and a strict TriageConfig refusal (recollect / _fresh_config) all route to _fail and end the process; gitseam._run has no timeout. (4) #921 item 4: GH_TIMEOUT_SECONDS uniform across paginated lists (low confidence). Verdict: three-to-four independent causes sharing a theme (the driver does not survive a disruption), not one. Stopped to ask the operator per the batch rule.
+
+<!-- fr:journal kind=decision scope=debug id=d-operator-scope created=2026-10-06T13:36:42+00:00 -->
+### d-operator-scope · decision · Batch drive-restart-forge: investigation
+
+Operator (2026-10-06): fix all three causes in this one PR, each failing-test-first. #998: lenient read of .fr/triage.yaml inside the drive loop (unknown top-level keys warned once, ignored; hand-run collect/check stay strict) PLUS re-exec of the driver after post_merge installs a newer fr. #921.1: leave every batch of a skipped repo out of the pass, warned once per reason; Skipped unchanged.
