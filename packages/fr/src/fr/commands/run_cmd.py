@@ -2593,7 +2593,7 @@ def _verify_walk(
         raise typer.Exit(2) from e
     if dirty:
         problems.append(f"uncommitted code since the walk ({dirty[0]}...)")
-    problems += _walk_provenance(key, state.run, modified, opened=opened)
+    problems += _walk_provenance(key, state.run, path, modified, opened=opened)
     if problems:
         err_console.print(f"[red]{key}: --evidence walk={value} is refused:[/red]", soft_wrap=True)
         for problem in problems:
@@ -2603,16 +2603,18 @@ def _verify_walk(
 
 
 def _walk_provenance(
-    key: str, run: str, modified: _dt.datetime, *, opened: str | None
+    key: str, run: str, log: Path, modified: _dt.datetime, *, opened: str | None
 ) -> list[str]:
-    """Why a walk log modified at `modified` is not one a command of yours
-    wrote during this unit (empty when it is). Unobservable: `unobserved=walk`,
-    warned — and a log older than the unit is still refused."""
+    """Why the walk log `log`, modified at `modified`, is not one a command of
+    yours wrote during this unit (empty when it is). A command that also
+    writes `log` from the shell does not count (`walks_run`). Unobservable:
+    `unobserved=walk`, warned — and a log older than the unit is still
+    refused."""
     from fr.run.observed import walks_run
     from fr.run.telemetry import orchestrator_ran_since, parse_timestamp
 
     windows = (
-        orchestrator_ran_since(os.environ, lambda command: walks_run(command, run), opened)
+        orchestrator_ran_since(os.environ, lambda command: walks_run(command, run, log=log), opened)
         if opened
         else None
     )

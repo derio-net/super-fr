@@ -587,22 +587,77 @@ _UV_VALUE_FLAGS = frozenset({"--project", "--directory", "--with", "--python", "
 _COMMAND_DEPTH = 4
 
 
-def walks_run(command: str, run: str) -> bool:
+def walks_run(command: str, run: str, *, log: Path | None = None) -> bool:
     """Does `command` run `fr verification walk --run <run>`? The command-match
     witness beside the write-target one (`fr.run.telemetry._writes`): the walk
     writes its own log, so the command names no `>` target to match.
 
     The `fr` must be a simple command's PROGRAM — bare, by path, after `uv run
-    [flags]`, inside `fr isolation exec … --` or `sh -c` — never an argument:
-    `echo fr verification walk --run x` runs nothing. Syntax, not execution,
-    as every reader here: the caller ties the log's mtime to the window."""
+    [flags]`, inside `fr isolation exec … --` or `sh -c` — and `verification
+    walk` its first two arguments, `--run` an argument whose value is exactly
+    `run`. Text that only MENTIONS a walk runs nothing: an argument (`echo fr
+    …`), a quoted string, a comment, a here-doc body.
+
+    Given `log`, a command that ALSO writes it from the shell — a redirect,
+    `tee`, or a copying program (`cp`, `mv`, `touch`, …) naming it or its
+    directory — does not count (security review of p3-r1): the walk writes its
+    own log, so a shell write to that path is the forgery shape. Syntax, not
+    execution, as every reader here: the caller ties the log's mtime to the
+    window."""
     from fr.run.telemetry import _simple_commands
 
+    clean = _structure(command)
+    if log is not None and _writes_walk_log(command, clean, log):
+        return False
     return any(
         args[:2] == ["verification", "walk"] and _run_option(args[2:]) == run
-        for words in _simple_commands(command)
+        for words in _simple_commands(clean)
         for args in _fr_args(words, 0)
     )
+
+
+_COPIERS = frozenset(
+    {"cp", "mv", "install", "ln", "rsync", "dd", "tee", "touch", "sed", "truncate"}
+)
+"""Programs that write (or re-date) a path named among their arguments."""
+
+
+def _structure(command: str) -> str:
+    """`command` with here-doc bodies and comments blanked, newlines kept — so
+    neither is read as a command. Quotes are left for `_simple_commands`."""
+    from fr.run.telemetry import _COMMENT, _HEREDOC, _QUOTED
+
+    spans = [d.span(3) for d in _HEREDOC.finditer(command)]
+    masked = command
+    for start, end in [*spans, *(m.span() for m in _QUOTED.finditer(command))]:
+        masked = masked[:start] + "_" * (end - start) + masked[end:]
+    spans += [m.span() for m in _COMMENT.finditer(masked)]
+    out = list(command)
+    for start, end in spans:
+        for i in range(start, end):
+            if out[i] != "\n":
+                out[i] = " "
+    return "".join(out)
+
+
+def _writes_walk_log(command: str, clean: str, log: Path) -> bool:
+    """Does `command` write `log` from the shell: a redirect or `tee` naming it,
+    or a `_COPIERS` program naming it or its directory?"""
+    from fr.run.telemetry import _LEADING_ASSIGNMENT, _is_log, _simple_commands, _writes
+
+    home = os.path.expanduser("~")
+    if _writes(command.replace("~/", home + "/"), log):
+        return True
+    for words in _simple_commands(clean):
+        while words and _LEADING_ASSIGNMENT.match(words[0]):
+            words = words[1:]
+        if not words or os.path.basename(words[0]) not in _COPIERS:
+            continue
+        for word in words[1:]:
+            target = os.path.expanduser(word.split("=", 1)[-1] if "=" in word else word)
+            if _is_log(target, log) or _is_log(target.rstrip("/"), log.parent):
+                return True
+    return False
 
 
 def _fr_args(words: list[str], depth: int) -> list[list[str]]:

@@ -298,3 +298,74 @@ def test_a_tilde_path_is_expanded_before_it_is_judged_relative(
     )
 
     assert got.startswith("forged.log@")
+
+
+# --- the command-match predicate, hardened (security review of p3-r1) -------------
+
+
+def _walk_log() -> Path:
+    return Path.home() / ".cache/fr/walks/w1/20261006T160800Z.log"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'echo "fr verification walk --run w1"',
+        "echo fr verification walk --run w1",
+        "printf '%s' 'fr verification walk --run w1'",
+        "# fr verification walk --run w1",
+        "true # ; fr verification walk --run w1",
+        "cat <<EOF > /tmp/x\nfr verification walk --run w1\nEOF",
+        "fr verification walk --run w1-other",
+        "fr verification walk --run=w1x",
+        "fr verification walks --run w1",
+        "fr verification --run w1 walk",
+    ],
+)
+def test_text_that_only_mentions_the_walk_is_not_a_walk(command: str) -> None:
+    from fr.run.observed import walks_run
+
+    assert not walks_run(command, "w1", log=_walk_log())
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "fr verification walk --run w1 --model m > {log}",
+        "fr verification walk --run w1 --model m | tee {log}",
+        "fr verification walk --run w1 --model m; cp /tmp/forged {log}",
+        "fr verification walk --run w1 --model m && cp /tmp/forged ~/.cache/fr/walks/w1/",
+        "fr verification walk --run w1 --model m && touch -d 2026-10-06 {log}",
+        "fr verification walk --run w1 --model m; cat > {log} <<EOF\nforged\nEOF",
+    ],
+)
+def test_a_walk_that_also_writes_its_log_from_the_shell_is_a_forgery(command: str) -> None:
+    from fr.run.observed import walks_run
+
+    log = _walk_log()
+    command = command.format(log=log)
+    assert walks_run(command.split(" >")[0].split(" |")[0].split(";")[0].split(" &&")[0], "w1")
+    assert not walks_run(command, "w1", log=log)
+
+
+def test_a_real_walk_with_a_cd_and_a_read_of_its_log_still_counts() -> None:
+    from fr.run.observed import walks_run
+
+    log = _walk_log()
+    command = f"cd /w && uv run fr verification walk --run w1 --model m; tail -3 {log}"
+    assert walks_run(command, "w1", log=log)
+
+
+def test_the_gate_refuses_a_walk_command_that_copies_a_forgery_onto_the_log(
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _owed_good(tmp_path)
+    log = _forged(root, _home)
+    _session(
+        tmp_path,
+        monkeypatch,
+        f"fr verification walk --run w1 --model m; cp {tmp_path / 'f.log'} {log}",
+    )
+
+    with pytest.raises(Exit):
+        _gate(root, log)
