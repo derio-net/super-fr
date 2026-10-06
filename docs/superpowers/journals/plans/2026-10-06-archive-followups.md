@@ -64,3 +64,28 @@ Fixed in 53b901337: --branch and --all owed-debug-journal spy tests added.
 ### p1-r5-resolved · finding [fixed] · resolves p1-r5: --sweep-only spy test passes on an empty log (phase 1)
 
 Fixed in 53b901337: the fixture really moves a spec and the spy asserts [True].
+
+<!-- fr:journal kind=decision scope=plan id=p2-dirty-is-worktree-vs-index created=2026-10-06T18:12:15+00:00 phase=2 -->
+### p2-dirty-is-worktree-vs-index · decision · matrix retarget dirty check is worktree-vs-index, not paths_dirty (phase 2)
+
+Reuses phase 1's _edited_in_worktree (git diff --quiet) for matrix.yaml and the three reports, so a staged-only change is not an edit; consistent with p1-r3. A dirty file raises inside the step and surfaces as the standard `note: matrix retarget skipped` line; nothing is written.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-baseline-was-120-refs created=2026-10-06T18:12:15+00:00 phase=2 -->
+### p2-baseline-was-120-refs · discovery · the zero baseline held 120 stale archived refs, not one (phase 2)
+
+fr acceptance check showed twin warnings for 20 distinct archived specs/journals across 120 refs (many with #fragments), not only the spec-ref-writers ref. All were retargeted with retarget_text (moves derived from the warnings, fragment stripped) plus `fr acceptance report --deterministic`; the matrix diff touches only `super-fr:docs/superpowers` ref lines and check now prints no twin warning.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-flow-lists-not-retargeted created=2026-10-06T18:12:15+00:00 phase=2 -->
+### p2-flow-lists-not-retargeted · discovery · retarget_text handles block-list refs only (per spec) (phase 2)
+
+Flow-style `origin: [..]` lists are not rewritten (spec §B names block-list items). The matrix writers emit block lists, so none exist in the real matrix; a flow list would simply keep warning in check rather than be corrupted.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-06T18:12:15+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the step is one short function reusing phase 1's _edited_in_worktree; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-06T18:12:15+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+a one-string reword of an existing warning; nothing to clean
