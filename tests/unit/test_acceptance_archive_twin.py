@@ -95,9 +95,7 @@ def test_twin_warning_says_the_ref_survived_an_archive_fr_did_not_perform(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = make_repo(tmp_path, row(origin='"own:docs/superpowers/specs/s.md"'))
-    (root / "docs/superpowers/specs/s.md").rename(
-        root / "docs/superpowers/implemented/specs/s.md"
-    )
+    (root / "docs/superpowers/specs/s.md").rename(root / "docs/superpowers/implemented/specs/s.md")
     result = run_check(root, monkeypatch)
     assert result.exit_code == 0, result.output
     flat = " ".join(result.output.split())
