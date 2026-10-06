@@ -6455,9 +6455,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dedupe.py#test_the_calibration_fixture_groups_the_known_duplicates
+      - super-fr:tests/unit/test_triage_dedupe.py#test_distinct_from_on_either_side_silences_the_pair
+      - super-fr:tests/unit/test_triage_dedupe.py#test_an_issue_judged_a_duplicate_is_in_no_group
+      - super-fr:tests/unit/test_triage_check.py#test_candidates_come_from_the_dedupe_engine_and_json_carries_both
+    status: ci
+    notes: Engine, four signals, exclusions and the check output are unit-tested; the
+      calibration fixture is a live capture of this repo's issues (2026-10-06).
   - id: triage-dedupe-judged
     capability: triage-dedupe
     acceptance: A judged duplicate_of is validated at load, never unplaced, and reported
