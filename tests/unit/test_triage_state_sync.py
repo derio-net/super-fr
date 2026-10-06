@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,8 @@ from fr.triage.errors import TriageError
 from fr.triage.state_sync import (
     DURABLE_DIRS,
     DURABLE_FILES,
+    SYMLINK,
+    SYMLINK_DEST,
     SyncReport,
     contained,
     export_state,
@@ -427,3 +430,102 @@ def test_a_filesystem_error_is_a_clean_triage_error(tmp_path: Path) -> None:
     assert result.exit_code == 2
     assert "board/manifest.yaml" in result.output
     assert "Traceback" not in result.output
+
+
+# ------------------------------------------------ check-to-write race (gh#1003)
+# The checks above read the tree once; the copy must not resolve the names again.
+# Each test swaps a path for a symlink the instant the destination check returns,
+# which is the window a path-based copy leaves open.
+
+
+def _swap_after_check(
+    monkeypatch: pytest.MonkeyPatch, rel: str, swap: Callable[[], None]
+) -> None:
+    from fr.triage import state_sync
+
+    check = state_sync._symlinked_dest
+
+    def racing(dest: Path, path: str) -> bool:
+        verdict = check(dest, path)
+        if path == rel:
+            swap()
+        return verdict
+
+    monkeypatch.setattr(state_sync, "_symlinked_dest", racing)
+
+
+def _relink(path: Path, to: Path) -> None:
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+    path.symlink_to(to)
+
+
+def test_a_destination_file_swapped_for_a_symlink_is_not_written_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "judgements.yaml").write_text("old\n", encoding="utf-8")
+    victim = tmp_path / "victim"
+    victim.write_text("ORIGINAL\n", encoding="utf-8")
+    _swap_after_check(
+        monkeypatch, "judgements.yaml", lambda: _relink(dest / "judgements.yaml", victim)
+    )
+
+    report = export_state(_state(tmp_path / "state"), *_at(dest))
+
+    assert victim.read_text(encoding="utf-8") == "ORIGINAL\n"
+    assert _skipped(report)["judgements.yaml"] == SYMLINK_DEST
+    assert "judgements.yaml" not in report.copied
+
+
+def test_a_destination_directory_swapped_for_a_symlink_is_not_written_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dest = tmp_path / "dest"
+    (dest / "board").mkdir(parents=True)
+    victim_dir = tmp_path / "victim-dir"
+    victim_dir.mkdir()
+    _swap_after_check(
+        monkeypatch, "board/manifest.yaml", lambda: _relink(dest / "board", victim_dir)
+    )
+
+    report = export_state(_state(tmp_path / "state"), *_at(dest))
+
+    assert list(victim_dir.iterdir()) == []
+    assert _skipped(report)["board/manifest.yaml"] == SYMLINK_DEST
+
+
+def test_a_source_swapped_for_a_symlink_is_neither_followed_nor_copied_as_a_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = _state(tmp_path / "state")
+    secret = tmp_path / "secret"
+    secret.write_text("SECRET\n", encoding="utf-8")
+    dest = tmp_path / "dest"
+    _swap_after_check(
+        monkeypatch, "judgements.yaml", lambda: _relink(state / "judgements.yaml", secret)
+    )
+
+    report = export_state(state, *_at(dest))
+
+    target = dest / "judgements.yaml"
+    assert not target.is_symlink()
+    assert not target.exists()
+    assert _skipped(report)["judgements.yaml"] == SYMLINK
+
+
+def test_a_copy_keeps_the_source_mtime_and_mode(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    source = state / "judgements.yaml"
+    os.chmod(source, 0o640)
+    os.utime(source, ns=(1_000_000_000_000_000_000, 1_000_000_000_000_000_000))
+    dest = tmp_path / "dest"
+
+    export_state(state, *_at(dest))
+
+    copy = (dest / "judgements.yaml").stat()
+    assert copy.st_mtime_ns == 1_000_000_000_000_000_000
+    assert copy.st_mode & 0o777 == 0o640
