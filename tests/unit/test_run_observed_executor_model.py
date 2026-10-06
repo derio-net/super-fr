@@ -236,3 +236,47 @@ def test_a_synthesized_attempt_may_not_carry_tier_or_bound() -> None:
     for field in ("tier", "bound"):
         with pytest.raises(ValueError, match=field):
             Attempt(dispatched="t", synthesized=True, **{field: "x"})
+
+
+def _claim_then_resolve(repo: Path, shipped: Path, root: Path, model: str):
+    claim = ["run", "claim", "r1", *UNIT, "--agent", "a1f1", "--model", model]
+    assert _invoke_measurable(repo, shipped, claim, root, "sess-1").exit_code == 0
+    return _invoke_measurable(
+        repo, shipped, ["run", "resolve", "r1", *UNIT, "--state", "done"], root, "sess-1"
+    )
+
+
+def test_a_claimed_model_equal_to_the_transcript_still_warns_against_bound(
+    dispatched: tuple[Path, Path, Path, Path],
+) -> None:
+    """Review p2-r2: OpenCode always claims `--model`; when the claim matches the
+    transcript, the bound-vs-ran warning must still fire on a family difference."""
+    repo, shipped, root, session = dispatched
+    add_dispatch(
+        session, timestamp=_SAME_INSTANT, agent_id="a1f1", tool_use_id="toolu_a", usage=_USAGE_FIRST
+    )
+
+    result = _claim_then_resolve(repo, shipped, root, "claude-sonnet-5")
+
+    assert result.exit_code == 0, result.output
+    assert _code_attempt(repo).model == "claude-sonnet-5"
+    out = _squash(result.output)
+    assert "ran on claude-sonnet-5" in out and "claude-opus-5" in out
+
+
+def test_a_claimed_model_of_the_bound_family_does_not_warn(
+    dispatched: tuple[Path, Path, Path, Path],
+) -> None:
+    repo, shipped, root, session = dispatched
+    transcript = add_dispatch(
+        session, timestamp=_SAME_INSTANT, agent_id="a1f1", tool_use_id="toolu_a", usage=_USAGE_FIRST
+    )
+    transcript.write_text(
+        transcript.read_text().replace("claude-sonnet-5", "claude-opus-5-20260101")
+    )
+
+    result = _claim_then_resolve(repo, shipped, root, "claude-opus-5-20260101")
+
+    assert result.exit_code == 0, result.output
+    assert _code_attempt(repo).model == "claude-opus-5-20260101"
+    assert "ran on" not in _squash(result.output)

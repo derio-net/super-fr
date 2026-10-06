@@ -300,3 +300,38 @@ def test_the_command_unpriced_shows_tokens_and_turns_and_dash_dollars(tmp_path: 
     assert "1.2M / 34k" in out
     assert "—" in out
     assert "$" not in out
+
+
+def test_a_closed_out_run_prints_its_per_phase_table_from_the_archive(tmp_path: Path) -> None:
+    """Review p2-r1: an archived run's usage file was found, its cursor was not."""
+    from fr.run.model import archived_run_path, run_path
+    from fr.usage.file import archived_usage_path
+
+    save_run_state(tmp_path, _two_phases())
+    archived = archived_run_path(tmp_path, RUN)
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    run_path(tmp_path, RUN).rename(archived)
+    _write_usage(tmp_path, 1.0)
+    usage = usage_path(tmp_path, RUN)
+    target = archived_usage_path(tmp_path, RUN)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    usage.rename(target)
+
+    out = _invoke(tmp_path)
+
+    assert "By phase" in out
+    assert "claude-sonnet-5 ≠" in out
+
+
+def test_an_unparseable_archived_cursor_still_prints_the_step_table(tmp_path: Path) -> None:
+    from fr.run.model import archived_run_path
+
+    archived = archived_run_path(tmp_path, RUN)
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    archived.write_text("schema_version: 2\nrun: r1\nitems: {}\n")
+    _write_usage(tmp_path, 1.0)
+
+    out = _invoke(tmp_path)
+
+    assert "1.2M / 34k" in out
+    assert "By phase" not in out, "an unreadable cursor gives no per-phase table"

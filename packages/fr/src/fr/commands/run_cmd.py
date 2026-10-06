@@ -3727,8 +3727,10 @@ def _observed_model(attempt: UnitAttempt, key: str) -> UnitAttempt:
     if attempt.agent is None or attempt.agent_type is None:
         return attempt
     observed = subagent_model(os.environ, attempt.session, attempt.agent)
-    if observed is None or observed == attempt.model:
+    if observed is None:
         return attempt
+    # Compared even when a claim already wrote the observed model (review
+    # p2-r2: OpenCode always claims `--model`), against the binding.
     expected = attempt.bound if attempt.bound is not None else attempt.model
     if expected is not None and model_family(observed) != model_family(expected):
         err_console.print(
@@ -4838,6 +4840,24 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     _render_step_and_items(state, console, _unevidenced_units(repo_root, state))
 
 
+def _cost_cursor(repo_root: Path, run_id: str) -> RunState | None:
+    """The run's cursor for `fr run cost` — live first, then archived, the
+    same fallback `load_run_usage` makes for the usage file (review p2-r1), so
+    a closed-out run keeps its per-phase table. `None` when neither reads: an
+    archived cursor older than the live model prints the step table only."""
+    from fr.run.model import archived_run_path, parse_run_state
+
+    try:
+        return load_run_state(repo_root, run_id)
+    except RunStateError:
+        pass
+    archived = archived_run_path(repo_root, run_id)
+    try:
+        return parse_run_state(archived.read_text()) if archived.is_file() else None
+    except (OSError, RunStateError):
+        return None
+
+
 @run_app.command("cost")
 def cost_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
@@ -4902,11 +4922,8 @@ def cost_cmd(
             )
             raise typer.Exit(2)
         entries, replayed, ignored = effective_entries(usage)
-        try:
-            phase_state = load_run_state(repo_root, run_id)
-            order = list(phase_state.steps)
-        except RunStateError:
-            order = []
+        phase_state = _cost_cursor(repo_root, run_id)
+        order = list(phase_state.steps) if phase_state is not None else []
         captures = ", ".join(f"{'+'.join(c.at)}@{c.host}" for c in usage.captures) or "none"
         note = f"captures: {captures}"
         if replayed:
