@@ -1,0 +1,2 @@
+bump: patch
+summary: "triage drive: adopts every already-finished close-out whatever the wave selection, says when plan mode cannot read a clone instead of planning phantom close-outs, and merges an archive PR only into the default branch"
