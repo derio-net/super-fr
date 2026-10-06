@@ -26,8 +26,8 @@ from fr.triage.batch import (
     BatchStage,
     ForeignPr,
     QueueEntry,
-    batch_branch,
     batch_item_id,
+    recorded_branch,
 )
 from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
 
@@ -347,7 +347,7 @@ def housekeeping_branch(branch: str, run: str | None, plan: str | None) -> str:
 
 def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
     """The close-out work item's brief: the `fr pickup` instruction for the batch."""
-    branch = batch_branch(batch)
+    branch = recorded_branch(batch)
     pickup = f"fr pickup --run {run}" if run else f"fr pickup --branch {branch}"
     return (
         f"Close out batch {batch.id} ({batch.title}): its PR on {branch} has merged.\n"
@@ -443,7 +443,7 @@ def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
     both the head name and the files (gh#936)."""
     if not pr.trusted:
         return False
-    branch = batch_branch(batch)
+    branch = recorded_branch(batch)
     if pr.head_ref == f"chore/closeout-{branch.replace('/', '-')}":
         return True
     if not pr.head_ref.startswith(ARCHIVE_PREFIXES):

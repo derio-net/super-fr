@@ -21,6 +21,7 @@ from fr.triage.batch import (
     derive_batch_stage,
     last_dispatch,
     latest_marker,
+    recorded_branch,
 )
 from fr.triage.errors import TriageError
 from fr.triage.model import (
@@ -157,7 +158,7 @@ def dispatch_comment(batch: Batch, item_id: str, key: str) -> str:
     return (
         f"{batch_marker(item_id)}\n"
         f"Dispatched as batch `{batch.id}` ({batch.title}){company}. "
-        f"Branch `{batch_branch(batch)}`."
+        f"Branch `{recorded_branch(batch)}`."
     )
 
 

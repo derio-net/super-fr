@@ -111,6 +111,15 @@ def last_dispatch(batch: Batch) -> DispatchEvent | None:
     return None
 
 
+def recorded_branch(batch: Batch) -> str:
+    """The branch *batch*'s work is on: its last dispatch's recorded branch, else
+    `batch_branch` (spec 2026-10-06-triage-batch-adopt §F, R14). Readers take the
+    branch from here, never recompute it: an adopted session's branch is the one
+    the event recorded."""
+    event = last_dispatch(batch)
+    return event.branch if event is not None else batch_branch(batch)
+
+
 # ------------------------------------------------------------------- stage
 
 

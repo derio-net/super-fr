@@ -1508,7 +1508,9 @@ def test_the_dispatch_comment_names_the_recorded_branch() -> None:
     from fr.triage.batch_dispatch import dispatch_comment
 
     b = _adopted("x", 1, branch="feat/hand-started")
-    assert "Branch `feat/hand-started`." in dispatch_comment(b, batch_item_id(REPO, "x"), "super-fr#1")
+    assert "Branch `feat/hand-started`." in dispatch_comment(
+        b, batch_item_id(REPO, "x"), "super-fr#1"
+    )
 
 
 def _adopt_facts(pr: PullRequest) -> Any:
