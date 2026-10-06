@@ -18,6 +18,8 @@ import typer
 
 from fr import __version__
 from fr.artifacts.trigger import ensure_artifacts_current
+from fr.binary_identity import current_identity
+from fr.binary_identity import enforce as enforce_binary_identity
 from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
@@ -92,6 +94,12 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def identity_callback(value: bool) -> None:
+    if value:
+        typer.echo(current_identity())
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -102,8 +110,19 @@ def main(
         is_eager=True,
         help="Show version and exit.",
     ),
+    identity: bool | None = typer.Option(
+        None,
+        "--identity",
+        callback=identity_callback,
+        is_eager=True,
+        help="Show which fr this is (version and package directory) and exit.",
+    ),
 ) -> None:
     """VK toolchain: v2 plan-as-folder, render → observe → diff → apply."""
+    # super-fr#746: before anything else — a wrong fr must not migrate
+    # artifacts either. Refuses a PATH-reached fr that disagrees with the fr the
+    # harness's integrations pinned; see fr.binary_identity.
+    enforce_binary_identity()
     # The obligatory artifact-migration trigger (spec §3.C). It runs before
     # every non-exempt command: in an interactive context stale artifacts are
     # migrated and committed and the typed command then runs, and in a daemon /

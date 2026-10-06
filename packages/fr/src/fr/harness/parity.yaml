@@ -27,6 +27,36 @@ surfaces:
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
+  - id: fr-binary-pin
+    kind: hook
+    script: fr-binary-pin.sh
+    summary: >-
+      The shell and the integrations run the same fr (super-fr#746). The fr the
+      hooks/plugin resolve is exported to the shell as FR_HARNESS_FR, and fr
+      refuses at CLI entry when a PATH-reached fr disagrees (a venv fr warns).
+    harnesses:
+      claude-code:
+        state: partial
+        scope_note: >-
+          SessionStart writes the pin to $CLAUDE_ENV_FILE, which Claude Code
+          sources before every Bash command (hook unit-tested in
+          tests/unit/test_hooks_binary_pin.py). That a live session's shell
+          then carries the pin is not yet live-proven; and only an fr that
+          ships this check can refuse — an older global fr runs unchecked.
+      opencode:
+        state: partial
+        scope_note: >-
+          pin.ts adds FR_HARNESS_FR via `shell.env`, from the plugin's own
+          `fr --identity` (bun-tested, test/pin.test.ts); not live-proven, and,
+          as on Claude Code, an fr older than the check does not refuse.
+      hermes:
+        state: absent
+        scope_note: >-
+          no hook ships an env into Hermes' `terminal` tool, so nothing pins
+          the fr there.
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
   - id: fr-isolation-guard
     kind: hook
     script: fr-isolation-guard.sh
