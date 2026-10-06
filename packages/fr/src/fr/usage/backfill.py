@@ -83,7 +83,7 @@ def _entries(raw: dict[str, Any], env: Mapping[str, str]) -> list[SessionEntry]:
             record = read_session(harness, session, env)
         except Exception as e:  # noqa: BLE001 — one bad reader is one unavailable session
             record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
-        read.append(session_entry(record, windows, units))
+        read.append(session_entry(record, windows, rekey=units))
     if any(e.unavailable is None for e in read):
         return read
     entries = _cursor_figures(raw) + read
@@ -124,7 +124,7 @@ def refreshed_file(
             except Exception:  # noqa: BLE001 — an unreadable session stays as recorded
                 record = None
             if record is not None and record.unavailable is None and record.cost.usd is not None:
-                entry = session_entry(record, windows, units)
+                entry = session_entry(record, windows, rekey=units)
         sessions.append(entry)
     if tuple(sessions) == mine.sessions:
         return None

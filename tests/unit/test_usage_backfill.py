@@ -122,6 +122,17 @@ def test_a_run_with_transcripts_gets_exact_dollars(repo: Path) -> None:
     assert any(m.usd_source == "exact" and m.usd for m in entry.models.values())
 
 
+def test_backfill_writes_no_main_subagent_or_unit_split(repo: Path) -> None:
+    """Archived files are not re-shaped (cost-evidence spec R6): `backfill`
+    passes no unit index, so neither section is written."""
+    _backfill(repo)
+    for run in ("2026-09-01-feat-old", "2026-09-21-feat-new"):
+        text = archived_usage_path(repo, run).read_text()
+        assert "steps_by_role" not in text and "units:" not in text
+        for capture in load_usage(archived_usage_path(repo, run)).captures:  # type: ignore[union-attr]
+            assert all(not s.steps_by_role and not s.units for s in capture.sessions)
+
+
 def test_a_run_without_transcripts_keeps_its_cursor_figures_with_no_dollars(repo: Path) -> None:
     _backfill(repo)
     usage = load_usage(archived_usage_path(repo, "2026-09-01-feat-old"))

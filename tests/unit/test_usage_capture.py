@@ -179,6 +179,9 @@ def test_capture_records_each_dispatch_brief_under_the_unit_that_claimed_it(
     assert usage is not None
     entry = next(s for s in usage.captures[0].sessions if s.session == CC_SESSION)
     assert entry.briefs == {unit: 2480, "toolu_01UnnGBPuZbTDsutzsmhochi": 96}
+    # a live capture also carries the main/subagent split and the per-unit one (R2, R3)
+    assert set(entry.steps_by_role) <= {"main", "subagent"} and entry.steps_by_role
+    assert "agent" in entry.units.get(unit, {}) or "(unattributed)" in entry.units
 
 
 def test_a_new_hosts_first_resolve_appends_its_capture_and_a_known_host_adds_nothing(

@@ -31,7 +31,16 @@ from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, mo
 
 from fr.usage.model import UsageRecord
 from fr.usage.readers.hermes import ACP_ZERO_TOKENS
+from fr.run.telemetry import parse_timestamp
 from fr.usage.rollup import Window, rollup
+from fr.usage.split import (
+    Acc,
+    Interval,
+    UnitIndex,
+    by_role_and_step,
+    by_unit_and_role,
+    step_role_of,
+)
 
 USAGE_REL = Path("docs") / "superpowers" / "usage"
 IMPLEMENTED_USAGE_REL = Path("docs") / "superpowers" / "implemented" / "usage"
@@ -71,6 +80,12 @@ class Figure(BaseModel):
 
     usd: float | None = None
     turns: int | None = None
+    input: int | None = None
+    cache_write: int | None = None
+    cache_read: int | None = None
+    output: int | None = None
+    """Token counts: set on the main/subagent and per-unit figures (R4), absent
+    (`None`) on the older activity and step figures."""
 
 
 class SessionEntry(BaseModel):
@@ -81,6 +96,10 @@ class SessionEntry(BaseModel):
     models: dict[str, ModelFigures] = {}
     activity: dict[str, Figure] = {}
     steps: dict[str, Figure] = {}
+    steps_by_role: dict[str, dict[str, Figure]] = {}
+    """`{main|subagent: {step: figure}}` — a step's figures by thread (R2)."""
+    units: dict[str, dict[str, Figure]] = {}
+    """`{unit key | (unattributed): {role: figure}}` (R3)."""
     briefs: dict[str, int] = {}
     """Dispatch-brief sizes in characters, keyed by unit."""
     unavailable: str | None = None
@@ -94,7 +113,9 @@ class SessionEntry(BaseModel):
 
     @model_validator(mode="after")
     def _unavailable_carries_no_figures(self) -> SessionEntry:
-        if self.unavailable is not None and (self.models or self.activity or self.steps):
+        if self.unavailable is not None and (
+            self.models or self.activity or self.steps or self.steps_by_role or self.units
+        ):
             raise ValueError("an `unavailable` session carries no figures")
         return self
 
@@ -227,34 +248,73 @@ def _role(record: UsageRecord) -> str:
     return f"subagent:{agent}" if agent else "subagent"
 
 
-def units_by_agent(cursor: Mapping[str, Any]) -> dict[str, str]:
-    """`{agent id: unit key}` from a run cursor's attempts (any version with
-    `units`) — how a brief the reader keyed by agent id finds its unit."""
-    out: dict[str, str] = {}
+def unit_index(cursor: Mapping[str, Any]) -> UnitIndex:
+    """What a run cursor says about who held each unit and when (spec §B).
+
+    Read from the raw mapping, tolerantly, so any cursor version with `units`
+    serves. A synthesized attempt contributes no agent and no interval; an
+    attempt with no `returned` is open-ended only when it is the unit's last
+    (`fr.run.units.open_attempt`'s rule: the held one)."""
+    agents: dict[str, str] = {}
+    roles: dict[str, str] = {}
+    intervals: list[Interval] = []
     steps = cursor.get("steps")
-    for record in steps.values() if isinstance(steps, Mapping) else ():
+    for step, record in steps.items() if isinstance(steps, Mapping) else ():
         units = record.get("units") if isinstance(record, Mapping) else None
         for key, unit in units.items() if isinstance(units, Mapping) else ():
-            attempts = unit.get("attempts") if isinstance(unit, Mapping) else None
-            for attempt in attempts if isinstance(attempts, list | tuple) else ():
-                agent = attempt.get("agent") if isinstance(attempt, Mapping) else None
+            if not isinstance(unit, Mapping):
+                continue
+            unit_key = str(key)
+            roles[unit_key] = step_role_of(str(step))
+            attempts = unit.get("attempts")
+            recorded = (
+                [a for a in attempts if isinstance(a, Mapping)]
+                if isinstance(attempts, list | tuple)
+                else []
+            )
+            for position, attempt in enumerate(recorded):
+                if attempt.get("synthesized"):
+                    continue
+                agent = attempt.get("agent")
                 if isinstance(agent, str) and agent:
-                    out.setdefault(agent, str(key))
-    return out
+                    agents.setdefault(agent, unit_key)
+                start = parse_timestamp(attempt.get("dispatched"))
+                if start is None:
+                    continue
+                end = parse_timestamp(attempt.get("returned"))
+                held = end is None and position == len(recorded) - 1
+                if end is not None or held:
+                    intervals.append(Interval(unit_key, start, end))
+            evidence = unit.get("evidence")
+            reviewer = evidence.get("reviewer") if isinstance(evidence, Mapping) else None
+            if isinstance(reviewer, str) and reviewer:
+                agents.setdefault(reviewer, unit_key)
+    return UnitIndex(agents=agents, roles=roles, intervals=tuple(intervals))
+
+
+def units_by_agent(cursor: Mapping[str, Any]) -> dict[str, str]:
+    """`{agent id: unit key}` — how a brief the reader keyed by agent id finds
+    its unit. A thin view of `unit_index`."""
+    return unit_index(cursor).agents
 
 
 def session_entry(
     record: UsageRecord,
     windows: Sequence[Window] = (),
-    units: Mapping[str, str] | None = None,
+    index: UnitIndex | None = None,
+    *,
+    rekey: Mapping[str, str] | None = None,
 ) -> SessionEntry:
     """One session's figures, copied out of `record` field by field.
 
     Only model ids, token counts, dollars, turns, step names and brief SIZES
     are read; tool calls are used to CLASSIFY (inside `rollup`) and never
-    copied. `units` (`units_by_agent`) re-keys a brief from the agent id the
-    reader found to the cursor unit that agent held; an unmatched brief keeps
-    the reader's key (p2-r24)."""
+    copied. `index` (`unit_index`) re-keys a brief from the agent id the reader
+    found to the cursor unit that agent held (an unmatched brief keeps the
+    reader's key, p2-r24) and, when given, adds the main/subagent split per
+    step and the per-unit split (R2, R3). `None` writes neither: that is what
+    `backfill` and `refreshed_file` pass, so archived files keep their shape.
+    They still re-key briefs, through `rekey` (`units_by_agent`) alone."""
     if record.unavailable is not None:
         return SessionEntry(
             session=record.session, unavailable=committed_reason(record.unavailable)
@@ -299,7 +359,7 @@ def session_entry(
     }
     briefs: dict[str, int] = {}
     for key, size in record.briefs.items():
-        unit = (units or {}).get(key, key)
+        unit = (rekey if rekey is not None else index.agents if index else {}).get(key, key)
         briefs[unit] = briefs.get(unit, 0) + size
     return SessionEntry(
         session=record.session,
@@ -307,15 +367,52 @@ def session_entry(
         models=models,
         activity=activity,
         steps=steps,
+        steps_by_role=_figures_by_role(record, windows) if index is not None else {},
+        units=_figures_by_unit(record, index) if index is not None else {},
         briefs=briefs,
     )
+
+
+def _figure_of(acc: Acc, priced: bool) -> Figure:
+    return Figure(
+        usd=acc.usd if priced else None,
+        turns=acc.turns,
+        input=acc.input,
+        cache_write=acc.cache_write,
+        cache_read=acc.cache_read,
+        output=acc.output,
+    )
+
+
+def _figures_by_role(
+    record: UsageRecord, windows: Sequence[Window]
+) -> dict[str, dict[str, Figure]]:
+    priced = record.cost.usd is not None
+    split = by_role_and_step(record, windows)
+    return {
+        role: {step: _figure_of(acc, priced) for step, acc in steps.items()}
+        for role, steps in split.items()
+        if steps
+    }
+
+
+def _figures_by_unit(record: UsageRecord, index: UnitIndex) -> dict[str, dict[str, Figure]]:
+    priced = record.cost.usd is not None
+    return {
+        unit: {role: _figure_of(acc, priced) for role, acc in roles.items()}
+        for unit, roles in by_unit_and_role(record, index).items()
+    }
 
 
 # --- read / write -------------------------------------------------------------
 
 
 def _figure(f: Figure) -> dict[str, Any]:
-    return {"usd": f.usd, "turns": f.turns}
+    out: dict[str, Any] = {"usd": f.usd, "turns": f.turns}
+    for name in ("input", "cache_write", "cache_read", "output"):
+        if getattr(f, name) is not None:
+            out[name] = getattr(f, name)
+    return out
 
 
 def _session(entry: SessionEntry) -> dict[str, Any]:
@@ -338,6 +435,16 @@ def _session(entry: SessionEntry) -> dict[str, Any]:
     }
     out["activity"] = {name: _figure(f) for name, f in entry.activity.items()}
     out["steps"] = {name: _figure(f) for name, f in entry.steps.items()}
+    if entry.steps_by_role:
+        out["steps_by_role"] = {
+            role: {step: _figure(f) for step, f in steps.items()}
+            for role, steps in entry.steps_by_role.items()
+        }
+    if entry.units:
+        out["units"] = {
+            unit: {role: _figure(f) for role, f in roles.items()}
+            for unit, roles in entry.units.items()
+        }
     if entry.briefs:
         out["briefs"] = dict(entry.briefs)
     return out
@@ -386,6 +493,7 @@ def load_usage(path: Path) -> UsageFile | None:
 __all__ = [
     "NO_SESSION_FOUND",
     "committed_reason",
+    "unit_index",
     "units_by_agent",
     "IMPLEMENTED_USAGE_REL",
     "MIGRATED_HOST",
@@ -395,6 +503,7 @@ __all__ = [
     "ModelFigures",
     "SessionEntry",
     "UsageFile",
+    "UnitIndex",
     "UsageFileError",
     "archived_usage_path",
     "dump_usage",

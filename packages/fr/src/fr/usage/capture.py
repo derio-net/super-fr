@@ -37,7 +37,7 @@ from fr.usage.file import (
     host_label,
     load_usage,
     session_entry,
-    units_by_agent,
+    unit_index,
     upsert_capture,
     usage_path,
 )
@@ -202,14 +202,14 @@ def build_capture(
     windows = windows_from_cursor(
         {"started": state.started, "steps": {k: {"at": v.at} for k, v in state.steps.items()}}
     )
-    units = units_by_agent(state.model_dump(mode="json"))
+    index = unit_index(state.model_dump(mode="json"))
     entries: list[SessionEntry] = []
     for harness, session in pairs:
         try:
             record = read_session(harness, session, env)
         except Exception as e:  # noqa: BLE001 — a reader must not fail a step
             record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
-        entries.append(session_entry(record, windows, units))
+        entries.append(session_entry(record, windows, index))
     label = this_host(state.run, env)
     previous = existing.host(label)
     events = previous.at if previous is not None else ()
@@ -223,7 +223,7 @@ def build_capture(
         harness_now = "unknown"
     merged = _merge(previous, entries)
     if not merged:
-        merged = [session_entry(unavailable("", harness_now, NO_SESSION_FOUND), windows, units)]
+        merged = [session_entry(unavailable("", harness_now, NO_SESSION_FOUND), windows, index)]
     return Capture(
         host=label,
         harness=harness_now,

@@ -116,6 +116,8 @@ def test_backfill_prices_an_archived_session_once_it_has_exited(
     assert entry.models and all(m.usd_source == "exact" for m in entry.models.values())
     assert capture.at[-2:] == ("closeout", "backfill")
     assert capture.mode == "devcontainer"
+    # a refreshed entry is re-priced, never re-shaped (cost-evidence spec R6)
+    assert not entry.steps_by_role and not entry.units
 
 
 @pytest.mark.usefixtures("complete_live_pr")

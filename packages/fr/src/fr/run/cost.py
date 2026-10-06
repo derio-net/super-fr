@@ -201,7 +201,7 @@ def recompute_entries(
     the session of whoever runs it (spec 2026-10-02-opencode-observe-2 §C,
     #848); with none, the `NO_SESSION_FOUND` placeholder a capture writes."""
     from fr.usage.capture import candidates
-    from fr.usage.file import NO_SESSION_FOUND, session_entry, units_by_agent
+    from fr.usage.file import NO_SESSION_FOUND, session_entry, unit_index
     from fr.usage.model import unavailable
     from fr.usage.rollup import windows_from_cursor
     from fr.usage.sources import read_session
@@ -209,16 +209,16 @@ def recompute_entries(
     windows = windows_from_cursor(
         {"started": state.started, "steps": {k: {"at": v.at} for k, v in state.steps.items()}}
     )
-    units = units_by_agent(state.model_dump(mode="json"))
+    index = unit_index(state.model_dump(mode="json"))
     out: list[SessionEntry] = []
     for harness, session in candidates(state, env, repo_root, ambient=False):
         try:
             record = read_session(harness, session, env)
         except Exception as e:  # noqa: BLE001 — one bad reader is one unavailable session
             record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
-        out.append(session_entry(record, windows, units))
+        out.append(session_entry(record, windows, index))
     if not out:
-        out.append(session_entry(unavailable("", "unknown", NO_SESSION_FOUND), windows, units))
+        out.append(session_entry(unavailable("", "unknown", NO_SESSION_FOUND), windows, index))
     return out
 
 
