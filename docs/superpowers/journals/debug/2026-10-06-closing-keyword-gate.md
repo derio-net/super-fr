@@ -34,3 +34,8 @@ Confirms h1. `shared_closing_keywords` policed every line where a keyword and a 
 ### e1-resolved · finding [fixed] · resolves e1: Live: GitHub never links a keyword across a line break, but a wrapped ref list leaves its tail open
 
 Fixed by f1 (2728f5b63): the wrapped-list tail is read with its line; the split-keyword shape stays prose, as the live evidence shows GitHub links nothing there.
+
+<!-- fr:journal kind=review scope=debug id=r1 created=2026-10-06T16:59:53+00:00 -->
+### r1 · review · Independent review: 1 in-scope regression fixed, 1 refuted live, 1 accepted, 1 out of scope
+
+Reviewer in a separate, read-only context (no shell; findings re-checked here by running the old and new gate side by side, then live on PR #1032). (1) IN SCOPE, FIXED: 'Closes GH-1 and #2' was refused before and passed after the narrowing, because the gate's ref pattern did not know GH-n. Live: 'Closes GH-869 and #868' -> [869]. Fixed by reading refs with _ISSUE_REF_GITHUB, red test first. (2) REFUTED: 'Closes (#1) and (#2)' also flipped to pass; live 'Closes (#868)' -> [] and 'Closes (#869) and (#868)' -> [], so GitHub closes nothing there and the old refusal was a #868-class false hit. Pinned by a test. (3) ACCEPTED: 'Closes #1\n#2 is the follow-up' is now refused. GitHub does leave #2 open there, so the refusal is right, only noisy, and needs a line that opens on a bare #n. (4) OUT OF SCOPE, pre-existing: a list wrapped inside a blockquote ('> Closes #1,\n> #2') is not joined; the old gate missed it too. Full suite after: 9698 passed, 105 skipped.
