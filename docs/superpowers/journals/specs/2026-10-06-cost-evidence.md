@@ -187,3 +187,6 @@ Pre-existing: brief re-keying ignored evidence.reviewer before this change; no r
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-cost-evidence-p2 created=2026-10-06T17:45:35+00:00 -->
 ### phase-split-2026-10-06-cost-evidence-p2 · decision · ask: #838 tier/bound model and #793 item 4 per-phase overhead table (R7-R9)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-cost-evidence-p3 created=2026-10-06T17:45:37+00:00 -->
+### phase-split-2026-10-06-cost-evidence-p3 · decision · ask: #627 / #793 item 5 / #593 before-after comparison and audit (R10-R11)
