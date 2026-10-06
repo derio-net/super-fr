@@ -633,3 +633,38 @@ Backlog page vs Kanban disambiguated, board.html in the file table (591cc7a96).
 ### p5-r7-resolved · finding [fixed] · resolves p5-r7: docs/triage/README.md was stale on manifests, timeline attribution, fragments and the recipe (phase 5)
 
 README rewritten for the four page manifests, R12, the history render and the export opt-in (591cc7a96).
+
+<!-- fr:journal kind=finding scope=plan id=p1-visual-matcher-uv-with-resolved-2 created=2026-10-06T08:01:59+00:00 state=open resolves=p1-visual-matcher-uv-with tracked_by=#999 -->
+### p1-visual-matcher-uv-with-resolved-2 · finding [deferred → #999] · resolves p1-visual-matcher-uv-with: capture-script witness misreads uv run --with
+
+Filed at closeout as #999.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved-2 created=2026-10-06T08:02:02+00:00 state=open resolves=p1-r4 tracked_by=#1000 -->
+### p1-r4-resolved-2 · finding [deferred → #1000] · resolves p1-r4: cancelled-only waves count as finished and silently vanish from the board (spec'd predicate, undocumented consequence)
+
+Filed at closeout as #1000.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved-2 created=2026-10-06T08:02:05+00:00 state=open resolves=p1-r6 tracked_by=#1001 -->
+### p1-r6-resolved-2 · finding [deferred → #1001] · resolves p1-r6: board wave table is cramped at 390px (columns wrap letter by letter); predates this phase, board relayout is R2-R5
+
+Filed at closeout as #1001.
+
+<!-- fr:journal kind=finding scope=plan id=p2-suite-log-background-unwitnessed-resolved-2 created=2026-10-06T08:02:07+00:00 state=open resolves=p2-suite-log-background-unwitnessed tracked_by=#1002 -->
+### p2-suite-log-background-unwitnessed-resolved-2 · finding [deferred → #1002] · resolves p2-suite-log-background-unwitnessed: fr cannot witness a suite log written by a run_in_background command, which the brief's own long_commands rule prescribes
+
+Filed at closeout as #1002.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11-resolved-2 created=2026-10-06T08:02:11+00:00 state=open resolves=p4-r11 tracked_by=#1003 -->
+### p4-r11-resolved-2 · finding [deferred → #1003] · resolves p4-r11: local check-to-write race between the symlink check and copy2 in state_sync (local attacker only)
+
+Filed at closeout as #1003.
+
+<!-- fr:journal kind=finding scope=plan id=p4-archive-pr-base-unchecked-resolved-2 created=2026-10-06T08:02:15+00:00 state=open resolves=p4-archive-pr-base-unchecked tracked_by=#1004 -->
+### p4-archive-pr-base-unchecked-resolved-2 · finding [deferred → #1004] · resolves p4-archive-pr-base-unchecked: the wave driver's archive-PR merge path never checks the PR's base branch either
+
+Filed at closeout as #1004.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved-2 created=2026-10-06T08:02:19+00:00 state=open resolves=p5-r2 tracked_by=#1005 -->
+### p5-r2-resolved-2 · finding [deferred → #1005] · resolves p5-r2: pipeline.py aborts on closed pinned issues, so built fragments cannot be regenerated from imported state
+
+Filed at closeout as #1005.
