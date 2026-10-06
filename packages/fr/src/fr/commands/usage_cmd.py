@@ -222,3 +222,30 @@ def backfill_cmd(repo: RepoOpt = None) -> None:
     )
     for path in (*report.written, *report.refreshed):
         typer.echo(f"  {path.relative_to(root)}")
+
+
+@usage_app.command("compare")
+def compare_cmd(
+    before: Annotated[
+        str, typer.Option("--before", help="ISO date (runs started before it) or a run id.")
+    ],
+    after: Annotated[
+        str, typer.Option("--after", help="ISO date (runs started on or after it) or a run id.")
+    ],
+    repo: RepoOpt = None,
+) -> None:
+    """Compare two sets of runs: phases, turns, main/subagent tokens, cost,
+    review findings per phase and re-opened findings (read-only, deterministic).
+    Runs are read from live and archived usage files, cursors and plan journals."""
+    from fr.usage.compare import load_run_inputs, render_compare, run_row, select_runs
+
+    _require_host(repo)
+    root = _repo(repo)
+    try:
+        sets = [
+            [run_row(load_run_inputs(root, r)) for r in select_runs(root, sel, before=is_before)]
+            for sel, is_before in ((before, True), (after, False))
+        ]
+    except ValueError as e:
+        raise _fail(str(e)) from e
+    typer.echo(render_compare(*sets), nl=False)
