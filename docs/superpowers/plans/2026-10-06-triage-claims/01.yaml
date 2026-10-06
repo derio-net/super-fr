@@ -1,0 +1,288 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Claims core — scope identity, the claim marker, forge comment ids and edits,
+    claim writes, facts, check sets, the claim and scope commands, batch-command gates
+    (R1–R12, R15)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-claims-identity
+  - triage-claims-hands-off
+  - triage-claims-expiry
+  - triage-claims-writes
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/scope_config.py
+  - packages/fr/src/fr/triage/claims.py
+  - packages/fr/src/fr/triage/claim_writes.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/labels.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_claim_cmd.py
+  - tests/unit/*
+  - tests/scenarios/triage-claims-*.sh
+  - tests/scenarios/fixtures/*
+  - docs/acceptance/*
+  - .changes/feat-batch-triage-claims.yaml
+  estimate_lines: 1900
+tasks:
+- number: 1
+  title: Skeleton smoke — the suite runs green on a trivial claims test
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create tests/unit/test_triage_claims.py with one trivial test importing `fr.triage` and asserting
+      `fr.labels.FR_IN_PROGRESS.name == "fr:in-progress"`. Run `uv run pytest tests/unit/test_triage_claims.py -q --no-cov`
+      — green. This proves the test wiring before any claim code exists; T3 replaces it.
+- number: 2
+  title: Scope identity and scope config (spec §3.A, R1, R15)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED tests/unit/test_triage_scope_config.py: `host_id()` returns `FR_HOST_ID` when set; otherwise creates
+      `<home>/.config/fr/host-id` (home via `fr.isolation.types._home()`, monkeypatched to tmp_path) holding 16
+      hex chars, mode 0600, and returns the same value on a second call; when another process wins the race
+      (monkeypatch `os.link` to write the winner's file then raise FileExistsError) the call returns the
+      winner's id; a malformed file raises TriageError naming the path. `scope_id(<repo scope derio-net/super-fr>)`
+      matches `^s-[0-9a-f]{8}$`, is stable, differs for another host id and another scope, and never contains
+      the hostname. `ScopeConfig` defaults to (24, None, []), refuses `claim_expiry_hours: 0` and an unknown
+      key naming the file; `default_board_name` gives `super-fr batches`, `derio-net batches` and
+      `<group name> batches`. `state_sync.DURABLE_FILES` lacks `scope.yaml`, and `export_state` over a state
+      dir holding `scope.yaml` copies no such file. Run the file — fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: write packages/fr/src/fr/triage/scope_config.py (host_id with temp file + `os.link` exclusive
+      create, scope_id, closed-world ScopeConfig, load_scope_config(state_dir), default_board_name). Re-run — green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: reuse an existing temp-file helper (`fr.artifacts.atomic`) if it fits the link-into-place
+      shape; otherwise record the reason in the step record.
+- number: 3
+  title: The claim marker and pure rules `fr/triage/claims.py` (spec §3.B, R2, R4,
+    R8, R10)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED tests/unit/test_triage_claims.py (replacing the smoke): `render_marker`/`parse_marker` round-trip the
+      JSON marker and its human line; the released form parses as released; malformed JSON or a model mismatch
+      is ignored and counted; `claims_from_comments` keeps each signer's latest un-released marker (live or
+      expired) and drops a signer whose latest marker is released; `winner` orders by created_at then comment
+      id; `holder(claims, me)` returns the oldest claim when it is foreign, even expired, and None when own;
+      `needs_refresh` is true past expiry/4 and always for an own expired claim; `releasing` is true for
+      cancelled, abandoned and archived, false for merged and partial; `owed_claims` covers wave'd batches and
+      wave-less batches from dispatched on, never a releasing batch; `owed_releases` lists members of releasing
+      batches with no `claims_released` event. No rendered marker contains a hostname or path. Run — fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: write packages/fr/src/fr/triage/claims.py (Claim model, marker prefixes `<!-- fr-claim:` and
+      `<!-- fr-claim-released:`, the functions above, pure, clock passed in). Add `FR_CLAIMED` to
+      packages/fr/src/fr/labels.py. Re-run — green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: share marker-prefix handling with the batch-marker helpers in model.py/batch.py where that
+      reduces duplication; else record the reason.
+- number: 4
+  title: Forge comment ids and edits (spec §3.C, R12)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED in tests/unit/test_real_ghclient.py: `list_issue_comments` returns `id` parsed from each comment's
+      `url` (`...#issuecomment-123` → 123; `None` when absent); `edit_issue_comment` runs
+      `gh api -X PATCH repos/o/r/issues/comments/123 -f body=...`. In tests/unit/test_forge_adapter_batch_ops.py
+      glab and tea raise UnsupportedForgeOperation for `edit_issue_comment`. The fake GhClients in
+      tests/unit/fakes.py and tests/unit/triage_fixtures.py record edits and serve ids. Run — fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `edit_issue_comment` to the GhClient Protocol (ghclient.py) and its UnsupportedBatchOps mixin,
+      implement it in real_ghclient.py, add `id` to list_issue_comments' dicts, update the fakes. Re-run — green.
+- number: 5
+  title: Claim writes `fr/triage/claim_writes.py` (spec §3.D, R2–R4, R8–R10)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED tests/unit/test_triage_claim_writes.py against the fake GhClient: claim ensures and adds `fr:claimed`
+      and posts one marker; a scope claiming after an older EXPIRED foreign marker loses (R4 over un-released
+      claims), withdraws its own new marker and returns Held; an own un-released marker naming another batch is
+      edited in place, never reposted; refresh edits in place and returns Held without writing when another
+      scope's take released the marker; release edits to the released form and removes the label only when no
+      un-released claim (live or expired) remains, on an open and on a closed issue; take refuses a live claim,
+      and on an expired one releases it with `released_by` then claims. Run — fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: write packages/fr/src/fr/triage/claim_writes.py (every write re-reads comments first; writes only
+      through GhClient). Re-run — green.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: fold repeated read-parse-decide sequences into one helper; else record the reason.
+- number: 6
+  title: Facts and judgements schema bumps; collect reads claims (spec §3.H, R10,
+    R12)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED in tests/unit/test_triage_collect.py and tests/unit/test_triage_model.py: an open issue labelled
+      `fr:claimed` gets `Issue.claims` from one comment read shared with `dispatch_marker_at` (an issue with
+      both labels is read once); written facts are schema 6 and schemas 3–5 still load; a `claims_released`
+      event loads in a schema-6 judgements file and is refused in a schema-5 one; JUDGEMENTS_SCHEMA is 6 and
+      1–5 load. Run — fails.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: model.py (IssueClaim, Issue.claims, FACTS_SCHEMA 6 and FACTS_READS with the comment above them
+      extended, ClaimsReleasedEvent, JUDGEMENTS_SCHEMA 6), collect.py (shared comment read). Update tests that
+      pinned schema 5. Re-run the triage tests — green.
+- number: 7
+  title: check sets and the claim / scope commands (spec §3.A, §3.E, R1, R7, R9)
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      RED in tests/unit/test_triage_check.py: `held elsewhere`, `expired claims` and `claims owed` in text and
+      `--json` (`held_elsewhere`, `expired_claims`, `claims_owed`); check exits 0. New
+      tests/unit/test_triage_claim_cmd.py (CliRunner, fake client): `fr triage scope show` prints name, id,
+      state dir and config; `claim list` shows the three sets; `claim sync` without `--yes` prints owed claims,
+      refreshes and releases, and with `--yes` writes them and appends `claims_released`; `claim take` refuses a
+      live claim, takes an expired one under `--yes`, previews without; `claim release` releases its own claim
+      any time, a foreign one only expired. Run — fails.
+  - id: P1.T7.S2
+    text: |-
+      GREEN: check.py's sets; commands/triage_claim_cmd.py (`claim` group: list, sync, take, release) and
+      `scope show`, registered under `fr triage`. Re-run — green.
+- number: 8
+  title: Batch-command gates (spec §3.E, R3, R5, R6, R10, R11)
+  steps:
+  - id: P1.T8.S1
+    text: |-
+      RED in tests/unit/test_triage_batch_verbs.py, test_triage_batch_dispatch.py and
+      test_triage_batch_merge.py: `batch create --wave` and `edit --add-issue|--wave` refuse (exit 2, nothing
+      written) an issue held elsewhere, naming holder, batch and expiry, and name `claim take` for an expired
+      one; with `--yes` they write owed claims after the judgements write, without it they print them and
+      `fr triage claim sync --yes`; `edit --remove-issue --yes` and `--no-wave --yes` release; `batch dispatch
+      --yes` claims before the runner launch (the fake runner is never called when a claim loses) and refuses a
+      held batch; `batch merge` refuses a held batch; `batch cancel --yes` on a held batch releases own claims
+      and leaves held members' labels and comments untouched; cancelling a proposed batch with written claims
+      uses the client. Run — fails.
+  - id: P1.T8.S2
+    text: |-
+      GREEN in commands/triage_batch_cmd.py through claims.py and claim_writes.py. Re-run the batch test files — green.
+  - id: P1.T8.S3
+    text: |-
+      REFACTOR: one helper resolving (client, scope id, scope config) shared by create/edit/dispatch/cancel and
+      the claim group; else record the reason.
+- number: 9
+  title: Scenarios, matrix, change fragment
+  steps:
+  - id: P1.T9.S1
+    text: |-
+      Write tests/scenarios/triage-claims-held.sh and tests/scenarios/triage-claims-expired.sh (sourcing
+      _common.sh, never reaching a forge). Each copies a facts fixture produced by the model's own serializer
+      (`Facts(...).to_json` from a small generator, never hand-composed), with `FR_HOST_ID` exported so the
+      scope id is known, whose issue carries another scope's live / expired claim. Assert `fr triage check
+      --json` lists it under held_elsewhere / expired_claims and `fr triage batch create ... --wave 1` exits 2
+      naming the holder (and `claim take` for the expired one). Run
+      `uv run pytest tests/integration/test_scenarios.py -q --no-cov -k triage-claims` — green.
+  - id: P1.T9.S2
+    text: |-
+      Add `.changes/feat-batch-triage-claims.yaml` (bump: minor, one-line summary). Move rows
+      triage-claims-identity, -hands-off, -expiry and -writes to `ci` with `fr acceptance set-status`, naming
+      test refs by test name; run `uv run fr acceptance check`. After the last code commit, run the full suite
+      `uv run pytest -q --no-cov -n auto` into a log outside the repo.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T9.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T9.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

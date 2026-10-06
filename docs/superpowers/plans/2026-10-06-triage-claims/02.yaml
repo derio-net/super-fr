@@ -1,0 +1,77 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Driver — claim, refresh, release and held actions in every drive pass (R3,
+    R6, R8, R10, R11)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-claims-driver
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_batch_drive.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - docs/acceptance/*
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: Pure pass (spec §3.F)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED in tests/unit/test_triage_batch_drive.py: with `Snapshot.me`, `held`, `claims_owed`, `refresh_owed`
+      and `releases_owed`, `drive_pass` emits claim, refresh and release actions before any other; one `held`
+      action per batch with a member held elsewhere and no merge, update, closeout, archive or dispatch for it;
+      a held batch in LIVE_STAGES counts against --max-inflight, a proposed held one does not; a merged batch
+      keeps refreshing and is released only once archived. Run — fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN in packages/fr/src/fr/triage/batch_drive.py (ActionKinds claim, refresh, release). Re-run — green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: keep the claim actions in one helper ordered ahead of the rest; else record the reason.
+- number: 2
+  title: Command execution and backfill (spec §3.F, R11)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED in tests/unit/test_triage_batch_drive_cmd.py: `_Driver.snapshot` fills the claim fields from facts,
+      the scope id and the scope config; a `--yes` pass writes owed claims (a dispatched pre-claims batch is
+      backfilled), refreshes, releases and appends one `claims_released` event per released batch, so the next
+      pass owes nothing; a claim that returns Held stops the pass acting on that batch and prints the held
+      line. Run — fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN in commands/triage_batch_cmd.py `_Driver` (snapshot, and `_act` for the new kinds through
+      claim_writes). Move triage-claims-driver to `ci` with `fr acceptance set-status`. After the last code
+      commit, run the full suite into a log outside the repo.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
