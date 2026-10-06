@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 from fr.triage.batch import BATCH_STAGES, derive_batch_stage, last_dispatch, planned_merge_order
 from fr.triage.batch import batch_pr as find_batch_pr
 from fr.triage.batch_drive import finished_waves
-from fr.triage.check import CheckResult, classify
+from fr.triage.check import CheckResult, classify, is_awaiting_live
 from fr.triage.components import (
     CHROME_CSS,
     GRID_CSS,
@@ -897,6 +897,25 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
     return f"{head}{body}</section>"
 
 
+def _awaiting_live(
+    issues: list[Issue],
+    row: Callable[[Issue, Judgement | None, str], str],
+    judgements: Judgements,
+) -> str:
+    """The awaiting-live issues as a closed group of their own, out of every tier."""
+    if not issues:
+        return ""
+    inner = (
+        '<section class="tier awaiting-live" data-tier="awaiting-live">'
+        '<p class="tier-desc">Merged, and a post-merge acceptance row still awaits its live '
+        "walk. Not ranked or proposed as work; the walk's close command frees each one.</p>"
+        '<div class="rows">'
+        + "".join(row(i, judgements.issues.get(i.key), "awaiting-live") for i in issues)
+        + "</div></section>"
+    )
+    return collapsed("awaiting-live", "Awaiting live", len(issues), inner)
+
+
 def render(
     facts: Facts,
     judgements: Judgements,
@@ -956,13 +975,17 @@ def render(
             rows = [
                 row(by_key[key], j, str(tier.n))
                 for key, j in judgements.issues.items()
-                if j.tier == tier.n and key in by_key and not j.duplicate_of
+                if j.tier == tier.n
+                and key in by_key
+                and not j.duplicate_of
+                and not is_awaiting_live(by_key[key])
             ]
             count += len(rows)
             sev = f"sev-{min(pos + 1, SEVERITIES)}"
             title = f"Tier {tier.n} · {tier.title}"
             folds.append(_section(str(tier.n), sev, title, inline(tier.description), rows))
-        return collapsed("backlog-by-tier", "Backlog by tier", count, FILTER_BAR + "".join(folds))
+        tiers = collapsed("backlog-by-tier", "Backlog by tier", count, FILTER_BAR + "".join(folds))
+        return tiers + _awaiting_live(result.awaiting_live, row, judgements)
 
     builders: dict[str, Callable[[], str]] = {
         "since": lambda: _since_table(since),
