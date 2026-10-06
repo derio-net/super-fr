@@ -85,10 +85,15 @@ def _agent_pre_merge(strategy: str | None, repo_root: Path) -> bool:
 class WalkOwed:
     """What `deliver` owes a walk for: the agent-driven pre-merge rows citing
     the run's spec, and the run-level strategy when that is agent-driven
-    pre-merge too. Owed when either is present."""
+    pre-merge too. Owed when either is present.
+
+    `strategy` is the one strategy a log must have walked: the run-level one,
+    else the owed rows' common one (`None` when they share none — each row's
+    coverage then refuses the rows a single log could not walk)."""
 
     rows: tuple[Row, ...] = ()
     run_strategy: str | None = None
+    strategy: str | None = None
 
     @property
     def owed(self) -> bool:
@@ -115,7 +120,9 @@ def walk_owed(
         candidate = section.strategy or verification.shape_default
         if _agent_pre_merge(candidate, repo_root):
             run_level = candidate
-    return WalkOwed(rows=rows, run_strategy=run_level)
+    row_strategies = {verification.strategy(r) for r in rows}
+    common = row_strategies.pop() if len(row_strategies) == 1 else None
+    return WalkOwed(rows=rows, run_strategy=run_level, strategy=run_level or common)
 
 
 def plan_rows(
@@ -233,11 +240,18 @@ def parse_walk_log(text: str) -> WalkLog:
         raise WalkError(f"not a walk log — its header is incomplete ({e!r})") from e
 
 
-def check_walk_log(log: WalkLog, owed: WalkOwed, head_tree: str) -> list[str]:
-    """Every reason `log` does not satisfy `owed` at `head_tree` (empty when it
-    does): the stale tree, each failing step, a missing smoke, each owed row it
-    does not cover — each naming its cause."""
+def check_walk_log(log: WalkLog, owed: WalkOwed, head_tree: str, *, run: str) -> list[str]:
+    """Every reason `log` does not satisfy `owed` for `run` at `head_tree`
+    (empty when it does): another run's or strategy's log, the stale tree, each
+    failing step, a missing smoke, each owed row it does not cover — each
+    naming its cause."""
     problems: list[str] = []
+    if log.run != run:
+        problems.append(f"the walk is of run {log.run!r}, not {run!r}")
+    if owed.strategy is not None and log.strategy != owed.strategy:
+        problems.append(
+            f"the walk is of strategy {log.strategy!r}, but this run owes {owed.strategy!r}"
+        )
     if log.code_tree != head_tree:
         problems.append(
             f"the walk covers code tree {log.code_tree[:12]} but HEAD's is {head_tree[:12]} — "

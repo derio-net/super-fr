@@ -1912,7 +1912,7 @@ def _verified_evidence(
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
     if "walk" in offered:
         assert walk_owed is not None
-        verified["walk"] = _verify_walk(key, offered["walk"], repo_root, walk_owed)
+        verified["walk"] = _verify_walk(key, offered["walk"], repo_root, state, walk_owed)
     # Every DERIVED witness is evaluated, and every refusal printed, before the
     # resolve is refused (gh#768): one environmental blocker (no fetchable
     # remote) used to exit first and hide each witness declared after it.
@@ -2541,7 +2541,7 @@ def _walk_obligation(key: str, repo_root: Path, state: RunState) -> WalkOwed:
     return owed
 
 
-def _verify_walk(key: str, value: str, repo_root: Path, owed: WalkOwed) -> str:
+def _verify_walk(key: str, value: str, repo_root: Path, state: RunState, owed: WalkOwed) -> str:
     """`value` is `none` (accepted only when no walk is owed) or a log
     `fr verification walk` wrote on HEAD's code tree, every step passing and
     every owed row covered — or exit 2 naming the cause. Returns the witness,
@@ -2563,7 +2563,7 @@ def _verify_walk(key: str, value: str, repo_root: Path, owed: WalkOwed) -> str:
     try:
         data = path.read_bytes()
         log = parse_walk_log(data.decode())
-        problems = check_walk_log(log, owed, code_tree(repo_root))
+        problems = check_walk_log(log, owed, code_tree(repo_root), run=state.run)
         dirty = dirty_code_paths(repo_root)
     except (OSError, UnicodeDecodeError, WalkError, GitUnavailableError) as e:
         err_console.print(

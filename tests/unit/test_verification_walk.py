@@ -293,12 +293,54 @@ def test_check_walk_log_names_each_cause() -> None:
     log = WalkLog("r", "candidate", "t" * 64, "h", "m", steps)
     owed = WalkOwed(rows=(row("a"), row("b")))
 
-    problems = " | ".join(check_walk_log(log, owed, "u" * 64))
+    problems = " | ".join(check_walk_log(log, owed, "u" * 64, run="r"))
 
     assert "code tree" in problems  # stale
     assert "'row:a' failed" in problems
     assert "'b' is not covered" in problems
-    assert check_walk_log(log, WalkOwed(), "t" * 64) == ["step 'row:a' failed (exit 1)"]
+    assert check_walk_log(log, WalkOwed(), "t" * 64, run="r") == ["step 'row:a' failed (exit 1)"]
+
+
+def test_check_walk_log_refuses_another_runs_or_another_strategys_log() -> None:
+    """Review p3-r2: a passing log of ANOTHER run, or of a strategy this run
+    does not owe, is not this run's walk — the header must match both."""
+    from fr.verification.walk import WalkLog, WalkOwed, WalkStep, check_walk_log
+
+    steps = (
+        WalkStep("install", 0, 1.0),
+        WalkStep("smoke:version", 0, 0.1),
+        WalkStep("smoke:status", 0, 0.1),
+    )
+    tree = "t" * 64
+    owed = WalkOwed(run_strategy="candidate", strategy="candidate")
+
+    assert (
+        check_walk_log(WalkLog("r", "candidate", tree, "h", "m", steps), owed, tree, run="r") == []
+    )
+    other_run = " | ".join(
+        check_walk_log(WalkLog("x", "candidate", tree, "h", "m", steps), owed, tree, run="r")
+    )
+    assert "run 'x'" in other_run
+    other_strategy = " | ".join(
+        check_walk_log(WalkLog("r", "client-live", tree, "h", "m", steps), owed, tree, run="r")
+    )
+    assert "strategy 'client-live'" in other_strategy and "'candidate'" in other_strategy
+
+
+def test_walk_owed_names_the_rows_common_strategy(tmp_path: Path) -> None:
+    """With no run-level strategy owed, the expected strategy is the owed rows'
+    own (p3-r2)."""
+    from fr.requirements import load_spec_matrix
+    from fr.verification.rows import SpecVerification
+    from fr.verification.spec_section import parse_section
+    from fr.verification.walk import walk_owed
+
+    root = _repo(tmp_path, strategy="live", rows={"ok": "true"})
+    matrix, spec_ref = load_spec_matrix(root, SPEC)
+    section = parse_section("## Verification\n\nstrategy: live\n- ok: candidate\n")
+    owed = walk_owed(matrix, spec_ref, SpecVerification(root, section), root)
+
+    assert owed.run_strategy is None and owed.strategy == "candidate"
 
 
 def test_a_log_with_no_header_is_not_a_walk_log() -> None:
