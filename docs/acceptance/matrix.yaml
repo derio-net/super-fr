@@ -6090,7 +6090,10 @@ rows:
       as a run item with payload.kind closeout and --run/--branch; an attributed archive
       PR is merged; herdr characterised unchanged. gh#883: the close-out is recorded
       before its session starts, so a restart after the session ended starts no second
-      one; a runner failure takes the record back.'
+      one; a runner failure takes the record back. gh#931: a failed runner dispatch
+      (close-out or batch) no longer ends loop mode: it is reported once per batch and
+      cause (the runner error''s code when it has one) and retried on a later pass;
+      --once still exits 1.'
   - id: wave-driven-live
     capability: triage-batch-drive
     acceptance: A real wave of two batches runs from dispatch to a merged archive PR
