@@ -34,3 +34,8 @@ test_a_fifth_batch_is_held_by_four_in_flight_across_two_owners: 2+2 in flight ac
 ### f-1025-12 · finding [fixed] · #1025 items 1-2 fixed: dispatch fetch and export writes
 
 Item 1: dispatch_batch/_reservation take read_errors=True from the driver only; a failed _fresh_config raises ForgeReadError(code=2) as merge_ctx does, so the loop skips the pass; batch dispatch by hand still exits 2. Item 2: every git/forge write failure in _export/_export_merge goes through _export_failed (failed_write, reported once per wave+cause, retried next pass; --once exits 1); a separate _export_failures counter keeps the export owed rather than blocked. Tests in test_triage_batch_drive_disruption.py (gh#1025 sections).
+
+<!-- fr:journal kind=finding scope=debug id=f-1025-3 created=2026-10-06T17:08:24+00:00 state=fixed -->
+### f-1025-3 · finding [fixed] · #1025 item 3 fixed: a stale pre-recorded close-out is warned once
+
+batch_drive._stale_closeout: a close-out event older than STALE_CLOSEOUT (15 min), whose item the runner does not hold live and that no archive PR is attributed to, is a once-said warn naming fr pickup --run/--branch. Only for batches in Snapshot.closeout_probed, which the command fills (yes mode only) and probes through _existing alongside the due ones, so plan mode never calls one stale. Tests: test_triage_batch_drive.py (gh#1025 (3)) and test_triage_batch_drive_disruption.py.
