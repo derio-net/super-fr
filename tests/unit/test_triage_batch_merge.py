@@ -46,7 +46,8 @@ class MergeForge:
 
     def __init__(self) -> None:
         self.prs: dict[int, dict[str, Any]] = {}
-        self.checks: dict[int, list[dict[str, Any]]] = {}
+        self.checks: dict[int, list[dict[str, Any]]] = {}  # required ones
+        self.all_checks: dict[int, list[dict[str, Any]]] = {}  # default: the required
         self.refuse: dict[int, str] = {}
         self.merged: list[tuple[int, str, str]] = []
         self.waits: list[int] = []
@@ -73,6 +74,11 @@ class MergeForge:
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
+
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        if number in self.all_checks:
+            return list(self.all_checks[number])
+        return self.pr_required_checks(repo, number)
 
     def wait_required_checks(self, repo: str, number: int, **kw: Any) -> list[dict[str, Any]]:
         self.waits.append(number)

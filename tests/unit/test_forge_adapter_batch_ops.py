@@ -161,6 +161,34 @@ def test_pr_required_checks_is_empty_when_the_branch_requires_none(
     assert RealGhClient().pr_required_checks(REPO, 12) == []
 
 
+@pytest.mark.parametrize("method", ["pr_required_checks", "pr_checks"])
+def test_a_head_with_no_checks_registered_yet_reads_as_none_not_an_error(
+    monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
+    """gh#952, gh#947: gh has two "nothing here" answers. A head with no check at
+    all, which every head is for a moment after a push, says `no checks reported`
+    (with or without `--required`); that is an empty answer, never a failed read."""
+    _fake(
+        monkeypatch,
+        {("pr", "checks"): _gh.GhError("no checks reported on the 'feat/x' branch", returncode=1)},
+    )
+
+    assert getattr(RealGhClient(), method)(REPO, 12) == []
+
+
+def test_pr_checks_reads_every_check_not_only_the_required_ones(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = [{"name": "lint", "bucket": "pending", "state": "QUEUED"}]
+    fake = _fake(
+        monkeypatch,
+        {("pr", "checks"): _gh.GhError("pending", stdout=json.dumps(raw), returncode=8)},
+    )
+
+    assert RealGhClient().pr_checks(REPO, 12) == raw
+    assert "--required" not in fake.calls[0]
+
+
 def test_wait_required_checks_polls_until_nothing_is_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
