@@ -51,6 +51,10 @@ def test_gitlab_reads_the_mr_description(
 ) -> None:
     import fr.glab
 
+    # glab is logged into the host (gh#1014's trust gate).
+    (tmp_path / "glab-config").mkdir()
+    (tmp_path / "glab-config" / "config.yml").write_text("hosts:\n    gitlab.example.com: {}\n")
+    monkeypatch.setenv("GLAB_CONFIG_DIR", str(tmp_path / "glab-config"))
     seen: dict[str, object] = {}
 
     def run(args: list[str], *, host: str | None = None, cwd: Path | None = None) -> str:

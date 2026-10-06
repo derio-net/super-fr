@@ -33,6 +33,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
+from fr.ghclient import HostRefusedError
 from fr.labels import LabelDef
 
 T = TypeVar("T")
@@ -52,6 +53,67 @@ class GlabError(Exception):
         self.returncode = returncode
 
 
+class GlabHostRefusedError(GlabError, HostRefusedError):
+    """The host trust gate refused a host glab is not logged into (gh#1014) —
+    `fr.gh.GhHostRefusedError`'s GitLab twin. A `GlabError` so existing
+    handlers see it; `RealGlabClient` checks the gate before any method body
+    runs, so a soft-fail method can never read it as "no MR" / "no file"."""
+
+
+def _config_yml() -> Path | None:
+    """The config file glab itself reads (probed against glab 1.89):
+    `$GLAB_CONFIG_DIR/config.yml` alone when that is set; otherwise the FIRST
+    of `~/.config/glab-cli/config.yml` and `$XDG_CONFIG_HOME/glab-cli/
+    config.yml` that exists — glab warns about the second and ignores it. Not
+    gh's order: there XDG comes first. None when glab would find no file."""
+    if config_dir := os.environ.get("GLAB_CONFIG_DIR"):
+        return Path(config_dir) / "config.yml"
+    candidates = [Path.home() / ".config" / "glab-cli" / "config.yml"]
+    if xdg := os.environ.get("XDG_CONFIG_HOME"):
+        candidates.append(Path(xdg) / "glab-cli" / "config.yml")
+    return next((p for p in candidates if p.is_file()), None)
+
+
+def known_hosts() -> frozenset[str]:
+    """The hosts glab is logged into — the keys of its config's `hosts:`
+    mapping, the ones `glab auth login` wrote (lowercased). A missing,
+    unreadable or malformed file is the empty set: nothing is trusted."""
+    import yaml
+
+    path = _config_yml()
+    if path is None:
+        return frozenset()
+    try:
+        data = yaml.safe_load(path.read_text())
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return frozenset()
+    hosts = data.get("hosts") if isinstance(data, dict) else None
+    if not isinstance(hosts, dict):
+        return frozenset()
+    return frozenset(str(k).lower() for k in hosts)
+
+
+def host_env(host: str | None) -> dict[str, str] | None:
+    """The host overlay for a `glab` subprocess: None for no host (glab's own
+    resolution), else `{"GITLAB_HOST": host}`.
+
+    The ONE place the GitLab host trust gate is enforced (gh#1014), as
+    `fr.gh.host_env` is for gh. glab sends `GITLAB_TOKEN` to whichever host
+    it targets, and the hosts fr threads come from MR URLs and a cloned repo's
+    committed `fr-profiles.yaml` — neither fully trusted. So a host glab is not
+    logged into raises, before any subprocess starts."""
+    if host is None:
+        return None
+    if host.lower() not in known_hosts():
+        raise GlabHostRefusedError(
+            f"GitLab host {host!r} is not one glab is logged into; run "
+            f"`glab auth login --hostname {host}` (fr will not point glab, or a "
+            "GITLAB_TOKEN, at an unknown host; a GITLAB_TOKEN alone does not "
+            "count as a login)"
+        )
+    return {"GITLAB_HOST": host}
+
+
 def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = None) -> str:
     """Run a glab command and return stdout. Raises GlabError on failure.
 
@@ -67,8 +129,10 @@ def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = No
     `env=None`, so the child inherits this process's environment unchanged
     and glab's own resolution from the current git directory still
     applies. `cwd` picks that git directory for a call that names no
-    `--repo` (gh#742); `None` keeps this process's."""
-    env = {**os.environ, "GITLAB_HOST": host} if host else None
+    `--repo` (gh#742); `None` keeps this process's. A host glab is not logged
+    into is refused first (`host_env`, gh#1014)."""
+    overlay = host_env(host or None)
+    env = {**os.environ, **overlay} if overlay else None
     try:
         result = subprocess.run(
             ["glab", *args],
@@ -283,7 +347,12 @@ def is_transient(err: GlabError) -> bool:
     contain "timeout" or "http 5" would now be retried. No captured
     GitLab error body contains that vocabulary (spec §2.A), and a real
     gateway timeout SHOULD retry, so the widening is deliberate — but it
-    is a widening, recorded here rather than discovered later."""
+    is a widening, recorded here rather than discovered later.
+
+    A host trust refusal is never transient, by TYPE: its message names the
+    host, and a host can be called anything (gh#1013)."""
+    if isinstance(err, HostRefusedError):
+        return False
     return any(p in _haystack(err) for p in _TRANSIENT_PATTERNS)
 
 
@@ -335,7 +404,10 @@ def is_not_found(err: GlabError) -> bool:
 
     Reads stdout as well as stderr via `_haystack`, which is a wider
     surface than these patterns were written against — the same deliberate,
-    recorded widening `is_transient` carries."""
+    recorded widening `is_transient` carries. A host trust refusal is never
+    "absent", by type (gh#1013)."""
+    if isinstance(err, HostRefusedError):
+        return False
     return any(p in _haystack(err) for p in _NOT_FOUND_PATTERNS)
 
 

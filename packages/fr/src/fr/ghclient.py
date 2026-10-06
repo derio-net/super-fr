@@ -8,6 +8,7 @@ process spawning.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, Protocol
@@ -38,13 +39,30 @@ class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec 
         )
 
 
+class HostRefusedError(Exception):
+    """A forge adapter's host trust gate refused to point its CLI at a host
+    the CLI is not logged into (spec 2026-10-06-forge-remainder §4.E; gh#1014).
+    Each backend's refusal (`GhHostRefusedError`, `GlabHostRefusedError`) also
+    subclasses that backend's own error, so existing `except` clauses still
+    see it. Classify a refusal by THIS type, never by its message: the message
+    names the host, and a host can be called anything (gh#1013)."""
+
+
 class CommandRunner(Protocol):
     """How an adapter's lookup runs one CLI command (spec
     2026-10-06-forge-remainder §4.B). The isolation lifecycle injects its own
     `Runner`, so its network env and timeout apply; `None` means the adapter's
-    default, `run_cli`."""
+    default, `run_cli`.
 
-    def __call__(self, argv: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]: ...
+    `env` is the adapter's overlay: the variables that point the CLI at its
+    host (`GH_HOST`, `GITLAB_HOST`), to set ON TOP of whatever environment the
+    runner would use anyway — None when there is nothing to add. A runner that
+    drops it talks to whatever host the checkout's remote names, not the one
+    the trust gate passed (gh#1015)."""
+
+    def __call__(
+        self, argv: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]: ...
 
 
 # The exit a shell gives a command it cannot find: what `run_cli` answers for a
@@ -56,9 +74,12 @@ def run_cli(
     argv: list[str], *, cwd: Path, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     """The adapters' default `CommandRunner`. Never raises for a missing
-    binary: it comes back as exit 127, which every lookup reads as `None`."""
+    binary: it comes back as exit 127, which every lookup reads as `None`.
+    `env` is the overlay (see `CommandRunner`); none passes `env=None`, so the
+    child inherits this process's environment unchanged."""
+    full = {**os.environ, **env} if env else None
     try:
-        return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, env=env)
+        return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, env=full)
     except FileNotFoundError as exc:
         return subprocess.CompletedProcess(argv, _NOT_FOUND_EXIT, stdout="", stderr=str(exc))
 

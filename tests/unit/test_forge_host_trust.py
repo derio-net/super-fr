@@ -25,8 +25,8 @@ from typing import Any
 import pytest
 from fr import gh as _gh
 from fr import glab as _glab
-from fr.ghclient import HostRefusedError
 from fr.gh import GhHostRefusedError
+from fr.ghclient import HostRefusedError
 from fr.glab import GlabHostRefusedError
 from fr.hostclient import client_for_backend, forge_error_kind
 from fr.real_ghclient import RealGhClient

@@ -11,6 +11,7 @@ where gh uses `--body`, and glab's `#`-prefixed label color).
 
 import os
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -43,6 +44,16 @@ from tests.unit.test_real_glabclient import (
     GLAB_STDOUT_404_TREE,
     GLAB_STDOUT_UNAUTHENTICATED,
 )
+
+
+@pytest.fixture(autouse=True)
+def _glab_logged_in(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """glab logged into the fixture host `gl.corp.com`, so the host trust gate
+    (`fr.glab.host_env`, gh#1014) lets this file's hosted calls through."""
+    d = tmp_path / "glab-config"
+    d.mkdir()
+    (d / "config.yml").write_text("hosts:\n    gl.corp.com: {}\n")
+    monkeypatch.setenv("GLAB_CONFIG_DIR", str(d))
 
 
 class TestCreateIssue:
@@ -301,6 +312,10 @@ def test_the_table_covers_every_public_glab_helper() -> None:
         "is_not_found",
         "is_already_exists",
         "with_retry",
+        # The host trust gate itself (gh#1014): `test_forge_host_trust.py` pins it.
+        "GlabHostRefusedError",
+        "known_hosts",
+        "host_env",
     }
     assert public == set(_HOST_FORWARDING_CALLS)
 

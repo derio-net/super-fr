@@ -10,10 +10,21 @@ without spawning real subprocesses.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from fr import glab as _glab
 from fr.real_glabclient import RealGlabClient, _coerce_ci_state
+
+
+@pytest.fixture(autouse=True)
+def _glab_logged_in(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """glab logged into the fixture host `gl.corp.com`, so the host trust gate
+    (`fr.glab.host_env`, gh#1014) lets this file's hosted calls through."""
+    d = tmp_path / "glab-config"
+    d.mkdir()
+    (d / "config.yml").write_text("hosts:\n    gl.corp.com: {}\n")
+    monkeypatch.setenv("GLAB_CONFIG_DIR", str(d))
 
 
 def _fake_run_glab_factory(returns: dict[tuple[str, ...], str]):
