@@ -8,14 +8,14 @@ R17: only *trusted* authors' markers count. Writes go only through `GhClient`.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from fr.ghclient import GhClient
 from fr.labels import FR_CLAIMED
-from fr.triage.claims import Claim, Marker, holder, read_claims, render_marker
+from fr.triage.claims import Claim, Marker, holder, needs_refresh, read_claims, render_marker
 from fr.triage.errors import TriageError
 
 
@@ -56,7 +56,7 @@ def _released(marker: Marker, now: datetime, by: str | None = None) -> str:
     return render_marker(marker.model_copy(update={"released": now, "released_by": by}))
 
 
-def _posted_id(comments: list[Mapping[str, Any]], body: str) -> tuple[int | None, str]:
+def _posted_id(comments: Sequence[Mapping[str, Any]], body: str) -> tuple[int | None, str]:
     """The id and author of the newest comment carrying exactly *body*."""
     for c in reversed(comments):
         if c.get("body") == body and isinstance(c.get("id"), int):
@@ -128,15 +128,17 @@ def refresh(
     expiry: timedelta,
     now: datetime,
     trusted: Collection[str],
+    due_only: bool = False,
 ) -> Outcome:
     """Edit this scope's un-released marker in place with a new heartbeat and expiry
-    (R8). When another scope's take released it, write nothing and report Held."""
+    (R8). When another scope's take released it, write nothing and report Held.
+    *due_only* writes only when `needs_refresh` says the heartbeat is due."""
     _, claims = _read(client, repo, number, trusted)
     own = _own(claims, me)
     rival = holder(claims, me)
     if rival is not None:
         return Held(rival)
-    if own is None:
+    if own is None or (due_only and not needs_refresh(own, now, expiry)):
         return Done("none")
     marker = own.marker.model_copy(update={"heartbeat": now, "expires": now + expiry})
     client.edit_issue_comment(repo, own.comment_id, render_marker(marker))
@@ -151,16 +153,26 @@ def release(
     me: str,
     now: datetime,
     trusted: Collection[str],
+    of: str | None = None,
 ) -> Outcome:
-    """Edit this scope's marker to its released form; remove `fr:claimed` once no
-    un-released claim, live or expired, remains (R10). Open or closed alike."""
+    """Edit the claim of *of* (default: this scope) to its released form; remove
+    `fr:claimed` once no un-released claim, live or expired, remains (R10). Open or
+    closed alike. Another scope's claim is released only once expired (R9), and its
+    released form names this scope as `released_by`."""
+    signer = of or me
     _, claims = _read(client, repo, number, trusted)
-    own = _own(claims, me)
-    if own is not None:
-        client.edit_issue_comment(repo, own.comment_id, _released(own.marker, now))
-    if not [c for c in claims if c.signer != me]:
+    target = _own(claims, signer)
+    if target is not None and signer != me and now < target.expires:
+        raise ClaimError(
+            f"{repo}#{number}: the claim of {signer} (batch {target.batch}) is live until "
+            f"{target.expires.isoformat()}; only an expired claim of another scope can be released"
+        )
+    if target is not None:
+        by = me if signer != me else None
+        client.edit_issue_comment(repo, target.comment_id, _released(target.marker, now, by=by))
+    if not [c for c in claims if c.signer != signer]:
         client.edit_issue_labels(repo, number, add=frozenset(), remove=frozenset({FR_CLAIMED.name}))
-    return Done("released", own.comment_id) if own is not None else Done("none")
+    return Done("released", target.comment_id) if target is not None else Done("none")
 
 
 def take(

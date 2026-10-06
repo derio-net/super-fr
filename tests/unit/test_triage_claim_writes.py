@@ -180,3 +180,27 @@ def test_take_refuses_when_no_other_scope_holds_the_issue(gh: FakeGhClient) -> N
 def test_an_own_marker_the_trusted_set_does_not_cover_is_refused(gh: FakeGhClient) -> None:
     with pytest.raises(cw.ClaimError, match="not an allowed author"):
         cw.claim(gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=frozenset())
+
+
+def test_release_of_another_scopes_expired_claim_names_the_releaser(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - 3 * DAY, expires=NOW - DAY)
+    out = cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, of=OTHER)
+    assert out == cw.Done("released", 1)
+    (m,) = _markers(gh)
+    assert (m.released, m.released_by) == (NOW, ME)
+    assert "fr:claimed" not in gh.issues[(REPO, 1)].labels
+
+
+def test_release_of_another_scopes_live_claim_is_refused(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - DAY, expires=NOW + DAY)
+    with pytest.raises(cw.ClaimError, match="live"):
+        cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, of=OTHER)
+    assert _ops(gh) == []
+
+
+def test_refresh_due_only_skips_a_fresh_heartbeat(gh: FakeGhClient) -> None:
+    _claim(gh)
+    gh.calls.clear()
+    later = NOW + timedelta(hours=1)
+    out = cw.refresh(gh, REPO, 1, me=ME, expiry=DAY, now=later, trusted=TRUSTED, due_only=True)
+    assert out == cw.Done("none") and _ops(gh) == []

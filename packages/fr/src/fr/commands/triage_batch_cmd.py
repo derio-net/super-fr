@@ -162,6 +162,7 @@ from fr.triage.batch_merge import (
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
+from fr.triage.claim_sync import ClaimEnv
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
@@ -186,6 +187,7 @@ from fr.triage.model import (
     state_dir,
 )
 from fr.triage.render import plural
+from fr.triage.scope_config import load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
 
 if TYPE_CHECKING:
@@ -202,6 +204,24 @@ def make_client(url: str) -> GhClient:
     """The forge adapter for the repo *url* lives on, on its own instance (§3.J;
     spec 2026-10-06-forge-remainder §4.D). Tests replace this."""
     return client_for_url(url)
+
+
+def claim_env(scope: Scope, target: Path, facts: Facts) -> ClaimEnv:
+    """This scope's claim identity, config and forge clients (triage-claims §3.E): the one
+    resolver the batch verbs and the `claim` group share. A broken host id or scope
+    config exits 2 naming its file."""
+    try:
+        me, config = scope_id(scope), load_scope_config(target)
+    except TriageError as exc:
+        _fail(str(exc))
+    return ClaimEnv(
+        me=me,
+        config=config,
+        facts=facts,
+        client_for=lambda owner_repo: make_client(
+            f"https://{_host_of(facts, owner_repo)}/{owner_repo}"
+        ),
+    )
 
 
 def make_checkout(path: Path | None) -> Checkout:

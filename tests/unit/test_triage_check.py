@@ -521,3 +521,76 @@ def test_a_duplicate_of_a_duplicate_is_duplicate_chained() -> None:
     result = classify(facts, j)
     assert result.duplicate_chained == ["super-fr#1", "super-fr#4", "super-fr#5"]
     assert result.to_json()["duplicate_chained"] == ["super-fr#1", "super-fr#4", "super-fr#5"]
+
+
+# ------------------------------------------------- triage-claims R7: the claim sets
+
+
+def _claim(signer: str, batch: str, *, expires: str, cid: int = 1) -> dict[str, Any]:
+    return {
+        "signer": signer,
+        "batch": batch,
+        "claimed": "2026-09-01T00:00:00Z",
+        "heartbeat": "2026-09-01T00:00:00Z",
+        "expires": expires,
+        "comment_id": cid,
+        "created_at": "2026-09-01T00:00:00Z",
+    }
+
+
+CLAIM_JUDGED = """schema: 6
+tiers: [{n: 1, title: Data loss}]
+issues:
+  "super-fr#1": {tier: 1}
+  "super-fr#2": {tier: 1}
+  "super-fr#3": {tier: 1}
+  "super-fr#4": {tier: 1}
+batches:
+  - {id: mine, title: mine, ids: ["super-fr#3", "super-fr#4"], wave: 1}
+"""
+
+
+def _claims_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    monkeypatch.setenv("FR_HOST_ID", "0123456789abcdef")
+    me = scope_id(Scope(kind="repo", target=REPO))
+    facts = _facts(
+        [
+            _issue(1, claims=[_claim("s-aaaaaaaa", "theirs", expires="2999-01-01T00:00:00Z")]),
+            _issue(2, claims=[_claim("s-bbbbbbbb", "old", expires="2026-09-02T00:00:00Z")]),
+            _issue(3, claims=[_claim(me, "mine", expires="2026-09-02T00:00:00Z")]),
+            _issue(4),
+        ]
+    )
+    _write(tmp_path, facts, CLAIM_JUDGED)
+    return me
+
+
+def test_check_reports_the_three_claim_sets_in_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    me = _claims_state(tmp_path, monkeypatch)
+    result = _check(tmp_path, "--json")
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    held = {h["key"]: h for h in data["held_elsewhere"]}
+    assert sorted(held) == ["super-fr#1", "super-fr#2"]
+    assert held["super-fr#1"]["holder"] == "s-aaaaaaaa"
+    assert held["super-fr#1"]["batch"] == "theirs"
+    assert held["super-fr#1"]["expires"] == "2999-01-01T00:00:00Z"
+    expired = {(e["key"], e["signer"]) for e in data["expired_claims"]}
+    assert expired == {("super-fr#2", "s-bbbbbbbb"), ("super-fr#3", me)}
+    assert data["claims_owed"] == [{"key": "super-fr#4", "batch": "mine"}]
+
+
+def test_check_prints_the_claim_sets_and_exits_0(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _claims_state(tmp_path, monkeypatch)
+    result = _check(tmp_path)
+    assert result.exit_code == 0, result.output
+    for label in ("held elsewhere", "expired claims", "claims owed"):
+        assert label in result.output
+    assert "s-aaaaaaaa" in result.output

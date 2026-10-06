@@ -52,12 +52,14 @@ from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS
-from fr.triage.batch import is_open
+from fr.triage.batch import closeout_state, derive_batch_stage, is_open
+from fr.triage.claims import expired, from_issue_claim, holder, owed_claims
 from fr.triage.dedupe import CandidateGroup, candidates
 from fr.triage.model import (
     Batch,
     Facts,
     Issue,
+    IssueClaim,
     Judgements,
     PullRequest,
     issue_key,
@@ -103,6 +105,66 @@ class Duplicate:
 
 
 @dataclass(frozen=True)
+class HeldElsewhere:
+    """An open issue another scope's un-released claim holds (triage-claims R7)."""
+
+    key: str
+    title: str
+    url: str
+    claim: IssueClaim
+
+
+@dataclass(frozen=True)
+class ExpiredClaim:
+    """An un-released claim, this scope's or another's, past its expires-at (R7)."""
+
+    key: str
+    claim: IssueClaim
+
+
+@dataclass(frozen=True)
+class OwedClaim:
+    """A member this scope owes a claim that facts show unwritten (R3, R7)."""
+
+    key: str
+    batch: str
+
+
+@dataclass(frozen=True)
+class ClaimSets:
+    held_elsewhere: list[HeldElsewhere] = field(default_factory=list)
+    expired_claims: list[ExpiredClaim] = field(default_factory=list)
+    claims_owed: list[OwedClaim] = field(default_factory=list)
+
+
+def claim_sets(facts: Facts, judgements: Judgements, me: str, now: datetime) -> ClaimSets:
+    """R7's three sets, from facts' claims and this scope's batches. Only open issues:
+    collect reads no closed issue's comments, so facts know no claim there."""
+    held: list[HeldElsewhere] = []
+    stale: list[ExpiredClaim] = []
+    open_issues = {i.key: i for i in facts.issues if i.state == "open"}
+    for i in open_issues.values():
+        if (h := holder([from_issue_claim(c) for c in i.claims], me)) is not None:
+            raw = next(c for c in i.claims if c.comment_id == h.comment_id)
+            held.append(HeldElsewhere(key=i.key, title=i.title, url=i.url, claim=raw))
+        stale.extend(
+            ExpiredClaim(key=i.key, claim=c) for c in i.claims if expired(from_issue_claim(c), now)
+        )
+    batches = judgements.batches
+    stages = {b.id: derive_batch_stage(b, facts) for b in batches}
+    archived = {b.id for b in batches if closeout_state(b) == "archived"}
+    owed: list[OwedClaim] = []
+    for key, bid in owed_claims(batches, stages, archived):
+        issue = open_issues.get(key)
+        if issue is None:
+            continue
+        own = next((c for c in issue.claims if c.signer == me), None)
+        if own is None or own.batch != bid:
+            owed.append(OwedClaim(key=key, batch=bid))
+    return ClaimSets(held, stale, owed)
+
+
+@dataclass(frozen=True)
 class CheckResult:
     unranked: list[Issue]
     unranked_prs: list[PullRequest]
@@ -120,6 +182,7 @@ class CheckResult:
     awaiting_live: list[Issue] = field(default_factory=list)
     candidates: list[CandidateGroup] = field(default_factory=list)
     duplicates: list[Duplicate] = field(default_factory=list)
+    claims: ClaimSets = field(default_factory=ClaimSets)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -175,6 +238,27 @@ class CheckResult:
                 }
                 for s in self.stale
             ],
+            "held_elsewhere": [
+                {
+                    "key": h.key,
+                    "title": h.title,
+                    "url": h.url,
+                    "holder": h.claim.signer,
+                    "batch": h.claim.batch,
+                    "expires": h.claim.expires,
+                }
+                for h in self.claims.held_elsewhere
+            ],
+            "expired_claims": [
+                {
+                    "key": e.key,
+                    "signer": e.claim.signer,
+                    "batch": e.claim.batch,
+                    "expires": e.claim.expires,
+                }
+                for e in self.claims.expired_claims
+            ],
+            "claims_owed": [{"key": o.key, "batch": o.batch} for o in self.claims.claims_owed],
         }
 
 
@@ -327,8 +411,15 @@ def unplaced_issues(facts: Facts, judgements: Judgements) -> list[Issue]:
     ]
 
 
-def classify(facts: Facts, judgements: Judgements) -> CheckResult:
-    """Sort issues into their sets and report open PRs without a judgement."""
+def classify(
+    facts: Facts,
+    judgements: Judgements,
+    *,
+    me: str | None = None,
+    now: datetime | None = None,
+) -> CheckResult:
+    """Sort issues into their sets and report open PRs without a judgement. Given this
+    scope's id *me* and the clock *now*, also the claim sets (triage-claims R7)."""
     judged = {normalize_key(k) for k in judgements.issues}
     found = {i.key: i for i in facts.issues}
     unranked = [
@@ -397,4 +488,9 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
         awaiting_live=awaiting_live_issues(facts),
         candidates=candidates(facts, judgements),
         duplicates=duplicates(facts, judgements),
+        claims=(
+            claim_sets(facts, judgements, me, now)
+            if me is not None and now is not None
+            else ClaimSets()
+        ),
     )

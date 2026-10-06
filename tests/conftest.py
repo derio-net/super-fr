@@ -79,6 +79,14 @@ own test that sets `COLUMNS=40` explicitly, and that test still overrides this.
 
 
 @pytest.fixture(autouse=True)
+def _fixed_triage_host_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fixed `FR_HOST_ID` (triage-claims R1), so no test that reaches a triage scope
+    id mints `~/.config/fr/host-id` in the real home. Tests of the minting itself
+    delete it and point `HOME` at a tmp dir."""
+    monkeypatch.setenv("FR_HOST_ID", "feedfacefeedface")
+
+
+@pytest.fixture(autouse=True)
 def _wide_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COLUMNS", WIDE_TERMINAL_COLUMNS)
 

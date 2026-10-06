@@ -58,6 +58,7 @@ class FakeGhClient:
         # Ids `comment_issue` assigns, and the creation time it stamps.
         self.next_comment_id: int = 1000
         self.comment_created_at: str = "2026-09-26T00:00:00Z"
+        self.comment_author: str = "fr"
 
     # ---- preload helpers (test setup) ----
 
@@ -172,7 +173,7 @@ class FakeGhClient:
         self.next_comment_id += 1
         self.issue_comments.setdefault((repo, number), []).append(
             {
-                "author": "fr",
+                "author": self.comment_author,
                 "body": body,
                 "created_at": self.comment_created_at,
                 "id": self.next_comment_id,
