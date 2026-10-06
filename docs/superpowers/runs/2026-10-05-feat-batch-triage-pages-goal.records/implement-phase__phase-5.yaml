@@ -43,4 +43,4 @@ journal:
       or moved-name warnings.
 resolves: []
 evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/p5-suite.log
+  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p5-suite.log
