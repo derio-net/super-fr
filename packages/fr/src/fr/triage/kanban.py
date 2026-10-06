@@ -397,7 +397,7 @@ def build_board(
     *,
     stops: Mapping[str, MergeStop] | None = None,
 ) -> Board:
-    """One card per batch in six columns, sorted by wave (none last) then id (R2).
+    """One card per batch in seven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
     batch's PR is open at the head it was recorded at."""
     batches = judgements.batches

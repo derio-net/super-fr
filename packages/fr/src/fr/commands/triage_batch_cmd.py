@@ -1085,7 +1085,9 @@ def dispatch_batch(
         )
     try:
         taken = stage == "proposed" and checkout.remote_branch_exists(branch)
-    except TriageError as exc:
+    except TriageError as exc:  # a forge read: the driver's boundary (gh#1025, review)
+        if read_errors:
+            raise ForgeReadError(str(exc), code=2) from exc
         _fail(str(exc))
     if taken:
         _fail(
@@ -1768,6 +1770,12 @@ class _Driver:
                 if b.id in repos and is_finished(b, stages[b.id], archives.get(repos[b.id], ()))
             ]
             sessions = self._sessions(facts, finished, repos)
+        existing, probed = frozenset[str](), frozenset[str]()
+        if self.yes:
+            existing, _ = self._existing(facts, due, repos)
+            stale_live, asked = self._existing(facts, stale, repos, soft=True)
+            existing |= stale_live
+            probed = frozenset(b.id for b in stale if closeout_item_id(repos[b.id], b.id) in asked)
         return Snapshot(
             batches=tuple(judgements.batches),
             stages=stages,
@@ -1779,8 +1787,8 @@ class _Driver:
             merged_at=merged_at,
             released=frozenset(released),
             archives=archives,
-            existing=self._existing(facts, [*due, *stale], repos) if self.yes else frozenset(),
-            closeout_probed=frozenset(b.id for b in stale) if self.yes else frozenset(),
+            existing=existing,
+            closeout_probed=probed,
             warned=frozenset(self.warned),
             close_sessions=closing_sessions,
             sessions=sessions,
@@ -2040,13 +2048,17 @@ class _Driver:
         ]
 
     def _existing(
-        self, facts: Facts, closing: list[Batch], repos: dict[str, str]
-    ) -> frozenset[str]:
+        self, facts: Facts, closing: list[Batch], repos: dict[str, str], *, soft: bool = False
+    ) -> tuple[frozenset[str], frozenset[str]]:
         """The close-out items the runners already hold live, so a kill between the
-        dispatch and its event never starts a second session (§B step 2). Only the
-        close-outs that are due are probed (review rg-10): a runner that cannot start
-        one now must not stop a merge or a dispatch. A runner's preflight refusal is
-        reported once and exits 2."""
+        dispatch and its event never starts a second session (§B step 2), and the
+        items actually asked about. Only the close-outs that are due are probed
+        (review rg-10): a runner that cannot start one now must not stop a merge or a
+        dispatch. A runner's preflight refusal is reported once and exits 2.
+
+        *soft*: the stale-close-out probe (gh#1025), a report only. A runner that cannot
+        load or refuses is skipped, and its items are left unasked, so none is called
+        stale on a read that never happened."""
         from fr_dispatch.work_item import WorkItem
 
         found: set[str] = set()
@@ -2071,13 +2083,21 @@ class _Driver:
                 tracking=None,
             )
             by_runner.setdefault(str(launch.runner), []).append(probe)
+        asked: set[str] = set()
         for name, probes in by_runner.items():
-            runner = self.runner(name)
-            refusal = runner.preflight(probes)
-            if refusal:
-                _fail(f"runner `{name}` refused: {refusal}")
+            if soft:
+                loaded = self._try_runner(name)
+                if loaded is None or loaded.preflight(probes):
+                    continue
+                runner = loaded
+            else:
+                runner = self.runner(name)
+                refusal = runner.preflight(probes)
+                if refusal:
+                    _fail(f"runner `{name}` refused: {refusal}")
             found |= runner.existing_dispatches(probes)
-        return frozenset(found)
+            asked.update(p.id for p in probes)
+        return frozenset(found), frozenset(asked)
 
     def _sessions(
         self, facts: Facts, finished: list[Batch], repos: dict[str, str]

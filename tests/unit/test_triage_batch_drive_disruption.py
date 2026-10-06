@@ -847,3 +847,37 @@ def test_plan_mode_reads_no_runner_so_calls_no_closeout_stale(
     _recorded_long_ago(world, tmp_path)
     code, out = _drive(tmp_path)
     assert "was recorded at" not in out, out
+
+
+def test_a_runner_that_refuses_the_stale_probe_does_not_stop_the_drive(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """review: the stale probe is a report; a preflight refusal there must not exit 2 the
+    way a refused close-out start does (rg-10). Unread, so nothing is called stale."""
+    _recorded_long_ago(world, tmp_path)
+    runner.refusal = "no herdr server"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code != 2, out
+    assert "was recorded at" not in out
+
+
+def test_a_failed_remote_branch_read_for_a_dispatch_does_not_end_the_loop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """review: `ls-remote` is a forge read too (gh#1025 item 1)."""
+    _proposed(world, tmp_path, n=1)
+    reads: list[int] = []
+
+    def _exists(branch: str) -> bool:
+        reads.append(1)
+        if len(reads) == 1:
+            raise GitError("`git ls-remote` failed: Could not resolve host: github.com")
+        return False
+
+    monkeypatch.setattr(checkout, "remote_branch_exists", _exists)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("Could not resolve host") == 1
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1"]
