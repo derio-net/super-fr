@@ -14,3 +14,8 @@ PR #1038, head f1919d4: `gh pr view --json statusCheckRollup` returns BOTH CI ru
 ### dea78f795763 · root-cause · collect._checks counts superseded check runs
 
 statusCheckRollup lists every CheckRun of every workflow run on the head commit (and every StatusContext). `_checks` never collapses entries naming the same check, so a superseded failure is counted beside its newer success. GitHub's UI and `gh pr checks` keep only the most recent run per (workflow, check name) / status context.
+
+<!-- fr:journal kind=finding scope=debug id=131419e2f90d created=2026-10-06T20:42:52+00:00 state=fixed -->
+### 131419e2f90d · finding [fixed] · collect counts one run per check, the latest
+
+New `collect._latest_runs` collapses statusCheckRollup to one entry per (workflowName, name) / StatusContext context, the most recent by startedAt; a not-yet-started, not-completed run ranks newest (a queued re-run reads pending, never its predecessor's green). Entries with no identity are each counted. Pinned red-first in tests/unit/test_triage_open_prs.py by the live #1038 rollup (fixture super-fr-rerun-checks.json), order-independence, the queued-rerun case and cross-workflow/status-context separation. The older captured-fixture test had pinned the double count (16 runs for 8 checks) and now counts distinct checks. Full suite: 9733 passed, 123 skipped; ruff + mypy clean.
