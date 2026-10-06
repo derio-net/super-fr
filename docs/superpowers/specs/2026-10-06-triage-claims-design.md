@@ -341,6 +341,7 @@ strategy: candidate
 - triage-claims-identity: none — unit tests: scope ids are stable, host-qualified and carry no hostname; concurrent first use yields one host id; `scope show` output; `state export` never copies `scope.yaml`.
 - triage-claims-writes: none — forge writes; unit tests against a fake GhClient cover claim, the race over expired claims, in-place batch rewrite, refresh, release on open and closed issues, the label rule, `create`/`edit --yes` and the comment-id parse; collect and the facts and judgements schema bumps are unit-tested.
 - triage-claims-driver: none — `drive_pass` is pure; unit tests cover the claim, refresh, release and held actions, release at archive (never at merged), the `claims_released` record and the `--max-inflight` count.
+- triage-claims-trusted-authors: none — comment authorship and association come from the forge; unit tests against a fake GhClient cover untrusted, association-trusted, viewer and pr_authors markers in collect and every claim-write re-read.
 - triage-claims-board-publish: none — unit tests render the board's held group and run a fake publish command (placeholders, timeout, failure, `board --publish`, default names); the skill mirrors are guarded by the existing sync tripwires.
 
 ## 5. Test Plan
