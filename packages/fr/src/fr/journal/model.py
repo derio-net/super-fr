@@ -482,9 +482,27 @@ def effective_finding_states(entries: list[JournalEntry]) -> dict[str, Effective
     return _fold(entries)[0]
 
 
+def finding_states_and_reopens(
+    entries: list[JournalEntry],
+) -> tuple[dict[str, EffectiveFindingState], list[str]]:
+    """`(effective states, ids re-opened along the way)` from the ONE fold: a
+    finding is re-opened when a record says `open` for a finding whose
+    effective state at that point was closed (fixed, refuted, deferred or
+    out-of-scope). In first-reopen order, each id once."""
+    states, _flagged, reopened = _fold_full(entries)
+    return states, reopened
+
+
 def _fold(
     entries: list[JournalEntry],
 ) -> tuple[dict[str, EffectiveFindingState], list[str]]:
+    states, flagged, _reopened = _fold_full(entries)
+    return states, flagged
+
+
+def _fold_full(
+    entries: list[JournalEntry],
+) -> tuple[dict[str, EffectiveFindingState], list[str], list[str]]:
     """The ONE walk over a journal's finding records: (effective states,
     unauthorized fixes). Both public readers are projections of it, so the
     state a gate sees and the guard on how it got there cannot disagree about
@@ -493,6 +511,7 @@ def _fold(
     """
     states: dict[str, EffectiveFindingState] = {}
     flagged: dict[str, None] = {}  # insertion-ordered set
+    reopened: dict[str, None] = {}
     for e in entries:
         if e.resolves is None:
             if e.kind == "finding" and e.state is not None:
@@ -506,8 +525,10 @@ def _fold(
             flagged.pop(fid, None)
         elif states.get(fid) == "out-of-scope":
             flagged[fid] = None
+        if new == "open" and states.get(fid, "open") != "open":
+            reopened[fid] = None
         states[fid] = new
-    return states, list(flagged)
+    return states, list(flagged), list(reopened)
 
 
 def unauthorized_fixes(entries: list[JournalEntry]) -> list[str]:

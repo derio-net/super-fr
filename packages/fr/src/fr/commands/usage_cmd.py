@@ -239,19 +239,38 @@ def compare_cmd(
         ),
     ],
     repo: RepoOpt = None,
+    steps: Annotated[
+        bool,
+        typer.Option(
+            "--steps",
+            help="Also print, per set, the main session's turns, tokens, cost and $/turn per step.",
+        ),
+    ] = False,
 ) -> None:
     """Compare two sets of runs: phases, turns, main/subagent tokens, cost,
     review findings per phase and re-opened findings (read-only, deterministic).
     Runs are read from live and archived usage files, cursors and plan journals."""
-    from fr.usage.compare import load_run_inputs, render_compare, run_row, select_runs
+    from fr.usage.compare import (
+        load_run_inputs,
+        mark_shared,
+        render_compare,
+        render_steps,
+        run_row,
+        select_runs,
+        step_table,
+    )
 
     _require_host(repo)
     root = _repo(repo)
     try:
-        sets = [
-            [run_row(load_run_inputs(root, r)) for r in select_runs(root, sel, before=is_before)]
+        inputs = [
+            [load_run_inputs(root, r) for r in select_runs(root, sel, before=is_before)]
             for sel, is_before in ((before, True), (after, False))
         ]
     except ValueError as e:
         raise _fail(str(e)) from e
-    typer.echo(render_compare(*sets), nl=False)
+    rows = [mark_shared([run_row(i) for i in group]) for group in inputs]
+    typer.echo(render_compare(*rows), nl=False)
+    if steps:
+        for label, group in zip(("before", "after"), inputs, strict=True):
+            typer.echo("\n" + render_steps(label, step_table(group)), nl=False)
