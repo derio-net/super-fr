@@ -164,3 +164,9 @@ no artifact migration is owed.
 - Creating a batch from adopt (R2).
 - Adopting a session on a non-herdr runner (the protocol allows it later).
 - Adopting a `working` agent (R9): wait until it is idle, then adopt.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-06-triage-batch-adopt | `derio-net/super-fr` | `2026-10-06-triage-batch-adopt` | — |
