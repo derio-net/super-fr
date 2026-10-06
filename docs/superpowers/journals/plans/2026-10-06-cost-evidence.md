@@ -198,3 +198,43 @@ Independent review (feature-dev:code-reviewer, Opus) of 029e56003..64fed89d5 aga
 ### p2-r2-resolved · finding [fixed] · resolves p2-r2: _observed_model returned early when observed == attempt.model, skipping the bound-vs-ran warning after a claim --model (phase 2)
 
 7d7727e1e: early return only when unobserved; family compared against bound or model; test_a_claimed_model_equal_to_the_transcript_still_warns_against_bound, test_a_claimed_model_of_the_bound_family_does_not_warn.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-selector-timestamp created=2026-10-06T21:19:42+00:00 phase=3 -->
+### p3-selector-timestamp · discovery · compare selectors take an ISO timestamp as well as a date (phase 3)
+
+A bare date cuts at midnight UTC, so #514's merge (2026-09-20T16:47Z) would put a whole day's runs on one side. The selector therefore also accepts an ISO timestamp (a bare date is midnight UTC); the audit used timestamps for both cutoffs.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-no-archived-token-split created=2026-10-06T21:19:42+00:00 phase=3 -->
+### p3-no-archived-token-split · discovery · no archived run carries the v2 main/subagent split (phase 3)
+
+Only two live usage files (this run, an in-flight sibling, both unpriced) carry steps_by_role, so compare's token columns are dashes for every archived run. #593's rules were answered from v1 per-step dollars and turns of the main session instead, with the share-of-cost rule reported as not determined.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-zero-reopens-corpus created=2026-10-06T21:19:42+00:00 phase=3 -->
+### p3-zero-reopens-corpus · discovery · no journal in the corpus re-opens a finding (phase 3)
+
+Zero resolution records in the archived and live plan journals say open for a finding that was closed, so compare's re-opened column is 0 everywhere and does not discriminate; the audit says so.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-audit-conclusions created=2026-10-06T21:19:42+00:00 phase=3 -->
+### p3-audit-conclusions · discovery · audit conclusions: #627 inconclusive, #793 item 5 inconclusive (leaning no change), #593 inconclusive with option 4 as the default (phase 3)
+
+See docs/superpowers/audits/2026-10-06-cost-evidence-audit.md. The before set of #627 has no usage at all (0/13 priced); #793's after set has 5 priced runs of 15; #593's share-of-cost rule cannot be evaluated from v1 files.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-skill-line-cap created=2026-10-06T21:19:42+00:00 phase=3 -->
+### p3-skill-line-cap · discovery · fr-audit SKILL.md sits at 119 lines under two line caps (phase 3)
+
+test_skill_validation caps skills at 120 and test_fr_audit_skill requires fewer than 120; the compare mention was tightened to 119 to satisfy both.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-acceptance-row created=2026-10-06T21:19:42+00:00 phase=3 -->
+### p3-acceptance-row · discovery · acceptance row cost-evidence-usage-compare moved to ci (phase 3)
+
+set-status with refs to the compare unit tests; the engine committed that change itself.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-06T21:19:42+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+compare.py was written once against its tests; the only later change was widening the selector to timestamps, nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-06T21:19:42+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+the audit is a document, there was no code to refactor
