@@ -415,6 +415,7 @@ class RealGhClient:
             ]
         )
 
+    @_hosted
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
         # Never `--draft`: the driver merges it once green (pages-goal R13).
         out = _gh._run_gh(
