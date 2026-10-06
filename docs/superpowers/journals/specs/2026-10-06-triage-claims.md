@@ -216,3 +216,8 @@ The drive pass is a separate surface from the claim core, reviewed against batch
 ### phase-split-2026-10-06-triage-claims-p3 · decision · ask: the board, per-scope publishing and the skill (R13, R14, R16) are their own ask
 
 UI and publishing hook with visual evidence; independent of the driver phase.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-triage-claims-p2-1 created=2026-10-06T18:47:00+00:00 -->
+### phase-split-2026-10-06-triage-claims-p2-1 · decision · review-size: the driver's share of R3/R6/R8/R10/R11 would push phase 1 past ~2,500 changed lines for one review
+
+Phase 1 already estimates ~1,900 lines across identity, marker, forge, writes, facts, check, commands and batch gates; the drive-pass integration (~600) is reviewed separately against batch_drive's pure-pass contract.
