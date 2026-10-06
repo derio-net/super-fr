@@ -6801,9 +6801,20 @@ rows:
       in CI, so its own PRs can run a candidate walk
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R25
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_walk.py#test_the_walk_refuses_a_repo_without_the_install_contract_naming_it
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_the_install_prints_fr_and_the_tool_runs
+      - super-fr:tests/integration/test_scenarios.py#test_the_install_carries_every_runner_package
+      - super-fr:tests/integration/test_scenarios.py#test_a_git_source_installs_every_package_from_its_subdirectory
+      - super-fr:tests/integration/test_scenarios.py#test_the_install_refuses_a_source_without_the_package
+      - super-fr:tests/integration/test_scenarios.py#test_every_scenario_script_has_a_test_here
+    status: ci
+    notes: 'install contract exercised in CI: tests/integration/test_scenarios.py installs
+      .fr/candidate-install into a tmp prefix (runs, carries every runner package, git
+      source uses subdirectories, refuses a source without the package) and runs every
+      scenario script; the missing-contract refusal is covered by test_verification_walk'
   - id: prerelease-command-shape
     capability: verification
     acceptance: fr verification prerelease --dry-run prints the workflow dispatch for
