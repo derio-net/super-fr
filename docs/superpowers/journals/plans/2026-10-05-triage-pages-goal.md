@@ -633,3 +633,8 @@ Backlog page vs Kanban disambiguated, board.html in the file table (591cc7a96).
 ### p5-r7-resolved · finding [fixed] · resolves p5-r7: docs/triage/README.md was stale on manifests, timeline attribution, fragments and the recipe (phase 5)
 
 README rewritten for the four page manifests, R12, the history render and the export opt-in (591cc7a96).
+
+<!-- fr:journal kind=finding scope=plan id=p1-visual-matcher-uv-with-resolved-2 created=2026-10-06T08:01:59+00:00 state=open resolves=p1-visual-matcher-uv-with tracked_by=#999 -->
+### p1-visual-matcher-uv-with-resolved-2 · finding [deferred → #999] · resolves p1-visual-matcher-uv-with: capture-script witness misreads uv run --with
+
+Filed at closeout as #999.
