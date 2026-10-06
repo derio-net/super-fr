@@ -40,29 +40,19 @@ Stages (`backlog`, `blocked`, `in-progress`, `pr-draft`, `pr-ready`, `merged`, `
    - **stale dispatch**: a batch dispatch with no PR after `stale_dispatch_days`. Report it.
    - **unplaced**: open, in no open batch, no `features` group and not `kind: parked` (a cancelled batch's members
      count). Place each: a batch, a feature group, or park it. A judged duplicate is never listed here.
-   - **duplicate candidates**: groups of open issues the engine proposes as duplicates, each flagged pair with its
-     reasons (close titles, shared rare identifiers, a shared finding id and issue reference, same theme). A
-     proposal, not a verdict: judge every group (step 3).
-   - **duplicates**: every open issue judged `duplicate_of` an original, with the original's state (`open`,
-     `closed` or `missing`) and, for an open or closed one, the exact `gh issue close N --repo OWNER/REPO
-     --duplicate-of <url>` command. Report those commands to the operator; never run them. A `missing` original
-     prints no command and names why: fix the key, or collect again.
+   - **duplicate candidates**: groups of open issues the engine proposes as duplicates, each flagged pair with its reasons (close titles, shared rare identifiers, a shared finding id and issue reference, same theme). A proposal, not a verdict: judge every group (step 3).
+   - **duplicates**: every open issue judged `duplicate_of` an original, with the original's state (`open`, `closed` or `missing`) and, for an open or closed one, the exact `gh issue close N --repo OWNER/REPO --duplicate-of <url>` command: report it to the operator, never run it. A `missing` original prints no command and names why: fix the key, or collect again.
 3. **Judge the unranked.** Read each from `facts.json` (bodies stop at 2,000 characters; `gh issue view` when cut
    off) and the code; a first run creates the file with `schema: 3` and `tiers`. Compare against ALL judgements.
-   Then judge each **duplicate candidate** group: re-read its issues, and set `duplicate_of: <original>` on each
-   duplicate (the original is the issue with the fuller evidence, else the older one), or `distinct_from: [<other>]`
-   when they differ, so the pair is not proposed again.
+   Then judge each **duplicate candidate** group: re-read its issues, and set `duplicate_of: <original>` on each duplicate (the original is the issue with the fuller evidence, else the older one), or `distinct_from: [<other>]` when they differ, so the pair is not proposed again.
 4. **Render.** `fr triage render --repo OWNER/REPO --open` writes `triage.html` and a snapshot. The board reads: **Since last report**
    (the diff from the previous snapshot), **Needs you now** (computed, never typed: green drafts, failing CI, blocked batches,
    stale dispatches, unfinished `post_merge`, unplaced issues), **Next up** (the driver's own order), **Waves** (tabs, closing
    order, features, parked), then the backlog by tier. Report back the board's path, what changed, what needs the operator
    and the `gh` commands you recommend.
-5. **Batch.** Propose groups of judged issues to ship as one run and one PR (`fr triage batch suggest` is input,
-   never the answer); create the accepted ones with `fr triage batch create <id> --title T --issue KEY...`.
+5. **Batch.** Propose groups of judged issues to ship as one run and one PR (`fr triage batch suggest` is input, never the answer); create the accepted ones with `fr triage batch create <id> --title T --issue KEY...`.
 
-Open PRs are triaged in the same loop: each carries an intent anchor (closing issue, spec, debug journal, else
-`unanchored`) with CI/merge badges. Judge the diff against it: `delivers | partial | drift | unanchored` plus one line
-in `delivery_note`. Shallow by design: never a code review.
+Open PRs are triaged in the same loop: each carries an intent anchor (closing issue, spec, debug journal, else `unanchored`) with CI/merge badges. Judge the diff against it: `delivers | partial | drift | unanchored` plus one line in `delivery_note`. Shallow by design: never a code review.
 To sync later, run the same loop: `check` names what arrived, shipped or went missing.
 
 ## judgements.yaml
@@ -84,10 +74,7 @@ issues:
     verified: true          # re-read at current main, not copied from the issue
     detail: "`gc()` trusts `MERGED` and calls `down()`. **Still live** on main (issue cites :1013, now :1312)."
     note: "Batch with super-fr#469, same subsystem."
-  "super-fr#470":           # a judged duplicate: nested under its original on the board
-    tier: 1
-    duplicate_of: "super-fr#435"      # one original, itself not a duplicate (no chains); never itself
-    distinct_from: ["super-fr#469"]   # keys judged NOT duplicates of this one; each once, never the same key as duplicate_of
+  "super-fr#470": {tier: 1, duplicate_of: "super-fr#435", distinct_from: ["super-fr#469"]}  # original (never a duplicate itself, no chains); keys judged NOT duplicates, each once
     kind: defect            # optional: defect | feature | parked (parked = deliberately not now)
 features:                   # optional ranked groups; "start" is shown, never run
   - rank: 1
@@ -114,13 +101,9 @@ from unfinished to finished while duplicate candidates exist: the count and the 
 
 ## The shape of a judgement
 
-1. **Tier by what the failure costs**: lost work, then a failure that looks like success, then friction. Never
-   by age, label, reporter or how loud the issue is.
-2. **Verify against current main, at scale too.** Before `verified: true`, re-read the cited `file:line` at
-   current main — snippets go stale, and at forty issues a fixed bug stays ranked as live. If you did not
-   re-read it, write `verified: false`.
-3. **Record line drift** in `detail` (`was :1013, now :1312`); a bug already fixed on main is a close
-   recommendation, not a ranking.
+1. **Tier by what the failure costs**: lost work, then a failure that looks like success, then friction. Never by age, label, reporter or how loud the issue is.
+2. **Verify against current main, at scale too.** Before `verified: true`, re-read the cited `file:line` at current main — snippets go stale, and at forty issues a fixed bug stays ranked as live. If you did not re-read it, write `verified: false`.
+3. **Record line drift** in `detail` (`was :1013, now :1312`); a bug already fixed on main is a close recommendation, not a ranking.
 4. **Hunt duplicates and batches.** Same predicate, same file, same sentence: record a duplicate in the
    structured `duplicate_of` field (or `distinct_from` for a pair that only looks alike), never as prose in
    `note`, and name the batch when issues share a subsystem. A shared root cause across three or more issues becomes a
