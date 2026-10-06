@@ -1,0 +1,6 @@
+# Journal: 2026-10-06-batch-drive-restart-forge
+
+<!-- fr:journal kind=hypothesis scope=debug id=h-one-root-cause created=2026-10-06T11:35:43+00:00 -->
+### h-one-root-cause · hypothesis · Batch drive-restart-forge: investigation
+
+Batch drive-restart-forge (#883, #921, #998) was placed as ONE root cause. Reading triage_batch_cmd.py/_Driver says it is not. (1) #883: _close_out appends CloseoutEvent only AFTER runner.dispatch; the restart dedupe in the gap is runner liveness (_existing / existing_dispatches), so a tab that ended before a restart is invisible. (2) #921 item 1: collect_facts drops a failing repo into facts.skipped in org scope; the drive never reads skipped, so its batches derive stages with no PRs (pr-open/merged read as dispatched). (3) #921 items 2-3, the push-rejection comment, and #998: the loop's only per-pass error boundary is ForgeReadError; git fetch failures (_archived/_released/merge_ctx), the archive merge refusal, a rejected update push and a strict TriageConfig refusal (recollect / _fresh_config) all route to _fail and end the process; gitseam._run has no timeout. (4) #921 item 4: GH_TIMEOUT_SECONDS uniform across paginated lists (low confidence). Verdict: three-to-four independent causes sharing a theme (the driver does not survive a disruption), not one. Stopped to ask the operator per the batch rule.
