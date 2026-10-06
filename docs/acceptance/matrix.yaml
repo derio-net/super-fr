@@ -7083,9 +7083,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_model_binding_set_probe
+    status: ci
+    notes: scenario walks live, retired-but-listed (refused), server error (warns, persists)
+      and --no-probe against a stub opencode; unit tests pin the classifier and the
+      injection refusal
     verify: candidate
     scenario: tests/scenarios/model-binding-set-probe.sh
   - id: model-binding-replacement
