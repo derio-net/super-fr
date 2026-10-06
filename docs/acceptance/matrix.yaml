@@ -7160,9 +7160,13 @@ rows:
       beside the model that ran; resolve never overwrites them
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_executor_model.py#test_advance_records_tier_and_binding_and_leaves_model_unset
+      - super-fr:tests/unit/test_run_observed_executor_model.py#test_a_new_attempt_warns_against_bound_not_model
+    status: ci
+    notes: 'Unit-pinned by this PR (phase 2): advance records tier/bound on subagent
+      attempts, resolve keeps them and records what ran.'
   - id: cost-evidence-phase-table
     capability: run
     acceptance: fr run cost and the rendered PR body show per phase its tier, bound
