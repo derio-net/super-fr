@@ -19,8 +19,6 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-import tempfile
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -29,23 +27,20 @@ import yaml
 from fr.cli import app
 from fr.triage.architecture import (
     GENERATED,
+    MOVED,
     Measure,
     Subsystems,
     load_subsystems,
     measure_subsystems,
     render_architecture,
-    resolve_manifest,
 )
 from fr.triage.errors import TriageError
+from fr.triage.fragments import Entry, Resolved
 from fr.triage.gitseam import Checkout
-from fr.triage.model import Facts, Judgements
-from fr.triage.origins import Origins, OriginsFacts, load_origins
-from fr.triage.snapshot import Snapshot, store_snapshot, stored_snapshots, take_snapshot
-from fr.triage.views import needs_you
+from fr.triage.model import Judgements
 from typer.testing import CliRunner
 
-from tests.unit.triage_board_fixtures import REPO, busy
-from tests.unit.triage_origins_fixtures import ROWS, SINCE, classification_yaml
+from tests.unit.triage_board_fixtures import busy
 
 SCOPE = "example-org/widgets"
 DASH = "—"
@@ -210,29 +205,14 @@ def test_the_binary_decode_failure_is_a_dash_never_a_crash(
 # ---------------------------------------------------------------- the page itself
 
 
-def _snapshots(f: Facts, jd: Judgements, n: int) -> list[tuple[datetime, Snapshot]]:
-    base = datetime(2026, 9, 25, 9, 0, tzinfo=UTC)
-    out = []
-    for step in range(n):
-        shown = Facts.model_validate(
-            {
-                **f.model_dump(by_alias=True, mode="json"),
-                "issues": [i.model_dump(mode="json") for i in f.issues[: len(f.issues) - step]],
-            }
-        )
-        out.append((base + timedelta(days=step), take_snapshot(shown, jd, acceptance=None)))
-    return out
-
-
 def _page(
     *,
-    snaps: int = 3,
     fragments: list[tuple[str, str]] | None = None,
     sections: list[str] | None = None,
     notes: list[str] | None = None,
     measured: Any = None,
-    origins: bool = False,
-    snapshots: list[tuple[datetime, Snapshot]] | None = None,
+    subsystems: Subsystems | None = None,
+    entries: list[Entry] | None = None,
 ) -> str:
     f, jd = busy()
     jd = Judgements.model_validate(
@@ -246,53 +226,17 @@ def _page(
             },
         }
     )
-    of = oc = None
-    if origins:
-        of = _origins_facts()
-        oc = load_origins_from_text(classification_yaml())
+    order = entries or [
+        *(Entry(n) for n in (sections if sections is not None else GENERATED)),
+        *(Entry(n) for n, _ in fragments or []),
+    ]
     return render_architecture(
         f,
         jd,
-        origins_facts=of,
-        origins=oc,
-        subsystems=_subsystems(),
+        subsystems=subsystems or _subsystems(),
         measured=measured or {},
-        fragments=dict(fragments or []),
-        order=[
-            *(sections if sections is not None else GENERATED),
-            *(n for n, _ in fragments or []),
-        ],
-        snapshots=snapshots if snapshots is not None else _snapshots(f, jd, snaps),
+        resolved=Resolved(order=order, fragments=dict(fragments or [])),
         notes=notes or [],
-    )
-
-
-def load_origins_from_text(text: str) -> Origins:
-    path = Path(tempfile.mkdtemp()) / "origins.yaml"
-    path.write_text(text, encoding="utf-8")
-    return load_origins(path)
-
-
-def _origins_facts() -> OriginsFacts:
-    return OriginsFacts.model_validate(
-        {
-            "scope": "example-org--widgets",
-            "since": SINCE,
-            "collected_at": "2026-09-30T00:00:00+00:00",
-            "issues": [
-                {
-                    "key": f"widgets#{n}",
-                    "repo": REPO,
-                    "number": n,
-                    "title": f"Widget defect {n}",
-                    "url": f"https://github.com/{REPO}/issues/{n}",
-                    "created_at": created,
-                    "closed_at": closed,
-                    "state": "closed" if closed else "open",
-                }
-                for n, created, closed, _reason, *_ in ROWS
-            ],
-        }
     )
 
 
@@ -311,88 +255,101 @@ def test_page_has_a_real_title_the_three_theme_blocks_and_the_gutter() -> None:
     assert re.search(
         r"max-width: 480px\) \{\s*main \{ padding-left: 16px; padding-right: 16px", page
     )
-    assert page.count("<script>") == 1
+    assert "<script>" not in page  # no tabs here any more, so no script
 
 
-def test_the_sections_follow_r20_timeline_then_measured_then_authored() -> None:
+def test_the_sections_are_summary_cards_size_table_then_authored() -> None:
     page = _page(fragments=[("overview.html", "<p>hand drawn</p>")])
-    order = [
-        'id="snapshot-timeline"',
-        'id="summary"',
-        'id="waves"',
-        'id="subsystems"',
-        'id="size-table"',
-        'id="filings-per-day"',
-        'id="operator-actions"',
-        'data-fragment="overview.html"',
-    ]
-    # filings-per-day needs origins facts, which this page has none of: absent, not misplaced.
-    present = [o for o in order if o != 'id="filings-per-day"']
-    positions = [_pos(page, o) for o in present]
+    order = ['id="summary"', 'id="subsystems"', 'id="size-table"', 'data-fragment="overview.html"']
+    positions = [_pos(page, o) for o in order]
     assert positions == sorted(positions)
 
 
-def test_waves_are_the_shared_tabs_with_the_latest_wave_preselected() -> None:
+def test_the_page_no_longer_shows_what_other_pages_own() -> None:
     page = _page()
-    waves = page[_pos(page, 'id="waves"') : _pos(page, 'id="subsystems"')]
-    assert "data-tabs" in waves
-    # busy() has waves 1, 2, 3 and wave 3 still has live batches: it is preselected.
-    assert re.search(r'id="wave-tab-3"[^>]*aria-selected="true"', waves)
-    assert re.search(r'id="wave-tab-1"[^>]*aria-selected="false"', waves)
-    # With scripts off every wave is shown, each labelled by its own heading.
-    for n in (1, 2, 3):
-        assert f'<h3 class="panel-label">Wave {n}</h3>' in waves
-    assert "hidden" not in re.findall(r'<div role="tabpanel"[^>]*>', waves)[0]
+    for gone in (
+        "snapshot-timeline",
+        'id="waves"',
+        "filings-per-day",
+        "origin-counts",
+        "operator-actions",
+    ):
+        assert gone not in page, gone
 
 
-def test_the_snapshot_timeline_steps_through_stored_snapshots() -> None:
-    page = _page(snaps=4)
-    tl = page[_pos(page, 'id="snapshot-timeline"') : _pos(page, 'id="summary"')]
-    assert "data-tabs" in tl
-    assert len(re.findall(r'role="tabpanel"', tl)) == 4
-    assert re.search(r'aria-selected="true"[^>]*>2026-09-28', tl)  # newest preselected
-    assert "2026-09-25" in tl
+def test_the_page_opens_with_its_nav_and_goal() -> None:
+    page = _page()
+    assert 'aria-current="page"' in page and 'href="history.html"' in page
+    assert re.search(r'class="goal">What is the system, and where does it hurt\?<', page)
+    assert page.index("</header>") < page.index('class="pages"') < page.index('id="summary"')
 
 
-def test_a_snapshot_tab_counts_batches_per_stage_and_folds_the_list() -> None:
-    """gh#917: a tab showed every batch with its stage as one unbroken run of text.
-
-    By hand: 5 merged, 2 cancelled, 1 pr-open, and one stage an older fr stored that
-    the current vocabulary lacks. Counts come in lifecycle order, unknown stages last.
-    """
-    batches = {f"m{n}": "merged" for n in range(5)}
-    batches |= {"c0": "cancelled", "c1": "cancelled", "p0": "pr-open", "z0": "retired"}
-    snap = Snapshot(batches=batches, issues={}, prs={}, figures={"open": 1})
-    page = _page(snapshots=[(datetime(2026, 9, 25, 9, 0, tzinfo=UTC), snap)])
-    tl = page[_pos(page, 'id="snapshot-timeline"') : _pos(page, 'id="summary"')]
-    counts = re.findall(r'<span class="chip">([a-z-]+) <b>(\d+)</b></span>', tl)
-    assert counts == [("cancelled", "2"), ("pr-open", "1"), ("merged", "5"), ("retired", "1")]
-    # The per-batch list survives, folded away: no batch name outside a closed <details>.
-    folded = re.search(
-        r"<details class=\"stages\"><summary>[^<]*9 batches[^<]*</summary>(.*?)</details>", tl
+def test_a_fragment_between_generated_sections_renders_there() -> None:
+    page = _page(
+        entries=[Entry("summary"), Entry("mid.html"), Entry("subsystems"), Entry("size-table")],
+        fragments=[("mid.html", "<p>MID</p>")],
     )
-    assert folded, tl
-    assert "<code>m0</code>" in folded.group(1)
-    assert "<code>m0</code>" not in tl.replace(folded.group(0), "")
+    at = [_pos(page, x) for x in ('id="summary"', "MID", 'id="subsystems"', 'id="size-table"')]
+    assert at == sorted(at)
 
 
-def test_a_snapshot_with_no_batches_says_so() -> None:
-    snap = Snapshot(batches={}, issues={}, prs={}, figures={"open": 1})
-    page = _page(snapshots=[(datetime(2026, 9, 25, 9, 0, tzinfo=UTC), snap)])
-    tl = page[_pos(page, 'id="snapshot-timeline"') : _pos(page, 'id="summary"')]
-    assert "no batches" in tl
-    assert "<details" not in tl
+def test_the_summary_shows_lines_then_and_now_summed_over_the_measured(
+    checkout: Checkout,
+) -> None:
+    measured = measure_subsystems(checkout, _subsystems(), now_ref="HEAD")
+    page = _page(measured=measured)
+    strip = page[_pos(page, 'id="summary"') : _pos(page, 'id="subsystems"')]
+    then = sum(m.then.lines for m in measured.values() if m.then)
+    now = sum(m.now.lines for m in measured.values() if m.now)
+    assert f'data-figure="lines then"><b>{then}</b>' in strip
+    assert f'data-figure="lines now"><b>{now}</b>' in strip
 
 
-@pytest.mark.parametrize("n", [0, 1])
-def test_fewer_than_two_snapshots_falls_back_with_a_sentence(n: int) -> None:
-    page = _page(snaps=n)
-    tl = page[_pos(page, 'id="snapshot-timeline"') : _pos(page, 'id="summary"')]
-    if n == 0:
-        assert "No snapshots yet" in tl
-    else:
-        assert "Only one snapshot" in tl
-        assert len(re.findall(r'role="tabpanel"', tl)) == 1
+def test_unmeasured_lines_are_dashes_in_the_summary() -> None:
+    page = _page(measured={})
+    strip = page[_pos(page, 'id="summary"') : _pos(page, 'id="subsystems"')]
+    assert f'data-figure="lines then"><b>{DASH}</b>' in strip
+    assert f'data-figure="lines now"><b>{DASH}</b>' in strip
+
+
+def test_where_it_hurts_lists_the_three_subsystems_with_most_open_defects() -> None:
+    from fr.triage.architecture import Subsystem
+
+    f, jd = busy()
+    raw = jd.model_dump(by_alias=True, mode="json", exclude_none=True)
+    open_keys = [i.key for i in f.issues if i.state == "open"]
+    # Open issues 1..: themes a(x4 defects), b(x3), c(x3, more open in total), d(x1), e(x0).
+    plan = ["a"] * 4 + ["b"] * 3 + ["c"] * 3 + ["d"]
+    themes: dict[str, tuple[str, str]] = {}
+    for key, theme in zip(open_keys, plan, strict=False):
+        themes[key] = (theme, "defect")
+    for extra, key in zip(open_keys[len(plan) :], ["c-plain"] * 5, strict=False):
+        themes[extra] = ("c", "feature")  # c has more open issues than b: wins the tie
+    raw["issues"] = {
+        k: {
+            **v,
+            "theme": themes.get(k, ("e", "feature"))[0],
+            "kind": themes.get(k, ("e", "feature"))[1],
+        }
+        for k, v in raw["issues"].items()
+    }
+    jd2 = Judgements.model_validate(raw)
+    subs = Subsystems(
+        subsystems=[
+            Subsystem(name=n.upper(), path=["x/*"], then_ref="HEAD", themes=[n]) for n in "abcde"
+        ]
+    )
+    page = render_architecture(
+        f,
+        jd2,
+        subsystems=subs,
+        measured={},
+        resolved=Resolved(order=[Entry("summary"), Entry("subsystems")]),
+    )
+    hurts = re.findall(r'<li><a href="#subsystem-([a-z-]+)">', page)
+    assert hurts == ["a", "c", "b"]  # d has a defect but is fourth
+    for slug in hurts:
+        assert f'<article class="subsystem" id="subsystem-{slug}"' in page
 
 
 def test_subsystem_cards_place_open_issues_and_the_rest_under_other(
@@ -401,9 +358,11 @@ def test_subsystem_cards_place_open_issues_and_the_rest_under_other(
     measured = measure_subsystems(checkout, _subsystems(), now_ref="HEAD")
     page = _page(measured=measured)
     cards = page[_pos(page, 'id="subsystems"') : _pos(page, 'id="size-table"')]
-    core = re.search(r'<article class="subsystem" data-subsystem="core".*?</article>', cards, re.S)
+    core = re.search(
+        r'<article class="subsystem"[^>]*data-subsystem="core".*?</article>', cards, re.S
+    )
     other = re.search(
-        r'<article class="subsystem" data-subsystem="Other".*?</article>', cards, re.S
+        r'<article class="subsystem"[^>]*data-subsystem="Other".*?</article>', cards, re.S
     )
     assert core and other
     # busy() open issues: 3,4,5,6,7,8,9,10,11,12,13 (1 and 2 are closed). Themes follow the
@@ -427,7 +386,7 @@ def test_every_open_issue_lands_somewhere_never_dropped() -> None:
 
 def test_the_size_table_shows_dashes_for_what_was_not_measured() -> None:
     page = _page(measured={})
-    table = page[_pos(page, 'id="size-table"') : _pos(page, 'id="operator-actions"')]
+    table = page[_pos(page, 'id="size-table"') :]
     assert DASH in table
     assert "<td>0</td>" not in table
     assert '<div class="scroll"><table' in table  # its own overflow wrapper
@@ -436,7 +395,7 @@ def test_the_size_table_shows_dashes_for_what_was_not_measured() -> None:
 def test_the_size_table_and_bars_carry_the_measured_numbers(checkout: Checkout) -> None:
     measured = measure_subsystems(checkout, _subsystems(), now_ref="HEAD")
     page = _page(measured=measured)
-    table = page[_pos(page, 'id="size-table"') : _pos(page, 'id="operator-actions"')]
+    table = page[_pos(page, 'id="size-table"') :]
     row = re.search(r'<tr data-subsystem="core">.*?</tr>', table, re.S)
     assert row
     cells = re.findall(r"<td[^>]*>(.*?)</td>", row.group(0), re.S)
@@ -447,39 +406,6 @@ def test_the_size_table_and_bars_carry_the_measured_numbers(checkout: Checkout) 
     cards = page[_pos(page, 'id="subsystems"') : _pos(page, 'id="size-table"')]
     assert 'data-lines="12" style="width:100.0%"' in cards
     assert 'data-lines="5" style="width:41.7%"' in cards
-
-
-def test_the_summary_strip_names_its_sources_and_dashes_what_is_absent() -> None:
-    page = _page()
-    strip = page[_pos(page, 'id="summary"') : _pos(page, 'id="waves"')]
-    f, _ = busy()
-    open_n = sum(1 for i in f.issues if i.state == "open")
-    assert f'data-figure="open issues"><b>{open_n}</b>' in strip
-    assert 'data-figure="defects"' in strip
-    assert 'data-figure="batches merged"><b>1</b>' in strip  # busy(): only a-merged
-    assert f'data-figure="issues filed"><b>{DASH}</b>' in strip  # no origins facts
-    assert "facts.json" in strip and "judgements.yaml" in strip
-
-
-def test_origins_sections_appear_only_when_origins_exist() -> None:
-    without = _page()
-    assert 'id="origin-counts"' not in without and 'id="filings-per-day"' not in without
-    with_ = _page(origins=True)
-    assert 'id="origin-counts"' in with_ and 'id="filings-per-day"' in with_
-    chart = with_[_pos(with_, 'id="filings-per-day"') :]
-    assert '<div class="scroll"><svg class="chart"' in chart  # natural size, own wrapper
-    assert 'data-figure="issues filed"><b>15</b>' in with_
-
-
-def test_operator_actions_are_the_boards_needs_you_now_rows() -> None:
-    page = _page()
-    actions = page[_pos(page, 'id="operator-actions"') :]
-    f, jd = busy()
-    rows = needs_you(f, jd)
-    assert rows
-    assert len(re.findall(r'<li class="need"', actions)) == len(rows)
-    for r in rows:
-        assert f'data-need="{r.kind}" data-ref="{r.ref}"' in actions
 
 
 def test_fragments_are_inlined_in_manifest_order_each_in_its_own_wrapper() -> None:
@@ -524,163 +450,6 @@ def test_a_long_unbreakable_token_wraps_inside_its_subsystem_card() -> None:
 # ---------------------------------------------------------------------- manifest
 
 
-def _arch(tmp_path: Path, manifest: str, **files: str) -> Path:
-    d = tmp_path / "architecture"
-    d.mkdir()
-    (d / "manifest.yaml").write_text(manifest, encoding="utf-8")
-    for name, text in files.items():
-        (d / name.replace("__", ".")).write_text(text, encoding="utf-8")
-    return d
-
-
-def test_manifest_resolves_generated_names_and_fragment_files_in_order(tmp_path: Path) -> None:
-    d = _arch(
-        tmp_path,
-        "sections:\n  - waves\n  - overview.html\n  - size-table\n  - second.html\n",
-        overview__html="<p>one</p>",
-        second__html="<p>two</p>",
-    )
-    resolved = resolve_manifest(d)
-    named = ["waves", "overview.html", "size-table", "second.html"]
-    assert resolved.order == [*named, *(g for g in GENERATED if g not in named)]
-    assert resolved.fragments == {"overview.html": "<p>one</p>", "second.html": "<p>two</p>"}
-    assert resolved.missing == []
-
-
-def test_a_manifest_entry_with_no_file_is_reported(tmp_path: Path) -> None:
-    d = _arch(tmp_path, "sections:\n  - summary\n  - gone.html\n")
-    resolved = resolve_manifest(d)
-    assert resolved.missing == ["gone.html"]
-    assert "gone.html" not in resolved.fragments
-
-
-def test_a_malformed_fragment_is_refused_and_named(tmp_path: Path) -> None:
-    d = _arch(
-        tmp_path, "sections:\n  - ok.html\n  - bad.html\n",
-        ok__html="<p>fine</p>", bad__html="<div><p>never closed</div>",
-    )  # fmt: skip
-    with pytest.raises(TriageError, match=r"bad\.html"):
-        resolve_manifest(d)
-
-
-@pytest.mark.parametrize(
-    "text",
-    ["<div>open", "</p>", "<ul><li>x</ul>", "<svg><g></svg>", "<html><body>x</body></html>",
-     "<script>alert(1)</script>"],
-)  # fmt: skip
-def test_malformed_or_document_level_fragments_are_refused(tmp_path: Path, text: str) -> None:
-    d = _arch(tmp_path, "sections:\n  - f.html\n", f__html=text)
-    with pytest.raises(TriageError, match=r"f\.html"):
-        resolve_manifest(d)
-
-
-def test_well_formed_fragments_with_void_and_self_closing_tags_pass(tmp_path: Path) -> None:
-    d = _arch(
-        tmp_path,
-        "sections:\n  - f.html\n",
-        f__html=(
-            '<p>a<br>b</p><img src="x.png" alt=""><svg viewBox="0 0 4 4"><path d="M0 0"/></svg>'
-        ),
-    )
-    assert "f.html" in resolve_manifest(d).fragments
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "<style>p{color:red}</style>",
-        '<link rel="stylesheet" href="x.css">',
-        '<iframe src="https://example.com"></iframe>',
-        '<object data="x.swf"></object>',
-        '<embed src="x.swf">',
-        '<meta http-equiv="refresh" content="0">',
-        '<base href="https://example.com/">',
-        '<form action="/x"><p>x</p></form>',
-        "<head><p>x</p></head>",
-        "<body><p>x</p></body>",
-        "<title>Page</title>",
-        '<p onclick="go()">x</p>',
-        '<svg><g onload="go()"></g></svg>',
-        '<a href="javascript:alert(1)">x</a>',
-        '<a href="  JaVa\tScript:alert(1)">x</a>',
-        '<img src="data:text/html;base64,AAAA" alt="">',
-        '<svg><a xlink:href="javascript:alert(1)"><text>x</text></a></svg>',
-    ],
-)
-def test_forbidden_constructs_are_each_refused(tmp_path: Path, text: str) -> None:
-    d = _arch(tmp_path, "sections:\n  - f.html\n", f__html=text)
-    with pytest.raises(TriageError, match=r"f\.html"):
-        resolve_manifest(d)
-
-
-def test_a_title_inside_an_svg_is_an_accessible_name_and_allowed(tmp_path: Path) -> None:
-    d = _arch(
-        tmp_path,
-        "sections:\n  - f.html\n",
-        f__html='<svg viewBox="0 0 4 4"><title>Flow of work</title><rect/></svg>',
-    )
-    assert "f.html" in resolve_manifest(d).fragments
-
-
-def test_ordinary_links_and_https_urls_are_allowed(tmp_path: Path) -> None:
-    d = _arch(
-        tmp_path,
-        "sections:\n  - f.html\n",
-        f__html=(
-            '<p><a href="https://example.com/x">x</a> '
-            '<img src="data:image/png;base64,AA" alt=""></p>'
-        ),
-    )
-    assert "f.html" in resolve_manifest(d).fragments
-
-
-def test_a_self_closing_non_void_html_tag_is_refused_with_line_and_tag(tmp_path: Path) -> None:
-    d = _arch(tmp_path, "sections:\n  - f.html\n", f__html="<p>a</p>\n<div/>\n")
-    with pytest.raises(TriageError, match=r"<div/>.*line 2|line 2.*<div/>"):
-        resolve_manifest(d)
-
-
-def test_self_closing_is_fine_on_svg_shapes(tmp_path: Path) -> None:
-    d = _arch(tmp_path, "sections:\n  - f.html\n", f__html="<svg><g/><circle/></svg><br/>")
-    assert "f.html" in resolve_manifest(d).fragments
-
-
-def test_a_manifest_naming_only_fragments_keeps_every_generated_section(tmp_path: Path) -> None:
-    d = _arch(tmp_path, "sections:\n  - one.html\n", one__html="<p>1</p>")
-    resolved = resolve_manifest(d)
-    assert resolved.order == ["one.html", *GENERATED]
-    assert resolved.appended == list(GENERATED)
-    page = _page(fragments=[("one.html", "<p>1</p>")])
-    assert _pos(page, 'id="summary"') < _pos(page, 'data-fragment="one.html"')  # groups fixed
-
-
-def test_appended_sections_are_reported_on_the_page_by_the_command(
-    tmp_path: Path, checkout: Checkout
-) -> None:
-    state = _state(tmp_path)
-    arch = state / "architecture"
-    arch.mkdir()
-    (arch / "manifest.yaml").write_text("sections:\n  - one.html\n", encoding="utf-8")
-    (arch / "one.html").write_text("<p>1</p>", encoding="utf-8")
-    result = _run(state, checkout)
-    assert result.exit_code == 0, result.output
-    page = (state / "architecture.html").read_text(encoding="utf-8")
-    assert 'id="summary"' in page and 'id="operator-actions"' in page
-    assert "does not name" in page and "summary" in page
-
-
-def test_a_fragment_path_may_not_leave_the_architecture_directory(tmp_path: Path) -> None:
-    d = _arch(tmp_path, "sections:\n  - ../secret.html\n")
-    with pytest.raises(TriageError, match="architecture"):
-        resolve_manifest(d)
-
-
-def test_no_manifest_means_every_generated_section_and_no_fragments(tmp_path: Path) -> None:
-    resolved = resolve_manifest(tmp_path / "architecture")
-    assert resolved.order == list(GENERATED)
-    assert resolved.fragments == {} and resolved.missing == []
-
-
 # ------------------------------------------------------------------ the command
 
 
@@ -716,19 +485,6 @@ def test_render_writes_only_under_the_state_directory(tmp_path: Path, checkout: 
     assert sorted(p.name for p in state.iterdir()) == [
         "architecture.html", "facts.json", "judgements.yaml", "subsystems.yaml",
     ]  # fmt: skip
-
-
-def test_render_reads_stored_snapshots(tmp_path: Path, checkout: Checkout) -> None:
-    state = _state(tmp_path)
-    f, jd = busy()
-    for step in range(3):
-        snap = take_snapshot(f, jd, acceptance=None).model_copy(update={"figures": {"open": step}})
-        store_snapshot(state, snap, datetime(2026, 9, 25 + step, 9, 0, tzinfo=UTC))
-    assert len(stored_snapshots(state)) == 3
-    result = _run(state, checkout)
-    assert result.exit_code == 0, result.output
-    page = (state / "architecture.html").read_text(encoding="utf-8")
-    assert len(re.findall(r'id="snapshot-tab-', page)) == 3
 
 
 def test_render_refuses_a_malformed_fragment_and_writes_nothing(
@@ -780,28 +536,59 @@ def test_render_outside_a_git_checkout_dashes_the_measurements(tmp_path: Path) -
     assert DASH in table
 
 
-@pytest.mark.parametrize("body", ["{not json", '{"schema": 1}', "\xff\xfe"])
-def test_a_corrupt_origins_facts_file_is_exit_2_naming_it(
-    tmp_path: Path, checkout: Checkout, body: str
-) -> None:
-    state = _state(tmp_path)
-    (state / "origins-facts.json").write_bytes(body.encode("latin-1"))
-    result = _run(state, checkout)
-    assert result.exit_code == 2
-    assert "origins-facts.json" in result.output
-    assert not (state / "architecture.html").exists()
-
-
-def test_the_page_states_the_counting_rule_and_labels_utc(
-    tmp_path: Path, checkout: Checkout
-) -> None:
+def test_the_page_states_the_counting_rule(tmp_path: Path, checkout: Checkout) -> None:
     state = _state(tmp_path)
     (state / "subsystems.yaml").write_text(yaml.safe_dump(SUBSYSTEMS), encoding="utf-8")
-    f, jd = busy()
-    store_snapshot(state, take_snapshot(f, jd, acceptance=None), datetime(2026, 9, 25, tzinfo=UTC))
     assert _run(state, checkout).exit_code == 0
     page = (state / "architecture.html").read_text(encoding="utf-8")
     assert "binary files, symlinks and submodules are not counted" in page
     assert "a moved file moves its lines between subsystems" in page
     assert "<th>Source lines" not in page and "Source lines" not in page
-    assert "UTC" in page[_pos(page, 'id="snapshot-timeline"') : _pos(page, 'id="summary"')]
+
+
+def test_the_command_does_not_read_origins_files(tmp_path: Path, checkout: Checkout) -> None:
+    state = _state(tmp_path)
+    (state / "origins-facts.json").write_text("{not json", encoding="utf-8")
+    (state / "origins.yaml").write_text(": : bad", encoding="utf-8")
+    result = _run(state, checkout)
+    assert result.exit_code == 0, result.output
+    assert (state / "architecture.html").exists()
+
+
+def test_a_manifest_naming_a_moved_section_notes_the_owning_page(
+    tmp_path: Path, checkout: Checkout
+) -> None:
+    state = _state(tmp_path)
+    arch = state / "architecture"
+    arch.mkdir()
+    (arch / "manifest.yaml").write_text(
+        "sections:\n  - waves\n  - timeline\n  - summary\n", encoding="utf-8"
+    )
+    result = _run(state, checkout)
+    assert result.exit_code == 0, result.output
+    page = (state / "architecture.html").read_text(encoding="utf-8")
+    assert "`waves`, which is now on the board page" in page
+    assert "`timeline`, which is now on the history page" in page
+    assert "no file" not in page and "no file" not in result.output
+    assert 'id="waves"' not in page and "snapshot-timeline" not in page
+    assert set(MOVED) >= {
+        "waves",
+        "operator-actions",
+        "filings-per-day",
+        "origin-counts",
+        "timeline",
+    }
+
+
+def test_appended_sections_are_reported_on_the_page_by_the_command(
+    tmp_path: Path, checkout: Checkout
+) -> None:
+    state = _state(tmp_path)
+    arch = state / "architecture"
+    arch.mkdir()
+    (arch / "manifest.yaml").write_text("sections:\n  - one.html\n", encoding="utf-8")
+    (arch / "one.html").write_text("<p>1</p>", encoding="utf-8")
+    result = _run(state, checkout)
+    assert result.exit_code == 0, result.output
+    page = (state / "architecture.html").read_text(encoding="utf-8")
+    assert 'id="summary"' in page and "does not name" in page

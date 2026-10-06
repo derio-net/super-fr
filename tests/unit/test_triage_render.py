@@ -105,7 +105,7 @@ def test_an_unranked_issue_renders_in_the_first_tier_labelled_not_yet_triaged(
 
     assert _sections(page)[0] == "unranked"
     assert _section_of(page, "super-fr#535") == "unranked"
-    first = page[page.index('data-tier="unranked"') : page.index('data-tier="1"')]
+    first = page[page.index('id="backlog-tier-unranked"') : page.index('id="backlog-tier-1"')]
     assert "not yet triaged" in first
     assert "fr-triage" in first
 
@@ -372,8 +372,11 @@ def test_a_non_https_url_produces_no_href(tmp_path: Path, url: str) -> None:
     block = _row_block(page, issue.key)
     assert "href=" not in block
     assert f"issue #{issue.number}" not in block
+    from fr.triage.components import PAGES
+
+    nav = {p.file for p in PAGES}  # the page chrome's own relative links, constants
     hrefs = [a.get("href") for t, a in _elements(page) if t == "a"]
-    assert all(h is None or h.startswith("https://") for h in hrefs), hrefs
+    assert all(h is None or h.startswith("https://") or h in nav for h in hrefs), hrefs
 
 
 def _hostile_theme(facts: dict[str, Any], judgements: dict[str, Any]) -> None:
@@ -540,6 +543,179 @@ def test_a_truncation_note_names_its_list_in_plain_words_and_its_remedy(
     assert f"The {source} list" not in notes.group(1)
     if source != "prs":
         assert "--" not in notes.group(1), "no flag exists for this list: none may be named"
+
+
+# ------------------------------------------------ page chrome and finished waves (R1, R8)
+
+
+def _board_waves(page: str) -> str:
+    m = re.search(r'<section[^>]*id="waves".*?</section>', page, flags=re.S)
+    assert m
+    return m.group(0)
+
+
+_CANCEL = {"kind": "cancel", "at": "2026-10-02T10:00:00Z", "reason": "no longer wanted"}
+_CLOSEOUT = {
+    "kind": "closeout",
+    "at": "2026-10-03T10:00:00Z",
+    "runner": "fake",
+    "handle": "h",
+    "archived": 12,
+}
+
+
+def _waved(*waves: tuple[int, list[dict[str, Any]]]) -> tuple[Facts, Judgements]:
+    from tests.unit.triage_board_fixtures import batch, dispatch, facts, issue, j, judgements
+
+    n = len(waves)
+    f = facts([issue(i) for i in range(1, n + 1)])
+    jd = judgements(
+        {f"widgets#{i}": j() for i in range(1, n + 1)},
+        [
+            batch(f"b{i}", [i], wave=w, events=[dispatch(f"b{i}"), *tail])
+            for i, (w, tail) in enumerate(waves, start=1)
+        ],
+    )
+    return f, jd
+
+
+def test_the_board_carries_its_nav_and_goal() -> None:
+    from tests.unit.triage_board_fixtures import busy
+
+    page = render(*busy())
+    assert re.search(r'<a [^>]*href="triage.html"[^>]*aria-current="page"', page)
+    assert 'class="goal">What do I do next?<' in page
+    assert (
+        page.index("</header>") < page.index('class="pages"') < page.index('id="since-last-report"')
+    )
+    assert 'href="history.html"' in page and 'href="origins.html"' in page
+
+
+def test_a_finished_wave_is_not_a_board_tab_and_the_selected_tab_exists() -> None:
+    f, jd = _waved((1, [_CANCEL]), (2, [_CLOSEOUT]), (3, []))
+    sect = _board_waves(render(f, jd))
+    keys = re.findall(r'role="tab"[^>]*data-key="([^"]*)"', sect)
+    assert keys == ["3"]
+    assert re.search(r'data-key="3"[^>]*>', sect) and 'aria-selected="true"' in sect
+
+
+def test_the_preselected_tab_is_always_present_when_the_top_wave_is_finished() -> None:
+    # the highest wave (3) is finished; an earlier one (1) still has live work (the
+    # `keys.index` ValueError regression: preselection must be among the unfinished waves)
+    f, jd = _waved((1, []), (3, [_CANCEL]))
+    sect = _board_waves(render(f, jd))
+    tab = re.search(r'<button[^>]*id="wave-tab-1"[^>]*>', sect)
+    assert tab and 'aria-selected="true"' in tab.group(0)
+    assert "wave-tab-3" not in sect
+
+
+def test_when_every_wave_is_finished_the_board_says_so_and_links_history() -> None:
+    f, jd = _waved((1, [_CANCEL]), (2, [_CLOSEOUT]))
+    sect = _board_waves(render(f, jd))
+    assert "Every wave is finished" in sect
+    assert 'href="history.html"' in sect
+    assert 'role="tab"' not in sect
+
+
+def test_a_board_fragment_survives_a_render(tmp_path: Path) -> None:
+    from fr.triage.fragments import resolve_manifest
+    from fr.triage.render import GENERATED
+
+    from tests.unit.triage_board_fixtures import busy
+
+    board = tmp_path / "board"
+    board.mkdir()
+    (board / "note.html").write_text("<p>operator note</p>", encoding="utf-8")
+    (board / "manifest.yaml").write_text(
+        yaml.safe_dump({"sections": ["since", "note.html", "needs"]}), encoding="utf-8"
+    )
+    resolved = resolve_manifest(board, GENERATED)
+    page = render(*busy(), resolved=resolved)
+    assert page.index('id="since-last-report"') < page.index("operator note")
+    assert page.index("operator note") < page.index('id="needs-you-now"')
+    # a generated section the manifest omits is still shown, after its entries
+    assert 'id="batches"' in page
+    assert resolved.appended and "since" not in resolved.appended
+
+
+def test_the_render_command_reads_the_board_manifest(tmp_path: Path) -> None:
+    from tests.unit.test_triage_render_command import _render, _state
+
+    state = _state(tmp_path)
+    (state / "board").mkdir()
+    (state / "board" / "n.html").write_text("<p>kept</p>", encoding="utf-8")
+    (state / "board" / "manifest.yaml").write_text(
+        yaml.safe_dump({"sections": ["n.html"]}), encoding="utf-8"
+    )
+    _render(state)
+    assert "<p>kept</p>" in (state / "triage.html").read_text(encoding="utf-8")
+
+
+# ------------------------------- severity and duplicates on the board (triage-pages-goal R11)
+
+
+def _sev_board(**overrides: dict[str, Any]) -> tuple[Facts, Judgements]:
+    from tests.unit.triage_board_fixtures import busy
+
+    f, jd = busy()
+    data = jd.model_dump(mode="json", by_alias=True)
+    for key, extra in overrides.items():
+        data["issues"][key.replace("_", "#")].update(extra)
+    return f, Judgements.model_validate(data)
+
+
+def _row_of(page: str, key: str) -> str:
+    m = re.search(rf'<details class="row"[^>]*data-key="{re.escape(key)}".*?</details>', page, re.S)
+    assert m, f"no row {key}"
+    return m.group(0)
+
+
+def test_backlog_rows_show_a_severity_pill_or_a_dash() -> None:
+    page = render(*_sev_board(widgets_3={"severity": "high"}))
+    assert 'data-severity="high"' in _row_of(page, "widgets#3")
+    plain = _row_of(page, "widgets#4")
+    assert 'data-severity=""' in plain and "—" in plain
+
+
+def test_a_next_up_row_shows_the_most_severe_member_severity() -> None:
+    from fr.triage.views import next_up
+
+    f, jd = _sev_board(widgets_13={"severity": "low"}, widgets_12={"severity": "high"})
+    data = jd.model_dump(mode="json", by_alias=True)
+    for b in data["batches"]:
+        if b["id"] == "e-next":
+            b["ids"] = ["widgets#13", "widgets#12"]
+    data["features"] = []
+    jd2 = Judgements.model_validate(data)
+    row = next(r for r in next_up(f, jd2) if r.ref == "e-next")
+    assert row.severity == "high"
+    page = render(f, jd2)
+    m = re.search(r'<li class="next" data-next="batch" data-ref="e-next".*?</li>', page, re.S)
+    assert m and 'data-severity="high"' in m.group(0)
+    low = next(r for r in next_up(*_sev_board(widgets_13={"severity": "low"})) if r.ref == "e-next")
+    assert low.severity == "low"
+    none = next(r for r in next_up(*_sev_board()) if r.ref == "e-next")
+    assert none.severity is None
+
+
+def test_a_duplicate_leaves_the_tier_sections_and_is_listed_under_parked() -> None:
+    f, jd = _sev_board(widgets_6={"duplicate_of": "widgets#7"})
+    page = render(f, jd)
+    start = page.index('id="backlog-by-tier"')
+    backlog = page[start : page.index('id="parked"')]
+    assert 'data-key="widgets#6"' not in backlog
+    assert 'data-key="widgets#7"' in backlog
+    parked = re.search(r'<details[^>]*id="parked".*?</details>', page, re.S)
+    assert parked and "duplicate of" in parked.group(0)
+    assert 'href="https://github.com/example-org/widgets/issues/7"' in parked.group(0)
+
+
+def test_a_duplicate_of_an_unknown_issue_is_plain_text_under_parked() -> None:
+    page = render(*_sev_board(widgets_6={"duplicate_of": "widgets#99"}))
+    parked = re.search(r'<details[^>]*id="parked".*?</details>', page, re.S)
+    assert parked
+    text = parked.group(0)
+    assert "duplicate of widgets#99" in text and "issues/99" not in text
 
 
 # ------------------------------------------------ the board link (batch-board R13)

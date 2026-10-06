@@ -17,6 +17,10 @@ Pure: facts and judgements in, sets out. The command only formats them.
 - **unplaced** — an open issue (judged or not) in no open batch, in no feature
   group and not parked (wave-driver R9). The still-open members of a cancelled,
   merged, partial or abandoned batch are unplaced: that batch is no longer open;
+- **no severity** — an open, judged issue whose judgement carries no `severity`
+  (triage-pages-goal R11);
+- **duplicate unknown** — a judged issue whose `duplicate_of` names an issue the facts
+  do not hold;
 - **stale dispatch** — an open issue labelled `fr:in-progress` whose fr-batch
   marker comment is older than the repo's `stale_dispatch_days` (default 3)
   with no open or merged linked PR — a closed-unmerged one is not progress
@@ -74,6 +78,11 @@ class CheckResult:
     stale: list[Stale] = field(default_factory=list)
     unplaced: list[Issue] = field(default_factory=list)
     settled_prs: list[PullRequest] = field(default_factory=list)
+    no_severity: list[Issue] = field(default_factory=list)
+    duplicate_unknown: list[str] = field(default_factory=list)
+    # Judgements whose `duplicate_of` target is itself a duplicate: a chain or a cycle
+    # leaves no original on the board for its members (review p3-r2).
+    duplicate_chained: list[str] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -96,6 +105,9 @@ class CheckResult:
             "orphaned": list(self.orphaned),
             "unreachable": [{"key": u.key, "reason": u.reason} for u in self.unreachable],
             "unplaced": [row(i) for i in self.unplaced],
+            "no_severity": [row(i) for i in self.no_severity],
+            "duplicate_unknown": list(self.duplicate_unknown),
+            "duplicate_chained": list(self.duplicate_chained),
             "stale_dispatch": [
                 {
                     "key": s.key,
@@ -180,7 +192,7 @@ def unplaced_issues(facts: Facts, judgements: Judgements) -> list[Issue]:
             placed.update(batch.ids)
     for feature in judgements.features:
         placed.update(feature.ids)
-    placed.update(k for k, j in judgements.issues.items() if j.kind == "parked")
+    placed.update(k for k, j in judgements.issues.items() if j.kind == "parked" or j.duplicate_of)
     return [i for i in facts.issues if i.state == "open" and i.key not in placed]
 
 
@@ -226,5 +238,22 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
         unreachable=unreachable,
         stale=stale_dispatches(facts),
         unplaced=unplaced_issues(facts, judgements),
+        no_severity=[
+            i
+            for i in facts.issues
+            if i.state == "open" and i.key in judged and judgements.issues[i.key].severity is None
+        ],
+        duplicate_unknown=sorted(
+            k
+            for k, j in judgements.issues.items()
+            if j.duplicate_of and j.duplicate_of not in found
+        ),
+        duplicate_chained=sorted(
+            k
+            for k, j in judgements.issues.items()
+            if j.duplicate_of
+            and (t := judgements.issues.get(j.duplicate_of)) is not None
+            and t.duplicate_of
+        ),
         settled_prs=settled_prs,
     )

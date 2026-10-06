@@ -189,7 +189,7 @@ class GhClient(Protocol):
         ...
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
-        """`{state, draft, head_oid, head_ref, mergeable, merge_state, merge_commit}`
+        """`{state, draft, head_oid, head_ref, base_ref, mergeable, merge_state, merge_commit}`
         of one PR, read fresh. `state` is OPEN | CLOSED | MERGED; `merge_commit` is
         the commit the merge made on the base ("" while unmerged)."""
         ...
@@ -222,6 +222,12 @@ class GhClient(Protocol):
         """Merge the PR only if its head is still *head_sha*; *method* is one of
         `MERGE_METHODS`. Never bypasses branch protection: a refusal raises
         with the forge's own message."""
+        ...
+
+    def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
+        """Open a ready (never draft) PR from *head* into *base*; its number. The
+        driver's per-wave state export (pages-goal R13). A refusal raises with the
+        forge's own message."""
         ...
 
     def closing_ref(self, repo: str, number: int) -> str:
@@ -333,6 +339,9 @@ class UnsupportedBatchOps:
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         raise self._unsupported("pr_merge")
+
+    def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
+        raise self._unsupported("pr_create")
 
     def closing_ref(self, repo: str, number: int) -> str:
         raise self._unsupported("closing_ref")

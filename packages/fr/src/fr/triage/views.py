@@ -18,7 +18,7 @@ not collected), so no row of that kind is produced — it is not invented
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -41,8 +41,11 @@ from fr.triage.batch_drive import (
     drive_pass,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
+from fr.triage.batch_drive import (
+    finished_waves as finished_waves,
+)
 from fr.triage.check import classify, stale_dispatches
-from fr.triage.model import Batch, Facts, Judgement, Judgements, PullRequest
+from fr.triage.model import Batch, Facts, Judgement, Judgements, PullRequest, Severity
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -243,6 +246,7 @@ class NextRow:
     deps: tuple[str, ...]
     reason: str
     waiting: bool = False  # a batch the driver would NOT start this pass
+    severity: Severity | None = None  # the most severe member's (R11)
 
 
 def size_of(keys: Sequence[str], issues: Mapping[str, Judgement]) -> str:
@@ -251,7 +255,17 @@ def size_of(keys: Sequence[str], issues: Mapping[str, Judgement]) -> str:
     return max(sizes, key=CX_RANK.__getitem__, default="-")
 
 
-def _tier(keys: Sequence[str], issues: Mapping[str, Judgement]) -> int | None:
+SEVERITY_RANK: dict[str, int] = {"low": 1, "med": 2, "high": 3}
+
+
+def max_severity(keys: Sequence[str], issues: Mapping[str, Judgement]) -> Severity | None:
+    """The most severe member severity (`high > med > low`); None when none carries one."""
+    found = [s for k in keys if k in issues and (s := issues[k].severity) is not None]
+    return max(found, key=SEVERITY_RANK.__getitem__, default=None)
+
+
+def batch_tier(keys: Sequence[str], issues: Mapping[str, Judgement]) -> int | None:
+    """The lowest tier among the judged members; None when none carries a judgement."""
     tiers = [issues[k].tier for k in keys if k in issues]
     return min(tiers) if tiers else None
 
@@ -274,11 +288,12 @@ def next_up(
             "batch",
             b.id,
             b.title,
-            _tier(b.ids, issues),
+            batch_tier(b.ids, issues),
             size_of(b.ids, issues),
             tuple(b.after),
             reason,
             waiting,
+            max_severity(b.ids, issues),
         )
 
     for bid in started:
@@ -312,10 +327,12 @@ def next_up(
                 "feature",
                 feature.title,
                 feature.title,
-                _tier(feature.ids, issues),
+                batch_tier(feature.ids, issues),
                 size_of(feature.ids, issues),
                 (),
                 f"feature rank {feature.rank}{why}",
+                False,
+                max_severity(feature.ids, issues),
             )  # fmt: skip
         )
     return rows
@@ -333,18 +350,33 @@ def waves(judgements: Judgements) -> dict[str, list[Batch]]:
     return grouped
 
 
-def preselected_wave(facts: Facts, judgements: Judgements) -> int | None:
+def batch_stages(facts: Facts, judgements: Judgements) -> dict[str, str]:
+    """Every batch's derived stage, by batch id: the *stages* `finished_waves` takes."""
+    return {b.id: derive_batch_stage(b, facts) for b in judgements.batches}
+
+
+def unfinished_waves(facts: Facts, judgements: Judgements) -> set[str]:
+    """The wave keys that still show on the board: every wave minus the finished ones."""
+    done = finished_waves(judgements.batches, batch_stages(facts, judgements))
+    return {str(b.wave) for b in judgements.batches if b.wave is not None} - done
+
+
+def preselected_wave(
+    facts: Facts, judgements: Judgements, among: Collection[str] | None = None
+) -> int | None:
     """The most recent wave (R16): the highest wave number with a batch not yet merged,
-    else the highest. A cancelled batch never merges, so it does not hold a wave open."""
-    numbers = {b.wave for b in judgements.batches if b.wave is not None}
-    if not numbers:
-        return None
-    live = {
-        b.wave
+    else the highest. A cancelled batch never merges, so it does not hold a wave open.
+    With *among* (wave keys), only those waves are considered: the board passes the
+    unfinished ones, the history page the finished ones (triage-pages-goal R8)."""
+    waved = [
+        (b.wave, derive_batch_stage(b, facts))
         for b in judgements.batches
-        if b.wave is not None and derive_batch_stage(b, facts) not in {"merged", "cancelled"}
-    }
-    return max(live) if live else max(numbers)
+        if b.wave is not None and (among is None or str(b.wave) in among)
+    ]
+    if not waved:
+        return None
+    live = [n for n, stage in waved if stage not in {"merged", "cancelled"}]
+    return max(live) if live else max(n for n, _ in waved)
 
 
 def kind_counts(facts: Facts, judgements: Judgements) -> dict[str, int]:

@@ -1,0 +1,87 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Skills, repo triage state and its opt-in (R14, R15)
+  tag: agentic
+  depends_on:
+  - 3
+  - 4
+  tracking_issue: null
+  acceptance:
+  - triage-pages-skills-documented
+  tier: mechanical
+  files:
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - plugins/super-fr/skills/fr-origins/SKILL.md
+  - plugins/super-fr/skills/fr-audit/SKILL.md
+  - .opencode/skills/*
+  - .hermes/skills/*
+  - docs/triage/*
+  - .fr/triage.yaml
+  - tests/unit/test_triage_skill*.py
+  - docs/acceptance/*
+  estimate_lines: 250
+tasks:
+- number: 1
+  title: Skills document the pages, fragments, data fields and verbs (R14)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: tests/unit/test_triage_skill_docs.py (or the existing triage skill test module) asserting
+      fr-triage SKILL.md names `fr triage history render`, `fr triage state export`, `severity`,
+      `duplicate_of`, `export:` and "board/manifest.yaml"; fr-origins names `duplicate_of`, `fixed_by`,
+      `introduced_in`, "schema: 2", "origins/manifest.yaml"; fr-audit names the four page goals and says
+      hand-written analysis lives in fragments. Fails.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: edit the three canonical SKILL.md files (tool- and argument-neutral prose: the neutrality
+      tripwire scans them), then run BOTH `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`. Green; move triage-pages-skills-documented to
+      ci. Commit.
+  - id: P5.T1.S3
+    text: |-
+      No refactor (prose); record the reason.
+- number: 2
+  title: This repo's triage state uses the verbs and opts in to export (R15)
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      `git fetch origin && git rebase origin/main`. If `docs/triage/` (from #969) is not on main, STOP and
+      report blocked naming #969; do not recreate its files. Otherwise: delete docs/triage/sync.sh;
+      rewrite docs/triage/README.md's sync commands to `uv run fr triage state import --from docs/triage
+      --repo derio-net/super-fr` and `export --to docs/triage`; move the three dated fragments' entries
+      from docs/triage/derio-net--super-fr/architecture/manifest.yaml into history/manifest.yaml (listing
+      `timeline` and `finished-waves` first) and move the fragment files with them; drop the architecture
+      manifest's waves/filings-per-day/origin-counts/operator-actions entries; add `export: {path:
+      docs/triage}` to .fr/triage.yaml with a comment citing spec R13.
+  - id: P5.T2.S2
+    text: |-
+      Verify: import the state into a temp dir with `uv run fr triage state import`, then
+      `uv run fr triage architecture render --dir <tmp>` and `history render --dir <tmp>` print no
+      missing-fragment or moved-name warning. Full suite into `$TMPDIR/p5-suite.log`. Commit and push.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T06:23:23+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T06:23:23+00:00'
+      note: null
+    P5.T1.S3:
+      state: x
+      ticked_at: '2026-10-06T06:23:23+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T06:23:23+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-10-06T06:23:23+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T06:23:23+00:00'
+    note: null
+    observed_prs: []

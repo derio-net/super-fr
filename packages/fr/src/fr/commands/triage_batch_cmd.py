@@ -32,11 +32,13 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 import time
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
@@ -88,6 +90,7 @@ from fr.triage.batch import (
     pr_open_queue,
     resolve_launch,
     save_batches,
+    save_exports,
     suggest,
     withdrawal_body,
     withdrawn_already,
@@ -106,6 +109,7 @@ from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     DEFAULT_MAX_INFLIGHT,
     DEFAULT_WORKSPACE_PREFIX,
+    EXPORT_KINDS,
     RUNS_DIR,
     Action,
     LivePr,
@@ -119,7 +123,11 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     default_selection,
     drive_pass,
+    export_branch,
+    export_target,
+    export_wave_of,
     find_run,
+    finished_waves,
     housekeeping_branch,
     is_archived,
     is_finished,
@@ -149,16 +157,19 @@ from fr.triage.model import (
     CancelEvent,
     CloseoutEvent,
     DispatchEvent,
+    Export,
     Facts,
     Judgements,
     Launch,
     PostMergeEvent,
+    PullRequest,
     Scope,
     load_judgements,
     load_scope_facts,
     state_dir,
 )
 from fr.triage.render import plural
+from fr.triage.state_sync import check_scope_name, export_state
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
@@ -1443,6 +1454,7 @@ class _Driver:
         self._unloadable: set[str] = set()  # runners that failed to load, reported once
         self._probes: dict[str, tuple[Runner, Any]] = {}  # per pass: live item id -> its runner
         self._merge: dict[str, MergeContext] = {}
+        self._export_refusals = 0  # per pass: owed exports refused before any write
 
     # -------------------------------------------------------------- reaching out
 
@@ -1585,6 +1597,12 @@ class _Driver:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        done_waves = finished_waves(judgements.batches, stages)
+        export_path, export_refused = self._export_config(facts)
+        export_prs, export_orphans = self._export_reads(
+            facts, judgements, repos, done_waves, export_path
+        )
+        export_default = {r: self._default_branch(r) for r in export_path}
         closing_sessions = self.yes and not self.keep_sessions
         sessions = frozenset[str]()
         self._probes = {}
@@ -1614,6 +1632,135 @@ class _Driver:
             archived=frozenset(archived),
             adopted=adopted,
             foreign={b.id: found for b in chosen if (found := tuple(foreign_batch_prs(b, facts)))},
+            export_path=export_path,
+            exports=tuple(judgements.exports),
+            export_prs=export_prs,
+            export_orphans=export_orphans,
+            export_default=export_default,
+            finished=done_waves,
+            export_refused=export_refused,
+        )
+
+    def _default_branch(self, repo: str) -> str:
+        """*repo*'s default branch, the only base an export PR may have (p4-r15); ""
+        when the clone cannot say, which matches no base."""
+        try:
+            return self._reader(repo).default_branch()
+        except TriageError:
+            return ""
+
+    def _export_files(self, repo: str, head: str) -> tuple[str, ...]:
+        """The paths *head* changed since it forked from `origin/<default>`, renames
+        split into a delete and an add, never truncated; () when git cannot read it."""
+        if not head:
+            return ()
+        try:
+            checkout = self._reader(repo)
+            checkout.fetch()
+            ref = f"origin/{checkout.default_branch()}"
+            return tuple(sorted(checkout.changed_paths(ref, head)))
+        except TriageError:
+            return ()
+
+    def _export_config(self, facts: Facts) -> tuple[dict[str, str], frozenset[str]]:
+        """(repo -> export directory `<path>/<scope>`) for a single-repo scope that opts
+        in (R13), and the repos of a group or org scope that opt in, which never export."""
+        opted = {
+            r: f"{c.path}/{self.scope.name}"  # normalised at load (p4-r2)
+            for r in facts.repos
+            if (c := facts.config_for(r).export) is not None
+        }
+        if self.scope.kind == "repo":
+            return opted, frozenset()
+        return {}, frozenset(opted)
+
+    def _export_reads(
+        self,
+        facts: Facts,
+        judgements: Judgements,
+        repos: dict[str, str],
+        finished: frozenset[str],
+        export_path: dict[str, str],
+    ) -> tuple[dict[tuple[str, str], LivePr], dict[str, tuple[LivePr, ...]]]:
+        """§I's live reads: the export PR of each repo's newest unmerged export (keyed
+        by its wave), and the repo's orphans: open PRs from the repo itself on any
+        `chore/triage-state-wave-<N>` head that no entry records (p4-r3). A cross-repo
+        PR is never an orphan (p4-r7). Trust is the author check; state and head are
+        fresh from `pr_view` for a recorded PR, from this pass's collect for an orphan.
+
+        `files` are NEVER the forge's: gh names only a rename's new path and stops at
+        100 entries (p4-sec-file-list). They are git's diff of the head the decision is
+        about (the recorded head, or the orphan's) against `origin/<default>`; an
+        unreadable head reads as no files, which the decision refuses. An orphan's
+        content is never read: the export reuses the PR, never its head (p4-r12)."""
+        collected = {pr.number: pr for pr in facts.prs}
+        prs: dict[tuple[str, str], LivePr] = {}
+        orphans: dict[str, tuple[LivePr, ...]] = {}
+        try:
+            for repo in sorted(export_path):
+                allowed = allowed_authors(repo, facts)
+                # a PR whose entry is recorded closed is reusable once reopened (p4-r13)
+                recorded = {e.pr for e in judgements.exports if e.repo == repo and not e.closed}
+                found = tuple(
+                    self._orphan(self.client(facts, repo), repo, pr, allowed)
+                    for pr in facts.prs
+                    if pr.repo == repo
+                    and pr.state == "OPEN"
+                    and export_wave_of(pr.head_ref) is not None
+                    and pr.cross_repo is not True  # a fork never stalls the export
+                    and pr.number not in recorded
+                )
+                if found:
+                    orphans[repo] = found
+                target = export_target(
+                    repo, judgements.batches, repos, finished, judgements.exports, found
+                )
+                if target is None or target.recorded is None or target.recorded.pr is None:
+                    continue
+                done, number = target.recorded, target.recorded.pr
+                client = self.client(facts, repo)
+                listed = next(
+                    (p for p in _live_head_prs(client, repo, export_branch(target.wave), allowed)
+                     if p.number == number),
+                    None,
+                )  # fmt: skip
+                view = client.pr_view(repo, number)
+                pick = replace(
+                    listed or LivePr(number=number, state="", draft=False, head=""),
+                    state=str(view.get("state", "")).upper(),
+                    draft=bool(view.get("draft")),
+                    head=str(view.get("head_oid") or ""),
+                    base=str(view.get("base_ref") or ""),  # p4-r15
+                    files=self._export_files(repo, done.head or ""),
+                )
+                if pick.state == "OPEN":
+                    pr = collected.get(pick.number)
+                    verdict, failing = checks_verdict(
+                        client.pr_required_checks(repo, pick.number),
+                        (pr.checks if pr is not None else None) or {},
+                        ci_none=self._ci_none(repo),
+                    )
+                    pick = replace(pick, checks=verdict, failing=failing)
+                prs[(repo, target.wave)] = pick
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        return prs, orphans
+
+    @staticmethod
+    def _orphan(client: GhClient, repo: str, pr: PullRequest, allowed: frozenset[str]) -> LivePr:
+        """An unrecorded open export PR, as reuse judges it: open, trusted, and its base
+        read fresh (p4-r15). Nothing else of it is read: nothing of it is kept (p4-r12)."""
+        view = client.pr_view(repo, pr.number)
+        return LivePr(
+            number=pr.number,
+            state=str(view.get("state", "")).upper() or "OPEN",
+            draft=pr.is_draft,
+            head=pr.head_oid,
+            head_ref=pr.head_ref,
+            trusted=distrust(pr.author, pr.cross_repo, allowed) is None,
+            base=str(view.get("base_ref") or ""),
         )
 
     def _hand_closeout(self, facts: Facts, repo: str, batch: Batch) -> LivePr | None:
@@ -1862,6 +2009,7 @@ class _Driver:
         _, facts, judgements = _load_state(self.scope, self.target)
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._stopped, self._queued = {}, 0
+        self._export_refusals = 0
         self.failed_write = False
         snap = self.snapshot(facts, judgements, _now())
         plan = drive_pass(snap)
@@ -1873,19 +2021,31 @@ class _Driver:
             if not self.yes:
                 _say(action_line(action))
                 continue
+            refused = self._export_refusals
             outcome, did, in_flight = self._act(action, facts, in_flight)
             acted = acted or did
+            if self._export_refusals > refused:  # refused before any write: a warning
+                action = replace(action, kind="warn")
             if outcome or action.kind != "close":  # a close reported already stays quiet
                 _say(action_line(action, outcome))
         summary = settle(
             plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
         )
+        if self._export_refusals:  # still owed, but only the operator can move it
+            summary = replace(
+                summary,
+                closing=summary.closing - self._export_refusals,
+                blocked=summary.blocked + self._export_refusals,
+            )
         _say(summary_line(summary))
         if self.yes:
             self._write_board()
         else:
             _say("nothing done; re-run with --yes to act")
-        return acted, summary, [a.batch for a in plan.actions if a.kind == "blocked"]
+        stuck = [a.batch for a in plan.actions if a.kind == "blocked"]
+        stuck += [f"export wave {a.wave} {a.batch}" for a in plan.actions
+                  if a.wave is not None and a.kind == "warn"]  # fmt: skip
+        return acted, summary, stuck
 
     def _write_board(self) -> None:
         """Render `board.html` from what this pass left on disk (R11). A board that cannot
@@ -1910,13 +2070,20 @@ class _Driver:
 
     def _act(self, action: Action, facts: Facts, in_flight: int) -> tuple[str, bool, int]:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
+        if action.kind in EXPORT_KINDS:
+            refusals = self._export_refusals
+            line = self._export_act(action, facts)
+            return line, self._export_refusals == refusals, in_flight  # a refusal did nothing
+        if action.kind in ("warn", "foreign"):
+            if action.head:  # an export's warn names no head: it is said every pass
+                self.warned.add(action.head)
+            return action.detail, False, in_flight
+        if action.kind in ("blocked", "held"):
+            return action.detail, False, in_flight
         judgements = load_judgements(self.target / "judgements.yaml")
         batch = _find(judgements.batches, action.batch)
         repo = batch_repo(batch, facts)
-        if action.kind in ("blocked", "held") or repo is None:
-            return action.detail, False, in_flight
-        if action.kind in ("warn", "foreign"):
-            self.warned.add(action.head)
+        if repo is None:
             return action.detail, False, in_flight
         if action.kind == "close":
             return self._close_sessions(action), False, in_flight  # never `acted`
@@ -2128,6 +2295,174 @@ class _Driver:
                 event.model_copy(update={"at": _now_after(batch), "archived": action.pr}),
             )  # fmt: skip
         return f"merged archive PR #{action.pr}"
+
+    # ------------------------------------------------------- state export (R13)
+
+    def _export_act(self, action: Action, facts: Facts) -> str:
+        assert action.wave is not None
+        if action.kind == "export":
+            return self._export(action, facts, action.batch, action.wave)
+        if action.kind == "export-reconcile":  # merged outside the driver (p4-r1)
+            assert action.pr is not None
+            self._mark(action.batch, action.pr, merged=True)
+            return f"recorded export PR #{action.pr} as merged"
+        if action.kind == "export-closed":  # closed unmerged: said once (p4-r6)
+            assert action.pr is not None
+            self._mark(action.batch, action.pr, closed=True)
+            err_console.print(f"[yellow]warning:[/yellow] {escape(action.detail)}", soft_wrap=True)
+            return f"recorded export PR #{action.pr} as closed; its waves are owed again"
+        return self._export_merge(action, facts, action.batch, action.wave)
+
+    def _record_export(
+        self, repo: str, waves: tuple[str, ...], *, pr: int | None, head: str | None = None
+    ) -> None:
+        """Record one `exports:` entry per covered wave (§G, R13), all with the same PR
+        and head, replacing earlier entries of those waves; a refused write exits 2."""
+        path = self.target / "judgements.yaml"
+        read = load_judgements(path).exports
+        at = _now()
+        new = [Export(wave=w, repo=repo, at=at, pr=pr, head=head) for w in waves]
+        kept = [e for e in read if not (e.repo == repo and e.wave in waves)]
+        self._save_exports(path, [*kept, *new], read)
+
+    def _mark(self, repo: str, pr: int, *, merged: bool = False, closed: bool = False) -> None:
+        """Mark every entry carrying export PR *pr* merged (or closed): a PR covers all
+        its waves, so all of them move together."""
+        path = self.target / "judgements.yaml"
+        read = load_judgements(path).exports
+        update = {"merged": True} if merged else {"closed": True}
+        marked = [e.model_copy(update=update) if (e.repo, e.pr) == (repo, pr) else e for e in read]
+        self._save_exports(path, marked, read)
+
+    @staticmethod
+    def _save_exports(path: Path, exports: list[Export], read: list[Export]) -> None:
+        try:
+            save_exports(path, exports, read=read)
+        except TriageError as exc:
+            _fail(str(exc))
+
+    def _export(self, action: Action, facts: Facts, repo: str, wave: str) -> str:
+        """§I: export the state into a worktree of `origin/<default>`, commit only
+        `<path>/<scope>/`, force-push the wave's export branch and open a ready PR.
+        A repo-side root that a symlink or a `..` would take outside the worktree is
+        refused before any write (a warn; the drive goes on). A git or forge write
+        that fails exits 1."""
+        config = facts.config_for(repo).export
+        assert config is not None
+        checkout = self.checkout(repo)
+        where = self.target / "export" / wave
+        branch = export_branch(wave)
+        try:
+            checkout.fetch()
+            default = checkout.default_branch()
+            if (where / ".git").exists():  # a pass that died left it: driver-owned
+                checkout.remove_worktree(where)
+            if where.exists():  # fr's own scratch, not a worktree: replaced (p4-r10)
+                shutil.rmtree(where)
+            worktree = checkout.add_worktree(where, f"origin/{default}")
+        except (TriageError, OSError) as exc:
+            _fail(f"export wave {wave}: {exc}", code=1)
+        try:
+            rel = f"{config.path}/{check_scope_name(self.scope.name)}"
+            try:
+                report = export_state(self.target, worktree.path, rel)
+            except TriageError as exc:
+                self._export_refusals += 1
+                return f"refused, nothing committed or pushed: {exc}"
+            try:
+                # Never forced past the repo's .gitignore (p4-r9): named, not staged.
+                left = worktree.ignored([f"{rel}/{p}" for p in report.copied])
+                head = worktree.commit_paths(
+                    [rel], f"chore(triage): export the triage state after wave {wave}"
+                )
+            except TriageError as exc:
+                _fail(f"export wave {wave}: {exc}", code=1)
+            note = _ignored_note(left)
+            if left:
+                _say(action_line(Action("warn", repo, note, wave=wave)))
+            suffix = f"; {_ignored_note(left, short=True)}" if left else ""
+            if head is None:
+                self._record_export(repo, _covers(action), pr=None)
+                if action.pr is not None:  # p4-r13: left open, said once (never recorded)
+                    stale = (f"export PR #{action.pr} on {branch} is stale: the state on the "
+                             "default branch is already current; it can be closed")  # fmt: skip
+                    _say(action_line(Action("warn", repo, stale, pr=action.pr, wave=wave)))
+                return f"{rel} is unchanged; recorded with no PR{suffix}"
+            try:
+                worktree.push(branch, force=True)
+            except TriageError as exc:
+                _fail(f"export wave {wave}: {exc}", code=1)
+            if action.pr is not None:  # reuse (p4-r12): the PR now carries OUR commit
+                self._record_export(repo, _covers(action), pr=action.pr, head=head)
+                return f"pushed {head[:12]} to {branch}; reused PR #{action.pr}{suffix}"
+            client = self.client(facts, repo)
+            try:
+                number = client.pr_create(
+                    repo,
+                    head=branch,
+                    base=default,
+                    title=f"chore(triage): triage state after wave {wave}",
+                    body=(
+                        f"The triage state of `{self.scope.target}` once wave {wave} finished, "
+                        f"exported under `{rel}/` by `fr triage batch drive` "
+                        "(`fr triage state import` reads it back).\n\n"
+                        "Facts and rendered pages are not exported; they are rebuilt."
+                        + (f"\n\n{_ignored_count(left)}" if left else "")
+                    ),
+                )
+            except UnsupportedForgeOperation as exc:
+                _fail(str(exc))
+            except FORGE_ERRORS as exc:
+                _fail(f"export wave {wave}: the forge refused the PR: {exc}", code=1)
+            self._record_export(repo, _covers(action), pr=number, head=head)  # the pin
+            return f"opened PR #{number} from {branch} at {head[:12]}{suffix}"
+        finally:
+            try:
+                checkout.remove_worktree(where)
+            except TriageError:
+                pass  # scratch: the next export replaces it
+
+    def _export_merge(self, action: Action, facts: Facts, repo: str, wave: str) -> str:
+        """Merge the export PR at its RECORDED head (`action.head`, which step 3b sets
+        from the export record and only when the live head equals it), never the live
+        one: nobody reviews this PR, so a commit someone else pushed to its branch must
+        not reach the default branch (p4-sec-unpinned-merge). Then record it merged."""
+        ctx = self.merge_ctx(facts, repo)
+        assert action.pr is not None
+        try:
+            ctx.client.pr_merge(repo, action.pr, head_sha=action.head, method=ctx.method)
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            _fail(f"export PR #{action.pr}: the forge refused the merge: {exc}", code=1)
+        self._mark(repo, action.pr, merged=True)
+        return f"merged export PR #{action.pr} at {action.head[:12]}"
+
+
+def _ignored_note(paths: tuple[str, ...], *, short: bool = False) -> str:
+    """What the export left out because the target repo ignores it (p4-r9), the first
+    few named: the warn's words, or (*short*) the export line's."""
+    n = len(paths)
+    shown = ", ".join(paths[:5]) + (f", and {n - 5} more" if n > 5 else "")
+    files = "file" if n == 1 else "files"
+    if short:
+        return f"{n} durable {files} ignored by the target repo not exported: {shown}"
+    verb = "is" if n == 1 else "are"
+    return f"{n} durable {files} {verb} ignored by the target repo and were not exported: {shown}"
+
+
+def _ignored_count(paths: tuple[str, ...]) -> str:
+    """The PR body's line about ignored files: a count, never a name (p4-r14). The
+    body is public; the names stay in the local line and warn."""
+    n = len(paths)
+    if n == 1:
+        return "1 durable file is ignored by this repo and was not exported."
+    return f"{n} durable files are ignored by this repo and were not exported."
+
+
+def _covers(action: Action) -> tuple[str, ...]:
+    """The waves an export or adoption records: every one its PR covers (R13)."""
+    return action.covers or ((action.wave,) if action.wave is not None else ())
 
 
 def _say(line: str) -> None:

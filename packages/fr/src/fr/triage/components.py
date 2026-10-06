@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import html
 from collections.abc import Sequence
+from typing import NamedTuple
 
 LIGHT = {
     "ground": "#F4F5F2", "surface": "#FFFFFF", "ink": "#1B2021", "muted": "#5E6A66",
@@ -37,6 +38,32 @@ FONT_TOKENS = (
 )
 
 
+class Page(NamedTuple):
+    key: str
+    file: str
+    title: str
+    goal: str
+
+
+PAGES = (
+    Page("board", "triage.html", "Board", "What do I do next?"),
+    Page(
+        "origins",
+        "origins.html",
+        "Origins",
+        "Where do defects come from, and what process change stops them?",
+    ),
+    Page(
+        "architecture",
+        "architecture.html",
+        "Architecture",
+        "What is the system, and where does it hurt?",
+    ),
+    Page("history", "history.html", "History", "How did we get here?"),
+)
+"""The four pages the triage engine writes, in nav order: one goal each (spec §A)."""
+
+
 def _vars(tokens: dict[str, str]) -> str:
     return " ".join(f"--{name}: {value};" for name, value in tokens.items())
 
@@ -53,6 +80,80 @@ TOKENS_CSS = f"""
 :root[data-theme="light"] {{ {_vars(LIGHT)} color-scheme: light; }}
 :root[data-theme="dark"] {{ {_vars(DARK)} color-scheme: dark; }}
 """
+
+CHROME_CSS = """
+nav.pages { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 10px 0 0; font-size: .9rem; }
+nav.pages a { color: var(--muted); text-decoration: none; padding: 2px 0;
+  border-bottom: 2px solid transparent; }
+nav.pages a[aria-current="page"] { color: var(--ink); font-weight: 600;
+  border-bottom-color: var(--accent); }
+.goal { margin: 8px 0 0; font-size: 1.05rem; color: var(--ink); }
+details.fold { margin-top: 20px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 0 14px; }
+details.fold > summary { cursor: pointer; padding: 10px 0; font-weight: 600; font-size: 1.05rem; }
+details.fold > summary .count { font: 500 .8rem var(--mono); color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; margin-left: 6px; }
+details.fold[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+"""
+"""The page chrome every page's CSS includes: nav bar, goal sentence, collapsed sections."""
+
+BASE_CSS = """
+* { box-sizing: border-box; }
+html, body { margin: 0; overflow-x: hidden; }
+body { background: var(--ground); color: var(--ink); font: 15px/1.5 var(--sans); }
+main { max-width: 1040px; margin: 0 auto; padding: 0 16px 48px; }
+a { color: var(--accent); }
+code { font-family: var(--mono); font-size: .92em; overflow-wrap: anywhere; }
+header.mast { padding: 28px 0 16px; border-bottom: 2px solid var(--ink); }
+header.mast h1 { margin: 0 0 6px; font-size: 1.6rem; font-weight: 600; overflow-wrap: anywhere; }
+.meta { color: var(--muted); font-size: .88rem; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.notes { margin: 12px 0 0; padding: 0; list-style: none; font-size: .85rem; color: var(--sev-2); }
+section { margin-top: 28px; }
+section > h2 { margin: 0 0 8px; font-size: 1.15rem; font-weight: 600; }
+.lede, .src { color: var(--muted); font-size: .85rem; margin: 0 0 10px; }
+.quiet { color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: 2px 10px; font-size: .85rem; }
+.chip b { font-family: var(--mono); font-weight: 500; }
+.scroll { overflow-x: auto; }
+table { width: 100%; min-width: 560px; border-collapse: collapse; background: var(--surface);
+  border: 1px solid var(--line); font-size: .88rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line);
+  vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+td.n, th.n { text-align: right; font-family: var(--mono); }
+svg.chart { display: block; height: auto; }
+svg.chart text { font-family: var(--mono); font-size: 10px; }
+.stages summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.stage-list { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .85rem;
+  margin-top: 6px; }
+.fragment { margin-top: 28px; }
+"""
+"""The prelude the architecture and history pages share (theme-built ground, masthead,
+sections, tables); a page adds its own pieces after it."""
+
+GRID_CSS = """
+.tablewrap { overflow-x: auto;
+  /* scroll shadows: an edge with more table beyond it is shaded (review p2-r2) */
+  background:
+    linear-gradient(to right, var(--ground) 30%, transparent) left / 32px 100% no-repeat local,
+    linear-gradient(to left, var(--ground) 30%, transparent) right / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.25), transparent)
+      left / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.25), transparent)
+      right / 12px 100% no-repeat scroll; }
+table.grid { border-collapse: collapse; width: 100%; min-width: 720px; font-size: .88rem; }
+table.grid th, table.grid td { text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--line); padding: 4px 8px; }
+table.grid th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+table.grid td.mono { overflow-wrap: anywhere; min-width: 7em; }
+table.grid.narrow { min-width: 0; }
+table.grid.narrow td { overflow-wrap: anywhere; }
+"""
+"""Wide data tables: a `.tablewrap` scrolls sideways, so a table keeps readable columns at
+phone width (a 390px page never scrolls as a whole) instead of wrapping letter by letter;
+`.narrow` is for a table of short columns that fits."""
 
 GUTTER_CSS = """
 @media (max-width: 480px) {
@@ -144,4 +245,29 @@ def tabs(group: str, label: str, panels: Sequence[tuple[str, str, str]], selecte
         f'<div class="tabs" data-tabs>'
         f'<div role="tablist" aria-label="{_esc(label)}" hidden>{"".join(tab_html)}</div>'
         f"{''.join(panel_html)}</div>"
+    )
+
+
+def page_header(current: str) -> str:
+    """The nav bar linking the four pages, *current* marked `aria-current="page"`, then
+    the goal sentence of *current* (spec §A). Every renderer calls it after its masthead."""
+    here = ' aria-current="page"'
+    links = "".join(
+        f'<a href="{_esc(p.file)}"{here if p.key == current else ""}>{_esc(p.title)}</a>'
+        for p in PAGES
+    )
+    goal = next(p.goal for p in PAGES if p.key == current)
+    return (
+        f'<nav class="pages" aria-label="Triage pages">{links}</nav>'
+        f'<p class="goal">{_esc(goal)}</p>'
+    )
+
+
+def collapsed(id_: str, title: str, count: int | None, body: str) -> str:
+    """A closed-by-default section: the title and, when known, an item count show on the
+    summary line. *title* is escaped here; *body* is the caller's and must be safe."""
+    n = "" if count is None else f' <span class="count">{count}</span>'
+    return (
+        f'<details id="{_esc(id_)}" class="fold"><summary>{_esc(title)}{n}</summary>'
+        f"{body}</details>"
     )

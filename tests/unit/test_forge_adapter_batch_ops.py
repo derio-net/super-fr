@@ -102,18 +102,21 @@ def test_pr_view_shapes_state_draft_head_oid_and_mergeable(
         "isDraft": True,
         "headRefOid": "abc123",
         "headRefName": "feat/batch-x",
+        "baseRefName": "main",
         "mergeable": "MERGEABLE",
         "mergeStateStatus": "BEHIND",
     }
-    _fake(monkeypatch, {("pr", "view"): json.dumps(raw)})
+    fake = _fake(monkeypatch, {("pr", "view"): json.dumps(raw)})
 
     view = RealGhClient().pr_view(REPO, 12)
 
+    assert "baseRefName" in fake.calls[0][fake.calls[0].index("--json") + 1].split(",")  # p4-r15
     assert view == {
         "state": "OPEN",
         "draft": True,
         "head_oid": "abc123",
         "head_ref": "feat/batch-x",
+        "base_ref": "main",
         "mergeable": "MERGEABLE",
         "merge_state": "BEHIND",
         "merge_commit": "",
@@ -272,6 +275,33 @@ def test_pr_merge_propagates_a_protection_refusal_verbatim(
         RealGhClient().pr_merge(REPO, 12, head_sha="abc", method="merge")
 
 
+def test_pr_create_opens_a_ready_pr_and_returns_its_number(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _fake(monkeypatch, {("pr", "create"): f"https://github.com/{REPO}/pull/57\n"})
+
+    got = RealGhClient().pr_create(
+        REPO, head="chore/triage-state-wave-3", base="main", title="t", body="b"
+    )
+
+    assert got == 57
+    (call,) = fake.calls
+    assert call[:4] == ["pr", "create", "--repo", REPO]
+    for flag, value in (("--head", "chore/triage-state-wave-3"), ("--base", "main"),
+                        ("--title", "t"), ("--body", "b")):  # fmt: skip
+        assert call[call.index(flag) + 1] == value
+    assert "--draft" not in call
+
+
+def test_pr_create_refuses_an_answer_with_no_pr_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """p4-r4: a forge write failure every caller already handles, never a traceback."""
+    from fr.hostclient import FORGE_ERRORS
+
+    _fake(monkeypatch, {("pr", "create"): "something else\n"})
+    with pytest.raises(FORGE_ERRORS, match="PR URL"):
+        RealGhClient().pr_create(REPO, head="h", base="main", title="t", body="b")
+
+
 def test_closing_ref_is_githubs_cross_repo_closes_line() -> None:
     assert RealGhClient().closing_ref(REPO, 577) == "Closes derio-net/super-fr#577"
 
@@ -318,6 +348,7 @@ _CALLS: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
     "pr_merge": ((REPO, 1), {"head_sha": "abc", "method": "merge"}),
     "closing_ref": ((REPO, 1), {}),
     "repo_merge_methods": ((REPO,), {}),
+    "pr_create": ((REPO,), {"head": "h", "base": "main", "title": "t", "body": "b"}),
 }
 
 
