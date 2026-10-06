@@ -174,3 +174,48 @@ a single small method plus a protocol; nothing to clean
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 two config fields and a stamp bump; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-06T21:38:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · the owed restart lived only in memory while the post_merge event was persisted, so a pass aborted after post_merge lost it for good (phase 2)
+
+the owed restart lived only in memory while the post_merge event was persisted, so a pass aborted after post_merge lost it for good
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-06T21:38:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · the preflight-refusal test found the probe by a call-count heuristic and never asserted the refusal was reported (phase 2)
+
+the preflight-refusal test found the probe by a call-count heuristic and never asserted the refusal was reported
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-06T21:38:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · 'reported once per driver process' was untested across passes (phase 2)
+
+'reported once per driver process' was untested across passes
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-06T21:38:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · no test that a recorded close-out, or one whose post_merge is not owed, does not restart (phase 2)
+
+no test that a recorded close-out, or one whose post_merge is not owed, does not restart
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-10-06T21:38:49+00:00 phase=2 -->
+### review-p2 · review · phase 2 independent review: 4 findings, all in scope, all fixed (phase 2)
+
+Independent reviewer (separate context) raised p2-r1..p2-r4; each verified and fixed with a test (head f63e3b6c0); full suite 9807 passed, 105 skipped (/private/tmp/claude-502/driver-sessions-p2-review-suite.log).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-06T21:38:49+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: the owed restart lived only in memory while the post_merge event was persisted, so a pass aborted after post_merge lost it for good (phase 2)
+
+run_pass's actions sit in try/finally whose finally runs the soft _restart_sessions() under --yes; red-first test: a later close-out refused via can_dispatch still restarts once; spec §B amended. Chosen over persisting the owed restart: no new state or artifact shape.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-06T21:38:49+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: the preflight-refusal test found the probe by a call-count heuristic and never asserted the refusal was reported (phase 2)
+
+Test keys on the close-out probe item (wave group, no payload.kind) and asserts the refusal is reported once, the probes are close-out probes, restart_idle is not called and both close-outs still dispatch.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-06T21:38:49+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: 'reported once per driver process' was untested across passes (phase 2)
+
+Two tests drive two run_pass calls on one _Driver; the non-restarter and the refusal are each reported exactly once.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-06T21:38:49+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: no test that a recorded close-out, or one whose post_merge is not owed, does not restart (phase 2)
+
+New tests: a recorded close-out and a close-out whose PostMergeEvent already exists never call restart_idle.
