@@ -4932,9 +4932,14 @@ rows:
       in its label, read-only, as the start of a sweep
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_list_prints_every_session_with_its_issue_refs_and_writes_nothing
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_label_refs_parses_repo_issue_refs
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_list_sessions_returns_one_target_per_tab_with_its_raw_label
+    status: ci
+    notes: --list over a fake adopter prints tab, workspace, status and parsed repo#n
+      refs and writes nothing; herdr's list_sessions is tested against a live capture.
   - id: triage-batch-adopt-resumable
     capability: Backlog triage
     acceptance: A batch adopt that fails part-way is finished by running the same command
