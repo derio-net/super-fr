@@ -622,8 +622,8 @@ def _note_unpriced(path: Path, state: RunState, env: Mapping[str, str]) -> None:
         print(
             f"fr archive: no dollars yet for session(s) {', '.join(sessions)} of run "
             f"{state.run}: a harness may write a session's cost only when it exits "
-            "(Claude Code does). Once they have ended, run `fr usage backfill` here and "
-            "commit the refreshed implemented/usage file.",
+            "(Claude Code does). The next `fr archive` here will price it (or run "
+            "`fr usage backfill`).",
             file=sys.stderr,
         )
 

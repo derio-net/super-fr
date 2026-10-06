@@ -185,9 +185,7 @@ def _unpriced_then_exited(repo: Path, tmp_path: Path) -> Path:
     stripped); returns the transcript, restorable to the exited state."""
     transcript = next((tmp_path / "projects").rglob(f"{CC_SESSION}.jsonl"))
     full = transcript.read_text()
-    transcript.write_text(
-        "".join(ln for ln in full.splitlines(True) if '"cost-state"' not in ln)
-    )
+    transcript.write_text("".join(ln for ln in full.splitlines(True) if '"cost-state"' not in ln))
     assert _backfill(repo).exit_code == 0
     transcript.write_text(full)  # the session exits
     return transcript
@@ -247,9 +245,7 @@ def test_refresh_archived_reports_an_unreadable_cursor_in_failed(
     assert report.refreshed == []
 
 
-def test_refresh_archived_skips_a_file_the_skip_predicate_names(
-    repo: Path, tmp_path: Path
-) -> None:
+def test_refresh_archived_skips_a_file_the_skip_predicate_names(repo: Path, tmp_path: Path) -> None:
     _unpriced_then_exited(repo, tmp_path)
     target = archived_usage_path(repo, "2026-09-21-feat-new")
     before = target.read_bytes()

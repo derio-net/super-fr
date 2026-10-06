@@ -430,8 +430,8 @@ def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
                 try:
                     root = resolve_repo_root()
                 except Exception:  # noqa: BLE001 — outside a repo there is nothing to follow up
-                    root = None
-                if root is not None:
+                    pass
+                else:
                     _after_moves(root, log, _ArchiveOpts(branch=kwargs.get("branch")))
 
     return wrapper
