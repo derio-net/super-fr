@@ -7074,3 +7074,72 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: model-binding-set-probe
+    capability: model-bindings
+    acceptance: '`fr models set --harness opencode` refuses a model the provider will
+      not serve, naming the provider''s error and a proposed replacement, even when
+      the catalogue marks it active; an inconclusive probe warns and persists; `--no-probe`
+      skips and says so'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/model-binding-set-probe.sh
+  - id: model-binding-replacement
+    capability: model-bindings
+    acceptance: A dead binding is replaced by its live same-family successor, else by
+      a live tool-calling same-provider model distinct from the orchestrator and other
+      tiers that keeps tier price ordering within 2x the dead model's price, else no
+      replacement is proposed
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/model-binding-replacement.sh
+  - id: model-binding-check-report
+    capability: model-bindings
+    acceptance: '`fr models check` reports every binding live/dead/unknown/unprobed
+      with proposals and upgrade offers, exits 1 off a terminal when any binding is
+      dead, and never applies an offer unasked'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/model-binding-check.sh
+  - id: model-binding-run-integration
+    capability: model-bindings
+    acceptance: A run surfaces dead bindings and offers at start and in its operator-gated
+      brief, and before dispatching a phase on OpenCode substitutes a dead tier binding
+      autonomously (recorded in the plan journal, loudly) or refuses with no brief
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: model-binding-live-opencode
+    capability: model-bindings
+    acceptance: On a real OpenCode install a retired tier binding is proposed interactively,
+      asked at the fr-goal gate, and substituted unattended at advance, with the dispatched
+      executor running on the replacement (opencode.db)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
