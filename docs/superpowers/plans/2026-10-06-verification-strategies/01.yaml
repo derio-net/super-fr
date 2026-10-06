@@ -1,0 +1,185 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Strategy vocabulary — manifests, resolver, check/list, shape default, spec
+    section
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - verification-strategy-resolution
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/verification/*
+  - packages/fr/src/fr/verifications/*
+  - plugins/super-fr/verifications/*
+  - packages/fr/src/fr/workflow/*
+  - packages/fr/src/fr/workflows/*
+  - plugins/super-fr/workflows/*
+  - packages/fr/src/fr/commands/verification_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/pyproject.toml
+  - tests/unit/test_verification_*.py
+  - tests/unit/test_tripwire_shipped_verifications.py
+  - tests/unit/test_workflow_*.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: SMOKE — the verification package imports and a trivial test is green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create packages/fr/src/fr/verification/__init__.py (empty docstring module) and
+      tests/unit/test_verification_model.py with one test asserting `import fr.verification`
+      succeeds. Run `uv run pytest tests/unit/test_verification_model.py -q --no-cov`; green.
+      Commit (smoke: the minimum runtime of the new package exercised in the suite).
+- number: 2
+  title: RED/GREEN — StrategyManifest model and parse_strategy (spec §A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_verification_model.py cover parse_strategy(text, source):
+      a valid manifest (verification, schema: 1, description, when, driver, install,
+      scenario, source, notes) parses; an unknown top-level key, `when: later`,
+      `driver: robot`, an unknown `{placeholder}` in install/scenario, and the reserved
+      name `none` are each refused with a StrategyError naming the field. Run: fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/verification/model.py — StrategyManifest (pydantic,
+      frozen, extra="forbid", wire key `schema` aliased to schema_version Literal[1],
+      mirroring workflow/model.py:107-119), PLACEHOLDERS frozenset
+      {repo, worktree, prefix, bin, fixture, client, scenario, source}, RESERVED = "none",
+      StrategyError, parse_strategy. Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: share the argv-template placeholder scan with nothing else yet — keep it a
+      private helper `_placeholders(argv)`; ruff + mypy clean on the new module.
+- number: 3
+  title: RED/GREEN — resolver (repo > env > wheel > marketplace), shared with workflows
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_verification_resolve.py — a repo file under
+      docs/superpowers/verifications/<n>.yaml wins wholesale over a shipped one;
+      $FR_SHIPPED_VERIFICATIONS_DIR is consulted next; then the wheel copy
+      (fr/verifications/); then the marketplace clone path; an unknown name raises
+      naming every place looked; list_strategies(repo) returns (name, source-label) for
+      all, repo-shadowed names once. Existing workflow resolve tests must stay green.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: factor the four-place directory walk out of workflow/resolve.py into a small
+      shared helper (e.g. fr/_shipped.py: `shipped_lookup(repo_rel, env_var, package,
+      plugin_rel, name)` + `shipped_listing(...)`), re-point workflow/resolve.py at it with
+      behaviour unchanged, and add verification/resolve.py (resolve_strategy,
+      list_strategies). Tests green, including the whole tests/unit/test_workflow_* set.
+- number: 4
+  title: RED/GREEN — shipped manifests, wheel mirror, tripwire
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_tripwire_shipped_verifications.py — every
+      plugins/super-fr/verifications/*.yaml parses and passes check; the set is exactly
+      {candidate, client-live, prerelease, live} with the when/driver of spec §A's table;
+      packages/fr/src/fr/verifications/ holds byte-identical copies (mirror the existing
+      workflows tripwire's shape — find it with `grep -rl "fr/workflows" tests/unit`).
+  - id: P1.T4.S2
+    text: |-
+      GREEN: author the four canonical manifests in plugins/super-fr/verifications/ per
+      spec §A (install argv `.fr/candidate-install {prefix} {worktree}` for candidate and
+      client-live, `{source}` for prerelease, null for live; scenario argv `{scenario}`),
+      copy them into packages/fr/src/fr/verifications/ with a generated-notice README like
+      packages/fr/src/fr/workflows/README.md, and make sure the wheel includes the
+      directory as package data (check how fr/workflows is included in
+      packages/fr/pyproject.toml and do the same). Green.
+- number: 5
+  title: RED/GREEN — `fr verification list|check`, workflow `verification:` default
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_verification_cmd.py (CliRunner) — `fr verification list` prints
+      each name with its source; `fr verification check --all` exits 0 on shipped, 2 on a
+      malformed repo manifest naming the file and field; `check <name>` checks one. And in
+      the workflow model tests: WorkflowManifest accepts optional `verification: <name>`;
+      `fr workflow check` refuses a name that does not resolve; shipped fr-goal and
+      fr-goal-light declare `verification: candidate`.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: commands/verification_cmd.py (typer group `verification`, list + check),
+      registered in cli.py; NOT added to READ_ONLY_COMMANDS (spec §A). Add
+      `verification: str | None = None` to WorkflowManifest and the check in
+      workflow/check.py; add `verification: candidate` to both canonical shipped shapes and
+      their wheel copies. Green; run the full tests/unit/test_tripwire_shipped_workflows.py.
+- number: 6
+  title: RED/GREEN — spec `## Verification` parser and effective strategy (spec §B
+    first half)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: tests/unit/test_verification_spec_section.py — parse_section(spec_text) on the
+      grammar in spec §B: optional `strategy:` line; `- <row>: <strategy|none> — <reason>`
+      lines; missing section -> None; malformed line -> SectionError naming it.
+      effective_strategy(row_verify, row_id, section, shape_default) follows R7's precedence
+      (verify, override, strategy, shape) and returns None when the run has no section and
+      the row no verify; is_post_merge(...) is True for a strategy whose manifest says
+      post-merge; `none` is neither post-merge nor pre-merge. Use plain strings for
+      row_verify so this phase does not depend on the matrix shape change.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: verification/spec_section.py and verification/effective.py. Green. Run
+      `uv run ruff check packages/ tests/ && uv run mypy packages/fr/src` and the full
+      fast suite `uv run pytest -q --no-cov -n auto`; commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

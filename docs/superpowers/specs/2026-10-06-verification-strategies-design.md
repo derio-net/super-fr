@@ -551,3 +551,9 @@ strategy: candidate
 - closes-refused-while-awaiting-walk: none — needs a live PR body; unit tests over premature_closes and _deliver_pr_gate with a fake forge cover it in CI
 - triage-drive-conflict-handback: none — needs a forge and a runner; executor tests with a fake runner and a git fixture cover it in CI
 - super-fr-candidate-contract: none — every walk's smoke runs the contract
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-06-verification-strategies | `derio-net/super-fr` | `2026-10-06-verification-strategies` | — |

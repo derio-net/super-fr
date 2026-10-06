@@ -1,0 +1,113 @@
+schema_version: 2
+phase:
+  number: 3
+  title: The walk, the `walk` evidence, and the deliver PR-body gates
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - shipped-verification-strategies
+  - candidate-walk-gates-deliver
+  - premerge-owed-pr-section
+  - closes-refused-while-awaiting-walk
+  tier: standard
+  files:
+  - packages/fr/src/fr/verification/*
+  - packages/fr/src/fr/commands/verification_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/workflows/*
+  - plugins/super-fr/workflows/*
+  - tests/unit/test_verification_walk*.py
+  - tests/unit/test_run_deliver*.py
+  - tests/unit/test_pr_body*.py
+  - tests/unit/test_run_evidence*.py
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: RED/GREEN — `fr verification walk`
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_verification_walk.py with a tmp repo carrying a fake
+      `.fr/candidate-install` (a shell script that writes `{prefix}/bin/fakefr` printing a
+      version, last line the tool name), a spec with `## Verification` (strategy candidate;
+      rows with scenario scripts, one failing) and a matrix: the walk refuses without the
+      contract (names `.fr/candidate-install`); without --model (exit 2); installs into a
+      mkdtemp prefix with UV_TOOL_DIR/UV_TOOL_BIN_DIR there; runs smoke (version + status
+      in a fresh git fixture) then each covered row's scenario with PATH={bin}:$PATH and
+      FR_WALK_PREFIX; writes ~/.cache/fr/walks/<run>/<UTC>.log (HOME monkeypatched) with
+      the `fr-walk: 1` header (run, strategy, code_tree, harness, model, steps); exits
+      non-zero on the failing scenario; `--client <path>` runs scenarios with that cwd; the
+      operator-fr-unchanged assertion fails loudly when the install touched the pinned fr.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: verification/walk.py (pure planning: which rows, which argv) + the IO driver;
+      `walk` subcommand in verification_cmd.py. Reuse fr/run/code_tree.py for the tree.
+      Green.
+- number: 2
+  title: RED/GREEN — `walk` deliver evidence
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: deliver evidence tests — `walk` in _VERIFIABLE_EVIDENCE/_OFFERED_EVIDENCE; owed
+      when the run's spec gives the run or a row an agent pre-merge strategy; when owed: a
+      passing log on HEAD's code tree covering every owed row + smoke is accepted, a stale
+      tree / failing step / missing row / hand-written log is refused naming the cause, and
+      an agent pre-merge row with no scenario is refused by id (R10); when NOT owed an
+      absent walk and `walk: none` both pass — including a run whose spec has no
+      `## Verification` (in-flight back-compat, the not-owed check runs before
+      _verified_evidence rule 2 at run_cmd.py:1773-1776).
+  - id: P3.T2.S2
+    text: |-
+      GREEN: verifier branch in run_cmd.py's _verified_evidence; add `walk` to both
+      canonical shipped shapes' deliver evidence and the wheel copies. Green.
+- number: 3
+  title: RED/GREEN — PR body sections and premature closes
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: pr_body tests — `## Pre-merge verification owed` is in REQUIRED_SECTIONS and
+      renders one line per operator-driven pre-merge row with its exact walk command (or
+      `None.`); `## Post-merge verification owed` appends reasons. closing_refs(body)
+      returns (line, keyword, ref) with the same fence/inline-code/marker skipping as
+      shared_closing_keywords (whose tests stay green); premature_closes normalises bare
+      #n via resolve_identity (no forge call), owner/repo#n, and GitHub and GitLab issue
+      URLs, and returns each Closes/Fixes/Resolves line whose issue a post-merge,
+      not-walk-verified row cites, with the `Refs <ref>` fix. _deliver_pr_gate refuses on
+      it (exit 2) printing both.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: pr_body.py (closing_refs, premature_closes, sections) and the gate call in
+      run_cmd._deliver_pr_gate. Green; full fast suite, ruff, mypy; commit.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
