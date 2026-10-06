@@ -6709,9 +6709,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R3
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_shipped_verification_strategies
+    status: ci
+    notes: scenario tests/scenarios/shipped-verification-strategies.sh runs against
+      a candidate install in CI (tests/integration/test_scenarios.py)
+    scenario: tests/scenarios/shipped-verification-strategies.sh
   - id: spec-verification-section
     capability: verification
     acceptance: 'A spec''s ## Verification section sets the run''s strategy and per-row
