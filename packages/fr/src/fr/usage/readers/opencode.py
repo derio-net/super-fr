@@ -170,6 +170,7 @@ def _read(source: Path, session: str) -> UsageRecord:
                 tokens=tokens_of(data),
                 tool_calls=tuple(calls.get(message_id, ())),
                 agent="main" if owner == session else str(data.get("agent") or "subagent"),
+                agent_id=None if owner == session else str(owner),
             )
         )
         cost = data.get("cost")
