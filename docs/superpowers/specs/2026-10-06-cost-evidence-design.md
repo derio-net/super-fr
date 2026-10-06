@@ -89,7 +89,11 @@ R10. `fr usage compare --before <date|run-id> --after <date|run-id>` compares
      version and plan journals. Per run it shows: phases, turns, main and
      subagent cache-read and output tokens, dollars (with how many runs were
      priced), review findings per phase and re-opened findings. Per set it
-     shows medians and the sample size. It is read-only and deterministic.
+     shows medians and the sample size. With `--steps` it shows, per set,
+     the main session's turns, tokens and dollars per step and the dollars per
+     main-session turn per step (the figures #593's decision rules need). A
+     session that appears in more than one run of a set is marked. It is
+     read-only and deterministic.
 R11. An audit document, `docs/superpowers/audits/2026-10-06-cost-evidence-audit.md`,
      answers from `fr usage compare` output (quoted, with the command):
      (a) #627, with the cutoff at #514's merge; (b) #793 item 5, with the
@@ -276,7 +280,11 @@ Inputs per run:
 - the plan, found through the cursor's `steps.plan.emitted.plan` (run ids are
   not plan slugs), and its journal (`journals/plans/`, then the archived one).
   Findings per phase are journal `finding` entries grouped by their `phase`
-  field. Re-opened findings are those whose resolution fold
+  field; findings with no phase are reported separately, never divided in.
+  The phase count comes from the plan folder's `NN.yaml` files (live, then
+  `implemented/plans/`), falling back to the cursor's `phase/<n>` keys
+  (with or without a member segment) only when the plan is missing, since
+  pre-v5 cursors list only the phases fr dispatched. Re-opened findings are those whose resolution fold
   (`fr.journal.model`) shows a re-open record.
 
 The output is a per-run table plus a per-set median row and `n`. A run missing
