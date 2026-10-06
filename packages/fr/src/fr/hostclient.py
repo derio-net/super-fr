@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fr import _hosts
 from fr.gh import GhError
@@ -99,6 +100,20 @@ def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) 
     if backend == "gitea":
         return RealTeaClient()
     return RealGhClient(host=host)
+
+
+def client_for_url(url: str) -> GhClient:
+    """The client for the forge AND instance *url* lives on — the backend from
+    the URL's path shape (else its hostname), and a host only when it is not a
+    recognized SaaS domain (spec 2026-10-06-forge-remainder §4.D). For callers
+    holding a URL and no checkout: `fr_vk.pr_state` and the triage batch verbs.
+
+    A self-hosted GitLab URL with no MR path shape still reads as github
+    here; triage facts are GitHub-only, so it cannot arise from them."""
+    return client_for_backend(
+        _hosts.backend_for_url(url),
+        host=_hosts.self_hosted_hostname(urlparse(url).hostname),
+    )
 
 
 def client_for(repo_root: Path) -> GhClient:

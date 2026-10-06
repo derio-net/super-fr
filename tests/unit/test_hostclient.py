@@ -188,3 +188,43 @@ class TestClientForWarnsOnAnUnthreadedDeclaredHost:
         # infers it, and an SSH alias must never become GH_HOST (§4.E).
         assert isinstance(client, RealGhClient)
         assert client._host is None
+
+
+class TestClientForUrl:
+    """`client_for_url` (spec 2026-10-06-forge-remainder §4.D, Test Plan 2):
+    the forge AND instance a bare URL names, shared by `fr_vk.pr_state` and
+    the triage batch verbs."""
+
+    def test_a_ghe_pr_url_gives_a_github_client_on_that_host(self) -> None:
+        client = hostclient.client_for_url("https://ghe.example/o/r/pull/3")
+        assert isinstance(client, RealGhClient)
+        assert client._host == "ghe.example"
+
+    def test_a_github_com_pr_url_gives_no_host(self) -> None:
+        client = hostclient.client_for_url("https://github.com/o/r/pull/3")
+        assert isinstance(client, RealGhClient)
+        assert client._host is None
+
+    def test_a_self_hosted_gitlab_mr_url_gives_a_glab_client_on_that_host(self) -> None:
+        client = hostclient.client_for_url("https://gitlab.example/g/p/-/merge_requests/1")
+        assert isinstance(client, RealGlabClient)
+        assert client._host == "gitlab.example"
+
+
+class TestTriageBatchMakeClient:
+    """`triage_batch_cmd.make_client` reaches the instance the repo URL names
+    (§4.D, R5) — it used to drop the host, so a GHE batch talked to github.com."""
+
+    def test_a_ghe_repo_url_keeps_its_host(self) -> None:
+        from fr.commands import triage_batch_cmd
+
+        client = triage_batch_cmd.make_client("https://ghe.example/o/r")
+        assert isinstance(client, RealGhClient)
+        assert client._host == "ghe.example"
+
+    def test_a_github_com_repo_url_gives_no_host(self) -> None:
+        from fr.commands import triage_batch_cmd
+
+        client = triage_batch_cmd.make_client("https://github.com/o/r")
+        assert isinstance(client, RealGhClient)
+        assert client._host is None
