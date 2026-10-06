@@ -3,35 +3,86 @@ run: 2026-10-06-feat-batch-triage-dedupe
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T2.S4, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T3.S4, P1.T3.S5, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T4.S4, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T5.S4, P1.T6.S1, P1.T6.S2, P1.T6.S3, P1.T6.S4]
+ticks:
+- P1.T1.S1
+- P1.T1.S2
+- P1.T1.S3
+- P1.T2.S1
+- P1.T2.S2
+- P1.T2.S3
+- P1.T2.S4
+- P1.T3.S1
+- P1.T3.S2
+- P1.T3.S3
+- P1.T3.S4
+- P1.T3.S5
+- P1.T4.S1
+- P1.T4.S2
+- P1.T4.S3
+- P1.T4.S4
+- P1.T5.S1
+- P1.T5.S2
+- P1.T5.S3
+- P1.T5.S4
+- P1.T6.S1
+- P1.T6.S2
+- P1.T6.S3
+- P1.T6.S4
 refactor:
-  P1.T6: "Task 6 is skill prose, mirrors, fragment and matrix; there is no code to restructure (the 120-line skill cap was met by joining wrapped lines, content unchanged)."
+  P1.T6: Task 6 is skill prose, mirrors, fragment and matrix; there is no code to restructure (the 120-line skill cap was met by joining wrapped lines, content unchanged).
 journal:
-  - kind: discovery
-    id: skill-120-line-cap
-    phase: 1
-    title: fr-triage SKILL.md sat exactly at the 120-line cap
-    body: "tests/unit/test_skill_validation.py caps every SKILL.md at 120 lines and fr-triage was already at 120, so the dedupe teaching had to be paid for by joining wrapped paragraphs (no words dropped) and putting the example row on one flow line."
-  - kind: discovery
-    id: kanban-phrase-table
-    phase: 1
-    title: A new ActionKind needs a phrase in triage/kanban.py
-    body: "kanban._ACTION_PHRASES is indexed by every ActionKind (test_every_action_kind_has_a_phrase), so adding dedupe to the driver needed a phrase there; the action names no batch and is never a card hint."
-  - kind: discovery
-    id: dedupe-fixture-states
-    phase: 1
-    title: The calibration capture is mostly closed issues
-    body: "594/607/631/640/647/724/725 are closed on the forge today; the test loads every captured issue as open, since the engine compares open issues only and the capture is of text, not state."
-evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-suite.log}
+- kind: discovery
+  id: skill-120-line-cap
+  phase: 1
+  title: fr-triage SKILL.md sat exactly at the 120-line cap
+  body: tests/unit/test_skill_validation.py caps every SKILL.md at 120 lines and fr-triage was already at 120, so the dedupe teaching had to be paid for by joining wrapped paragraphs (no words dropped) and putting the example row on one flow line.
+- kind: discovery
+  id: kanban-phrase-table
+  phase: 1
+  title: A new ActionKind needs a phrase in triage/kanban.py
+  body: kanban._ACTION_PHRASES is indexed by every ActionKind (test_every_action_kind_has_a_phrase), so adding dedupe to the driver needed a phrase there; the action names no batch and is never a card hint.
+- kind: discovery
+  id: dedupe-fixture-states
+  phase: 1
+  title: The calibration capture is mostly closed issues
+  body: 594/607/631/640/647/724/725 are closed on the forge today; the test loads every captured issue as open, since the engine compares open issues only and the capture is of text, not state.
+evidence: {}
 visual:
-  - row: triage-dedupe-board
-    script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/shoot.py
-    shots:
-      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/desktop-full-collapsed.png, shows: [original-with-one-duplicate, original-with-two-duplicates, duplicate-of-closed-original, duplicate-of-missing-original, possible-duplicates-groups]}
-      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/desktop-expanded-originals.png, shows: [expand-original-row-shows-duplicates, original-with-one-duplicate, original-with-two-duplicates]}
-      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/desktop-possible-groups.png, shows: [possible-duplicates-groups]}
-      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/desktop-possible-empty.png, shows: [possible-duplicates-empty]}
-      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/phone-full-collapsed.png, shows: [phone-width-long-reason, original-with-one-duplicate, duplicate-of-closed-original, duplicate-of-missing-original]}
-      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/phone-expanded-originals.png, shows: [expand-original-row-shows-duplicates, original-with-two-duplicates]}
-      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/phone-possible-groups.png, shows: [phone-width-long-reason, possible-duplicates-groups]}
-      - {path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/phone-possible-empty.png, shows: [possible-duplicates-empty]}
+- row: triage-dedupe-board
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/shoot.py
+  shots:
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/desktop-full-collapsed.png
+    shows:
+    - original-with-one-duplicate
+    - original-with-two-duplicates
+    - duplicate-of-closed-original
+    - duplicate-of-missing-original
+    - possible-duplicates-groups
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/desktop-expanded-originals.png
+    shows:
+    - expand-original-row-shows-duplicates
+    - original-with-one-duplicate
+    - original-with-two-duplicates
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/desktop-possible-groups.png
+    shows:
+    - possible-duplicates-groups
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/desktop-possible-empty.png
+    shows:
+    - possible-duplicates-empty
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/phone-full-collapsed.png
+    shows:
+    - phone-width-long-reason
+    - original-with-one-duplicate
+    - duplicate-of-closed-original
+    - duplicate-of-missing-original
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/phone-expanded-originals.png
+    shows:
+    - expand-original-row-shows-duplicates
+    - original-with-two-duplicates
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/phone-possible-groups.png
+    shows:
+    - phone-width-long-reason
+    - possible-duplicates-groups
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-visual/phone-possible-empty.png
+    shows:
+    - possible-duplicates-empty
