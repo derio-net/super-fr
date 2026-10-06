@@ -225,3 +225,15 @@ def test_re_rendering_the_only_snapshot_says_nothing_changed(
     _render(state)
     assert len(_snaps(state)) == 1
     assert "Nothing changed" in (state / "triage.html").read_text(encoding="utf-8")
+
+
+# ------------------------------------------------ the board link (batch-board R13)
+
+
+def test_the_render_command_links_the_board_only_when_board_html_exists(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    _render(state)
+    assert "board.html" not in (state / "triage.html").read_text(encoding="utf-8")
+    (state / "board.html").write_text("<html></html>", encoding="utf-8")
+    _render(state)
+    assert 'href="board.html"' in (state / "triage.html").read_text(encoding="utf-8")

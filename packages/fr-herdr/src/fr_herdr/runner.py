@@ -22,6 +22,11 @@ prompt is in.
   none exists); an item without one goes to the runner's own workspace.
   Because a group's workspace is not the runner's, `existing_dispatches` lists
   the tabs of EVERY workspace and matches the item id wherever it is.
+- **Session state and focus.** `session_statuses` reads one `tab list` for
+  all items and reports a session's most urgent tab (`blocked` > `working` >
+  `idle` > `done`; a value herdr adds later is `unknown`; no tab is `absent`);
+  `focus` selects the item's workspace, then its tab (`workspace focus`, `tab
+  focus`), and is False when there is no tab.
 - **Inside herdr only.** `preflight` refuses unless `HERDR_ENV=1` and `herdr`
   is on PATH: herdr's own rule is never to drive a session from outside it.
 
@@ -42,7 +47,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from fr_dispatch.protocols import CloseOutcome
+    from fr_dispatch.protocols import CloseOutcome, SessionStatus
     from fr_dispatch.work_item import WorkItem
 
 
@@ -141,7 +146,7 @@ class HerdrRunner:
         workspace; every other tab goes with `tab close`.
         """
         tabs = _list_tabs()
-        mine = [t for t in tabs if t.get("label") == item.id]
+        mine = _tabs_labelled(tabs, item.id)
         if not mine:
             return "absent"
         if any(t.get("agent_status") in _BUSY for t in mine):
@@ -161,6 +166,21 @@ class HerdrRunner:
             else:
                 _run_herdr(["tab", "close", str(tab["tab_id"])])
         return "closed"
+
+    def session_statuses(self, items: Sequence[WorkItem]) -> dict[str, SessionStatus]:
+        """Each item's most urgent tab status, from one `tab list` (spec §B; R9)."""
+        tabs = _list_tabs()
+        return {item.id: _status_of(_tabs_labelled(tabs, item.id)) for item in items}
+
+    def focus(self, item: WorkItem) -> bool:
+        """Select the item's workspace, then its tab; False when it has no tab (spec §B)."""
+        mine = _tabs_labelled(_list_tabs(), item.id)
+        if not mine:
+            return False
+        tab = mine[0]
+        _run_herdr(["workspace", "focus", str(tab["workspace_id"])])
+        _run_herdr(["tab", "focus", str(tab["tab_id"])])
+        return True
 
     def can_dispatch(self, item: WorkItem) -> bool:
         return item.unit in self.units and item.payload.get("harness") in HARNESSES
@@ -274,6 +294,24 @@ def _list_tabs() -> list[dict[str, Any]]:
     return [t for t in tabs if isinstance(t, dict)]
 
 
+_PRECEDENCE: tuple[SessionStatus, ...] = ("blocked", "working", "idle", "done", "unknown")
+"""Most urgent first: what a session in several tabs reports."""
+
+
+def _tabs_labelled(tabs: list[dict[str, Any]], item_id: str) -> list[dict[str, Any]]:
+    return [t for t in tabs if t.get("label") == item_id]
+
+
+def _status_of(tabs: list[dict[str, Any]]) -> SessionStatus:
+    if not tabs:
+        return "absent"
+    seen = {t.get("agent_status") for t in tabs}
+    for status in _PRECEDENCE:
+        if status in seen:
+            return status
+    return "unknown"
+
+
 def _list_workspaces() -> list[dict[str, Any]]:
     result = _run_herdr(["workspace", "list"]).get("result")
     workspaces = result.get("workspaces", []) if isinstance(result, dict) else []
@@ -328,9 +366,11 @@ def _close_workspace(workspace: str | None) -> None:
 
 
 if TYPE_CHECKING:
-    from fr_dispatch.protocols import Runner, SessionCloser
+    from fr_dispatch.protocols import Runner, SessionCloser, SessionFocuser, SessionInspector
 
     # Conformance check: `Runner` is not runtime-checkable, so this assignment is
     # what makes CI's mypy fail when a signature here drifts from the protocol.
     _conforms: Runner = HerdrRunner()
     _closes: SessionCloser = HerdrRunner()
+    _inspects: SessionInspector = HerdrRunner()
+    _focuses: SessionFocuser = HerdrRunner()

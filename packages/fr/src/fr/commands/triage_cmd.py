@@ -358,7 +358,8 @@ def render_command(
     snap = take_snapshot(facts, judgements, acceptance=acceptance_rows(matrix_path))
     since = diff_snapshots(previous_snapshot(target_dir, snap), snap)
     out = target_dir / "triage.html"
-    out.write_text(render(facts, judgements, since), encoding="utf-8")
+    page = render(facts, judgements, since, board=(target_dir / "board.html").is_file())
+    out.write_text(page, encoding="utf-8")
     # Stored only once the page exists, and only when the board differs from the latest
     # snapshot: a re-render with nothing new must not erase "Since last report".
     if snap != latest_snapshot(target_dir):
@@ -382,4 +383,5 @@ def render_command(
 # already exists.
 import fr.commands.triage_architecture_cmd  # noqa: E402, F401
 import fr.commands.triage_batch_cmd  # noqa: E402, F401
+import fr.commands.triage_kanban_cmd  # noqa: E402, F401
 import fr.commands.triage_origins_cmd  # noqa: E402, F401
