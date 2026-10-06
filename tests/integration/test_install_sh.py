@@ -769,9 +769,7 @@ class TestFrHerdrOnPath:
         }
         if no_herdr:
             env["UV_STUB_NO_HERDR"] = "1"
-        result = subprocess.run(
-            ["bash", str(INSTALL_SH)], capture_output=True, text=True, env=env
-        )
+        result = subprocess.run(["bash", str(INSTALL_SH)], capture_output=True, text=True, env=env)
         assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
         return result, path_bin, tooldir, log
 
@@ -811,9 +809,7 @@ class TestFrHerdrOnPath:
         _, path_bin, tooldir, _ = self._run(fake_home, tmp_path, preexisting_fr=False)
         assert os.readlink(path_bin / "fr-herdr") == str(tooldir / "fr" / "bin" / "fr-herdr")
 
-    def test_no_link_when_fr_herdr_was_not_installed(
-        self, fake_home: Path, tmp_path: Path
-    ) -> None:
+    def test_no_link_when_fr_herdr_was_not_installed(self, fake_home: Path, tmp_path: Path) -> None:
         _, path_bin, _, _ = self._run(fake_home, tmp_path, preexisting_fr=True, no_herdr=True)
         assert not (path_bin / "fr-herdr").exists() and not (path_bin / "fr-herdr").is_symlink()
 
@@ -829,7 +825,8 @@ def test_candidate_install_asks_for_fr_herdrs_executables(tmp_path: Path) -> Non
         "#!/bin/sh\n"
         'for a in "$@"; do printf "%s\\n" "$a" >> "$UV_STUB_LOG"; done\n'
         'mkdir -p "$UV_TOOL_BIN_DIR"\n'
-        'printf "#!/bin/sh\\necho fr 9\\n" > "$UV_TOOL_BIN_DIR/fr"; chmod +x "$UV_TOOL_BIN_DIR/fr"\n'
+        'printf "#!/bin/sh\\necho fr 9\\n" > "$UV_TOOL_BIN_DIR/fr"\n'
+        'chmod +x "$UV_TOOL_BIN_DIR/fr"\n'
     )
     uv.chmod(0o755)
     result = subprocess.run(
