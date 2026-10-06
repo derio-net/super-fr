@@ -184,3 +184,6 @@ R8 + §E: ran shown only for attempts that recorded bound; R11 lists pre-gh#637 
 ### sr-r1-12-resolved · finding [out-of-scope] · resolves sr-r1-12: Reviewer dispatch briefs stay keyed by raw agent id (units_by_agent ignores evidence.reviewer)
 
 Pre-existing: brief re-keying ignored evidence.reviewer before this change; no requirement here asks for it, and this change does not alter brief keys.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-cost-evidence-p2 created=2026-10-06T17:45:35+00:00 -->
+### phase-split-2026-10-06-cost-evidence-p2 · decision · ask: #838 tier/bound model and #793 item 4 per-phase overhead table (R7-R9)
