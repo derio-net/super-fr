@@ -5,6 +5,12 @@ Test Plan 3 and 4).
 host, through both of `fr.gh`'s subprocess paths (`_run_gh` and
 `view_pr_body`); with no host, and for a bare `fr.gh` call made afterwards,
 `env` stays `None` so the SaaS path is byte-for-byte what it was.
+
+The trust gate (plan journal `p1-gh-host-trust-gate`): `GH_HOST` makes gh send
+`GH_ENTERPRISE_TOKEN` to that host, and the hosts fr threads come from URLs
+and a cloned repo's committed config. So only a host gh is logged into (a key
+of gh's own `hosts.yml`) is ever threaded; any other fails closed, before a
+subprocess starts, and never falls back to github.com.
 """
 
 from __future__ import annotations
@@ -36,6 +42,18 @@ class _Recorder:
         if argv[1:3] == ["pr", "view"]:
             out = "the body"
         return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+
+@pytest.fixture(autouse=True)
+def gh_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """gh's config dir, logged into `ghe.example` (and github.com) only."""
+    d = tmp_path / "gh-config"
+    d.mkdir()
+    (d / "hosts.yml").write_text(
+        "github.com:\n    user: someone\nghe.example:\n    user: someone\n"
+    )
+    monkeypatch.setenv("GH_CONFIG_DIR", str(d))
+    return d
 
 
 @pytest.fixture
@@ -106,3 +124,86 @@ def test_every_gh_method_is_hosted() -> None:
         and not getattr(fn, "__fr_hosted__", False)
     ]
     assert unhosted == []
+
+
+_REFUSAL = (
+    "GitHub host 'evil.example' is not one gh is logged into; run "
+    "`gh auth login --hostname evil.example` (fr will not point gh, or its "
+    "tokens, at an unknown host)"
+)
+
+
+def test_an_unknown_host_fails_closed_on_the_run_gh_path(recorder: _Recorder) -> None:
+    with pytest.raises(_gh.GhError) as exc:
+        RealGhClient(host="evil.example").view_issue("o/r", 1)
+    assert str(exc.value) == _REFUSAL
+    assert recorder.envs == []  # no subprocess started
+
+
+def test_an_unknown_host_fails_closed_on_the_view_pr_body_path(
+    recorder: _Recorder, tmp_path: Path
+) -> None:
+    with pytest.raises(_gh.GhError, match="evil.example"):
+        RealGhClient(host="evil.example").pr_body("3", cwd=tmp_path)
+    assert recorder.envs == []
+
+
+def test_an_unknown_host_never_falls_back_to_github_com(recorder: _Recorder) -> None:
+    """A fail-soft method still starts no subprocess: no silent github.com
+    target (#892's wrong-target write)."""
+    assert RealGhClient(host="evil.example").file_exists("o/r", "x") is False
+    assert recorder.envs == []
+
+
+def test_building_a_client_touches_no_filesystem(
+    monkeypatch: pytest.MonkeyPatch, recorder: _Recorder
+) -> None:
+    def boom() -> frozenset[str]:
+        raise AssertionError("known_hosts read at construction")
+
+    monkeypatch.setattr(_gh, "known_hosts", boom)
+    RealGhClient(host="evil.example")
+    RealGhClient()
+
+
+def test_no_host_needs_no_login(
+    monkeypatch: pytest.MonkeyPatch, recorder: _Recorder, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("GH_CONFIG_DIR", str(tmp_path / "nowhere"))
+    RealGhClient().view_issue("o/r", 1)
+    assert recorder.envs == [None]
+
+
+class TestKnownHosts:
+    def test_reads_the_keys_of_gh_config_dir_hosts_yml(self) -> None:
+        assert _gh.known_hosts() == frozenset({"github.com", "ghe.example"})
+
+    def test_falls_back_to_xdg_config_home(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.delenv("GH_CONFIG_DIR")
+        (tmp_path / "xdg" / "gh").mkdir(parents=True)
+        (tmp_path / "xdg" / "gh" / "hosts.yml").write_text("ghe.xdg.example: {}\n")
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+        assert _gh.known_hosts() == frozenset({"ghe.xdg.example"})
+
+    def test_falls_back_to_home_dot_config(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.delenv("GH_CONFIG_DIR")
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".config" / "gh").mkdir(parents=True)
+        (tmp_path / ".config" / "gh" / "hosts.yml").write_text("ghe.home.example: {}\n")
+        assert _gh.known_hosts() == frozenset({"ghe.home.example"})
+
+    @pytest.mark.parametrize("body", [None, "", "- a list\n", "{unclosed: [\n"])
+    def test_a_missing_or_unreadable_file_is_the_empty_set(
+        self, gh_config: Path, body: str | None
+    ) -> None:
+        hosts = gh_config / "hosts.yml"
+        if body is None:
+            hosts.unlink()
+        else:
+            hosts.write_text(body)
+        assert _gh.known_hosts() == frozenset()

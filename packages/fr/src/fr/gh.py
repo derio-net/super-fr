@@ -49,12 +49,51 @@ _HOST: contextvars.ContextVar[str | None] = contextvars.ContextVar("fr_gh_host",
 `RealGhClient(host=...)` — so a bare `fr.gh` call never sees a host."""
 
 
+def _hosts_yml() -> Path:
+    """gh's own `hosts.yml`: `$GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else
+    `~/.config/gh` — gh's lookup order."""
+    if config_dir := os.environ.get("GH_CONFIG_DIR"):
+        return Path(config_dir) / "hosts.yml"
+    if xdg := os.environ.get("XDG_CONFIG_HOME"):
+        return Path(xdg) / "gh" / "hosts.yml"
+    return Path.home() / ".config" / "gh" / "hosts.yml"
+
+
+def known_hosts() -> frozenset[str]:
+    """The hosts gh is logged into — the top-level keys of its `hosts.yml`, the
+    ones the operator ran `gh auth login` for (lowercased). A missing,
+    unreadable or malformed file is the empty set: nothing is trusted."""
+    import yaml
+
+    try:
+        data = yaml.safe_load(_hosts_yml().read_text())
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return frozenset()
+    if not isinstance(data, dict):
+        return frozenset()
+    return frozenset(str(k).lower() for k in data)
+
+
 def _env() -> dict[str, str] | None:
     """The `env` for a `gh` subprocess: None (inherit, the SaaS path untouched)
-    when no host is in scope, else a copy of `os.environ` plus `GH_HOST`."""
+    when no host is in scope, else a copy of `os.environ` plus `GH_HOST`.
+
+    The ONE place the host trust gate is enforced, so every `gh` subprocess
+    path inherits it (plan journal `p1-gh-host-trust-gate`). `GH_HOST` makes gh
+    send `GH_ENTERPRISE_TOKEN` to that host, and the hosts fr threads come from
+    PR/issue URLs and a cloned repo's committed `fr-profiles.yaml` — neither
+    fully trusted. So a host gh is not logged into raises `GhError`, before any
+    subprocess starts, and never falls back to github.com (#892's wrong-target
+    write)."""
     host = _HOST.get()
     if host is None:
         return None
+    if host.lower() not in known_hosts():
+        raise GhError(
+            f"GitHub host {host!r} is not one gh is logged into; run "
+            f"`gh auth login --hostname {host}` (fr will not point gh, or its "
+            "tokens, at an unknown host)"
+        )
     return {**os.environ, "GH_HOST": host}
 
 

@@ -55,7 +55,10 @@ class RealGhClient:
 
     `host` names a GitHub Enterprise instance: every `gh` this client runs
     gets `GH_HOST=<host>`. None (the default) leaves gh's own host resolution
-    alone — the SaaS path, unchanged."""
+    alone — the SaaS path, unchanged. A host gh is not logged into
+    (`fr.gh.known_hosts`) is never threaded: each call fails closed with
+    `GhError` instead — checked at call time, so building a client reads
+    nothing (plan journal `p1-gh-host-trust-gate`)."""
 
     def __init__(self, host: str | None = None) -> None:
         self._host = host
