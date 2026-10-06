@@ -14,3 +14,8 @@ pickup_cmd._run_unit_record calls run_cmd._resolve_manifest_for_state, which rai
 ### f-1 · finding [fixed] · pickup reads the cursor with the lenient read-only resolver
 
 pickup_cmd._run_unit_record now calls run_cmd._resolve_manifest_for_read: a step drift prints one stderr warning naming fr run reshape and the ## Step record section stays. Failing test first (test_pickup_on_a_drifted_cursor_keeps_the_record_and_warns_once), green after. Full suite: 8974 passed; 2 failures (test_install_marketplace_namespace purge, test_dispatch_lint_corpus) pass on rerun on both this branch and the base: load flakes under a 28-min contended run, not regressions.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-10-06T10:58:37+00:00 -->
+### review-1 · review · Self-review of the diff: no in-scope findings
+
+Read the diff end to end. Noted out of scope and left as is: a schema-version mismatch (not drift) still raises RunStateError, which _record_section still swallows silently. #988 is about step drift, and §B deliberately keeps schema mismatch as a refusal; the silent part could be its own follow-up.
