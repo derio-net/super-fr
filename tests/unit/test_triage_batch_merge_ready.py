@@ -116,6 +116,36 @@ def test_a_moved_head_is_told_from_a_refusal(
     assert issubclass(HeadMovedError, MergeStopError)
 
 
+def test_a_head_that_moves_just_before_the_merge_is_a_moved_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gh#962: a push between the head check and `pr_merge(head_sha=)` makes the
+    forge refuse the merge. The re-read head tells it from a protection refusal."""
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    forge.refuse[1001] = "Head branch was modified. Review and try the merge again."
+    real_merge = forge.pr_merge
+
+    def push_then_merge(repo: str, number: int, *, head_sha: str, method: str) -> None:
+        forge.prs[number]["head_oid"] = "pushed-meanwhile"
+        real_merge(repo, number, head_sha=head_sha, method=method)
+
+    monkeypatch.setattr(forge, "pr_merge", push_then_merge)
+    with pytest.raises(HeadMovedError, match="pushed-meanw"):
+        merge_ready(ctx, slot, None)
+
+
+def test_a_refusal_with_the_head_unmoved_stays_a_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    forge.refuse[1001] = "Required status check is expected."
+    with pytest.raises(MergeStopError, match="forge refused") as got:
+        merge_ready(ctx, slot, None)
+    assert not isinstance(got.value, HeadMovedError)
+
+
 def test_a_pr_behind_its_base_is_updated_and_left_for_a_later_pass(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

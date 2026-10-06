@@ -407,6 +407,18 @@ def _merge(ctx: MergeContext, slot: Slot, head: str, head_version: str | None) -
     try:
         ctx.client.pr_merge(ctx.repo, pr.number, head_sha=head, method=ctx.method)
     except FORGE_ERRORS as exc:  # a protection refusal, in the forge's own words
+        # Unless a push landed after `_open_head`: the head-SHA guard refused it, and
+        # the train stops and re-plans next pass (gh#962). Told by the re-read head,
+        # never by the refusal's wording, which differs per forge.
+        try:
+            moved = str(ctx.client.pr_view(ctx.repo, pr.number).get("head_oid"))
+        except FORGE_ERRORS:
+            moved = head  # unknown: report the refusal as it came
+        if moved != head:
+            raise HeadMovedError(
+                f"PR #{pr.number} (batch {slot.step.batch.id}): head moved before the merge "
+                f"({head[:12]} -> {moved[:12]}); re-run to re-plan"
+            ) from exc
         raise MergeStopError(f"PR #{pr.number}: the forge refused the merge: {exc}") from exc
     ctx.say(f"merged PR #{pr.number} (batch {slot.step.batch.id}) at {head[:12]}")
     where = scratch_path(ctx, slot)
