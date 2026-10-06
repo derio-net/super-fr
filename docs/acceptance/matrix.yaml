@@ -6515,11 +6515,11 @@ rows:
       counts, a blocked mark for unsatisfiable dependencies and a pill for cancelled/abandoned/partial,
       linked from triage.html, readable in light and dark and at phone width.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R15
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban.py
@@ -6542,8 +6542,8 @@ rows:
       PR and CI state, lifecycle details, the event timeline and a next-action hint
       drawn from what the driver would do on the same facts.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban.py
@@ -6563,9 +6563,9 @@ rows:
       herdr session, and refuses with exit 2 and a reason when there is no event, no
       capable runner or no live session.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban_focus.py
@@ -6587,8 +6587,8 @@ rows:
       failing or incapable runner shows unknown with a page note and never fails the
       render; a blocked session flags its card as needing the operator.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban_cmd.py
@@ -6608,9 +6608,9 @@ rows:
       and the page reloads on a configurable timer keeping expanded cards and scroll
       position.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R11
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban_cmd.py
@@ -6632,7 +6632,7 @@ rows:
       reaches a script element, and the copied command is built only from the validated
       batch id and scope options.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban_render.py
@@ -6644,12 +6644,18 @@ rows:
       the pasted jump command switches to the batch's tab in its wave workspace, and
       a session waiting on a prompt shows blocked.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-batch-board-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R11
+    levels:
+      int:
+      - super-fr:docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md
+    status: skipped
+    notes: 'not-implemented -> skipped on 2026-10-06: all three post-merge Test Plan
+      items driven live inside herdr against a real fr triage batch drive over 101 batches
+      (columns vs an independent gh oracle, cards moving on acting and non-acting passes,
+      reloads keeping expansion, jump switching the tab, two blocked sessions shown
+      as needs-you). Manual and post-merge only, so not in CI.'
     verify: post-merge
   - id: fr-binary-identity
     capability: harness-parity
