@@ -2,7 +2,8 @@
 
 `drive_pass(snapshot)` returns the ordered actions one pass of `fr triage batch
 drive` takes: merge what is ready, close out what merged, merge an attributed
-archive PR, dispatch what may start, and report what is blocked or failing.
+archive PR, dispatch what may start, report what is blocked or failing, and say
+when a finished wave leaves duplicate candidates (`dedupe`).
 The command layer (`fr.commands.triage_batch_cmd`) builds the `Snapshot` from
 the facts, the forge client, the checkout and the runner, and executes the
 actions; this module only decides.
@@ -63,6 +64,7 @@ ActionKind = Literal[
     "warn",
     "foreign",
     "close",
+    "dedupe",
     "export",
     "export-merge",
     "export-reconcile",
@@ -135,6 +137,12 @@ class Snapshot:
     # and the batch and close-out item ids of batches that a closing runner holds live.
     close_sessions: bool = False
     sessions: frozenset[str] = frozenset()
+    # Triage-dedupe R10. The waves that were unfinished on this process's previous pass
+    # (None on its first), the candidate-group count, and the scope-qualified check
+    # command: the count and the command arrive here so this module imports no dedupe.
+    unfinished_waves: frozenset[str] | None = None  # wave keys, as `finished`
+    duplicate_groups: int = 0
+    dedupe_command: str = ""
     # Per-wave state export (pages-goal R13, §I). `export_path`: repo -> the export
     # directory `<path>/<scope>` in the repo, for a single-repo scope only; `exports`:
     # what the state file records; `export_prs`: (repo, wave) -> the live PR of a recorded, unmerged
@@ -606,6 +614,13 @@ def is_finished(batch: Batch, stage: BatchStage, archives: Sequence[LivePr]) -> 
     return any(p.state == "MERGED" and attributed(p, batch, event) for p in archives)
 
 
+def unfinished_waves(snap: Snapshot) -> frozenset[str]:
+    """The wave keys (`str(batch.wave)`) of the state file that `snap.finished` does not
+    hold: what the next pass compares against (triage-dedupe R10). `finished` is
+    `finished_waves`, the one predicate the board, the history page and the driver read."""
+    return frozenset(str(b.wave) for b in snap.batches if b.wave is not None) - snap.finished
+
+
 # ------------------------------------------------------------------ the pass
 
 
@@ -665,8 +680,9 @@ def _walk_train(
 
 
 def drive_pass(snap: Snapshot) -> Pass:
-    """One pass: report foreign PRs, merge, close out, archive, dispatch — in that
-    order, so a slot a merge frees is used in the same pass."""
+    """One pass: report foreign PRs, merge, close out, archive, dispatch, close sessions,
+    then report duplicate candidates of newly finished waves — in that order, so a slot a
+    merge frees is used in the same pass."""
     actions: list[Action] = []
     stages = dict(snap.stages)
     merging: set[str] = set()
@@ -823,6 +839,17 @@ def drive_pass(snap: Snapshot) -> Pass:
             if live:
                 actions.append(Action("close", batch.id, f"sessions {', '.join(live)}", items=live))
 
+    # 6. Report duplicate candidates once per wave observed going unfinished -> finished
+    # (R10). Never inferred from a planned action: an archive merge may still fail.
+    if snap.duplicate_groups > 0:
+        n = snap.duplicate_groups
+        groups = f"{n} duplicate candidate {'group' if n == 1 else 'groups'}"
+        for wave in sorted(snap.finished & (snap.unfinished_waves or frozenset()), key=int):
+            actions.append(
+                Action("dedupe", "", f"{groups} after wave {wave} finished; run "
+                       f"`{snap.dedupe_command}` to judge them")
+            )  # fmt: skip
+
     merged = sum(1 for b in driven if stages.get(b) in LANDED)
     closing += len(merging)
     return Pass(
@@ -845,6 +872,8 @@ def drive_pass(snap: Snapshot) -> Pass:
 def action_line(action: Action, outcome: str | None = None) -> str:
     """The one line an action prints, in plan mode (*outcome* None) and when acted:
     the same words in `--once` and loop mode."""
+    if action.kind == "dedupe":  # names no batch
+        return f"dedupe: {outcome or action.detail}"
     if action.wave is not None:
         return f"{action.kind} wave {action.wave} {action.batch}: {outcome or action.detail}"
     return f"{action.kind} {action.batch}: {outcome or action.detail}"

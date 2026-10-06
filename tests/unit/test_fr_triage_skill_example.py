@@ -110,3 +110,23 @@ def test_the_skill_names_the_batch_verbs_and_the_yes_rule() -> None:
     ):
         assert verb in text, verb
     assert "--yes" in text
+
+
+def test_the_example_shows_both_duplicate_fields_and_loads_them(tmp_path: Path) -> None:
+    path = tmp_path / "judgements.yaml"
+    path.write_text(_example())
+
+    judged = load_judgements(path).issues["super-fr#470"]
+
+    assert judged.duplicate_of == "super-fr#435"
+    assert judged.distinct_from == ["super-fr#469"]
+
+
+def test_the_skill_teaches_judging_candidates_and_leaves_the_close_to_the_operator() -> None:
+    text = SKILL.read_text()
+
+    assert "**duplicate candidates**" in text and "**duplicates**" in text
+    assert "`duplicate_of: <original>`" in text and "`distinct_from: [<other>]`" in text
+    assert "gh issue close N --duplicate-of <url>" in text
+    assert "link duplicates in `note`" not in text
+    assert "`dedupe` line" in text

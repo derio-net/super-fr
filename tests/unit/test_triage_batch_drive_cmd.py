@@ -60,6 +60,7 @@ class World:
         self.calls: list[str] = []
         self.comments: dict[int, list[dict[str, Any]]] = {}
         self.config: dict[str, Any] | None = None
+        self.titles: dict[int, str] = {}
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -90,7 +91,7 @@ class World:
                 Issue(
                     repo=REPO,
                     number=i,
-                    title=f"issue {i}",
+                    title=self.titles.get(i, f"issue {i}"),
                     state=s,  # type: ignore[arg-type]
                     url=f"https://github.com/{REPO}/issues/{i}",
                     prs=linked[i],
@@ -2349,6 +2350,58 @@ def test_no_train_line_without_a_ready_pr(
     assert "train " not in out
 
 
+# ------------------------------------------- dedupe wiring (triage-dedupe R10, sr-1, sr-5)
+
+
+def test_the_driver_fills_the_dedupe_fields_and_carries_unfinished_waves(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    world.titles = {1: "deliver gate refuses X", 2: "deliver gate refuses X again"}
+    _proposed(world, tmp_path)
+    seen: list[Any] = []
+    real = triage_batch_cmd.drive_pass
+
+    def _spy(snap: Any) -> Any:
+        seen.append(snap)
+        return real(snap)
+
+    scope_args = ["--repo", REPO, "--dir", str(tmp_path)]
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd.Scope(kind="repo", target=REPO), tmp_path, named=None,
+        checkouts={}, max_inflight=4, yes=False, scope_args=scope_args,
+    )  # fmt: skip
+    monkeypatch.setattr(triage_batch_cmd, "drive_pass", _spy)
+    driver.run_pass()
+    driver.run_pass()
+
+    first, second = seen
+    assert first.unfinished_waves is None  # a first pass reports nothing
+    assert second.unfinished_waves == {"1"}  # b1 and b2 are unfinished: carried forward
+    assert first.duplicate_groups == 1
+    assert first.dedupe_command == f"fr triage check --repo {REPO} --dir {tmp_path}"
+
+
+def test_a_dedupe_action_is_reported_under_yes_and_acts_on_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    from fr.triage.batch_drive import Action
+
+    _proposed(world, tmp_path)
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd.Scope(kind="repo", target=REPO), tmp_path, named=None,
+        checkouts={}, max_inflight=4, yes=True,
+    )  # fmt: skip
+    before = (tmp_path / "judgements.yaml").read_text()
+
+    outcome = driver._act(Action("dedupe", "", "2 duplicate candidate groups after wave 1"),
+                          world.facts(), 0)  # fmt: skip
+
+    assert outcome == ("2 duplicate candidate groups after wave 1", False, 0)
+    assert (tmp_path / "judgements.yaml").read_text() == before
+    assert runner.dispatched == [] and world.calls == []
+
+
 # ------------------------------------- per-wave state export (pages-goal R13, §I)
 
 EXPORT_CONFIG = {"export": {"path": "docs/triage"}}
@@ -3085,3 +3138,27 @@ def test_extra_orphans_are_warned_stale_once_each(
     (stale,) = [ln for ln in _lines(out, "warn") if "stale" in ln]
     assert "PR #45" in stale and "safe to close" in stale and "PR #40" in stale
     assert _exports(state) == [("1", 40, False)]
+
+
+@pytest.mark.parametrize(("unfinished", "passes"), [(frozenset({"1"}), 2), (frozenset(), 1)])
+def test_a_finishing_loop_runs_one_observation_pass_only_when_a_wave_was_unfinished(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, unfinished: frozenset[str], passes: int,
+) -> None:  # fmt: skip
+    """Review p1-r4: the pass that ends the drive may finish the last wave itself (an
+    adopt, an archive merge); only one more pass observes it, so the loop runs it once."""
+    from fr.triage.batch_drive import Summary
+
+    _proposed(world, tmp_path, 1)
+    calls: list[int] = []
+
+    def _done_pass(self: Any) -> tuple[bool, Summary, list[str]]:
+        calls.append(1)
+        self._unfinished = unfinished if len(calls) == 1 else frozenset()
+        return False, Summary(in_flight=0, merged=1, pending=0, closing=0), []
+
+    monkeypatch.setattr(triage_batch_cmd._Driver, "run_pass", _done_pass)
+    code, _ = _drive(tmp_path, "--yes", "--checkout", f"{REPO}={checkout.path}")
+
+    assert code == 0
+    assert len(calls) == passes

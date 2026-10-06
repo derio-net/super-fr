@@ -6675,6 +6675,91 @@ rows:
       reloads keeping expansion, jump switching the tab, two blocked sessions shown
       as needs-you). Manual and post-merge only, so not in CI.'
     verify: post-merge
+  - id: triage-dedupe-candidates
+    capability: triage-dedupe
+    acceptance: fr triage check lists candidate duplicate groups among open issues,
+      each pair with the reason it was flagged, excluding judged duplicates and pairs
+      judged distinct
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dedupe.py#test_the_calibration_fixture_groups_the_known_duplicates
+      - super-fr:tests/unit/test_triage_dedupe.py#test_distinct_from_on_either_side_silences_the_pair
+      - super-fr:tests/unit/test_triage_dedupe.py#test_an_issue_judged_a_duplicate_is_in_no_group
+      - super-fr:tests/unit/test_triage_check.py#test_candidates_come_from_the_dedupe_engine_and_json_carries_both
+    status: ci
+    notes: Engine, four signals, exclusions and the check output are unit-tested; the
+      calibration fixture is a live capture of this repo's issues (2026-10-06).
+  - id: triage-dedupe-judged
+    capability: triage-dedupe
+    acceptance: duplicate_of and distinct_from are validated at load, a judged duplicate is never unplaced, and check reports it with its original's state and the gh close --duplicate-of command, which fr never runs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_check.py#test_an_open_duplicate_of_an_open_original_carries_the_close_command
+      - super-fr:tests/unit/test_triage_check.py#test_a_judged_duplicate_is_never_unplaced
+      - super-fr:tests/unit/test_triage_cli.py#test_a_duplicate_of_target_that_is_not_open_is_viewed_like_a_judged_key
+      - super-fr:tests/unit/test_triage_model.py#test_a_duplicate_chain_loads_so_check_can_report_it
+    status: ci
+    notes: 'Merged with main''s triage-pages-goal duplicate_of: a chain loads and is
+      reported by check''s duplicate_chained set instead of being refused at load.'
+  - id: triage-dedupe-board
+    capability: triage-dedupe
+    acceptance: The triage board lists every judged duplicate under Parked and on its open original's row, with the close command, and lists candidate duplicate groups in a Possible duplicates section
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py#test_an_open_duplicate_nests_in_its_originals_row_with_the_close_command
+      - super-fr:tests/unit/test_triage_render.py#test_possible_duplicates_lists_each_group_escaped_before_the_backlog
+    status: ci
+    notes: Unit-tested render; browser check 2026-10-06 (headless Chrome, 1280px and
+      375px, every visual state and the expand interaction opened and checked, no horizontal
+      scroll at 375px).
+    visual:
+      states:
+      - original-with-one-duplicate
+      - original-with-two-duplicates
+      - duplicate-of-closed-original
+      - duplicate-of-missing-original
+      - possible-duplicates-groups
+      - possible-duplicates-empty
+      - phone-width-long-reason
+      interactions:
+      - expand-original-row-shows-duplicates
+  - id: triage-dedupe-driver
+    capability: triage-dedupe
+    acceptance: The wave driver reports the candidate-group count once, in the pass that observes a wave finish, and never acts on duplicates
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_wave_going_from_unfinished_to_finished_reports_the_candidates_last
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_driver_fills_the_dedupe_fields_and_carries_unfinished_waves
+    status: ci
+    notes: 'Unit level only: drive_pass is pure and a live wave cannot be finished on
+      demand.'
+  - id: triage-dedupe-skill
+    capability: triage-dedupe
+    acceptance: The fr-triage skill teaches judging candidate groups into duplicate_of
+      or distinct_from and leaves the printed close commands to the operator
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_triage_skill_example.py#test_the_skill_teaches_judging_candidates_and_leaves_the_close_to_the_operator
+      - super-fr:tests/unit/test_tripwire_hermes_skills_sync.py
+    status: ci
+    notes: Skill prose and example are pinned by tests; mirrors regenerated by both
+      sync scripts.
   - id: forge-calls-through-adapter
     capability: forge-adapter
     acceptance: Every forge call fr's packages make goes through the forge adapter;
