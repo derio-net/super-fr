@@ -1,0 +1,11 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-archive-followups
+step: deliver
+outcome: done
+journal: []
+resolves: []
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1040
+evidence:
+  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/full-suite.log
