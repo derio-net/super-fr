@@ -1,0 +1,36 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-driver-sessions
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T5.S4]
+refactor:
+  P1.T1: "a smoke test over captured fixtures; no production code existed to clean"
+  P1.T4: "cli.py is 58 lines of argparse over restart_idle written once to its tests; nothing duplicated or misnamed"
+  P1.T5: "shell and test additions follow the existing atomic_symlink and stub-uv patterns; nothing to tidy"
+journal:
+  - kind: discovery
+    id: herdr-agent-start-name-reuse
+    phase: 1
+    title: "herdr accepts the pane's own agent name again right after /exit; it refuses only when another pane holds it"
+    body: |
+      Probed live (herdr 0.9.1) in scratch tabs. After `/exit` the pane drops out of `agent list` (the name is released), and `agent start <same name> --kind claude --pane <same pane> -- --resume <id>` is ACCEPTED with the same agent_session.value and name (fixture agent-start-reuse.json). A different pane starting a name another pane holds gets `agent_name_taken` (agent-start-name-taken.json). So the named `agent start` path is primary, and `agent_name_taken` alone triggers the send-text fallback.
+  - kind: discovery
+    id: claude-agent-count-is-not-background-work
+    phase: 1
+    title: "`← N agent` is on every idle Claude status line, so only shells/monitors and the agent panel mean background work"
+    body: |
+      Spec §A treats `← N agent(s)` as background-agent evidence. Live, a freshly started session with nothing running already shows `← 1 agent`, and the count did not change while a background subagent ran (the status line then also showed `2 shells, 1 monitor` and an agent panel, `⏺ main` / `◯ general-purpose ...`, while herdr reported `done`). `has_background_work` therefore counts `N shells|monitors`, a `◯` panel row, or `← N agents` with N above 1. Using the spec's literal rule would have skipped nearly every pane. The hint segments also vanish from the status line while a draft is typed, and herdr still says `idle` then.
+  - kind: discovery
+    id: pane-read-is-raw-text
+    phase: 1
+    title: "`herdr pane read` prints raw terminal text, not a JSON envelope"
+    body: |
+      `_run_herdr` returns it as `{"raw": <text>}` (stripped), so the screen fixtures are that return value and restart.py reads `.get("raw")`. process-info's foreground_processes also lists non-claude processes (MCP servers; one has no `argv` key), so the claude process is found by argv[0] basename, and its cwd (not the pane's) slugs the transcript path. An extra classify reason `no-process` covers a pane with no claude in the foreground.
+  - kind: discovery
+    id: exit-dialog-not-live-captured
+    phase: 1
+    title: "Claude's exit dialog is quoted from #964, not captured"
+    body: |
+      An unsent feedback draft is not reproducible without sending feedback, so no fixture of the dialog exists; the engine matches "unsent feedback draft" / "Enter to review & send" in the visible text and the tests use that quoted string. The fixtures README says so.
+evidence: {tests: /private/tmp/claude-502/driver-sessions-p1-suite.log}
