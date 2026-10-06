@@ -344,3 +344,178 @@ state_sync is one copy loop shared by both directions; nothing to clean
 ### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
 
 execution reuses _archive's merge path and the gitseam/ghclient seams; the export steps are one method each, nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · export PR merged outside the driver (or crash after pr_merge) is never marked merged; export_target pins to it forever and later waves never export, silently (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · ExportConfig accepts trailing-slash/./empty-part paths that contained() refuses every pass; _export_config rstrips '/' but _export does not (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · crash between pr_create and record, plus a wave finishing before the next pass, opens a second export PR (adoption looks only at the highest owed wave's branch) (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · pr_create ValueError (no PR URL) is not in FORGE_ERRORS: driver tracebacks instead of exiting 1 (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · import's mtime "newer" check is defeated by git checkout mtimes; docstring overclaims "never silently overwritten" (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · a recorded export PR closed unmerged blocks that repo's exports forever with no documented recovery (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · any fork PR named chore/triage-state-wave-N blocks the export (untrusted row); cross-repo PRs could be ignored safely (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r8 · finding [open] (reviewer: in scope) · adoption after a crash pins and auto-merges whatever trusted-PR head is live, with no proof the driver pushed it (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r9 · finding [open] (reviewer: in scope) · commit_paths uses git add without -f, so gitignored durable files are silently not exported (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r10 · finding [open] (reviewer: in scope) · untested leftover-worktree path; non-worktree export dir fails every pass; OSError in _sync escapes as a traceback (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=out -->
+### p4-r11 · finding [open] (reviewer: out of scope) · local check-to-write race between the symlink check and copy2 in state_sync (local attacker only) (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r12 · finding [open] (reviewer: in scope) · adoption's single-commit proof is structural, not authorship: a force-pushed single commit inside the export dir is still adopted and auto-merged; compare the orphan's tree to a local re-export (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r13 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r13 · finding [open] (reviewer: in scope) · a recorded-closed export PR that is reopened is never an orphan; the re-export force-pushes its branch and gh pr create fails (exit 1) every pass (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r14 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r14 · finding [open] (reviewer: in scope) · names of gitignored durable files are published in the public export PR body; keep names local, put a count in the PR (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r15 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r15 · finding [open] (reviewer: in scope) · export PR base branch is never checked at reuse or merge: a retargeted/orphan PR auto-merges default-branch history plus the export into an arbitrary branch (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r16 created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=in -->
+### p4-r16 · finding [open] (reviewer: in scope) · when several orphan export PRs are open only the highest is reused; the others stay open with no warn (phase 4)
+
+Raised by the phase 4 reviewer (separate dispatched Opus context).
+
+<!-- fr:journal kind=finding scope=plan id=p4-archive-pr-base-unchecked created=2026-10-06T00:00:58+00:00 phase=4 state=open review_scope=out -->
+### p4-archive-pr-base-unchecked · finding [open] (reviewer: out of scope) · the wave driver's archive-PR merge path never checks the PR's base branch either (phase 4)
+
+Noted by the phase 4 reviewer while verifying p4-r15. The archive merge (_archive, pre-existing) merges a trusted archive PR without comparing baseRefName to the default branch. Not caused by this change; the export path got the fix (p4-r15).
+
+<!-- fr:journal kind=review scope=plan id=p4-review-1 created=2026-10-06T00:00:58+00:00 phase=4 -->
+### p4-review-1 · review · phase 4 review: 16 findings (15 in, 1 out) over four rounds (phase 4)
+
+Dispatched Opus reviewer read 800267752..16f136be3 adversarially against R12, R13, §G-§I, verified the five mid-phase security fixes held (symlink follow, root symlink/traversal, unpinned merge, forge file list, export backlog), and raised p4-r1..r11; re-verified after fixes and raised p4-r12..r14, then p4-r15..r16; final pass at d9eb4fc1a: all fixed, none new (1818 passed). Separate automated security reviews also caught a force-add exposure (fixed in p4-r9).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: export PR merged outside the driver (or crash after pr_merge) is never marked merged; export_target pins to it forever and later waves never export, silently (phase 4)
+
+export-reconcile records the merge (4245d98e0); tests test_a_recorded_pr_merged_outside_the_driver_is_reconciled, test_after_a_reconciled_merge_the_next_wave_exports, test_an_export_pr_merged_outside_the_driver_is_recorded_and_the_next_wave_exports.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: ExportConfig accepts trailing-slash/./empty-part paths that contained() refuses every pass; _export_config rstrips '/' but _export does not (phase 4)
+
+path normalised once at load with contained()'s refusal set (bffb98f54); tests test_the_export_path_is_normalised_once_at_load, test_an_export_path_contained_would_refuse_is_refused_at_load.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: crash between pr_create and record, plus a wave finishing before the next pass, opens a second export PR (adoption looks only at the highest owed wave's branch) (phase 4)
+
+orphans on any wave branch are reused; no second PR (0ef4cb772, b154a5382); tests test_a_crash_then_a_new_wave_reuses_the_orphan_and_opens_no_second_pr, test_a_crash_after_opening_then_a_new_wave_opens_exactly_one_pr.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: pr_create ValueError (no PR URL) is not in FORGE_ERRORS: driver tracebacks instead of exiting 1 (phase 4)
+
+GhError, exit 1 (f33017b97); test test_pr_create_refuses_an_answer_with_no_pr_url.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: import's mtime "newer" check is defeated by git checkout mtimes; docstring overclaims "never silently overwritten" (phase 4)
+
+identical files skipped, mtime rule documented in docstring and --force help (47846d80f); tests test_a_byte_identical_file_is_neither_copied_nor_overwritten, test_the_newer_check_is_documented_as_mtime_based.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: a recorded export PR closed unmerged blocks that repo's exports forever with no documented recovery (phase 4)
+
+closed recorded once, waves owed again (4245d98e0); tests test_a_recorded_pr_closed_unmerged_is_recorded_closed_once, test_waves_of_a_closed_export_are_owed_again, test_a_closed_unmerged_export_pr_is_recorded_once_then_re_exported.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: any fork PR named chore/triage-state-wave-N blocks the export (untrusted row); cross-repo PRs could be ignored safely (phase 4)
+
+cross-repo PRs ignored (0ef4cb772); test test_a_fork_pr_on_the_export_branch_name_is_ignored.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r8 -->
+### p4-r8-resolved · finding [fixed] · resolves p4-r8: adoption after a crash pins and auto-merges whatever trusted-PR head is live, with no proof the driver pushed it (phase 4)
+
+superseded by the reuse redesign: the driver never adopts content, it force-pushes its own commit and pins to it (b154a5382); test test_an_orphan_is_reused_with_the_drivers_own_commit_never_its_foreign_one.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r9 -->
+### p4-r9-resolved · finding [fixed] · resolves p4-r9: commit_paths uses git add without -f, so gitignored durable files are silently not exported (phase 4)
+
+fixed by reporting, never force-adding (226176276, replacing 51c5d0f99 after a security review flagged --force as sensitive-data exposure; names local, count in the PR body 2570b389f); test test_files_the_target_repo_ignores_are_reported_never_force_added, test_commit_paths_never_forces_past_gitignore_and_ignored_names_what_it_left.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r10 -->
+### p4-r10-resolved · finding [fixed] · resolves p4-r10: untested leftover-worktree path; non-worktree export dir fails every pass; OSError in _sync escapes as a traceback (phase 4)
+
+(0f952056e); tests test_a_leftover_export_worktree_with_changes_is_replaced, test_a_plain_directory_at_the_export_scratch_path_is_replaced, test_a_filesystem_error_while_exporting_is_a_warn_for_the_wave, test_a_filesystem_error_is_a_clean_triage_error.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=open resolves=p4-r11 out_of_scope=true -->
+### p4-r11-resolved · finding [out-of-scope] · resolves p4-r11: local check-to-write race between the symlink check and copy2 in state_sync (local attacker only) (phase 4)
+
+A local attacker who can swap files in the operator's own state dir already owns them; no privilege boundary is crossed. Not caused by an implementation error in this change's threat model.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r12 -->
+### p4-r12-resolved · finding [fixed] · resolves p4-r12: adoption's single-commit proof is structural, not authorship: a force-pushed single commit inside the export dir is still adopted and auto-merged; compare the orphan's tree to a local re-export (phase 4)
+
+reuse redesign: only driver-written commits are ever pinned (b154a5382, spec d6dd51bae); test test_an_orphan_is_reused_with_the_drivers_own_commit_never_its_foreign_one.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r13-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r13 -->
+### p4-r13-resolved · finding [fixed] · resolves p4-r13: a recorded-closed export PR that is reopened is never an orphan; the re-export force-pushes its branch and gh pr create fails (exit 1) every pass (phase 4)
+
+reopened PR reused, no pr_create (b154a5382); test test_a_reopened_pr_recorded_closed_is_reused.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r14-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r14 -->
+### p4-r14-resolved · finding [fixed] · resolves p4-r14: names of gitignored durable files are published in the public export PR body; keep names local, put a count in the PR (phase 4)
+
+PR body carries a count only (2570b389f); test test_files_the_target_repo_ignores_are_reported_never_force_added.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r15-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r15 -->
+### p4-r15-resolved · finding [fixed] · resolves p4-r15: export PR base branch is never checked at reuse or merge: a retargeted/orphan PR auto-merges default-branch history plus the export into an arbitrary branch (phase 4)
+
+baseRefName read fresh; non-default/unknown base is warned and blocked, never reused or merged (d9eb4fc1a); tests test_a_recorded_export_pr_not_based_on_the_default_branch_is_never_merged, test_an_orphan_not_based_on_the_default_branch_is_never_reused, test_a_retargeted_recorded_export_pr_is_never_merged, test_an_orphan_based_on_another_branch_is_not_reused_and_nothing_is_pushed.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r16-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=fixed resolves=p4-r16 -->
+### p4-r16-resolved · finding [fixed] · resolves p4-r16: when several orphan export PRs are open only the highest is reused; the others stay open with no warn (phase 4)
+
+each extra orphan warned stale once (d9eb4fc1a); tests test_every_orphan_besides_the_reused_one_is_warned_stale_once, test_extra_orphans_are_warned_stale_once_each.
+
+<!-- fr:journal kind=finding scope=plan id=p4-archive-pr-base-unchecked-resolved created=2026-10-06T00:00:58+00:00 phase=4 state=open resolves=p4-archive-pr-base-unchecked out_of_scope=true -->
+### p4-archive-pr-base-unchecked-resolved · finding [out-of-scope] · resolves p4-archive-pr-base-unchecked: the wave driver's archive-PR merge path never checks the PR's base branch either (phase 4)
+
+Pre-existing behaviour of the archive path; to be filed as its own issue at the merge touchpoint.

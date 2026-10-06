@@ -164,13 +164,20 @@ steps:
           tests: p4-suite.log@40c3c932b1ea;tree=ecc507371ec154e0947894f9c93b184cd5ead7abd964b22916e4f7b4426324d4
           visual: none
       phase/4/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-05T23:19:05+00:00'
           agent: aa6ecc8e88533e654
           harness: claude-code
           model: claude-opus-5-5
           session: a95011be-df46-40a9-a07a-e24ccd3c8a59
+          returned: '2026-10-06T00:00:59+00:00'
+          outcome: done
+        evidence:
+          review: p4-review-1
+          reviewer: aa6ecc8e88533e654
+          visual: none
+          findings: p4-sec-symlink-follow,p4-sec-root-symlink-traversal,p4-export-backlog-of-finished-waves,p4-sec-unpinned-merge,p4-sec-file-list,p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7,p4-r8,p4-r9,p4-r10,p4-r11,p4-r12,p4-r13,p4-r14,p4-r15,p4-r16,p4-archive-pr-base-unchecked
   journal-check:
     state: pending
   deliver:
