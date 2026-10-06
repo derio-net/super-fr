@@ -106,3 +106,8 @@ It predates this change (gh#490). File it as a follow-up to give glab the same h
 ### p1-x2 · finding [fixed] (reviewer: in scope) · p1-r1's fix let the trust-gate refusal fail fr init scaffold's GHE issues probe (phase 1)
 
 Caught by the post-review full suite (test_github_enterprise_is_asked_as_host_owner_repo): issues_enabled_for passed the host to the GitHub client although the probe already names it as HOST/OWNER/REPO, so the now-unswallowed GhHostRefusedError failed the scaffold for a host gh was not logged into. Fixed in 742c56a68: the probe gives the GitHub client no host. pr_observe, the other URL-host caller, catches and logs every error, so its refusal is a logged warning naming gh auth login.
+
+<!-- fr:journal kind=finding scope=plan id=p1-x3 created=2026-10-06T08:29:57+00:00 phase=1 state=fixed review_scope=in -->
+### p1-x3 · finding [fixed] (reviewer: in scope) · p1-x2's fix dropped the trust gate from fr init scaffold's GHE issues probe (phase 1)
+
+Background security review: issues_enabled_for's host can come from a cloned repo's committed fr-profiles.yaml or its origin, and gh sends GH_ENTERPRISE_TOKEN to the host HOST/OWNER/REPO names, so giving the client no host bypassed the gate. Fixed: the client keeps the host; a GhHostRefusedError becomes a ServicesError naming gh auth login and --tracking, and no gh process starts (test_a_github_host_gh_is_not_logged_into_is_refused_not_probed). Note the pre-existing exposure (the probe contacted the configured host before this PR) is now closed too.
