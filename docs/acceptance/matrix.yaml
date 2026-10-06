@@ -7110,9 +7110,19 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R6
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_check.py#test_check_reports_the_three_claim_sets_in_json
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_edit_add_issue_or_wave_refuses_a_member_held_elsewhere
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_cancel_yes_on_a_held_batch_releases_own_claims_and_leaves_held_members_alone
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_refuses_a_batch_held_elsewhere_before_anything
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_merge_refuses_a_batch_held_elsewhere
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_claims_held
+    status: ci
+    notes: 'phase 1: scenario covers check''s held_elsewhere and batch create''s refusal;
+      unit tests cover edit, dispatch, merge and cancel (R5, R6, R7). The driver''s
+      held action is phase 2 (triage-claims-driver).'
     verify: candidate
     scenario: tests/scenarios/triage-claims-held.sh
   - id: triage-claims-expiry
