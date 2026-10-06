@@ -117,14 +117,47 @@ def test_after_moves_runs_once_for_all(tmp_path, monkeypatch, spy):
 
 
 def test_after_moves_runs_for_sweep_only(tmp_path, monkeypatch, spy):
-    from tests.unit.test_archive_cmd import _add_spec
+    """p1-r5: the sweep really moves a spec, so the log is non-empty."""
+    from tests.unit.test_archive_cmd import _add_spec, _strand_plan
 
     repo = _repo(tmp_path)
-    _add_spec(repo, "2026-05-01-done-design.md", [])
+    _add_plan(repo, "2026-05-25-bookmarks", ticked=True, spec_name="2026-05-25-bm-design.md")
+    _add_spec(
+        repo,
+        "2026-05-25-bm-design.md",
+        [("bm", "derio-net/test", "docs/superpowers/implemented/plans/2026-05-25-bookmarks")],
+    )
     _seed(repo)
+    _strand_plan(repo, "2026-05-25-bookmarks")
     result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--sweep-only"])
     assert result.exit_code == 0, result.output
-    assert len(spy) == 1
+    assert (repo / "docs/superpowers/implemented/specs/2026-05-25-bm-design.md").exists()
+    assert spy == [True]
+
+
+def test_after_moves_runs_for_branch(tmp_path, monkeypatch, spy):
+    """p1-r4: `--branch` on a merged branch that added a plan."""
+    from tests.unit import test_archive_branch as tb
+
+    repo = tb._base(tmp_path)
+    tb._merged(repo, lambda r: tb._plan(r, tb.PLAN, ticked=True, spec=tb.SPEC))
+    result = tb._invoke(monkeypatch, repo, ["archive", "--branch", tb.BRANCH])
+    assert result.exit_code == 0, result.output
+    assert (repo / tb.IMPL / "plans" / tb.PLAN).is_dir()
+    assert spy == [True]
+
+
+def test_after_moves_runs_for_all_when_only_an_owed_debug_journal_moves(tmp_path, monkeypatch, spy):
+    """p1-r4: `--all` with no plan to archive — only an owed debug journal moves."""
+    from tests.unit.test_archive_all_debug import SP, _write
+
+    repo = _repo(tmp_path)
+    _write(repo, SP / "journals" / "debug" / "on-ref.md", "# on ref\n")
+    _seed(repo)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert (repo / SP / "implemented/journals/debug/on-ref.md").exists()
+    assert spy == [True]
 
 
 def test_after_moves_sees_an_empty_log_when_nothing_moved(tmp_path, monkeypatch, spy):
@@ -165,7 +198,8 @@ def _patch_refresh(monkeypatch, fn):
 
     calls: list[object] = []
 
-    def fake(repo_root, env, *, skip=None):
+    def fake(repo_root, env, *, skip=None, max_age_days=None):
+        assert max_age_days == 30, "the archive path bounds the refresh"
         calls.append(skip)
         return fn(repo_root, skip)
 
