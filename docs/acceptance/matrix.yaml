@@ -7133,9 +7133,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: candidate walk scenario named at plan time; written in phase 1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_restart.py
+      - super-fr:tests/unit/test_fr_herdr_cli.py
+    status: ci
+    notes: 'fr-herdr restart-idle shipped (phase 1): engine and console script unit-tested
+      against live herdr 0.9.1 captures, and a candidate-walk scenario drives the installed
+      fr-herdr against a fake herdr that replays them'
     verify: candidate
     scenario: tests/scenarios/herdr-restart-idle.sh
   - id: herdr-restart-idle-live
