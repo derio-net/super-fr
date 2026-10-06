@@ -89,7 +89,7 @@ def claim_list_command(
     """This scope's held-elsewhere, expired and owed claims, from facts. Always exits 0."""
     scope = _scope(repo, org)
     target, facts, judgements = _load_state(scope, dir_override)
-    env = triage_batch_cmd.claim_env(scope, target, facts)
+    env = triage_batch_cmd.claim_env(target, facts)
     print_claim_sets(claim_sets(facts, judgements, env.me, _now()))
 
 
@@ -110,7 +110,7 @@ def claim_sync_command(
     """Write every owed claim, due refresh and owed release (R3, R8, R10, R11)."""
     scope = _scope(repo, org)
     target, facts, judgements = _load_state(scope, dir_override)
-    env = triage_batch_cmd.claim_env(scope, target, facts)
+    env = triage_batch_cmd.claim_env(target, facts)
     now = _now()
     plan = plan_sync(env, judgements.batches, now)
     for op in plan.ops:
@@ -197,7 +197,7 @@ def claim_take_command(
     chosen = next((b for b in judgements.batches if b.id == batch.lower()), None)
     if chosen is None or key not in chosen.ids:
         _fail(f"{key} is not a member of a batch {batch!r} of this scope; take names its batch")
-    env = triage_batch_cmd.claim_env(scope, target, facts)
+    env = triage_batch_cmd.claim_env(target, facts)
     now = _now()
     _, rival = _foreign(env, key)
     if rival is not None and now < rival.expires:
@@ -241,7 +241,7 @@ def claim_release_command(
     scope = _scope(repo, org)
     target, facts, _ = _load_state(scope, dir_override)
     key = normalize_key(key)
-    env = triage_batch_cmd.claim_env(scope, target, facts)
+    env = triage_batch_cmd.claim_env(target, facts)
     now = _now()
     own, rival = _foreign(env, key)
     if own is not None:

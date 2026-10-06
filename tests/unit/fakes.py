@@ -58,7 +58,7 @@ class FakeGhClient:
         # Ids `comment_issue` assigns, and the creation time it stamps.
         self.next_comment_id: int = 1000
         self.comment_created_at: str = "2026-09-26T00:00:00Z"
-        self.comment_author: str = "fr"
+        self.comment_author: str = "operator"  # the login triage facts name as viewer
 
     # ---- preload helpers (test setup) ----
 

@@ -15,7 +15,7 @@ ME = "s-11111111"
 OTHER = "s-22222222"
 NOW = datetime(2026, 9, 26, 0, 0, tzinfo=UTC)
 DAY = timedelta(hours=24)
-TRUSTED = frozenset({"fr"})
+TRUSTED = frozenset({"operator"})
 
 
 @pytest.fixture
@@ -31,7 +31,7 @@ def _foreign(
     at: datetime,
     expires: datetime,
     cid: int = 1,
-    author: str = "fr",
+    author: str = "operator",
     signer: str = OTHER,
     number: int = 1,
 ) -> None:

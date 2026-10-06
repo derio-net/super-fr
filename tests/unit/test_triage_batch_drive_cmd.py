@@ -175,7 +175,7 @@ class World:
         return f"Closes {repo}#{number}"
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
-        return list(self.comments.get(number, []))
+        return [dict(c) for c in self.comments.get(number, [])]
 
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         self.calls.append("ensure_labels")
@@ -184,7 +184,18 @@ class World:
         self.calls.append(f"label {number}")
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
-        self.comments.setdefault(number, []).append({"author": "fr", "body": body})
+        # an id and a time, like the gh adapter's, and authored as the facts' viewer: a
+        # dispatch claims its members first (triage-claims R3, R17)
+        cid = 1 + sum(len(c) for c in self.comments.values())
+        self.comments.setdefault(number, []).append(
+            {"author": "operator", "body": body, "created_at": NOW.isoformat(), "id": cid}
+        )
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        for comments in self.comments.values():
+            for c in comments:
+                if c.get("id") == comment_id:
+                    c["body"] = body
 
 
 class DriveCheckout:

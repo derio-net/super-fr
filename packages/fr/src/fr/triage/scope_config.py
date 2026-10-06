@@ -73,9 +73,11 @@ def host_id() -> str:
     return _read_host_id(path)
 
 
-def scope_id(scope: Scope) -> str:
-    """This host's id for *scope*: `s-` and eight hex characters, nothing identifying."""
-    digest = hashlib.sha256(f"{scope.name}\0{host_id()}".encode()).hexdigest()
+def scope_id(scope: Scope | str) -> str:
+    """This host's id for *scope* (a Scope, or its `name`): `s-` and eight hex
+    characters, nothing identifying."""
+    name = scope if isinstance(scope, str) else scope.name
+    digest = hashlib.sha256(f"{name}\0{host_id()}".encode()).hexdigest()
     return f"s-{digest[:8]}"
 
 

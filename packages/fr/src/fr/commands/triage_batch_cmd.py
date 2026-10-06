@@ -40,7 +40,7 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -162,7 +162,8 @@ from fr.triage.batch_merge import (
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
-from fr.triage.claim_sync import ClaimEnv
+from fr.triage.claim_sync import ClaimEnv, ClaimOp, SyncResult, execute
+from fr.triage.claims import Claim, from_issue_claim, holder
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
@@ -172,6 +173,7 @@ from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     Batch,
     CancelEvent,
+    ClaimsReleasedEvent,
     CloseoutEvent,
     ConflictEvent,
     DispatchEvent,
@@ -206,12 +208,13 @@ def make_client(url: str) -> GhClient:
     return client_for_url(url)
 
 
-def claim_env(scope: Scope, target: Path, facts: Facts) -> ClaimEnv:
+def claim_env(target: Path, facts: Facts) -> ClaimEnv:
     """This scope's claim identity, config and forge clients (triage-claims §3.E): the one
-    resolver the batch verbs and the `claim` group share. A broken host id or scope
-    config exits 2 naming its file."""
+    resolver the batch verbs, the driver and the `claim` group share. The scope is the
+    one the facts were collected for (every loader checks they match). A broken host id
+    or scope config exits 2 naming its file."""
     try:
-        me, config = scope_id(scope), load_scope_config(target)
+        me, config = scope_id(facts.scope), load_scope_config(target)
     except TriageError as exc:
         _fail(str(exc))
     return ClaimEnv(
@@ -222,6 +225,132 @@ def claim_env(scope: Scope, target: Path, facts: Facts) -> ClaimEnv:
             f"https://{_host_of(facts, owner_repo)}/{owner_repo}"
         ),
     )
+
+
+def held_members(keys: Iterable[str], facts: Facts, me: str) -> list[tuple[str, Claim]]:
+    """The members of *keys* another scope's un-released claim holds, from facts (R5, R6).
+    Only open issues: collect reads no closed issue's comments."""
+    found = {i.key: i for i in facts.issues if i.state == "open"}
+    out: list[tuple[str, Claim]] = []
+    for key in keys:
+        issue = found.get(key)
+        if issue is not None:
+            h = holder([from_issue_claim(c) for c in issue.claims], me)
+            if h is not None:
+                out.append((key, h))
+    return out
+
+
+def _held_line(key: str, h: Claim, now: datetime) -> str:
+    line = (
+        f"{key} is claimed by triage scope {h.signer} for batch {h.batch}, expires "
+        f"{h.expires.isoformat()}"
+    )
+    if now >= h.expires:
+        line += (
+            f" (expired: only the operator takes it over, `fr triage claim take {key} "
+            "--batch <id> --yes`)"
+        )
+    return line
+
+
+def _refuse_held(env: ClaimEnv, keys: Iterable[str], what: str) -> None:
+    """Exit 2, nothing written, when another scope holds any of *keys* (R5, R6)."""
+    found = held_members(keys, env.facts, env.me)
+    if found:
+        now = _now()
+        _fail(
+            f"{what}: another triage scope holds "
+            + "; ".join(_held_line(k, h, now) for k, h in found)
+        )
+
+
+def _own_claim_batch(facts: Facts, key: str, me: str) -> str | None:
+    issue = next((i for i in facts.issues if i.key == key), None)
+    own = next((c for c in issue.claims if c.signer == me), None) if issue else None
+    return own.batch if own else None
+
+
+def _settle_claims(env: ClaimEnv, ops: list[ClaimOp], *, yes: bool) -> SyncResult | None:
+    """The claim writes a create/edit made owed (R3, R10). Under --yes, written after the
+    judgements change; without it, printed with the command that writes them. A failed
+    write exits 1 naming the issue; the judgements change stands."""
+    if not ops:
+        return None
+    for op in ops:
+        if op.kind == "claim":
+            console.print(f"  claim {op.key} for {op.batch}", markup=False)
+        else:
+            console.print(f"  {op.kind} {op.key} ({op.batch})", markup=False)
+    if not yes:
+        console.print(
+            "claims not written; `fr triage claim sync --yes` writes them (or re-run with --yes)",
+            markup=False,
+        )
+        return None
+    try:
+        result = execute(env, ops, _now())
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    problems = [f"{op.kind} {op.key}: {why}" for op, why in result.failed] + [
+        f"{h.key}: held by {h.holder.signer} (batch {h.holder.batch})" for h in result.held
+    ]
+    if problems:
+        _fail(
+            "the judgements change stands, but these claim writes did not complete; "
+            "`fr triage claim sync --yes` finishes them: " + "; ".join(problems),
+            code=1,
+        )
+    return result
+
+
+def _claim_ops(batch: Batch, keys: Iterable[str], facts: Facts, me: str) -> list[ClaimOp]:
+    """Claim ops for *keys* of *batch*, skipping members facts show already claimed for it."""
+    return [
+        ClaimOp("claim", k, batch.id) for k in keys if _own_claim_batch(facts, k, me) != batch.id
+    ]
+
+
+def _withdraw_unowed(env: ClaimEnv, batch: Batch, posted: list[str]) -> None:
+    """A wave-less batch owes no claim until it is dispatched (R3): when its dispatch did
+    not happen, withdraw the markers this call posted. Best effort: a failure here leaves
+    them to `claim sync`, which releases own claims no batch owes."""
+    if batch.wave is not None or not posted:
+        return
+    try:
+        execute(env, [ClaimOp("release", k, batch.id) for k in posted], _now())
+    except UnsupportedForgeOperation:
+        pass
+
+
+def _claim_for_dispatch(env: ClaimEnv, batch: Batch) -> list[str]:
+    """Claim every member for *batch* before its launch (R3, R4); the keys whose marker
+    this call posted. A member held elsewhere refuses the batch (exit 2) and a failed
+    write exits 1, both with nothing launched."""
+    ops = _claim_ops(batch, batch.ids, env.facts, env.me)
+    if not ops:
+        return []
+    try:
+        result = execute(env, ops, _now())
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    posted = [op.key for op, done in result.done if done.action == "posted"]
+    if result.held or result.failed:
+        _withdraw_unowed(env, batch, posted)
+    if result.held:
+        now = _now()
+        _fail(
+            f"batch {batch.id!r} cannot be dispatched: another triage scope holds "
+            + "; ".join(_held_line(h.key, h.holder, now) for h in result.held)
+            + ". Nothing was launched."
+        )
+    if result.failed:
+        _fail(
+            f"batch {batch.id!r}: these claims were not written, so nothing was launched; "
+            "re-run to complete: " + "; ".join(f"{op.key}: {why}" for op, why in result.failed),
+            code=1,
+        )
+    return posted
 
 
 def make_checkout(path: Path | None) -> Checkout:
@@ -283,6 +412,16 @@ ModelOpt = Annotated[
     typer.Option(
         "--model",
         help="Session model (the run's orchestrator); subagents use their `fr models` tiers.",
+    ),
+]
+
+
+ClaimYesOpt = Annotated[
+    bool,
+    typer.Option(
+        "--yes",
+        help="Also write the claims this change makes owed (the judgements write happens "
+        "either way).",
     ),
 ]
 
@@ -386,11 +525,12 @@ def batch_create_command(
     runner: RunnerOpt = None,
     harness: HarnessOpt = None,
     model: ModelOpt = None,
+    yes: ClaimYesOpt = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
 ) -> None:
-    """Add a proposed batch of judged issues."""
+    """Add a proposed batch of judged issues. With --wave, its claims are owed (R3)."""
     target, facts, judgements = _load_state(_scope(repo, org), dir_override)
     if not title or not issue:
         _fail("create needs --title and at least one --issue")
@@ -408,9 +548,13 @@ def batch_create_command(
         _fail(f"invalid batch: {exc}")
     if any(b.id == new.id for b in judgements.batches):
         _fail(f"batch {new.id!r} already exists; use `fr triage batch edit`")
+    env = claim_env(target, facts)
+    _refuse_held(env, new.ids, f"batch {new.id!r} cannot be created")
     _write(target, [*judgements.batches, new], facts, read=judgements.batches)
     console.print(f"created batch {new.id} ({plural(len(new.ids), 'issue')})", markup=False)
     _warn_mixed_themes(new, judgements)
+    if new.wave is not None:  # a wave makes claims owed from now (R3)
+        _settle_claims(env, _claim_ops(new, new.ids, facts, env.me), yes=yes)
 
 
 @batch_app.command("edit")
@@ -436,12 +580,13 @@ def batch_edit_command(
     runner: RunnerOpt = None,
     harness: HarnessOpt = None,
     model: ModelOpt = None,
+    yes: ClaimYesOpt = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
 ) -> None:
     """Change a proposed batch; past `proposed`, only --order (and, until it merges,
-    --wave and --after) may change."""
+    --wave and --after) may change. Claims follow the change (R3, R5, R10)."""
     if no_wave and wave is not None:
         _fail("--no-wave and --wave contradict each other")
     if no_after and after is not None:
@@ -487,9 +632,23 @@ def batch_edit_command(
         new = Batch.model_validate(doc)
     except ValidationError as exc:
         _fail(f"invalid batch: {exc}")
+    env = claim_env(target, facts)
+    added = [k for k in new.ids if k not in batch.ids]
+    checked = new.ids if wave is not None else added
+    _refuse_held(env, checked, f"batch {new.id!r} cannot take these members")
     _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
     console.print(f"edited batch {new.id}", markup=False)
     _warn_mixed_themes(new, judgements)
+    owed_before = batch.wave is not None or stage != "proposed"
+    owed_after = new.wave is not None or stage != "proposed"
+    dropped = [k for k in batch.ids if k not in new.ids]
+    ops = [ClaimOp("release", k, batch.id) for k in dropped] if owed_before else []
+    if owed_before and not owed_after:  # --no-wave on a proposed batch
+        ops += [ClaimOp("release", k, batch.id) for k in new.ids]
+    elif owed_after:
+        ops += _claim_ops(new, new.ids, facts, env.me)
+    if set_wave or add_issue or remove_issue:
+        _settle_claims(env, ops, yes=yes)
 
 
 @batch_app.command("cancel")
@@ -512,19 +671,35 @@ def batch_cancel_command(
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
     item = batch_item_id(owner_repo, batch.id)
-    touches_forge = stage != "proposed"  # a proposed batch never reached the forge
+    env = claim_env(target, facts)
+    # R6: a member another scope holds keeps its fr:in-progress label and comments;
+    # they are its holder's. This scope's own claims are released (R10).
+    held = {k for k, _ in held_members(batch.ids, facts, env.me)}
+    owes = batch.wave is not None or any(e.kind == "dispatch" for e in batch.events)
+    claimed = any(_own_claim_batch(facts, k, env.me) for k in batch.ids)
+    releases = owes or claimed
+    withdraws = [k for k in batch.ids if k not in held] if stage != "proposed" else []
+    # a proposed batch reached the forge only when its claims were written
+    touches_forge = stage != "proposed" or claimed
     if touches_forge:
         # gh#803: withdrawing writes labels and comments to the tracker, so it
         # is gated as dispatch is — a proposed batch writes nothing and needs
         # no clone.
         _tracking_gate(checkout_path, owner_repo, yes=yes)
     console.print(f"cancel batch {batch.id} ({stage})", markup=False)
-    if touches_forge:
+    for key in withdraws:
+        console.print(
+            f"  {key}: remove {FR_IN_PROGRESS.name}, post the withdrawal comment",
+            markup=False,
+        )
+    for key in sorted(held):
+        console.print(
+            f"  {key}: held by another triage scope; its label and comments are left to it",
+            markup=False,
+        )
+    if releases and touches_forge:
         for key in batch.ids:
-            console.print(
-                f"  {key}: remove {FR_IN_PROGRESS.name}, post the withdrawal comment",
-                markup=False,
-            )
+            console.print(f"  {key}: release this scope's claim", markup=False)
     console.print("  append a cancel event to judgements.yaml", markup=False)
     if not yes:
         console.print("nothing written; re-run with --yes to act", markup=False)
@@ -536,7 +711,7 @@ def batch_cancel_command(
         # is the one operation a backend may not support, so an unsupported
         # backend is refused (exit 2) with no member half-withdrawn.
         posted: dict[str, bool] = {}
-        for key in batch.ids:
+        for key in withdraws:
             number = int(key.rpartition("#")[2])
             try:
                 posted[key] = withdrawn_already(
@@ -546,7 +721,7 @@ def batch_cancel_command(
                 _fail(str(exc))
             except FORGE_ERRORS as exc:  # a forge failure: report the member, keep going
                 failed.append(f"{key}: {exc}")
-        for key in batch.ids:
+        for key in withdraws:
             if key not in posted:
                 continue  # its read failed: nothing written for it, reported above
             number = int(key.rpartition("#")[2])
@@ -560,14 +735,29 @@ def batch_cancel_command(
                 _fail(str(exc))
             except FORGE_ERRORS as exc:  # a forge failure: report the member, keep going
                 failed.append(f"{key}: {exc}")
+        released: list[str] = []
+        if releases and not failed:
+            try:
+                result = execute(env, [ClaimOp("release", k, batch.id) for k in batch.ids], _now())
+            except UnsupportedForgeOperation as exc:
+                _fail(str(exc))
+            failed += [f"{op.key}: {why}" for op, why in result.failed]
+            # only real releases: a member with no claim of this scope's is left to the
+            # next `claim sync`, which records it, so a claim-free cancel reads as before
+            released = [op.key for op, done in result.done if done.action == "released"]
         if failed:
             _fail(
                 "these members were not fully withdrawn, so no cancel event was written; "
                 "re-run to complete: " + "; ".join(failed),
                 code=1,
             )
+    else:
+        released = []
     event = CancelEvent(kind="cancel", at=_now_after(batch), reason=reason)
-    cancelled = batch.model_copy(update={"events": [*batch.events, event]})
+    events: list[Any] = [*batch.events, event]
+    if released:
+        events.append(ClaimsReleasedEvent(kind="claims_released", at=event.at, keys=released))
+    cancelled = batch.model_copy(update={"events": events})
     _write(target, _replace(judgements.batches, cancelled), facts, read=judgements.batches)
     console.print(f"cancelled batch {batch.id}", markup=False)
 
@@ -1026,6 +1216,8 @@ def dispatch_batch(
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
     _tracking_gate(checkout_path, owner_repo, yes=yes)  # before any forge call
+    env = claim_env(target, facts)
+    _refuse_held(env, batch.ids, f"batch {batch.id!r} cannot be dispatched")  # R6
     client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
     if (handle or reserved_version) and not repair:
         _fail("--handle and --reserved-version go with --repair only")
@@ -1141,9 +1333,13 @@ def dispatch_batch(
     if item.id in runner.existing_dispatches([item]):
         _fail(f"runner `{runner_name}` already holds {item.id} live; nothing written")
     _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
+    # R3: the claims, R4's re-read included, before the launch, which cannot be undone,
+    # and before any other forge write. A member another scope holds refuses the batch.
+    posted = _claim_for_dispatch(env, batch)
     try:
         launched = runner.dispatch(item)
-    except Exception as exc:  # the runner's own failure: nothing is written
+    except Exception as exc:  # the runner's own failure: nothing else is written
+        _withdraw_unowed(env, batch, posted)
         raise RunnerDispatchError(
             f"runner `{runner_name}` failed to dispatch {item.id}: {exc}"
         ) from exc
@@ -1209,6 +1405,9 @@ def batch_merge_command(
     if not queue:
         console.print("no pr-open batches to merge", markup=False)
         return
+    env = claim_env(target, facts)
+    for e in queue:  # R6: a batch another scope holds a member of is never merged here
+        _refuse_held(env, e.batch.ids, f"batch {e.batch.id!r} cannot be merged")
     repos = {batch_repo(e.batch, facts) for e in queue}
     if len(repos) != 1 or None in repos:
         _fail(

@@ -167,12 +167,13 @@ def release(
             f"{repo}#{number}: the claim of {signer} (batch {target.batch}) is live until "
             f"{target.expires.isoformat()}; only an expired claim of another scope can be released"
         )
-    if target is not None:
-        by = me if signer != me else None
-        client.edit_issue_comment(repo, target.comment_id, _released(target.marker, now, by=by))
+    if target is None:
+        return Done("none")  # nothing of *signer*'s stands here: nothing is written
+    by = me if signer != me else None
+    client.edit_issue_comment(repo, target.comment_id, _released(target.marker, now, by=by))
     if not [c for c in claims if c.signer != signer]:
         client.edit_issue_labels(repo, number, add=frozenset(), remove=frozenset({FR_CLAIMED.name}))
-    return Done("released", target.comment_id) if target is not None else Done("none")
+    return Done("released", target.comment_id)
 
 
 def take(
