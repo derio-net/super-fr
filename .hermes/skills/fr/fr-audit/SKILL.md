@@ -69,15 +69,24 @@ cheap session. Never drop it from the comparison silently or count it as zero.
 
 ## Pages
 
+Four triage pages answer different questions, each with its own generated sections and hand-written analysis:
+
+- **Board** ("What do I do next?"): `fr triage render` writes `triage.html`. Shows transitions, needs, priorities and waves, plus backlog by tier and your fragments.
+- **Origins** ("Where do defects come from?"): `fr triage origins render` writes `origins.html`. Shows where issues came from, their process implications, filings per day and your fragments.
+- **Architecture** ("What is the system, and where does it hurt?"): `fr triage architecture render` writes `architecture.html`. Shows subsystem source lines, measured sections and your fragments.
+- **History** ("How did we get here?"): `fr triage history render` writes `history.html`. Shows the timeline and finished waves, plus your fragments.
+
+Each page holds authored fragments in a manifest (`board/manifest.yaml`, `origins/manifest.yaml`, `architecture/manifest.yaml`, `history/manifest.yaml`), with fragment files beside it. Hand-written analysis lives in fragments — diagrams, narrative, your own voice — and never in a page edited after it is rendered: the next render rebuilds generated sections and erases any hand edits.
+
 **Audit page (measured).** `fr usage report --session <id>… --format html -o
 $HOME/.cache/fr/usage/<name>.html`. Report the pooled shares and the per-session
 range, name the sessions, and state what was unavailable.
 
-**Architecture page.** The engine builds it: `fr triage architecture render --repo
+**Architecture page (detailed).** The engine builds it: `fr triage architecture render --repo
 <owner/repo> [--checkout <clone>] [--now-ref <ref>]` writes `architecture.html` into the
 triage state directory (the usual `fr triage` scope options), and nothing else. Its sections
-are generated, so you never type a figure into it: the snapshot timeline, then the measured
-sections (summary, waves, subsystem cards, size table, filings, origins, operator actions),
+are generated, so you never type a figure into it: the summary and measured
+sections (subsystem cards, size table),
 then your fragments. You supply three inputs, all in the state directory:
 
 - `subsystems.yaml`: a `subsystems:` list, each with `name`, `path` (globs; `*` spans `/`),
@@ -92,11 +101,11 @@ then your fragments. You supply three inputs, all in the state directory:
   a page-level `<title>` (`<svg><title>` is fine), `on*` attributes and `javascript:` or
   `data:text/html` URLs. That is all the check does, so a fragment must carry no untrusted
   text: HTML-escape any issue title or other outside text yourself.
-- `architecture/manifest.yaml`: `sections:`, an ordered list of generated section names
-  (`summary`, `waves`, `subsystems`, `size-table`, `filings-per-day`, `origin-counts`,
-  `operator-actions`) and fragment file names. A listed file that does not exist is reported
+- `architecture/manifest.yaml`: an ordered list of generated section names
+  (`summary`, `subsystems`, `size-table`) and fragment file names. A listed file that does not exist is reported
   and shown on the page; a generated section you do not name is appended, with a note on
-  the page, before the fragments; with no manifest every generated section shows.
+  the page, before the fragments; with no manifest every generated section shows. (The timeline, waves,
+  filings and origins now live on the history and origins pages respectively.)
 
 **Measured versus projected is the rule.** The verb's sections are measurements. Everything
 you author is the future state, design: for each step the spec changes, state the turns it removes

@@ -35,13 +35,16 @@ Never write the facts yourself. The state is outside every repo and is never com
 ## origins.yaml
 
 ```yaml
-schema: 1
+schema: 2
 issues:
   widgets#12:                   # <repo-name>#<n>, lowercase
     category: leftover          # latent | regression | new-feature | leftover | gap | duplicate
     source: pipeline            # pipeline | recording | hand
     pr: owner/repo#98           # the PR it relates to (optional; a regression REQUIRES one)
     severity: med               # low | med | high
+    duplicate_of: "widgets#11"  # optional, only with category: duplicate; link to the original
+    fixed_by: "owner/repo#100"  # optional: the PR that fixed this
+    introduced_in: "owner/repo#80"  # optional: the PR that introduced this (not on a regression)
     reason: one line, why this category
     evidence: optional, what you read to be sure
 causes:                         # optional
@@ -50,6 +53,8 @@ causes:                         # optional
     batches: [finish-widgets]   # batch ids from judgements.yaml
     process_change: what to do differently, one line
 ```
+
+The origins page holds authored fragments in `origins/manifest.yaml` with fragment files beside it, the same way the board, architecture and history pages do.
 
 ## Classification discipline
 

@@ -12,7 +12,9 @@ description: >
 
 You can already read an issue, check it against the code and rank it. A triage done in chat dies with the session; `fr triage` keeps your ranking in a file, so a refresh costs only the delta.
 
-## State: two files, two owners
+## Pages and state
+
+Four pages answer your questions: **board** ("What do I do next?"), **origins** ("Where do defects come from?"), **architecture** ("What is the system?") and **history** ("How did we get here?"). Render them with `fr triage render`, `fr triage origins render`, `fr triage architecture render` and `fr triage history render`. Each page holds authored fragments in a manifest: `board/manifest.yaml`, `origins/manifest.yaml`, `architecture/manifest.yaml`, `history/manifest.yaml`, each with fragment files beside it. Hand-written analysis lives in fragments and never in a page edited after it is rendered: use `fr triage state export --to <dir>` to carry the state to a repo commit and `fr triage state import --from <dir>` to read it back.
 
 Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for
 `--org OWNER`, lowercased; `--dir D` overrides). Pass the same `--repo`/`--org`/`--dir` to every command. `--repo A/B,C/D` is a **group** (owners may differ): one board, one directory (sorted `owner--repo` slugs joined by `+`, hashed past 80 characters), one `--max-inflight` cap. Two repos with the same name are refused (exit 2: keys are `<repo-name>#<n>`); batches stay single-repo; every repo of a group needs a `--checkout REPO=PATH`, even one with no batches (`batch drive` and a plan print without `--yes` are refused the same way).
@@ -71,6 +73,8 @@ issues:
     tier: 1
     theme: isolation
     cx: S                   # XS | S | S-M | M | L | "-" (quote it: a bare - is a YAML list)
+    severity: high          # optional: low | med | high
+    duplicate_of: "super-fr#400"  # optional: link a duplicate to its original
     verified: true          # re-read at current main, not copied from the issue
     detail: "`gc()` trusts `MERGED` and calls `down()`. **Still live** on main (issue cites :1013, now :1312)."
     note: "Batch with super-fr#469, same subsystem."
@@ -89,6 +93,8 @@ batches:                    # written by the `batch` verbs; judged keys, one rep
     title: "Stop trusting MERGED for local teardown"
     ids: ["super-fr#435"]   # optional: rationale, order, wave, after, bump (patch|minor|major), skill, launch
 ```
+
+Set `export: {path: <repo-relative dir>}` in `.fr/triage.yaml` to have the driver export finished waves to that directory in one PR per wave.
 
 Quote every title, description, detail, note and body: a `: ` inside unquoted text, or a leading `-`, breaks the
 file. Set `ranked_at` to today whenever you change a judgement. Keys are case-insensitive (two differing only by case conflict). `detail`, `note` and pattern `body` interpret only `` `code` `` and `**bold**`.
