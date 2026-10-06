@@ -29,3 +29,8 @@ Ruled out: 182 of 184 subagent transcripts with a background ack carry a task-no
 ### ro-1002-notice · ruled-out · Missing notice in subagent transcripts
 
 The notice was present, queued at 22:03:23.996 with status completed. The window closed early because the command itself detached with &, not because the notice was missing.
+
+<!-- fr:journal kind=finding scope=debug id=fix-1002 created=2026-10-06T08:49:58+00:00 state=fixed -->
+### fix-1002 · finding [fixed] · wrote_since closes a self-detached writer at the first later exit=0 of its log
+
+telemetry.wrote_since now records every completed foreground Bash call and, for a writer that _detaches, appends (issued, seen) where seen = _seen_exit over those calls: the same stand-in OpenCode uses (gh#719). Pinned by tests/unit/test_run_witness_detached.py (failing first). Replayed against the real phase-2 executor transcript: base window ends 22:03:23.996, fixed reader adds one ending 22:12:01.229, covering the 510 s suite.
