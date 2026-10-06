@@ -1,0 +1,26 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-archive-followups
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2]
+refactor:
+  P2.T2: "the step is one short function reusing phase 1's _edited_in_worktree; nothing to clean"
+  P2.T3: "a one-string reword of an existing warning; nothing to clean"
+journal:
+  - kind: decision
+    id: p2-dirty-is-worktree-vs-index
+    phase: 2
+    title: matrix retarget dirty check is worktree-vs-index, not paths_dirty
+    body: "Reuses phase 1's _edited_in_worktree (git diff --quiet) for matrix.yaml and the three reports, so a staged-only change is not an edit; consistent with p1-r3. A dirty file raises inside the step and surfaces as the standard `note: matrix retarget skipped` line; nothing is written."
+  - kind: discovery
+    id: p2-baseline-was-120-refs
+    phase: 2
+    title: the zero baseline held 120 stale archived refs, not one
+    body: "fr acceptance check showed twin warnings for 20 distinct archived specs/journals across 120 refs (many with #fragments), not only the spec-ref-writers ref. All were retargeted with retarget_text (moves derived from the warnings, fragment stripped) plus `fr acceptance report --deterministic`; the matrix diff touches only `super-fr:docs/superpowers` ref lines and check now prints no twin warning."
+  - kind: discovery
+    id: p2-flow-lists-not-retargeted
+    phase: 2
+    title: retarget_text handles block-list refs only (per spec)
+    body: "Flow-style `origin: [..]` lists are not rewritten (spec §B names block-list items). The matrix writers emit block lists, so none exist in the real matrix; a flow list would simply keep warning in check rather than be corrupted."
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/1ee7f0e3-bfd3-449b-a323-8c290d481fc5/scratchpad/af/p2-suite.log}
