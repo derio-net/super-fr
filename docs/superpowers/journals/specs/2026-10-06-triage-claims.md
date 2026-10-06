@@ -76,3 +76,128 @@ Operator: `publish:` argv in `<state>/scope.yaml` with {board}/{name}/{scope_id}
 ### verify-candidate · decision · Verification: candidate + scenarios
 
 Operator: candidate walk with scenarios for the read-side (held elsewhere, expired); unit tests for the rest; no post-merge row.
+
+<!-- fr:journal kind=finding scope=spec id=sr-1 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-1 · finding [open] (reviewer: in scope) · claim()/holder() weigh live claims only, so an un-released expired foreign claim is silently taken over
+
+R4's race rule ranged over live claims only: a scope claiming against an expired, un-released foreign claim would win, an automatic take-over the operator ruled out, and contradicting R6.
+
+<!-- fr:journal kind=finding scope=spec id=sr-2 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-2 · finding [open] (reviewer: in scope) · release drops fr:claimed when no live claim is left, hiding expired claims from collect
+
+collect reads comments only of fr:claimed issues, so dropping the label while an expired un-released marker remains hides it from facts, check and R6.
+
+<!-- fr:journal kind=finding scope=spec id=sr-3 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-3 · finding [open] (reviewer: in scope) · claims released at stage merged, before the close-out runs
+
+CLOSED_OUT includes merged (batch.py:59) but the close-out runs after it (batch_drive.py:851-888); releasing at merged reopens cross-host duplicate close-outs. The wave-less owed clause also alternated with releases.
+
+<!-- fr:journal kind=finding scope=spec id=sr-4 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-4 · finding [open] (reviewer: in scope) · claims on closed members are never in facts, so owed_releases cannot release them
+
+collect reads open issues only; a merged batch's members are closed.
+
+<!-- fr:journal kind=finding scope=spec id=sr-5 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-5 · finding [open] (reviewer: in scope) · own expired claims are never refreshed after a driver outage
+
+R8 refreshed live claims only; a refresh could also resurrect a marker another scope's take released.
+
+<!-- fr:journal kind=finding scope=spec id=sr-6 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-6 · finding [open] (reviewer: in scope) · dispatch must claim before the runner launch
+
+runner.dispatch (:1125) precedes _forge_writes (:1146); a lost race would be found after a session started.
+
+<!-- fr:journal kind=finding scope=spec id=sr-7 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-7 · finding [open] (reviewer: in scope) · batch cancel refused for a held batch deadlocks it
+
+A held own batch could never be dispatched, merged or cancelled.
+
+<!-- fr:journal kind=finding scope=spec id=sr-8 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-8 · finding [open] (reviewer: in scope) · deferring the wave-assignment claim to --yes departs from claim-at-wave, and the gap is invisible
+
+create/edit are local-only today.
+
+<!-- fr:journal kind=finding scope=spec id=sr-9 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-9 · finding [open] (reviewer: in scope) · a re-claim posts a new comment, breaking one-marker-per-signer; moving a member between batches unspecified
+
+Editing a released marker back to live would keep its old created_at and wrongly win R4.
+
+<!-- fr:journal kind=finding scope=spec id=sr-10 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-10 · finding [open] (reviewer: in scope) · concurrent first use can mint two host ids
+
+Atomic rename does not stop two processes each minting an id.
+
+<!-- fr:journal kind=finding scope=spec id=sr-11 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-11 · finding [open] (reviewer: in scope) · a held batch with a running session is left out of --max-inflight
+
+A backfilled held batch may already be dispatched.
+
+<!-- fr:journal kind=finding scope=spec id=sr-12 created=2026-10-06T18:43:36+00:00 state=open review_scope=in -->
+### sr-12 · finding [open] (reviewer: in scope) · Verification row descriptions do not cover several requirements their rows claim
+
+R1 scope show, R3 create/edit, R9 take/release, R12 collect/schema, R14 board --publish and names, R15 export exclusion, R16 mirrors were unnamed.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-10-06T18:43:36+00:00 -->
+### spec-review-1 · review · independent spec review: 12 findings
+
+fr-spec-reviewer checked the six operator decisions against R1-R16 and §3, every named file/line against the code (all references verified correct), and internal consistency across requirements, design, Verification and §6. Findings sr-1..sr-12, all in scope, all fixed in the spec. No finding on the facts schema bump, harness neutrality of the argv publish hook, privacy of the marker, or the gh comment url as the PATCH id source.
+
+<!-- fr:journal kind=finding scope=spec id=sr-1-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-1 -->
+### sr-1-resolved · finding [fixed] · resolves sr-1: claim()/holder() weigh live claims only, so an un-released expired foreign claim is silently taken over
+
+R4 and §3.B/§3.D now range over every un-released claim, live or expired; expiry changes only what the operator is offered.
+
+<!-- fr:journal kind=finding scope=spec id=sr-2-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-2 -->
+### sr-2-resolved · finding [fixed] · resolves sr-2: release drops fr:claimed when no live claim is left, hiding expired claims from collect
+
+R10 and §3.D remove the label only when no un-released claim, live or expired, remains.
+
+<!-- fr:journal kind=finding scope=spec id=sr-3-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-3 -->
+### sr-3-resolved · finding [fixed] · resolves sr-3: claims released at stage merged, before the close-out runs
+
+§3.B releasing(): cancelled, abandoned or finished (run archived); merged/partial keep and refresh claims. owed_claims bounded to not-releasing batches.
+
+<!-- fr:journal kind=finding scope=spec id=sr-4-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-4 -->
+### sr-4-resolved · finding [fixed] · resolves sr-4: claims on closed members are never in facts, so owed_releases cannot release them
+
+Releases are derived from the batch side and read/written per member at release time, open or closed; recorded as a claims_released event (judgements schema 6) so they are not repeated.
+
+<!-- fr:journal kind=finding scope=spec id=sr-5-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-5 -->
+### sr-5-resolved · finding [fixed] · resolves sr-5: own expired claims are never refreshed after a driver outage
+
+R8 refreshes own un-released claims, expired included; refresh re-reads and returns Held without writing when the marker was released by a take.
+
+<!-- fr:journal kind=finding scope=spec id=sr-6-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-6 -->
+### sr-6-resolved · finding [fixed] · resolves sr-6: dispatch must claim before the runner launch
+
+R3 and §3.E: the claim, R4's re-read included, completes after the compare-before-write checks and before the runner launch.
+
+<!-- fr:journal kind=finding scope=spec id=sr-7-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-7 -->
+### sr-7-resolved · finding [fixed] · resolves sr-7: batch cancel refused for a held batch deadlocks it
+
+R6 and §3.E allow cancel on a held batch: it releases own claims and leaves held members' label and comments to their holder; touches_forge now covers a proposed batch with written claims.
+
+<!-- fr:journal kind=finding scope=spec id=sr-8-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-8 -->
+### sr-8-resolved · finding [fixed] · resolves sr-8: deferring the wave-assignment claim to --yes departs from claim-at-wave, and the gap is invisible
+
+create/edit gain --yes that writes the claims at wave assignment; without it the claims are owed and shown in check's and claim list's new `claims owed` set; recorded under §2.2 decision 1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-9-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-9 -->
+### sr-9-resolved · finding [fixed] · resolves sr-9: a re-claim posts a new comment, breaking one-marker-per-signer; moving a member between batches unspecified
+
+R2: at most one un-released marker per signer; re-claim posts a new one. R3/§3.D: an own un-released claim naming another batch is edited in place (continuous hold).
+
+<!-- fr:journal kind=finding scope=spec id=sr-10-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-10 -->
+### sr-10-resolved · finding [fixed] · resolves sr-10: concurrent first use can mint two host ids
+
+§3.A: temp file hard-linked into place (fails if it exists), loser re-reads the winner; path through fr.isolation.types._home().
+
+<!-- fr:journal kind=finding scope=spec id=sr-11-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-11 -->
+### sr-11-resolved · finding [fixed] · resolves sr-11: a held batch with a running session is left out of --max-inflight
+
+§3.F: held batches in LIVE_STAGES count; only proposed held batches do not.
+
+<!-- fr:journal kind=finding scope=spec id=sr-12-resolved created=2026-10-06T18:43:36+00:00 state=fixed resolves=sr-12 -->
+### sr-12-resolved · finding [fixed] · resolves sr-12: Verification row descriptions do not cover several requirements their rows claim
+
+Every Verification row now names the tests that cover each requirement it maps.
