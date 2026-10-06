@@ -43,10 +43,12 @@
 # — see run_cmd.py). Recovering a stranded run is NOT the one-liner it
 # looks like, verified on this repo's own run: `fr run adopt` REFUSES while
 # a run file exists for the same shape+branch, which is precisely the
-# stranded case, so the old `docs/superpowers/runs/<id>.yaml` must be moved
-# aside first. Adoption then re-dispatches `review-phase` for every
-# completed phase (it keys items on the first group member) and does not
-# carry the old cursor's gate provenance. Correct, but not free.
+# stranded case. Recover with `fr run reshape <run-id>` (it inserts the new
+# step pending and keeps every unit), or, when reshape refuses, with
+# `fr run adopt <plan-dir> --supersede`: it replaces the run, carrying gate
+# provenance, units and evidence forward, and marks a phase whose plan
+# journal already holds its review `reviewer=historical` instead of
+# re-dispatching it. Never move the run file aside by hand.
 workflow: fr-goal
 schema: 1
 description: TDD feature delivery, goal to reviewed PR.

@@ -30,7 +30,6 @@ backend declares unsupported).
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import tempfile
@@ -40,17 +39,17 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, NamedTuple, NoReturn
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 from urllib.parse import urlparse
 
 import typer
 import yaml
 from pydantic import ValidationError
 from rich.markup import escape
-from rich.text import Text
 
 from fr._hosts import backend_for_url
 from fr.acceptance.ci import CI_CONFIG_PATHS
+from fr.commands import triage_kanban_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
@@ -62,6 +61,8 @@ from fr.commands.triage_cmd import (
     console,
     err_console,
 )
+from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
+from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_backend
 from fr.labels import FR_IN_PROGRESS
@@ -117,6 +118,7 @@ from fr.triage.batch_drive import (
     closeout_due,
     closeout_event,
     closeout_item_id,
+    default_selection,
     drive_pass,
     find_run,
     housekeeping_branch,
@@ -139,6 +141,8 @@ from fr.triage.batch_merge import (
     run_queue,
 )
 from fr.triage.batch_version import read_source, reserve
+from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
+from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.model import (
@@ -178,25 +182,9 @@ def make_checkout(path: Path | None) -> Checkout:
 
 
 def load_runner(name: str) -> Runner:
-    """Build runner *name* through `fr_dispatch.registry.load_runner` (§3.C step 1).
-
-    The soft point: `fr_dispatch` is imported here, behind find_spec, never at
-    module level. Tests replace this.
-    """
-    if importlib.util.find_spec("fr_dispatch") is None:
-        _fail(DISPATCH_INSTALL_HINT)
-    from fr_dispatch.registry import RunnerLoadError
-    from fr_dispatch.registry import load_runner as _load
-
-    try:
-        return _load(name)
-    except RunnerLoadError as exc:
-        _fail(str(exc))
-
-
-def _fail(message: str, code: int = 2) -> NoReturn:
-    err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
-    raise typer.Exit(code=code)
+    """Build runner *name* through the soft point in `triage_kanban_cmd` (§3.C step 1),
+    with this module's install hint. Tests replace this."""
+    return kanban_load_runner(name, DISPATCH_INSTALL_HINT)
 
 
 def _now_after(batch: Batch) -> datetime:
@@ -1177,11 +1165,7 @@ def batch_merge_command(
 
 # ------------------------------------------------------------------- drive
 
-DRIVE_LOCK = "drive.lock"
 DEFAULT_INTERVAL = 120
-LOCK_GRACE = 10.0
-"""Seconds an unreadable `drive.lock` is held: long enough for a starter that
-created it to have written it (review rg-7)."""
 SERVICE_PATHS: tuple[str, ...] = (
     ".devcontainer/fr-profiles.yaml",
     *sorted({p for paths in CI_CONFIG_PATHS.values() for p in paths}),
@@ -1243,31 +1227,6 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True  # alive, owned by someone else
-    return True
-
-
-def _lock_text(path: Path) -> str | None:
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-
-
-def _lock_pid(text: str) -> int | None:
-    """The pid a lock names, or None when it is not (yet) a whole lock."""
-    try:
-        return int(json.loads(text)["pid"])
-    except (ValueError, KeyError, TypeError):
-        return None
-
-
 @contextmanager
 def drive_lock(target: Path) -> Iterator[None]:
     """`<state dir>/drive.lock` (pid, start time) for as long as a driver runs (R6).
@@ -1296,19 +1255,10 @@ def drive_lock(target: Path) -> Iterator[None]:
         held = _lock_text(path)
         if held is None:
             continue  # released meanwhile: try again
-        pid = _lock_pid(held)
-        if pid is None:
-            try:
-                age = time.time() - path.stat().st_mtime
-            except FileNotFoundError:
-                continue
-            if age < LOCK_GRACE:
-                _fail(f"another driver is taking {path}; wait for it, or stop it first")
-        elif _pid_alive(pid):
-            started = json.loads(held).get("started")
+        holder = lock_holder(path, held)  # the one rule `--watch` reads too
+        if holder is not None:
             _fail(
-                f"another driver holds {path} (pid {pid}, started {started}); "
-                "stop it first, or wait for it to finish"
+                f"another driver holds {path} ({holder}); stop it first, or wait for it to finish"
             )
         aside = target / f".{DRIVE_LOCK}.stale.{uuid.uuid4().hex}"
         try:
@@ -1379,8 +1329,8 @@ def _chosen(batches: list[Batch], named: list[str] | None) -> list[Batch]:
     """The batches to drive: those named; else every batch with a wave; else all."""
     if named:
         return [_find(batches, b) for b in named]
-    waved = [b for b in batches if b.wave is not None]
-    return waved or list(batches)
+    selected = default_selection(batches)
+    return [b for b in batches if b.id in selected]
 
 
 def _parse_at(stamp: str | None) -> datetime | None:
@@ -1468,8 +1418,11 @@ class _Driver:
         yes: bool,
         workspace_prefix: str = DEFAULT_WORKSPACE_PREFIX,
         keep_sessions: bool = False,
+        scope_args: list[str] | None = None,
     ) -> None:
         self.scope, self.target, self.named = scope, target, named
+        self.scope_args = scope_args or []
+        self.board_failures: set[str] = set()  # board write failures, since the last good one
         self.workspace_prefix = workspace_prefix
         self.keep_sessions = keep_sessions
         self.checkout_paths = checkouts
@@ -1520,16 +1473,9 @@ class _Driver:
         best effort, so a load failure never ends the drive (R10)."""
         if name in self._unloadable:
             return None
-        # `load_runner` reports a refusal through `_fail` (a red `error:` and an exit);
-        # an adapter's own import or `from_env()` failure is any exception. Either is
-        # one warning here, with its reason (review p2-r1).
-        try:
-            with err_console.capture() as said:
-                return self.runner(name)
-        except typer.Exit:
-            reason = Text.from_ansi(said.get()).plain.strip().removeprefix("error:").strip()
-        except Exception as exc:  # noqa: BLE001 - closing is best effort
-            reason = f"{type(exc).__name__}: {exc}"
+        runner, reason = try_load(name, self.runner)
+        if runner is not None:
+            return runner
         self._unloadable.add(name)
         err_console.print(
             f"[yellow]warning:[/yellow] runner `{escape(name)}` could not be loaded "
@@ -1819,29 +1765,18 @@ class _Driver:
         if not finished:
             return frozenset()
         from fr_dispatch.protocols import SessionCloser
-        from fr_dispatch.work_item import WorkItem
 
         by_runner: dict[str, list[WorkItem]] = {}
         for b in finished:
             repo = repos[b.id]
-            group = self.group_of(b)
             dispatch, closeout = last_dispatch(b), closeout_event(b)
-            wanted = [(batch_item_id(repo, b.id), dispatch.runner if dispatch else None)]
+            wanted = [(False, dispatch.runner if dispatch else None)]
             if closeout is not None and closeout.runner != "hand":
-                wanted.append((closeout_item_id(repo, b.id), closeout.runner))
-            for item_id, name in wanted:
+                wanted.append((True, closeout.runner))
+            for is_closeout, name in wanted:
                 if not name:
                     continue
-                probe = WorkItem(
-                    id=item_id,
-                    unit="run",
-                    workflow=batch_workflow(b),
-                    repo=repo,
-                    parent=None,
-                    inputs=(),
-                    payload={"group": group},
-                    tracking=None,
-                )
+                probe = probe_item(repo, b, closeout=is_closeout, prefix=self.workspace_prefix)
                 by_runner.setdefault(str(name), []).append(probe)
         for name, probes in by_runner.items():
             runner = self._try_runner(name)
@@ -1946,9 +1881,32 @@ class _Driver:
             plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
         )
         _say(summary_line(summary))
-        if not self.yes:
+        if self.yes:
+            self._write_board()
+        else:
             _say("nothing done; re-run with --yes to act")
         return acted, summary, [a.batch for a in plan.actions if a.kind == "blocked"]
+
+    def _write_board(self) -> None:
+        """Render `board.html` from what this pass left on disk (R11). A board that cannot
+        be written is one warning per distinct cause and never changes the pass."""
+        try:
+            triage_kanban_cmd.write_board(
+                self.scope,
+                self.target,
+                scope_args=self.scope_args,
+                prefix=self.workspace_prefix,
+            )
+        except Exception as exc:  # noqa: BLE001 - the board is a view; it never fails a pass
+            cause = triage_kanban_cmd.one_line(exc)
+            if cause not in self.board_failures:
+                self.board_failures.add(cause)
+                err_console.print(
+                    f"[yellow]warning:[/yellow] could not write the board: {escape(cause)}",
+                    soft_wrap=True,
+                )
+        else:
+            self.board_failures.clear()
 
     def _act(self, action: Action, facts: Facts, in_flight: int) -> tuple[str, bool, int]:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
@@ -2289,6 +2247,7 @@ def batch_drive_command(
         yes=yes,
         workspace_prefix=workspace_prefix,
         keep_sessions=keep_sessions,
+        scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override),
     )
     with drive_lock(target):
         while True:

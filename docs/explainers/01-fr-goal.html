@@ -390,6 +390,19 @@ from — so the plan rejoins the pipeline instead of being stranded outside it.
 The upgrade only ever <em>offers</em> this: it prints the command and adopts nothing
 on your behalf, because an unrelated command should not quietly add tracked
 files to your repository.</p>
+<p>A run that already exists but was started against an older shape — the shape
+has since gained or lost a step — is a different problem, and moving its file
+aside by hand loses what it knew. <code>fr run reshape &lt;run-id&gt;</code> previews moving it
+onto the current step list (and <code>--yes</code> applies it) when that loses nothing the
+run recorded. When it cannot, <code>fr run adopt &lt;plan-dir&gt; --supersede</code> replaces
+the run with a freshly adopted one and carries forward the gate answers, the
+emitted artifacts, and every unit with its attempts and evidence; an attempt
+still open is closed as abandoned, and the preview names whose work that cuts
+off before you pass <code>--yes</code>. A phase whose review already sits in the plan
+journal, written before the cursor existed and after the work it reviews, is
+adopted with that review marked <code>done</code> as a <em>historical</em> review: fr says the
+reviewer was not observed, and the PR body lists every such phase by name so you
+can check them.</p>
 <p>Two details make this more than bookkeeping. First, a failed step <strong>does not</strong>
 move the cursor. Success advances, failure stays put, so a stalled run keeps
 reporting the same step until someone deals with it rather than sliding past it.

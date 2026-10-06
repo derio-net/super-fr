@@ -25,6 +25,7 @@ from fr.triage.batch_drive import (
     checks_verdict,
     closeout_brief,
     closeout_item_id,
+    default_selection,
     drive_pass,
     find_run,
     housekeeping_branch,
@@ -917,3 +918,13 @@ def test_summary_line_adds_queued_between_closing_and_blocked() -> None:
     s = Summary(in_flight=1, merged=0, pending=0, closing=2, blocked=3, queued=4)
     assert summary_line(s) == ("in flight 1, merged 0, pending 0, closing 2, queued 4, blocked 3")
     assert "queued" not in summary_line(Summary(1, 0, 0, 0))
+
+
+def test_default_selection_is_the_waved_batches() -> None:
+    waved, unwaved = _batch("a", 1, wave=1), _batch("b", 2, wave=None)
+    assert default_selection([waved, unwaved]) == frozenset({"a"})
+
+
+def test_default_selection_is_every_batch_when_none_has_a_wave() -> None:
+    a, b = _batch("a", 1, wave=None), _batch("b", 2, wave=None)
+    assert default_selection([a, b]) == frozenset({"a", "b"})

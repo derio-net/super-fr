@@ -314,6 +314,20 @@ The upgrade only ever *offers* this: it prints the command and adopts nothing
 on your behalf, because an unrelated command should not quietly add tracked
 files to your repository.
 
+A run that already exists but was started against an older shape — the shape
+has since gained or lost a step — is a different problem, and moving its file
+aside by hand loses what it knew. `fr run reshape <run-id>` previews moving it
+onto the current step list (and `--yes` applies it) when that loses nothing the
+run recorded. When it cannot, `fr run adopt <plan-dir> --supersede` replaces
+the run with a freshly adopted one and carries forward the gate answers, the
+emitted artifacts, and every unit with its attempts and evidence; an attempt
+still open is closed as abandoned, and the preview names whose work that cuts
+off before you pass `--yes`. A phase whose review already sits in the plan
+journal, written before the cursor existed and after the work it reviews, is
+adopted with that review marked `done` as a *historical* review: fr says the
+reviewer was not observed, and the PR body lists every such phase by name so you
+can check them.
+
 Two details make this more than bookkeeping. First, a failed step **does not**
 move the cursor. Success advances, failure stays put, so a stalled run keeps
 reporting the same step until someone deals with it rather than sliding past it.

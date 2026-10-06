@@ -256,7 +256,7 @@ Everyday:
 | `fr archive` | Move finished plans (and specs) to `implemented/` |
 | `fr skills` | Condensed overview of the skills + CLI surface |
 | `fr workflow` | `check <shape>` — validate a resolved workflow manifest (schema, duplicate ids, dangling `needs`, cycles, capabilities) |
-| `fr run` | Durable workflow-run cursor: `start`, `status`, `advance`, `resolve`, `adopt`, `check` — see [Workflow shapes](#workflow-shapes) |
+| `fr run` | Durable workflow-run cursor: `start`, `status`, `advance`, `resolve`, `reshape`, `adopt` (`--supersede`), `check` — see [Workflow shapes](#workflow-shapes) |
 
 Maintenance:
 
@@ -307,6 +307,8 @@ fr run advance <run-id>             # kind: cli executes; kind: agent emits a br
 fr run resolve <run-id> --step <id> --state done|failed [--emitted name=path]
 fr run status <run-id>              # cursor + every step's state
 fr run adopt <plan-dir|spec>        # give work already in flight a cursor (offered, not forced)
+fr run reshape <run-id> [--yes]     # move a drifted cursor onto the shape's current step list
+fr run adopt <plan-dir> --supersede # replace a stranded run, carrying its provenance forward
 fr workflow check <shape>           # schema/graph validation (CI tripwire on every shipped shape)
 ```
 

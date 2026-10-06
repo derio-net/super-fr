@@ -19,8 +19,9 @@ from typing import Any
 import pytest
 import yaml
 from fr.cli import app
-from fr.commands import triage_batch_cmd, triage_cmd
+from fr.commands import triage_batch_cmd, triage_cmd, triage_kanban_cmd
 from fr.gh import GhError
+from fr.triage import drive_lock
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
@@ -1038,6 +1039,87 @@ def test_an_archive_pr_merged_by_hand_is_recorded_so_batch_list_reads_archived(
     assert code == 0 and _lines(out, "adopt") == [], out
 
 
+# ------------------------------------------------- the board, every pass (R11)
+
+
+def _page(tmp_path: Path) -> str:
+    return (tmp_path / "board.html").read_text(encoding="utf-8")
+
+
+def test_an_acting_once_pass_writes_the_board_and_shows_its_own_dispatch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    page = _page(tmp_path)
+    start = page.index('data-column="running"')
+    assert 'id="card-b1"' in page[start : page.index("</section>", start)]
+
+
+def test_a_pass_that_acts_on_nothing_still_writes_the_board(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1], draft=True)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, _ = _drive(tmp_path, "--once", "--yes")
+    assert code == 3
+    assert 'id="card-b1"' in _page(tmp_path)
+
+
+def test_plan_mode_writes_no_board(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path)
+    assert code == 0, out
+    assert not (tmp_path / "board.html").exists()
+
+
+def test_the_board_copies_the_drives_repo_and_dir_only_when_given(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _proposed(world, tmp_path, 1)
+    _drive(tmp_path, "--once", "--yes")
+    assert f"focus b1 --repo {REPO} --dir {tmp_path.resolve()}" in _page(tmp_path)
+    seen: list[list[str]] = []
+
+    def _spy(scope: Any, target: Path, *, scope_args: Any, **kw: Any) -> Any:
+        seen.append(list(scope_args))
+        return target / "board.html", 0
+
+    monkeypatch.setattr(triage_kanban_cmd, "write_board", _spy)
+    monkeypatch.setattr(triage_batch_cmd, "state_dir", lambda scope, override: tmp_path)
+    CliRunner().invoke(app, ["triage", "batch", "drive", "--once", "--yes", "--repo", REPO])
+    assert seen == [["--repo", REPO]]
+
+
+def test_a_board_that_cannot_be_written_warns_once_per_cause_and_changes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _proposed(world, tmp_path, 1)
+
+    def _boom(*a: Any, **kw: Any) -> Any:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(triage_kanban_cmd, "write_board", _boom)
+    sleeps: list[float] = []
+
+    def _stop(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise RuntimeError("end of the test loop")
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop)
+    _, out = _drive(tmp_path, "--yes", "--interval", "5")
+    assert out.count("could not write the board") == 1 and "disk full" in out
+    assert len(sleeps) == 3 and world.passes == [1, 1, 1]  # type: ignore[attr-defined]
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1"]
+
+
 # ------------------------------------------------------------ lock (R6)
 
 
@@ -1058,7 +1140,7 @@ def test_a_stale_lock_is_taken_over_and_released(
 ) -> None:  # fmt: skip
     _proposed(world, tmp_path, 1)
     (tmp_path / "drive.lock").write_text(json.dumps({"pid": 999_999_999, "started": "x"}))
-    monkeypatch.setattr(triage_batch_cmd, "_pid_alive", lambda pid: pid == os.getpid())
+    monkeypatch.setattr(drive_lock, "pid_alive", lambda pid: pid == os.getpid())
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert not (tmp_path / "drive.lock").exists()
@@ -1470,7 +1552,7 @@ def test_a_stale_lock_retaken_by_another_starter_is_not_removed(
             return False
         return pid == 4242
 
-    monkeypatch.setattr(triage_batch_cmd, "_pid_alive", _alive)
+    monkeypatch.setattr(drive_lock, "pid_alive", _alive)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 2, out
     assert lock.read_text() == rival

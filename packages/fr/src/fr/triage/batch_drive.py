@@ -335,6 +335,14 @@ def is_archived(added: Iterable[str], live: Callable[[str], bool]) -> bool:
     return bool(mine) and not any(live(p) for p in mine)
 
 
+def default_selection(batches: Iterable[Batch]) -> frozenset[str]:
+    """The batch ids a drive acts on when none is named: every batch with a wave, else
+    all. The one rule `fr triage batch drive` and the board's hints both read."""
+    every = list(batches)
+    waved = [b for b in every if b.wave is not None]
+    return frozenset(b.id for b in (waved or every))
+
+
 def closeout_event(batch: Batch) -> CloseoutEvent | None:
     """The batch's close-out event, if it has one."""
     for e in reversed(batch.events):
