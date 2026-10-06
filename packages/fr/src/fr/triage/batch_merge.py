@@ -40,6 +40,9 @@ FAILING_BUCKETS = frozenset({"fail", "cancel"})
 BaseCommit = tuple[str, tuple[tuple[str, str], ...]]
 # Close-out and archive merges move a run's artifacts and nothing else (gh#927).
 ARCHIVE_PREFIX = "docs/superpowers/"
+# The acceptance matrix cites specs and plans by path, which an archive merge moves:
+# a PR changing it overlaps every archive merge, though no path is shared (gh#937).
+CITES_ARCHIVE_PREFIX = "docs/acceptance/"
 # Change fragments: a release commit deletes the ones it consumed.
 FRAGMENT_PREFIX = ".changes/"
 # Update-push-wait rounds per PR before merge gives up on a moving main.
@@ -314,7 +317,7 @@ def routine_commit(
     """
     if not changes:
         return False
-    if all(path.startswith(ARCHIVE_PREFIX) for _, path in changes):
+    if _is_archive(changes):
         return True
     consumed = False
     pairs: list[tuple[str, str]] = []
@@ -334,17 +337,25 @@ def _behind_only_routinely(ctx: MergeContext, head: str) -> bool:
     path the PR changed, so the PR merges as it is instead of being updated.
 
     The overlap rule keeps the forge's merge conflict-free and the PR's own change
-    to a file from landing on a version of it the PR's CI never saw.
+    to a file from landing on a version of it the PR's CI never saw. A PR that
+    changes the acceptance matrix overlaps every archive merge, whose moves can
+    leave its refs dangling (gh#937).
     """
     commits = ctx.checkout.commits_behind(head, ctx.main)
     if not commits:
         return False
     touched = ctx.checkout.changed_paths(ctx.main, head)
+    cites = any(path.startswith(CITES_ARCHIVE_PREFIX) for path in touched)
     return all(
         routine_commit(changes, ctx.checkout.show, sha)
         and not touched.intersection(path for _, path in changes)
+        and not (cites and _is_archive(changes))
         for sha, changes in commits
     )
+
+
+def _is_archive(changes: Sequence[tuple[str, str]]) -> bool:
+    return bool(changes) and all(path.startswith(ARCHIVE_PREFIX) for _, path in changes)
 
 
 MergeReadiness = Literal["merged", "updated", "already-merged", "draft", "failing", "pending"]
@@ -396,6 +407,18 @@ def _merge(ctx: MergeContext, slot: Slot, head: str, head_version: str | None) -
     try:
         ctx.client.pr_merge(ctx.repo, pr.number, head_sha=head, method=ctx.method)
     except FORGE_ERRORS as exc:  # a protection refusal, in the forge's own words
+        # Unless a push landed after `_open_head`: the head-SHA guard refused it, and
+        # the train stops and re-plans next pass (gh#962). Told by the re-read head,
+        # never by the refusal's wording, which differs per forge.
+        try:
+            moved = str(ctx.client.pr_view(ctx.repo, pr.number).get("head_oid"))
+        except FORGE_ERRORS:
+            moved = head  # unknown: report the refusal as it came
+        if moved != head:
+            raise HeadMovedError(
+                f"PR #{pr.number} (batch {slot.step.batch.id}): head moved before the merge "
+                f"({head[:12]} -> {moved[:12]}); re-run to re-plan"
+            ) from exc
         raise MergeStopError(f"PR #{pr.number}: the forge refused the merge: {exc}") from exc
     ctx.say(f"merged PR #{pr.number} (batch {slot.step.batch.id}) at {head[:12]}")
     where = scratch_path(ctx, slot)

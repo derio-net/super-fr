@@ -5567,6 +5567,28 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py#test_readme_has_acceptance_badge
     status: ci
     notes: Index link and README badge pinned by unit tests.
+  - id: pages-deploy-survives-report-refusal
+    capability: acceptance-matrix
+    acceptance: 'A Pages deploy still publishes the explainers when the acceptance report
+      cannot be rendered (the migration gate refuses over stale artifacts): /acceptance/
+      shows a placeholder naming the commit, the run still goes red, and a newer push
+      queues behind a running deploy instead of cancelling it'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-06-pages-deploy.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py#test_concurrency_never_cancels_a_running_deploy
+      - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_cannot_skip_the_deploy
+      - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_publishes_a_placeholder_before_upload
+      - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_still_fails_the_run_after_deploying
+      - super-fr:tests/unit/test_pages_workflow.py#test_the_placeholder_says_the_report_was_not_rendered
+    status: skipped
+    notes: Workflow shape unit-pinned and the placeholder script executed in the unit
+      suite; a live deploy over a gate refusal has not been observed (it needs stale
+      artifacts on main).
+    verify: live
+    issues:
+    - derio-net/super-fr#924
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
@@ -6541,9 +6563,10 @@ rows:
       the live PR) are unit-tested in CI.
   - id: triage-board-columns
     capability: triage-batch-board
-    acceptance: '`fr triage board` writes board.html showing one card per batch in six
-      lifecycle columns (Proposed, Waiting, Running, PR open, Closing out, Done) with
-      counts, a blocked mark for unsatisfiable dependencies and a pill for cancelled/abandoned/partial,
+    acceptance: '`fr triage board` writes board.html showing one card per batch in seven
+      lifecycle columns (Proposed, Waiting, Running, PR open, Closing out, Partial,
+      Done) with counts, a partial batch in Partial until its close-out is archived,
+      a blocked mark for unsatisfiable dependencies and a pill for cancelled/abandoned/partial,
       linked from triage.html, readable in light and dark and at phone width.'
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-batch-board-design.md#R1
@@ -6557,8 +6580,9 @@ rows:
       - super-fr:tests/unit/test_triage_kanban_render.py
       - super-fr:tests/unit/test_triage_kanban_cmd.py
     status: ci
-    notes: board model, page and command unit-tested; browser-checked light, dark, 375px
-      (phase 2). triage.html link lands in phase 3
+    notes: 'board model, page and command unit-tested; browser-checked light, dark,
+      375px (phase 2). gh#985: a partial batch owed its close-out has its own Partial
+      column (operator decision 2026-10-06), pinned in test_triage_kanban.py and test_triage_kanban_render.py'
     visual:
       states:
       - empty board
@@ -6567,6 +6591,8 @@ rows:
       - done card with cancelled pill
       - dark theme
       - phone width stacked columns
+    issues:
+    - derio-net/super-fr#985
   - id: triage-board-card-detail
     capability: triage-batch-board
     acceptance: A board card expands in place, scripts on or off, to show member issues,
@@ -6881,10 +6907,10 @@ rows:
       one is usable, a shape declares the default, and a malformed manifest is refused
       by fr verification check
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_verification_cmd.py#test_the_shipped_shapes_declare_candidate_and_it_resolves
@@ -6901,8 +6927,8 @@ rows:
       go to a throwaway prefix through the repo's install contract and never touch the
       operator's install
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R8
     levels:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_shipped_verification_strategies
@@ -6916,9 +6942,9 @@ rows:
       overrides; a post-merge row without a reason fails self-review; legacy verify
       post-merge rows read as live'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_plan_self_review_verification.py#test_a_post_merge_or_none_row_without_a_reason_fails
@@ -6940,8 +6966,8 @@ rows:
       and the run's row scenarios, and deliver refuses until a passing walk log covering
       HEAD's code tree and every owed row is cited
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R9
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R11
     levels: {}
     status: not-implemented
     notes: ''
@@ -6950,7 +6976,7 @@ rows:
     acceptance: The PR body lists operator-driven pre-merge walks with their command
       and a ready-checklist line, and post-merge rows with their reason
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R12
     levels: {}
     status: not-implemented
     notes: ''
@@ -6959,8 +6985,8 @@ rows:
     acceptance: deliver refuses a Closes/Fixes/Resolves line for an issue a not-yet-walk-verified
       post-merge row cites, naming the line and printing Refs
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R15
     levels: {}
     status: not-implemented
     notes: ''
@@ -6970,8 +6996,8 @@ rows:
       row citing an issue is walk-verified it prints the close command (nothing under
       tracking none)
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R14
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R16
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_walks.py#test_the_walk_that_verifies_the_last_open_row_prints_the_close_commands
@@ -6988,17 +7014,22 @@ rows:
     acceptance: fr verification prerelease cuts an rc tag and GitHub pre-release of
       a branch without touching main or any version surface; other forges refuse
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R24
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: skipped
+    notes: 'Live-verified 2026-10-06 at closeout: `fr verification prerelease --branch
+      chore/archive-2026-10-06-verification-strategies` dispatched prerelease.yml (run
+      37498798304, success); tag rc/chore-archive-2026-10-06-verification-strategies/09352274256d
+      sits on the branch head and its GitHub release is a pre-release; main and the
+      version surfaces unchanged (bump-version --check ok). Not in CI; the other-forge
+      refusal is unit-pinned only if a level is added.'
     verify: live
   - id: super-fr-candidate-contract
     capability: verification
     acceptance: super-fr provides .fr/candidate-install and scenario scripts, exercised
       in CI, so its own PRs can run a candidate walk
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R25
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R25
     levels:
       unit:
       - super-fr:tests/unit/test_verification_walk.py#test_the_walk_refuses_a_repo_without_the_install_contract_naming_it
@@ -7018,7 +7049,7 @@ rows:
     acceptance: fr verification prerelease --dry-run prints the workflow dispatch for
       a branch and its rc tag, and refuses on a non-GitHub forge
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R24
     levels:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_prerelease_command_shape
@@ -7032,8 +7063,8 @@ rows:
       ranked, proposed or reported unplaced; the close-out brief prints the label command
       for Refs'd issues
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R17
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R18
     levels:
       unit:
       - super-fr:tests/unit/test_closeout_awaiting_live.py#test_a_refsd_issue_a_waiting_row_cites_gets_the_label_command
@@ -7056,11 +7087,11 @@ rows:
       session or a fresh one, later overlapping conflicts wait behind the first, and
       after two hand-backs without a merge the batch is listed under needs you
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R19
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R20
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R21
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R22
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R23
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R19
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R21
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R22
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R23
     levels: {}
     status: not-implemented
     notes: ''
@@ -7069,7 +7100,7 @@ rows:
     acceptance: On a real wave, a conflicted batch's live herdr session receives the
       hand-back brief, resolves, and pushes, and the train merges it
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
     levels: {}
     status: not-implemented
     notes: ''

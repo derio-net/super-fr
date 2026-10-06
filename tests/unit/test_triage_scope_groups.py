@@ -177,19 +177,22 @@ def _issue_model(repo: str, number: int) -> Issue:
     )
 
 
-def _group_state(tmp_path: Path, *batches: str) -> Path:
+def _group_state(
+    tmp_path: Path, *batches: str, alpha: tuple[int, ...] = (1,), beta: tuple[int, ...] = (2,)
+) -> Path:
+    keys = [(ALPHA, "alpha", n) for n in alpha] + [(BETA, "beta", n) for n in beta]
     facts = Facts(
         schema=4,
         scope=Scope.group([ALPHA, BETA]).name,
         kind="group",
         collected_at=NOW.isoformat(),
         repos=[ALPHA, BETA],
-        issues=[_issue_model(ALPHA, 1), _issue_model(BETA, 2)],
+        issues=[_issue_model(repo, n) for repo, _, n in keys],
     )
     (tmp_path / "facts.json").write_text(json.dumps(facts.to_json()), encoding="utf-8")
     (tmp_path / "judgements.yaml").write_text(
         "schema: 3\ntiers:\n  - {n: 1, title: Now}\nissues:\n"
-        "  alpha#1: {tier: 1}\n  beta#2: {tier: 1}\n"
+        + "".join(f"  {name}#{n}: {{tier: 1}}\n" for _, name, n in keys)
         + ("batches:\n" + "".join(batches) if batches else ""),
         encoding="utf-8",
     )
@@ -307,6 +310,40 @@ def test_a_dispatched_batch_in_one_repo_uses_the_cap_of_the_other(
     code, out = _drive(tmp_path, *_clones(tmp_path, ALPHA, BETA), "--max-inflight", "1")
     assert code in (0, 3), out
     assert "dispatch bb" not in out
+    # Held by the other repo's batch, not merely absent (gh#884).
+    assert "held bb: the in-flight cap (1) is full: ba" in out
+
+
+def _dispatched(bid: str) -> str:
+    return (
+        "    events:\n      - {kind: dispatch, at: 2026-10-01T10:00:00Z, runner: fake, "
+        f"handle: h-{bid}, branch: feat/batch-{bid}}}\n"
+    )
+
+
+def test_a_fifth_batch_is_held_by_four_in_flight_across_two_owners(
+    tmp_path: Path, _no_forge: None
+) -> None:
+    """gh#884: two in flight per repo (and per owner) is under a cap of 4 each, so
+    per-repo or per-owner counting would dispatch the fifth; the group's one cap holds
+    it. The control run proves the fifth is dispatchable, so the hold is the cap's."""
+    state = [
+        _batch("a1", "alpha#1") + _dispatched("a1"),
+        _batch("a2", "alpha#3") + _dispatched("a2"),
+        _batch("b1", "beta#2") + _dispatched("b1"),
+        _batch("b2", "beta#4") + _dispatched("b2"),
+        _batch("b5", "beta#6"),
+    ]
+    _group_state(tmp_path, *state, alpha=(1, 3), beta=(2, 4, 6))
+    clones = _clones(tmp_path, ALPHA, BETA)
+    code, out = _drive(tmp_path, *clones)
+    assert code in (0, 3), out
+    assert "dispatch b5" not in out
+    assert "held b5: the in-flight cap (4) is full: a1, a2, b1, b2" in out
+
+    code, out = _drive(tmp_path, *clones, "--max-inflight", "5")
+    assert code in (0, 3), out
+    assert "dispatch b5: wave 1" in out
 
 
 def test_drive_refuses_a_group_repo_with_no_checkout_before_anything_runs(

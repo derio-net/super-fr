@@ -56,13 +56,21 @@ def test_a_board_with_no_batches_says_so() -> None:
     assert "<!DOCTYPE html>" in page and "<title>" in page
 
 
-def test_six_columns_with_their_counts_in_order() -> None:
+def test_seven_columns_with_their_counts_in_order() -> None:
     page = _page()
     heads = re.findall(r'<h2>(\w[\w ]*) <span class="count">(\d+)</span></h2>', page)
+    # The fixture's partial batch is owed its close-out: Partial, not Done (gh#985).
     assert heads == [
         ("Proposed", "2"), ("Waiting", "2"), ("Running", "3"),
-        ("PR open", "3"), ("Closing out", "3"), ("Done", "4"),
+        ("PR open", "3"), ("Closing out", "3"), ("Partial", "1"), ("Done", "3"),
     ]  # fmt: skip
+
+
+def test_the_wide_grid_has_one_track_per_column() -> None:
+    from fr.triage.kanban import COLUMNS
+    from fr.triage.kanban_render import CSS
+
+    assert f".board {{ display: grid; grid-template-columns: repeat({len(COLUMNS)}," in CSS
 
 
 def test_every_card_is_a_details_element_with_its_id() -> None:
