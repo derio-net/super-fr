@@ -6490,9 +6490,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py#test_an_open_duplicate_nests_in_its_originals_row_with_the_close_command
+      - super-fr:tests/unit/test_triage_render.py#test_possible_duplicates_lists_each_group_escaped_before_the_backlog
+    status: ci
+    notes: Unit-tested render; browser check 2026-10-06 (headless Chrome, 1280px and
+      375px, every visual state and the expand interaction opened and checked, no horizontal
+      scroll at 375px).
     visual:
       states:
       - original-with-one-duplicate
