@@ -191,3 +191,59 @@ tea unlabel is `tea issues edit {number} --repo {repo} --remove-labels {label}`;
 ### p2-tea-remove-labels-resolved · finding [out-of-scope] · resolves p2-tea-remove-labels: the spec says tea has no unlabel command, but the installed tea's `issues edit` has --remove-labels (phase 2)
 
 Same fact as p2-r1, which carries the fix in scope; this executor-filed duplicate is closed without its own fix.
+
+<!-- fr:journal kind=decision scope=plan id=p3-walk-log-header-is-the-proof created=2026-10-06T12:43:43+00:00 phase=3 -->
+### p3-walk-log-header-is-the-proof · decision · a walk log is trusted by its fr-walk header, code tree and steps, not by who ran it (phase 3)
+
+The log is `---`-fenced YAML (fr-walk: 1, run, strategy, code_tree, harness, model, steps)
+followed by each step's output. deliver refuses a log with no header ("not a walk log"), a
+code_tree != HEAD's, a failing step, a missing smoke (install, smoke:version, smoke:status),
+an owed row with no `row:<id>` step, and uncommitted code paths. It does NOT tie the log to
+the command that wrote it (tests does, via the transcript); a header forged by hand passes.
+Recorded as a known limit rather than inventing a signature scheme the spec does not ask for.
+
+<!-- fr:journal kind=decision scope=plan id=p3-walk-strategy-and-gates created=2026-10-06T12:43:43+00:00 phase=3 -->
+### p3-walk-strategy-and-gates · decision · walk covers rows whose effective strategy is the run's (or --strategy); refuses dirty code, post-merge and prerelease sources (phase 3)
+
+`--strategy` defaults to the spec section's `strategy:` else the shape default. The walk
+refuses (exit 2): a post-merge strategy, an uncommitted code path (the log records HEAD's
+tree, so a dirty tree would be false evidence), a `source: prerelease` strategy (walk does
+not build an rc; install it and use --client), a row with no scenario, an unknown --row.
+A failing step exits 1; the operator's fr changing exits 2 AFTER the log is written. The child
+env drops FR_HARNESS_FR so the candidate is not judged against the operator's identity pin.
+deliver owes ONE log covering every agent pre-merge row, so a run mixing two agent
+strategies cannot satisfy it with one walk; not supported.
+
+<!-- fr:journal kind=decision scope=plan id=p3-premature-closes-signature created=2026-10-06T12:43:43+00:00 phase=3 -->
+### p3-premature-closes-signature · decision · premature_closes takes a holds_open callable as a fourth argument (phase 3)
+
+The spec names premature_closes(live_body, matrix, identity). Whether a row holds an issue
+open needs the run's section and shape default, so the predicate is injected
+(pr_body.holds_open_for_run builds it; rows of other specs fall back to
+acceptance.walks.holds_open). The gate (run_cmd._refuse_premature_closes) is inert when no
+matrix row cites an issue, so repos without a remote or identity are unaffected.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-deliver-evidence-order created=2026-10-06T12:43:43+00:00 phase=3 -->
+### p3-deliver-evidence-order · discovery · the walk-owed predicate sits before rule 2 in _verified_evidence, and an unreadable section/matrix/strategy fails closed (phase 3)
+
+The old run_cmd.py:1773-1776 rule-2 block is now the `missing` list; `walk` is excluded
+from it only when _walk_obligation says not owed. A malformed ## Verification section or an
+unresolvable strategy refuses deliver (fr cannot decide whether a walk is owed). R10 (owed
+row with no scenario) is refused by id inside the same obligation check. Both shapes' deliver
+evidence (plugin + wheel copies) gained `walk`; three tripwire tests pinning the old lists and
+REQUIRED_SECTIONS were updated.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-06T12:43:43+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+a new module (verification/walk.py) and one subcommand; the only shared piece (shape_default) was moved into verification/rows.py as written
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-06T12:43:43+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+one verifier branch beside the tests branch; nothing duplicated to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-06T12:43:43+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+shared_closing_keywords was refactored onto the _closing_lines generator that closing_refs shares, as part of the change
