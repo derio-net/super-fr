@@ -19,3 +19,8 @@ statusCheckRollup lists every CheckRun of every workflow run on the head commit 
 ### 131419e2f90d · finding [fixed] · collect counts one run per check, the latest
 
 New `collect._latest_runs` collapses statusCheckRollup to one entry per (workflowName, name) / StatusContext context, the most recent by startedAt; a not-yet-started, not-completed run ranks newest (a queued re-run reads pending, never its predecessor's green). Entries with no identity are each counted. Pinned red-first in tests/unit/test_triage_open_prs.py by the live #1038 rollup (fixture super-fr-rerun-checks.json), order-independence, the queued-rerun case and cross-workflow/status-context separation. The older captured-fixture test had pinned the double count (16 runs for 8 checks) and now counts distinct checks. Full suite: 9733 passed, 123 skipped; ruff + mypy clean.
+
+<!-- fr:journal kind=review scope=debug id=d2b1d7c646fb created=2026-10-06T20:44:52+00:00 -->
+### d2b1d7c646fb · review · Independent review: no bugs; two false-green risks, one fixed, one accepted
+
+A separate reviewer read the diff and found no correctness bugs, and confirmed collect._checks is the only parser of the per-run rollup (real_ghclient reads GitHub's computed `statusCheckRollup { state }`). Raised: (1) runs tied on timestamp were picked by list order — FIXED: ties keep the worse state, pinned by test_runs_no_timestamp_orders_keep_the_worse_state. (2) a newer SKIPPED run of the same workflow/job (a second event gated off by `if:`) supersedes an earlier FAILURE — ACCEPTED as-is: GitHub's checks UI and `gh pr checks` both show the latest run per check, so the driver now agrees with what the operator sees on the PR; diverging would reintroduce a disagreement between the two.
