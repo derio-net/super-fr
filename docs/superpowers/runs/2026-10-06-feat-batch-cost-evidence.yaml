@@ -99,12 +99,19 @@ steps:
           tests: p2-suite.log@43084a9e75f8;tree=98cab8a32b461e59c1b7a56e3b14c7a55bda22d892211dd0bd5dfdcf295ebac2
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T20:19:06+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: 8096ebf8-b0a5-4123-83fe-797c2f6f4890
+          returned: '2026-10-06T20:40:29+00:00'
+          outcome: done
+        evidence:
+          review: p2-review-r1
+          reviewer: a389974e3d671af9f
+          visual: none
+          findings: p2-r1,p2-r2
   journal-check:
     state: pending
   deliver:

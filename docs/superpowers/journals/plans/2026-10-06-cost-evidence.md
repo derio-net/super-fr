@@ -173,3 +173,28 @@ the shared cell formatters (usd_text, count_text, compact_tokens, figure_cells, 
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 pr_body renders through the same fr.run.cost formatters as the CLI (cost_markdown), so no duplicate remained; T5's tidy covered the old local usd/n helpers
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-06T20:40:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · fr run cost loaded the phase cursor only from docs/superpowers/runs/, so archived runs printed no per-phase table (phase 2)
+
+run_cmd.py ~4905 load_run_state only; load_run_usage falls back to implemented/usage/.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-06T20:40:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · _observed_model returned early when observed == attempt.model, skipping the bound-vs-ran warning after a claim --model (phase 2)
+
+run_cmd.py ~3730; OpenCode's in-child claim always passes --model (claim.ts:111).
+
+<!-- fr:journal kind=review scope=plan id=p2-review-r1 created=2026-10-06T20:40:28+00:00 phase=2 -->
+### p2-review-r1 · review · Phase 2 review (tier/bound, run kind 9, per-phase tables) (phase 2)
+
+Independent review (feature-dev:code-reviewer, Opus) of 029e56003..64fed89d5 against R7-R9 / §D-§E: §D, run 8→9 (run_driver precedent, no cursor_guard), §E and the explainer check out; readers of attempt.model grepped repo-wide, only a cosmetic held-unit descriptor loss. Raised p2-r1 and p2-r2, both in scope, both fixed in 7d7727e1e with tests. No out-of-scope findings.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-06T20:40:28+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: fr run cost loaded the phase cursor only from docs/superpowers/runs/, so archived runs printed no per-phase table (phase 2)
+
+7d7727e1e: _cost_cursor reads live then archived cursor, tolerating an unparseable one; test_a_closed_out_run_prints_its_per_phase_table_from_the_archive, test_an_unparseable_archived_cursor_still_prints_the_step_table.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-06T20:40:28+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: _observed_model returned early when observed == attempt.model, skipping the bound-vs-ran warning after a claim --model (phase 2)
+
+7d7727e1e: early return only when unobserved; family compared against bound or model; test_a_claimed_model_equal_to_the_transcript_still_warns_against_bound, test_a_claimed_model_of_the_bound_family_does_not_warn.
