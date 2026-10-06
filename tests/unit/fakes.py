@@ -55,6 +55,9 @@ class FakeGhClient:
         # (repo, number) -> comments, oldest first, in the adapter's
         # `list_issue_comments` shape (spec 2026-09-25-triage-batches §3.J).
         self.issue_comments: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        # Ids `comment_issue` assigns, and the creation time it stamps.
+        self.next_comment_id: int = 1000
+        self.comment_created_at: str = "2026-09-26T00:00:00Z"
 
     # ---- preload helpers (test setup) ----
 
@@ -166,13 +169,31 @@ class FakeGhClient:
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         self._gate()
         self.calls.append(("comment_issue", {"repo": repo, "number": number, "body": body}))
+        self.next_comment_id += 1
         self.issue_comments.setdefault((repo, number), []).append(
-            {"author": "fr", "body": body, "created_at": "2026-09-26T00:00:00Z"}
+            {
+                "author": "fr",
+                "body": body,
+                "created_at": self.comment_created_at,
+                "id": self.next_comment_id,
+            }
         )
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
         self.calls.append(("list_issue_comments", {"repo": repo, "number": number}))
-        return list(self.issue_comments.get((repo, number), []))
+        return [dict(c) for c in self.issue_comments.get((repo, number), [])]
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        self._gate()
+        self.calls.append(
+            ("edit_issue_comment", {"repo": repo, "comment_id": comment_id, "body": body})
+        )
+        for (r, _), comments in self.issue_comments.items():
+            for c in comments:
+                if r == repo and c.get("id") == comment_id:
+                    c["body"] = body
+                    return
+        raise FakeGhError(f"no comment {comment_id} on {repo}")
 
     def closing_ref(self, repo: str, number: int) -> str:
         """GitHub's closing line, as `RealGhClient.closing_ref` spells it."""

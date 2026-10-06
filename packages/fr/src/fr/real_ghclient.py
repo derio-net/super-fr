@@ -73,6 +73,18 @@ def _hosted(
     return wrapper
 
 
+_COMMENT_ID = re.compile(r"#issuecomment-(\d+)$")
+
+
+def _comment_id(url: object) -> int | None:
+    """The numeric comment id GitHub puts at the end of a comment's url, else None
+    (`gh issue view --json comments` carries `url`, never the REST id)."""
+    if not isinstance(url, str):
+        return None
+    m = _COMMENT_ID.search(url)
+    return int(m.group(1)) if m else None
+
+
 class RealGhClient:
     """Wraps `vk.gh` to satisfy the `GhClient` Protocol.
 
@@ -330,9 +342,23 @@ class RealGhClient:
                 "author": (c.get("author") or {}).get("login", ""),
                 "body": c.get("body", ""),
                 "created_at": c.get("createdAt", ""),
+                "id": _comment_id(c.get("url")),
             }
             for c in raw.get("comments") or []
         ]
+
+    @_hosted
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        _gh._run_gh(
+            [
+                "api",
+                "-X",
+                "PATCH",
+                f"repos/{repo}/issues/comments/{comment_id}",
+                "-f",
+                f"body={body}",
+            ]
+        )
 
     @_hosted
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:

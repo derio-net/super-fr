@@ -189,3 +189,50 @@ class TestPrStatusByUrl:
 
         monkeypatch.setattr(_gh, "_run_gh", _raise)
         assert RealGhClient().pr_status_by_url("https://github.com/o/r/pull/999") is None
+
+
+class TestIssueComments:
+    """Comment ids and comment edits (spec 2026-10-06-triage-claims §3.C, R12)."""
+
+    def test_list_issue_comments_parses_the_id_from_the_url(self, monkeypatch):
+        raw = {
+            "comments": [
+                {
+                    "author": {"login": "a"},
+                    "body": "x",
+                    "createdAt": "2026-10-06T10:00:00Z",
+                    "url": "https://github.com/o/r/issues/7#issuecomment-123",
+                },
+                {"author": {"login": "b"}, "body": "y", "createdAt": "2026-10-06T11:00:00Z"},
+                {
+                    "author": {"login": "c"},
+                    "body": "z",
+                    "createdAt": "2026-10-06T12:00:00Z",
+                    "url": "https://github.com/o/r/issues/7",
+                },
+            ]
+        }
+        monkeypatch.setattr(
+            _gh, "_run_gh", _fake_run_gh_factory({("issue", "view"): json.dumps(raw)})
+        )
+        got = RealGhClient().list_issue_comments("o/r", 7)
+        assert [c["id"] for c in got] == [123, None, None]
+        assert got[0] == {
+            "author": "a",
+            "body": "x",
+            "created_at": "2026-10-06T10:00:00Z",
+            "id": 123,
+        }
+
+    def test_edit_issue_comment_patches_the_comment(self, monkeypatch):
+        calls: list[list[str]] = []
+
+        def _run(args: list[str]) -> str:
+            calls.append(list(args))
+            return "{}"
+
+        monkeypatch.setattr(_gh, "_run_gh", _run)
+        RealGhClient().edit_issue_comment("o/r", 123, "new body")
+        assert calls == [
+            ["api", "-X", "PATCH", "repos/o/r/issues/comments/123", "-f", "body=new body"]
+        ]

@@ -63,8 +63,8 @@ def test_list_issue_comments_returns_body_author_and_created_at(
     comments = RealGhClient().list_issue_comments(REPO, 577)
 
     assert comments == [
-        {"author": "a", "body": "first", "created_at": "2026-09-25T10:00:00Z"},
-        {"author": "b", "body": "second", "created_at": "2026-09-26T10:00:00Z"},
+        {"author": "a", "body": "first", "created_at": "2026-09-25T10:00:00Z", "id": None},
+        {"author": "b", "body": "second", "created_at": "2026-09-26T10:00:00Z", "id": None},
     ]
     assert fake.calls == [["issue", "view", "577", "--repo", REPO, "--json", "comments"]]
 
@@ -294,6 +294,7 @@ def test_repo_merge_methods_maps_an_unknown_default_to_none(
 
 _CALLS: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
     "list_issue_comments": ((REPO, 1), {}),
+    "edit_issue_comment": ((REPO, 1, "body"), {}),
     "list_prs_by_head": ((REPO, "feat/batch-x"), {}),
     "pr_view": ((REPO, 1), {}),
     "pr_required_checks": ((REPO, 1), {}),
