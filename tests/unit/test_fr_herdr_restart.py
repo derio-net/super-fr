@@ -22,7 +22,6 @@ def test_live_fixtures_load() -> None:
         assert a["agent_status"] in {"idle", "working", "done", "blocked"}
         assert a["agent_session"]["value"]
         assert a["pane_id"]
-        assert "name" in a or True  # absent on an unnamed pane
     assert any("name" in a for a in claude) and any("name" not in a for a in claude)
 
     for name in ("process-info.json", "process-info-model-flag.json"):
