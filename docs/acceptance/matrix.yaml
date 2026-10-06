@@ -6990,8 +6990,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: skipped
+    notes: 'Live-verified 2026-10-06 at closeout: `fr verification prerelease --branch
+      chore/archive-2026-10-06-verification-strategies` dispatched prerelease.yml (run
+      37498798304, success); tag rc/chore-archive-2026-10-06-verification-strategies/09352274256d
+      sits on the branch head and its GitHub release is a pre-release; main and the
+      version surfaces unchanged (bump-version --check ok). Not in CI; the other-forge
+      refusal is unit-pinned only if a level is added.'
     verify: live
   - id: super-fr-candidate-contract
     capability: verification
