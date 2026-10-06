@@ -87,6 +87,16 @@ def test_list_prs_by_head_lists_every_state_for_the_branch(
     assert {"headRefOid", "files"} <= set(fields)  # the driver attributes merged archives
 
 
+
+def test_delete_branch_quotes_the_branch_in_the_api_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """p1-r7: a `#` (or `?`, `%`) in a branch name is URL syntax unless quoted;
+    the `/` separating its segments stays a path separator."""
+    fake = _fake(monkeypatch, {("api",): ""})
+    RealGhClient().delete_branch(REPO, "feat/fix#12 a?b%")
+    assert fake.calls == [
+        ["api", "-X", "DELETE", f"repos/{REPO}/git/refs/heads/feat/fix%2312%20a%3Fb%25"]
+    ]
+
 def test_pr_view_reads_the_merge_commit(monkeypatch: pytest.MonkeyPatch) -> None:
     """The wave driver's release probe needs the commit the merge made (rg-9)."""
     raw = {"state": "MERGED", "isDraft": False, "mergeCommit": {"oid": "c0ffee"}}

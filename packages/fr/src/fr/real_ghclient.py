@@ -18,6 +18,7 @@ import functools
 import json
 import re
 import subprocess
+import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
@@ -439,7 +440,8 @@ class RealGhClient:
 
     @_hosted
     def delete_branch(self, repo: str, branch: str) -> None:
-        _gh._run_gh(["api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{branch}"])
+        ref = urllib.parse.quote(branch, safe="/")  # a `#` or `?` is URL syntax (p1-r7)
+        _gh._run_gh(["api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{ref}"])
 
     def closing_ref(self, repo: str, number: int) -> str:
         return f"Closes {repo}#{number}"
