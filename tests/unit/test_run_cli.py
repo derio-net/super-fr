@@ -1091,8 +1091,116 @@ def test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields(tmp_pat
     step_fields = set(Step.model_fields) - {"id", "run"}
     # `run`/`workflow`/`step` are the run-identity keys the brief adds on top,
     # `record` the pre-filled step record (spec 2026-09-25 §5.C.3), and
-    # `unbound_tiers` the active harness's unbound tiers (gh#538).
-    assert set(brief) == step_fields | {"run", "workflow", "step", "record", "unbound_tiers"}
+    # `unbound_tiers` the active harness's unbound tiers (gh#538), and
+    # `dead_bindings`/`binding_offers` the gated step's binding health
+    # (spec 2026-10-06-model-binding-churn R6).
+    assert set(brief) == step_fields | {
+        "run",
+        "workflow",
+        "step",
+        "record",
+        "unbound_tiers",
+        "dead_bindings",
+        "binding_offers",
+    }
+
+
+# --- spec 2026-10-06-model-binding-churn R6: start notice, gated brief keys --
+
+_GATED_SHAPE = (
+    "workflow: gated\nschema: 1\nunit: run\n"
+    "steps:\n  - id: brainstorm\n    kind: agent\n    gate: operator\n    emits: [spec]\n"
+)
+
+
+@pytest.fixture
+def churned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """OpenCode with `standard` bound to a dead model whose same-family
+    successor is live, and `hard` live with a newer same-family offer."""
+    from tests.unit import binding_fakes as bf
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("FR_HARNESS", "opencode")
+    bf.user_models(tmp_path, "opencode:\n  standard: prov/std\n  hard: prov/hard\n")
+    prober = bf.ScriptedProber(
+        [
+            bf.ent("std", "s", "2026-01-01"),
+            bf.ent("std2", "s", "2026-04-01"),
+            bf.ent("hard", "h", "2026-01-01", 20.0),
+            bf.ent("hard2", "h", "2026-05-01", 20.0),
+        ],
+        dead={"prov/std": None},
+    )
+    bf.install(monkeypatch, prober)
+    return prober
+
+
+def test_a_gated_brief_lists_dead_bindings_and_offers(tmp_path: Path, churned) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATED_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+
+    brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
+
+    (dead,) = brief["dead_bindings"]
+    assert dead["tier"] == "standard"
+    assert dead["model"] == "prov/std"
+    assert dead["verdict"] == "dead"
+    assert dead["proposal"] == {"model": "prov/std2", "rule": "family", "price_ratio": 1.0}
+    assert "ProviderModelNotFoundError" in dead["reason"]
+    assert brief["binding_offers"] == [
+        {"tier": "hard", "model": "prov/hard", "offer": "prov/hard2"}
+    ]
+
+
+def test_an_ungated_brief_carries_null_binding_keys(tmp_path: Path, churned) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+
+    brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
+
+    assert brief["dead_bindings"] is None
+    assert brief["binding_offers"] is None
+
+
+def test_a_gated_brief_on_an_unprobed_harness_carries_null_binding_keys(
+    tmp_path: Path, churned, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit import binding_fakes as bf
+
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    bf.user_models(tmp_path, "claude-code:\n  standard: claude-sonnet-5\n")
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATED_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+
+    brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
+
+    assert brief["dead_bindings"] is None
+    assert brief["binding_offers"] is None
+    assert churned.probed == []
+
+
+def test_run_start_names_each_dead_binding_and_offer_and_never_blocks(
+    tmp_path: Path, churned
+) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATED_SHAPE)
+
+    result = _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    dead = [ln for ln in lines if "opencode/standard" in ln and "dead" in ln]
+    offer = [ln for ln in lines if "opencode/hard" in ln and "prov/hard2" in ln]
+    assert len(dead) == 1 and "prov/std2" in dead[0], result.output
+    assert len(offer) == 1, result.output
+    assert load_run_state(repo, "r1").cursor == "brainstorm"
 
 
 # --- gh#653: the brief and the records dir must match what resolve accepts --

@@ -31,9 +31,10 @@ from rich.console import Console
 
 import fr.bindings
 from fr.artifacts import trigger
-from fr.bindings.choose import Choice, is_autonomous
+from fr.bindings.choose import Choice
 from fr.bindings.health import BindingHealth, check_bindings, propose_for
 from fr.bindings.probe import default_probe_cache
+from fr.bindings.wording import proposal_text
 from fr.commands.common import resolve_repo_root
 from fr.models import (
     REPO_MODELS_REL,
@@ -142,18 +143,6 @@ def _apply_binding(
         )
 
 
-def _ratio_text(choice: Choice) -> str:
-    return "×?" if choice.price_ratio is None else f"×{choice.price_ratio:.1f}"
-
-
-def _proposal_text(choice: Choice) -> str:
-    """``prov/m (rule family, price ×1.0)``; an operator-only pick says so."""
-    text = f"{choice.model} (rule {choice.rule}, price {_ratio_text(choice)}"
-    if not is_autonomous(choice):
-        text += ", operator-only"
-    return text + ")"
-
-
 @models_app.command("set")
 def set_cmd(
     harness: str = typer.Option(..., "--harness", help="e.g. claude-code | opencode | hermes."),
@@ -212,7 +201,7 @@ def set_cmd(
             if proposal is None:
                 err_console.print(f"no replacement found ({chosen.reason})")  # type: ignore[union-attr]
             else:
-                err_console.print(f"proposed replacement: {_proposal_text(proposal)}")
+                err_console.print(f"proposed replacement: {proposal_text(proposal)}")
             if proposal is None or not trigger.is_interactive():
                 raise typer.Exit(code=2)
             if not typer.confirm(
@@ -236,7 +225,7 @@ def _health_line(harness: str, h: BindingHealth) -> str:
     if h.verdict in ("unknown", "dead") and h.detail:
         line += f" ({h.detail})"
     if h.proposal is not None:
-        line += f" → {_proposal_text(h.proposal)}"
+        line += f" → {proposal_text(h.proposal)}"
     elif h.no_choice is not None:
         line += f" → no replacement ({h.no_choice.reason}; tried {len(h.no_choice.tried)})"
     for o in h.offers:

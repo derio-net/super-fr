@@ -36,7 +36,11 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+import fr.bindings
 from fr.artifacts.commit import CommitOutcome
+from fr.bindings.health import BindingHealth, check_bindings
+from fr.bindings.probe import default_probe_cache
+from fr.bindings.wording import proposal_text
 from fr.commands.common import resolve_repo_root
 from fr.git import GitUnavailableError, git_answer
 from fr.harness import HARNESSES, load_matrix
@@ -58,6 +62,7 @@ from fr.journal.model import (
     spec_journal_slug,
     unauthorized_fixes,
 )
+from fr.models import REPO_MODELS_REL, default_models_path, load_models
 from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
 from fr.run import units
@@ -3341,6 +3346,7 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         # step; a fan-out group's record is per member, in the member brief.
         "record": None if step.steps else _record_brief(state, step),
         "unbound_tiers": _unbound_tiers(resolve_repo_root()),
+        **_gated_binding_keys(step),
     }
 
 
@@ -3363,6 +3369,85 @@ def _unbound_tiers(repo_root: Path) -> list[str] | None:
     if harness is None:
         return None
     return [t for t in PHASE_TIERS if _resolved_model(repo_root, harness, t) is None]
+
+
+def _binding_health(
+    repo_root: Path, tiers: list[str] | None = None
+) -> tuple[str, list[BindingHealth]] | None:
+    """`(harness, report)` for the detected harness's bindings — `None` when no
+    harness is detected or it cannot be probed (spec 2026-10-06-model-binding-
+    churn R10: only OpenCode can). The ONE place `fr run` reaches
+    `check_bindings`: the start notice, the gated brief and the pre-dispatch
+    guard all read it, with the 6 h probe cache allowed (R3)."""
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        return None
+    if harness is None:
+        return None
+    prober = fr.bindings.prober_for(harness)
+    if prober is None:
+        return None
+    report = check_bindings(
+        harness,
+        load_models(repo_root / REPO_MODELS_REL),
+        load_models(default_models_path()),
+        prober,
+        tiers=tiers,
+        cache=default_probe_cache(),
+    )
+    return harness, report
+
+
+def _gated_binding_keys(step: Step) -> dict[str, list[dict[str, Any]] | None]:
+    """The brief's `dead_bindings` and `binding_offers` (R6): lists only for a
+    `gate: operator` step on a probed harness — the one place an operator is
+    there to answer them (R7) — and `null` everywhere else, so a dispatch
+    brief never pays for a probe nobody will act on."""
+    health = _binding_health(resolve_repo_root()) if step.gate == "operator" else None
+    if health is None:
+        return {"dead_bindings": None, "binding_offers": None}
+    _, report = health
+    dead = [
+        {
+            "tier": h.tier,
+            "model": h.model,
+            "verdict": h.verdict,
+            "proposal": None
+            if h.proposal is None
+            else {
+                "model": h.proposal.model,
+                "rule": h.proposal.rule,
+                "price_ratio": h.proposal.price_ratio,
+            },
+            "reason": h.detail,
+        }
+        for h in report
+        if h.verdict == "dead"
+    ]
+    offers = [
+        {"tier": o.tier, "model": o.model, "offer": o.offer} for h in report for o in h.offers
+    ]
+    return {"dead_bindings": dead, "binding_offers": offers}
+
+
+def _binding_notice_lines(harness: str, report: list[BindingHealth]) -> list[str]:
+    """`fr run start`'s loud lines (R6): one per dead binding, one per offer."""
+    lines: list[str] = []
+    for h in report:
+        if h.verdict == "dead":
+            line = f"warning: {harness}/{h.tier} is bound to {h.model}, which is dead ({h.detail})"
+            if h.proposal is not None:
+                line += f" — proposed: {proposal_text(h.proposal)}"
+            elif h.no_choice is not None:
+                line += f" — no replacement ({h.no_choice.reason})"
+            lines.append(line + "; review with `fr models check`")
+        lines.extend(
+            f"offer: {harness}/{o.tier} {o.model} → {o.offer} (newer, same family; never "
+            f"applied unasked — `fr models set --harness {harness} --tier {o.tier} {o.offer}`)"
+            for o in h.offers
+        )
+    return lines
 
 
 def _caller_evidence(step: Step) -> list[str]:
@@ -4450,6 +4535,11 @@ def start_cmd(
     notice = _orchestrator_model_notice(workspace)
     if notice is not None:
         err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
+    # R6: report, never block — the run has started either way.
+    health = _binding_health(workspace)
+    if health is not None:
+        for line in _binding_notice_lines(*health):
+            err_console.print(f"[yellow]{escape(line)}[/yellow]", soft_wrap=True)
 
 
 @run_app.command("reshape")
