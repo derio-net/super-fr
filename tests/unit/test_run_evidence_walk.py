@@ -181,7 +181,19 @@ def _forged(root: Path, home: Path, *, where: Path | None = None) -> Path:
     steps = tuple(
         WalkStep(n, 0, 0.1) for n in ("install", "smoke:version", "smoke:status", "row:ok")
     )
-    log = WalkLog(RUN, "candidate", code_tree(root), "claude-code", "m-1", steps)
+    from fr.verification.resolve import strategy_identity
+
+    source, sha = strategy_identity("candidate", root)
+    log = WalkLog(
+        RUN,
+        "candidate",
+        code_tree(root),
+        "claude-code",
+        "m-1",
+        steps,
+        manifest_source=source,
+        manifest_sha256=sha,
+    )
     path = where or home / ".cache/fr/walks" / RUN / "forged.log"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(log.render())
@@ -297,10 +309,8 @@ def test_a_tilde_path_is_expanded_before_it_is_judged_relative(
     [
         "fr verification walk --run w1 --model m",
         "uv run fr verification walk --run=w1 --model m",
-        "uv run --project /w fr verification walk --model m --run w1",
-        "FR_X=1 /opt/bin/fr verification walk --run w1 --model m",
         "cd /w && uv run fr verification walk --run w1 --model m",
-        "cd '/w space' && FR_X=1 fr verification walk --run w1",
+        "cd '/w space' && fr verification walk --model m --run w1",
     ],
 )
 def test_the_two_allowed_shapes_are_a_walk(command: str) -> None:
@@ -346,6 +356,20 @@ def test_the_two_allowed_shapes_are_a_walk(command: str) -> None:
         "fr verification walk --run w1\ncp /tmp/f /x.log",
         "fr verification walk --run 'w1",
         "uv run python fr verification walk --run w1",
+        # Another program can't vouch for the walk: no env prefix, no path to
+        # some `fr`, no uv flags (security review of p3-r1).
+        "FR_X=1 fr verification walk --run w1",
+        "PATH=/tmp/evil:$PATH fr verification walk --run w1",
+        "FR_SHIPPED_VERIFICATIONS_DIR=/tmp/v fr verification walk --run w1",
+        "env fr verification walk --run w1",
+        "cd /w && FR_X=1 fr verification walk --run w1",
+        "/opt/bin/fr verification walk --run w1",
+        "./fr verification walk --run w1",
+        "bin/fr verification walk --run w1",
+        "uv run --project /w fr verification walk --run w1",
+        "uv run --project=/w fr verification walk --run w1",
+        "uv run --with x fr verification walk --run w1",
+        "uv run --python 3.12 fr verification walk --run w1",
         "./fr-wrapper verification walk --run w1",
     ],
 )
@@ -399,3 +423,27 @@ def test_a_symlink_out_of_the_walk_dir_is_refused(
 
     with pytest.raises(Exit):
         _gate(root, walks / "walk.log")
+
+
+def test_a_log_walked_on_another_manifest_than_deliver_resolves_is_refused(
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The log binds the strategy manifest it walked (source + sha256): a
+    strategy edited after the walk — say, to rubber-stamp — no longer matches
+    what deliver resolves, and the log is refused."""
+    root = _owed_good(tmp_path)
+    log = Path(_walked(root, _home))
+    header = log.read_text().split("---\n")[1]
+    assert "manifest_sha256:" in header and "manifest_source:" in header
+    _session(tmp_path, monkeypatch, "fr verification walk --run w1 --model m")
+    stamp = _dt.datetime.fromisoformat("2026-10-06T16:08:00+00:00").timestamp()
+    os.utime(log, (stamp, stamp))
+    assert _gate(root, log).startswith(log.name + "@")  # the walk's own manifest: accepted
+
+    tampered = log.read_text().replace("manifest_sha256: ", "manifest_sha256: 0", 1)
+    log.write_text(tampered)
+    os.utime(log, (stamp, stamp))
+    with pytest.raises(Exit):
+        _gate(root, log)
+
+    assert "manifest" in capsys.readouterr().err

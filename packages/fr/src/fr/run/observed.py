@@ -598,14 +598,17 @@ def walks_run(command: str, run: str) -> bool:
     write a file is complete — security review of p3-r1). After shlex-splitting,
     the command is one of:
 
-    (a) `[NAME=value …] <fr> verification walk <args…>`
-    (b) `cd <path> && [NAME=value …] <fr> verification walk <args…>`
+    (a) `<fr> verification walk <args…>`
+    (b) `cd <path> && <fr> verification walk <args…>`
 
-    where `<fr>` is `fr`, `uv run fr`, `uv run --project <p> fr`, or an absolute
-    path named `fr`, and the args hold exactly one `--run`, equal to `run`.
-    Anything else is not a walk: another segment, any other operator
-    (redirect, pipe, `;`, `||`, background `&`, subshell, braces), command
-    substitution, a here-doc, a comment, unbalanced quotes.
+    where `<fr>` is ONLY `fr` or `uv run fr`, and the args hold exactly one
+    `--run`, equal to `run`. A command that ran a different program cannot
+    vouch for the walk, so there is no env-assignment prefix (`PATH=…`,
+    `FR_SHIPPED_VERIFICATIONS_DIR=…`), no `env`, no path to some `fr`, no uv
+    flag (`--project`, `--with`, `--python`). Anything else is not a walk:
+    another segment, any other operator (redirect, pipe, `;`, `||`, background
+    `&`, subshell, braces), command substitution, a here-doc, a comment,
+    unbalanced quotes.
 
     The residual this cannot close: a process the agent started EARLIER (in
     the background) can still write the log during this command's window. That
@@ -637,25 +640,12 @@ def walks_run(command: str, run: str) -> bool:
 
 
 def _is_walk(words: list[str], run: str) -> bool:
-    """`words` is `[NAME=value …] <fr> verification walk <args…>` with exactly
-    one `--run`, equal to `run`."""
-    from fr.run.telemetry import _LEADING_ASSIGNMENT
-
-    while words and _LEADING_ASSIGNMENT.match(words[0]):
-        words = words[1:]
-    if words[:2] == ["uv", "run"]:
+    """`words` is `fr verification walk <args…>` or `uv run fr verification
+    walk <args…>` — nothing before it, no other `fr` — with exactly one
+    `--run`, equal to `run`."""
+    if words[:3] == ["uv", "run", "fr"]:
         words = words[2:]
-        if words[:1] == ["--project"]:
-            words = words[2:]
-        elif words and words[0].startswith("--project="):
-            words = words[1:]
-        if words[:1] != ["fr"]:
-            return False
-    if not words or os.path.basename(words[0]) != "fr":
-        return False
-    if words[0] != "fr" and not os.path.isabs(words[0]):
-        return False
-    if words[1:3] != ["verification", "walk"]:
+    if words[:3] != ["fr", "verification", "walk"]:
         return False
     runs: list[str | None] = []
     args = words[3:]

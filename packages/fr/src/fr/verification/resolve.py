@@ -49,6 +49,20 @@ def resolve_strategy(
     `repo_root=None` searches only the shipped sources. Raises `StrategyError`
     naming EVERY searched path when none exists.
     """
+    path = resolved_strategy_path(name, repo_root, shipped_root=shipped_root)
+    manifest = parse_strategy(path.read_text(), source=str(path))
+    if manifest.verification != name:
+        raise StrategyError(
+            f"{path}: manifest names itself {manifest.verification!r}, but its file is {name!r}"
+        )
+    return manifest
+
+
+def resolved_strategy_path(
+    name: str, repo_root: Path | None, *, shipped_root: Path | None = None
+) -> Path:
+    """The file `resolve_strategy` reads for `name` — or `StrategyError`
+    naming every searched path."""
     if name == RESERVED:
         raise StrategyError(f"{RESERVED!r} is reserved: it means no strategy, it never resolves")
 
@@ -60,16 +74,23 @@ def resolve_strategy(
     )
     for path in candidates:
         if path.is_file():
-            manifest = parse_strategy(path.read_text(), source=str(path))
-            if manifest.verification != name:
-                raise StrategyError(
-                    f"{path}: manifest names itself {manifest.verification!r}, "
-                    f"but its file is {name!r}"
-                )
-            return manifest
+            return path
 
     searched = " and ".join(str(p) for p in candidates)
     raise StrategyError(f"unknown verification strategy {name!r} — searched {searched}")
+
+
+def strategy_identity(
+    name: str, repo_root: Path, *, shipped_root: Path | None = None
+) -> tuple[str, str]:
+    """`(source label, sha256)` of the manifest `name` resolves to — what a
+    walk log records, so `deliver` can refuse a log walked on a manifest that
+    has since changed (a repo strategy edited to rubber-stamp shows in the diff
+    AND unbinds the log). `StrategyError` when it does not resolve."""
+    import hashlib
+
+    path = resolved_strategy_path(name, repo_root, shipped_root=shipped_root)
+    return _label(path.parent, repo_root), hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _label(directory: Path, repo_root: Path) -> str:

@@ -180,6 +180,10 @@ class WalkLog:
     model: str
     steps: tuple[WalkStep, ...]
     body: str = ""
+    manifest_source: str = ""
+    manifest_sha256: str = ""
+    """Where the walked strategy's manifest resolved from, and its bytes'
+    sha256 (`fr.verification.resolve.strategy_identity`)."""
 
     @property
     def rows(self) -> tuple[str, ...]:
@@ -197,6 +201,8 @@ class WalkLog:
             "code_tree": self.code_tree,
             "harness": self.harness,
             "model": self.model,
+            "manifest_source": self.manifest_source,
+            "manifest_sha256": self.manifest_sha256,
             "steps": [
                 {"name": s.name, "exit": s.exit, "seconds": round(s.seconds, 2)} for s in self.steps
             ],
@@ -236,17 +242,33 @@ def parse_walk_log(text: str) -> WalkLog:
             model=str(header["model"]),
             steps=steps,
             body="\n".join(lines[end + 1 :]),
+            manifest_source=str(header["manifest_source"]),
+            manifest_sha256=str(header["manifest_sha256"]),
         )
     except (KeyError, TypeError, ValueError) as e:
         raise WalkError(f"not a walk log — its header is incomplete ({e!r})") from e
 
 
-def check_walk_log(log: WalkLog, owed: WalkOwed, head_tree: str, *, run: str) -> list[str]:
+def check_walk_log(
+    log: WalkLog,
+    owed: WalkOwed,
+    head_tree: str,
+    *,
+    run: str,
+    manifest: tuple[str, str] | None = None,
+) -> list[str]:
     """Every reason `log` does not satisfy `owed` for `run` at `head_tree`
-    (empty when it does): another run's or strategy's log, the stale tree, each
-    failing step, a missing smoke, each owed row it does not cover — each
-    naming its cause."""
+    (empty when it does): another run's or strategy's log, a manifest other
+    than `manifest` (`(source, sha256)` of what the strategy resolves to now),
+    the stale tree, each failing step, a missing smoke, each owed row it does
+    not cover — each naming its cause."""
     problems: list[str] = []
+    if manifest is not None and (log.manifest_source, log.manifest_sha256) != manifest:
+        problems.append(
+            f"the walk ran strategy {log.strategy!r} from manifest {log.manifest_source} "
+            f"@{log.manifest_sha256[:12]}, but it resolves to {manifest[0]} "
+            f"@{manifest[1][:12]} now — the strategy changed since; walk again"
+        )
     if log.run != run:
         problems.append(f"the walk is of run {log.run!r}, not {run!r}")
     if owed.strategy is not None and log.strategy != owed.strategy:
@@ -371,8 +393,11 @@ def run_walk(
     and a change is a failing `operator-fr-unchanged` step, so the log never
     reads as a pass `deliver` would take.
     """
+    from fr.verification.resolve import strategy_identity
+
     base = dict(os.environ if env is None else env)
     _contract(repo_root, manifest)
+    manifest_source, manifest_sha256 = strategy_identity(manifest.verification, repo_root)
     if manifest.source == "prerelease":
         raise WalkError(
             f"strategy {manifest.verification!r} installs from a pre-release, which `walk` "
@@ -483,6 +508,8 @@ def run_walk(
             model=model,
             steps=steps,
             body=body,
+            manifest_source=manifest_source,
+            manifest_sha256=manifest_sha256,
         )
         directory = walk_log_dir(run)
         directory.mkdir(parents=True, exist_ok=True)

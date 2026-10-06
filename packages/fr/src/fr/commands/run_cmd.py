@@ -2558,6 +2558,8 @@ def _verify_walk(
     unit opened. Unobservable: recorded `unobserved=walk`, never silent.
     """
     from fr.run.code_tree import code_tree, dirty_code_paths
+    from fr.verification.model import StrategyError
+    from fr.verification.resolve import strategy_identity
     from fr.verification.walk import WalkError, check_walk_log, parse_walk_log, walk_log_dir
 
     if value == "none":
@@ -2596,10 +2598,16 @@ def _verify_walk(
     try:
         data = path.read_bytes()
         log = parse_walk_log(data.decode())
-        problems = check_walk_log(log, owed, code_tree(repo_root), run=state.run)
+        problems = check_walk_log(
+            log,
+            owed,
+            code_tree(repo_root),
+            run=state.run,
+            manifest=strategy_identity(log.strategy, repo_root),
+        )
         dirty = dirty_code_paths(repo_root)
         modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
-    except (OSError, UnicodeDecodeError, WalkError, GitUnavailableError) as e:
+    except (OSError, UnicodeDecodeError, WalkError, GitUnavailableError, StrategyError) as e:
         err_console.print(
             f"[red]{key}: --evidence walk={value}: {escape(str(e))}[/red]", soft_wrap=True
         )
