@@ -134,3 +134,38 @@ The robustness cases p1-r1..r3 break on had no tests. Fix: add them alongside th
 ### p1-r9-resolved · finding [fixed] · resolves p1-r9: missing tests for corrupt cache/snapshot, failed cache write, nested/@ ids (phase 1)
 
 25c7c4bb6: the tests named under p1-r1..r4 cover the gap.
+
+<!-- fr:journal kind=decision scope=plan id=p2-choice-carries-tried created=2026-10-06T18:57:34+00:00 phase=2 -->
+### p2-choice-carries-tried · decision · Choice gains a non-identity `tried` field so a refusal names every candidate probed (phase 2)
+
+R8 says a refusal names the candidates fr tried. NoChoice already carried them; an operator-only Choice (ratio > 2, or the hint rule) did not. `fr.bindings.choose.Choice` now has `tried: tuple[str, ...] = field(default=(), compare=False)`, filled by every rule, so phase 1's equality assertions are unaffected.
+
+<!-- fr:journal kind=decision scope=plan id=p2-no-run-journal-refuses created=2026-10-06T18:57:34+00:00 phase=2 -->
+### p2-no-run-journal-refuses · decision · An autonomous pick with no run journal yet (no plan, no spec emitted) refuses rather than substitutes (phase 2)
+
+R11 requires recorded iff applied. A run that has emitted neither a spec nor a plan has no run journal to record in, so `_guard_dispatch_binding` exits 2 there (naming the `fr models set` line) instead of applying an unrecorded substitution. Not reachable on the shipped fr-goal shape, whose first tiered step (spec-review) needs the spec.
+
+<!-- fr:journal kind=decision scope=plan id=p2-wording-module created=2026-10-06T18:57:34+00:00 phase=2 -->
+### p2-wording-module · decision · fr.bindings.wording is the one formatter for both deciders (phase 2)
+
+`Substitution` (harness, tier, old, new, reason, decider, rule, price_ratio) with `substitution_line` (R11), `decision_title`/`decision_body` (the five fields plus the price ratio) and `proposal_text`/`ratio_text`, moved out of models_cmd. `fr models set/check` and the run guard both print through it.
+
+<!-- fr:journal kind=decision scope=plan id=p2-guard-restore-unnotes created=2026-10-06T18:57:34+00:00 phase=2 -->
+### p2-guard-restore-unnotes · decision · A failed substitution also drops the journal from the pending cursor commit (phase 2)
+
+`_RunWrites.remember` is a no-op outside the step-record engine, so the guard keeps its own pre-write bytes of both files and restores them itself; it also removes the journal from `_RunWrites.paths`, so the advance's always-run commit carries nothing for a substitution that was not applied. The guard is called before anything is marked running, so a refusal leaves the cursor byte-identical.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-explainer-not-touched created=2026-10-06T18:57:34+00:00 phase=2 -->
+### p2-explainer-not-touched · discovery · docs/explainers/01-fr-goal.md does not describe the model-per-tier question (phase 2)
+
+It mentions models only as a dispatch-record fact (§ who is holding) and in the configuration table row "Model per phase tier"; the question round's tier/binding questions are not described, so per spec §D no explainer edit or .html regeneration is owed.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-t1-refactor-landed-at-green created=2026-10-06T18:57:34+00:00 phase=2 -->
+### p2-t1-refactor-landed-at-green · discovery · P2.T1.S3's `_binding_health` helper was written at GREEN (phase 2)
+
+Both call sites (start notice, gated brief) and later the guard read `run_cmd._binding_health`, written once at GREEN; the refactor step confirmed nothing duplicated was left and ran ruff + mypy clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-06T18:57:34+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+skill prose, generated mirrors, a parity row, an AGENTS.md paragraph and a matrix status: no code to clean
