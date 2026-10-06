@@ -332,7 +332,7 @@ rows:
     acceptance: fr archive runs repair once per invocation, so each repair warning reaches
       the operator exactly once.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-27-spec-ref-writers-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_archive_cmd.py
@@ -1320,7 +1320,7 @@ rows:
       takes no phase work; and a tick that refuses an item for its unit says so instead
       of blaming the repo.
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-27-apply-runner-units.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-apply-runner-units.md
     levels:
       unit:
       - super-fr:tests/unit/test_apply_runner_units.py
@@ -1516,7 +1516,7 @@ rows:
     acceptance: An operator can ask fr which workspace an agent session is attached
       to, and which sessions hold a workspace, without inspecting the harness.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-04-worktree-traceability-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_sessions.py
@@ -1545,7 +1545,7 @@ rows:
       its fr-isolation worktree path (or no fr-isolation), green when fr and purple
       when not, well inside one status-line refresh (0.5 s CI guard).
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-04-worktree-traceability-design.md
     - super-fr:docs/superpowers/implemented/specs/2026-09-14-statusline-session-branch-design.md
     levels:
       int:
@@ -1574,7 +1574,7 @@ rows:
       an fr workspace at the fr location with the session bound; subagent worktrees
       keep the Claude default shape.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-04-worktree-traceability-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_sessions_cmd.py
@@ -1607,7 +1607,7 @@ rows:
     acceptance: fr isolation up run from inside any worktree of a repo files the workspace
       under the main checkout name.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-04-worktree-traceability-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_repo_key.py
@@ -1622,7 +1622,7 @@ rows:
     acceptance: fr isolation gc removes empty repo folders and stale session files from
       the fr cache.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-04-worktree-traceability-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_gc_hygiene.py
@@ -1641,7 +1641,7 @@ rows:
     acceptance: In an fr-enabled repo, a request that would invoke using-git-worktrees
       is routed to fr-isolation; no .worktrees directory is created.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-04-worktree-traceability-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_worktrees_dir.py
@@ -2144,7 +2144,7 @@ rows:
       subagent: the canonical Claude Code agent is mirrored into .opencode/agent/ with
       OpenCode''s own frontmatter, and drift between the two is a CI failure.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_opencode_agent_mirror.py
@@ -2164,7 +2164,7 @@ rows:
       subagent and gets a genuine child session — parented, separately costed — rather
       than executing the phase inline in the orchestrator's own context.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
     status: skipped
     notes: 'LIVE-VERIFIED 2026-09-21 — the post-merge run this row was owed. A real
@@ -2222,7 +2222,7 @@ rows:
       from the same repo-over-user fr models config Claude Code dispatch uses — despite
       OpenCode's dispatch call carrying no model parameter.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_opencode_agent_mirror.py
@@ -2241,7 +2241,7 @@ rows:
       machine under the same opt-in as skills and commands, and --uninstall removes
       them.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_agents.py
@@ -2259,7 +2259,7 @@ rows:
       and one that REPLACES an earlier binding — reaches the agent OpenCode actually
       dispatches, rather than being frozen at whatever the last install.sh run resolved.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-opencode-tier-binding-reaches-dispatch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-opencode-tier-binding-reaches-dispatch-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_opencode_agents_materialize.py
@@ -2558,7 +2558,7 @@ rows:
     acceptance: An operator re-entering the loop cold is told to wait rather than handed
       a second dispatch brief for an agent that is still running.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-fr-run-cursor-cluster-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2592,7 +2592,7 @@ rows:
     acceptance: A grouped for_each member id copied from advance's output resolves,
       or the failure teaches the two flags that do.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-fr-run-cursor-cluster-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2609,7 +2609,7 @@ rows:
       started it, so fr isolation status can answer 'where is this session's work?'
       for an fr-goal run.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-fr-run-cursor-cluster-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2626,7 +2626,7 @@ rows:
     acceptance: A plan whose manual work an agentic phase would have to wait on is refused
       at authoring, not discovered mid-run.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-fr-run-cursor-cluster-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_plan_ops.py
@@ -2643,7 +2643,7 @@ rows:
     acceptance: A manual phase is never offered to an agent, and the cursor still shows
       it rather than hiding a deliberate omission.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-fr-run-cursor-cluster-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -3293,7 +3293,7 @@ rows:
       fr run advance has briefed it, so that path can no longer leave a done unit with
       no dispatch record
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_resolve_requires_advance.py#test_a_unit_that_was_never_advanced_cannot_be_resolved
@@ -3310,7 +3310,7 @@ rows:
       a unit the orchestrator runs itself never carries a tier's model - it records
       the orchestrator's OBSERVED model, or none when unobservable
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_orchestrator_model.py#test_an_orchestrator_run_unit_records_no_model
@@ -3326,7 +3326,7 @@ rows:
     acceptance: fr-goal's first action, fr run start, is allowed from the base clone
       while a pipeline is live, and every other run verb stays gated to the workspace
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
       unit:
       - super-fr:tests/unit/test_hooks_guard.py#TestRunStartEntersIsolation::test_fr_run_start_allowed
@@ -3342,7 +3342,7 @@ rows:
     acceptance: A scaffolded uv profile gives the container its own per-project uv environment,
       under a different name from the host's, so neither side replaces the other's
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
       unit:
       - super-fr:tests/unit/test_init_scaffold.py#test_a_uv_profile_keeps_uvs_environment_out_of_the_bind_mount
@@ -3362,7 +3362,7 @@ rows:
       in the session transcript since it paused, or an explicit recorded bypass with
       a reason; where the transcript is unreadable the gate announces itself advisory
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py#test_advance_degrades_loudly_on_claude_code_when_it_cannot_verify
@@ -3386,7 +3386,7 @@ rows:
     acceptance: A phase review names the separate reviewer that performed it; the phase's
       own implementer, or a reviewer this session never dispatched, is refused
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence_separate_context.py#test_the_implementer_cannot_review_its_own_phase
@@ -3404,7 +3404,7 @@ rows:
     acceptance: Delivery names the log of a full test run the orchestrator itself performed
       during delivery; a missing, stale, or someone-else's log is refused
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence_separate_context.py#test_a_suite_the_orchestrator_ran_is_accepted_with_its_hash
@@ -3422,7 +3422,7 @@ rows:
       no longer fails self-review (superseded by plan-one-phase-is-first-class; the
       skeleton rule applies only with two or more agentic phases)
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
       - super-fr:tests/unit/test_v2_plan_ops.py#test_a_sole_marked_agentic_phase_raises_no_skeleton_error
@@ -3436,7 +3436,7 @@ rows:
     acceptance: Starting a run or entering isolation binds the calling session to the
       workspace whenever the session is knowable, however fr was launched
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_sessions_cmd.py#test_up_without_session_binds_the_ambient_one
@@ -3456,7 +3456,7 @@ rows:
       model over a claimed alias, the orchestrator's own model for units it ran - and
       warns when the orchestrator strays from a bound orchestrator model
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py#test_advance_records_the_observed_model_of_an_orchestrator_run_step
@@ -3479,7 +3479,7 @@ rows:
       session that wrote the log since the unit opened counts; an agent-composed log
       is refused'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_tests_log_opencode.py
@@ -3496,7 +3496,7 @@ rows:
       only: a tests= log inside it is refused at deliver, and fr validate artifacts
       (CI) flags any other file there'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_tests_log_opencode.py
@@ -3510,7 +3510,7 @@ rows:
       call to its task-notification, not to the launch ack; a still-running, failed
       or killed background command yields no window'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-26-deliver-gate-background-window.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-26-deliver-gate-background-window.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
@@ -3525,7 +3525,7 @@ rows:
       command that names the log and prints its exit=0 line; an unobserved, failed,
       subagent-observed or already-closed detached suite yields no window past its launch'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-27-opencode-detach-tests-gate.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-opencode-detach-tests-gate.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_tests_log_opencode.py
@@ -3542,7 +3542,7 @@ rows:
       first tool call, which claims the one open unclaimed unit dispatched to that agent
       (recording the tier agent that ran) and refuses zero or several'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-27-opencode-holder-identity.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-opencode-holder-identity.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_holder_identity.py
@@ -3566,7 +3566,7 @@ rows:
       the log and prints its exit=0 line; a failed, unfinished or other-log exit line
       yields no extension
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-10-06-run-evidence-witness.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-06-run-evidence-witness.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_witness_detached.py
@@ -3580,7 +3580,7 @@ rows:
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
       one
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_agent_skill_capability.py#test_an_agent_told_to_use_a_skill_is_granted_the_skill_tool
@@ -3592,7 +3592,7 @@ rows:
     acceptance: An operator can produce a ranked, filterable backlog board for one repo
       as a local HTML file, with no Artifact tool and no server
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_triage_render.py
@@ -3606,7 +3606,7 @@ rows:
     acceptance: An operator can triage every non-archived repo of an org into one board,
       and a repo whose issues cannot be read is reported rather than aborting the board
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_triage_collect.py
@@ -3618,7 +3618,7 @@ rows:
     acceptance: 'An issue with no ranking is never silently absent: it renders first,
       in its own Unranked tier, and fr triage check names it'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_triage_render.py
@@ -3633,7 +3633,7 @@ rows:
     acceptance: Each issue's stage (backlog, blocked, PR draft, PR ready, merged, closed)
       is derived from forge facts on every collect, never hand-set
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_triage_stage.py
@@ -3645,7 +3645,7 @@ rows:
     acceptance: 'A board over an org''s issues is safe to open: titles, bodies and labels
       filed by anyone render as inert text'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_triage_render.py
@@ -3668,7 +3668,7 @@ rows:
     acceptance: An agent on Claude Code can follow fr-triage end to end for a repo and
       an org
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
     status: skipped
     notes: 'Walked live post-merge 2026-09-22 (Test Plan 11) on Claude Code 2.1.278
@@ -3682,7 +3682,7 @@ rows:
     acceptance: An agent on OpenCode, which has no Artifact tool, can follow fr-triage
       end to end for a repo
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
     status: skipped
     notes: 'Walked live post-merge 2026-09-22 (Test Plan 12) on OpenCode with github-copilot/gpt-5.6-terra,
@@ -3694,7 +3694,7 @@ rows:
     capability: Backlog triage
     acceptance: An agent on Hermes can follow fr-triage end to end
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
     status: not-implemented
     notes: Born at brainstorm; decision d4 chose not to walk Hermes. Stays not-implemented
@@ -3705,7 +3705,7 @@ rows:
       not a worktree count, ending count-based self-heal false negatives (#472) and
       false positives (#529)
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-sentinel-three-states-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_sentinel_lifecycle.py
@@ -3729,7 +3729,7 @@ rows:
       path no longer exists and points at recovery options; standard denial points first
       at status/up, deprecates unconditional down --all (#432)'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md#2.C
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-sentinel-three-states-design.md#2.C
     levels:
       unit:
       - super-fr:tests/unit/test_hooks_guard.py#TestDenialsSayTheTrueThing
@@ -3744,7 +3744,7 @@ rows:
       still works without state: it fetches origin, resolves the branch ref, verifies
       the merge, and reports the workspace was already reaped'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md#2.D
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-sentinel-three-states-design.md#2.D
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -3791,7 +3791,7 @@ rows:
     acceptance: A harness-specific argument named outside a scoped per-harness clause,
       in any skill, agent or rule (canonical or mirror) and in any spelling, fails CI
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-22-harness-argument-neutrality-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
@@ -3809,7 +3809,7 @@ rows:
     acceptance: The phase executor tells a reader on each harness how to run a command
       longer than that harness's foreground limit, and to leave nothing running at handback
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-22-harness-argument-neutrality-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
@@ -3841,7 +3841,7 @@ rows:
     acceptance: The phase-executor description check fails a description that merely
       mentions a second worktree instead of ruling it out
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-22-harness-argument-neutrality-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_phase_executor_worktree.py
@@ -3855,7 +3855,7 @@ rows:
     acceptance: triage shows every open PR with CI and merge state, including issue-less
       PRs anchored to spec or journal
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-22-triage-open-prs-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-22-triage-open-prs-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_triage_open_prs.py
@@ -3871,7 +3871,7 @@ rows:
     capability: Backlog triage
     acceptance: triage judges PRs against intent anchor with delivery verdict delivers|partial|drift|unanchored
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-22-triage-open-prs-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-22-triage-open-prs-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_triage_open_prs.py
@@ -3886,7 +3886,7 @@ rows:
     acceptance: When OpenCode loads the plugin twice (global install plus a project-local
       copy), an idle run still gets one continuation nudge per run position
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-22-opencode-plugin-delivery.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-22-opencode-plugin-delivery.md
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/idle.test.ts
@@ -3900,7 +3900,7 @@ rows:
       OpenCode plugin (edit gate + idle adapter) installed globally in a form OpenCode
       loads, and --uninstall removes exactly it
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-22-opencode-plugin-delivery.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-22-opencode-plugin-delivery.md
     levels:
       unit:
       - super-fr:tests/unit/test_opencode_plugin_delivery.py
@@ -3928,7 +3928,7 @@ rows:
       rebuild`: the container is recreated with the new features while uncommitted worktree
       files and an active run''s cursor survive (#577).'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_container_verbs.py
@@ -3947,7 +3947,7 @@ rows:
       (worktree and state kept, status reads stopped), and the next `fr isolation exec`
       resumes it instead of failing with a raw devcontainer error (#471).
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -3967,7 +3967,7 @@ rows:
       refusal, preserves its uncommitted cursor even under --force, and the next `fr
       isolation up --branch` restores it (#575).
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_preserve.py
@@ -3986,7 +3986,7 @@ rows:
       names the recovery command, instead of an unexplained missing path; a never-existed
       id says that instead (#575).
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_explain_missing.py
@@ -4006,7 +4006,7 @@ rows:
       checks out origin''s tip, refuses an ambiguous --base, and names the tip it used
       (#438).'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_branch_classify.py
@@ -4024,7 +4024,7 @@ rows:
     acceptance: An unrecognised --tool fails loudly, names the known set, and writes
       nothing; --feature <ref> is the explicit escape
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#a-tool-resolution-gh574
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-scaffold-batch-574-576-569-design.md#a-tool-resolution-gh574
     levels:
       unit:
       - super-fr:tests/unit/test_scaffold_tools.py
@@ -4040,7 +4040,7 @@ rows:
     acceptance: --tool java/maven yields a container where java -version (at the project's
       detected version) and mvn -v succeed
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#a-tool-resolution-gh574
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-scaffold-batch-574-576-569-design.md#a-tool-resolution-gh574
     levels:
       unit:
       - super-fr:tests/unit/test_scaffold_java_version.py
@@ -4059,7 +4059,7 @@ rows:
     acceptance: glab/tea postCreate installs the binary for the container's own architecture,
       and an unsupported architecture fails naming it
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#b-per-architecture-host-clis-gh576
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-scaffold-batch-574-576-569-design.md#b-per-architecture-host-clis-gh576
     levels:
       unit:
       - super-fr:tests/unit/test_scaffold_host_cli_snippet.py
@@ -4075,7 +4075,7 @@ rows:
     acceptance: Every pinned glab/tea asset still downloads and matches its recorded
       checksum, checked on a schedule
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#b-per-architecture-host-clis-gh576
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-scaffold-batch-574-576-569-design.md#b-per-architecture-host-clis-gh576
     levels:
       unit:
       - super-fr:tests/unit/test_check_pinned_clis.py
@@ -4098,7 +4098,7 @@ rows:
     acceptance: Commands addressing an existing workspace route by its recorded mode,
       whatever FR_ISOLATION_TARGET says in the caller's env
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#c-mode-from-state-gh569
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-scaffold-batch-574-576-569-design.md#c-mode-from-state-gh569
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_recorded_mode.py
@@ -4120,7 +4120,7 @@ rows:
       on origin/<default>, reports locally-complete plans as waiting for merge, and
       suggests archiving merged plans one at a time
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-archive-merge-evidence-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-archive-merge-evidence-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_merge_evidence.py
@@ -4136,7 +4136,7 @@ rows:
     acceptance: fr archive refuses a plan whose undispatched phases are not complete
       on origin/<default>; --force on a single plan still overrides
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-23-archive-merge-evidence-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-23-archive-merge-evidence-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_archive_gate_landed.py
@@ -4154,7 +4154,7 @@ rows:
       and offered to the operator as an issue, not fixed in the feature PR; fixing one
       needs an operator decision
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_journal_model.py
@@ -4172,7 +4172,7 @@ rows:
     acceptance: 'The delivered PR carries a proportionality report: unreferenced new
       files, out-of-plan touches, and diff size against the plan''s estimate'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_plan_proportionality.py
@@ -4188,7 +4188,7 @@ rows:
     acceptance: The operator can see what the main session cost per pipeline step, on
       Claude Code and OpenCode
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cost_cmd.py
@@ -4204,8 +4204,8 @@ rows:
       or a brainstorm-record rebind (first step only, same first step), and the light
       plan step refuses a plan with more than one agentic phase
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R2
     levels:
       unit:
       - super-fr:tests/unit/test_run_light_shape.py
@@ -4220,7 +4220,7 @@ rows:
       plan together under the full spec-review evidence gate, and the per-phase code
       review still runs
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_run_light_shape.py
@@ -4233,7 +4233,7 @@ rows:
       tree of the latest phase unit whose holder-written, fresh suite log fr verified;
       otherwise it demands a fresh run
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_run_suite_reuse.py
@@ -4246,7 +4246,7 @@ rows:
     acceptance: On the super-fr-3 feature-C benchmark the light path costs at most 2x
       plain's money and 2.5x its time with verified delivery
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R8
     levels: {}
     status: not-implemented
     notes: ''
@@ -4256,7 +4256,7 @@ rows:
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
       cannot complete without that review's evidence
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence_separate_context.py
@@ -4277,7 +4277,7 @@ rows:
     acceptance: Completed flat agent steps with missing required evidence are visible
       as debt in fr run check and fr run status
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-flat-agent-step-evidence-debt-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-flat-agent-step-evidence-debt-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence.py
@@ -4288,7 +4288,7 @@ rows:
     acceptance: deliver's tests=<log> gate accepts a log the orchestrator wrote under
       a dot-directory (e.g. .fr-deliver/tests.log)
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-writes-dot-dir-prefix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-writes-dot-dir-prefix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
@@ -4302,7 +4302,7 @@ rows:
       or override; the skeleton gate applies only to plans with two or more agentic
       phases
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-one-phase-plans-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-one-phase-plans-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_v2_plan_ops.py#test_a_sole_unmarked_agentic_phase_passes_with_no_override
@@ -4320,7 +4320,7 @@ rows:
       no fixed cap of 4; a round larger than the harness question tool's limit spans
       consecutive calls and still clears the gate as one round.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
@@ -4341,7 +4341,7 @@ rows:
       that differs from the declaration, a design-risk round 2 that round 1 never announced,
       and any third round.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_question_rounds.py
@@ -4360,7 +4360,7 @@ rows:
       README) describes one gate with sized, at-most-two announced rounds; none still
       promises a four-question single batch.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_fr_goal_question_rounds.py
@@ -4382,7 +4382,7 @@ rows:
     acceptance: deliver's tests=<log> gate accepts a suite the orchestrator ran in the
       background once its task-notification reports success
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-tests-window-background-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-tests-window-background-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
@@ -4395,7 +4395,7 @@ rows:
     acceptance: deliver's tests=<log> gate accepts a log whose path the writing command
       held in a shell variable
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-tests-window-background-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-tests-window-background-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
@@ -4406,7 +4406,7 @@ rows:
     acceptance: A requirement that can only be verified after merge does not block delivery
       and stays visibly owed in the PR body
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-requirements-traceability-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_deliver_pr_body.py
@@ -4420,9 +4420,9 @@ rows:
       ask of its own (including a standalone walking skeleton), unless a recorded split
       decision explains it
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-phase-sizing-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-phase-sizing-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-phase-sizing-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_phase_sizing.py
@@ -4437,8 +4437,8 @@ rows:
     acceptance: fr plan self-review fails a plan whose agentic phases after the first
       carry no recorded split reason
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-phase-sizing-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-phase-sizing-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_plan_phase_sizing.py
@@ -4451,7 +4451,7 @@ rows:
     acceptance: fr plan proportionality reports agentic phases against the asks they
       serve and names each phase with no ask of its own, without blocking
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-phase-sizing-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_plan_proportionality.py
@@ -4464,7 +4464,7 @@ rows:
     acceptance: 'An operator verification step is steered to a Test Plan line: self-review
       warns on a single-step trailing manual phase and fr-plan says so'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-phase-sizing-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_plan_phase_sizing.py
@@ -4478,7 +4478,7 @@ rows:
     acceptance: fr-plan's guidance sizes phases to asks, no longer asks for 4-6 phases,
       and keeps steps bite-sized within a phase
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-phase-sizing-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_fr_plan_sizing_prose.py
@@ -4493,7 +4493,7 @@ rows:
       returns a fixed shape carrying its suite log, the spec reviewer covers spec and
       plan, and the orchestrator is told never to open subagent transcripts
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_skill_light_path.py
@@ -4506,7 +4506,7 @@ rows:
       operator''s raw input: the shipped workflows carry no requirements/coverage/fidelity/requirement-rows
       evidence, and implement/review briefs and journal handoff carry no operator input'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-is-the-contract-design.md#R1
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-raw-input-relay-design.md
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-fidelity-invention-design.md
     levels:
@@ -4523,7 +4523,7 @@ rows:
       or gate; the parser also reads a pre-5.0 three-column table, and phase sizing
       and visual evidence work on both
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-is-the-contract-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_spec_requirements_list.py
@@ -4538,7 +4538,7 @@ rows:
       brainstorm, writes a plain R1..Rn list, runs spec review once with no coverage
       or partition loop, and delivers
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-is-the-contract-design.md#R2
     levels: {}
     status: skipped
     notes: 'Verified live 2026-09-29 (super-fr-3 take 12: feature-C brief, OpenCode
@@ -4557,7 +4557,7 @@ rows:
       PR with 'fr isolation verify-merge --branch <b>' and no flags; a missing merge-base
       is a clean error naming --default-branch, never a traceback.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-fr-goal-closeout-defects-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_cmd.py
@@ -4572,7 +4572,7 @@ rows:
       the plan, so a post-merge housekeeping workspace comes up without a hand-committed
       wrapper; the guard's remedy is the harness-neutral 'fr init validator-wrapper'.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-fr-goal-closeout-defects-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_init_cmd.py
@@ -4589,7 +4589,7 @@ rows:
       on a feature branch, so fr archive / fr repair / fr isolation down never refuse
       over fr's own uncommitted state.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-fr-goal-closeout-defects-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_records_commit.py
@@ -4607,7 +4607,7 @@ rows:
       a fresh session prints a self-contained closeout brief (verify-merge, Test Plan,
       archive, down) from the run file.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-fr-goal-closeout-defects-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_closeout.py
@@ -4626,7 +4626,7 @@ rows:
       batch naming an unjudged issue or an issue already in another open batch, and
       derives the batch stage from forge facts
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3a-batch-state-judgementsyaml-schema-2
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-triage-batches-design.md#3a-batch-state-judgementsyaml-schema-2
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_model.py
@@ -4646,7 +4646,7 @@ rows:
       takes run-unit work, with an engine-rendered brief that closes every member issue;
       a runner that cannot take run work is refused before anything is written
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3c-batch-dispatch
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-triage-batches-design.md#3c-batch-dispatch
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_dispatch.py
@@ -4666,7 +4666,7 @@ rows:
       forge, and any machine that triages the repo shows it in-progress, without reading
       local run state
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3e-forge-visibility
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-triage-batches-design.md#3e-forge-visibility
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_dispatch.py
@@ -4688,7 +4688,7 @@ rows:
       a later batch never ships a lower version and its version conflict after an earlier
       merge is resolved without the operator
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3d-version-reservations
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-triage-batches-design.md#3d-version-reservations
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_version.py
@@ -4711,7 +4711,7 @@ rows:
       shared-file conflicts up front; the queue stops on a real conflict naming the
       files, and a re-run resumes at the first unmerged PR
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3f-batch-merge
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-triage-batches-design.md#3f-batch-merge
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_merge.py
@@ -4738,7 +4738,7 @@ rows:
       never pins subagent models, so every phase executor and reviewer runs on its configured
       fr models tier'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md#a-the-session-model-704
+    - super-fr:docs/superpowers/implemented/specs/2026-09-27-triage-batch-launch-design.md#a-the-session-model-704
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_verbs.py
@@ -4754,7 +4754,7 @@ rows:
       starts /fr-debugging on a fix/batch-<id> branch with fr-debugging's two hard stops
       stated, warning at create/edit when the members do not share one theme
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md#b-a-batch-declares-its-skill-687
+    - super-fr:docs/superpowers/implemented/specs/2026-09-27-triage-batch-launch-design.md#b-a-batch-declares-its-skill-687
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_model.py
@@ -4770,9 +4770,9 @@ rows:
       closed; it carries it with fresh PR links, an issue open again reads open, and
       a fully closed merged batch stays merged.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_triage_collect_carry.py#test_a_carried_closed_key_is_not_viewed
@@ -4787,8 +4787,8 @@ rows:
       was unviewed or never seen, and collects fully when no same-scope previous facts
       are readable.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_triage_collect_carry.py#test_an_unseen_key_and_a_carried_open_issue_are_viewed
@@ -4801,7 +4801,7 @@ rows:
     acceptance: fr triage collect never carries facts over; it views every judged issue
       that is not open.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_triage_collect_carry.py#test_the_collect_command_views_on_a_second_run_too
@@ -4812,7 +4812,7 @@ rows:
     acceptance: Each drive pass prints one line naming the issues its collect viewed
       and carried over.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_recollect_carries_a_known_closed_issue_over
@@ -4824,7 +4824,7 @@ rows:
       full collect takes seconds, not minutes, and fr triage check reports the same
       settled count.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R1
     levels: {}
     status: not-implemented
     notes: ''
@@ -4834,7 +4834,7 @@ rows:
     acceptance: After drive passes that carried facts over, fr triage check reports
       the same settled set as right after a full fr triage collect.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-scoped-collect-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R7
     levels: {}
     status: not-implemented
     notes: ''
@@ -4845,7 +4845,7 @@ rows:
       open issues with no severity and duplicates whose target is unknown, and the board
       shows severity and lists duplicates under Parked.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_triage_check.py#test_severity_and_duplicate_of_load_on_every_schema
@@ -4862,8 +4862,8 @@ rows:
       the state directory and a repo directory, never facts or rendered pages, and import
       keeps a newer local file unless forced.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R12
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R15
     levels:
       unit:
       - super-fr:tests/unit/test_triage_state_sync.py#test_export_copies_the_durable_state_and_nothing_else
@@ -4880,7 +4880,7 @@ rows:
       duplicates, origins schema 2, the history verb, the state verbs and the export
       key.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_triage_skill_docs.py
@@ -4892,7 +4892,7 @@ rows:
     acceptance: The operator can reconstruct a run's cost per model, step and activity
       from Claude Code, OpenCode or Hermes session data
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_usage_readers.py
@@ -4910,7 +4910,7 @@ rows:
     acceptance: Delivering a run stores its usage in docs/superpowers/usage/<run-id>.yaml
       without an extra agent turn
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       int:
       - super-fr:tests/unit/test_usage_capture.py
@@ -4923,7 +4923,7 @@ rows:
     acceptance: fr run cost shows a delivered run's cost on a checkout that never ran
       it
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       int:
       - super-fr:tests/unit/test_run_cost_cmd.py
@@ -4936,7 +4936,7 @@ rows:
     capability: Lean cost-aware pipeline
     acceptance: A usage file never contains a hostname, base URL, path or message content
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_usage_kind.py
@@ -4949,7 +4949,7 @@ rows:
     capability: Lean cost-aware pipeline
     acceptance: A devcontainer-mode run's usage file has readable sessions
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
     status: skipped
     notes: 'Live-verified 2026-09-26 (Test Plan 15, #628 phase 4): /fr-goal on #624
@@ -4961,7 +4961,7 @@ rows:
     acceptance: 'Each agent step''s bookkeeping is one fr run resolve --record: one
       commit, one line of output'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       int:
       - super-fr:tests/unit/test_record_apply.py
@@ -4974,7 +4974,7 @@ rows:
     capability: Lean cost-aware pipeline
     acceptance: An invalid step record changes nothing
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_record_apply.py
@@ -4987,7 +4987,7 @@ rows:
     capability: Lean cost-aware pipeline
     acceptance: A new session picks up an in-progress step record and completes it
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       int:
       - super-fr:tests/unit/test_record_template.py
@@ -4999,7 +4999,7 @@ rows:
     capability: Lean cost-aware pipeline
     acceptance: A live run spends at most 2 bookkeeping turns per step (baseline 6.1)
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
     status: not-implemented
     notes: 'Live walk 2026-09-26 missed the target: 2.7 turns/step-item on Claude Code
@@ -5010,7 +5010,7 @@ rows:
     capability: Lean cost-aware pipeline
     acceptance: A PR missing a required fr-rendered section cannot be delivered
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       int:
       - super-fr:tests/unit/test_deliver_pr_body.py
@@ -5023,7 +5023,7 @@ rows:
     acceptance: The operator can regenerate the audit and architecture pages from run
       data
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       int:
       - super-fr:tests/integration/test_usage_report_cli.py
@@ -5035,7 +5035,7 @@ rows:
     acceptance: deliver's live-PR check reads the PR body on GitHub, GitLab and Gitea
       alike, and its refusals name that forge's own CLI
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_pr_body_adapters.py
@@ -5055,7 +5055,7 @@ rows:
       one bot release commit, tag and GitHub Release listing the fragment summaries,
       and no CI run starts for that commit
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-version-bump-churn-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_release_script.py
@@ -5071,7 +5071,7 @@ rows:
     acceptance: Two PRs that both need a release never conflict over the version — the
       PR gate demands an added change fragment and refuses any edit to a version surface
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-version-bump-churn-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_change_fragment_gate.py
@@ -5087,7 +5087,7 @@ rows:
       lacks its feature — it must name the predicted release at PR time and the actual
       release at tag time, or a failure and issue say so
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-version-bump-churn-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_version_floors.py
@@ -5102,7 +5102,7 @@ rows:
     acceptance: Two PRs adding acceptance rows to different existing capabilities merge
       without conflict in matrix.yaml or any of the three committed reports
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-version-bump-churn-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_concurrent_merge.py
@@ -5119,7 +5119,7 @@ rows:
       edits .gitignore by appending one line; a row reaches ci only in a repo with a
       CI config
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-28-acceptance-init-no-ci.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-28-acceptance-init-no-ci.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_init_no_ci.py
@@ -5131,7 +5131,7 @@ rows:
     acceptance: fr acceptance init commits every file it writes on a working branch,
       and reports each as created or modified, so the worktree is clean afterwards
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-29-acceptance-init-commit.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-29-acceptance-init-commit.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_init_commit.py
@@ -5145,7 +5145,7 @@ rows:
       spec, plan, run or journal) is refused as a process directive when written; existing
       rows still move
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-29-acceptance-init-commit.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-29-acceptance-init-commit.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_init_commit.py
@@ -5158,7 +5158,7 @@ rows:
       fails a line anchor (naming the test it sits in) and a name that no longer resolves,
       authoring refuses a new line anchor, and a repair converts existing ones'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-10-02-acceptance-integrity.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-acceptance-integrity.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_integrity.py#test_check_refuses_a_name_anchor_that_names_no_test
@@ -5179,7 +5179,7 @@ rows:
     acceptance: 'fr acceptance add and set-status edit a matrix whose rows are flush-left
       under rows: (PyYAML default block style) instead of rolling back'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-10-02-acceptance-integrity.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-acceptance-integrity.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_integrity.py#test_add_appends_to_a_flush_left_matrix
@@ -5193,7 +5193,7 @@ rows:
       or removed, notes, verify) instead of logging X → X, and a ref both dropped and
       added is refused by the CLI and the record engine alike
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-10-02-acceptance-integrity.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-acceptance-integrity.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_with_an_unchanged_status_names_the_added_level
@@ -5207,7 +5207,7 @@ rows:
       a command (in the same rewrite as its status move), so re-pointing a row whose
       tests were deleted needs no hand-edited YAML.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-acceptance-set-status-drop-level-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-acceptance-set-status-drop-level-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_set_status.py
@@ -5221,7 +5221,7 @@ rows:
     acceptance: The default-branch forge lookup and verify-merge's fetches are timed
       and non-interactive; a timeout reads as unknown, never as a verdict
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-isolation-network-timeouts-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-isolation-network-timeouts-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_network_timeouts.py
@@ -5232,7 +5232,7 @@ rows:
     acceptance: fr plan create against a spec with no Implementation Plans section appends
       the canonical section and the plan's row instead of refusing.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-plan-table-header-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-plan-table-header-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_v2_plan_ops.py#test_create_appends_missing_section_with_header_and_row
@@ -5248,7 +5248,7 @@ rows:
       canonical '| Plan | Repo | File | Depends on |' header, so the first failure carries
       its own fix.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-plan-table-header-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-plan-table-header-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_v2_plan_ops.py
@@ -5261,7 +5261,7 @@ rows:
     acceptance: fr plan rework on a spec with no Implementation Plans section still
       refuses, naming the canonical header; only create auto-creates the section.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-plan-table-header-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-plan-table-header-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_v2_plan_ops.py
@@ -5272,7 +5272,7 @@ rows:
     acceptance: An isolation gc candidate whose origin fetch hangs is bounded by the
       configured network timeout and is not reaped on the resulting fetch failure.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-isolation-gc-fetch-timeout-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-isolation-gc-fetch-timeout-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_network_timeouts.py
@@ -5283,7 +5283,7 @@ rows:
     acceptance: A run whose capture found no session is reported as unavailable with
       a reason, never as an empty or free run
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-usage-unavailable-when-no-session-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-usage-unavailable-when-no-session-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_usage_capture.py
@@ -5299,7 +5299,7 @@ rows:
     acceptance: A dispatched unit's recorded model is the one its subagent transcript
       names, not the tier binding, and a mismatch is reported
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-10-02-batch-usage-accuracy.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-batch-usage-accuracy.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_executor_model.py
@@ -5311,7 +5311,7 @@ rows:
     acceptance: A session still open when the closeout captured it is named at closeout,
       and fr usage backfill prices the archived file once the session has exited
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-10-02-batch-usage-accuracy.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-batch-usage-accuracy.md
     levels:
       unit:
       - super-fr:tests/unit/test_usage_refresh_after_exit.py
@@ -5325,7 +5325,7 @@ rows:
     acceptance: A CI run of ci.yml completes in under 4 minutes of wall clock (excluding
       queue), with coverage still gated at 75% across the whole suite
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-ci-time-budget-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-ci-time-budget-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_ci_shards.py
@@ -5338,7 +5338,7 @@ rows:
       issue; later breaches update it without duplicates, and 3 consecutive green runs
       close it
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-ci-time-budget-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-ci-time-budget-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_ci_budget.py
@@ -5351,7 +5351,7 @@ rows:
     acceptance: Adding a workflow file that the budget watcher neither watches nor explicitly
       excludes fails CI
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-ci-time-budget-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-ci-time-budget-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_ci_budget.py
@@ -5364,7 +5364,7 @@ rows:
     acceptance: A workflow that references a remote GitHub Action by anything but a
       full commit SHA with a version comment fails CI
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-27-ci-hardening-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_actions_pinned.py
@@ -5377,7 +5377,7 @@ rows:
     acceptance: Dependabot proposes updates to the SHA-pinned actions weekly, as one
       grouped PR
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-27-ci-hardening-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_actions_pinned.py
@@ -5391,7 +5391,7 @@ rows:
     acceptance: One stable ci-ok check fails whenever any ci.yml job fails or is cancelled,
       so a required-check rule can name exactly one context
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-27-ci-hardening-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_ci_shards.py
@@ -5405,7 +5405,7 @@ rows:
     acceptance: An fr record commit succeeds inside a devcontainer whose bind-mounted
       worktree git considers foreign-owned
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-container-git-ownership-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-container-git-ownership-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_container_git_ownership.py
@@ -5420,7 +5420,7 @@ rows:
     acceptance: A scaffolded devcontainer profile trusts its own workspace path for
       git so a fresh container needs no manual safe.directory
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-container-git-ownership-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-container-git-ownership-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_container_git_ownership.py
@@ -5433,7 +5433,7 @@ rows:
       rewrote (its exact file content was on the base after the merge) and checks the
       fetched remote branch as well as the local one; unlanded content still refuses
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-26-verify-merge-rewrites-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-26-verify-merge-rewrites-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -5463,7 +5463,7 @@ rows:
       entry points), so dispatch --to herdr/cncd/vk and install.sh --install-bridge
       work outside uv run
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-27-batch-package-lists.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-batch-package-lists.md
     levels:
       int:
       - super-fr:tests/integration/test_runner_package_lists.py
@@ -5480,7 +5480,7 @@ rows:
       migration) stores the same canonical spec form, and none of them shortens a ref
       that leaves the repo.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-27-spec-ref-writers-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_repair.py
@@ -5495,7 +5495,7 @@ rows:
       its process ancestry, and records a session only when that harness owns the session
       key
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-09-27-opencode-holder-identity.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-opencode-holder-identity.md
     levels:
       unit:
       - super-fr:tests/unit/test_harness_detect.py
@@ -5516,7 +5516,7 @@ rows:
       (limits included) that visual evidence must cover, written by `fr acceptance add`
       and by a step record, and validated (no empty or duplicate names).
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R1
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_visual.py
@@ -5532,9 +5532,9 @@ rows:
       at /acceptance/, freshly rendered with github links pinned to the deployed commit,
       published even when rows are failing
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-03-acceptance-report-pages-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-03-acceptance-report-pages-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-03-acceptance-report-pages-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
@@ -5547,7 +5547,7 @@ rows:
     acceptance: Publishing the acceptance report keeps every explainer page at its current
       URL, because one workflow deploys both in a single Pages artifact
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-03-acceptance-report-pages-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
@@ -5559,8 +5559,8 @@ rows:
     acceptance: The explainers landing page links to the published acceptance report
       and the README carries a badge pointing at it
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-03-acceptance-report-pages-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-03-acceptance-report-pages-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-03-acceptance-report-pages-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py#test_index_links_to_acceptance_report
@@ -5574,7 +5574,7 @@ rows:
       shows a placeholder naming the commit, the run still goes red, and a newer push
       queues behind a running deploy instead of cancelling it'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-10-06-pages-deploy.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-06-pages-deploy.md
     levels:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py#test_concurrency_never_cancels_a_running_deploy
@@ -5597,9 +5597,9 @@ rows:
       agent''s transcript since the unit opened; a script''s pass/fail alone never satisfies
       it.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence_visual.py
@@ -5614,7 +5614,7 @@ rows:
     acceptance: At `review-phase` the screenshots must have been opened in the dispatched
       reviewer's own transcript; the executor having opened them is refused.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence_visual.py
@@ -5628,7 +5628,7 @@ rows:
     acceptance: A capture script named in visual evidence must exist and be re-run by
       the stage that names it; the skills prefer such a script to agent-driven browsing.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence_visual.py
@@ -5643,10 +5643,10 @@ rows:
       the reviewer and deliver each open their own fresh screenshots and the cursor
       records the witness.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R5
     levels: {}
     status: not-implemented
     notes: ''
@@ -5658,8 +5658,8 @@ rows:
       script re-run at each stage, open every screenshot, fill the record''s `visual:`
       section.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_skill_visual_evidence.py
@@ -5673,8 +5673,8 @@ rows:
       `fr pickup --branch <b>`, and `fr pickup --run` delegates to the same builder,
       adding only run extras.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R2
     levels:
       unit:
       - super-fr:tests/unit/test_pickup_branch.py
@@ -5690,8 +5690,8 @@ rows:
       added or modified (debug journals included) through each kind''s gate, reports
       what it holds, and refuses a branch whose changes are not on the default ref.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_archive_branch.py
@@ -5705,7 +5705,7 @@ rows:
       on the default ref, archivable plans, fully implemented specs, orphan journals)
       with the command that clears it, without failing.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_status_owed.py
@@ -5717,7 +5717,7 @@ rows:
     acceptance: fr-debugging's deliver relays the `fr pickup --branch <b>` close-out
       line on every harness mirror.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_closeout_relay.py
@@ -5729,7 +5729,7 @@ rows:
     acceptance: '`fr archive --all` moves every debug journal live on the default ref,
       and evidence refs to a moved journal still resolve in `fr acceptance check`.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_archive_all_debug.py
@@ -5743,8 +5743,8 @@ rows:
       a new session, archives the branch's spec, plan, run, usage and journals with
       nothing held.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R3
     levels: {}
     status: skipped
     notes: 'Proven live 2026-09-29 in a fresh session from the base clone: fr pickup
@@ -5759,7 +5759,7 @@ rows:
       line (fr-goal's run line; fr-debugging and standalone fr-execute `fr pickup --branch
       <b>`), and fr-isolation's post-merge cleanup points at the same brief.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_closeout_relay.py
@@ -5771,7 +5771,7 @@ rows:
     acceptance: fr-profiles declares forge, ci and tracking as nested {type, host} services;
       jenkins, jira and a cross-forge tracker are refused naming the follow-up issue
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-fr-profiles-services-design.md#R1
     levels:
       unit:
       - super-fr:tests/unit/test_services_model.py
@@ -5784,7 +5784,7 @@ rows:
     acceptance: An undeclared ci or tracking resolves to the forge's own, hosts default
       to the forge host for native types, and every forge consumer keeps today's behaviour
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-fr-profiles-services-design.md#R2
     levels:
       unit:
       - super-fr:tests/unit/test_services_resolve.py
@@ -5798,7 +5798,7 @@ rows:
       shape at the first fr command (ci detected offline), and an invalid services block
       fails fr validate artifacts
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-fr-profiles-services-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_migration_profiles_services.py
@@ -5811,7 +5811,7 @@ rows:
     acceptance: 'acceptance init and the ci status follow the declared ci service: none
       scaffolds no pipeline and refuses ci; a pipeline type scaffolds its template'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-fr-profiles-services-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_services.py
@@ -5823,7 +5823,7 @@ rows:
     acceptance: 'Under ci: none, fr-goal''s Ready checklist and fr-acceptance name the
       local suite as the gate'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-fr-profiles-services-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_skill_services_prose.py
@@ -5837,7 +5837,7 @@ rows:
       lines, apply --yes and triage batch dispatch refuse, the pipeline omits the debt
       issue, findings stay out-of-scope'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-fr-profiles-services-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_tracking_none.py
@@ -5850,7 +5850,7 @@ rows:
     acceptance: fr services prints each resolved service's type, host and source, plain
       and --json, without touching any artifact
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-fr-profiles-services-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_services_cli.py
@@ -5862,7 +5862,7 @@ rows:
     acceptance: fr init scaffold writes the nested services, detecting ci and tracking
       and refusing with the flag to pass when detection is inconclusive
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-fr-profiles-services-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_init_scaffold.py
@@ -5876,8 +5876,8 @@ rows:
       call (running following cli steps, printing the next brief); `fr run advance`
       chains consecutive cli steps; `--no-advance` keeps the old behaviour'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_run_one_call.py
@@ -5891,7 +5891,7 @@ rows:
       7 from 1 hop by hop through a frozen RecordV6, and an unconfirmed record is left
       byte-identical and reported
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-is-the-contract-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_migration_record_contract.py
@@ -5904,8 +5904,8 @@ rows:
       records the top-level session on the attempt, and fr run cost and the PR's Cost
       table show the run's real figures
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R2
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_advance_from_a_child_session_records_the_run_session
@@ -5921,8 +5921,8 @@ rows:
       holder from the single matching child, and refuses a reviewer id that names no
       dispatched child or names a phase executor
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_an_invented_reviewer_id_is_refused_at_the_phase_review_on_opencode
@@ -5937,7 +5937,7 @@ rows:
       invented reviewer and the missing answered_by are refused or corrected and the
       Cost table has real numbers
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R13
     levels: {}
     status: not-implemented
     notes: ''
@@ -5948,7 +5948,7 @@ rows:
       to a run only when an attempt or workspace binding names it, and say unavailable
       rather than show a foreign session's figures
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_run_cost_cmd.py#test_recompute_never_adds_the_callers_session
@@ -5963,7 +5963,7 @@ rows:
       with a Claude Code and an OpenCode backend, keeping the could-not-read / found-nothing
       distinction
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_opencode.py
@@ -5977,8 +5977,8 @@ rows:
       block is missing, ambiguous, or names a finding the plan journal lacks, and the
       PR body lists every review-phase finding with its resolution
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_run_review_return_resolve.py
@@ -5993,7 +5993,7 @@ rows:
       and verifies the operator gate as on Claude Code; the fr-goal skill and parity.yaml
       describe the tool
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_gate_opencode.py
@@ -6007,8 +6007,8 @@ rows:
       refused naming both values, and fr run gates/check say claimed-and-unobserved
       instead of 'no operator answered it'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_run_answered_by_no_default.py
@@ -6020,7 +6020,7 @@ rows:
     acceptance: On OpenCode, the visual witness observes screenshot reads and capture-script
       runs in the owing session only
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence_visual.py
@@ -6032,8 +6032,8 @@ rows:
       row, and the Hermes edit gate partial for its shell-write gap, and fr harness
       parity --check passes
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-10-02-opencode-observe-2-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_harness_matrix.py
@@ -6046,7 +6046,7 @@ rows:
       and invalid prerequisites (unknown, self, cycle) are refused before anything is
       written
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R1
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_waves.py
@@ -6060,11 +6060,11 @@ rows:
       after a stop without repeating work, and signals done, waiting or refused through
       its exit code
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py
@@ -6083,7 +6083,7 @@ rows:
     acceptance: The driver merges a batch PR only when it is not a draft and every check
       is green, and never readies, approves or un-drafts a PR
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py
@@ -6098,8 +6098,8 @@ rows:
       starts the close-out session through the batch's runner, and merges the archive
       PR when it is ready and green
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py
@@ -6121,9 +6121,9 @@ rows:
     acceptance: A real wave of two batches runs from dispatch to a merged archive PR
       with no hand step but the operator readying the PRs
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R5
     levels: {}
     status: not-implemented
     notes: 'Live run 2026-10-03 (Test Plan 16, fr 5.2.1/5.2.2): batches arch-card-clip
@@ -6141,11 +6141,11 @@ rows:
       drive), created once and reused, while a batch dispatched by hand opens where
       it always did
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_a_group_with_no_workspace_creates_one_and_uses_its_root_pane
@@ -6161,10 +6161,10 @@ rows:
       an emptied wave workspace, and never holds or fails the drive over it; --keep-sessions
       turns it off
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R9
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_close_closes_the_group_workspace_of_a_lone_tab
@@ -6180,9 +6180,9 @@ rows:
     acceptance: A live two-wave drive inside herdr groups each wave's sessions in its
       own workspace and leaves no finished batch's tab or emptied wave workspace open
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R9
     levels: {}
     status: not-implemented
     notes: ''
@@ -6193,9 +6193,9 @@ rows:
       it are neither updated nor merged — and advances past a merged head in the same
       pass
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_ready_green_prs_form_one_train_in_order
@@ -6209,8 +6209,8 @@ rows:
     acceptance: A PR with failing CI or a refused merge is reported once and stepped
       over, and rejoins the train at its merge-order place once green
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_a_failing_head_is_stepped_over_and_the_next_leads
@@ -6225,7 +6225,7 @@ rows:
     acceptance: Every drive pass prints one train line per repo (head, queued, stepped
       over) and the summary counts queued PRs
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_train_line_names_head_then_queued_and_stepped
@@ -6238,7 +6238,7 @@ rows:
     acceptance: In a live wave of several ready PRs in one repo, each PR is updated
       at most once per PR merged ahead of it
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-04-drive-merge-train-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R2
     levels: {}
     status: not-implemented
     notes: ''
@@ -6249,7 +6249,7 @@ rows:
       state-export PR for it and merges it when green, recording the export so it never
       repeats.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_a_finished_wave_with_no_export_and_no_pr_is_exported
@@ -6264,7 +6264,7 @@ rows:
     acceptance: On a real finished wave, the repo copy of the triage state matches the
       cache with no manual step.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R13
     levels: {}
     status: not-implemented
     notes: ''
@@ -6274,7 +6274,7 @@ rows:
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
       of repos, owners allowed to differ, as one board
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R15
     levels:
       unit:
       - super-fr:tests/unit/test_triage_scope_groups.py#test_drive_plans_both_repos_of_a_group_against_one_shared_cap
@@ -6287,12 +6287,12 @@ rows:
       needs the operator now, and what would start next, shows waves as tabs with the
       latest preselected, and keeps every section it showed before
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R9
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R16
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R17
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R18
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R19
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R19
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R20
     levels:
       unit:
       - super-fr:tests/unit/test_triage_board_views.py#test_needs_you_now_lists_each_kind_and_the_unplaced_issues
@@ -6306,8 +6306,8 @@ rows:
     acceptance: A defect-origins page is generated from classified issues, with counts
       by category and source, filings per day and time to fix
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_triage_origins.py#test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch
@@ -6321,8 +6321,8 @@ rows:
     acceptance: The architecture page's measured sections are generated from the triage
       state and the repo, and authored fragments are spliced in in manifest order
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R11
-    - super-fr:docs/superpowers/specs/2026-10-02-wave-driver-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_triage_architecture.py#test_line_counts_per_subsystem_at_then_and_now_name_their_commits
@@ -6336,9 +6336,9 @@ rows:
       opens with the one question it answers and a nav bar to the other three, and no
       generated section appears on two pages.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_four_pages
@@ -6366,9 +6366,9 @@ rows:
       Needs you now, Next up and the unfinished waves with a per-batch Tier column;
       backlog, features, parked, patterns, PRs and batches follow as collapsed sections.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_triage_board_views.py#test_the_board_is_ordered_since_needs_next_waves_then_the_folds
@@ -6392,7 +6392,7 @@ rows:
       filter hides cards by stage, and a link to a batch opens its card and the sections
       around it.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_board.py#test_every_card_is_a_closed_details_with_its_stage_and_a_linkable_id
@@ -6416,7 +6416,7 @@ rows:
       the finished waves (every batch cancelled or archived) and dated fragments, and
       finished waves leave the board.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_triage_history.py#test_finished_waves_are_tabs_with_the_highest_finished_selected
@@ -6438,7 +6438,7 @@ rows:
       render and is placed exactly at its manifest position, optionally as a collapsed
       titled section, under the same refusals as before.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_triage_fragments.py#test_a_fragment_between_two_generated_sections_renders_there
@@ -6455,7 +6455,7 @@ rows:
       origins check reports a duplicate whose target is outside the window, and the
       page links a duplicate to its original.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-triage-pages-goal-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_triage_origins.py#test_facts_stay_schema_1_and_origins_yaml_loads_1_and_2
@@ -6469,7 +6469,7 @@ rows:
     acceptance: A runner may offer to close an item's sessions; one that does not is
       never asked and behaves as before
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-drive-herdr-sessions-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_run_unit_runner_contract.py#test_session_closer_is_a_runtime_protocol_a_plain_runner_is_not
@@ -6483,9 +6483,9 @@ rows:
       moved onto the current shape with every recorded step kept, and a reshape that
       would skip or lose recorded work is refused with nothing changed
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-run-upgrade-midflight-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-run-upgrade-midflight-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-run-upgrade-midflight-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_run_reshape.py#test_a_step_added_after_the_cursor_is_inserted_pending_in_manifest_order
@@ -6501,7 +6501,7 @@ rows:
     acceptance: '`fr run gates` and the other read-only run commands answer from a drifted
       cursor with a warning instead of refusing'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-run-upgrade-midflight-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_run_reshape_cmd.py#test_gates_answers_a_drifted_cursor_with_one_warning
@@ -6517,8 +6517,8 @@ rows:
       the operator's gate answers, dispatch history and evidence recorded by the old
       cursor survive into the new one
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-run-upgrade-midflight-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-run-upgrade-midflight-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_run_adopt_supersede.py#test_carry_forward_copies_gate_provenance_and_missing_emitted_keys
@@ -6537,9 +6537,9 @@ rows:
       as a historical review — inferred by adoption from the plan journal or resolved
       by hand — and is reported as historical, never as debt or failure
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-05-run-upgrade-midflight-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-run-upgrade-midflight-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-run-upgrade-midflight-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-05-run-upgrade-midflight-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence_historical.py#test_a_review_between_the_implement_return_and_started_is_accepted
@@ -6720,9 +6720,9 @@ rows:
       each pair with the reason it was flagged, excluding judged duplicates and pairs
       judged distinct
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_triage_dedupe.py#test_the_calibration_fixture_groups_the_known_duplicates
@@ -6736,10 +6736,10 @@ rows:
     capability: triage-dedupe
     acceptance: duplicate_of and distinct_from are validated at load, a judged duplicate is never unplaced, and check reports it with its original's state and the gh close --duplicate-of command, which fr never runs
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_triage_check.py#test_an_open_duplicate_of_an_open_original_carries_the_close_command
@@ -6753,8 +6753,8 @@ rows:
     capability: triage-dedupe
     acceptance: The triage board lists every judged duplicate under Parked and on its open original's row, with the close command, and lists candidate duplicate groups in a Possible duplicates section
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_triage_render.py#test_an_open_duplicate_nests_in_its_originals_row_with_the_close_command
@@ -6778,7 +6778,7 @@ rows:
     capability: triage-dedupe
     acceptance: The wave driver reports the candidate-group count once, in the pass that observes a wave finish, and never acts on duplicates
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_a_wave_going_from_unfinished_to_finished_reports_the_candidates_last
@@ -6791,7 +6791,7 @@ rows:
     acceptance: The fr-triage skill teaches judging candidate groups into duplicate_of
       or distinct_from and leaves the printed close commands to the operator
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-dedupe-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_fr_triage_skill_example.py#test_the_skill_teaches_judging_candidates_and_leaves_the_close_to_the_operator
@@ -6805,7 +6805,7 @@ rows:
       a tripwire with no allowlist fails CI on any direct gh import or argv outside
       the GitHub backend
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-forge-remainder-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_forge_adapter.py#test_no_forge_call_bypasses_the_adapter
@@ -6820,7 +6820,7 @@ rows:
       on GitHub, GitLab and Gitea through the forge adapter, with the same normalised
       PR state
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-forge-remainder-design.md#R2
     levels:
       unit:
       - super-fr:tests/unit/test_forge_adapter_lookups.py#test_pr_for_branch_sends_todays_argv_and_normalises_the_record
@@ -6839,7 +6839,7 @@ rows:
       is not logged into: the refusal comes before any process, on every adapter method,
       and is classified by its type (fail fast, never retried)'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-10-06-glab-host-trust.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-06-glab-host-trust.md
     levels:
       unit:
       - super-fr:tests/unit/test_forge_host_trust.py#test_every_public_glab_method_refuses_an_unknown_host_before_any_process
@@ -6864,7 +6864,7 @@ rows:
     acceptance: Triage batch verbs talk to the forge instance the batch's repo lives
       on, a self-hosted (GitHub Enterprise) instance included, never the SaaS default
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-forge-remainder-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_hostclient.py#TestTriageBatchMakeClient::test_a_ghe_repo_url_keeps_its_host
@@ -6907,10 +6907,10 @@ rows:
       one is usable, a shape declares the default, and a malformed manifest is refused
       by fr verification check
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_verification_cmd.py#test_the_shipped_shapes_declare_candidate_and_it_resolves
@@ -6927,8 +6927,8 @@ rows:
       go to a throwaway prefix through the repo's install contract and never touch the
       operator's install
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R8
     levels:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_shipped_verification_strategies
@@ -6942,9 +6942,9 @@ rows:
       overrides; a post-merge row without a reason fails self-review; legacy verify
       post-merge rows read as live'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_plan_self_review_verification.py#test_a_post_merge_or_none_row_without_a_reason_fails
@@ -6966,8 +6966,8 @@ rows:
       and the run's row scenarios, and deliver refuses until a passing walk log covering
       HEAD's code tree and every owed row is cited
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R9
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R11
     levels: {}
     status: not-implemented
     notes: ''
@@ -6976,7 +6976,7 @@ rows:
     acceptance: The PR body lists operator-driven pre-merge walks with their command
       and a ready-checklist line, and post-merge rows with their reason
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R12
     levels: {}
     status: not-implemented
     notes: ''
@@ -6985,8 +6985,8 @@ rows:
     acceptance: deliver refuses a Closes/Fixes/Resolves line for an issue a not-yet-walk-verified
       post-merge row cites, naming the line and printing Refs
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R15
     levels: {}
     status: not-implemented
     notes: ''
@@ -6996,8 +6996,8 @@ rows:
       row citing an issue is walk-verified it prints the close command (nothing under
       tracking none)
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R14
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R16
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_walks.py#test_the_walk_that_verifies_the_last_open_row_prints_the_close_commands
@@ -7014,7 +7014,7 @@ rows:
     acceptance: fr verification prerelease cuts an rc tag and GitHub pre-release of
       a branch without touching main or any version surface; other forges refuse
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R24
     levels: {}
     status: skipped
     notes: 'Live-verified 2026-10-06 at closeout: `fr verification prerelease --branch
@@ -7029,7 +7029,7 @@ rows:
     acceptance: super-fr provides .fr/candidate-install and scenario scripts, exercised
       in CI, so its own PRs can run a candidate walk
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R25
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R25
     levels:
       unit:
       - super-fr:tests/unit/test_verification_walk.py#test_the_walk_refuses_a_repo_without_the_install_contract_naming_it
@@ -7049,7 +7049,7 @@ rows:
     acceptance: fr verification prerelease --dry-run prints the workflow dispatch for
       a branch and its rc tag, and refuses on a non-GitHub forge
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R24
     levels:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_prerelease_command_shape
@@ -7063,8 +7063,8 @@ rows:
       ranked, proposed or reported unplaced; the close-out brief prints the label command
       for Refs'd issues
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R17
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R18
     levels:
       unit:
       - super-fr:tests/unit/test_closeout_awaiting_live.py#test_a_refsd_issue_a_waiting_row_cites_gets_the_label_command
@@ -7087,11 +7087,11 @@ rows:
       session or a fresh one, later overlapping conflicts wait behind the first, and
       after two hand-backs without a merge the batch is listed under needs you
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R19
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R20
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R21
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R22
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R23
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R19
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R21
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R22
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R23
     levels: {}
     status: not-implemented
     notes: ''
@@ -7100,7 +7100,7 @@ rows:
     acceptance: On a real wave, a conflicted batch's live herdr session receives the
       hand-back brief, resolves, and pushes, and the train merges it
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
     levels: {}
     status: not-implemented
     notes: ''
@@ -7208,3 +7208,72 @@ rows:
     notes: TTL, fresh bypass and snapshot fallback pinned by unit tests with an injected
       clock and cache dir
     verify: none
+  - id: archive-prices-earlier-closeouts
+    capability: archive
+    acceptance: An fr archive that moves anything prices the sessions earlier closeouts
+      left unpriced, staging the refreshed implemented/usage files, and never fails
+      the archive doing so
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_followups.py#test_an_archive_that_moved_something_stages_each_refreshed_usage_file
+      - super-fr:tests/unit/test_usage_backfill.py
+      - super-fr:tests/unit/test_archive_followups.py#test_the_unpriced_note_promises_the_next_archive_will_price_it
+    status: ci
+    notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
+      is still owed'
+  - id: archive-retargets-matrix-refs
+    capability: archive
+    acceptance: After a successful archive, every same-repo matrix ref naming a moved
+      path points at its new location (only those bytes change) and the three reports
+      are regenerated, so fr acceptance check stays clean after closeout
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_retarget.py#test_other_repo_refs_notes_walks_and_comments_stay_byte_identical
+      - super-fr:tests/unit/test_archive_followups.py#test_a_plan_archive_retargets_matrix_refs_and_regenerates_the_reports
+      - super-fr:tests/unit/test_archive_followups.py#test_a_moved_then_exit_2_archive_still_retargets
+    status: ci
+    notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
+      is still owed'
+  - id: archive-files-open-ends
+    capability: archive
+    acceptance: fr archive lists the open and out-of-scope findings of the journals
+      it moves, files the chosen ones as tracker issues (deduplicated by marker, never
+      blocking the archive) and records each as deferred to its issue in the archived
+      journal
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_open_ends.py#test_issues_all_files_every_end_marks_it_and_defers_the_finding
+      - super-fr:tests/unit/test_archive_open_ends.py#test_an_issue_that_is_not_ours_or_only_quotes_the_marker_is_not_reused
+      - super-fr:tests/unit/test_archive_open_ends.py#test_non_interactive_with_no_flag_only_lists
+      - super-fr:tests/unit/test_archive_open_ends.py#test_archive_write_back_matches_the_journal_resolve_path
+    status: ci
+    notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
+      is still owed'
+  - id: closeout-brief-files-via-archive
+    capability: closeout
+    acceptance: The closeout brief hands out-of-scope findings to one fr archive --branch
+      <b> --issues <ids> command instead of per-finding manual journal lines
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_closeout.py#test_closeout_brief_archive_line_names_every_qid_and_the_way_to_file_none
+      - super-fr:tests/unit/test_run_closeout.py#test_closeout_brief_archive_line_parses_against_the_real_cli
+    status: ci
+    notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
+      is still owed'

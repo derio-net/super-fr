@@ -1,0 +1,165 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Open ends → issues (#458) and the closeout brief route
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - archive-files-open-ends
+  - closeout-brief-files-via-archive
+  tier: standard
+  files:
+  - packages/fr/src/fr/archive_followups.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/journal/model.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/run/closeout.py
+  - tests/unit/test_archive_followups.py
+  - tests/unit/test_run_closeout.py
+  - tests/unit/test_closeout_*.py
+  - tests/unit/test_record_*.py
+  - tests/unit/test_journal_*.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/skills/fr-goal/SKILL.md
+  - .hermes/skills/fr/fr-goal/SKILL.md
+  - docs/explainers/01-fr-goal.*
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: RED/GREEN — shared resolution_entry builder (R12)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: a test that fr.journal.model.resolution_entry(...) for a deferral (target
+      finding, taken ids, stamp, tracked_by=url, body=note, phase) equals the entry
+      record/apply.py builds for the same deferral today (same id, title, state=open,
+      tracked_by). Fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: extract the builder from record/apply.py:367-380 into journal/model.py;
+      apply.py calls it. All existing record/journal tests green.
+- number: 2
+  title: RED/GREEN — open_ends listing and qualified ids (R8, R9 selection)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests for fr.archive_followups.open_ends(repo_root, journals) (open and
+      out-of-scope kept, fixed/refuted/deferred dropped, qid `<scope>/<slug>/<id>`), and
+      select(listed, "all" | "a,b", repo_root) — a qid resolves against its journal, live
+      or archived; a bare id resolves only when it is unique among the listed; an unknown
+      or ambiguous id is refused with a reason. Fails.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/archive_followups.py (OpenEnd, open_ends, select,
+      journals_from_log). Tests green.
+- number: 3
+  title: RED/GREEN — deciding + filing + write-back (R10–R12)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: with a fake GhClient — `--issues all` files every end with the marker
+      `<!-- fr:journal <qid> -->` and label follow-up (an ensure_labels failure → filed
+      without the label); an open issue carrying the marker is reused; dedup falls back to
+      none on UnsupportedForgeOperation; a per-finding create failure is reported and the
+      rest proceed; each filed end gets a deferred record appended and staged, so the
+      journal folds it to `deferred`; tracking none and an invalid services declaration
+      list only; non-interactive with no flag lists only; interactive y/N/select via
+      monkeypatched is_interactive + input; `--issues` with `--no-issues` exits 2 before
+      any move; explicit qids file even when nothing moved. Fails.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: file_open_ends + the open-ends step of _after_moves; CLI options
+      `--issues TEXT` and `--no-issues`; repo slug from resolve_identity (an empty Matrix
+      when none exists). Tests green.
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: keep every forge call behind _make_gh_client (the existing seam);
+      ruff/mypy clean.
+- number: 4
+  title: RED/GREEN — closeout brief routes via fr archive --issues (R13)
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: test_run_closeout.py — the brief lists out-of-scope findings as
+      `  - <qid>: <title>` and one `fr archive --branch <b> --issues <qid,…>` line naming
+      `--no-issues`, with no per-finding `fr journal resolve` lines; tracking none wording
+      unchanged. Fails.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: update run/closeout.py and every test pinning the old lines. Tests green.
+- number: 5
+  title: Skill, mirrors and explainer prose
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      Update plugins/super-fr/skills/fr-goal/SKILL.md's post-merge close-out paragraph to
+      the `fr archive --branch <b> --issues <qids>` route; run
+      `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`; the mirror and tool-neutrality
+      tripwires green.
+  - id: P3.T5.S2
+    text: |-
+      Update docs/explainers/01-fr-goal.md's close-out passage and re-render the .html per
+      .claude/rules/explainers-currency.md (first verify that an unmodified render is
+      byte-identical; run from / with --isolated). If the renderer is unavailable, record
+      in the step record that the regeneration is owed.
+  - id: P3.T5.S3
+    text: |-
+      REFACTOR + gate: ruff, ruff format, mypy, and the full suite
+      `uv run pytest -q --no-cov -n auto` green.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T5.S1:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T5.S2:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+    P3.T5.S3:
+      state: x
+      ticked_at: '2026-10-06T18:57:12+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T18:57:12+00:00'
+    note: null
+    observed_prs: []
