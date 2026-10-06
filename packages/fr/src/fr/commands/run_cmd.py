@@ -2570,7 +2570,8 @@ def _verify_walk(
             )
             raise typer.Exit(2)
         return "none"
-    path = (Path(value).expanduser() if Path(value).is_absolute() else repo_root / value).resolve()
+    given = Path(value).expanduser()
+    path = (given if given.is_absolute() else repo_root / given).resolve()
     directory = walk_log_dir(state.run)
     if not path.is_relative_to(directory.resolve()):
         err_console.print(

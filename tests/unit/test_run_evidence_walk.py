@@ -281,3 +281,20 @@ def test_walks_run_reads_the_program_not_an_argument() -> None:
     assert not walks_run("echo fr verification walk --run w1", "w1")
     assert not walks_run("fr verification walk --run w2", "w1")
     assert not walks_run("fr verification check --run w1", "w1")
+
+
+def test_a_tilde_path_is_expanded_before_it_is_judged_relative(
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p3-r7: `walk=~/...` is the operator's home, not `<repo>/~/...`."""
+    root = _owed_good(tmp_path)
+    _forged(root, _home)
+    _session(tmp_path, monkeypatch, "fr verification walk --run w1 --model m")
+    state = load_run_state(root, RUN)
+    owed = run_cmd._walk_obligation("step/deliver", root, state)
+
+    got = run_cmd._verify_walk(
+        "step/deliver", f"~/.cache/fr/walks/{RUN}/forged.log", root, state, owed, opened=_OPENED
+    )
+
+    assert got.startswith("forged.log@")
