@@ -119,3 +119,168 @@ Only the live herdr hand-back stays post-merge. → R25.
 ### gate-question-rounds-brainstorm · decision · Operator gate `brainstorm` took two question rounds
 
 Trigger: design-risk. Round 1 Q1 replaced the proposed live/candidate/preview enum with an extensible, per-issue strategy vocabulary defaulted by shape; round 2 settled what a strategy is, where its default and per-issue choice live, how post-merge stays last resort, whether an operator walk blocks deliver, and what ships for pre-release.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-1 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-1 · finding [open] (reviewer: in scope) · R15 refuses this PR's own Closes lines for #959/#818
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-2 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-2 · finding [open] (reviewer: in scope) · Two post-merge rows contradict R25 and decision q11
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-3 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-3 · finding [open] (reviewer: in scope) · Run-level candidate makes R10 demand a scenario for every row
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-4 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-4 · finding [open] (reviewer: in scope) · No per-subcommand migration-gate exemption exists
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-5 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-5 · finding [open] (reviewer: in scope) · Earlier matrix hops still use the live parser
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-6 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-6 · finding [open] (reviewer: in scope) · Other verify == post-merge consumers go unnamed
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-7 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-7 · finding [open] (reviewer: in scope) · Record AcceptanceItem needs a 7→8 shape change
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-8 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-8 · finding [open] (reviewer: in scope) · Wheel copy made canonical, the reverse of workflows
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-9 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-9 · finding [open] (reviewer: in scope) · Omitting walk contradicts _verified_evidence rule 2
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-10 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-10 · finding [open] (reviewer: in scope) · Slug and issue-close rendering do not exist in the forge adapter
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-11 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-11 · finding [open] (reviewer: in scope) · Walk model has no detection source
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-12 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-12 · finding [open] (reviewer: in scope) · candidate-install omits the runner packages
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-13 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-13 · finding [open] (reviewer: in scope) · R22 conflict counting is ambiguous
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-14 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-14 · finding [open] (reviewer: in scope) · A blocked session may get the brief; R23 says capability
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-15 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-15 · finding [open] (reviewer: in scope) · R7 and §B precedence differ; row-level verify has no reason source
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-16 created=2026-10-06T11:14:23+00:00 state=open review_scope=in -->
+### sr-r1-16 · finding [open] (reviewer: in scope) · Test Plan reserved for post-merge while this spec's Test Plan is pre-merge
+
+See the reviewer's return (independent spec review, spec-review-r1). Evidence and file:line refs are as reported.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-r1 created=2026-10-06T11:14:23+00:00 -->
+### spec-review-r1 · review · Independent spec review: 16 findings, all in scope
+
+fr-spec-reviewer raised sr-r1-1..16, all in scope; all fixed in the spec. Decisions q1–q11 and r2q1–r2q6 were otherwise honoured, and the reviewer verified every named file:line it checked.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-1-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-1 -->
+### sr-r1-1-resolved · finding [fixed] · resolves sr-r1-1: R15 refuses this PR's own Closes lines for #959/#818
+
+§I: this PR's rows carry no issues:; the operator's Closes rule stands and #822 is not dogfooded on its own closing lines, stated in the PR body.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-2-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-2 -->
+### sr-r1-2-resolved · finding [fixed] · resolves sr-r1-2: Two post-merge rows contradict R25 and decision q11
+
+R25 now says only behaviour that cannot run pre-merge stays live, each with its reason; prerelease's pre-merge part is the new candidate row prerelease-command-shape (--dry-run argv + non-GitHub refusal); Test Plan lists both live rows.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-3-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-3 -->
+### sr-r1-3-resolved · finding [fixed] · resolves sr-r1-3: Run-level candidate makes R10 demand a scenario for every row
+
+Added the reserved override none (with a reason) to R6/R7/§B; ## Verification now maps every row: six candidate rows with scenarios, the rest live or none with reasons.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-4-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-4 -->
+### sr-r1-4-resolved · finding [fixed] · resolves sr-r1-4: No per-subcommand migration-gate exemption exists
+
+§A: the verification group stays under the gate as a whole, citing trigger.py:82-92/:223; walk reads the matrix with the live parser.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-5-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-5 -->
+### sr-r1-5-resolved · finding [fixed] · resolves sr-r1-5: Earlier matrix hops still use the live parser
+
+§B: guard_matrix (shared by 1→2 and 2→3) is re-pointed at the frozen MatrixV3 reader; the chain [2,3,4] is asserted.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-6-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-6 -->
+### sr-r1-6-resolved · finding [fixed] · resolves sr-r1-6: Other verify == post-merge consumers go unnamed
+
+§B lists pr_body._post_merge_owed, run/visual.py:67, acceptance_cmd.py:430-432 and record/template.py:109, all switched to effective.is_post_merge.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-7-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-7 -->
+### sr-r1-7-resolved · finding [fixed] · resolves sr-r1-7: Record AcceptanceItem needs a 7→8 shape change
+
+§B adds Record kind 7→8: widened verify, new fields, a frozen RecordV7 reader, a stamp migration and a validator.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-8-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-8 -->
+### sr-r1-8-resolved · finding [fixed] · resolves sr-r1-8: Wheel copy made canonical, the reverse of workflows
+
+§A: the plugin directory is canonical and the wheel copy is generated; author docs move to docs/verification-strategies.md and the fr-acceptance skill.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-9-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-9 -->
+### sr-r1-9-resolved · finding [fixed] · resolves sr-r1-9: Omitting walk contradicts _verified_evidence rule 2
+
+§C: the owed predicate runs before rule 2, and an absent walk is satisfied when not owed; Risks restated.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-10-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-10 -->
+### sr-r1-10-resolved · finding [fixed] · resolves sr-r1-10: Slug and issue-close rendering do not exist in the forge adapter
+
+§D uses resolve_identity and states how URLs normalise; §E widens hostclient's command table with issue-close/unlabel/label per backend and a manual line where tea lacks one.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-11-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-11 -->
+### sr-r1-11-resolved · finding [fixed] · resolves sr-r1-11: Walk model has no detection source
+
+R9/§C: --model is required on walk; the harness comes from detect_harness or --harness.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-12-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-12 -->
+### sr-r1-12-resolved · finding [fixed] · resolves sr-r1-12: candidate-install omits the runner packages
+
+§I: super-fr's contract mirrors install.sh's --with set for both source forms.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-13-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-13 -->
+### sr-r1-13-resolved · finding [fixed] · resolves sr-r1-13: R22 conflict counting is ambiguous
+
+R22/§G: at most 2 hand-backs per dispatch (session|fresh events since the latest dispatch); held events never count; needs-you clears on merge, cancel or a new dispatch; the message target is the latest fresh item, else the dispatch item.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-14-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-14 -->
+### sr-r1-14-resolved · finding [fixed] · resolves sr-r1-14: A blocked session may get the brief; R23 says capability
+
+R20/§G: message only an idle session; working or blocked waits for a later pass; R23/§G call it an optional protocol, not a CAPABILITIES entry.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-15-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-15 -->
+### sr-r1-15-resolved · finding [fixed] · resolves sr-r1-15: R7 and §B precedence differ; row-level verify has no reason source
+
+R7 matches §B (verify, override, strategy, shape); a spec line may give a reason for a matrix-level verify; the PR body prints 'no reason recorded (legacy)'; self-review refuses a run row without a reason.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-16-resolved created=2026-10-06T11:14:23+00:00 state=fixed resolves=sr-r1-16 -->
+### sr-r1-16-resolved · finding [fixed] · resolves sr-r1-16: Test Plan reserved for post-merge while this spec's Test Plan is pre-merge
+
+§I restated: the Test Plan lists post-merge rows with reasons, pre-merge walks live in ## Verification; this spec's Test Plan follows that.

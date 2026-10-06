@@ -6780,6 +6780,15 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
+  - id: prerelease-command-shape
+    capability: verification
+    acceptance: fr verification prerelease --dry-run prints the workflow dispatch for
+      a branch and its rc tag, and refuses on a non-GitHub forge
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: awaiting-live-triage
     capability: triage
     acceptance: Issues labelled fr:awaiting-live are listed as their own set, never
