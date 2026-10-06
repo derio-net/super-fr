@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-triage-dedupe
 workflow: fr-goal@1
 branch: feat/batch-triage-dedupe
 started: '2026-10-06T06:34:30+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -50,8 +50,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-06T08:27:16+00:00'
+    state: done
+    at: '2026-10-06T08:59:57+00:00'
     members:
     - implement-phase
     - review-phase
@@ -70,13 +70,20 @@ steps:
         evidence:
           visual: triage-dedupe-board:8:5b5ce4cd9d50
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T08:27:16+00:00'
           agent: aec058da657e26ec0
           harness: claude-code
           model: claude-opus-5-5
           session: 0ff4fc40-6789-4cab-8c02-9ebb25134314
+          returned: '2026-10-06T08:59:57+00:00'
+          outcome: done
+        evidence:
+          review: p1-review
+          reviewer: aec058da657e26ec0
+          visual: triage-dedupe-board:4:23d282c3c6f9
+          findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8,p1-r9,p1-r10,p1-o1
   journal-check:
     state: pending
   deliver:
