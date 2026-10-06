@@ -111,3 +111,63 @@ Caught by the post-review full suite (test_github_enterprise_is_asked_as_host_ow
 ### p1-x3 · finding [fixed] (reviewer: in scope) · p1-x2's fix dropped the trust gate from fr init scaffold's GHE issues probe (phase 1)
 
 Background security review: issues_enabled_for's host can come from a cloned repo's committed fr-profiles.yaml or its origin, and gh sends GH_ENTERPRISE_TOKEN to the host HOST/OWNER/REPO names, so giving the client no host bypassed the gate. Fixed: the client keeps the host; a GhHostRefusedError becomes a ServicesError naming gh auth login and --tracking, and no gh process starts (test_a_github_host_gh_is_not_logged_into_is_refused_not_probed). Note the pre-existing exposure (the probe contacted the configured host before this PR) is now closed too.
+
+<!-- fr:journal kind=decision scope=plan id=p2-lookups-trust-gate created=2026-10-06T08:48:33+00:00 phase=2 -->
+### p2-lookups-trust-gate · decision · The isolation lookups inherit the GitHub host trust gate (R6 over R2) (phase 2)
+
+`RealGhClient.default_branch` / `pr_for_branch` carry `@_hosted`, so a client built with
+a host gh is not logged into raises `GhHostRefusedError` from the lookups too, before any
+subprocess, rather than returning None. R2's "never raise" covers a CLI that fails, is
+missing or prints garbage; the refusal is not a CLI failure, and p1-gh-host-trust-gate
+already said phase 2's lookups inherit it. Reachable from isolation only when
+`.devcontainer/fr-profiles.yaml` DECLARES a GitHub host (client_for threads no derived
+host). The runner local.py injects carries no GH_HOST: inside a checkout gh infers the
+host from the remote, so the env is the network env, unchanged.
+
+<!-- fr:journal kind=decision scope=plan id=p2-run-cli-exit-127 created=2026-10-06T08:48:33+00:00 phase=2 -->
+### p2-run-cli-exit-127 · decision · The default runner reads a missing binary as exit 127, not None (phase 2)
+
+`fr.ghclient.run_cli` (the adapters' default `CommandRunner`) catches FileNotFoundError and
+returns a CompletedProcess with exit 127 (a shell's "command not found"), so each moved body
+reads it like any other failed call and returns None — no separate missing-binary branch
+in six lookup bodies. The GitHub default runner is `run_cli(..., env=_gh._env())`, read at
+call time inside the method's `@_hosted` scope, via a module-level `_gh_runner` (a method
+mentioning `_gh.` would itself have to be hosted).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-acceptance-rows-owed created=2026-10-06T08:48:33+00:00 phase=2 -->
+### p2-acceptance-rows-owed · discovery · forge-calls-through-adapter and isolation-lookups-every-forge are still not-implemented in the matrix (phase 2)
+
+The evidence their status move needs now exists — tests/unit/test_tripwire_forge_adapter.py
+(no allowlist), tests/unit/test_forge_adapter_lookups.py,
+tests/unit/test_isolation_network_timeouts.py#test_local_py_holds_no_forge_cli_argv,
+tests/unit/test_forge_error_kind.py and the ClientForge tests in test_triage_collect.py —
+but phase 2's tasks do not move them, and triage-batch-self-hosted-host (phase 1) is still
+not-implemented too. The acceptance-matrix rule wants them moved in the same PR
+(`fr acceptance set-status`); left for the orchestrator's delivery.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-dispatch-skill-not-mirrored created=2026-10-06T08:48:33+00:00 phase=2 -->
+### p2-dispatch-skill-not-mirrored · discovery · fr-dispatch has no OpenCode/Hermes mirror; only fr-triage's mirrors changed (phase 2)
+
+Both sync scripts ran; they regenerated .opencode/ and .hermes/ copies of fr-triage only.
+fr-dispatch lives in plugins/super-fr-dispatch, which neither script mirrors, so its edit
+has no generated counterpart.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-06T08:48:33+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+the three lookup bodies moved verbatim; the one shared piece (run_cli, the default runner reading a missing binary as exit 127) was extracted while writing them, so nothing was left to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-06T08:48:33+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+local.py only lost code; its json import is still used elsewhere in the file and detect_backend still serves push_check
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-06T08:48:33+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+ClientForge is a one-line delegation per read; the only tidy (a named _FAILURES tuple for _forge_errors) went in with the green step
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-10-06T08:48:33+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+forge_error_kind's GhError branch was folded onto a get_args(ForgeErrorKind) set in the green commit; nothing further to clean
