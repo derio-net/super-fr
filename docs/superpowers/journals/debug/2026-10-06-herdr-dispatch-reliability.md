@@ -29,3 +29,8 @@ agent start is attempted once against a pane whose shell may not be up (herdr fa
 ### 1567b0469681 · root-cause · Driver: a failed runner dispatch is a typer.Exit that ends loop mode
 
 Operator decision 2026-10-06: fix both causes in the one PR. _Driver._close_out and dispatch_batch _fail(code=1) on a runner exception; nothing in run_pass or the loop catches it. Fix: a typed failure the driver reports once per cause and retries on a later pass (failed_write set, so --once still exits 1); 'batch dispatch' keeps exiting 1.
+
+<!-- fr:journal kind=finding scope=debug id=runner-handoffs created=2026-10-06T15:54:41+00:00 state=fixed -->
+### runner-handoffs · finding [fixed] · Runner confirms the pane and the submit
+
+fr_herdr/runner.py: _start_agent retries agent_pane_busy (PANE_BUSY_TRIES=15, 2s apart), any other refusal raised as is; _submit uses agent prompt --wait --until working --until blocked --timeout 30000, and on agent_prompt_stalled sends one Enter and waits again (10s) before raising 'was not submitted'. HerdrError.code parsed from herdr's envelope. Pinned first by test_fr_herdr_runner.py (pane busy retried / bounded / other refusals not retried; stalled brief Enter-recovered / still stalled fails and closes the tab; error code parsed). Live-walked 2026-10-06: 3 real dispatches, one hit agent_pane_busy and recovered; every agent was working when dispatch returned; 'enter' accepted by send-keys (a bogus key is invalid_key).
