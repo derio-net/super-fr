@@ -60,11 +60,14 @@ def _attempt(repo: Path, key: str):
 def test_the_dispatched_executor_still_records_the_tiers_model(
     at_the_review: tuple[Path, Path],
 ) -> None:
-    """The control: this is about who ran the unit, not about models at all."""
+    """The control: this is about who ran the unit, not about models at all.
+    Since run version 9 the binding is recorded as `bound` (spec
+    2026-10-06-cost-evidence §D); `model` waits for what ran."""
     repo, _ = at_the_review
     executor = _attempt(repo, "phase/1/code")
     assert executor.agent_type == "super-fr:fr-phase-executor"
-    assert executor.model == "claude-opus-5"
+    assert executor.bound == "claude-opus-5"
+    assert executor.model is None
 
 
 def test_an_orchestrator_run_unit_records_no_model(at_the_review: tuple[Path, Path]) -> None:
@@ -73,6 +76,7 @@ def test_an_orchestrator_run_unit_records_no_model(at_the_review: tuple[Path, Pa
     assert review.agent_type is None
     assert review.harness == "claude-code"
     assert review.model is None
+    assert (review.tier, review.bound) == (None, None)
 
 
 def test_status_does_not_print_a_model_beside_the_orchestrator(

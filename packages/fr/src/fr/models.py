@@ -17,6 +17,7 @@ Config shape (``harness → tier → model``)::
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -108,3 +109,20 @@ def set_binding(path: Path, harness: str, tier: str, model: str) -> None:
     cfg.setdefault(harness, {})[tier] = model
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(cfg, sort_keys=True))
+
+
+_MODEL_DATE = re.compile(r"-\d{8}$")
+
+
+def model_family(model: str) -> str:
+    """`model` without a context-window suffix or a trailing snapshot date, so
+    a binding's `claude-haiku-4-5` and a transcript's
+    `claude-haiku-4-5-20251001` compare equal: the dispatch honoured the
+    binding, and a warning would be noise (review of gh#637).
+
+    Shared by `fr run resolve`'s observed-model warning and `fr run cost`'s
+    per-phase mismatch mark (spec 2026-10-06-cost-evidence §E), so the two can
+    never disagree about what counts as the same model."""
+    from fr.usage.readers.claude_code import normalize_model
+
+    return _MODEL_DATE.sub("", normalize_model(model))

@@ -3550,11 +3550,15 @@ def _open_dispatch(
             # debug journal C3) is that the orchestrator's model is no longer
             # invisible: its own transcript names it, so fr records what it
             # OBSERVES there — never a resolution — and `None` when it cannot.
-            model=(
-                _resolved_model(repo_root, harness, tier)
-                if agent_type is not None
-                else orchestrator_model(os.environ)
-            ),
+            #
+            # For a SUBAGENT attempt the binding is a prediction, so it goes
+            # into `bound` beside its `tier` (spec 2026-10-06-cost-evidence
+            # §D, R7) and `model` is left for what ran: a `--model` claim, or
+            # `_observed_model` at resolve. Before run version 9 the binding
+            # sat in `model`, which is why "ran" is shown only beside `bound`.
+            model=(None if agent_type is not None else orchestrator_model(os.environ)),
+            tier=(tier if agent_type is not None else None),
+            bound=(_resolved_model(repo_root, harness, tier) if agent_type is not None else None),
             # Derived from fr's OWN environment, exactly like `harness` — the
             # agent never reports it (§4.D.1). It is what lets a later session
             # read the RIGHT transcript directory, and what stops a window
@@ -3712,7 +3716,12 @@ def _observed_model(attempt: UnitAttempt, key: str) -> UnitAttempt:
     Observed beats bound and beats reported, as `orchestrator_model` already
     does for the orchestrator's own units; a difference is said aloud, never
     blocked. Unobservable leaves the attempt as it was — an absence is not
-    a mismatch."""
+    a mismatch.
+
+    The comparison is against `bound` (spec 2026-10-06-cost-evidence §D),
+    falling back to `model` for an attempt opened before run version 9, whose
+    `model` held the binding. `tier` and `bound` are never touched."""
+    from fr.models import model_family
     from fr.run.telemetry import subagent_model
 
     if attempt.agent is None or attempt.agent_type is None:
@@ -3720,27 +3729,15 @@ def _observed_model(attempt: UnitAttempt, key: str) -> UnitAttempt:
     observed = subagent_model(os.environ, attempt.session, attempt.agent)
     if observed is None or observed == attempt.model:
         return attempt
-    if attempt.model is not None and _model_family(observed) != _model_family(attempt.model):
+    expected = attempt.bound if attempt.bound is not None else attempt.model
+    if expected is not None and model_family(observed) != model_family(expected):
         err_console.print(
             f"[yellow]{key}: agent {attempt.agent} ran on {observed}, but the cursor "
-            f"recorded {attempt.model}. fr records what ran. If the tier's binding was "
+            f"recorded {expected}. fr records what ran. If the tier's binding was "
             "meant, pass that model in the dispatch.[/yellow]",
             soft_wrap=True,
         )
     return attempt.model_copy(update={"model": observed})
-
-
-_MODEL_DATE = re.compile(r"-\d{8}$")
-
-
-def _model_family(model: str) -> str:
-    """`model` without a context-window suffix or a trailing snapshot date, so
-    a binding's `claude-haiku-4-5` and a transcript's
-    `claude-haiku-4-5-20251001` compare equal: the dispatch honoured the
-    binding, and a warning would be noise (review of gh#637)."""
-    from fr.usage.readers.claude_code import normalize_model
-
-    return _MODEL_DATE.sub("", normalize_model(model))
 
 
 def _build_member_brief(
