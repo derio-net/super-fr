@@ -12,9 +12,11 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Literal, cast, get_args
 from urllib.parse import urlparse
 
 from fr import _hosts
+from fr import gh as _gh
 from fr.gh import GhError
 from fr.ghclient import GhClient
 from fr.glab import GlabError
@@ -27,6 +29,34 @@ from fr.tea import TeaError
 # class per backend CLI. A caller that collects per-item forge failures catches
 # exactly these, so a programming error is never reported as a forge failure.
 FORGE_ERRORS: tuple[type[Exception], ...] = (GhError, GlabError, TeaError)
+
+ForgeErrorKind = Literal["rate_limit", "info", "warn", "unknown"]
+_KINDS = frozenset(get_args(ForgeErrorKind))
+
+
+def forge_error_kind(exc: BaseException) -> ForgeErrorKind:
+    """Classify any forge error for retry / back-off (spec
+    2026-10-06-forge-remainder §4.C): `rate_limit` (back off the whole tick),
+    `info` (the target is gone), `warn` (transient) or `unknown`.
+
+    A `GhError` is `fr.gh._classify_error`'s call. A `GlabError` / `TeaError`
+    gets the same text rules over its stderr and message, with GitLab's and
+    Gitea's 429 counted as a rate limit beside GitHub's 403. Anything that is
+    not a forge error is `unknown`."""
+    if isinstance(exc, GhError):
+        kind = _gh._classify_error((exc.stderr or "") + " " + str(exc))
+        return cast("ForgeErrorKind", kind) if kind in _KINDS else "unknown"
+    if not isinstance(exc, (GlabError, TeaError)):
+        return "unknown"
+    text = ((exc.stderr or "") + " " + str(exc)).lower()
+    if ("403" in text or "429" in text) and "rate limit" in text:
+        return "rate_limit"
+    if "404" in text or "not found" in text:
+        return "info"
+    if any(pat in text for pat in _gh._TRANSIENT_PATTERNS):
+        return "warn"
+    return "unknown"
+
 
 # The command fr names when it tells an agent to open, edit or ready a PR,
 # per backend (gh#742: a refusal that says `gh pr create` on a GitLab
