@@ -39,3 +39,8 @@ gh#998: TriageConfig is extra=forbid and the driver reads .fr/triage.yaml from t
 ### f-883 · finding [fixed] · Batch drive-restart-forge: investigation
 
 Close-out recorded before runner.dispatch (handle=item.id), rolled back on a dispatch failure, the runner's handle swapped in after. Pinned by test_the_closeout_is_recorded_before_its_tab_starts, test_a_restart_after_the_closeout_tab_ended_starts_no_second_closeout, test_a_closeout_the_runner_fails_to_start_is_not_left_recorded.
+
+<!-- fr:journal kind=finding scope=debug id=f-921 created=2026-10-06T13:58:52+00:00 state=fixed -->
+### f-921 · finding [fixed] · Batch drive-restart-forge: investigation
+
+Fetch/config failures raise ForgeReadError (skip pass); an archive merge refusal and an update-push GitError are reported once and retried, --once exits 1; GIT_TIMEOUT_SECONDS bounds git (never post_merge); skipped repos are left out of the selection, warned once, counted pending. Pinned by the gh#921 tests in tests/unit/test_triage_batch_drive_disruption.py.
