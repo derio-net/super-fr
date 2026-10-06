@@ -257,6 +257,44 @@ def test_an_install_that_touches_the_operators_fr_fails_loudly(
 
     assert result.exit_code == 2
     assert "operator's own fr" in result.output.replace("\n", " ")
+    # Review p3-r3: every step of that log passed, so the log itself must say
+    # the operator's fr moved — or a later `deliver` would accept it.
+    from fr.verification.walk import WalkOwed, check_walk_log, parse_walk_log
+
+    log = parse_walk_log(_logs(_home)[0].read_text())
+    assert ("operator-fr-unchanged", 1) in [(s.name, s.exit) for s in log.steps]
+    problems = check_walk_log(log, WalkOwed(), log.code_tree, run=RUN)
+    assert any("operator-fr-unchanged" in p for p in problems)
+    assert not any(s.name.startswith("row:") for s in log.steps)  # stopped at the install
+
+
+def test_a_scenario_that_touches_the_operators_fr_fails_the_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _home: Path
+) -> None:
+    """The guard runs at the end too: a row's scenario is a child as well."""
+    pinned = tmp_path / "operator" / "fr"
+    pinned.parent.mkdir()
+    pinned.write_text("#!/bin/sh\necho operator\n")
+    monkeypatch.setenv("FR_HARNESS_FR", str(pinned))
+    root = _repo(tmp_path, rows={"ok": f'echo tampered >> "{pinned}"'})
+
+    assert _walk(root, "--row", "ok").exit_code == 2
+
+    from fr.verification.walk import parse_walk_log
+
+    steps = parse_walk_log(_logs(_home)[0].read_text()).steps
+    assert steps[-1].name == "operator-fr-unchanged" and steps[-1].exit != 0
+
+
+def test_the_throwaway_prefix_is_removed_after_the_walk(tmp_path: Path, _home: Path) -> None:
+    """Review p3-r8: the candidate install is throwaway — nothing stays behind."""
+    root = _repo(tmp_path, rows={"ok": 'echo "prefix=$FR_WALK_PREFIX"'})
+
+    assert _walk(root, "--row", "ok").exit_code == 0
+
+    text = _logs(_home)[0].read_text()
+    prefix = Path(text.split("prefix=", 1)[1].split("\n", 1)[0])
+    assert prefix.name.startswith("fr-walk-") and not prefix.exists()
 
 
 def test_the_candidate_never_sees_the_operators_identity_pin(

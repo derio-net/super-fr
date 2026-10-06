@@ -58,6 +58,7 @@ STEP_TIMEOUT_SECONDS = 1800
 SMOKE_VERSION = "smoke:version"
 SMOKE_STATUS = "smoke:status"
 INSTALL = "install"
+OPERATOR_FR = "operator-fr-unchanged"
 ROW_PREFIX = "row:"
 _SEPARATOR = "---"
 
@@ -364,7 +365,11 @@ def run_walk(
 
     Raises `WalkError` before anything runs for a missing contract, scenario or
     unsupported source, and AFTER the log is written when the install moved the
-    operator's `fr` — that is a failure louder than any step's exit code.
+    operator's `fr` — that is a failure louder than any step's exit code. The
+    log says so too (review p3-r3): the operator's `fr` is fingerprinted right
+    after the install (a moved one stops the walk there) and again at the end,
+    and a change is a failing `operator-fr-unchanged` step, so the log never
+    reads as a pass `deliver` would take.
     """
     base = dict(os.environ if env is None else env)
     _contract(repo_root, manifest)
@@ -386,88 +391,111 @@ def run_walk(
 
     before = operator_fr_fingerprint(base)
     prefix = Path(tempfile.mkdtemp(prefix="fr-walk-")).resolve()
-    bin_dir = prefix / "bin"
-    child = {
-        **{k: v for k, v in base.items() if k != "FR_HARNESS_FR"},
-        "UV_TOOL_DIR": str(prefix / "uv-tools"),
-        "UV_TOOL_BIN_DIR": str(bin_dir),
-        "FR_WALK_PREFIX": str(prefix),
-        "PATH": f"{bin_dir}{os.pathsep}{base.get('PATH', '')}",
-    }
-    fixture = prefix / "fixture"
-    values = {
-        "repo": str(repo_root),
-        "worktree": str(repo_root),
-        "prefix": str(prefix),
-        "bin": str(bin_dir),
-        "fixture": str(fixture),
-        "client": str(client) if client is not None else str(fixture),
-        "source": str(repo_root),
-    }
-    ran: list[_Ran] = []
+    # Throwaway (review p3-r8): removed once the log is written and the
+    # operator's fr checked — whatever the walk's outcome.
+    try:
+        bin_dir = prefix / "bin"
+        child = {
+            **{k: v for k, v in base.items() if k != "FR_HARNESS_FR"},
+            "UV_TOOL_DIR": str(prefix / "uv-tools"),
+            "UV_TOOL_BIN_DIR": str(bin_dir),
+            "FR_WALK_PREFIX": str(prefix),
+            "PATH": f"{bin_dir}{os.pathsep}{base.get('PATH', '')}",
+        }
+        fixture = prefix / "fixture"
+        values = {
+            "repo": str(repo_root),
+            "worktree": str(repo_root),
+            "prefix": str(prefix),
+            "bin": str(bin_dir),
+            "fixture": str(fixture),
+            "client": str(client) if client is not None else str(fixture),
+            "source": str(repo_root),
+        }
+        ran: list[_Ran] = []
 
-    def record(name: str, argv: Sequence[str], cwd: Path) -> str:
-        r, out = _run(name, argv, cwd, child)
-        ran.append(r)
-        return out
+        def record(name: str, argv: Sequence[str], cwd: Path) -> str:
+            r, out = _run(name, argv, cwd, child)
+            ran.append(r)
+            return out
 
-    def render_template(template: Sequence[str], **extra: str) -> list[str]:
-        argv = render_argv(template, {**values, **extra})
-        # A repo-relative program (`.fr/candidate-install`) runs from the repo.
-        if "/" in argv[0] and not os.path.isabs(argv[0]):
-            argv[0] = str(repo_root / argv[0])
-        return argv
+        def render_template(template: Sequence[str], **extra: str) -> list[str]:
+            argv = render_argv(template, {**values, **extra})
+            # A repo-relative program (`.fr/candidate-install`) runs from the repo.
+            if "/" in argv[0] and not os.path.isabs(argv[0]):
+                argv[0] = str(repo_root / argv[0])
+            return argv
 
-    assert manifest.install is not None
-    out = record(INSTALL, render_template(manifest.install), repo_root)
-    if ran[-1].step.exit == 0:
-        tool = next((ln.strip() for ln in reversed(out.splitlines()) if ln.strip()), "")
-        if not tool:
-            ran[-1] = _Ran(
-                WalkStep(INSTALL, 1, ran[-1].step.seconds),
-                ran[-1].output + "\nthe install printed no tool name on its last line\n",
-            )
-        else:
-            tool_path = str(bin_dir / tool)
-            fixture.mkdir()
-            record("smoke:fixture", ["git", "init", "-q", str(fixture)], prefix)
-            record(SMOKE_VERSION, [tool_path, "--version"], prefix)
-            record(SMOKE_STATUS, [tool_path, "status"], fixture)
-            for row in rows:
-                if client is not None:
-                    cwd = client
-                else:
-                    cwd = prefix / f"work-{row.id}"
-                    shutil.copytree(fixture, cwd)
-                argv = render_template(
-                    manifest.scenario or ("{scenario}",), scenario=str(scenarios[row.id])
+        def operator_fr_moved() -> str | None:
+            """A failing `operator-fr-unchanged` step when the operator's `fr` is
+            no longer what it was before the walk; the change, else `None`."""
+            after = operator_fr_fingerprint(base)
+            if after == before:
+                return None
+            change = f"{before} -> {after}"
+            ran.append(
+                _Ran(
+                    WalkStep(OPERATOR_FR, 1, 0.0),
+                    f"the operator's own fr changed ({change}) — a candidate install must "
+                    "stay inside its prefix (gh#683)\n",
                 )
-                if not _is_executable(Path(argv[0])) and Path(argv[0]).is_file():
-                    argv = ["sh", *argv]
-                record(f"{ROW_PREFIX}{row.id}", argv, cwd)
+            )
+            return change
 
-    steps = tuple(r.step for r in ran)
-    body = "\n".join(f"=== {r.step.name} (exit {r.step.exit}) ===\n{r.output}" for r in ran)
-    log = WalkLog(
-        run=run,
-        strategy=manifest.verification,
-        code_tree=code_tree,
-        harness=harness,
-        model=model,
-        steps=steps,
-        body=body,
-    )
-    directory = walk_log_dir(run)
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{now().strftime('%Y%m%dT%H%M%SZ')}.log"
-    path.write_text(log.render())
-    after = operator_fr_fingerprint(base)
-    if after != before:
-        raise WalkError(
-            f"the install changed the operator's own fr ({before} -> {after}) — a candidate "
-            "install must stay inside its prefix; the log was written to " + str(path)
+        assert manifest.install is not None
+        out = record(INSTALL, render_template(manifest.install), repo_root)
+        moved = operator_fr_moved()
+        if moved is None and ran[-1].step.exit == 0:
+            tool = next((ln.strip() for ln in reversed(out.splitlines()) if ln.strip()), "")
+            if not tool:
+                ran[-1] = _Ran(
+                    WalkStep(INSTALL, 1, ran[-1].step.seconds),
+                    ran[-1].output + "\nthe install printed no tool name on its last line\n",
+                )
+            else:
+                tool_path = str(bin_dir / tool)
+                fixture.mkdir()
+                record("smoke:fixture", ["git", "init", "-q", str(fixture)], prefix)
+                record(SMOKE_VERSION, [tool_path, "--version"], prefix)
+                record(SMOKE_STATUS, [tool_path, "status"], fixture)
+                for row in rows:
+                    if client is not None:
+                        cwd = client
+                    else:
+                        cwd = prefix / f"work-{row.id}"
+                        shutil.copytree(fixture, cwd)
+                    argv = render_template(
+                        manifest.scenario or ("{scenario}",), scenario=str(scenarios[row.id])
+                    )
+                    if not _is_executable(Path(argv[0])) and Path(argv[0]).is_file():
+                        argv = ["sh", *argv]
+                    record(f"{ROW_PREFIX}{row.id}", argv, cwd)
+
+        if moved is None:
+            moved = operator_fr_moved()
+        steps = tuple(r.step for r in ran)
+        body = "\n".join(f"=== {r.step.name} (exit {r.step.exit}) ===\n{r.output}" for r in ran)
+        log = WalkLog(
+            run=run,
+            strategy=manifest.verification,
+            code_tree=code_tree,
+            harness=harness,
+            model=model,
+            steps=steps,
+            body=body,
         )
-    return path, log
+        directory = walk_log_dir(run)
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{now().strftime('%Y%m%dT%H%M%SZ')}.log"
+        path.write_text(log.render())
+        if moved is not None:
+            raise WalkError(
+                f"the install changed the operator's own fr ({moved}) — a candidate "
+                "install must stay inside its prefix; the log was written to " + str(path)
+            )
+        return path, log
+    finally:
+        shutil.rmtree(prefix, ignore_errors=True)
 
 
 def _is_executable(path: Path) -> bool:
