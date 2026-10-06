@@ -1,2 +1,0 @@
-bump: minor
-summary: "Model bindings survive provider churn: OpenCode bindings are probed live, dead ones are replaced by family then tier, asked at a terminal or the fr-goal gate and decided-and-journaled mid-run (#591)"
