@@ -74,8 +74,8 @@ issues:
     verified: true          # re-read at current main, not copied from the issue
     detail: "`gc()` trusts `MERGED` and calls `down()`. **Still live** on main (issue cites :1013, now :1312)."
     note: "Batch with super-fr#469, same subsystem."
-  "super-fr#470": {tier: 1, duplicate_of: "super-fr#435", distinct_from: ["super-fr#469"]}  # original (never a duplicate itself, no chains); keys judged NOT duplicates, each once
     kind: defect            # optional: defect | feature | parked (parked = deliberately not now)
+  "super-fr#470": {tier: 1, duplicate_of: "super-fr#435", distinct_from: ["super-fr#469"]}  # original (never a duplicate itself, no chains); keys judged NOT duplicates, each once
 features:                   # optional ranked groups; "start" is shown, never run
   - rank: 1
     title: "Isolation GC"
