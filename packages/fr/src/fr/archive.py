@@ -16,7 +16,9 @@ import os
 import subprocess
 import tempfile
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -52,6 +54,7 @@ __all__ = [
     "archive_journal",
     "DefaultRef",
     "MergeEvidence",
+    "MoveLog",
     "SpecSweepResult",
     "archive_plan_dir",
     "archive_run_cursor",
@@ -62,6 +65,7 @@ __all__ = [
     "landed_for",
     "merge_evidence",
     "paths_dirty",
+    "recording_moves",
     "spec_archive_sweep",
 ]
 
@@ -360,6 +364,30 @@ def paths_dirty(repo_root: Path, *paths: Path) -> bool:
     return bool(out.strip())
 
 
+@dataclass
+class MoveLog:
+    """The ``(src_rel, dst_rel)`` pairs ``_git_mv`` staged, in order."""
+
+    moves: list[tuple[Path, Path]] = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return bool(self.moves)
+
+
+_MOVE_LOG: ContextVar[MoveLog | None] = ContextVar("fr_archive_move_log", default=None)
+
+
+@contextmanager
+def recording_moves() -> Iterator[MoveLog]:
+    """Record every ``_git_mv`` made inside the block (spec 2026-10-06 §0)."""
+    log = MoveLog()
+    token = _MOVE_LOG.set(log)
+    try:
+        yield log
+    finally:
+        _MOVE_LOG.reset(token)
+
+
 def _git_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> None:
     (repo_root / dst_rel).parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -373,6 +401,9 @@ def _git_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> None:
         raise ArchiveError(
             f"git mv {src_rel} -> {dst_rel} failed: {(e.stderr or '').strip()}"
         ) from e
+    log = _MOVE_LOG.get()
+    if log is not None:
+        log.moves.append((src_rel, dst_rel))
 
 
 def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
