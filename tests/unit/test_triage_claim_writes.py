@@ -293,3 +293,47 @@ def test_a_failed_marker_post_keeps_the_label_another_claim_needs(
     with pytest.raises(FakeGhError):
         _claim(gh)
     assert "fr:claimed" in gh.issues[(REPO, 1)].labels
+
+
+# ------------------------------------------- two writers, ours older (review p1-r9)
+
+
+def test_two_near_simultaneous_writers_the_older_marker_wins_and_the_rival_withdraws(
+    gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R4 from both sides: both scopes read an unclaimed issue, both post. Ours lands
+    150 ms before theirs, so ours wins; the rival's own re-read sees it lose and it
+    withdraws its marker. The label stays: our claim stands."""
+    ours_at = NOW + timedelta(milliseconds=100)
+    theirs_at = NOW + timedelta(milliseconds=250)
+    gh.comment_created_at = ours_at.isoformat()
+    post = gh.comment_issue
+
+    def both_post(repo: str, number: int, body: str) -> None:
+        post(repo, number, body)  # ours, id 1001
+        # the rival read the issue unclaimed too, and its marker lands just after ours
+        rival = Marker(signer=OTHER, batch="theirs", claimed=NOW, heartbeat=NOW, expires=NOW + DAY)
+        gh.issue_comments[(repo, number)].append(
+            {
+                "association": "MEMBER",
+                "author": "peer-host",
+                "body": render_marker(rival),
+                "created_at": theirs_at.isoformat(),
+                "id": 1002,
+            }
+        )
+
+    monkeypatch.setattr(gh, "comment_issue", both_post)
+    assert _claim(gh) == cw.Done("posted", 1001)
+    # the rival's post-write re-read: R4 says ours is older, so it withdraws its own
+    rival_out = cw.claim(
+        gh, REPO, 1, me=OTHER, batch="theirs", expiry=DAY, now=NOW, trusted=TRUSTED
+    )
+    assert isinstance(rival_out, cw.Held) and rival_out.claim.signer == ME
+    mine, theirs = _markers(gh)
+    assert (mine.signer, mine.released) == (ME, None)
+    assert theirs.signer == OTHER and theirs.released is not None
+    assert "fr:claimed" in gh.issues[(REPO, 1)].labels
+    assert isinstance(
+        cw.refresh(gh, REPO, 1, me=OTHER, expiry=DAY, now=NOW, trusted=TRUSTED), cw.Held
+    )
