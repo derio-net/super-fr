@@ -9,3 +9,8 @@
 ### repro-1001 · repro · Wave table wraps ids at every hyphen at 390px
 
 Rendered the live super-fr board from a scratch copy of the triage state and opened it at 390x844. The wave table sat in a 720px scroller (p2-r2's fix), but split its width over 8 columns: Batch ~84px, Issues ~92px, so 'debug-journal-push' and 'super-fr#871' wrapped at each hyphen. Why took 217px.
+
+<!-- fr:journal kind=finding scope=debug id=fix-987 created=2026-10-06T08:35:53+00:00 state=fixed -->
+### fix-987 · finding [fixed] · Driver records merge stops; board reads them
+
+New fr.triage.merge_stops (merge-stops.json beside drive.lock, not judgements.yaml: a new event kind would break every older closed-world reader). _merge_batch records a stop at action.head unless HeadMovedError and clears on merge/already-merged. build_board(stops=) counts a stop only while the PR is OPEN at that head: hint 'needs you: merge stopped: <reason>', needs_you; a batch whose after names it waits on it (the pure pass otherwise planned its dispatch as if the merge landed). Tests: test_triage_kanban merge-stop tests, test_triage_merge_stops, test_a_stopped_merge_is_recorded_for_the_board_and_cleared_when_it_lands, test_a_moved_head_is_not_recorded_as_a_stop.
