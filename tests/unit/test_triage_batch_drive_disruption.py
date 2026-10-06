@@ -47,6 +47,7 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 — fixtures
     _state,
     _StopError,
     checkout_fixture,
+    git_checkout,
     runner_fixture,
     sleeps_fixture,
     world_fixture,
@@ -687,3 +688,120 @@ def test_a_restart_that_cannot_exec_says_why_and_how_to_resume(
     assert "could not restart" in result.output
     assert "fr triage batch drive" in result.output
     assert not (tmp_path / "drive.lock").exists()
+
+
+# ------------------- gh#1025 (1): a failed fetch while dispatching skips the pass
+
+
+def test_a_failed_fetch_for_a_dispatch_does_not_end_the_loop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """`dispatch_batch` fetches to reserve a version; that fetch failing during a forge
+    outage is a read the pass depends on, not a `batch dispatch` refusal (gh#1025)."""
+    _proposed(world, tmp_path, n=1)
+    fetches: list[int] = []
+
+    def _fetch() -> None:
+        fetches.append(1)
+        if len(fetches) == 1:
+            raise GitError("`git fetch` failed: Could not resolve host: github.com")
+
+    monkeypatch.setattr(checkout, "fetch", _fetch)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("Could not resolve host") == 1
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1"]
+
+
+def test_batch_dispatch_by_hand_still_exits_2_on_a_failed_fetch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """The verb keeps its exit code: only the driver reads a failed fetch as a skip."""
+    from typer.testing import CliRunner
+
+    from fr.cli import app
+
+    _proposed(world, tmp_path, n=1)
+
+    def _fetch() -> None:
+        raise GitError("`git fetch` failed: Could not resolve host: github.com")
+
+    monkeypatch.setattr(checkout, "fetch", _fetch)
+    result = CliRunner().invoke(
+        app,
+        ["triage", "batch", "dispatch", "b1", "--yes", "--repo", REPO, "--dir", str(tmp_path)],
+    )
+    assert result.exit_code == 2, result.output
+    assert "Could not resolve host" in result.output
+    assert runner.dispatched == []
+
+
+# ------------------------- gh#1025 (2): a failed export write skips, never ends
+
+
+def test_a_refused_export_merge_does_not_end_the_loop_and_is_reported_once(
+    tmp_path: Path, world: World, git_checkout: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_triage_batch_drive_cmd import _export_pr, _finished_wave, _recorded
+
+    sha = _export_pr(world, git_checkout.path)
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+    real = world.pr_merge
+    tries: list[int] = []
+
+    def _merge(repo: str, number: int, **kw: Any) -> None:
+        tries.append(number)
+        if len(tries) <= 2:
+            raise GhError("HTTP 502: Bad Gateway", returncode=1)
+        real(repo, number, **kw)
+
+    monkeypatch.setattr(world, "pr_merge", _merge)
+    _naps_until(monkeypatch, 3)
+    result = _drive_named(state, "--yes", "--keep-sessions")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("Bad Gateway") == 1
+    assert world.merged == [(40, sha, "squash")]
+
+
+def test_a_refused_export_pr_does_not_end_the_loop(
+    tmp_path: Path, world: World, git_checkout: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_triage_batch_drive_cmd import _finished_wave
+
+    state = _finished_wave(tmp_path, world)
+    real = world.pr_create
+    tries: list[str] = []
+
+    def _create(repo: str, **kw: Any) -> int:
+        tries.append(repo)
+        if len(tries) == 1:
+            raise GhError("HTTP 502: Bad Gateway", returncode=1)
+        return real(repo, **kw)
+
+    monkeypatch.setattr(world, "pr_create", _create)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(state, "--yes", "--keep-sessions")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("Bad Gateway") == 1
+    assert len(tries) == 2  # retried on the next pass, and opened
+
+
+def test_once_exits_1_on_a_refused_export_merge(
+    tmp_path: Path, world: World, git_checkout: Any
+) -> None:
+    from tests.unit.test_triage_batch_drive_cmd import (
+        _export_drive,
+        _export_pr,
+        _finished_wave,
+        _recorded,
+    )
+
+    sha = _export_pr(world, git_checkout.path)
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+    world.refuse_merge = "HTTP 502: Bad Gateway"
+    code, out = _export_drive(state, "--once", "--yes")
+    assert code == 1, out
+    assert "Bad Gateway" in out
