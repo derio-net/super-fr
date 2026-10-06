@@ -519,3 +519,42 @@ each extra orphan warned stale once (d9eb4fc1a); tests test_every_orphan_besides
 ### p4-archive-pr-base-unchecked-resolved · finding [out-of-scope] · resolves p4-archive-pr-base-unchecked: the wave driver's archive-PR merge path never checks the PR's base branch either (phase 4)
 
 Pre-existing behaviour of the archive path; to be filed as its own issue at the merge touchpoint.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-blocked-on-969 created=2026-10-06T06:23:23+00:00 phase=5 -->
+### p5-blocked-on-969 · discovery · Task 2 unblocked: PR #969 merged (phase 5)
+
+PR #969 (chore/triage-state) merged to origin/main. Coordinator merged main into
+feat branch (commit b8a528795). No rebase needed. Task 2 proceeded with fresh
+import/render verification.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-t1-skills-documented created=2026-10-06T06:23:23+00:00 phase=5 -->
+### p5-t1-skills-documented · discovery · Task 1 complete: Skills document pages, fragments, and fields (phase 5)
+
+All three skills (fr-triage, fr-origins, fr-audit) now document:
+- Four page goals and their use cases
+- Fragment manifests for hand-written analysis
+- New fields: severity, duplicate_of, fixed_by, introduced_in
+- Schema versions and export config
+- History verb and state export/import verbs
+Tests pass: 13 new tests validate the documentation, tripwires enforce skill length and tool neutrality.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-t2-state-configured created=2026-10-06T06:23:23+00:00 phase=5 -->
+### p5-t2-state-configured · discovery · Task 2 complete: Triage state configured for export (phase 5)
+
+P5.T2.S1 completed: deleted docs/triage/sync.sh; rewrote README.md sync commands to use
+`uv run fr triage state import --from docs/triage --repo derio-net/super-fr` and export;
+created history/manifest.yaml with timeline, finished-waves, and three dated fragments
+(closing order, origins analysis, history to 2026-10-02); dropped moved sections from
+architecture manifest; added `export: {path: docs/triage}` to .fr/triage.yaml (spec R13).
+P5.T2.S2 verified: import succeeded, architecture and history renders show no missing-fragment
+or moved-name warnings.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-10-06T06:23:23+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+Prose skills have no refactor step; documentation additions are concise and targeted
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-10-06T06:23:23+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+file moves, a deleted script and one config key: no code to clean

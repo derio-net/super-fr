@@ -179,7 +179,7 @@ steps:
           visual: none
           findings: p4-sec-symlink-follow,p4-sec-root-symlink-traversal,p4-export-backlog-of-finished-waves,p4-sec-unpinned-merge,p4-sec-file-list,p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7,p4-r8,p4-r9,p4-r10,p4-r11,p4-r12,p4-r13,p4-r14,p4-r15,p4-r16,p4-archive-pr-base-unchecked
       phase/5/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T00:00:59+00:00'
           agent: a625432f4d0c77eb6
@@ -187,6 +187,11 @@ steps:
           harness: claude-code
           model: claude-haiku-4-5-20251001
           session: a95011be-df46-40a9-a07a-e24ccd3c8a59
+          returned: '2026-10-06T06:23:24+00:00'
+          outcome: done
+        evidence:
+          tests: p5-suite.log@1cfca94f9d83;tree=fe30553f1957235e2dc4c75da45035e3ff4ee8fa13954ead52d8f5e81c581992
+          visual: none
   journal-check:
     state: pending
   deliver:
