@@ -33,9 +33,16 @@ AUTO = "auto"
 
 def issues_enabled_for(repo_root: Path, forge_type: str, host: str | None) -> bool | None:
     """Ask the forge whether issues are on for `repo_root`'s origin project.
-    None — unknown — on every failure, and always for tea."""
+    None — unknown — on every failure, and always for tea.
+
+    The one failure that is NOT unknown is the host trust gate's refusal (spec
+    2026-10-06-forge-remainder §4.E): `host` may come from a cloned repo's
+    committed `fr-profiles.yaml` or its origin, and gh sends
+    `GH_ENTERPRISE_TOKEN` to whatever host a `HOST/OWNER/REPO` names. So the
+    client keeps the host (the gate applies), and a refusal becomes a
+    `ServicesError` naming the `gh auth login` that unlocks it."""
     from fr._hosts import origin_slug
-    from fr.hostclient import client_for_backend
+    from fr.hostclient import FORGE_ERRORS, client_for_backend
 
     slug = origin_slug(repo_root)
     if slug is None or forge_type not in FORGE_TYPES:
@@ -43,7 +50,14 @@ def issues_enabled_for(repo_root: Path, forge_type: str, host: str | None) -> bo
     repo = slug
     if forge_type == "github" and host and host != "github.com":
         repo = f"{host}/{slug}"  # GitHub Enterprise: gh takes HOST/OWNER/REPO
-    return client_for_backend(forge_type, host=host).issues_enabled(repo)  # type: ignore[arg-type]
+    client = client_for_backend(forge_type, host=host)  # type: ignore[arg-type]
+    try:
+        return client.issues_enabled(repo)
+    except FORGE_ERRORS as exc:  # issues_enabled soft-fails all else: this is the refusal
+        raise ServicesError(
+            f"cannot ask the forge whether issues are enabled: {exc} — or pass "
+            f"`--tracking none` / `--tracking {forge_type}`"
+        ) from exc
 
 
 def _check_type(service: str, value: str, allowed: tuple[str, ...], flag: str) -> None:

@@ -98,9 +98,10 @@ def _cp(rc: int = 0, out: str = "") -> subprocess.CompletedProcess[str]:
 def test_default_branch_lookup_is_bounded_and_falls_back_on_timeout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str, prefix: tuple[str, ...]
 ) -> None:
-    import fr.isolation.local as local
+    import fr._hosts as _hosts
 
-    monkeypatch.setattr(local, "detect_backend", lambda _p: backend)
+    monkeypatch.setattr(_hosts, "detect_backend", lambda _p: backend)
+    monkeypatch.setattr(_hosts, "declared_host", lambda _p: None)
     repo = make_repo(tmp_path)
     rec = _Scripted({("git", "symbolic-ref"): _cp(1), prefix: _cp(124)})
     target = LocalWorktreeDevcontainerTarget(repo, runner=rec)
@@ -138,9 +139,10 @@ def _merged_answers(fetch_default: subprocess.CompletedProcess[str]) -> dict:
 def test_verify_merge_fetch_is_bounded_and_a_timeout_is_not_verified(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import fr.isolation.local as local
+    import fr._hosts as _hosts
 
-    monkeypatch.setattr(local, "detect_backend", lambda _p: "github")
+    monkeypatch.setattr(_hosts, "detect_backend", lambda _p: "github")
+    monkeypatch.setattr(_hosts, "declared_host", lambda _p: None)
     repo = make_repo(tmp_path)
     st = _state(repo, tmp_path)
     ok = _Scripted(_merged_answers(_cp(0)))
@@ -158,9 +160,10 @@ def test_verify_merge_fetch_is_bounded_and_a_timeout_is_not_verified(
 def test_verify_merge_reaped_fetches_are_bounded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import fr.isolation.local as local
+    import fr._hosts as _hosts
 
-    monkeypatch.setattr(local, "detect_backend", lambda _p: "github")
+    monkeypatch.setattr(_hosts, "detect_backend", lambda _p: "github")
+    monkeypatch.setattr(_hosts, "declared_host", lambda _p: None)
     repo = make_repo(tmp_path)
     rec = _Scripted(_merged_answers(_cp(0)))
     target = LocalWorktreeDevcontainerTarget(repo, runner=rec)
@@ -199,9 +202,10 @@ def test_verify_merge_reaped_fetches_are_bounded(
 def test_verify_merge_reaped_default_fetch_timeout_is_not_verified(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import fr.isolation.local as local
+    import fr._hosts as _hosts
 
-    monkeypatch.setattr(local, "detect_backend", lambda _p: "github")
+    monkeypatch.setattr(_hosts, "detect_backend", lambda _p: "github")
+    monkeypatch.setattr(_hosts, "declared_host", lambda _p: None)
     repo = make_repo(tmp_path)
     rec = _Scripted(_merged_answers(_cp(124)))
     res = LocalWorktreeDevcontainerTarget(repo, runner=rec).verify_merge_reaped("feat/x", "main")
@@ -213,9 +217,10 @@ def test_reap_hazard_fetch_is_bounded_and_timeout_is_unverifiable(
 ) -> None:
     """_reap_hazard's fetch to origin/<default> uses _run_network (bounded by
     network timeout) and returns an unverifiable hazard when it times out."""
-    import fr.isolation.local as local
+    import fr._hosts as _hosts
 
-    monkeypatch.setattr(local, "detect_backend", lambda _p: "github")
+    monkeypatch.setattr(_hosts, "detect_backend", lambda _p: "github")
+    monkeypatch.setattr(_hosts, "declared_host", lambda _p: None)
     repo = make_repo(tmp_path)
     st = _state(repo, tmp_path)
 
@@ -239,3 +244,23 @@ def test_reap_hazard_fetch_is_bounded_and_timeout_is_unverifiable(
     assert hazard is not None
     assert hazard.kind == "unverifiable"
     assert "could not be checked against origin/main" in hazard.detail
+
+
+def test_local_py_holds_no_forge_cli_argv() -> None:
+    """The lookups run through the forge adapter (spec 2026-10-06-forge-remainder
+    R3, Test Plan 7). R7's tripwire only sees `gh`, so this pins glab and tea
+    too: no list literal in local.py may start a forge CLI command."""
+    import ast
+
+    import fr.isolation.local as local
+
+    tree = ast.parse(Path(local.__file__).read_text(encoding="utf-8"))
+    argvs = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.List)
+        and len(node.elts) > 1
+        and isinstance(node.elts[0], ast.Constant)
+        and node.elts[0].value in {"gh", "glab", "tea"}
+    ]
+    assert argvs == [], f"forge CLI argv in local.py at lines {argvs}"

@@ -921,7 +921,11 @@ def verify_merge(
     _refuse_external(target, "verify-merge")
     # Resolve default_branch if not explicitly provided
     if default_branch is None:
-        default_branch = _worktree_ops(target)._resolve_default_branch()
+        try:
+            default_branch = _worktree_ops(target)._resolve_default_branch()
+        except IsolationError as e:  # a refused forge lookup (exit 2: it disproves nothing)
+            _fail(e)
+            return
     # Exit 2 (usage), never 1, on a raised IsolationError: 1 means "not
     # verified — recover", and an unresolvable ref/base disproves nothing
     # about the merge.
