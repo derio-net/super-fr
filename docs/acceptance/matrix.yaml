@@ -7174,9 +7174,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cost_phases.py#test_the_command_prints_the_role_split_and_the_phase_table
+      - super-fr:tests/unit/test_pr_body_cost.py#test_the_cost_section_carries_the_per_phase_table
+      - super-fr:tests/unit/test_pr_body_cost.py#test_the_phase_markdown_marks_a_mismatch
+    status: ci
+    notes: 'Unit-pinned by this PR (phase 2): fr run cost and the PR body render the
+      per-phase table; the live post-merge run (verify: live) is still owed.'
     verify: live
   - id: model-binding-set-probe
     capability: model-bindings
