@@ -250,7 +250,7 @@ def _repo_on(tmp_path: Path, backend: str) -> Path:
             "gitea",
             "tea issues close 3 --repo o/r",
             "tea issues edit 3 --repo o/r --add-labels fr:awaiting-live",
-            "# tea has no unlabel command: remove the fr:awaiting-live label from o/r#3 by hand",
+            "tea issues edit 3 --repo o/r --remove-labels fr:awaiting-live",
         ),
     ],
 )

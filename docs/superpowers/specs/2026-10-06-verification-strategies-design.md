@@ -408,8 +408,7 @@ evidence) and `issue-unlabel`:
 
 - `gh issue close <n> --comment …` and `gh issue edit <n> --remove-label …`;
 - `glab issue close <n>` and `glab issue update <n> --unlabel …`;
-- `tea issues close <n>`. tea has no unlabel command, so fr prints a one-line manual
-  instruction instead.
+- `tea issues close <n>` and `tea issues edit <n> --remove-labels …`.
 
 Under `tracking: none`, set-status prints nothing.
 

@@ -39,9 +39,7 @@ FORGE_ERRORS: tuple[type[Exception], ...] = (GhError, GlabError, TeaError)
 #
 # Issue ops (spec 2026-10-06-verification-strategies §E, R16): `{number}` and
 # `{repo}` come from an `owner/repo#n` ref, `{comment}` and `{label}` are
-# shell-quoted by `issue_command`. glab's `issue close` takes no comment. The
-# spec records tea as having no unlabel command, so fr prints a one-line manual
-# instruction there instead of a command (a `#` line, so pasting it runs nothing).
+# shell-quoted by `issue_command`. glab's `issue close` takes no comment.
 FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
     "github": {
         "create": "gh pr create --draft --body-file {body}",
@@ -68,9 +66,7 @@ FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
         "fill": 'tea pulls create --title "<title>"',
         "issue-close": "tea issues close {number} --repo {repo}",
         "issue-label": "tea issues edit {number} --repo {repo} --add-labels {label}",
-        "issue-unlabel": (
-            "# tea has no unlabel command: remove the {label} label from {repo}#{number} by hand"
-        ),
+        "issue-unlabel": "tea issues edit {number} --repo {repo} --remove-labels {label}",
     },
 }
 
@@ -108,17 +104,15 @@ def pr_command(repo_root: Path, op: str, **fields: str) -> str:
 def issue_command(repo_root: Path, op: str, *, ref: str, comment: str = "", label: str = "") -> str:
     """The `op` (issue-close | issue-label | issue-unlabel) command for
     `repo_root`'s forge against the issue `ref` (`owner/repo#n`) — see
-    `ISSUE_COMMANDS`. `comment` and `label` are shell-quoted; the manual line
-    a backend prints instead of a command uses them as written."""
+    `ISSUE_COMMANDS`. `comment` and `label` are shell-quoted."""
     import shlex
 
     m = _ISSUE_REF.match(ref)
     if m is None:
         raise ValueError(f"issue ref {ref!r} must be owner/repo#n")
     template = ISSUE_COMMANDS[_hosts.detect_backend(repo_root)][op]
-    quote = (lambda v: v) if template.startswith("#") else shlex.quote
     return template.format(
-        repo=m["repo"], number=m["number"], comment=quote(comment), label=quote(label)
+        repo=m["repo"], number=m["number"], comment=shlex.quote(comment), label=shlex.quote(label)
     )
 
 
