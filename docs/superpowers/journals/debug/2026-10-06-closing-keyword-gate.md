@@ -44,3 +44,8 @@ Reviewer in a separate, read-only context (no shell; findings re-checked here by
 ### o1 · finding [open] (reviewer: out of scope) · A reference list wrapped inside a blockquote is not joined
 
 '> Closes #1,\n> #2': _LIST_GLUE has no '>' so the quote's second line is not read as a continuation. Pre-existing (the line-scoped gate missed it too), rare, and not part of #869's live evidence, which covered plain line breaks.
+
+<!-- fr:journal kind=finding scope=debug id=o1-resolved created=2026-10-06T16:59:54+00:00 state=open resolves=o1 out_of_scope=true -->
+### o1-resolved · finding [out-of-scope] · resolves o1: A reference list wrapped inside a blockquote is not joined
+
+Pre-existing: the gate before this change missed it too; not caused by this change. Recorded in the PR body for the operator to file or drop.
