@@ -39,3 +39,8 @@ Item 1: dispatch_batch/_reservation take read_errors=True from the driver only; 
 ### f-1025-3 · finding [fixed] · #1025 item 3 fixed: a stale pre-recorded close-out is warned once
 
 batch_drive._stale_closeout: a close-out event older than STALE_CLOSEOUT (15 min), whose item the runner does not hold live and that no archive PR is attributed to, is a once-said warn naming fr pickup --run/--branch. Only for batches in Snapshot.closeout_probed, which the command fills (yes mode only) and probes through _existing alongside the due ones, so plan mode never calls one stale. Tests: test_triage_batch_drive.py (gh#1025 (3)) and test_triage_batch_drive_disruption.py.
+
+<!-- fr:journal kind=finding scope=debug id=f-1025-4 created=2026-10-06T17:11:28+00:00 state=fixed -->
+### f-1025-4 · finding [fixed] · #1025 item 4 fixed: bulk gh lists get a page-scaled bound
+
+gh._bound: a call carrying --limit N is bounded by list_timeout(N) = GH_TIMEOUT_SECONDS + 30s per 100-record page past the first, capped at GH_LIST_TIMEOUT_CAP_SECONDS (600s); every other call keeps 120s. Derived in _run_gh from the args so no call site or test fake changes. The gh#909 stall test now pins the cap. Tests: test_gh.py TestRunGhTimeout.
