@@ -101,3 +101,8 @@ Pre-existing stderr-text classification, unchanged by this phase. The refusal is
 ### p1-x1-resolved · finding [out-of-scope] · resolves p1-x1: GitLab host threading (gh#490) passes URL/config hosts to glab without a trust gate (phase 1)
 
 It predates this change (gh#490). File it as a follow-up to give glab the same hosts trust gate.
+
+<!-- fr:journal kind=finding scope=plan id=p1-x2 created=2026-10-06T08:26:59+00:00 phase=1 state=fixed review_scope=in -->
+### p1-x2 · finding [fixed] (reviewer: in scope) · p1-r1's fix let the trust-gate refusal fail fr init scaffold's GHE issues probe (phase 1)
+
+Caught by the post-review full suite (test_github_enterprise_is_asked_as_host_owner_repo): issues_enabled_for passed the host to the GitHub client although the probe already names it as HOST/OWNER/REPO, so the now-unswallowed GhHostRefusedError failed the scaffold for a host gh was not logged into. Fixed in 742c56a68: the probe gives the GitHub client no host. pr_observe, the other URL-host caller, catches and logs every error, so its refusal is a logged warning naming gh auth login.
