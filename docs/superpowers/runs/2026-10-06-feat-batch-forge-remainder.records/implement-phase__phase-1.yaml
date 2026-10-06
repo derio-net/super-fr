@@ -1,0 +1,53 @@
+schema_version: 7
+run: 2026-10-06-feat-batch-forge-remainder
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1]
+refactor:
+  P1.T3: "client_for gained one backend branch and a narrowed warning condition; the two host sources (declared for github, host_for for gitlab) are deliberately different, so there is no duplication to fold."
+  P1.T4: "client_for_url is the promoted body of pr_state's private helper, moved unchanged; pr_state and make_client each became a one-line call. Nothing left to clean."
+journal:
+  - kind: decision
+    id: p1-gh-host-trust-gate
+    phase: 1
+    title: GH_HOST is threaded only for a host gh is logged into; any other fails closed
+    body: |
+      `gh help environment`: GH_ENTERPRISE_TOKEN "will be used when a command targets a GitHub
+      Enterprise Server host". So GH_HOST=<any non-github.com host> sends the operator's enterprise
+      token to that host. The hosts fr threads come from sources that are not fully trusted: a URL
+      (`client_for_url`, fed by PR/issue URLs) and a cloned repo's committed
+      `.devcontainer/fr-profiles.yaml` (`client_for`'s declared host). A hostile value would leak
+      the credential.
+
+      So `fr.gh.known_hosts()` reads the top-level keys of gh's own `hosts.yml`
+      (`$GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`; missing, unreadable or
+      malformed = empty set), the hosts the operator ran `gh auth login` for. `_env()` is the one
+      enforcement point, so every gh subprocess path (`_run_gh`, `view_pr_body`, phase 2's lookups)
+      inherits it: a scoped host not in that set raises GhError ("GitHub host '<h>' is not one gh is
+      logged into; run `gh auth login --hostname <h>` ...") before any subprocess starts. It never
+      falls back to github.com, which would be #892's wrong-target write again. The check is lazy
+      (call time, not `RealGhClient.__init__`), so building a client reads nothing. RealGhClient
+      methods that already fail soft on GhError (file_exists, list_dir, list_linked_prs,
+      pr_status_by_url, issues_enabled) return their soft value for an unknown host, still with no
+      subprocess. Orchestrator decision; the spec records it in R6/§4.E.
+  - kind: decision
+    id: p1-hosted-decorator
+    phase: 1
+    title: RealGhClient scopes its host with one @_hosted decorator, guarded structurally
+    body: |
+      Each RealGhClient method that reaches fr.gh is wrapped by `_hosted`, which enters
+      `fr.gh.host_scope(self._host)` and marks the wrapper `__fr_hosted__`.
+      `test_gh_host.py::test_every_gh_method_is_hosted` fails if any method whose source mentions
+      `_gh.` lacks it (shown red by removing one decorator), so a new method cannot silently run
+      against gh's default host.
+  - kind: discovery
+    id: p1-smoke-baseline
+    phase: 1
+    title: Smoke baseline green; PR 994 CI not red
+    body: |
+      test_hostclient.py + test_tripwire_forge_adapter.py passed (17) before any change. `gh pr
+      checks 994`: every finished job passed, the test shards were still pending, nothing red.
+resolves: []
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a7f0f06a-d6c5-4034-aef8-2da990b37338/scratchpad/p1-suite.log
