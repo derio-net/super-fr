@@ -201,3 +201,8 @@ R2: at most one un-released marker per signer; re-claim posts a new one. R3/§3.
 ### sr-12-resolved · finding [fixed] · resolves sr-12: Verification row descriptions do not cover several requirements their rows claim
 
 Every Verification row now names the tests that cover each requirement it maps.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-06-triage-claims-p1 created=2026-10-06T18:46:39+00:00 -->
+### tier-2026-10-06-triage-claims-p1 · decision · hard: phase 1 owns the claim race and release lifecycle, a concurrency path every triage write relies on
+
+R4's oldest-un-released-wins race, the exclusive host-id create, release timing against close-out, and batch-command gates ordered before the runner launch are concurrency and gate paths; spec review sr-1..sr-7 showed how easily they go subtly wrong.
