@@ -92,8 +92,8 @@ class _Forge(FakeForge):
 
 def test_facts_are_written_at_the_current_schema() -> None:
     forge = _Forge(issues={REPO: []}, prs={REPO: []}, open_prs=[])
-    assert FACTS_SCHEMA == 4
-    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 4
+    assert FACTS_SCHEMA == 5
+    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 5
 
 
 def test_a_linked_open_pr_gains_files_head_oid_checks_and_merge_state_from_the_join() -> None:
@@ -444,6 +444,26 @@ def test_schema_3_facts_round_trip_through_the_loader(tmp_path: Path) -> None:
     path.write_text(json.dumps(facts.to_json()), encoding="utf-8")
 
     assert load_facts(path) == facts
+
+
+def test_schema_5_facts_carry_mirrors_and_schema_4_files_still_read(tmp_path: Path) -> None:
+    forge = _Forge(
+        issues={REPO: []},
+        prs={REPO: []},
+        open_prs=[],
+        file_bodies={(REPO, CONFIG_PATH, "HEAD"): _CONFIG + 'mirrors: [["uv", "run", "sync.py"]]\n'},
+    )
+    facts = collect_facts(forge, SCOPE, now=NOW)
+    assert facts.schema_ == FACTS_SCHEMA == 5
+    assert facts.config_for(REPO).mirrors == [["uv", "run", "sync.py"]]
+    path = tmp_path / "facts.json"
+    doc = facts.to_json()
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_facts(path) == facts
+
+    doc["schema"] = 4  # a file an older fr wrote: no `mirrors` worth reading, same shape
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_facts(path).schema_ == 4
 
 
 def test_schema_2_facts_are_refused_with_the_recollect_message(tmp_path: Path) -> None:

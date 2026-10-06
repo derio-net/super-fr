@@ -38,11 +38,14 @@ from fr.triage.stage import Stage, derive_stage
 # The version this fr WRITES for facts.json, on EVERY scope. 4 added the `group` scope kind
 # (wave-driver §H), and since then every scope's file carries keys a schema-3 reader
 # (closed-world) rejects: `viewer`, `judged_prs`, per-PR `author`/`cross_repo`, per-config
-# `post_merge`/`pr_authors`, nullable `checks`. Stamping a repo or org file 3 would turn
-# that reader's "unsupported schema; re-run collect" into "invalid facts" (gh#885). 3 still
-# loads, and the first collect upgrades it. Independent of JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[4] = 4
-FACTS_READS: tuple[int, ...] = (3, 4)
+# `post_merge`/`pr_authors`, nullable `checks`. 5 is the same story for per-config `mirrors`
+# (verification-strategies §G; `to_json` is a full `model_dump`, so every file carries it): a
+# schema-4 reader would answer "invalid facts" where "re-run collect" is owed. (`export`, per
+# config, was in the same position at 4; it is left as it is.) Stamping a file lower would
+# turn that reader's "unsupported schema; re-run collect" into "invalid facts" (gh#885).
+# 3 and 4 still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
+FACTS_SCHEMA: Literal[5] = 5
+FACTS_READS: tuple[int, ...] = (3, 4, 5)
 # The version this fr WRITES: every engine write stamps 5 (spec
 # 2026-10-06-verification-strategies §G: the `conflict` event; 4 was
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
@@ -359,7 +362,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4] = Field(4, alias="schema")
+    schema_: Literal[3, 4, 5] = Field(5, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
