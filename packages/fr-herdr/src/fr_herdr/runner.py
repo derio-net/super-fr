@@ -65,7 +65,7 @@ from fr_herdr._herdr import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from fr_dispatch.protocols import CloseOutcome, SessionStatus
+    from fr_dispatch.protocols import CloseOutcome, RestartSummary, SessionStatus
     from fr_dispatch.work_item import WorkItem
 
 
@@ -192,6 +192,19 @@ class HerdrRunner:
         """Prompt the item's agent with *text* (spec 2026-10-06-verification-strategies
         §G, R23): `herdr agent prompt <agent_name(item.id)> <text>`."""
         _run_herdr(["agent", "prompt", agent_name(item.id), text])
+
+    def restart_idle(self, *, exclude: Sequence[str] = ()) -> RestartSummary:
+        """Restart every idle claude pane via the engine, `yes=True` (spec
+        2026-10-06-driver-sessions §B); its report becomes a `RestartSummary`."""
+        from fr_dispatch.protocols import RestartSummary
+
+        report = restart.restart_idle(yes=True, exclude=exclude)
+        verdicts = [line.verdict for line in report.lines]
+        return RestartSummary(
+            ok=verdicts.count("ok"),
+            skipped=verdicts.count("skip"),
+            failed=tuple((ln.pane_id, ln.detail) for ln in report.lines if ln.verdict == "fail"),
+        )
 
     def can_dispatch(self, item: WorkItem) -> bool:
         return item.unit in self.units and item.payload.get("harness") in HARNESSES
@@ -418,6 +431,7 @@ if TYPE_CHECKING:
         SessionFocuser,
         SessionInspector,
         SessionMessenger,
+        SessionRestarter,
     )
 
     # Conformance check: `Runner` is not runtime-checkable, so this assignment is
@@ -427,3 +441,4 @@ if TYPE_CHECKING:
     _inspects: SessionInspector = HerdrRunner()
     _focuses: SessionFocuser = HerdrRunner()
     _messages: SessionMessenger = HerdrRunner()
+    _restarts: SessionRestarter = HerdrRunner()

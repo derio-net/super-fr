@@ -92,8 +92,8 @@ class _Forge(FakeForge):
 
 def test_facts_are_written_at_the_current_schema() -> None:
     forge = _Forge(issues={REPO: []}, prs={REPO: []}, open_prs=[])
-    assert FACTS_SCHEMA == 5
-    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 5
+    assert FACTS_SCHEMA == 6
+    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 6
 
 
 def test_a_linked_open_pr_gains_files_head_oid_checks_and_merge_state_from_the_join() -> None:
@@ -456,7 +456,7 @@ def test_schema_5_facts_carry_mirrors_and_schema_4_files_still_read(tmp_path: Pa
         },
     )
     facts = collect_facts(forge, SCOPE, now=NOW)
-    assert facts.schema_ == FACTS_SCHEMA == 5
+    assert facts.schema_ == FACTS_SCHEMA == 6
     assert facts.config_for(REPO).mirrors == [["uv", "run", "sync.py"]]
     path = tmp_path / "facts.json"
     doc = facts.to_json()
@@ -548,3 +548,39 @@ def test_a_second_collect_does_not_look_up_a_batch_found_merged_by_the_first(
     assert len(forge.called("list_prs_by_head")) == 1
     facts = load_facts(tmp_path / "facts.json")
     assert [(p.number, p.state) for p in facts.batch_prs] == [(40, "MERGED")]
+
+
+def test_schema_6_facts_carry_the_restart_config_and_schema_5_files_still_read(
+    tmp_path: Path,
+) -> None:
+    """driver-sessions §C: `post_merge_restart` and `idle_session_minutes` ride in the
+    config's full dump, so the stamp moves 5 -> 6 and 5 still loads."""
+    from fr.triage.model import FACTS_READS, TriageConfig
+
+    assert FACTS_SCHEMA == 6 and FACTS_READS == (3, 4, 5, 6)
+    default = TriageConfig()
+    assert (default.post_merge_restart, default.idle_session_minutes) == ("none", 60)
+    forge = _Forge(
+        issues={REPO: []},
+        prs={REPO: []},
+        open_prs=[],
+        file_bodies={
+            (REPO, CONFIG_PATH, "HEAD"): _CONFIG
+            + "post_merge_restart: idle\nidle_session_minutes: 30\n"
+        },
+    )
+    facts = collect_facts(forge, SCOPE, now=NOW)
+    assert facts.schema_ == 6
+    assert facts.config_for(REPO).post_merge_restart == "idle"
+    assert facts.config_for(REPO).idle_session_minutes == 30
+    path = tmp_path / "facts.json"
+    doc = facts.to_json()
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_facts(path) == facts
+    doc["schema"] = 5
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_facts(path).schema_ == 5
+    with pytest.raises(ValueError):
+        TriageConfig(idle_session_minutes=0)
+    with pytest.raises(ValueError):
+        TriageConfig(post_merge_restart="all")  # type: ignore[arg-type]

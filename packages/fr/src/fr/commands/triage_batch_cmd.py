@@ -1562,6 +1562,9 @@ class _Driver:
         self._runners: dict[str, Runner] = {}
         self._unloadable: set[str] = set()  # runners that failed to load, reported once
         self._probes: dict[str, tuple[Runner, Any]] = {}  # per pass: live item id -> its runner
+        # per pass: runner name -> the close-out probe, for every runner whose close-out
+        # followed a successful `post_merge` in a repo that opted in (driver-sessions sr-7)
+        self._restart: dict[str, Any] = {}
         self._merge: dict[str, MergeContext] = {}
         # The waves this process's previous pass found unfinished; None before its first
         # pass, so a wave already finished at start is never reported (R10).
@@ -2225,6 +2228,7 @@ class _Driver:
         _, facts, judgements = _load_state(self.scope, self.target)
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._clone_unread = {}
+        self._restart = {}
         self._stopped, self._queued, self._conflicts = {}, 0, {}
         self._export_refusals = 0
         self._export_failures = 0
@@ -2275,6 +2279,7 @@ class _Driver:
             )
         _say(summary_line(summary))
         if self.yes:
+            self._restart_sessions()
             self._write_board()
         else:
             _say("nothing done; re-run with --yes to act")
@@ -2282,6 +2287,40 @@ class _Driver:
         stuck += [f"export wave {a.wave} {a.batch}" for a in plan.actions
                   if a.wave is not None and a.kind == "warn"]  # fmt: skip
         return acted, summary, stuck
+
+    def _restart_sessions(self) -> None:
+        """Restart idle sessions once per recorded runner, after every close-out this pass
+        started (driver-sessions §B, sr-7). Soft like `_sessions`: a runner that cannot
+        load, refuses, or cannot restart is reported once per process, a raise is reported,
+        and none of it holds the drive or changes `--once`'s exit code."""
+        from fr_dispatch.protocols import SessionRestarter
+
+        for name, probe in self._restart.items():
+            runner = self._try_runner(name)
+            if runner is None:
+                continue
+            if not isinstance(runner, SessionRestarter):
+                self._report_once(f"restart\0{name}", f"runner `{name}` cannot restart sessions")
+                continue
+            try:
+                refusal = runner.preflight([probe])
+                if refusal:
+                    self._report_once(
+                        f"restart\0{name}\0{refusal}",
+                        f"runner `{name}` cannot restart sessions: {refusal}",
+                    )
+                    continue
+                result = runner.restart_idle()
+            except Exception as exc:  # noqa: BLE001 - upkeep, never the drive's work
+                err_console.print(
+                    f"[yellow]warning:[/yellow] restarting `{escape(name)}` sessions failed: "
+                    f"{escape(str(exc) or type(exc).__name__)}",
+                    soft_wrap=True,
+                )
+                continue
+            _say(f"restart: {result.ok} ok, {result.skipped} skipped, {len(result.failed)} failed")
+            for pane, reason in result.failed:
+                _say(f"restart failed {pane}: {reason}")
 
     def _write_board(self) -> None:
         """Render `board.html` from what this pass left on disk (R11). A board that cannot
@@ -2641,6 +2680,7 @@ class _Driver:
         except TriageError as exc:
             return f"close-out held: {exc}", False
         command = facts.config_for(repo).post_merge
+        post_merged = False
         if action.post_merge and command:
             try:
                 checkout.run_command(command)
@@ -2650,6 +2690,7 @@ class _Driver:
                 judgements, facts, batch, PostMergeEvent(kind="post_merge", at=_now_after(batch))
             )
             judgements = load_judgements(self.target / "judgements.yaml")
+            post_merged = True
             installed = _installed_version()
             if installed is not None and installed != __version__:
                 self.restart_to = installed  # after this pass: see `batch_drive_command`
@@ -2660,6 +2701,11 @@ class _Driver:
         archive = housekeeping_branch(branch, run, plan_slug)
         item_id = closeout_item_id(repo, batch.id)
         launch = self._launch(facts, batch, repo)
+        if post_merged and facts.config_for(repo).post_merge_restart == "idle":
+            name = str(launch.runner)  # restarted once at the end of the pass, not here
+            self._restart.setdefault(
+                name, probe_item(repo, batch, closeout=True, prefix=self.workspace_prefix)
+            )
         if action.recorded:
             self._append(
                 judgements, facts, batch,

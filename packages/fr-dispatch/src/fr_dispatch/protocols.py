@@ -24,6 +24,7 @@ lets one bad call kill the loop (apply's doctrine).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -174,6 +175,27 @@ class SessionMessenger(Protocol):
 
     def message(self, item: WorkItem, text: str) -> None:
         """Submit *text* to the item's session as a prompt. Raising is a failed send."""
+        ...
+
+
+@dataclass(frozen=True)
+class RestartSummary:
+    """What `SessionRestarter.restart_idle` did: sessions restarted, left alone, and the
+    (pane, reason) of each that failed."""
+
+    ok: int
+    skipped: int
+    failed: tuple[tuple[str, str], ...] = ()
+
+
+@runtime_checkable
+class SessionRestarter(Protocol):
+    """An optional protocol beside `Runner`, never part of it: restart the runner's idle
+    sessions so they load what a merge installed (spec 2026-10-06-driver-sessions §B).
+    The wave driver calls it once per pass; *exclude* names panes never to touch."""
+
+    def restart_idle(self, *, exclude: Sequence[str] = ()) -> RestartSummary:
+        """Restart every idle session. Raising is a failed restart."""
         ...
 
 
