@@ -49,3 +49,8 @@ Fetch/config failures raise ForgeReadError (skip pass); an archive merge refusal
 ### f-998 · finding [fixed] · Batch drive-restart-forge: investigation
 
 parse_triage_config(lenient=True) drops unknown top-level keys inside the drive only (collect_into, check_config_fresh, dispatch_batch), warned once; hand-run collect stays strict; after a post_merge that installs a newer fr the loop finishes its pass, releases drive.lock and re-execs on it. Pinned by the gh#998 tests in the same file.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-10-06T14:01:44+00:00 -->
+### review-1 · review · Batch drive-restart-forge: investigation
+
+Independent adversarial review (separate context, read-only) of the fix diff: no high-severity defect. Fixed: an os.execv failure on restart exited with a traceback; it now exits 1 naming how to resume (test_a_restart_that_cannot_exec_says_why_and_how_to_resume). Accepted as designed: a deterministic GitError on an update push is retried every pass, but reported once and recorded as a board stop; a permanently skipped repo is waited on, warned once; a dropped unknown config key is not enforced until a newer fr runs (operator's lenient choice); runner preflight and dispatch refusals still exit (pinned design, not a forge failure); closing_ref is pure string formatting on gh, so it is not a forge read. Deferred to gh#1025: the dispatch-path fetch and export-path _fail exits, a stale pre-recorded close-out warning (the new crash window between record and tab start), and #921 item 4's uniform gh timeout.
