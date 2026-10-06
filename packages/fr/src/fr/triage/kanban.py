@@ -28,12 +28,17 @@ from fr.triage.batch import (
     last_dispatch,
 )
 from fr.triage.batch_drive import (
+    ARCHIVE_PREFIXES,
     AWAITING_LIVE_HOLD,
     Action,
+    IdleSession,
+    LivePr,
+    attributed,
     closeout_event,
     closeout_item_id,
     default_selection,
     drive_pass,
+    idle_session,
 )
 from fr.triage.merge_stops import MergeStop, live_stop
 from fr.triage.model import (
@@ -108,6 +113,31 @@ HINT_REVIEW = "awaiting review"
 HINT_ARCHIVE_PENDING = "archive PR pending"
 HINT_CLOSEOUT_NOT_RECORDED = "close-out not recorded"
 HINT_FINISHED = "finished"
+
+
+def _idle_hint(idle: IdleSession, collected_at: str) -> str:
+    """The card's line for an idle session (driver-sessions R8): how long, and what is
+    missing. "No PR" is as of the last collect, so a PR opened since reads missing until
+    the next one (sr-9): the line says when."""
+    what = "no archive PR" if idle.closeout else "no PR"
+    return f"idle {idle.minutes} min, {what} as of {collected_at}"
+
+
+def _archive_prs(batch_repo_: str, facts: Facts) -> list[LivePr]:
+    """The collected archive PRs of *batch_repo_*, as the driver's attribution reads them."""
+    return [
+        LivePr(
+            number=p.number,
+            state=p.state,
+            draft=p.is_draft,
+            head=p.head_oid,
+            head_ref=p.head_ref,
+            files=tuple(p.files),
+            trusted=not p.cross_repo,
+        )  # fmt: skip
+        for p in facts.prs
+        if p.repo == batch_repo_ and p.head_ref.startswith(ARCHIVE_PREFIXES)
+    ]
 
 
 # ---------------------------------------------------------------- the model
@@ -310,6 +340,33 @@ def _event_row(event: object) -> EventRow:
     return EventRow(getattr(event, "kind", "event"), event.at, "")  # type: ignore[attr-defined]
 
 
+def _idle_of(
+    batch: Batch,
+    facts: Facts,
+    repo: str | None,
+    status: BoardStatus | None,
+    closeout_status: BoardStatus | None,
+    now: datetime | None,
+) -> IdleSession | None:
+    """The batch's idle session by `idle_session`, the driver's own rule, judged at *now*
+    (the wall clock: session status is live). None without a clock or a repo."""
+    if now is None or repo is None:
+        return None
+    threshold = facts.config_for(repo).idle_session_minutes
+    has_pr = batch_pr(batch, facts) is not None
+    event = closeout_event(batch)
+    archive = event is not None and any(
+        attributed(p, batch, event) for p in _archive_prs(repo, facts)
+    )
+    return idle_session(
+        batch, repo=repo, closeout=False, status=status, has_pr=has_pr,
+        archive_attributed=archive, now=now, threshold=threshold,
+    ) or idle_session(
+        batch, repo=repo, closeout=True, status=closeout_status, has_pr=has_pr,
+        archive_attributed=archive, now=now, threshold=threshold,
+    )  # fmt: skip
+
+
 def _card(
     batch: Batch,
     facts: Facts,
@@ -318,6 +375,7 @@ def _card(
     actions: Mapping[str, Action],
     selected: frozenset[str],
     stops: Mapping[str, MergeStop],
+    now: datetime | None = None,
 ) -> Card:
     column = column_of(batch, facts, batches)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
@@ -331,11 +389,14 @@ def _card(
         key = closeout_item_id(repo, batch.id) if repo else ""
         closeout_status = statuses.get(key, "unknown")
     stop = stops.get(batch.id)
-    needs_you = "blocked" in (status, closeout_status) or stop is not None
+    idle = _idle_of(batch, facts, repo, status, closeout_status, now)
+    needs_you = "blocked" in (status, closeout_status) or stop is not None or idle is not None
     if "blocked" in (status, closeout_status):
         hint = NEEDS_YOU
     elif stop is not None:
         hint = f"{NEEDS_YOU_MERGE_STOPPED}: {stop.reason}"
+    elif idle is not None:
+        hint = _idle_hint(idle, facts.collected_at)
     elif held := [d for d in batch.after if d in stops]:
         # The pass plans this batch's dispatch on the dependency merging first; a
         # stopped merge never lands, so it waits on it as the driver does ("held").
@@ -396,15 +457,18 @@ def build_board(
     statuses: Mapping[str, BoardStatus],
     *,
     stops: Mapping[str, MergeStop] | None = None,
+    now: datetime | None = None,
 ) -> Board:
     """One card per batch in seven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
-    batch's PR is open at the head it was recorded at."""
+    batch's PR is open at the head it was recorded at. *now* is the wall clock: with it a
+    card whose session sat idle past the repo's `idle_session_minutes` with no PR is
+    `needs_you` (R8); without it the board judges no idleness."""
     batches = judgements.batches
     actions = first_actions(facts, judgements)
     selected = default_selection(batches)
     live = live_stops(batches, facts, stops or {})
-    cards = [_card(b, facts, batches, statuses, actions, selected, live) for b in batches]
+    cards = [_card(b, facts, batches, statuses, actions, selected, live, now) for b in batches]
     cards.sort(key=lambda c: (c.batch.wave is None, c.batch.wave or 0, c.batch.id))
     columns = tuple(
         ColumnView(key, COLUMN_TITLES[key], tuple(c for c in cards if c.column == key))

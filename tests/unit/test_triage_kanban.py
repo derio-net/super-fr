@@ -6,12 +6,14 @@ clock, a forge or a runner.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, get_args
 
 import pytest
 from fr.triage import kanban
-from fr.triage.batch_drive import Action, ActionKind
+from fr.triage.batch import batch_item_id
+from fr.triage.batch_drive import Action, ActionKind, closeout_item_id
 from fr.triage.kanban import (
     COLUMNS,
     Board,
@@ -25,6 +27,7 @@ from fr.triage.merge_stops import MergeStop
 from fr.triage.model import Facts, Judgements
 
 from tests.unit.triage_board_fixtures import (
+    COLLECTED,
     REPO,
     batch,
     busy,
@@ -569,3 +572,90 @@ def test_the_board_pins_its_status_vocabulary() -> None:
 def test_the_board_module_imports_no_fr_dispatch() -> None:
     path = Path(kanban.__file__)
     assert forbidden_imports(path, "fr.triage", ("fr_dispatch",)) == []
+
+
+# ------------------------------ idle sessions (driver-sessions §D, R8)
+
+IDLE_NOW = datetime(2026, 10, 1, 12, 5, tzinfo=UTC)  # 125 minutes after `dispatch`
+ARCHIVE = {"kind": "closeout", "at": "2026-10-01T10:00:00Z", "runner": "fake", "handle": "c"}
+
+
+def _idle_card(
+    batches: list[dict[str, Any]],
+    issues: list[dict[str, Any]],
+    statuses: dict[str, Any],
+    bid: str = "a",
+    **kw: Any,
+) -> Any:
+    f, jd = _world(batches, issues, **kw)
+    return build_board(f, jd, statuses, now=IDLE_NOW).card(bid)
+
+
+def test_a_batch_card_idle_with_no_pr_needs_you_and_says_why() -> None:
+    card = _idle_card(
+        [batch("a", [1], events=[dispatch("a")])], [issue(1)], {batch_item_id(REPO, "a"): "idle"}
+    )
+    assert card.needs_you
+    assert card.hint == f"idle 125 min, no PR as of {COLLECTED}"
+
+
+def test_a_closeout_card_idle_with_no_archive_pr_needs_you_and_says_why() -> None:
+    card = _idle_card(
+        [batch("m", [1], events=[dispatch("m"), ARCHIVE])],
+        [issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")])],
+        {closeout_item_id(REPO, "m"): "idle"},
+        bid="m",
+    )
+    assert card.needs_you
+    assert card.hint == f"idle 125 min, no archive PR as of {COLLECTED}"
+
+
+def test_a_card_with_a_pr_is_not_flagged() -> None:
+    card = _idle_card(
+        [batch("a", [1], events=[dispatch("a")])],
+        [issue(1, prs=[pr(11, "feat/batch-a")])],
+        {batch_item_id(REPO, "a"): "idle"},
+    )
+    assert not card.needs_you and "idle" not in card.hint
+
+
+def test_a_closeout_with_an_attributed_archive_pr_is_not_flagged() -> None:
+    merged = pr(10, "feat/batch-m", state="MERGED")
+    closeout = {**ARCHIVE, "archived": 3}
+    card = _idle_card(
+        [batch("m", [1], events=[dispatch("m"), closeout])],
+        [issue(1, state="closed", prs=[merged])],
+        {closeout_item_id(REPO, "m"): "idle"},
+        bid="m",
+    )
+    assert not card.needs_you
+
+
+@pytest.mark.parametrize("status", ["working", "blocked", "absent", "unknown"])
+def test_a_session_that_is_not_idle_adds_no_idle_line(status: str) -> None:
+    card = _idle_card(
+        [batch("a", [1], events=[dispatch("a")])], [issue(1)], {batch_item_id(REPO, "a"): status}
+    )
+    assert "idle" not in card.hint
+
+
+def test_the_threshold_is_the_repos_idle_session_minutes() -> None:
+    f, jd = _world([batch("a", [1], events=[dispatch("a")])], [issue(1)])
+    from fr.triage.model import TriageConfig
+
+    f = f.model_copy(update={"config": {REPO: TriageConfig(idle_session_minutes=200)}})
+    statuses = {batch_item_id(REPO, "a"): "idle"}
+    assert not build_board(f, jd, statuses, now=IDLE_NOW).card("a").needs_you
+
+
+def test_without_a_clock_the_board_judges_no_idleness() -> None:
+    f, jd = _world([batch("a", [1], events=[dispatch("a")])], [issue(1)])
+    assert not build_board(f, jd, {batch_item_id(REPO, "a"): "idle"}).card("a").needs_you
+
+
+def test_an_idle_session_is_never_a_failing_ci_need() -> None:
+    from fr.triage.views import drive_snapshot, needs_you
+
+    f, jd = _world([batch("a", [1], events=[dispatch("a")])], [issue(1)])
+    assert drive_snapshot(f, jd).idle == ()
+    assert [n for n in needs_you(f, jd) if n.kind == "failing-ci"] == []
