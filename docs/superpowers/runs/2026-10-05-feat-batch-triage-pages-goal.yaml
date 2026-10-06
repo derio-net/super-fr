@@ -214,4 +214,12 @@ steps:
     stdout: "7 out-of-scope finding(s): p1-visual-matcher-uv-with, p1-r4, p1-r6, \n\
       p2-suite-log-background-unwitnessed, p4-r11, p4-archive-pr-base-unchecked, p5-r2\n"
   deliver:
-    state: pending
+    state: running
+    at: '2026-10-06T06:31:45+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-06T06:31:45+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: a95011be-df46-40a9-a07a-e24ccd3c8a59
