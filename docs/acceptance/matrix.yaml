@@ -6695,11 +6695,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R5
     levels:
+      unit:
+      - super-fr:tests/unit/test_verification_cmd.py#test_the_shipped_shapes_declare_candidate_and_it_resolves
+      - super-fr:tests/unit/test_verification_cmd.py#test_a_workflow_manifest_accepts_an_optional_verification_default
       int:
       - super-fr:tests/integration/test_scenarios.py#test_verification_strategy_resolution
     status: ci
-    notes: scenario tests/scenarios/verification-strategy-resolution.sh runs against
-      a candidate install in CI (tests/integration/test_scenarios.py)
+    notes: scenario covers resolution and check; unit tests added for a shape declaring
+      the default (shipped shapes declare candidate and it resolves)
     scenario: tests/scenarios/verification-strategy-resolution.sh
   - id: shipped-verification-strategies
     capability: verification
