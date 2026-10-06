@@ -259,3 +259,98 @@ the idle lookup is one helper beside _card; no duplicated logic to fold
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 a message string and one skill paragraph; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · a cancelled batch with a leftover idle session was warned and flagged needs-you (phase 3)
+
+a cancelled batch with a leftover idle session was warned and flagged needs-you
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · 'has sat idle for N min' reported minutes since dispatch, not idle duration (phase 3)
+
+'has sat idle for N min' reported minutes since dispatch, not idle duration
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · the close-out unfinished test lived only in the driver; the board read only open archive PRs (phase 3)
+
+the close-out unfinished test lived only in the driver; the board read only open archive PRs
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · threshold was >= while the spec said 'older than' (phase 3)
+
+threshold was >= while the spec said 'older than'
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · card printed raw ISO collected_at, wrapping mid-date (phase 3)
+
+card printed raw ISO collected_at, wrapping mid-date
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · a runner load failure in the idle probe warned 'its sessions are not closed' (phase 3)
+
+a runner load failure in the idle probe warned 'its sessions are not closed'
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · weak tests (raise case, non-status param, tautological failing-ci test, probe cost) (phase 3)
+
+weak tests (raise case, non-status param, tautological failing-ci test, probe cost)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=out -->
+### p3-r8 · finding [open] (reviewer: out of scope) · the card front shows the batch session's pill, so an idle close-out card reads the wrong session's status (phase 3)
+
+the card front shows the batch session's pill, so an idle close-out card reads the wrong session's status
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=out -->
+### p3-r9 · finding [open] (reviewer: out of scope) · the fr-triage skill says 'six lifecycle columns'; the board has seven (phase 3)
+
+the fr-triage skill says 'six lifecycle columns'; the board has seven
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-10-06T22:36:36+00:00 phase=3 -->
+### review-p3 · review · phase 3 independent review: 7 in scope (fixed), 2 out of scope (phase 3)
+
+Independent reviewer (separate context) raised p3-r1..p3-r9, drove the board itself and opened its own fresh screenshots of the three visual states plus a phone-width long label; tried limits (exact threshold flagged, 59 s at a 1-min threshold not flagged). p3-r1..r7 fixed with tests (head 4c8372a5c; full suite 9862 passed, 105 skipped, /private/tmp/claude-502/driver-sessions-p3-review-suite.log); p3-r8, p3-r9 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: a cancelled batch with a leftover idle session was warned and flagged needs-you (phase 3)
+
+idle_session takes the stage and returns None unless a session is owed work (dispatched; close-out merged/partial); prefilter and board rely on the rule; tests at rule, driver, board.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: 'has sat idle for N min' reported minutes since dispatch, not idle duration (phase 3)
+
+Wording now 'is <status>, dispatched|close-out started <N> min ago, with no PR|archive PR'; minutes_since; spec R7/§D and SKILL.md updated.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: the close-out unfinished test lived only in the driver; the board read only open archive PRs (phase 3)
+
+idle_session takes archives (open or merged) and applies is_finished and attribution itself; board passes facts' archive PRs incl. merged; tests.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: threshold was >= while the spec said 'older than' (phase 3)
+
+Kept at-least; spec reworded; boundary tests at threshold and threshold+1.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: card printed raw ISO collected_at, wrapping mid-date (phase 3)
+
+Formatted YYYY-MM-DD HH:MM UTC via a shared components helper; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: a runner load failure in the idle probe warned 'its sessions are not closed' (phase 3)
+
+_try_runner takes a consequence; idle path says 'idle sessions are not reported'; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: weak tests (raise case, non-status param, tautological failing-ci test, probe cost) (phase 3)
+
+Raise case split and asserts one report over two passes; real statuses + command-level done; failing-ci test builds inputs that would fill idle; one session_statuses per runner per pass asserted.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=open resolves=p3-r8 out_of_scope=true -->
+### p3-r8-resolved · finding [out-of-scope] · resolves p3-r8: the card front shows the batch session's pill, so an idle close-out card reads the wrong session's status (phase 3)
+
+Out of scope: the card's single status pill (kanban_render.py) predates this change; this PR only adds the reason line, which names the close-out explicitly.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=open resolves=p3-r9 out_of_scope=true -->
+### p3-r9-resolved · finding [out-of-scope] · resolves p3-r9: the fr-triage skill says 'six lifecycle columns'; the board has seven (phase 3)
+
+Out of scope: that sentence predates this change; this PR did not alter the board's columns.

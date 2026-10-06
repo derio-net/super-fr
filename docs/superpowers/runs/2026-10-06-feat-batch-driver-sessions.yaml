@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-driver-sessions
 workflow: fr-goal@1
 branch: feat/batch-driver-sessions
 started: '2026-10-06T18:08:40+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -50,8 +50,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-06T22:17:45+00:00'
+    state: done
+    at: '2026-10-06T22:36:37+00:00'
     members:
     - implement-phase
     - review-phase
@@ -127,12 +127,19 @@ steps:
           tests: driver-sessions-p3-suite.log@324d231d086f;tree=1807c0fe6b4c4c0a57ab166dc660ed8c7aab92c8bf909712353c61cdb954c545
           visual: board-idle-session:3:bc6cb67ab741
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T22:17:45+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: 1f7d5832-5559-42d4-abe3-aa58f6893ee0
+          returned: '2026-10-06T22:36:37+00:00'
+          outcome: done
+        evidence:
+          review: review-p3
+          reviewer: a83d1b4995fde562f
+          visual: board-idle-session:3:7c8f7f1b6468
+          findings: p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7,p3-r8,p3-r9
   journal-check:
     state: pending
   deliver:
