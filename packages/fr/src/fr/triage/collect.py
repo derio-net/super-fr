@@ -3,9 +3,11 @@
 Pure: every function returns data. No Typer, no printing, no filesystem writes
 — the command layer (`fr.commands.triage_cmd`) owns I/O.
 
-`Forge` is the whole of decision d2's seam. `GhForge` is its one
-implementation and the ONLY place `fr.triage` touches a forge; a second forge
-is a second class, not an edit to the collector.
+`Forge` is the whole of decision d2's seam. `ClientForge` is its one
+implementation and the ONLY place `fr.triage` touches a forge: it reads through
+a `GhClient` adapter (`fr.hostclient`), so a second forge is that adapter
+implementing the reads, not an edit to the collector (spec
+2026-10-06-forge-remainder §4.A).
 """
 
 from __future__ import annotations
@@ -19,9 +21,10 @@ from typing import Any, Protocol
 import yaml
 from pydantic import ValidationError
 
-from fr import gh
+from fr import real_ghclient
+from fr.ghclient import GhClient, UnsupportedForgeOperation
+from fr.hostclient import FORGE_ERRORS
 from fr.labels import FR_IN_PROGRESS
-from fr.real_ghclient import RealGhClient
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.model import (
     BATCH_MARKER_PREFIX,
@@ -43,7 +46,7 @@ from fr.triage.stage import pr_rank
 ISSUE_LIMIT = 1000
 PR_LIMIT = 200
 REPO_LIMIT = 200
-ORIGINS_ISSUE_LIST_FIELDS = gh.ORIGINS_ISSUE_LIST_FIELDS  # origins' own, wider issue fields
+ORIGINS_ISSUE_LIST_FIELDS = real_ghclient.ORIGINS_ISSUE_LIST_FIELDS  # origins' own, wider issue fields
 BODY_LIMIT = 2000
 CONFIG_PATH = ".fr/triage.yaml"
 # GitHub's contents API resolves HEAD to the default branch (verified live
@@ -86,63 +89,66 @@ GH_MISSING = (
 
 @contextmanager
 def _forge_errors() -> Iterator[None]:
-    """Translate every way a `gh` call fails into triage's own `ForgeError`."""
+    """Translate every way a forge call fails into triage's own `ForgeError`:
+    the forge CLI's error, an operation the backend does not implement, and a
+    CLI that is not installed at all."""
     try:
         yield
-    except gh.GhError as exc:
+    except (*FORGE_ERRORS, UnsupportedForgeOperation) as exc:
         raise ForgeError(str(exc)) from exc
     except FileNotFoundError as exc:  # subprocess could not exec `gh` at all
         raise ForgeError(GH_MISSING) from exc
 
 
-class GhForge:
-    """`Forge` backed by `fr.gh` (the `gh` CLI). Raises only `ForgeError`."""
+class ClientForge:
+    """`Forge` backed by a `GhClient` adapter. Raises only `ForgeError`."""
+
+    def __init__(self, client: GhClient) -> None:
+        self._client = client
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         # Archived repos included: the caller counts the raw list against its limit
         # before dropping them, or a full list with archived repos would not warn.
         with _forge_errors():
-            return gh.list_repos(owner=owner, limit=limit, include_archived=True)
+            return self._client.list_repos(owner, limit)
 
     def list_issues(
         self, *, repo: str, state: str, limit: int, fields: str | None = None
     ) -> list[dict[str, Any]]:
         with _forge_errors():
-            if fields is None:
-                return gh.list_issues(repo=repo, state=state, limit=limit)
-            return gh.list_issues(repo=repo, state=state, limit=limit, fields=fields)
+            return self._client.list_issues(repo, state, limit, fields)
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         with _forge_errors():
-            return gh.list_prs(repo=repo, state=state, limit=limit)
+            return self._client.list_prs(repo, state, limit)
 
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
         with _forge_errors():
-            return gh.list_open_prs(repo=repo, limit=limit)
+            return self._client.list_open_prs(repo, limit)
 
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         with _forge_errors():
-            return gh.view_issue(repo, number)
+            return self._client.view_issue_record(repo, number)
 
     def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
         with _forge_errors():
-            return gh.read_file_at_ref(repo=repo, path=path, ref=ref)
+            return self._client.read_file_at_ref(repo, path, ref)
 
-    # The two batch reads delegate to the forge adapter's own methods (spec
+    # The two batch reads are the adapter's own methods (spec
     # 2026-09-25-triage-batches §3.F), so each has ONE GitHub implementation
     # whether collect or a batch verb calls it.
 
     def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]:
         with _forge_errors():
-            return RealGhClient().list_issue_comments(repo, number)
+            return self._client.list_issue_comments(repo, number)
 
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
         with _forge_errors():
-            return RealGhClient().list_prs_by_head(repo, branch)
+            return self._client.list_prs_by_head(repo, branch)
 
     def viewer_login(self) -> str:
         with _forge_errors():
-            return gh.viewer_login()
+            return self._client.viewer_login()
 
 
 def scope_repos(

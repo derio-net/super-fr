@@ -233,6 +233,40 @@ class GhClient(Protocol):
         (one of `MERGE_METHODS`, or None) and the methods the repo allows."""
         ...
 
+    # ---- triage collect's reads (spec 2026-10-06-forge-remainder §4.A) ----
+    # Implemented for GitHub with `fr.gh`'s records unchanged; the glab/tea
+    # adapters raise `UnsupportedForgeOperation` for each (triage is
+    # GitHub-only by its own scope).
+
+    def list_repos(self, owner: str, limit: int) -> list[dict[str, Any]]:
+        """Every repo of *owner*, archived ones included (`{name, isArchived}`),
+        so the caller can count the raw list against *limit*."""
+        ...
+
+    def list_issues(
+        self, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
+        """One bulk issue list; *fields* None means the forge's default set."""
+        ...
+
+    def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
+
+    def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]: ...
+
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        """Raw text of *path* at *ref*; raises the backend's error when absent."""
+        ...
+
+    def viewer_login(self) -> str:
+        """The login the forge CLI is authenticated as."""
+        ...
+
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        """The RAW issue record (on GitHub, `gh issue view --json
+        ISSUE_VIEW_FIELDS`: title, url, label objects…) — distinct from the
+        projected `view_issue` that observe, apply and the bridge rely on."""
+        ...
+
     def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
         """The default branch of the repository checked out at *cwd*, as the
         forge reports it; None when the CLI fails, is missing or prints
@@ -305,3 +339,28 @@ class UnsupportedBatchOps:
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         raise self._unsupported("repo_merge_methods")
+
+    # Triage collect's reads (spec 2026-10-06-forge-remainder §4.A).
+
+    def list_repos(self, owner: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_repos")
+
+    def list_issues(
+        self, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
+        raise self._unsupported("list_issues")
+
+    def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_prs")
+
+    def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_open_prs")
+
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        raise self._unsupported("read_file_at_ref")
+
+    def viewer_login(self) -> str:
+        raise self._unsupported("viewer_login")
+
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        raise self._unsupported("view_issue_record")

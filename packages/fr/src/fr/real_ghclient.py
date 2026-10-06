@@ -19,11 +19,15 @@ import json
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Concatenate, ParamSpec, TypeVar
+from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from fr import gh as _gh
 from fr.ghclient import MERGE_METHODS, CommandRunner, run_cli
 from fr.labels import LabelDef
+
+# Re-exported for `fr.triage.collect`, which reads the forge only through the
+# adapter and so imports no `fr.gh` (spec 2026-10-06-forge-remainder §4.A).
+ORIGINS_ISSUE_LIST_FIELDS = _gh.ORIGINS_ISSUE_LIST_FIELDS
 
 # `gh pr checks` exits 8 when any check is still pending; its JSON is on stdout.
 _CHECKS_PENDING_EXIT = 8
@@ -432,6 +436,47 @@ class RealGhClient:
             "default": default if default in MERGE_METHODS else None,
             "allowed": [m for m, key in flags if raw.get(key)],
         }
+
+    # Triage collect's reads: each delegates to `fr.gh`, so the records are
+    # byte-identical to what collect read before (spec 2026-10-06 §4.A).
+
+    @_hosted
+    def list_repos(self, owner: str, limit: int) -> list[dict[str, Any]]:
+        return cast(
+            "list[dict[str, Any]]",
+            _gh.list_repos(owner=owner, limit=limit, include_archived=True),
+        )
+
+    @_hosted
+    def list_issues(
+        self, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
+        if fields is None:
+            return cast("list[dict[str, Any]]", _gh.list_issues(repo=repo, state=state, limit=limit))
+        return cast(
+            "list[dict[str, Any]]",
+            _gh.list_issues(repo=repo, state=state, limit=limit, fields=fields),
+        )
+
+    @_hosted
+    def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+        return cast("list[dict[str, Any]]", _gh.list_prs(repo=repo, state=state, limit=limit))
+
+    @_hosted
+    def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
+        return cast("list[dict[str, Any]]", _gh.list_open_prs(repo=repo, limit=limit))
+
+    @_hosted
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        return _gh.read_file_at_ref(repo=repo, path=path, ref=ref)
+
+    @_hosted
+    def viewer_login(self) -> str:
+        return _gh.viewer_login()
+
+    @_hosted
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        return cast("dict[str, Any]", _gh.view_issue(repo, number))
 
     @_hosted
     def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
