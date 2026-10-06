@@ -1,4 +1,4 @@
-"""Claim writes against the fake GhClient (spec 2026-10-06-triage-claims §3.D; R2-R4, R8-R10, R17)."""
+"""Claim writes against the fake GhClient (triage-claims §3.D; R2-R4, R8-R10, R17)."""
 
 from __future__ import annotations
 
