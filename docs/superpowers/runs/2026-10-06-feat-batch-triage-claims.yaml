@@ -85,14 +85,19 @@ steps:
           visual: none
           findings: p1-r17-default-trust-across-users,p1-r17-origin-not-on-matrix,p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8,p1-r9,p1-r10
       phase/2/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T20:40:51+00:00'
           agent: a085b9834682424c4
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
-          model: claude-sonnet-5
+          model: claude-sonnet-5-5
           session: cbb16f1b-fd32-46c2-b21b-5d302376757e
+          returned: '2026-10-06T21:17:25+00:00'
+          outcome: done
+        evidence:
+          tests: p2-full-suite.log@f1ecd1de4f93;tree=108a711db99c3f5f70ada65bb2b10c18b2faf7d3d3d873bf384d7c97b0ff2e5b
+          visual: none
   journal-check:
     state: pending
   deliver:

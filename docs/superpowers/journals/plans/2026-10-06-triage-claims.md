@@ -224,3 +224,35 @@ R17 got its own row, triage-claims-trusted-authors (status ci, 9 unit refs), add
 ### p1-r17-default-trust-across-users-resolved · finding [out-of-scope] · resolves p1-r17-default-trust-across-users: With no pr_authors, two hosts running as different forge users distrust each other's claims (phase 1)
 
 Duplicate of p1-r1, which the independent reviewer raised in scope and which was fixed in 66892d334; this executor-tagged out-of-scope entry is closed in favour of that one rather than reclassified.
+
+<!-- fr:journal kind=decision scope=plan id=p2-claim-writes-are-not-progress created=2026-10-06T21:17:24+00:00 phase=2 -->
+### p2-claim-writes-are-not-progress · decision · A claim, refresh or release write never counts as the pass having acted (phase 2)
+
+`_claim_write` always returns did=False, so a pass whose only work was claim bookkeeping still exits 3
+("work remains, nothing moved") exactly as before; a write that wrote nothing (a blind refresh of a
+closed member, a release with no marker) prints no line. Refreshes of members facts cannot see (closed
+issues: collect reads no closed issue's comments) are owed only under --yes and never announced in a
+plan. Releases are recorded through `record_releases` and `_save`; a recording the writer refuses (a
+cyclic state file) is warned once and retried next pass, because the forge release is idempotent.
+
+<!-- fr:journal kind=decision scope=plan id=p2-held-batches-block-the-summary created=2026-10-06T21:17:24+00:00 phase=2 -->
+### p2-held-batches-block-the-summary · decision · A held batch is reported once, skipped by every step, and counted blocked (phase 2)
+
+drive_pass emits one `held` action per selected, non-cancelled batch with a member in `Snapshot.held`
+and skips it in the merge train, close-out, archive and dispatch steps. A live one keeps counting
+against --max-inflight (stage unchanged); a proposed one takes no slot. Each counts as `blocked`, so a
+drive with nothing else left reads waiting-on-operator rather than done. A claim write that returns Held
+at act time (R4) stops later actions for that batch in the same pass.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-yaml-rewrite-breaks-text-edit-tests created=2026-10-06T21:17:24+00:00 phase=2 -->
+### p2-yaml-rewrite-breaks-text-edit-tests · discovery · Recording claims_released rewrites judgements.yaml, so a test that text-patches it between passes breaks (phase 2)
+
+`_finish` in test_triage_batch_drive_cmd.py replaced a dispatch-event line in the file text; once an
+earlier pass records claims_released the file is re-serialised and the text no longer matches. It now
+edits the parsed YAML. Existing archived-batch tests also see one extra claims_released event on the
+pass after the close-out is recorded (the release is derived from the archived close-out).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-06T21:17:24+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+The command layer is thin glue over claim_sync (plan_sync, execute, record_releases) and claim_env; the one extraction worth making, _claim_plan, was made in the GREEN step, so nothing was left to clean.
