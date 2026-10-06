@@ -171,3 +171,48 @@ ClientForge is a one-line delegation per read; the only tidy (a named _FAILURES 
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 forge_error_kind's GhError branch was folded onto a get_args(ForgeErrorKind) set in the green commit; nothing further to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-06T09:14:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · A refused GitHub host crashed isolation status/down/verify-merge/up and aborted the gc sweep (phase 2)
+
+The lookups now raise GhHostRefusedError (fail closed, spec §4.E). It was unhandled at local.py's _pr/_pr_from/_resolve_default_branch call sites and at isolation_cmd's verify-merge default-branch resolution, so it surfaced as a traceback, and one workspace aborted the host-wide gc sweep.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-06T09:14:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · No test pinned forge_error_kind(GhHostRefusedError) as unknown, or the bridge guard re-raising it (phase 2)
+
+The code was correct but nothing pinned the §4.C answer for the new refusal type.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-06T09:14:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · The planted-import tripwire test only called offences() on a string (phase 2)
+
+It duplicated test_the_scan_sees_every_form and never exercised the real directory scan.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-06T09:14:35+00:00 phase=2 state=open review_scope=out -->
+### p2-r4 · finding [open] (reviewer: out of scope) · The isolation lifecycle's injected runner drops GH_HOST (gate runs, host not applied) (phase 2)
+
+Isolation lookups never set GH_HOST before this change either; inside a checkout gh infers the host from the remote. The trust gate still runs through @_hosted.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-r1 created=2026-10-06T09:14:35+00:00 phase=2 -->
+### p2-review-r1 · review · Independent review of phase 2: 4 findings (p2-r1..p2-r4) (phase 2)
+
+A dispatched reviewer checked the verbatim lookup move (argv, normalisation, None-on-failure, network env/timeout), the isolation callers of the new refusal, collect's adapter reads and ClientForge, forge_error_kind and the bridge guard, the tripwire, the skill prose and mirrors, and test quality. It ran 268 targeted tests green. It raised p2-r1, p2-r2 and p2-r3 (in scope) and p2-r4 (out of scope).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-06T09:14:35+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: A refused GitHub host crashed isolation status/down/verify-merge/up and aborted the gc sweep (phase 2)
+
+cd304e03b. local.py turns the adapter's refusal into IsolationError (`_forge_refused`), so down and verify-merge refuse cleanly; isolation_cmd's verify-merge wraps the default-branch resolution in _fail (exit 2). status shows no PR and warns on stderr (`_status_pr`). gc runs each workspace through `_gc_one_guarded`, which records an escaped IsolationError as unverifiable/skipped, never reaped, and finishes the sweep. tests/unit/test_isolation_forge_refusal.py pins each call site.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-06T09:14:35+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: No test pinned forge_error_kind(GhHostRefusedError) as unknown, or the bridge guard re-raising it (phase 2)
+
+test_forge_error_kind.py now classifies GhHostRefusedError as unknown, and test_the_bridge_guard_reraises_the_host_refusal pins that it is re-raised with no back-off metric.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-06T09:14:35+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: The planted-import tripwire test only called offences() on a string (phase 2)
+
+The tripwire's scan is now `_bypasses(root)`. The planted test runs it over a tmp packages tree with a non-backend module, which is reported, and a backend-named gh.py, which is not.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-06T09:14:35+00:00 phase=2 state=open resolves=p2-r4 out_of_scope=true -->
+### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: The isolation lifecycle's injected runner drops GH_HOST (gate runs, host not applied) (phase 2)
+
+Pre-existing. Isolation lookups never threaded GH_HOST, and inside a checkout gh infers the host from the remote. The gate is still enforced.

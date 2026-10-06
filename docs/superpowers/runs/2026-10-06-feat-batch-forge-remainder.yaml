@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-forge-remainder
 workflow: fr-goal@1
 branch: feat/batch-forge-remainder
 started: '2026-10-06T06:34:45+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -50,8 +50,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-06T08:48:34+00:00'
+    state: done
+    at: '2026-10-06T09:14:36+00:00'
     members:
     - implement-phase
     - review-phase
@@ -99,12 +99,19 @@ steps:
           tests: p2-suite.log@9f42416ae42e;tree=64b2a157f80a3b1aa98c00421583c9e9e62b0dcfb8855e52a5b215d40b39481a
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T08:48:34+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: a7f0f06a-d6c5-4034-aef8-2da990b37338
+          returned: '2026-10-06T09:14:36+00:00'
+          outcome: done
+        evidence:
+          review: p2-review-r1
+          reviewer: a2b4e326ecded23e8
+          visual: none
+          findings: p2-r1,p2-r2,p2-r3,p2-r4
   journal-check:
     state: pending
   deliver:
