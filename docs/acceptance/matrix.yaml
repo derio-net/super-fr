@@ -6080,11 +6080,14 @@ rows:
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py
       - super-fr:tests/unit/test_fr_herdr_closeout.py
       - super-fr:tests/unit/test_triage_gitseam.py
+      - super-fr:tests/unit/test_triage_batch_drive_disruption.py
     status: ci
-    notes: post_merge runs once after the release commit (or the ten-minute fallback)
+    notes: 'post_merge runs once after the release commit (or the ten-minute fallback)
       and before the close-out, a failure holds it; the close-out goes through the runner
       as a run item with payload.kind closeout and --run/--branch; an attributed archive
-      PR is merged; herdr characterised unchanged.
+      PR is merged; herdr characterised unchanged. gh#883: the close-out is recorded
+      before its session starts, so a restart after the session ended starts no second
+      one; a runner failure takes the record back.'
   - id: wave-driven-live
     capability: triage-batch-drive
     acceptance: A real wave of two batches runs from dispatch to a merged archive PR
