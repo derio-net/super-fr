@@ -514,6 +514,44 @@ def test_an_unattributed_archive_pr_is_never_merged() -> None:
     assert got.actions == ()
 
 
+
+# ---------------------------- gh#1025 (3): a close-out recorded, never started
+
+
+def _stale(**kw: Any) -> Snapshot:
+    """`x` was recorded closing at 11:00 (an hour before NOW) and has no archive PR."""
+    kw.setdefault("closeout_probed", frozenset({"x"}))
+    return _snap([_closed("x", 1)], {"x": "merged"}, **kw)
+
+
+def test_a_closeout_recorded_but_not_live_and_with_no_archive_pr_is_warned() -> None:
+    (action,) = drive_pass(_stale()).actions
+    assert action.kind == "warn" and action.batch == "x"
+    assert "recorded at 2026-10-02T11:00" in action.detail
+    assert closeout_item_id(REPO, "x") in action.detail
+    assert drive_pass(_stale()).summary.closing == 1  # still owed: only said
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        dict(existing=frozenset({closeout_item_id(REPO, "x")})),  # its tab is live
+        dict(now=NOW.replace(hour=11, minute=5)),  # recorded 5 minutes ago
+        dict(closeout_probed=frozenset()),  # liveness unread (plan mode): unknown
+        dict(archives={REPO: (_archive(7, "chore/closeout-feat-batch-x"),)}),
+    ],
+    ids=["live", "recent", "unprobed", "archive-pr"],
+)
+def test_a_closeout_that_may_still_be_under_way_is_not_warned(kw: dict[str, Any]) -> None:
+    assert [a for a in drive_pass(_stale(**kw)).actions if a.kind == "warn"] == []
+
+
+def test_a_stale_closeout_is_warned_once() -> None:
+    (action,) = drive_pass(_stale()).actions
+    assert action.head  # its dedupe key
+    assert drive_pass(_stale(warned=frozenset({action.head}))).actions == ()
+
+
 def test_attribution_by_head_or_by_the_run_file() -> None:
     b = _closed("x", 1, run="r-x")
     event = b.events[-1]

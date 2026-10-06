@@ -115,6 +115,7 @@ from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     DEFAULT_MAX_INFLIGHT,
     DEFAULT_WORKSPACE_PREFIX,
+    STALE_CLOSEOUT,
     EXPORT_KINDS,
     RUNS_DIR,
     Action,
@@ -1671,6 +1672,7 @@ class _Driver:
         adopted: dict[str, LivePr] = {}
         archives: dict[str, tuple[LivePr, ...]] = {}
         due: list[Batch] = []
+        stale: list[Batch] = []  # recorded close-outs old enough to ask the runner about
         try:
             for e in queue:
                 repo = repos[e.batch.id]
@@ -1739,6 +1741,8 @@ class _Driver:
                     *archives.get(repos[b.id], ()),
                     *self._archive_prs(facts, repos[b.id], b, event),
                 )
+                if now - event.at >= STALE_CLOSEOUT:  # is its tab still live? (gh#1025)
+                    stale.append(b)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
@@ -1770,7 +1774,8 @@ class _Driver:
             merged_at=merged_at,
             released=frozenset(released),
             archives=archives,
-            existing=self._existing(facts, due, repos) if self.yes else frozenset(),
+            existing=self._existing(facts, [*due, *stale], repos) if self.yes else frozenset(),
+            closeout_probed=frozenset(b.id for b in stale) if self.yes else frozenset(),
             warned=frozenset(self.warned),
             close_sessions=closing_sessions,
             sessions=sessions,

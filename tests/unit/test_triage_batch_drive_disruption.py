@@ -805,3 +805,46 @@ def test_once_exits_1_on_a_refused_export_merge(
     code, out = _export_drive(state, "--once", "--yes")
     assert code == 1, out
     assert "Bad Gateway" in out
+
+
+# --------------------- gh#1025 (3): a close-out recorded but never started
+
+
+def _recorded_long_ago(world: World, tmp_path: Path) -> None:
+    """b1's close-out was recorded at 11:00 (an hour before the drive's NOW) and its
+    tab never opened: a driver killed between the record and the start (gh#883)."""
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:00:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _merged(world, tmp_path, events=closeout)
+
+
+def test_a_closeout_recorded_but_never_started_is_warned_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _recorded_long_ago(world, tmp_path)
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count(f"{CLOSEOUT_ITEM} was recorded at 2026-10-02T11:00Z") == 1
+    assert "fr pickup --run r1" in result.output
+    assert runner.dispatched == []  # said, never started a second time
+
+
+def test_a_closeout_whose_tab_is_live_is_not_warned(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _recorded_long_ago(world, tmp_path)
+    runner.live.add(CLOSEOUT_ITEM)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "was recorded at" not in out, out
+
+
+def test_plan_mode_reads_no_runner_so_calls_no_closeout_stale(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _recorded_long_ago(world, tmp_path)
+    code, out = _drive(tmp_path)
+    assert "was recorded at" not in out, out
