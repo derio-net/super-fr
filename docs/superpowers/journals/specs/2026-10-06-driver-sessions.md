@@ -206,3 +206,6 @@ kept_args keeps --model, --permission-mode, --dangerously-skip-permissions, --ad
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-driver-sessions-p2 created=2026-10-06T18:52:11+00:00 -->
 ### phase-split-2026-10-06-driver-sessions-p2 · decision · review-size: driver restart (#964 driver side) split from the restart engine so each diff stays reviewable
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-driver-sessions-p3 created=2026-10-06T18:52:15+00:00 -->
+### phase-split-2026-10-06-driver-sessions-p3 · decision · ask: #1029 idle-session reporting and board, with #878's documentation
