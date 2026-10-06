@@ -86,11 +86,12 @@ visual:
   - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/expired-1280-light.png
     shows:
     - card-claim-expiry
-  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/expired-400-dark.png
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/held-400-dark.png
     shows:
     - phone-width
     - dark-theme
-    - card-claim-expiry
+    - held-elsewhere-group
+    - expired-claim-marked
   - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p3r2/held-1280-light-link-hover.png
     shows:
     - open-held-issue-link
