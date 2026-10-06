@@ -3,27 +3,51 @@ run: 2026-10-06-feat-batch-verification-kinds
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T6.S1, P1.T6.S2]
+ticks:
+- P1.T1.S1
+- P1.T2.S1
+- P1.T2.S2
+- P1.T2.S3
+- P1.T3.S1
+- P1.T3.S2
+- P1.T4.S1
+- P1.T4.S2
+- P1.T5.S1
+- P1.T5.S2
+- P1.T6.S1
+- P1.T6.S2
 refactor:
-  P1.T3: "the task's GREEN step is itself the refactor (the four-place walk factored into fr/_shipped.py, workflow/resolve.py re-pointed, behaviour pinned by the unchanged workflow tests); nothing further to clean"
-  P1.T4: "data-only task: four manifests plus a byte copy; no code to clean"
-  P1.T5: "thin CLI mirroring workflow_cmd.py and one optional field; nothing duplicated worth extracting"
-  P1.T6: "two small pure functions written once against their tests; nothing to clean"
+  P1.T3: the task's GREEN step is itself the refactor (the four-place walk factored into fr/_shipped.py,
+    workflow/resolve.py re-pointed, behaviour pinned by the unchanged workflow tests); nothing further
+    to clean
+  P1.T4: 'data-only task: four manifests plus a byte copy; no code to clean'
+  P1.T5: thin CLI mirroring workflow_cmd.py and one optional field; nothing duplicated worth extracting
+  P1.T6: two small pure functions written once against their tests; nothing to clean
 journal:
-  - kind: decision
-    id: p1-shared-shipped-walk
-    title: shared shipped-dir walk lives in fr/_shipped.py; workflow keeps its own packaged_shipped_workflows_dir
-    phase: 1
-    body: "fr/_shipped.py holds packaged_dir(dirname), shipped_dirs, lookup_candidates, listing and MARKETPLACE_ROOT (re-exported from workflow.resolve). workflow.resolve keeps a thin packaged_shipped_workflows_dir wrapper because tests monkeypatch it by that name. The packaged-dir cache moved from two module globals to a per-dirname dict."
-  - kind: decision
-    id: p1-strategy-template-shape
-    title: install/scenario accept a string (shell-split) or a list, stored as tuple; check_workflow takes optional repo_root
-    phase: 1
-    body: "StrategyManifest.install/scenario normalise to tuple[str,...] | None. check_workflow(manifest, repo_root=None) resolves `verification:` against shipped sources only when repo_root is None; the CLI passes the repo root. resolve_strategy accepts repo_root=None for the same reason. effective_strategy(row_verify, row_id, section, shape_default) and is_post_merge(strategy, repo_root) take plain strings per the plan; is_post_merge raises StrategyError on an unresolvable name. spec_section ignores prose and fenced code, and errors only on a bullet or strategy: line that breaks the grammar; the reason is optional in the grammar (self-review owns 'reason owed')."
-  - kind: discovery
-    id: p1-no-change-fragment
-    title: no .changes fragment added in phase 1
-    phase: 1
-    body: "This phase touches packages/*/src and plugins/*/workflows, so the PR needs a .changes/<branch-slug>.yaml fragment; none was in this phase's steps. It is owed before delivery."
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a4557f5a-3a30-4673-856d-3f9329d47f77/scratchpad/p1-suite.log
+- kind: decision
+  id: p1-shared-shipped-walk
+  title: shared shipped-dir walk lives in fr/_shipped.py; workflow keeps its own packaged_shipped_workflows_dir
+  phase: 1
+  body: fr/_shipped.py holds packaged_dir(dirname), shipped_dirs, lookup_candidates, listing and MARKETPLACE_ROOT
+    (re-exported from workflow.resolve). workflow.resolve keeps a thin packaged_shipped_workflows_dir
+    wrapper because tests monkeypatch it by that name. The packaged-dir cache moved from two module globals
+    to a per-dirname dict.
+- kind: decision
+  id: p1-strategy-template-shape
+  title: install/scenario accept a string (shell-split) or a list, stored as tuple; check_workflow takes
+    optional repo_root
+  phase: 1
+  body: 'StrategyManifest.install/scenario normalise to tuple[str,...] | None. check_workflow(manifest,
+    repo_root=None) resolves `verification:` against shipped sources only when repo_root is None; the
+    CLI passes the repo root. resolve_strategy accepts repo_root=None for the same reason. effective_strategy(row_verify,
+    row_id, section, shape_default) and is_post_merge(strategy, repo_root) take plain strings per the
+    plan; is_post_merge raises StrategyError on an unresolvable name. spec_section ignores prose and fenced
+    code, and errors only on a bullet or strategy: line that breaks the grammar; the reason is optional
+    in the grammar (self-review owns ''reason owed'').'
+- kind: discovery
+  id: p1-no-change-fragment
+  title: no .changes fragment added in phase 1
+  phase: 1
+  body: This phase touches packages/*/src and plugins/*/workflows, so the PR needs a .changes/<branch-slug>.yaml
+    fragment; none was in this phase's steps. It is owed before delivery.
+evidence: {}
