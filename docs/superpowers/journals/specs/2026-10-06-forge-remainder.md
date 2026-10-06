@@ -134,3 +134,6 @@ Test Plan items 4, 6 and 7 added (per-backend lookups incl. run=None missing bin
 ### sr-f8-resolved · finding [fixed] · resolves sr-f8: 'mypy will name them' is false for test fakes
 
 §5 rewritten: names tests/unit/fakes.py FakeGhClient, states mypy does not check tests, and when the plan adds methods to a fake.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-forge-remainder-p2 created=2026-10-06T07:47:36+00:00 -->
+### phase-split-2026-10-06-forge-remainder-p2 · decision · ask: #742's allowlist emptying is its own ask, reviewable apart from #892's host threading
