@@ -6788,10 +6788,12 @@ rows:
       - super-fr:tests/unit/test_forge_adapter_lookups.py#test_default_branch_sends_todays_argv_and_reads_the_bare_name
       - super-fr:tests/unit/test_isolation_network_timeouts.py#test_default_branch_lookup_is_bounded_and_falls_back_on_timeout
       - super-fr:tests/unit/test_isolation_forge_refusal.py#test_gc_skips_the_refused_workspace_and_finishes_the_sweep
+      - super-fr:tests/unit/test_forge_host_trust.py#test_the_isolation_lifecycle_applies_the_host_on_both_lookups
     status: ci
     notes: 'super-fr#742: default_branch/pr_for_branch on gh, glab and tea through the
       adapter, same argv and normalised shape; isolation runs them on its own runner,
-      and a refused host degrades per call site.'
+      and a refused host degrades per call site. super-fr#1015: the runner is handed
+      the adapter''s host (GH_HOST / GITLAB_HOST) on top of its network env.'
   - id: glab-host-trust-gate
     capability: forge-adapter
     acceptance: 'fr never points glab, or a GITLAB_TOKEN, at a self-hosted GitLab glab
