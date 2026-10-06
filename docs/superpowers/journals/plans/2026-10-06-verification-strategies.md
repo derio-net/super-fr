@@ -34,3 +34,27 @@ thin CLI mirroring workflow_cmd.py and one optional field; nothing duplicated wo
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 two small pure functions written once against their tests; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-06T11:34:51+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · check_workflow callers omit repo_root, so a repo-authored strategy is refused outside `fr workflow check` (phase 1)
+
+run_cmd.py:917/4138/4170, artifacts/validate.py:144 and plan_ops.py:1638 called
+check_workflow(manifest) with no root; resolve_strategy then searched only shipped places,
+so a shape naming a repo-authored strategy (R1/R4/R5) passed `fr workflow check` but was
+refused by `fr run start`, `fr validate artifacts` and `fr plan self-review`.
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-10-06T11:34:51+00:00 phase=1 -->
+### p1-review · review · Phase 1 independent code review — 1 finding (p1-r1, in scope, fixed) (phase 1)
+
+Independent reviewer (separate context) reviewed cd689f2ce..a919a060d against spec §A/§B and
+01.yaml. Raised p1-r1 only. Verified sound: the resolve.py refactor keeps order, errors and
+exports; wheel packaging ships fr/verifications; the tripwire compares bytes both ways; the
+group is not migration-exempt; the parser's separators, fences and duplicates; R7 precedence.
+Received: p1-r1 verified against the five call sites and fixed structurally — repo_root is now
+a required argument (no default), every caller passes its root, tests pass None explicitly;
+a regression test fails without the validate.py fix and passes with it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-06T11:34:51+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: check_workflow callers omit repo_root, so a repo-authored strategy is refused outside `fr workflow check` (phase 1)
+
+check_workflow(manifest, repo_root) now requires the root; all five callers pass theirs; regression test test_every_shape_check_sees_a_repo_authored_strategy.
