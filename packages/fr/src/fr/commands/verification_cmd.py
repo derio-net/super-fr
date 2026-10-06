@@ -206,7 +206,7 @@ def prerelease_cmd(
     (`git+<remote>@<tag>`) the `prerelease` strategy installs from."""
     from fr import hostclient
     from fr._hosts import slug_from_url
-    from fr.ghclient import UnsupportedForgeOperation
+    from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
     from fr.git import GitUnavailableError, git_answer, remote_name
     from fr.real_ghclient import workflow_run_args
 
@@ -235,6 +235,11 @@ def prerelease_cmd(
     slug = slug_from_url(url)
     if slug is None:
         raise refuse("cannot read the origin repository slug")
+    # Decide the backend before the dry-run branch: a dry run that succeeds on
+    # a forge the real dispatch refuses is a lie.
+    client = hostclient.client_for(repo_root)
+    if isinstance(client, UnsupportedBatchOps):
+        raise refuse(str(UnsupportedForgeOperation("dispatch_workflow", client.backend)))
     inputs = {"branch": branch, "sha": sha}
     tag = rc_tag(branch, sha)
     if dry_run:
@@ -243,7 +248,7 @@ def prerelease_cmd(
                       soft_wrap=True)  # fmt: skip
     else:
         try:
-            hostclient.client_for(repo_root).dispatch_workflow(
+            client.dispatch_workflow(
                 slug, PRERELEASE_WORKFLOW, inputs=inputs
             )
         except UnsupportedForgeOperation as e:

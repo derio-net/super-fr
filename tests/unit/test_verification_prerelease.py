@@ -95,12 +95,12 @@ def test_without_dry_run_it_dispatches_through_the_client(repo, monkeypatch) -> 
 
 
 @pytest.mark.parametrize("client", [RealGlabClient(), RealTeaClient()], ids=["glab", "tea"])
-def test_other_forges_exit_2_unsupported(repo, monkeypatch, client) -> None:
+@pytest.mark.parametrize("dry", [False, True], ids=["dispatch", "dry-run"])
+def test_other_forges_exit_2_unsupported(repo, monkeypatch, client, dry) -> None:
     root, _ = repo
+    argv = ["verification", "prerelease", "--branch", "feat/x"] + (["--dry-run"] if dry else [])
 
-    result = _invoke(
-        root, ["verification", "prerelease", "--branch", "feat/x"], client, monkeypatch
-    )
+    result = _invoke(root, argv, client, monkeypatch)
 
     assert result.exit_code == 2
     assert "dispatch_workflow" in result.output
