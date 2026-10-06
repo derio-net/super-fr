@@ -23,7 +23,7 @@ import yaml
 from fr.commands import triage_batch_cmd
 from fr.gh import GhError
 from fr.triage import gitseam
-from fr.triage.collect import read_config
+from fr.triage.collect import read_config, read_config_lenient
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import GitError
 from fr.triage.model import Skipped, TriageConfig, load_judgements
@@ -46,10 +46,10 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 — fixtures
     _sandbox,
     _state,
     _StopError,
-    checkout,
-    runner,
-    sleeps,
-    world,
+    checkout_fixture,
+    runner_fixture,
+    sleeps_fixture,
+    world_fixture,
 )
 
 CLOSEOUT_ITEM = f"{REPO}/run/closeout-b1"
@@ -236,9 +236,7 @@ def test_once_still_exits_non_zero_on_a_failed_fetch(
     assert runner.dispatched == []
 
 
-def test_a_git_call_that_stalls_times_out(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_git_call_that_stalls_times_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """gh#921: a stalled fetch blocked the loop the way gh#909's `gh` call did."""
     seen: list[Any] = []
 
@@ -484,7 +482,7 @@ def test_read_config_is_strict_by_default_so_a_typo_run_by_hand_still_fails() ->
 
 def test_read_config_lenient_drops_unknown_top_level_keys_and_names_them() -> None:
     forge = _Forge(yaml.safe_dump(FUTURE))
-    config, ignored = read_config(forge, REPO, lenient=True)  # type: ignore[arg-type,misc]
+    config, ignored = read_config_lenient(forge, REPO)  # type: ignore[arg-type]
     assert config == TriageConfig(post_merge=["./scripts/install.sh"])
     assert ignored == ("future_block",)
 
@@ -492,7 +490,7 @@ def test_read_config_lenient_drops_unknown_top_level_keys_and_names_them() -> No
 def test_read_config_lenient_still_refuses_a_bad_known_key() -> None:
     forge = _Forge(yaml.safe_dump({"stale_dispatch_days": -1}))
     with pytest.raises(TriageError):
-        read_config(forge, REPO, lenient=True)  # type: ignore[arg-type]
+        read_config_lenient(forge, REPO)  # type: ignore[arg-type]
 
 
 # -------------------------------- gh#998: re-exec on the fr post_merge installed

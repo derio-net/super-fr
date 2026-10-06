@@ -28,6 +28,7 @@ from fr.triage.model import (
     Judgements,
     TriageConfig,
     batch_marker,
+    parse_triage_config,
 )
 
 # Stages whose reservation still stands: the run was briefed with it and has
@@ -129,7 +130,9 @@ def dispatched_already(comments: Iterable[dict[str, object]], item_id: str) -> b
     return latest_marker(comments, item_id) == "dispatch"
 
 
-def check_config_fresh(collected: TriageConfig | None, on_origin: str | None) -> None:
+def check_config_fresh(
+    collected: TriageConfig | None, on_origin: str | None, *, lenient: bool = False
+) -> None:
     """Refuse a collected `.fr/triage.yaml` that is not the one on
     `origin/<default>` now (§3.I).
 
@@ -138,10 +141,12 @@ def check_config_fresh(collected: TriageConfig | None, on_origin: str | None) ->
     set by whoever commits (a rebase, a skewed clock, a cherry-pick) and say
     nothing about which content was read; the content itself does. *collected*
     is None when collect found no file, *on_origin* when there is none now.
+    *lenient* is the wave driver's (gh#998): a top-level key this `fr` does not
+    know is dropped from both sides of the comparison, as its collect dropped it.
     """
     try:
         current = (
-            TriageConfig.model_validate(yaml.safe_load(on_origin) or {})
+            parse_triage_config(yaml.safe_load(on_origin) or {}, lenient=lenient)[0]
             if on_origin is not None
             else None
         )

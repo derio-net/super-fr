@@ -346,6 +346,26 @@ class TriageConfig(_Strict):
     export: ExportConfig | None = None
 
 
+def parse_triage_config(
+    data: object, *, lenient: bool = False
+) -> tuple[TriageConfig, tuple[str, ...]]:
+    """`.fr/triage.yaml`'s parsed body as config, and the top-level keys it ignored.
+
+    Strict by default: an unknown key is refused, so a typo fails where a person
+    runs `fr triage collect` by hand. *lenient* is the wave driver's (gh#998): it
+    reads the file from the default branch every pass, and its own merges land a
+    key the running `fr` predates before the release that knows it can. It drops
+    unknown TOP-LEVEL keys and names them; a known key with a bad value, or an
+    unknown key nested in a known block, is still refused.
+    """
+    if not lenient or not isinstance(data, dict):
+        return TriageConfig.model_validate(data), ()
+    known = {f.alias or name for name, f in TriageConfig.model_fields.items()}
+    ignored = tuple(sorted(str(k) for k in data if k not in known))
+    kept = {k: v for k, v in data.items() if k in known}
+    return TriageConfig.model_validate(kept), ignored
+
+
 class Facts(_Strict):
     """What `collect` read from the forge for one scope.
 

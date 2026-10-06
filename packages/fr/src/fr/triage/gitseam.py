@@ -31,11 +31,31 @@ class GitError(TriageError):
     """A git command failed; the message carries git's own words."""
 
 
-def _run(argv: list[str], cwd: Path, *, text: bool = True, ok: tuple[int, ...] = (0,)) -> Any:
+GIT_TIMEOUT_SECONDS = 300.0
+"""The longest one `git` call may take (gh#921): a fetch or push that stalls on a
+degraded forge raises like a failed one, so the wave driver skips that pass and
+reads again, as a stalled `gh` call does since gh#909. Generous on purpose: a
+clone's first fetch of a large repo is slow but finishes. A command the repo
+declares (`post_merge`, `version.set`/`relock`) is the repo's own and is not bounded."""
+
+
+def _run(
+    argv: list[str],
+    cwd: Path,
+    *,
+    text: bool = True,
+    ok: tuple[int, ...] = (0,),
+    timeout: float | None = None,
+) -> Any:
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
-    `text=False`; a return code outside *ok* raises `GitError` with the command's own words."""
+    `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
+    `GitError` with the command's own words."""
     try:
-        result = subprocess.run(argv, cwd=cwd, capture_output=True, text=text, check=False)
+        result = subprocess.run(
+            argv, cwd=cwd, capture_output=True, text=text, check=False, timeout=timeout
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GitError(f"`{shlex.join(argv)}` timed out after {timeout:g}s in {cwd}") from exc
     except OSError as exc:
         raise GitError(f"cannot run {argv[0]}: {exc}") from exc
     if result.returncode not in ok:
@@ -52,13 +72,13 @@ def _run(argv: list[str], cwd: Path, *, text: bool = True, ok: tuple[int, ...] =
 def git_bytes(args: list[str], cwd: Path, *, ok: tuple[int, ...] = (0,)) -> bytes:
     """Run `git <args>` and return stdout as raw bytes (for `-z` output whose paths and
     contents are not necessarily UTF-8); a return code outside *ok* raises `GitError`."""
-    out: bytes = _run(["git", *args], cwd, text=False, ok=ok)
+    out: bytes = _run(["git", *args], cwd, text=False, ok=ok, timeout=GIT_TIMEOUT_SECONDS)
     return out
 
 
 def git(args: list[str], cwd: Path) -> str:
     """Run `git <args>` in *cwd* and return its stdout; raise `GitError` on failure."""
-    out: str = _run(["git", *args], cwd)
+    out: str = _run(["git", *args], cwd, timeout=GIT_TIMEOUT_SECONDS)
     return out
 
 
@@ -86,9 +106,16 @@ def show_text(cwd: Path, ref: str, file: str) -> str | None:
 def git_ok(args: list[str], cwd: Path) -> bool:
     """Whether `git <args>` exits 0 (for predicates such as `merge-base --is-ancestor`)."""
     try:
-        return subprocess.run(["git", *args], cwd=cwd, capture_output=True).returncode == 0
+        done = subprocess.run(
+            ["git", *args], cwd=cwd, capture_output=True, timeout=GIT_TIMEOUT_SECONDS
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GitError(
+            f"`{shlex.join(['git', *args])}` timed out after {GIT_TIMEOUT_SECONDS:g}s in {cwd}"
+        ) from exc
     except OSError as exc:
         raise GitError(f"cannot run git: {exc}") from exc
+    return done.returncode == 0
 
 
 def run_declared(command: str, cwd: Path, **fields: str) -> None:

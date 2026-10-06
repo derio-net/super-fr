@@ -12,9 +12,9 @@ implementing the reads, not an edit to the collector (spec
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -40,6 +40,7 @@ from fr.triage.model import (
     Unviewed,
     issue_key,
     normalize_key,
+    parse_triage_config,
 )
 from fr.triage.stage import pr_rank
 
@@ -372,6 +373,8 @@ class CollectStats:
 
     viewed: int = 0
     carried: int = 0
+    # OWNER/REPO -> the top-level `.fr/triage.yaml` keys a lenient read dropped (gh#998)
+    ignored: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def collect_facts(
@@ -412,6 +415,7 @@ def collect_facts_counted(
     pr_limit: int = PR_LIMIT,
     repo_limit: int = REPO_LIMIT,
     carried: Iterable[Issue] = (),
+    lenient: bool = False,
 ) -> tuple[Facts, CollectStats]:
     """Build the facts for *scope*: two bulk calls per repo, inverted.
 
@@ -425,6 +429,8 @@ def collect_facts_counted(
     `.fr/triage.yaml` is invalid — is recorded under `skipped` and the rest
     still collect; in repo scope the one repo failing is the error, and
     in org scope so is collecting no repo at all (review r-p2-empty).
+    *lenient* reads each config as the wave driver must (gh#998): an unknown
+    top-level key is dropped and named in the stats' `ignored`, never refused.
     Each *judged* key no longer open costs one `view_issue`, so the extra
     calls are bounded by the judgements, never by the backlog. The batch
     extras are bounded the same way (spec 2026-09-25-triage-batches §3.F): one
@@ -447,13 +453,14 @@ def collect_facts_counted(
     # issue, and must never reach `view_issue`, which answers for PRs too (gh#902).
     listed_prs: dict[str, PullRequest] = {}
     config: dict[str, TriageConfig] = {}
+    ignored: dict[str, tuple[str, ...]] = {}
     markers: dict[tuple[str, int], str] = {}
     for repo in repos:
         try:
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
-            repo_config = read_config(forge, repo)
+            repo_config, dropped = _read_config(forge, repo, lenient=lenient)
             for raw in issues:
                 if at := _marker_at(forge, repo, raw):
                     markers[(repo, raw["number"])] = at
@@ -467,6 +474,8 @@ def collect_facts_counted(
         collected.append(repo)
         if repo_config is not None:
             config[repo] = repo_config
+        if dropped:
+            ignored[repo] = dropped
         if len(issues) == issue_limit:
             warnings.append(Truncation(source="issues", target=repo, limit=issue_limit))
         if len(prs) == pr_limit:
@@ -563,7 +572,7 @@ def collect_facts_counted(
         config=config,
         viewer=viewer,
     )
-    return facts, CollectStats(viewed=viewed, carried=carried_n)
+    return facts, CollectStats(viewed=viewed, carried=carried_n, ignored=ignored)
 
 
 def linked_prs_all(issues: Iterable[Issue]) -> list[PullRequest]:
@@ -607,14 +616,26 @@ def read_config(forge: Forge, repo: str) -> TriageConfig | None:
     is refused naming the repo and the file, never half-read — which fails a
     repo-scope collect and skips just that repo in org scope (review r2p-f4).
     """
+    return _read_config(forge, repo, lenient=False)[0]
+
+
+def read_config_lenient(forge: Forge, repo: str) -> tuple[TriageConfig | None, tuple[str, ...]]:
+    """`read_config` as the wave driver reads it (gh#998): an unknown top-level key
+    is dropped and named, never refused (`parse_triage_config`)."""
+    return _read_config(forge, repo, lenient=True)
+
+
+def _read_config(
+    forge: Forge, repo: str, *, lenient: bool
+) -> tuple[TriageConfig | None, tuple[str, ...]]:
     try:
         body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=DEFAULT_BRANCH_REF)
     except ForgeError as exc:
         if _NOT_FOUND in str(exc):
-            return None
+            return None, ()
         raise
     try:
-        return TriageConfig.model_validate(yaml.safe_load(body) or {})
+        return parse_triage_config(yaml.safe_load(body) or {}, lenient=lenient)
     except (yaml.YAMLError, ValidationError) as exc:
         raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
 
