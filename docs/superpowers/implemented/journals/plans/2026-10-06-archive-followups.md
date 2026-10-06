@@ -209,3 +209,8 @@ Fixed in a88cc2386: context_for(repo_root, end) derives it per finding (plan dir
 ### p3-r3-resolved · finding [fixed] · resolves p3-r3: No test compares archive's deferred record with what fr journal resolve --state deferred writes (phase 3)
 
 Fixed in a88cc2386: a parity test defers through the real CLI and through write_back; serialized entries match with created stripped.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved-2 created=2026-10-06T20:31:27+00:00 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved-2 · finding [fixed] · resolves p2-r4: Main archived verification-strategies (#1035), so the branch's 31 live refs to it become twin warnings after a rebase
+
+Handled at deliver: the branch was rebased onto main and retargeted, so all 27 verification-strategies refs on main name implemented/specs and fr acceptance check reports no twin warnings (checked at closeout, 2026-10-06).
