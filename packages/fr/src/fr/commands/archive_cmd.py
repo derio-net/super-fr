@@ -541,14 +541,7 @@ def _open_ends_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         return
     if not chosen:
         return
-    context = [
-        dst.as_posix()
-        for _src, dst in log.moves
-        if dst.parent in (IMPLEMENTED_REL / "specs", IMPLEMENTED_REL / "plans")
-    ]
-    for filed in af.file_open_ends(
-        repo_root, chosen, _make_gh_client(), _repo_slug(repo_root), context=context
-    ):
+    for filed in af.file_open_ends(repo_root, chosen, _make_gh_client(), _repo_slug(repo_root)):
         qid = filed.end.qid
         if filed.url is None:
             err_console.print(

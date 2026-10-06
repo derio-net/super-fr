@@ -361,6 +361,7 @@ def _journal_writes(
         try:
             entry = resolution_entry(
                 target=target_entry,
+                scope=scope,  # type: ignore[arg-type]
                 taken=taken,
                 created=stamp,
                 state=res.state,

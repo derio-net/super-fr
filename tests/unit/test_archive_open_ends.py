@@ -34,6 +34,7 @@ def test_resolution_entry_builds_the_deferral_the_record_engine_builds(tmp_path:
     f = _finding()
     entry = resolution_entry(
         target=f,
+        scope="plan",
         taken={"f1"},
         created="2026-10-06T01:00:00+00:00",
         state="deferred",
@@ -222,10 +223,16 @@ MATRIX = "schema_version: 4\norg: acme\nrepo: widgets\nrows: []\n"
 class DedupGh(FakeGhClient):
     """A fake forge that can list its open issues."""
 
-    def __init__(self, existing: list[dict] | None = None) -> None:
+    def __init__(self, existing: list[dict] | None = None, viewer: str = "me") -> None:
         super().__init__()
         self.listed = existing or []
+        self.viewer = viewer
         self.list_args: list[tuple] = []
+
+    def viewer_login(self) -> str:
+        if not self.viewer:
+            raise FakeGhError("no viewer")
+        return self.viewer
 
     def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
         self.list_args.append((repo, state, limit, fields))
@@ -301,7 +308,7 @@ def test_issues_all_files_every_end_marks_it_and_defers_the_finding(
     assert f"<!-- fr:journal plan/{SLUG}/f1 -->" in made[0]["body"]
     assert "body of f1" in made[0]["body"]
     assert f"docs/superpowers/implemented/journals/plans/{SLUG}.md" in made[0]["body"]
-    assert gh.list_args == [(OWN, "open", 200, "number,url,body")]
+    assert gh.list_args == [(OWN, "open", 200, "number,url,body,author")]
     assert _states(repo) == {
         "f1": "deferred",
         "f2": "deferred",
@@ -334,12 +341,46 @@ def test_an_ensure_labels_failure_files_without_the_label(
     assert [m["labels"] for m in _created(gh)] == [frozenset(), frozenset()]
 
 
+def _issue(n: int, body: str, author: str = "me") -> dict:
+    return {
+        "number": n,
+        "url": f"https://github.com/{OWN}/issues/{n}",
+        "body": body,
+        "author": {"login": author},
+    }
+
+
+def _f1_marker() -> str:
+    return f"<!-- fr:journal plan/{SLUG}/f1 -->"
+
+
+@pytest.mark.parametrize(
+    ("issues", "viewer"),
+    [
+        ([_issue(5, f"x\n{_f1_marker()}", author="mallory")], "me"),  # someone else's
+        ([_issue(5, f"see {_f1_marker()} quoted\nmore text")], "me"),  # mid-body
+        ([_issue(5, f"x\n{_f1_marker()}")], ""),  # viewer_login fails
+    ],
+    ids=["other-author", "mid-body", "no-viewer"],
+)
+def test_an_issue_that_is_not_ours_or_only_quotes_the_marker_is_not_reused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, issues: list[dict], viewer: str
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    gh = DedupGh(issues, viewer=viewer)
+    result = _archive(monkeypatch, repo, gh, "--issues", f"plan/{SLUG}/f1")
+    assert result.exit_code == 0, result.output
+    assert len(_created(gh)) == 1
+    rec = next(e for e in parse_journal(_archived_journal(repo).read_text()) if e.resolves == "f1")
+    assert rec.tracked_by == f"https://github.com/{OWN}/issues/1"  # ours, not #5
+
+
 def test_an_open_issue_with_the_marker_is_reused_not_duplicated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _open_ends_repo(tmp_path)
     url = f"https://github.com/{OWN}/issues/77"
-    gh = DedupGh([{"number": 77, "url": url, "body": f"x <!-- fr:journal plan/{SLUG}/f1 --> y"}])
+    gh = DedupGh([_issue(77, f"mine\n\n<!-- fr:journal plan/{SLUG}/f1 -->\n")])
     result = _archive(monkeypatch, repo, gh, "--issues", f"plan/{SLUG}/f1")
     assert result.exit_code == 0, result.output
     assert _created(gh) == []
@@ -508,3 +549,117 @@ def test_a_followup_failure_never_changes_the_exit_code(
     result = _archive(monkeypatch, repo, DedupGh(), "--issues", "all")
     assert result.exit_code == 0, result.output
     assert "note: open ends skipped" in result.output
+
+
+# --- p3-r2: per-end Context lines ---
+
+
+def _contexts(gh: FakeGhClient) -> list[list[str]]:
+    return [
+        [ln for ln in m["body"].splitlines() if ln.startswith("Context:")] for m in _created(gh)
+    ]
+
+
+def test_each_issue_names_only_its_own_plan_with_two_plans_archived(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    other = "2026-05-26-other"
+    for slug, fid in ((SLUG, "a"), (other, "b")):
+        _add_plan(repo, slug, ticked=True)
+        _journal(repo, "plan", slug, [_entry("plan", fid, f"finding {fid}")])
+    (repo / "docs/acceptance").mkdir(parents=True)
+    (repo / "docs/acceptance/matrix.yaml").write_text(MATRIX)
+    _seed(repo)
+    gh = DedupGh()
+    result = _invoke(monkeypatch, repo, gh, ["archive", "--all", "--issues", "all"])
+    assert result.exit_code == 0, result.output
+    by_title = dict(zip([m["title"] for m in _created(gh)], _contexts(gh), strict=True))
+    assert by_title == {
+        "finding a": [f"Context: `docs/superpowers/implemented/plans/{SLUG}`"],
+        "finding b": [f"Context: `docs/superpowers/implemented/plans/{other}`"],
+    }
+
+
+def test_explicit_qids_with_nothing_moved_still_carry_their_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _open_ends_repo(tmp_path)
+    assert _archive(monkeypatch, repo, DedupGh(), "--no-issues").exit_code == 0
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "archived"], check=True)
+    gh = DedupGh()
+    result = _invoke(monkeypatch, repo, gh, ["archive", "--all", "--issues", f"plan/{SLUG}/f1"])
+    assert result.exit_code == 0, result.output
+    assert _contexts(gh) == [[f"Context: `docs/superpowers/implemented/plans/{SLUG}`"]]
+
+
+def test_context_for_finds_a_spec_live_or_archived_and_none_for_debug(tmp_path: Path) -> None:
+    from fr.archive_followups import OpenEnd, context_for
+
+    def end(scope: str, slug: str) -> OpenEnd:
+        return OpenEnd(scope, slug, "x", "t", "b", "open", tmp_path / "j.md")
+
+    sp = tmp_path / "docs/superpowers"
+    (sp / "specs").mkdir(parents=True)
+    (sp / "implemented/specs").mkdir(parents=True)
+    (sp / "specs/live-design.md").write_text("x")
+    (sp / "implemented/specs/old.md").write_text("x")
+    assert context_for(tmp_path, end("spec", "live")) == ["docs/superpowers/specs/live-design.md"]
+    assert context_for(tmp_path, end("spec", "old")) == [
+        "docs/superpowers/implemented/specs/old.md"
+    ]
+    assert context_for(tmp_path, end("spec", "gone")) == []
+    assert context_for(tmp_path, end("debug", "d")) == []
+
+
+# --- p3-r3: archive's write-back equals `fr journal resolve --state deferred` ---
+
+
+def test_archive_write_back_matches_the_journal_resolve_path(tmp_path: Path) -> None:
+    """Two identical journals; one finding deferred through the real `fr journal
+    resolve`, the other through archive's `write_back`. The appended entries must
+    serialize identically once the fields that legitimately differ are aligned:
+    `created` (a clock) is stripped; the note is passed identically."""
+    import re
+
+    from fr.archive_followups import Filed, OpenEnd, write_back
+    from fr.cli import app
+    from fr.journal.model import serialize_entry
+    from typer.testing import CliRunner
+
+    url = "https://github.com/acme/widgets/issues/9"
+    note = f"Filed at archive as {url}."
+    paths = []
+    for name in ("a", "b"):
+        repo = tmp_path / name
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+        paths.append(_journal(repo, "plan", "p1", [_entry("plan", "f1", "first")]))
+
+    import os
+
+    old = os.getcwd()
+    os.chdir(tmp_path / "a")
+    try:
+        os.environ["VK_REPO_ROOT"] = str(tmp_path / "a")
+        res = CliRunner().invoke(
+            app,
+            ["journal", "resolve", "--scope", "plan", "--slug", "p1", "--id", "f1",
+             "--state", "deferred", "--tracked-by", url, "--note", note],
+        )  # fmt: skip
+    finally:
+        os.chdir(old)
+        os.environ.pop("VK_REPO_ROOT", None)
+    assert res.exit_code == 0, res.output
+
+    end = OpenEnd("plan", "p1", "f1", "first", "body of f1", "open", paths[1])
+    write_back(Filed(end, url=url))
+
+    def appended(path: Path) -> str:
+        entries = parse_journal(path.read_text())
+        text = "".join(serialize_entry(e) for e in entries if e.resolves == "f1")
+        return re.sub(r"created=\S+", "created=T", text)
+
+    assert appended(paths[0]) == appended(paths[1])
+    assert "resolves=f1" in appended(paths[0]) and f"tracked_by={url}" in appended(paths[0])

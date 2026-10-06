@@ -38,6 +38,7 @@ __all__ = [
     "FOLLOW_UP_LABEL",
     "Filed",
     "OpenEnd",
+    "context_for",
     "file_open_ends",
     "journals_from_log",
     "marker",
@@ -176,21 +177,50 @@ def _issue_body(end: OpenEnd, repo_root: Path, context: list[str]) -> str:
     return "\n".join(lines)
 
 
+_MARKER_LINE = re.compile(r"^<!-- fr:journal (\S+) -->$")
+
+
 def _existing_markers(gh: GhClient, repo: str) -> dict[str, str]:
-    """`marker -> url` of the open issues that already carry one. Any error
-    (including a forge that cannot list) means no dedup — never a failure."""
+    """`marker -> url` of the open issues THIS account filed that end in a
+    marker line, exactly as `_issue_body` writes it. An issue anyone else wrote,
+    or one that merely quotes a marker mid-body, is never reused — reuse hands
+    its URL to `tracked_by`, so a third party could otherwise redirect it. Any
+    error (no listing, no viewer) means no dedup, never a failure."""
     try:
-        issues = gh.list_issues(repo, "open", 200, fields="number,url,body")
+        me = gh.viewer_login()
+        issues = gh.list_issues(repo, "open", 200, fields="number,url,body,author")
     except Exception:  # noqa: BLE001 — dedup is best-effort by design (R11)
+        return {}
+    if not me:
         return {}
     found: dict[str, str] = {}
     for issue in issues:
-        body, url = str(issue.get("body") or ""), issue.get("url")
-        if not url:
+        author = issue.get("author")
+        login = author.get("login") if isinstance(author, dict) else author
+        url, body = issue.get("url"), str(issue.get("body") or "").rstrip()
+        if not url or login != me or not body:
             continue
-        for m in re.finditer(r"<!-- fr:journal (\S+) -->", body):
+        m = _MARKER_LINE.match(body.splitlines()[-1].strip())
+        if m:
             found.setdefault(m.group(1), str(url))
     return found
+
+
+def context_for(repo_root: Path, end: OpenEnd) -> list[str]:
+    """The spec/plan the end belongs to, repo-relative, whichever location it
+    is at now (archived or live) — independent of what this run moved."""
+    root = Path("docs/superpowers")
+    if end.scope == "plan":
+        cands = [root / "implemented/plans" / end.slug, root / "plans" / end.slug]
+        return [c.as_posix() for c in cands if (repo_root / c).is_dir()][:1]
+    if end.scope == "spec":
+        cands = [
+            root / d / f"{end.slug}{suffix}"
+            for d in ("implemented/specs", "specs")
+            for suffix in ("-design.md", ".md")
+        ]
+        return [c.as_posix() for c in cands if (repo_root / c).is_file()][:1]
+    return []
 
 
 def file_open_ends(
@@ -198,8 +228,6 @@ def file_open_ends(
     ends: list[OpenEnd],
     gh: GhClient,
     repo: str,
-    *,
-    context: list[str] | None = None,
 ) -> list[Filed]:
     """One issue per end (R11): an open issue already carrying the end's
     marker is reused; a label that cannot be ensured is dropped; an error on
@@ -222,7 +250,7 @@ def file_open_ends(
             url = gh.create_issue(
                 repo,
                 title=end.title,
-                body=_issue_body(end, repo_root, context or []),
+                body=_issue_body(end, repo_root, context_for(repo_root, end)),
                 labels=labels,
             )
         except Exception as e:  # noqa: BLE001 — a forge error is per finding (R10)
@@ -243,6 +271,7 @@ def write_back(filed: Filed) -> Path:
     target = next(e for e in entries if e.id == filed.end.id and e.resolves is None)
     entry = resolution_entry(
         target=target,
+        scope=filed.end.scope,  # type: ignore[arg-type]
         taken={e.id for e in entries},
         created=journal_now(),
         state="deferred",

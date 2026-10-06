@@ -615,6 +615,7 @@ reads the finding as open (fail closed) rather than failing to parse."""
 def resolution_entry(
     *,
     target: JournalEntry,
+    scope: JournalScope,
     taken: set[str],
     created: str,
     state: str,
@@ -629,7 +630,7 @@ def resolution_entry(
     the combination is not a valid entry."""
     return JournalEntry(
         kind="finding",
-        scope=target.scope,
+        scope=scope,
         id=resolution_record_id(target.id, taken),
         created=created,
         phase=phase,
