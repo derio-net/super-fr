@@ -27,7 +27,6 @@ from fr.triage.batch import (
     ForeignPr,
     QueueEntry,
     batch_item_id,
-    last_dispatch,
     recorded_branch,
 )
 from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
@@ -312,12 +311,7 @@ def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Actio
     if key in snap.warned:
         return None
     since = event.at.strftime("%Y-%m-%dT%H:%M")
-    last = last_dispatch(batch)
-    pickup = (
-        f"--run {event.run}"
-        if event.run
-        else f"--branch {last.branch if last else batch_branch(batch)}"
-    )
+    pickup = f"--run {event.run}" if event.run else f"--branch {recorded_branch(batch)}"
     return Action(
         "warn", batch.id,
         f"close-out {item} was recorded at {since}Z but no runner holds it and no archive "
