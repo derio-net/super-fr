@@ -784,18 +784,17 @@ def drive_pass(snap: Snapshot) -> Pass:
             continue
         ready = [p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"]
         default = snap.default_branch.get(snap.repos.get(batch.id, ""), "")
-        good = next((p for p in ready if not _wrong_base(p, default)), None)
-        if good is None and ready:
+        good = next((p for p in ready if default and not _wrong_base(p, default)), None)
+        if good is None and ready and default:
             # Merged only into the default branch, as the export (gh#1004, p4-r15): only
-            # the operator can retarget it, so the batch is blocked, reported once.
+            # the operator can retarget it, so the batch is blocked, and named every pass
+            # as a blocked dispatch is. An unknown default proves nothing: it waits.
             archives_blocked += 1
             wrong = ready[0]
-            if wrong.head not in snap.warned:
-                actions.append(
-                    Action("warn", batch.id, f"archive PR #{wrong.number} ({wrong.head_ref}) "
-                           f"{_wrong_base(wrong, default)}; it is never merged",
-                           pr=wrong.number, head=wrong.head)
-                )  # fmt: skip
+            actions.append(
+                Action("blocked", batch.id, f"archive PR #{wrong.number} ({wrong.head_ref}) "
+                       f"{_wrong_base(wrong, default)}; it is never merged", pr=wrong.number)
+            )  # fmt: skip
             continue
         closing += 1
         if good is not None:

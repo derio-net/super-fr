@@ -1433,20 +1433,20 @@ def test_two_waves_finishing_together_report_in_numeric_order() -> None:
 
 def test_an_archive_pr_retargeted_off_the_default_branch_is_never_merged() -> None:
     """gh#1004: the archive merge reads the PR's base as the export does (p4-r15). A
-    PR based anywhere but the default branch is reported once and never merged; only
-    the operator can retarget it, so the batch is blocked, not closing."""
+    PR based anywhere but the default branch is never merged; only the operator can
+    retarget it, so the batch is blocked (named every pass), not closing."""
     from dataclasses import replace
 
     b = _merged("x", 1, events=[_CLOSEOUT])
     pr = _live(5, "h5", head_ref="chore/closeout-feat-batch-x", trusted=True, base="release")
     snap = _snap([b], {"x": "merged"}, archives={REPO: (pr,)}, default_branch={REPO: "main"})
     got = drive_pass(snap)
-    assert [(a.kind, a.batch, a.pr, a.head) for a in got.actions] == [("warn", "x", 5, "h5")]
+    assert [(a.kind, a.batch, a.pr) for a in got.actions] == [("blocked", "x", 5)]
     assert "is based on release, not main" in got.actions[0].detail
     assert (got.summary.closing, got.summary.blocked) == (0, 1)
-    again = drive_pass(replace(snap, warned=frozenset({"h5"})))
-    assert again.actions == () and again.summary.blocked == 1
-    unknown = drive_pass(replace(snap, default_branch={}))  # an unread default is no default
-    assert [a.kind for a in unknown.actions] == ["warn"]
+    assert got.summary.waiting_on_operator
+    # a default the clone could not give proves nothing: no merge, no blame, it waits
+    unknown = drive_pass(replace(snap, default_branch={}))
+    assert unknown.actions == () and (unknown.summary.closing, unknown.summary.blocked) == (1, 0)
     on_main = drive_pass(replace(snap, archives={REPO: (replace(pr, base="main"),)}))
     assert [(a.kind, a.pr) for a in on_main.actions] == [("archive", 5)]

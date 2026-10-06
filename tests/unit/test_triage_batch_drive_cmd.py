@@ -1169,10 +1169,13 @@ def test_an_archive_pr_retargeted_off_the_default_branch_is_reported_and_never_m
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
     code, out = _drive(tmp_path, "--once", "--yes")
     assert world.merged == [], out
-    assert _lines(out, "warn") == [
-        "warn b1: archive PR #201 (chore/archive-p1) is based on release, not main; "
+    assert _lines(out, "blocked") == [
+        "blocked b1: archive PR #201 (chore/archive-p1) is based on release, not main; "
         "it is never merged"
     ], out
+    code, out = _drive(tmp_path, "--yes")  # the loop names the batch it stops on
+    assert code == 3 and world.merged == [], out
+    assert "only blocked batches remain (b1)" in out, out
     world.prs[201]["base"] = "main"  # retargeted back by the operator
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out

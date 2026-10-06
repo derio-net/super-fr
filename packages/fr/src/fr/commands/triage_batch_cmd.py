@@ -1773,7 +1773,8 @@ class _Driver:
         when the clone cannot say, which matches no base."""
         try:
             return self._reader(repo).default_branch()
-        except TriageError:
+        except TriageError as exc:
+            self._unreadable(repo, exc)
             return ""
 
     def _export_files(self, repo: str, head: str) -> tuple[str, ...]:
@@ -2186,7 +2187,7 @@ class _Driver:
             mine = sorted(b for b in snap.unverified if snap.repos.get(b) == repo)
             self._report_once(
                 f"clone\0{repo}\0{why}",
-                f"cannot read {repo}'s clone ({why}); archive/release checks skipped"
+                f"cannot read {repo}'s clone ({why}); the checks that need it are skipped"
                 + (f", so no close-out is planned for {', '.join(mine)}" if mine else ""),
             )  # fmt: skip
         plan = drive_pass(snap)
