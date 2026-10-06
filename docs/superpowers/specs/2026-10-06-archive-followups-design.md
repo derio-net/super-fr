@@ -60,7 +60,7 @@ results land in the housekeeping commit that is being made anyway.
 
 ## Requirements
 
-R1. Whenever an `fr archive` invocation has staged at least one move — on every exit path, including one that then refuses or exits 2 — it refreshes every existing `implemented/usage/*.yaml` whose run cursor is archived, using `refreshed_file`, and stages each rewritten file; an invocation that staged no move refreshes nothing.
+R1. Whenever an `fr archive` invocation has staged at least one move — on every exit path, including one that then refuses or exits 2 — it refreshes every existing `implemented/usage/*.yaml` whose run cursor is archived and whose this-host capture is at most 30 days old (Claude Code's default transcript retention — a session older than that can no longer be priced), using `refreshed_file`, and stages each rewritten file; an invocation that staged no move refreshes nothing.
 R2. The refresh never fails the archive: a usage file or cursor that cannot be read, or a usage file with uncommitted changes, is skipped with a one-line note; it never creates a usage file for a run that has none.
 R3. The closeout's "no dollars yet" message says the next `fr archive` (or `fr usage backfill`) will price the session, and no longer asks for a manual commit.
 R4. Whenever an invocation has staged at least one move (same trigger as R1), `fr archive` rewrites every same-repo matrix ref listed under a row's `origin` or a `levels.<level>` list that names a path this invocation moved — a spec, a journal, a run cursor, a usage file, a plan dir or any file inside one — to that path's new location, keeping any `#fragment`.
@@ -106,7 +106,7 @@ the next: the usage refresh (§A), the matrix retarget (§B), the open ends
 `fr.usage.backfill.refresh_archived(repo_root, env, *, skip: Callable[[Path],
 bool]) -> BackfillReport` holds the existing-file branch of `backfill()`.
 `backfill()` calls it for that branch, so there is still one implementation.
-It only refreshes: it never writes a new file. Each per-run exception lands in
+It only refreshes: it never writes a new file. Archive passes `max_age_days=30` (R1), so a session that will never be priced is not re-read forever; `fr usage backfill` passes `None` and stays unbounded. The cursor is parsed only when this host's capture has an unpriced session. "Dirty" means a worktree-vs-index difference (`git diff --quiet`), so a file this invocation just staged is not mistaken for a hand edit. Each per-run exception lands in
 `report.failed`. `skip` is `paths_dirty`, so an archived usage file with
 uncommitted edits is reported, not rewritten (R2). Archive `git add`s each
 refreshed file and prints `  priced: <path>`. It prints one `note:` per
