@@ -7100,9 +7100,12 @@ rows:
       replacement is proposed
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_model_binding_replacement
+    status: ci
+    notes: scenario covers family successor, tier order and distinctness, >2x operator-only,
+      provider hint and no replacement against a stub opencode
     verify: candidate
     scenario: tests/scenarios/model-binding-replacement.sh
   - id: model-binding-check-report
