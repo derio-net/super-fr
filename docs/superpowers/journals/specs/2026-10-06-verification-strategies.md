@@ -284,3 +284,6 @@ R7 matches §B (verify, override, strategy, shape); a spec line may give a reaso
 ### sr-r1-16-resolved · finding [fixed] · resolves sr-r1-16: Test Plan reserved for post-merge while this spec's Test Plan is pre-merge
 
 §I restated: the Test Plan lists post-merge rows with reasons, pre-merge walks live in ## Verification; this spec's Test Plan follows that.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-verification-strategies-p2 created=2026-10-06T11:17:05+00:00 -->
+### phase-split-2026-10-06-verification-strategies-p2 · decision · ask: matrix/record shape changes and walk recording (R7, R13, R14, R16) reviewed apart from the vocabulary
