@@ -101,6 +101,7 @@ from fr.triage.batch_dispatch import (
     LIVE_STAGES,
     TRIAGE_CONFIG_PATH,
     check_config_fresh,
+    conflict_brief,
     dispatch_comment,
     dispatched_already,
     live_reservations,
@@ -122,6 +123,8 @@ from fr.triage.batch_drive import (
     closeout_due,
     closeout_event,
     closeout_item_id,
+    conflict_decision,
+    conflict_item_id,
     default_selection,
     drive_pass,
     export_branch,
@@ -129,6 +132,7 @@ from fr.triage.batch_drive import (
     export_wave_of,
     find_run,
     finished_waves,
+    fresh_conflicts,
     housekeeping_branch,
     is_archived,
     is_finished,
@@ -140,6 +144,7 @@ from fr.triage.batch_drive import (
 from fr.triage.batch_merge import (
     HeadMovedError,
     MergeAttempt,
+    MergeConflictError,
     MergeContext,
     MergeStopError,
     choose_method,
@@ -158,6 +163,7 @@ from fr.triage.model import (
     Batch,
     CancelEvent,
     CloseoutEvent,
+    ConflictEvent,
     DispatchEvent,
     Export,
     Facts,
@@ -1448,6 +1454,8 @@ class _Driver:
         self._unlanded: set[str] = set()  # per pass: planned merges that did not land
         self._held = 0  # per pass: planned dispatches that did not start
         self._stopped: dict[str, str] = {}  # per pass: repo -> batch that stopped its train
+        # per pass: repo -> the conflicts its train met, (batch, refused paths) in order
+        self._conflicts: dict[str, list[tuple[str, tuple[str, ...]]]] = {}
         self._queued = 0  # per pass: candidates not attempted behind a stopped train
         self._clients: dict[str, GhClient] = {}
         self._checkouts: dict[str, Checkout] = {}
@@ -2010,7 +2018,7 @@ class _Driver:
         recollect(self.scope, self.target)
         _, facts, judgements = _load_state(self.scope, self.target)
         self._ci, self._unlanded, self._held = {}, set(), 0
-        self._stopped, self._queued = {}, 0
+        self._stopped, self._queued, self._conflicts = {}, 0, {}
         self._export_refusals = 0
         self.failed_write = False
         snap = self.snapshot(facts, judgements, _now())
@@ -2183,17 +2191,12 @@ class _Driver:
             attempt = merge_ready(ctx, slots[0], None)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
+        except MergeConflictError as exc:
+            line, acted = self._conflict(exc, action, facts, judgements, batch, repo)
+            return _MergeOutcome(line, acted, in_flight, _stops_train(exc))
         except MergeStopError as exc:
-            # A refusal ends neither the loop nor the pass (rg-4): it is reported in
-            # full once per batch, head and reason, and `--once` exits 1 on it.
-            self.failed_write = True
-            key = f"{batch.id}\0{action.head}\0{exc}"
-            stops = _stops_train(exc)
-            if key in self.reported:
-                again = f"stopped again at {action.head[:12]} (reported above)"
-                return _MergeOutcome(again, False, in_flight, stops)
-            self.reported.add(key)
-            return _MergeOutcome(f"stopped: {exc}", False, in_flight, stops)
+            return _MergeOutcome(self._stopped_line(batch, action, exc), False, in_flight,
+                                 _stops_train(exc))  # fmt: skip
         except TriageError as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:  # a re-read of the PR or its checks; the merge's own
@@ -2216,6 +2219,172 @@ class _Driver:
         return _MergeOutcome(
             f"held: PR #{action.pr} is {attempt.outcome}{held}", False, in_flight, stops
         )
+
+    def _stopped_line(self, batch: Batch, action: Action, exc: MergeStopError) -> str:
+        """A refusal ends neither the loop nor the pass (rg-4): it is reported in full
+        once per batch, head and reason, and `--once` exits 1 on it."""
+        self.failed_write = True
+        key = f"{batch.id}\0{action.head}\0{exc}"
+        if key in self.reported:
+            return f"stopped again at {action.head[:12]} (reported above)"
+        self.reported.add(key)
+        return f"stopped: {exc}"
+
+    # ------------------------------------------------- conflict hand-back (§G)
+
+    def _conflict(
+        self,
+        exc: MergeConflictError,
+        action: Action,
+        facts: Facts,
+        judgements: Judgements,
+        batch: Batch,
+        repo: str,
+    ) -> tuple[str, bool]:
+        """A real conflict (spec 2026-10-06-verification-strategies §G, R20-R22): the
+        stop line, then what `conflict_decision` says, from the persisted events and
+        the conflicts this pass's train met before it. Returns the line and whether
+        it acted (wrote an event or handed back)."""
+        stopped = self._stopped_line(batch, action, exc)
+        earlier = self._conflicts.setdefault(action.train, [])
+        decision = conflict_decision(batch.events, exc.head, exc.paths, tuple(earlier))
+        earlier.append((batch.id, exc.paths))
+        if decision.kind == "skip":
+            return stopped, False
+        if decision.kind == "wait-behind":
+            return (
+                f"{stopped}; waits behind {decision.behind}, whose conflict shares a path, "
+                "before it is handed back",
+                False,
+            )
+        if decision.kind == "held":
+            self._append(judgements, facts, batch, self._conflict_event(exc, batch, "held"))
+            return (
+                f"{stopped}; held: its hand-backs since its dispatch are spent, it needs you",
+                True,
+            )
+        return self._hand_back(exc, stopped, action, facts, judgements, batch, repo)
+
+    @staticmethod
+    def _conflict_event(
+        exc: MergeConflictError, batch: Batch, delivered: str, handle: str | None = None
+    ) -> ConflictEvent:
+        return ConflictEvent(
+            kind="conflict", at=_now_after(batch), head=exc.head, paths=list(exc.paths),
+            delivered=delivered, handle=handle,  # type: ignore[arg-type]
+        )  # fmt: skip
+
+    def _hand_back(
+        self,
+        exc: MergeConflictError,
+        stopped: str,
+        action: Action,
+        facts: Facts,
+        judgements: Judgements,
+        batch: Batch,
+        repo: str,
+    ) -> tuple[str, bool]:
+        """Deliver the brief: to the target's idle session, else nothing while it is
+        working or blocked, else to a fresh conflict session (R20, R23)."""
+        from fr_dispatch.protocols import SessionInspector, SessionMessenger
+        from fr_dispatch.work_item import WorkItem
+
+        last = last_dispatch(batch)
+        launch = self._launch(facts, batch, repo)
+        name = str(last.runner if last else launch.runner)
+        branch = last.branch if last else batch_branch(batch)
+        brief = conflict_brief(
+            batch, pr=action.pr, head=exc.head, paths=exc.paths, branch=branch,
+            base=self.merge_ctx(facts, repo).main, mirrors=facts.config_for(repo).mirrors,
+        )  # fmt: skip
+        runner = self.runner(name)
+        since = fresh_conflicts(batch, since_dispatch=True)
+        target = WorkItem(
+            id=conflict_item_id(repo, batch.id, fresh_conflicts(batch, since_dispatch=False))
+            if since
+            else batch_item_id(repo, batch.id),
+            unit="run", workflow=batch_workflow(batch), repo=repo, parent=None, inputs=(),
+            payload={"group": self.group_of(batch)}, tracking=None,
+        )  # fmt: skip
+        if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
+            try:
+                status = runner.session_statuses([target]).get(target.id, "unknown")
+                if status == "idle":
+                    runner.message(target, brief)
+            except Exception as exc_:  # noqa: BLE001 - retried next pass, never the drive's end
+                return (
+                    f"{stopped}; hand-back to {target.id} failed, retried next pass: {exc_}",
+                    False,
+                )
+            if status == "idle":
+                event = self._conflict_event(exc, batch, "session", target.id)
+                self._append(judgements, facts, batch, event)
+                return f"{stopped}; handed back to its session {target.id}", True
+            if status not in ("absent", "done"):
+                return (
+                    f"{stopped}; its session is {status}: nothing sent, retried next pass",
+                    False,
+                )
+        return self._fresh_conflict(
+            exc, stopped, judgements, facts, batch, repo, brief=brief, name=name, launch=launch,
+            branch=branch,
+        )  # fmt: skip
+
+    def _fresh_conflict(
+        self,
+        exc: MergeConflictError,
+        stopped: str,
+        judgements: Judgements,
+        facts: Facts,
+        batch: Batch,
+        repo: str,
+        *,
+        brief: str,
+        name: str,
+        launch: Launch,
+        branch: str,
+    ) -> tuple[str, bool]:
+        """Start `<repo>/run/conflict-<id>-<n>` through the batch's runner, the way a
+        close-out is started; a live one (a pass killed before its event) is recorded."""
+        from fr_dispatch.work_item import WorkItem
+
+        item = WorkItem(
+            id=conflict_item_id(repo, batch.id, fresh_conflicts(batch, since_dispatch=False) + 1),
+            unit="run",
+            workflow=batch_workflow(batch),
+            repo=repo,
+            parent=None,
+            inputs=(),
+            payload={
+                "kind": "conflict",
+                "brief": brief,
+                "harness": launch.harness,
+                "model": launch.model,
+                "branch": branch,
+                "issues": list(batch.ids),
+                "checkout": str(self.checkout(repo).path),
+                "group": self.group_of(batch),
+            },
+            tracking=None,
+        )
+        runner = self.runner(name)
+        if not runner.can_dispatch(item):
+            _fail(f"runner `{name}` does not take run-unit work")
+        refusal = runner.preflight([item])
+        if refusal:
+            _fail(f"runner `{name}` refused: {refusal}")
+        if item.id in runner.existing_dispatches([item]):
+            self._append(
+                judgements, facts, batch, self._conflict_event(exc, batch, "fresh", item.id)
+            )
+            return f"{stopped}; recorded the live {item.id}", True
+        try:
+            handle = runner.dispatch(item)
+        except Exception as err:  # the runner's own failure: nothing is written
+            _fail(f"runner `{name}` failed to dispatch {item.id}: {err}", code=1)
+        event = self._conflict_event(exc, batch, "fresh", handle or item.id)
+        self._append(judgements, facts, batch, event)
+        return f"{stopped}; handed back to a fresh session {item.id}", True
 
     def _close_out(
         self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str

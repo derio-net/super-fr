@@ -27,6 +27,7 @@ from fr.triage.batch import (
     batch_repo,
     derive_batch_stage,
     foreign_batch_prs,
+    is_open,
     pr_open_queue,
 )
 from fr.triage.batch_drive import (
@@ -40,6 +41,7 @@ from fr.triage.batch_drive import (
     checks_verdict,
     closeout_event,
     drive_pass,
+    held_conflict,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
@@ -125,6 +127,7 @@ def drive_snapshot(
 @dataclass(frozen=True)
 class Need:
     # ready-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch | unplaced
+    # | merge-conflict
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
     text: str
@@ -139,6 +142,7 @@ NEED_LABELS = {
     "post-merge": "post_merge not done",
     "stale-dispatch": "Stale dispatch",
     "unplaced": "Unplaced issue",
+    "merge-conflict": "Merge conflict",
 }
 
 
@@ -221,6 +225,17 @@ def needs_you(facts: Facts, judgements: Judgements) -> list[Need]:
             Need("post-merge", b.id,
                  f"batch {b.id} merged {merged.isoformat()} and its post_merge has not "
                  "succeeded (it failed, or no driver is running)", f"#batch-{b.id}")
+        )  # fmt: skip
+
+    for b in judgements.batches:
+        held = held_conflict(b)
+        if held is None or not is_open(b, facts):
+            continue
+        out.append(
+            Need("merge-conflict", b.id,
+                 f"batch {b.id} conflicts at {held.head} in {', '.join(held.paths)}, and its "
+                 "hand-backs are spent: resolve it, or dispatch or cancel the batch",
+                 f"#batch-{b.id}")
         )  # fmt: skip
 
     for s in stale_dispatches(facts):

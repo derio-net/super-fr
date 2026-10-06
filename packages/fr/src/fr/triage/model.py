@@ -342,6 +342,10 @@ class TriageConfig(_Strict):
     # The logins whose PRs on a batch branch are the batch's (gh#936). Empty means
     # the user `collect` ran as (`Facts.viewer`); a list REPLACES that default.
     pr_authors: list[str] = []
+    # The commands that regenerate this repo's generated mirrors, each an argument list
+    # (spec 2026-10-06-verification-strategies §G): a conflict hand-back's brief names
+    # them, so a session regenerates a mirror instead of hand-resolving it.
+    mirrors: list[Annotated[list[str], Field(min_length=1)]] = []
     # Where the wave driver exports this repo's triage state once a wave is finished
     # (spec 2026-10-05-triage-pages-goal R13); None: the driver never exports.
     export: ExportConfig | None = None
@@ -744,7 +748,9 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
-        later = sorted({e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_5_EVENTS})
+        later = sorted(
+            {e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_5_EVENTS}
+        )
         if self.schema_ < 5 and later:
             raise ValueError(
                 f"`{'`, `'.join(later)}` events need schema 5, but this file is stamped "

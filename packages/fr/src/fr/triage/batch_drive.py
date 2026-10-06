@@ -391,6 +391,29 @@ def conflict_decision(
     return ConflictDecision("handback")
 
 
+def held_conflict(batch: Batch) -> ConflictEvent | None:
+    """The batch's latest `conflict` event when it is `held` and no `dispatch` came after
+    it (R22): the operator owns that conflict. A new dispatch resets the count."""
+    for event in reversed(batch.events):
+        if isinstance(event, DispatchEvent):
+            return None
+        if isinstance(event, ConflictEvent):
+            return event if event.delivered == "held" else None
+    return None
+
+
+def fresh_conflicts(batch: Batch, *, since_dispatch: bool) -> int:
+    """How many fresh conflict sessions the batch started: all of them (the next one's
+    number), or only since its latest dispatch (whether one is the message target)."""
+    count = 0
+    for event in reversed(batch.events):
+        if since_dispatch and isinstance(event, DispatchEvent):
+            break
+        if isinstance(event, ConflictEvent) and event.delivered == "fresh":
+            count += 1
+    return count
+
+
 def conflict_item_id(repo: str, batch_id: str, n: int) -> str:
     """`<OWNER>/<REPO>/run/conflict-<batch-id>-<n>`: the *n*th fresh conflict session."""
     return f"{repo}/run/conflict-{batch_id}-{n}"

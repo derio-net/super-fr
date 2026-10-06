@@ -9,6 +9,7 @@ runs a process or calls a forge.
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Iterable, Sequence
 
 import yaml
@@ -104,6 +105,43 @@ def render_brief(
             "than one, stop and ask before fixing any.",
         ]
     return "\n".join(lines) + "\n"
+
+
+def conflict_brief(
+    batch: Batch,
+    *,
+    pr: int | None,
+    head: str,
+    paths: Sequence[str],
+    branch: str,
+    base: str,
+    mirrors: Sequence[Sequence[str]],
+) -> str:
+    """The conflict hand-back brief (spec 2026-10-06-verification-strategies §G, R20):
+    the batch, its PR, the head and the paths merge refused, then the five steps. The
+    repo's `.fr/triage.yaml` `mirrors:` commands, when declared, are step 3's."""
+    where = f"PR #{pr}" if pr is not None else "its PR"
+    regenerate = "3. Regenerate generated mirrors instead of hand-resolving them"
+    if mirrors:
+        commands = "; ".join(f"`{shlex.join(argv)}`" for argv in mirrors)
+        regenerate += f": run {commands}, then stage what they wrote."
+    else:
+        regenerate += " (rerun whatever generates them), then stage what they wrote."
+    return "\n".join(
+        [
+            f"Merge conflict on batch {batch.id} ({batch.title}): {where} on {branch}, at "
+            f"head {head}, conflicts with {base} in a change the wave driver will not "
+            f"resolve: {', '.join(paths)}.",
+            f"Resolve it on {branch} itself, in these five steps:",
+            f"1. `git fetch origin && git merge {base}` into {branch}. Do not rebase and "
+            "do not force-push: the PR's history stays as it is.",
+            f"2. Resolve the conflicted paths: {', '.join(paths)}.",
+            regenerate,
+            "4. Run the test suite, and fix what the merge broke.",
+            f"5. Commit the merge and `git push origin {branch}`. The driver merges the PR "
+            "once its checks are green.",
+        ]
+    )
 
 
 def dispatch_comment(batch: Batch, item_id: str, key: str) -> str:
