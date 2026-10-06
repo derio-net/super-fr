@@ -5,6 +5,8 @@ owed row covered — and omittable when it is not owed (in-flight back-compat)."
 
 from __future__ import annotations
 
+import datetime as _dt
+import os
 from pathlib import Path
 
 import pytest
@@ -102,7 +104,8 @@ def test_a_hand_written_log_is_refused(
     tmp_path: Path, _home: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = _owed_good(tmp_path)
-    fake = tmp_path / "walk.log"
+    fake = _home / ".cache/fr/walks" / RUN / "walk.log"
+    fake.parent.mkdir(parents=True)
     fake.write_text("all steps passed, honest\n")
 
     assert "not a walk log" in _refused(root, {"tests": "t", "walk": str(fake)}, capsys)
@@ -162,3 +165,119 @@ def test_both_shipped_shapes_declare_walk_on_deliver(name: str) -> None:
         manifest = parse_manifest((copy / f"{name}.yaml").read_text())
         (deliver,) = [s for s in manifest.steps if s.id == "deliver"]
         assert "walk" in deliver.evidence, copy
+
+
+# --- who ran the walk (review p3-r1) ------------------------------------------------
+
+_OPENED = "2026-10-06T16:00:00+00:00"
+
+
+def _forged(root: Path, home: Path, *, where: Path | None = None) -> Path:
+    """A header-complete log no walk wrote: HEAD's code tree, every step 0, the
+    smoke and the owed row — exactly what `check_walk_log` asks of a log."""
+    from fr.run.code_tree import code_tree
+    from fr.verification.walk import WalkLog, WalkStep
+
+    steps = tuple(
+        WalkStep(n, 0, 0.1) for n in ("install", "smoke:version", "smoke:status", "row:ok")
+    )
+    log = WalkLog(RUN, "candidate", code_tree(root), "claude-code", "m-1", steps)
+    path = where or home / ".cache/fr/walks" / RUN / "forged.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(log.render())
+    stamp = _dt.datetime.fromisoformat("2026-10-06T16:08:00+00:00").timestamp()
+    os.utime(path, (stamp, stamp))
+    return path
+
+
+def _session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str) -> None:
+    from tests.unit.transcript_sessions import ran_at
+
+    projects = tmp_path / "projects"
+    ran_at(
+        projects,
+        "2026-10-06T16:05:00.000Z",
+        until="2026-10-06T16:09:00.000Z",
+        session_id="s-walk",
+        command=command,
+    )
+    monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(projects))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s-walk")
+    monkeypatch.setenv("CLAUDECODE", "1")
+
+
+def _gate(root: Path, log: Path, *, opened: str | None = _OPENED) -> str:
+    state = load_run_state(root, RUN)
+    owed = run_cmd._walk_obligation("step/deliver", root, state)
+    return run_cmd._verify_walk("step/deliver", str(log), root, state, owed, opened=opened)
+
+
+def test_a_forged_log_no_command_of_yours_walked_is_refused(
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _owed_good(tmp_path)
+    log = _forged(root, _home)
+    _session(tmp_path, monkeypatch, f"cat /dev/null > {tmp_path / 'other.txt'}")
+
+    with pytest.raises(Exit):
+        _gate(root, log)
+
+    assert "fr verification walk --run w1" in capsys.readouterr().err.replace("\n", " ")
+
+
+def test_a_log_inside_the_window_of_your_walk_command_is_accepted(
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _owed_good(tmp_path)
+    log = _forged(root, _home)
+    _session(tmp_path, monkeypatch, f"cd {root} && uv run fr verification walk --run w1 --model m")
+
+    assert _gate(root, log).startswith("forged.log@")
+
+
+def test_a_walk_command_for_another_run_does_not_witness_this_one(
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _owed_good(tmp_path)
+    log = _forged(root, _home)
+    _session(tmp_path, monkeypatch, "fr verification walk --run other --model m")
+
+    with pytest.raises(Exit):
+        _gate(root, log)
+
+
+def test_a_log_outside_the_runs_walk_dir_is_refused(
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _owed_good(tmp_path)
+    log = _forged(root, _home, where=tmp_path / "elsewhere" / "walk.log")
+    _session(tmp_path, monkeypatch, "fr verification walk --run w1 --model m")
+
+    with pytest.raises(Exit):
+        _gate(root, log)
+
+    assert ".cache/fr/walks/w1" in capsys.readouterr().err.replace("\n", "")
+
+
+def test_an_unreadable_transcript_records_the_walk_unobserved(
+    tmp_path: Path, _home: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _owed_good(tmp_path)
+    log = _forged(root, _home)
+    run_cmd._take_unobserved()  # a gate an earlier test noted is not this one's
+
+    assert _gate(root, log).startswith("forged.log@")
+
+    assert run_cmd._take_unobserved() == {"unobserved": "walk"}
+    assert "unobserved=walk" in capsys.readouterr().err.replace("\n", " ")
+
+
+def test_walks_run_reads_the_program_not_an_argument() -> None:
+    from fr.run.observed import walks_run
+
+    assert walks_run("uv run --project /w fr verification walk --run w1 --model m", "w1")
+    assert walks_run("cd /w && fr verification walk --model m --run=w1", "w1")
+    assert walks_run("fr isolation exec -- 'fr verification walk --run w1'", "w1")
+    assert not walks_run("echo fr verification walk --run w1", "w1")
+    assert not walks_run("fr verification walk --run w2", "w1")
+    assert not walks_run("fr verification check --run w1", "w1")

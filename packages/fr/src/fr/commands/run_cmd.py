@@ -1912,7 +1912,9 @@ def _verified_evidence(
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
     if "walk" in offered:
         assert walk_owed is not None
-        verified["walk"] = _verify_walk(key, offered["walk"], repo_root, state, walk_owed)
+        verified["walk"] = _verify_walk(
+            key, offered["walk"], repo_root, state, walk_owed, opened=opened
+        )
     # Every DERIVED witness is evaluated, and every refusal printed, before the
     # resolve is refused (gh#768): one environmental blocker (no fetchable
     # remote) used to exit first and hide each witness declared after it.
@@ -2541,13 +2543,22 @@ def _walk_obligation(key: str, repo_root: Path, state: RunState) -> WalkOwed:
     return owed
 
 
-def _verify_walk(key: str, value: str, repo_root: Path, state: RunState, owed: WalkOwed) -> str:
+def _verify_walk(
+    key: str, value: str, repo_root: Path, state: RunState, owed: WalkOwed, *, opened: str | None
+) -> str:
     """`value` is `none` (accepted only when no walk is owed) or a log
     `fr verification walk` wrote on HEAD's code tree, every step passing and
     every owed row covered — or exit 2 naming the cause. Returns the witness,
-    `<log>@<sha256[:12]>`."""
+    `<log>@<sha256[:12]>`.
+
+    Attributed as `tests=` is (review p3-r1): the header is the log's own
+    claim, so it must also sit in this run's walk dir and — where the
+    transcript is readable — have been written inside the run window of a
+    command of YOURS that ran `fr verification walk --run <run>` since this
+    unit opened. Unobservable: recorded `unobserved=walk`, never silent.
+    """
     from fr.run.code_tree import code_tree, dirty_code_paths
-    from fr.verification.walk import WalkError, check_walk_log, parse_walk_log
+    from fr.verification.walk import WalkError, check_walk_log, parse_walk_log, walk_log_dir
 
     if value == "none":
         if owed.owed:
@@ -2560,11 +2571,20 @@ def _verify_walk(key: str, value: str, repo_root: Path, state: RunState, owed: W
             raise typer.Exit(2)
         return "none"
     path = (Path(value).expanduser() if Path(value).is_absolute() else repo_root / value).resolve()
+    directory = walk_log_dir(state.run)
+    if not path.is_relative_to(directory.resolve()):
+        err_console.print(
+            f"[red]{key}: --evidence walk={value} is not in {directory} — name the log "
+            f"`fr verification walk --run {state.run}` wrote.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     try:
         data = path.read_bytes()
         log = parse_walk_log(data.decode())
         problems = check_walk_log(log, owed, code_tree(repo_root), run=state.run)
         dirty = dirty_code_paths(repo_root)
+        modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
     except (OSError, UnicodeDecodeError, WalkError, GitUnavailableError) as e:
         err_console.print(
             f"[red]{key}: --evidence walk={value}: {escape(str(e))}[/red]", soft_wrap=True
@@ -2572,12 +2592,54 @@ def _verify_walk(key: str, value: str, repo_root: Path, state: RunState, owed: W
         raise typer.Exit(2) from e
     if dirty:
         problems.append(f"uncommitted code since the walk ({dirty[0]}...)")
+    problems += _walk_provenance(key, state.run, modified, opened=opened)
     if problems:
         err_console.print(f"[red]{key}: --evidence walk={value} is refused:[/red]", soft_wrap=True)
         for problem in problems:
             err_console.print(f"  - {problem}", markup=False, soft_wrap=True)
         raise typer.Exit(2)
     return _log_witness(path, data, repo_root)
+
+
+def _walk_provenance(
+    key: str, run: str, modified: _dt.datetime, *, opened: str | None
+) -> list[str]:
+    """Why a walk log modified at `modified` is not one a command of yours
+    wrote during this unit (empty when it is). Unobservable: `unobserved=walk`,
+    warned — and a log older than the unit is still refused."""
+    from fr.run.observed import walks_run
+    from fr.run.telemetry import orchestrator_ran_since, parse_timestamp
+
+    windows = (
+        orchestrator_ran_since(os.environ, lambda command: walks_run(command, run), opened)
+        if opened
+        else None
+    )
+    # One second of slack either side, as `tests=` (review r1-1).
+    slack = _dt.timedelta(seconds=1)
+    if windows is not None:
+        if any(s - slack <= modified <= e + slack for s, e in windows):
+            return []
+        why = (
+            "no command of yours ran it"
+            if not windows
+            else "its bytes were not written by the command of yours that ran it"
+        )
+        return [
+            f"{why} — `fr verification walk --run {run}` must run in this session since "
+            f"this unit opened at {opened}, and write the log you name"
+        ]
+    opened_at = parse_timestamp(opened)
+    if opened_at is not None and modified < opened_at - slack:
+        return [f"the log predates this unit (opened {opened}) — walk again"]
+    _note_unobserved("walk")
+    err_console.print(
+        f"[yellow]{key}: could not verify who ran the walk — "
+        f"{_why_unobservable('commands')}; recorded unverified "
+        "(evidence: unobserved=walk).[/yellow]",
+        soft_wrap=True,
+    )
+    return []
 
 
 def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None) -> str:

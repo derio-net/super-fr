@@ -71,6 +71,10 @@ class ObservedSession(Protocol):
         self, log: Path, since: _dt.datetime
     ) -> list[tuple[_dt.datetime, _dt.datetime]] | None: ...
 
+    def ran_windows(
+        self, matches: Callable[[str], bool], since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None: ...
+
 
 _TIER_SUFFIXES = ("-mechanical", "-standard", "-hard")
 
@@ -174,6 +178,13 @@ class ClaudeCodeSession:
 
         return wrote_since(self.transcript, log, _iso(since), main_thread=self.main_thread)
 
+    def ran_windows(
+        self, matches: Callable[[str], bool], since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+        from fr.run.telemetry import ran_since
+
+        return ran_since(self.transcript, matches, _iso(since), main_thread=self.main_thread)
+
 
 # --- OpenCode -------------------------------------------------------------
 
@@ -267,7 +278,21 @@ def _query(db: Path, sql: str, params: tuple[object, ...]) -> list[tuple[Any, ..
 def _wrote_windows(
     db: Path, log: Path, start: _dt.datetime, session: str | None
 ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
-    """The `(start, end)` of every `bash` part that WROTE `log`, started at or
+    from fr.run.telemetry import _writes
+
+    return _ran_windows(db, lambda command: _writes(command, log), start, session, log=log)
+
+
+def _ran_windows(
+    db: Path,
+    matches: Callable[[str], bool],
+    start: _dt.datetime,
+    session: str | None,
+    *,
+    log: Path | None = None,
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """The `(start, end)` of every `bash` part whose command `matches` (for the
+    write-target witness: WROTE `log`), started at or
     after `start`, completed with exit 0 — in `session`, or (`None`) in any
     TOP-LEVEL session (a `task` subagent is a child session, `parent_id` set).
     `None` when the database cannot be read.
@@ -279,9 +304,10 @@ def _wrote_windows(
     `None` (unobserved), never `[]`, which refuses as "nobody wrote it".
     Activity is read from `part`, not `session.time_updated`, which nothing
     shows OpenCode bumps per part. Exit 0 stands in for Claude Code's
-    `is_error`, which a non-zero exit sets.
+    `is_error`, which a non-zero exit sets. A detached writer's window is
+    extended only when there is a `log` to read its `exit=` line from.
     """
-    from fr.run.telemetry import _BashCall, _detaches, _seen_exit, _writes
+    from fr.run.telemetry import _BashCall, _detaches, _seen_exit
 
     since_ms = int(start.timestamp() * 1000)
     active = _query(db, "SELECT 1 FROM part WHERE time_updated >= ? LIMIT 1", (since_ms,))
@@ -328,10 +354,10 @@ def _wrote_windows(
     calls.sort(key=lambda c: (c.began, c.ended))
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
     for call in calls:
-        if call.exit_code != 0 or not _writes(call.command, log):
+        if call.exit_code != 0 or not matches(call.command):
             continue
         windows.append((call.began, call.ended))
-        if _detaches(call.command):
+        if log is not None and _detaches(call.command):
             seen = _seen_exit(call, calls, log)
             if seen is not None:
                 windows.append((call.began, seen))
@@ -519,11 +545,18 @@ class OpenCodeSession:
             return None
         return _wrote_windows(self.db, log, since, self.session)
 
+    def ran_windows(
+        self, matches: Callable[[str], bool], since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+        if not self._known():
+            return None
+        return _ran_windows(self.db, matches, since, self.session)
+
 
 @dataclass(frozen=True)
 class OpenCodeUnscoped:
     """OpenCode with no session id (the plugin not delivered, or older than
-    `shell.env`): serves `wrote_windows` only, reading every TOP-LEVEL session
+    `shell.env`): serves `wrote_windows` and `ran_windows` only, reading every TOP-LEVEL session
     active since — today's reading, which keeps `deliver-tests-provenance`
     enforced without the plugin (spec §A). Weaker than one session; still proof
     that an orchestrator's own shell command produced the bytes."""
@@ -535,11 +568,85 @@ class OpenCodeUnscoped:
     ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
         return _wrote_windows(self.db, log, since, None)
 
+    def ran_windows(
+        self, matches: Callable[[str], bool], since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+        return _ran_windows(self.db, matches, since, None)
+
 
 def opencode_unscoped(env: Mapping[str, str]) -> OpenCodeUnscoped:
     from fr.run.telemetry import OpenCodeReader
 
     return OpenCodeUnscoped(OpenCodeReader().database(env))
+
+
+# --- what a command line runs ------------------------------------------------
+
+_UV_VALUE_FLAGS = frozenset({"--project", "--directory", "--with", "--python", "--package"})
+"""`uv run` flags that take a value as the next word."""
+_COMMAND_DEPTH = 4
+
+
+def walks_run(command: str, run: str) -> bool:
+    """Does `command` run `fr verification walk --run <run>`? The command-match
+    witness beside the write-target one (`fr.run.telemetry._writes`): the walk
+    writes its own log, so the command names no `>` target to match.
+
+    The `fr` must be a simple command's PROGRAM — bare, by path, after `uv run
+    [flags]`, inside `fr isolation exec … --` or `sh -c` — never an argument:
+    `echo fr verification walk --run x` runs nothing. Syntax, not execution,
+    as every reader here: the caller ties the log's mtime to the window."""
+    from fr.run.telemetry import _simple_commands
+
+    return any(
+        args[:2] == ["verification", "walk"] and _run_option(args[2:]) == run
+        for words in _simple_commands(command)
+        for args in _fr_args(words, 0)
+    )
+
+
+def _fr_args(words: list[str], depth: int) -> list[list[str]]:
+    """The arguments of every `fr` invocation `words` (one simple command) runs."""
+    from fr.run.telemetry import _LEADING_ASSIGNMENT, _simple_commands
+
+    if depth > _COMMAND_DEPTH:
+        return []
+    while words and _LEADING_ASSIGNMENT.match(words[0]):
+        words = words[1:]
+    if not words:
+        return []
+    name = os.path.basename(words[0])
+    if name == "fr":
+        args = words[1:]
+        if args[:2] != ["isolation", "exec"]:
+            return [args]
+        rest = args[args.index("--") + 1 :] if "--" in args else []
+        if len(rest) == 1:
+            return [a for sub in _simple_commands(rest[0]) for a in _fr_args(sub, depth + 1)]
+        return _fr_args(rest, depth + 1)
+    if name == "uv" and words[1:2] == ["run"]:
+        rest = words[2:]
+        while rest and rest[0].startswith("-"):
+            rest = rest[2:] if rest[0] in _UV_VALUE_FLAGS else rest[1:]
+        return _fr_args(rest, depth + 1)
+    if name in ("sh", "bash") and "-c" in words:
+        after = words[words.index("-c") + 1 :]
+        return (
+            [a for sub in _simple_commands(after[0]) for a in _fr_args(sub, depth + 1)]
+            if after
+            else []
+        )
+    return []
+
+
+def _run_option(args: list[str]) -> str | None:
+    """The value of `--run` in `args` (`--run x` or `--run=x`), else `None`."""
+    for i, arg in enumerate(args):
+        if arg == "--run" and i + 1 < len(args):
+            return args[i + 1]
+        if arg.startswith("--run="):
+            return arg.removeprefix("--run=")
+    return None
 
 
 _ROOT_HOPS = 32
