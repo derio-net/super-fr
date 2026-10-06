@@ -5968,9 +5968,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R3
     - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_split.py#test_steps_by_role_sum_back_to_each_step_priced
+      - super-fr:tests/unit/test_usage_split.py#test_subagent_messages_go_to_executor_reviewer_and_flat_agent_roles
+      - super-fr:tests/unit/test_usage_split.py#test_each_unit_role_dollars_are_the_sum_of_its_messages_dollars
+    status: ci
+    notes: 'Unit-pinned by this PR (batch cost-evidence phase 1): role/step split invariants,
+      real-nesting unit attribution, per-unit dollars.'
   - id: cost-evidence-usage-v2-migration
     capability: usage
     acceptance: A version-1 usage file migrates to version 2 by stamp and validates,
