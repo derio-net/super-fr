@@ -1,9 +1,0 @@
-schema_version: 8
-run: 2026-10-06-feat-batch-cost-evidence
-step: deliver
-outcome: done
-acceptance: []
-emitted:
-  pr: https://github.com/derio-net/super-fr/pull/1041
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/8096ebf8-b0a5-4123-83fe-797c2f6f4890/scratchpad/full-suite.log
