@@ -157,13 +157,20 @@ steps:
           tests: p4-suite.log@db0c487a2946;tree=815b8312343ba56509fb44a66c103999a33cdf6fbfe4acffc4906c46a0ac1223
           visual: none
       phase/4/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T13:29:41+00:00'
           agent: ab0d60a7411b978ec
           harness: claude-code
           model: claude-opus-5-5
           session: a4557f5a-3a30-4673-856d-3f9329d47f77
+          returned: '2026-10-06T13:50:04+00:00'
+          outcome: done
+        evidence:
+          review: p4-review
+          reviewer: ab0d60a7411b978ec
+          visual: none
+          findings: p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7
   journal-check:
     state: pending
   deliver:

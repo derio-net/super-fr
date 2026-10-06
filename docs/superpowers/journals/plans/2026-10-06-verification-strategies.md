@@ -381,3 +381,78 @@ closing-keyword scanning was generalised in place (_closing_lines takes the keyw
 ### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
 
 one is_awaiting_live predicate in check.py serves check, views and render; no second label test exists
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-10-06T13:50:03+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · awaiting-live issue with leftover fr:in-progress also flagged stale dispatch and in needs-you (phase 4)
+
+Raised by the independent phase-4 reviewer with file:line evidence (see p4-review).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-10-06T13:50:03+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · next_up hid awaiting batches the driver still dispatched (phase 4)
+
+Raised by the independent phase-4 reviewer with file:line evidence (see p4-review).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-10-06T13:50:03+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · Refs-merged batch derived partial and blocked dependents (phase 4)
+
+Raised by the independent phase-4 reviewer with file:line evidence (see p4-review).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-10-06T13:50:03+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · close-out label command fails when the label does not exist (phase 4)
+
+Raised by the independent phase-4 reviewer with file:line evidence (see p4-review).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-10-06T13:50:03+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · parked/duplicate awaiting-live issues rendered twice (phase 4)
+
+Raised by the independent phase-4 reviewer with file:line evidence (see p4-review).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-10-06T13:50:03+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · no_severity still asked to rank awaiting-live issues (phase 4)
+
+Raised by the independent phase-4 reviewer with file:line evidence (see p4-review).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-10-06T13:50:03+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · referenced_refs read fr's render and matched prose 'ref' (phase 4)
+
+Raised by the independent phase-4 reviewer with file:line evidence (see p4-review).
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-10-06T13:50:03+00:00 phase=4 -->
+### p4-review · review · Phase 4 independent code review — 7 findings, all in scope, all fixed (phase 4)
+
+Reviewer checked labels/closeout/pr_body/triage check, views and render against §F (R17, R18). It confirmed: one label definition, closed issues excluded, a single PR-body read, nothing under tracking none, pure views, facts schema unchanged. It judged the test_install_atomic single failure an unrelated timing flake, since this phase does not touch install. Fixes were made test-first by a separate fixer. The orchestrator decided one shared rule for the board and the driver (p4-r2) and that awaiting-live members count as closed for the batch stage (p4-r3). Suite: 9285 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-10-06T13:50:03+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: awaiting-live issue with leftover fr:in-progress also flagged stale dispatch and in needs-you (phase 4)
+
+stale_dispatches excludes awaiting-live. 11bccb9a0.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-10-06T13:50:03+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: next_up hid awaiting batches the driver still dispatched (phase 4)
+
+One rule: check.batch_awaits_live; drive_pass emits held (AWAITING_LIVE_HOLD, not pending); next_up reads the held action; kanban card says why. 9f5a3cf49.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-10-06T13:50:03+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: Refs-merged batch derived partial and blocked dependents (phase 4)
+
+Awaiting-live members count as closed in derive_batch_stage; the preselected_wave workaround removed (a proposed, wholly-awaiting batch still holds no wave open). 599e191aa.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-10-06T13:50:03+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: close-out label command fails when the label does not exist (phase 4)
+
+LABEL_COMMANDS label-create per backend (flags checked against glab/tea --help); the brief prints one create line per repo before its add lines. 6749e766d.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-10-06T13:50:03+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: parked/duplicate awaiting-live issues rendered twice (phase 4)
+
+_parked excludes awaiting-live. 73dee0e47.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-10-06T13:50:03+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: no_severity still asked to rank awaiting-live issues (phase 4)
+
+Excluded; check.py docstring lists every excluded set. 224165148.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-10-06T13:50:03+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: referenced_refs read fr's render and matched prose 'ref' (phase 4)
+
+as_github=False, plural-only refs keyword, docstring corrected (GH-n Refs no longer labelled — accepted narrow loss). d31f8b2a8.
