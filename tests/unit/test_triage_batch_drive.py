@@ -17,6 +17,7 @@ from fr.triage.batch import ForeignPr, QueueEntry, batch_item_id
 from fr.triage.batch_drive import (
     CLOSEOUT_FALLBACK,
     Action,
+    IdleSession,
     LivePr,
     Snapshot,
     Train,
@@ -29,6 +30,7 @@ from fr.triage.batch_drive import (
     drive_pass,
     find_run,
     housekeeping_branch,
+    idle_session,
     is_archived,
     is_finished,
     summary_line,
@@ -1501,3 +1503,112 @@ def test_an_archive_pr_retargeted_off_the_default_branch_is_never_merged() -> No
     assert unknown.actions == () and (unknown.summary.closing, unknown.summary.blocked) == (1, 0)
     on_main = drive_pass(replace(snap, archives={REPO: (replace(pr, base="main"),)}))
     assert [(a.kind, a.pr) for a in on_main.actions] == [("archive", 5)]
+
+
+# --------------------------------- driver-sessions §D (R7): idle sessions, one pure rule
+
+
+def _idle(batch: Batch, **kw: Any) -> IdleSession | None:
+    kw.setdefault("status", "idle")
+    kw.setdefault("has_pr", False)
+    kw.setdefault("archive_attributed", False)
+    kw.setdefault("closeout", False)
+    return idle_session(batch, repo=REPO, now=NOW, threshold=60, **kw)
+
+
+def test_a_batch_session_idle_past_the_threshold_with_no_pr_is_reported() -> None:
+    got = _idle(_dispatched("x", 1))
+    assert got is not None
+    assert (got.item, got.batch, got.closeout) == (batch_item_id(REPO, "x"), "x", False)
+    assert got.since == datetime(2026, 10, 1, 10, 0, tzinfo=UTC)
+    assert got.minutes == 26 * 60
+    assert _idle(_dispatched("x", 1), status="done") is not None
+
+
+@pytest.mark.parametrize("status", ["working", "blocked", "absent", "unknown", None])
+def test_a_session_that_is_not_idle_or_done_is_never_reported(status: str | None) -> None:
+    assert _idle(_dispatched("x", 1), status=status) is None
+
+
+def test_a_young_dispatch_or_one_with_a_pr_is_not_reported() -> None:
+    assert _idle(_dispatched("x", 1)) is not None
+    young = idle_session(
+        _dispatched("x", 1), repo=REPO, closeout=False, status="idle", has_pr=False,
+        archive_attributed=False, now=datetime(2026, 10, 1, 10, 59, tzinfo=UTC), threshold=60,
+    )  # fmt: skip
+    assert young is None
+    assert _idle(_dispatched("x", 1), has_pr=True) is None
+
+
+def test_a_closeout_idle_past_the_threshold_with_no_archive_pr_is_reported() -> None:
+    got = _idle(_closed("x", 1), closeout=True)
+    assert got is not None and got.closeout
+    assert got.item == closeout_item_id(REPO, "x")
+    assert got.since == datetime(2026, 10, 2, 11, 0, tzinfo=UTC) and got.minutes == 60
+    assert _idle(_closed("x", 1), closeout=True, archive_attributed=True) is None
+
+
+def test_a_closeout_with_no_event_or_a_recorded_archive_is_not_reported() -> None:
+    assert _idle(_dispatched("x", 1), closeout=True) is None
+    done = _closed("x", 1)
+    done = done.model_copy(update={"events": [done.events[-1].model_copy(update={"archived": 5})]})
+    assert _idle(done, closeout=True) is None
+
+
+def _with_idle(*idle: IdleSession, **kw: Any) -> Snapshot:
+    return _snap([_dispatched("x", 1)], {"x": "dispatched"}, idle=idle, **kw)
+
+
+def _one_idle(closeout: bool = False) -> IdleSession:
+    batch = _closed("x", 1) if closeout else _dispatched("x", 1)
+    got = _idle(batch, closeout=closeout)
+    assert got is not None
+    return got
+
+
+def test_the_driver_warns_once_per_idle_session_with_a_paste_ready_focus_command() -> None:
+    idle = _one_idle()
+    snap = _with_idle(idle, scope_args=("--repo", REPO, "--dir", "/some dir"))
+    (action,) = drive_pass(snap).actions
+    assert action.kind == "warn" and action.batch == "x"
+    assert action.head == f"idle-session\0{batch_item_id(REPO, 'x')}\0{idle.since.isoformat()}"
+    assert f"{batch_item_id(REPO, 'x')} has sat idle for {idle.minutes} min with no PR" in (
+        action.detail
+    )
+    assert action.detail.endswith(
+        f"focus it: fr triage batch focus x --repo {REPO} --dir '/some dir'"
+    )
+    # Reported already: not repeated. The summary never moves.
+    again = _with_idle(idle, warned=frozenset({action.head}))
+    assert drive_pass(again).actions == ()
+    assert drive_pass(snap).summary == drive_pass(again).summary
+
+
+def test_a_closeout_warn_says_archive_pr_and_focuses_the_closeout() -> None:
+    idle = _one_idle(closeout=True)
+    (action,) = drive_pass(_with_idle(idle, scope_args=("--repo", REPO))).actions
+    assert "with no archive PR" in action.detail
+    assert f"fr triage batch focus x --closeout --repo {REPO}" in action.detail
+
+
+def test_an_idle_session_outside_the_selection_is_not_reported() -> None:
+    snap = _with_idle(_one_idle(), selected=frozenset())
+    assert drive_pass(snap).actions == ()
+
+
+def test_the_default_snapshot_has_no_idle_sessions() -> None:
+    from fr.triage.model import Facts, Judgements
+    from fr.triage.views import drive_snapshot
+
+    assert _snap([], {}).idle == ()
+    facts = Facts.model_validate(
+        {
+            "schema": 6,
+            "scope": "o/r",
+            "kind": "repo",
+            "collected_at": "2026-10-02T12:00:00Z",
+            "repos": [REPO],
+            "issues": [],
+        }
+    )
+    assert drive_snapshot(facts, Judgements.model_validate({"schema": 3})).idle == ()

@@ -43,7 +43,7 @@ import uuid
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 from urllib.parse import urlparse
@@ -116,9 +116,11 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     DEFAULT_WORKSPACE_PREFIX,
     EXPORT_KINDS,
+    LANDED,
     RUNS_DIR,
     STALE_CLOSEOUT,
     Action,
+    IdleSession,
     LivePr,
     Snapshot,
     Summary,
@@ -140,6 +142,7 @@ from fr.triage.batch_drive import (
     finished_waves,
     fresh_conflicts,
     housekeeping_branch,
+    idle_session,
     is_archived,
     is_finished,
     settle,
@@ -191,6 +194,8 @@ from fr.triage.state_sync import check_scope_name, export_state
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
     from fr_dispatch.work_item import WorkItem
+
+    from fr.triage.batch import BatchStage
 
 DISPATCH_INSTALL_HINT = (
     "dispatching to a runner requires fr-dispatch — install it "
@@ -1779,6 +1784,7 @@ class _Driver:
             stale_live, asked = self._existing(facts, stale, repos, soft=True)
             existing |= stale_live
             probed = frozenset(b.id for b in stale if closeout_item_id(repos[b.id], b.id) in asked)
+        idle = self._idle(facts, chosen, repos, stages, archives, now) if self.yes else ()
         return Snapshot(
             batches=tuple(judgements.batches),
             stages=stages,
@@ -1792,6 +1798,8 @@ class _Driver:
             archives=archives,
             existing=existing,
             closeout_probed=probed,
+            idle=idle,
+            scope_args=tuple(self.scope_args),
             warned=frozenset(self.warned),
             close_sessions=closing_sessions,
             sessions=sessions,
@@ -2144,6 +2152,77 @@ class _Driver:
                 if probe.id in held:
                     self._probes[probe.id] = (runner, probe)
         return frozenset(self._probes)
+
+    def _idle(
+        self,
+        facts: Facts,
+        chosen: list[Batch],
+        repos: dict[str, str],
+        stages: dict[str, BatchStage],
+        archives: dict[str, tuple[LivePr, ...]],
+        now: datetime,
+    ) -> tuple[IdleSession, ...]:
+        """The sessions the runner reports idle with nothing to show for it (R7).
+
+        Only candidates are probed: a batch whose last dispatch is older than the repo's
+        `idle_session_minutes` and that has no PR, and a recorded, unfinished close-out
+        older than that. One `session_statuses` per runner, and soft: a runner that cannot
+        load, refuses or raises is skipped, so no session reads idle from a read that never
+        happened. The verdict itself is `idle_session`, the one definition the board reads."""
+        from fr_dispatch.protocols import SessionInspector
+
+        candidates: list[tuple[Batch, bool, str]] = []  # (batch, is_closeout, runner name)
+        for b in chosen:
+            repo = repos.get(b.id)
+            if repo is None:
+                continue
+            limit = timedelta(minutes=facts.config_for(repo).idle_session_minutes)
+            dispatch, event = last_dispatch(b), closeout_event(b)
+            if dispatch is not None and now - dispatch.at >= limit and batch_pr(b, facts) is None:
+                candidates.append((b, False, str(dispatch.runner)))
+            if (
+                event is not None
+                and event.runner != "hand"
+                and stages.get(b.id) in LANDED
+                and now - event.at >= limit
+                and not is_finished(b, stages[b.id], archives.get(repo, ()))
+            ):
+                candidates.append((b, True, str(event.runner)))
+        by_runner: dict[str, list[tuple[Batch, bool, WorkItem]]] = {}
+        for b, is_closeout, name in candidates:
+            probe = probe_item(repos[b.id], b, closeout=is_closeout, prefix=self.workspace_prefix)
+            by_runner.setdefault(name, []).append((b, is_closeout, probe))
+        found: list[IdleSession] = []
+        for name, entries in by_runner.items():
+            runner = self._try_runner(name)
+            if runner is None or not isinstance(runner, SessionInspector):
+                continue
+            probes = [probe for _, _, probe in entries]
+            try:
+                refusal = runner.preflight(probes)
+                statuses = {} if refusal else runner.session_statuses(probes)
+            except Exception as exc:  # noqa: BLE001 - reporting is best effort
+                refusal, statuses = str(exc) or type(exc).__name__, {}
+            if refusal:
+                self._report_once(
+                    f"idle-probe\0{name}\0{refusal}",
+                    f"runner `{name}` cannot report session status: {refusal}",
+                )
+                continue
+            for b, is_closeout, probe in entries:
+                repo = repos[b.id]
+                event = closeout_event(b)
+                attributed_pr = event is not None and any(
+                    attributed(p, b, event) for p in archives.get(repo, ())
+                )
+                idle = idle_session(
+                    b, repo=repo, closeout=is_closeout, status=statuses.get(probe.id),
+                    has_pr=False, archive_attributed=attributed_pr, now=now,
+                    threshold=facts.config_for(repo).idle_session_minutes,
+                )  # fmt: skip
+                if idle is not None:
+                    found.append(idle)
+        return tuple(found)
 
     def _report_once(self, key: str, message: str) -> bool:
         """Print *message* the first time *key* is seen; whether it was printed."""
