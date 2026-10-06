@@ -108,7 +108,6 @@ evidence:
   model: claude-opus-5-5
 visual:
 - row: board-idle-session
-  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/1f7d5832-5559-42d4-abe3-aa58f6893ee0/scratchpad/p3/cap.py
   shots:
   - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/1f7d5832-5559-42d4-abe3-aa58f6893ee0/scratchpad/p3/idle-batch-card-needs-you.png
     shows:
