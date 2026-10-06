@@ -843,10 +843,12 @@ def _features_table(judgements: Judgements, facts: Facts) -> str:
 
 
 def _parked(facts: Facts, judgements: Judgements) -> str:
-    """Issues parked by kind, plus open duplicates, which leave the tier sections (R11)."""
+    """Issues parked by kind, plus open duplicates, which leave the tier sections (R11).
+    An awaiting-live one shows in its own group only (spec §F, R18)."""
     parked = [
         i for i in facts.issues
         if i.state == "open"
+        and not is_awaiting_live(i)
         and (j := judgements.issues.get(i.key))
         and (j.kind == "parked" or j.duplicate_of)
     ]  # fmt: skip

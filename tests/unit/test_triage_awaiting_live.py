@@ -221,3 +221,26 @@ def test_a_wave_of_merged_but_awaiting_batches_is_preselected_like_any_merged_wa
     f, jd = _refs_merged(dependent=False)
 
     assert preselected_wave(f, jd) == 2
+
+
+def test_a_parked_or_duplicate_awaiting_live_issue_is_not_listed_under_parked() -> None:
+    """p4-r5: it renders in the awaiting-live group only, never twice."""
+    f = facts([issue(1, labels=[LIVE]), issue(2, labels=[LIVE]), issue(3), issue(4)])
+    jd = judgements(
+        {
+            "widgets#1": j(kind="parked"),
+            "widgets#2": j(duplicate_of="widgets#3"),
+            "widgets#3": j(),
+            "widgets#4": j(kind="parked"),
+        }
+    )
+
+    page = render(f, jd)
+
+    parked = re.search(r'<details id="parked".*?</details>', page, re.S)
+    assert parked is not None
+    assert "issues/4" in parked.group(0)
+    assert 'issues/1"' not in parked.group(0) and 'issues/2"' not in parked.group(0)
+    group = re.search(r'<details id="awaiting-live".*?</section></details>', page, re.S)
+    assert group is not None
+    assert re.findall(r'data-key="(widgets#\d+)"', group.group(0)) == ["widgets#1", "widgets#2"]
