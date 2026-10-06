@@ -9,3 +9,8 @@ Batch drive-board-lows was dispatched as one root cause. Checked on origin/main 
 ### a52540135e27 · repro · #937: an archive merge lets a matrix-only PR merge unupdated
 
 test_an_archive_merge_updates_a_pr_that_changes_the_acceptance_matrix: main ahead by one archive commit (moves plans/X -> implemented/plans/X), PR changes only docs/acceptance/matrix.yaml -> merge_ready returns merged, expected updated.
+
+<!-- fr:journal kind=root-cause scope=debug id=3aa271b5d035 created=2026-10-06T16:58:20+00:00 -->
+### 3aa271b5d035 · root-cause · #937: the overlap rule sees paths, the matrix holds paths as content
+
+_behind_only_routinely skips the update when no path the archive commit touched is a path the PR changed. matrix.yaml cites specs/plans by path in its content, so an archive move can dangle a ref with no path overlap.
