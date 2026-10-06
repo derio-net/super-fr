@@ -29,12 +29,12 @@ from fr.triage.batch_drive import (
     drive_pass,
     find_run,
     finished_waves,
-    unfinished_waves,
     housekeeping_branch,
     is_archived,
     is_finished,
     summary_line,
     train_line,
+    unfinished_waves,
     wave_group,
 )
 from fr.triage.model import Batch, PullRequest
@@ -935,7 +935,8 @@ def test_default_selection_is_every_batch_when_none_has_a_wave() -> None:
 # ------------------------------------------- dedupe: a wave finishing (triage-dedupe R10)
 
 _CLOSEOUT_DONE = {
-    "kind": "closeout", "at": "2026-10-02T11:00:00Z", "runner": "fake", "handle": "h", "archived": 5,
+    "kind": "closeout", "at": "2026-10-02T11:00:00Z", "runner": "fake", "handle": "h",
+    "archived": 5,
 }  # fmt: skip
 CHECK = "fr triage check --repo o/r"
 
