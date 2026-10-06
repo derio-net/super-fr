@@ -1,0 +1,73 @@
+schema_version: 8
+run: 2026-10-06-feat-triage-batch-adopt
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: "Operator brief, verbatim"
+    body: |
+      "can you do a sweep of the running sessions on this host and adopt them via Wave Driver?"
+      Then, after being told the driver cannot adopt hand-started sessions and offered a
+      `fr triage batch adopt <batch> --tab <herdr-tab-id>` verb built via /fr-goal:
+      "yes, do that, can we do it with fr-goal-light?"
+  - kind: decision
+    id: d1-verb-shape
+    title: "New `batch adopt` verb, reusing the --repair recording path"
+    body: "Operator chose a new verb over extending `batch dispatch --repair`. It is kept distinct from the driver's close-out `adopt` action kind."
+  - kind: decision
+    id: d2-branch-renamed
+    title: "Adopt renames the session's branch to the batch branch"
+    body: "Operator answer (free text): the adopt option makes sure the branch is renamed to feat/batch-<id> as part of the adoption. Because five of the six target sessions are /fr-goal runs, the rename covers every place fr keys on the branch: local branch and upstream, remote branch (and so its PR), the isolation record, the .fr-isolation marker and a live run cursor (spec R4, §B)."
+  - kind: decision
+    id: d3-batch-must-exist
+    title: "The batch must already exist; adopt never creates one"
+    body: "Operator chose create-then-adopt: each verb does one job."
+  - kind: decision
+    id: d4-list
+    title: "`batch adopt --list` is a read-only sweep aid"
+    body: "Operator chose to add it: every herdr tab with its issue refs, writes nothing."
+  - kind: decision
+    id: d5-test-plan
+    title: "Post-merge Test Plan sweeps all six issue-backed sessions"
+    body: "Operator chose the full sweep over a single-session walk."
+  - kind: decision
+    id: d6-models
+    title: "Tier models left unbound"
+    body: "Executors and reviewers inherit the session model; nothing written to models.yaml."
+  - kind: decision
+    id: d7-refuse-working-agent
+    title: "Adopt refuses a `working` agent"
+    body: "Orchestrator call, not asked: renaming a branch under a working agent races its next push. Operator adopts once the session is idle. Revisit at PR review if wrong."
+  - kind: decision
+    id: d8-event-time
+    title: "Event time is clamped back to an existing PR's creation"
+    body: "Orchestrator call from code (batch.of_dispatch drops PRs older than event.at): at = min(now, open PR createdAt), strictly after the last event, else refuse."
+acceptance:
+  - id: triage-batch-adopt
+    capability: Backlog triage
+    acceptance: An operator can put an already-running herdr session under the wave driver for an existing batch without launching a second session; the driver then counts it in flight, finds its PR (even one opened before adoption), merges it, closes it out and closes its tab
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R1]
+    status: not-implemented
+    verify: post-merge
+  - id: triage-batch-adopt-branch-rename
+    capability: Backlog triage
+    acceptance: Adopting a session renames its branch to the batch branch everywhere fr keys on it (local, upstream, remote with its PR, isolation record, marker, run cursor) and tells the session's agent, so the session keeps working on the renamed branch
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R4]
+    status: not-implemented
+    verify: post-merge
+  - id: triage-batch-adopt-refusals
+    capability: Backlog triage
+    acceptance: Adopt prints its plan without --yes and, with --yes, refuses every unsafe case (wrong stage, foreign or unknown tab, working agent, mid-rebase worktree, existing target branch, missing version reservation) before writing anything
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R9]
+    status: not-implemented
+  - id: triage-batch-adopt-list
+    capability: Backlog triage
+    acceptance: An operator can list every running herdr session with the issue refs in its label, read-only, as the start of a sweep
+    origin: [super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R10]
+    status: not-implemented
+emitted:
+  spec: docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md
+evidence: {}
