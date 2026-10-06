@@ -189,11 +189,11 @@ def _continues(line: str, following: str) -> bool:
     reference closes nothing and is left to its own line (`Closes\\n#5` shares
     nothing); only the tail of a list that already closed its first reference
     is a reference GitHub leaves open."""
-    refs = list(_ISSUE_REF.finditer(line))
+    refs = list(_ISSUE_REF_GITHUB.finditer(line))
     if not (refs and _KEYWORD.search(line) and _LIST_GLUE.fullmatch(line, refs[-1].end())):
         return False
     glue = _LIST_GLUE.match(following)
-    return glue is not None and _ISSUE_REF.match(following, glue.end()) is not None
+    return glue is not None and _ISSUE_REF_GITHUB.match(following, glue.end()) is not None
 
 
 def _wrapped_lines(body: str) -> Iterator[tuple[str, str]]:
@@ -223,12 +223,14 @@ def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
     any of them, as in `fix colour #123` — is prose, and shares nothing (gh#868).
 
     A reference list that wraps onto the next line is read as one line (gh#869,
-    `_wrapped_lines`): GitHub closes only `#a` for `Closes #a,\\n#b`.
+    `_wrapped_lines`): GitHub closes only `#a` for `Closes #a,\\n#b`. References
+    are read as a merge reads them, `GH-<n>` included (review r1): `Closes GH-1
+    and #2` closes only GH-1.
     """
     out: list[tuple[str, list[str]]] = []
     for raw, line in _wrapped_lines(body):
         keywords = list(_KEYWORD.finditer(line))
-        refs = list(_ISSUE_REF.finditer(line))
+        refs = list(_ISSUE_REF_GITHUB.finditer(line))
         if not (keywords and refs):
             continue
         starts = [0, *(r.end() for r in refs[:-1])]
