@@ -106,6 +106,14 @@ def _bad_keys(keys: list[object]) -> list[object]:
     return [k for k in keys if not isinstance(k, str) or not KEY_RE.match(k)]
 
 
+def _keys(v: list[str], what: str) -> list[str]:
+    """Validate the key grammar of *v*, then normalise it (one rule for every key list)."""
+    bad = _bad_keys(list(v))
+    if bad:
+        raise ValueError(f"{what} must be '<repo-name>#<number>', got {bad!r}")
+    return [normalize_key(k) for k in v]
+
+
 @dataclass(frozen=True)
 class Scope:
     """What is being triaged: one repo, every non-archived repo of an owner, or a
@@ -394,6 +402,27 @@ class Judgement(_Strict):
     # What the issue is, for the board's closing order (wave-driver R9). Optional on
     # every schema: a file that never says loads exactly as before.
     kind: Kind | None = None
+    # Triage-dedupe R3: this issue duplicates *duplicate_of* (an original), or was
+    # judged different from each of *distinct_from*. Optional on every schema, like
+    # `kind`; the cross-key rules live on `Judgements`, which knows every key.
+    duplicate_of: str | None = None
+    distinct_from: list[str] = []
+
+    @field_validator("duplicate_of")
+    @classmethod
+    def _duplicate_of_is_a_key(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return _keys([v], "duplicate_of")[0]
+
+    @field_validator("distinct_from")
+    @classmethod
+    def _distinct_from_are_keys(cls, v: list[str]) -> list[str]:
+        keys = _keys(v, "distinct_from")
+        dupes = sorted({k for k in keys if keys.count(k) > 1})
+        if dupes:
+            raise ValueError(f"distinct_from lists {dupes} more than once")
+        return keys
 
 
 class Feature(_Strict):
@@ -408,10 +437,7 @@ class Feature(_Strict):
     @field_validator("ids")
     @classmethod
     def _ids_are_keys(cls, v: list[str]) -> list[str]:
-        bad = _bad_keys(list(v))
-        if bad:
-            raise ValueError(f"feature ids must be '<repo-name>#<number>', got {bad!r}")
-        return [normalize_key(k) for k in v]
+        return _keys(v, "feature ids")
 
 
 class Pattern(_Strict):
@@ -423,10 +449,7 @@ class Pattern(_Strict):
     @classmethod
     def _ids_are_keys(cls, v: list[str]) -> list[str]:
         """Same grammar and normaliser as judgement keys, so a typo is loud (r-p2-pattern-ids)."""
-        bad = _bad_keys(list(v))
-        if bad:
-            raise ValueError(f"pattern ids must be '<repo-name>#<number>', got {bad!r}")
-        return [normalize_key(k) for k in v]
+        return _keys(v, "pattern ids")
 
 
 class DispatchEvent(_Strict):
@@ -513,10 +536,7 @@ class Batch(_Strict):
     @field_validator("ids")
     @classmethod
     def _ids_are_keys_of_one_repo(cls, v: list[str]) -> list[str]:
-        bad = _bad_keys(list(v))
-        if bad:
-            raise ValueError(f"batch ids must be '<repo-name>#<number>', got {bad!r}")
-        keys = [normalize_key(k) for k in v]
+        keys = _keys(v, "batch ids")
         twice = sorted({k for k in keys if keys.count(k) > 1})
         if twice:
             # Review r2p-f5: caught here, or the open-batch rule later reports the
@@ -591,6 +611,29 @@ class Judgements(_Strict):
             seen[canon] = key
             out[canon] = value
         return out
+
+    def duplicate_targets(self) -> set[str]:
+        """Every key some judgement names as its original (`duplicate_of`)."""
+        return {j.duplicate_of for j in self.issues.values() if j.duplicate_of}
+
+    @model_validator(mode="after")
+    def _duplicate_fields_are_coherent(self) -> Judgements:
+        """No self reference, no chain (an original that is itself a duplicate has no
+        single row to nest under), and no key in both fields (spec triage-dedupe §3.A)."""
+        for key, j in self.issues.items():
+            if j.duplicate_of == key or key in j.distinct_from:
+                raise ValueError(f"{key}: duplicate_of / distinct_from name the issue itself")
+            if j.duplicate_of and j.duplicate_of in j.distinct_from:
+                raise ValueError(
+                    f"{key}: {j.duplicate_of} is in both duplicate_of and distinct_from"
+                )
+            original = self.issues.get(j.duplicate_of) if j.duplicate_of else None
+            if original is not None and original.duplicate_of:
+                raise ValueError(
+                    f"{key}: duplicate_of {j.duplicate_of}, which is itself a duplicate of "
+                    f"{original.duplicate_of}; name the final original (no chains)"
+                )
+        return self
 
     @model_validator(mode="after")
     def _tiers_are_declared(self) -> Judgements:
