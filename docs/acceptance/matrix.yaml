@@ -7112,8 +7112,8 @@ rows:
       the catalogue marks it active; an inconclusive probe warns and persists; `--no-probe`
       skips and says so'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R2
     levels:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_model_binding_set_probe
@@ -7130,7 +7130,7 @@ rows:
       tiers that keeps tier price ordering within 2x the dead model's price, else no
       replacement is proposed
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R4
     levels:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_model_binding_replacement
@@ -7145,9 +7145,9 @@ rows:
       with proposals and upgrade offers, exits 1 off a terminal when any binding is
       dead, and never applies an offer unasked'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R12
     levels:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_model_binding_check
@@ -7161,11 +7161,11 @@ rows:
       brief, and before dispatching a phase on OpenCode substitutes a dead tier binding
       autonomously (recorded in the plan journal, loudly) or refuses with no brief
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R9
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_run_binding_guard.py#test_a_dead_user_binding_is_substituted_before_a_grouped_dispatch
@@ -7186,12 +7186,18 @@ rows:
       asked at the fr-goal gate, and substituted unattended at advance, with the dispatched
       executor running on the replacement (opencode.db)
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R8
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: 'Partial live evidence 2026-10-06 at close-out: on a real OpenCode 1.18.34
+      install, fr models check (off a terminal) classified a binding the provider genuinely
+      retired (github-copilot/gpt-6-sol) as dead from ProviderModelNotFoundError, offered
+      the provider''s Did-you-mean hint as an operator-only replacement, reported the
+      three live bindings live, and exited 1. Still owed: interactive accept materialising
+      the agent file, the fr-goal gate question, and the unattended advance substitution
+      verified in opencode.db.'
     verify: live
   - id: model-binding-probe-cache
     capability: model-bindings
@@ -7199,7 +7205,7 @@ rows:
       check always probe fresh, and a bound model's last-known catalogue entry keeps
       its lineage after it leaves the catalogue
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_bindings_probe.py#test_the_probe_cache_honours_ttl_and_fresh
