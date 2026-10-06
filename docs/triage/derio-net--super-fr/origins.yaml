@@ -1,0 +1,1426 @@
+schema: 1
+issues:
+  super-fr#861:
+    category: latent
+    source: pipeline
+    severity: med
+    reason: live plans carry the previous major's fr_version ceiling at any major bump; the migration gate then refuses install.sh's `fr models apply`, which `|| true` hides. Present since the gate, exposed by the
+    evidence: issue body read (simulated 6.0.0 release, 2 failing tests); not checked against the code
+  super-fr#868:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#860
+    severity: low
+    reason: the closing-keyword gate added in
+    evidence: issue body read; not checked against the code
+  super-fr#869:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#860
+    severity: low
+    reason: the line-scoped closing-keyword gate added in
+    evidence: issue body read; not checked against the code
+  super-fr#871:
+    category: latent
+    source: hand
+    severity: med
+    reason: fr-debugging's deliver order always wrote the review journal entry after the last push; seen on
+    evidence: issue body read (timestamps 17:18 commit vs 17:52 merge); skill text not re-read
+  super-fr#875:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#873
+    severity: low
+    reason: deliberate deferral from
+    evidence: issue body read
+  super-fr#878:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: herdr preflight needs a herdr session; existed before the wave driver, which only makes it visible
+    evidence: issue body read; not checked against the code
+  super-fr#879:
+    category: gap
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: not a defect; a record-only filing of three spec-review claims confirmed correct. No category fits, filed as gap so it is counted once
+    evidence: issue body read
+  super-fr#880:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: med
+    reason: merge_ready (used by `batch merge`) applies only required checks while R4's full rule lives in the driver pass added by
+    evidence: issue body read; not checked against the code
+  super-fr#881:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: possible leftover schema-2 wording in the fr-triage skill or its mirrors after
+    evidence: issue body read; skill and mirrors not grepped
+  super-fr#882:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: closeout_state added with the wave driver looks for the archive PR where collect never stores it, so `archived` may be unreachable in batch list
+    evidence: issue body read; not checked against the code
+  super-fr#883:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: med
+    reason: the driver's close-out dedupe (#876) keys on live tabs, so a restart after a tab ended can start a second close-out
+    evidence: issue body read; not checked against the code
+  super-fr#884:
+    category: gap
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: group-cap tests added in
+    evidence: issue body read
+  super-fr#885:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: facts schema 4 (#876) is stamped on every scope, so an older fr refuses single-repo caches whose shape did not change
+    evidence: issue body read; observed facts.json schema 4 kind repo on this machine
+  super-fr#886:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: _load_state never checked facts.kind against the requested scope; predates the wave driver, groups add a third kind
+    evidence: issue body read; not checked against the code
+  super-fr#887:
+    category: gap
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: enhancement; the wave table omits tier by the spec's own design D
+    evidence: issue body read
+  super-fr#888:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: origins collect (new in
+    evidence: issue body read; observed the 1000-row model in passing, not verified
+  super-fr#889:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: gitseam Checkout.show() has always been text-only; the architecture page tripped it during
+    evidence: issue body read; not checked against the code
+  super-fr#891:
+    category: gap
+    source: hand
+    severity: high
+    reason: no supported path finishes an fr-goal run across an fr upgrade that adds a step (resolve, gates and adopt all refuse); a missing capability, not a change that broke working code
+    evidence: issue body read (first part); not checked against the code
+  super-fr#550:
+    category: latent
+    source: recording
+    severity: high
+    reason: the OpenCode edit gate has failed open on non-listed tools and non-absolute paths since the port (#366); a live probe showed a base-clone write allowed
+    evidence: 'issue body read; git log -S EDIT_TOOLS on the plugin index.ts shows #366 origin and #559 as the fix'
+  super-fr#552:
+    category: gap
+    source: pipeline
+    severity: low
+    reason: 'no `fr plan` verb grows an existing plan; capability never existed, recorded in #436''s spec as the third instance of the shape'
+    evidence: issue body read; not checked against the code
+  super-fr#553:
+    category: latent
+    source: hand
+    severity: med
+    reason: '`_fr_marker_valid` has never consulted the marker''s branch; drift went unchecked since the hook''s marker validation existed'
+    evidence: 'issue body read; git log -S_fr_marker_valid shows the function from #393/#422 era with no branch check, cited by the issue; function not re-read'
+  super-fr#555:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#481
+    severity: low
+    reason: 'the #436 harness-parity work (phase 6) deliberately left rules out of the tool-neutrality tripwire while rules mirror to OpenCode and Hermes'
+    evidence: issue body read; cites journal decision r3-i3-resolved; not checked against the code
+  super-fr#556:
+    category: gap
+    source: hand
+    severity: med
+    reason: no end-to-end live Hermes run exists; several claims are owed one (collective debt issue)
+    evidence: issue body read; not checked against the code
+  super-fr#558:
+    category: gap
+    source: hand
+    pr: derio-net/super-fr#542
+    severity: low
+    reason: 'fr triage collects PRs only to attach to issues, so issue-less PRs and CI state are never shown; feature request on #542''s triage'
+    evidence: 'issue body read; git log -S''pr list'' on collect.py shows the collection from #542'
+  super-fr#561:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#564
+    severity: low
+    reason: 'the #532 repair (#564) fixed the prose about the Hermes shell-write gap but left parity.yaml''s `enforced` declaration for Hermes'
+    evidence: issue body read; grep of parity.yaml confirms hermes `enforced` on the edit-gate row region (lines ~24-26) alongside OpenCode partial
+  super-fr#562:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#559
+    severity: low
+    reason: 'symlink-through-worktree write was review finding 7 (LOW) of #559''s probe suite and left unfixed in that PR'
+    evidence: issue body read; not checked against the code
+  super-fr#563:
+    category: leftover
+    source: hand
+    pr: derio-net/super-fr#366
+    severity: high
+    reason: the OpenCode support PR shipped the gate/idle plugin as code but install.sh never delivered it, while parity reported it present
+    evidence: issue body read; git log on install.sh shows no plugin delivery; npm 404 claim from issue not re-verified
+  super-fr#569:
+    category: latent
+    source: recording
+    severity: med
+    reason: '`fr isolation exec` re-selects the target from the env instead of the workspace marker, since host-worktree mode was added (#397)'
+    evidence: 'issue body read; git log -S FR_ISOLATION_TARGET shows #397 introduced env-based selection'
+  super-fr#574:
+    category: latent
+    source: recording
+    severity: med
+    reason: scaffold's KNOWN_TOOL_FEATURES has no java/maven and unknown --tool values are silently dropped, since the original scaffold
+    evidence: 'issue body read with the quoted code; git log -S KNOWN_TOOL_FEATURES shows #262 origin, fixed in #579'
+  super-fr#575:
+    category: latent
+    source: recording
+    severity: high
+    reason: '`down --force` bypasses the dirty-worktree hazard uniformly, destroying the uncommitted run cursor; never special-cased'
+    evidence: 'issue body read; git log -S_reap_hazard shows the guard from #507 (cursor not special-cased); live OpenCode run observed'
+  super-fr#576:
+    category: leftover
+    source: hand
+    pr: derio-net/super-fr#372
+    severity: med
+    reason: glab/tea install hardcoded to linux_amd64; the gap was acknowledged in a source comment by the multi-backend PR and left
+    evidence: 'issue body read; git log -S linux_amd64 shows #372 as the only origin'
+  super-fr#577:
+    category: gap
+    source: recording
+    severity: med
+    reason: no verb recreates a container without deleting the worktree (restart = docker restart, up reattaches); missing capability
+    evidence: 'issue body read with cited local.py lines; git log -S remove-existing-container shows it first appears in #581 (the fix)'
+  super-fr#578:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '`up` raises on a failed devcontainer up before save_state, leaving worktree and container unrecorded; ordering dates from the original implementation'
+    evidence: 'issue body read; git log -S save_state shows #262 origin; ordering not re-read'
+  super-fr#580:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#581
+    severity: low
+    reason: '`gc --stop-idle` was deferred by the operator from #471 when its lifecycle PR shipped'
+    evidence: issue body read; not checked against the code
+  super-fr#582:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#564
+    severity: med
+    reason: 'the long-commands clause added to the executor agent in #564 sits late in a long body and the OpenCode executor ignored it twice'
+    evidence: 'issue body read (opencode.db tool calls table); git log -S''long commands'' shows #564 added the clause'
+  super-fr#587:
+    category: latent
+    source: recording
+    severity: med
+    reason: '`fr run resolve` validates --emitted when given but never requires a step''s declared emits; gate absent since resolve existed'
+    evidence: 'issue body read; git log -S--emitted shows resolve''s emitted handling from #442/#465, extended in #536'
+  super-fr#591:
+    category: gap
+    source: hand
+    severity: med
+    reason: no live probe or fallback for retired model bindings; fr models set accepts any string
+    evidence: issue body read (live probe table); not checked against the code
+  super-fr#593:
+    category: gap
+    source: hand
+    severity: med
+    reason: 'discussion issue: ''measure first, then decide'''
+    evidence: '10-02 classification (imported); filed from: operator analysis of super-fr-2 recording; severity: design question, cost measurement'
+  super-fr#594:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#536
+    severity: high
+    reason: 'tests= window gate from #536 (merged 09-22) conflicts with brief''s run_in_background rule'
+    evidence: '10-02 classification (imported); filed from: live fr-goal run delivering PR #592 (live verification of #536); severity: deliver unresolvable for long suites; introduced in: pre-window (09-22); fixed by #693'
+  super-fr#597:
+    category: gap
+    source: hand
+    severity: med
+    reason: 'enhancement: four procedural measures (shipped in #604)'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 1 analysis; severity: process improvement, not defect'
+  super-fr#598:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#467
+    severity: med
+    reason: content-on-main check (#467, pre-window) compares against current tip
+    evidence: '10-02 classification (imported); filed from: live walk worktree-traceability P7.T2.S1; severity: merged workspaces become un-reapable; introduced in: pre-window; fixed by #696'
+  super-fr#601:
+    category: gap
+    source: hand
+    severity: low
+    reason: 'tracks phase 9 [manual] live walk of #372'
+    evidence: '10-02 classification (imported); filed from: operator by hand (tracking remaining live verification); severity: verification tracking, no defect'
+  super-fr#603:
+    category: latent
+    source: recording
+    severity: low
+    reason: plan_ops missing-section errors pre-window; exposed on first run in a fresh repo
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 1 recording (first /fr-goal run in a repo); severity: two wasted round trips; fixed by #651'
+  super-fr#605:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''judged out of scope: it predates that change'''
+    evidence: '10-02 classification (imported); filed from: batch review of PR #604 (phase-4 review, finding p4-f5); severity: missing debt line, reporting only; fixed by #612'
+  super-fr#606:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#536
+    severity: med
+    reason: 'lstrip(''./'') introduced 09-22 by #536 (git log -S)'
+    evidence: '10-02 classification (imported); filed from: delivery of PR #604 (journal finding dl-f1); severity: dot-dir logs always refused; introduced in: pre-window (09-22); fixed by #609'
+  super-fr#607:
+    category: duplicate
+    source: pipeline
+    severity: high
+    reason: 'duplicate of #594: same defect as #594 (#781 names #594/#607/#631 as one)'
+    evidence: '10-02 classification (imported); filed from: delivery of PR #604 (dl-f2); severity: deliver unresolvable for long suites; fixed by #693'
+  super-fr#610:
+    category: latent
+    source: recording
+    severity: high
+    reason: verify-merge default 'main', unpublished ports etc. all pre-window
+    evidence: '10-02 classification (imported); filed from: super-fr-3 takes 1-3 recordings (closeouts); severity: closeout cost 2/3 of delivery; fixed by #616'
+  super-fr#611:
+    category: gap
+    source: pipeline
+    severity: low
+    reason: 'enhancement: forge parity matrix'
+    evidence: '10-02 classification (imported); filed from: triage-batches brainstorm; severity: parity declaration missing'
+  super-fr#618:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''The hazard itself is older: up and gc use the same resolver'''
+    evidence: '10-02 classification (imported); filed from: review of PR #616 (phase-1, p1-r1); severity: hang only if forge CLI stalls; fixed by #652'
+  super-fr#619:
+    category: gap
+    source: pipeline
+    severity: low
+    reason: '''The duplication is older than that change'''
+    evidence: '10-02 classification (imported); filed from: review of PR #616 (phase-2, p2-r3); severity: duplication tech debt, not failing'
+  super-fr#621:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#616
+    severity: med
+    reason: 'closeout_brief added by #616; first live use printed resolve lines missing --note, in wrong order'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #616 (first live use of closeout brief); severity: closeout brief commands fail; introduced in: fr-goal run (fix #610); fixed by #622'
+  super-fr#623:
+    category: gap
+    source: pipeline
+    pr: derio-net/super-fr#628
+    severity: low
+    reason: '''parity.yaml marks Hermes usage capture implemented, not live-verified'''
+    evidence: '10-02 classification (imported); filed from: lean cost-aware pipeline run (PR #628); severity: unproven claim, fixture-based only; introduced in: operator-run fr-goal (lean pipeline 4.22.0)'
+  super-fr#624:
+    category: gap
+    source: pipeline
+    severity: low
+    reason: 'enhancement: --drop-level'
+    evidence: '10-02 classification (imported); filed from: review of PR #628 (phase-2, p2-r25); severity: missing verb, hand edit workaround; fixed by #635'
+  super-fr#625:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#604
+    severity: high
+    reason: 'naive created= is old, but the ''is not a review of it'' refusal was added by #604 (git log -S)'
+    evidence: '10-02 classification (imported); filed from: triage-batches brainstorm (live, CEST host + UTC container); severity: valid reviews refused east of UTC; confidence: confirmed; introduced in: operator-run fr-goal (4.20.0, #597/#593); fixed by #728'
+  super-fr#626:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#616
+    severity: med
+    reason: 'records_commit shipped by #616 (''gh#610''s fr commits its own records'')'
+    evidence: '10-02 classification (imported); filed from: triage-batches brainstorm (devcontainer); severity: records never committed in container; confidence: confirmed; introduced in: fr-goal run (fix #610); fixed by #694'
+  super-fr#627:
+    category: gap
+    source: pipeline
+    severity: low
+    reason: '''Recorded, not investigated'''
+    evidence: '10-02 classification (imported); filed from: lean pipeline spec §8 (PR #628); severity: measurement question, no defect'
+  super-fr#629:
+    category: regression
+    source: pipeline
+    pr: derio-net/super-fr#615
+    severity: low
+    reason: 'flakes only under -n auto, which #615 (09-25) introduced'
+    evidence: '10-02 classification (imported); filed from: lean pipeline run (PR #628, p3-r11); severity: flaky test, reruns pass; confidence: probable; introduced in: hand/agent chore PR (xdist)'
+  super-fr#630:
+    category: regression
+    source: pipeline
+    pr: derio-net/super-fr#615
+    severity: low
+    reason: '''Surfaced by #615''s xdist + coverage'''
+    evidence: '10-02 classification (imported); filed from: lean pipeline run (PR #628, d-oos-cov-rsync); severity: local-only flake, CI green; confidence: confirmed; introduced in: hand/agent chore PR (xdist)'
+  super-fr#631:
+    category: duplicate
+    source: pipeline
+    severity: high
+    reason: 'duplicate of #594: same defect as #594'
+    evidence: '10-02 classification (imported); filed from: lean pipeline run (PR #628, d-oos-tests-window); severity: deliver unresolvable for long suites; fixed by #693'
+  super-fr#632:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#628
+    severity: low
+    reason: '#628 made kind:agent gates persist it, knowingly left kind:cli (''not caused by that change'')'
+    evidence: '10-02 classification (imported); filed from: lean pipeline run (PR #628, d-oos-cli-gate-unobserved); severity: unobserved marker not persisted; introduced in: operator-run fr-goal (lean pipeline 4.22.0); fixed by #738'
+  super-fr#636:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#628
+    severity: med
+    reason: 'usage capture shipped by #628; candidates() finds no OpenCode session'
+    evidence: '10-02 classification (imported); filed from: live walk of PR #628 phase 4 (OpenCode run, PR #633); severity: OpenCode cost silently empty; confidence: confirmed; introduced in: operator-run fr-goal (lean pipeline 4.22.0); fixed by #695'
+  super-fr#637:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#628
+    severity: med
+    reason: 'Claude Code usage reader from #628 reads main transcript only'
+    evidence: '10-02 classification (imported); filed from: live walk of PR #628 phase 4 (Claude Code run, PR #635); severity: subagent cost missing from usage; confidence: confirmed; introduced in: operator-run fr-goal (lean pipeline 4.22.0)'
+  super-fr#638:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#536
+    severity: high
+    reason: 'OpenCode tests= check absent since #536 (reader first added by #688 as the fix); .records leak is #628''s'
+    evidence: '10-02 classification (imported); filed from: live walk of PR #628 phase 4 (OpenCode, PR #633); severity: gate passes on prose log; introduced in: pre-window (09-22); fixed by #688'
+  super-fr#639:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: journal add never validated ids
+    evidence: '10-02 classification (imported); filed from: live walk of PR #628 phase 4; severity: orphaned journal, wasted turns'
+  super-fr#640:
+    category: regression
+    source: pipeline
+    pr: derio-net/super-fr#615
+    severity: low
+    reason: 'test added by #615 (git log -S), times out under -n auto'
+    evidence: '10-02 classification (imported); filed from: live walk of PR #628 phase 4; severity: flaky test costs suite rerun; confidence: probable; introduced in: hand/agent chore PR (xdist)'
+  super-fr#643:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''Pre-existing gap'''
+    evidence: '10-02 classification (imported); filed from: review of PR #641 (closeout, r1-5); severity: tripwire gap, no failure'
+  super-fr#644:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#641
+    severity: low
+    reason: 'herdr runner new in #641; deferred as out of scope at its closeout'
+    evidence: '10-02 classification (imported); filed from: review of PR #641 (closeout, r1-6); severity: refused visibly after labeling; introduced in: operator-run fr-goal (triage batches); fixed by #730'
+  super-fr#645:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''A devcontainer image/provisioning gap, not a code defect'''
+    evidence: '10-02 classification (imported); filed from: review of PR #641 (closeout, r2p-envtest); severity: container-only test failure; fixed by #729'
+  super-fr#646:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#641
+    severity: low
+    reason: '''Follows from the per-scope state design'' of #641; deferred'
+    evidence: '10-02 classification (imported); filed from: review of PR #641 (closeout, r3-f14); severity: misleading reservation, merge renumbers; introduced in: operator-run fr-goal (triage batches)'
+  super-fr#647:
+    category: duplicate
+    source: pipeline
+    severity: low
+    reason: 'duplicate of #640: same test/timeout as #640; closed not-planned'
+    evidence: '10-02 classification (imported); filed from: review of PR #641 (delivery); severity: flaky test'
+  super-fr#648:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''Pre-existing collect behaviour'''
+    evidence: '10-02 classification (imported); filed from: review of PR #641 (closeout, r2-13); severity: missing facts, low impact'
+  super-fr#650:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#641
+    severity: high
+    reason: 'install.sh never adds fr-herdr, the package #641 introduced'
+    evidence: '10-02 classification (imported); filed from: live walk of PR #641 phase 4; severity: headline command fails when installed; confidence: confirmed; introduced in: operator-run fr-goal (triage batches); fixed by #729'
+  super-fr#653:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#628
+    severity: med
+    reason: 'step-record template/brief from #628 contradict gates; .records dir never created'
+    evidence: '10-02 classification (imported); filed from: live fr-goal run (isolation-timeouts batch, PR #652); severity: first record fails every run; confidence: probable; introduced in: operator-run fr-goal (lean pipeline 4.22.0)'
+  super-fr#654:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#635
+    severity: low
+    reason: 'deferred at #635 closeout'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #635 (p3-r3); severity: error wording only; introduced in: fr-goal run (fix #624)'
+  super-fr#655:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#635
+    severity: low
+    reason: 'deferred at #635 closeout'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #635 (p2-r4); severity: CLI already refuses it; introduced in: fr-goal run (fix #624)'
+  super-fr#656:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#635
+    severity: low
+    reason: 'deferred at #635 closeout'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #635 (p1-r4); severity: missing test only; introduced in: fr-goal run (fix #624)'
+  super-fr#659:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#652
+    severity: low
+    reason: '''out of scope for #652, which named only those two call sites'''
+    evidence: '10-02 classification (imported); filed from: spec review of PR #652; severity: untimed fetch, hang risk only; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5); fixed by #679'
+  super-fr#661:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#651
+    severity: low
+    reason: 'deferred from #651 closeout'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #651 (r1-3); severity: test duplication, deliberate pin; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5)'
+  super-fr#662:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#651
+    severity: low
+    reason: 'deferred from #651 closeout'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #651 (r1-4); severity: missing assertion only; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5); fixed by #674'
+  super-fr#663:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#651
+    severity: low
+    reason: 'deferred from #651 closeout'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #651 (r3-1); severity: loose citation in matrix; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5)'
+  super-fr#665:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#387
+    severity: high
+    reason: line-level check (#387, pre-window) exposed by back-to-back batch merges
+    evidence: '10-02 classification (imported); filed from: live walk: triage-batches phase 4 batch closeouts; severity: blocks every closeout but last; introduced in: pre-window; fixed by #696'
+  super-fr#667:
+    category: gap
+    source: pipeline
+    severity: med
+    reason: 'enhancement: batch closeout verb'
+    evidence: '10-02 classification (imported); filed from: live walk: triage-batches phase 4 (operator-endorsed flow); severity: N concurrent closeouts collide'
+  super-fr#669:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''relocated verbatim from bump-version.py in #666'''
+    evidence: '10-02 classification (imported); filed from: review of PR #666 (rp1-f3); severity: latent, no current trigger; fixed by #678'
+  super-fr#670:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''Pre-existing pattern from the replaced version-bump-required job'''
+    evidence: '10-02 classification (imported); filed from: review of PR #666 (rp2-f2); severity: runner-image dependency; fixed by #678'
+  super-fr#671:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''identical to the old check-version-bump-needed.py'''
+    evidence: '10-02 classification (imported); filed from: review of PR #666 (rp5-f1); severity: code/docs mismatch; fixed by #678'
+  super-fr#673:
+    category: gap
+    source: hand
+    severity: med
+    reason: skeleton gate design (pre-window) vs one-phase fixes
+    evidence: '10-02 classification (imported); filed from: operator analysis of 09-26 batch runs; severity: forces small fixes into 3 phases; fixed by #674'
+  super-fr#675:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#674
+    severity: low
+    reason: 'out-of-scope finding of #674'
+    evidence: '10-02 classification (imported); filed from: spec review of PR #674 (s4); severity: help text wording; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5)'
+  super-fr#676:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#674
+    severity: low
+    reason: 'out-of-scope finding of #674'
+    evidence: '10-02 classification (imported); filed from: phase review of PR #674 (r2); severity: matrix citation incomplete; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5)'
+  super-fr#680:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#628
+    severity: med
+    reason: 'pr_body._cost added by #628 (git log -S); rendered before deliver capture'
+    evidence: '10-02 classification (imported); filed from: observation of batch run PR #678 (release-scripts); severity: PR cost table always empty; confidence: confirmed; introduced in: operator-run fr-goal (lean pipeline 4.22.0); fixed by #754'
+  super-fr#681:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#678
+    severity: low
+    reason: 'deferred at #678 closeout'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #678 (r4, s6); severity: fail closed, no release impact; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5)'
+  super-fr#683:
+    category: regression
+    source: hand
+    pr: derio-net/super-fr#635
+    severity: high
+    reason: 'UV_TOOL_DIR block added by #635 (git log -S); issue: ''block added in #635 (4.22.2)'''
+    evidence: '10-02 classification (imported); filed from: operator by hand (fr broke on host); severity: every host suite run breaks fr; confidence: confirmed; introduced in: fr-goal run (fix #624); fixed by #688'
+  super-fr#686:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#466
+    severity: med
+    reason: 'repo-wide repair_repo(write=True) in archive since #262/#466 (git log -S)'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #684 (live archive); severity: archive edits other live plans; introduced in: pre-window; fixed by #697'
+  super-fr#687:
+    category: gap
+    source: hand
+    severity: med
+    reason: 'enhancement: batch skill'
+    evidence: '10-02 classification (imported); filed from: operator by hand (direction: bugs via fr-debugging); severity: bug batches run feature pipeline; fixed by #723'
+  super-fr#690:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''out of scope there because it predates that change'''
+    evidence: '10-02 classification (imported); filed from: review of PR #689 (p2-r7); severity: orphan entry, retry converges; fixed by #738'
+  super-fr#691:
+    category: gap
+    source: pipeline
+    severity: low
+    reason: docs drift, '#689 did not touch these lines'
+    evidence: '10-02 classification (imported); filed from: review of PR #689 (p3-r11); severity: published docs stale'
+  super-fr#698:
+    category: duplicate
+    source: pipeline
+    severity: high
+    reason: 'duplicate of #594: same backgrounded-suite window defect; closed not-planned'
+    evidence: '10-02 classification (imported); filed from: delivery of PR #697; severity: deliver unresolvable for long suites'
+  super-fr#699:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#604
+    severity: low
+    reason: 'fr-spec-reviewer dispatch introduced by #604; ordering vs brainstorm record unspecified'
+    evidence: '10-02 classification (imported); filed from: spec review of PR #694 (s5), deferred at closeout; severity: reviewer finds no record yet; confidence: probable; introduced in: operator-run fr-goal (4.20.0, #597/#593)'
+  super-fr#700:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#694
+    severity: low
+    reason: 'out-of-scope findings of #694''s own change to git_answer'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #694 (r4, r5); severity: trust scope wider than intended; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5)'
+  super-fr#704:
+    category: new-feature
+    source: hand
+    pr: derio-net/super-fr#641
+    severity: med
+    reason: 'render_brief ''Use <model> for every subagent'' shipped by #641'
+    evidence: '10-02 classification (imported); filed from: operator by hand (batches'' reviewers ran on Sonnet); severity: reviewers forced onto cheap model; confidence: confirmed; introduced in: operator-run fr-goal (triage batches); fixed by #723'
+  super-fr#705:
+    category: latent
+    source: pipeline
+    severity: med
+    reason: '''Pre-existing on main'''
+    evidence: '10-02 classification (imported); filed from: Opus review of PR #696; severity: git failure reads as pass; fixed by #727'
+  super-fr#706:
+    category: gap
+    source: pipeline
+    severity: med
+    reason: ruleset requires no checks; process gap
+    evidence: '10-02 classification (imported); filed from: closeout of PR #703 (spec review); severity: no CI gates merge; fixed by #743'
+  super-fr#707:
+    category: gap
+    source: pipeline
+    severity: med
+    reason: '''pre-existing, repo-wide convention that #703 followed'''
+    evidence: '10-02 classification (imported); filed from: closeout of PR #703 (phase-2 review / security scan); severity: mutable action tags, supply chain; fixed by #743'
+  super-fr#709:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''it existed before that PR'''
+    evidence: '10-02 classification (imported); filed from: post-merge Opus re-review of PR #697 (r2-f7); severity: rare refs, low impact; fixed by #737'
+  super-fr#710:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''it existed before that PR'''
+    evidence: '10-02 classification (imported); filed from: post-merge Opus re-review of PR #697 (r2-f8); severity: duplicate warnings, cosmetic; fixed by #737'
+  super-fr#711:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''it existed before that PR'''
+    evidence: '10-02 classification (imported); filed from: post-merge Opus re-review of PR #697 (r2-f9); severity: legacy migration path; fixed by #737'
+  super-fr#715:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#696
+    severity: low
+    reason: 'limit of #696''s blob-equality fallback, deferred'
+    evidence: '10-02 classification (imported); filed from: spec review of PR #696 (s5), deferred at closeout; severity: fails safe, false refusal; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5)'
+  super-fr#716:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#696
+    severity: high
+    reason: '#696''s new blob-history fallback introduced the unsafe direction; knowingly deferred'
+    evidence: '10-02 classification (imported); filed from: phase-1 review of PR #696 (r3), deferred at closeout; severity: gc can reap reverted workspace; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5); fixed by #735'
+  super-fr#717:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''Pre-existing on main'''
+    evidence: '10-02 classification (imported); filed from: phase-1 review of PR #696 (r4); severity: fails safe, false alarm; fixed by #727'
+  super-fr#719:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#693
+    severity: med
+    reason: '#693 fixed Claude Code only; spec non-goal records OpenCode follow-up'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #693 (s2, r6, o8); severity: OpenCode detached suite refused; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5); fixed by #731'
+  super-fr#720:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#693
+    severity: low
+    reason: '_ASSIGNMENT added by #693 (git log -S); deferred'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #693 (r5); severity: forgery class already documented; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5); fixed by #734'
+  super-fr#724:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#723
+    severity: low
+    reason: 'mixed_themes new in #723; deferred'
+    evidence: '10-02 classification (imported); filed from: review of PR #723 (r2-2); severity: spurious warning only; introduced in: wave 2 (batch-launch, claude-opus-5-5); fixed by #732'
+  super-fr#725:
+    category: duplicate
+    source: pipeline
+    severity: low
+    reason: 'duplicate of #724: same finding r2-2 filed twice; closed not-planned'
+    evidence: '10-02 classification (imported); filed from: closeout of PR #723 (r2-2); severity: spurious warning only'
+  super-fr#733:
+    category: gap
+    source: hand
+    severity: med
+    reason: 'design: closeout for every flow'
+    evidence: '10-02 classification (imported); filed from: operator/triage analysis; severity: debug journals never archived; fixed by #790'
+  super-fr#739:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#735
+    severity: med
+    reason: 'pinned as strict xfail in #735'
+    evidence: '10-02 classification (imported); filed from: independent review of PR #735 (finding 2); severity: reverted branch may read landed; introduced in: waves 2-4 (09-27 debug/feature batches, Opus orchestrator + tiers); fixed by #753'
+  super-fr#740:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#604
+    severity: high
+    reason: 'OpenCodeReader/FR_OPENCODE_DB added by #604 (git log -S) never honoured XDG_DATA_HOME'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 4 recording (fr arm); severity: deliver refused, gates unobserved; confidence: probable; introduced in: operator-run fr-goal (4.20.0, #597/#593); fixed by #755'
+  super-fr#741:
+    category: latent
+    source: pipeline
+    severity: med
+    reason: ancestor short-circuit in branch_changes_present predates window
+    evidence: '10-02 classification (imported); filed from: found while fixing #716 (PR #735), split by operator; severity: reverted merge reads landed; fixed by #753'
+  super-fr#742:
+    category: regression
+    source: recording
+    pr: derio-net/super-fr#628
+    severity: high
+    reason: 'view_pr_body + _deliver_pr_gate via gh added by #628 (git log -S); takes 1-3 on GitLab reached deliver'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 4 recording (fr arm, GitLab); severity: deliver never resolves on GitLab; confidence: confirmed; introduced in: operator-run fr-goal (lean pipeline 4.22.0)'
+  super-fr#745:
+    category: gap
+    source: recording
+    severity: med
+    reason: 'process: size phases to asks'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 4/5 recording analysis; severity: phase overhead dominates cost; fixed by #792'
+  super-fr#746:
+    category: latent
+    source: pipeline
+    severity: med
+    reason: dotfiles .zshenv PATH reorder; environment
+    evidence: '10-02 classification (imported); filed from: live test of #736 on OpenCode; severity: wrong fr binary, silently'
+  super-fr#749:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''not caused by that change'''
+    evidence: '10-02 classification (imported); filed from: independent review of PR #737 (cr-2); severity: spurious warning; fixed by #752'
+  super-fr#750:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#737
+    severity: low
+    reason: '#737 chose lexical escape test; extension deferred'
+    evidence: '10-02 classification (imported); filed from: independent review of PR #737 (cr-3); severity: no writer passes such value; introduced in: waves 2-4 (09-27 debug/feature batches, Opus orchestrator + tiers); fixed by #752'
+  super-fr#756:
+    category: new-feature
+    source: hand
+    pr: derio-net/super-fr#628
+    severity: low
+    reason: '_archive_usage added by #628 (git log -S); cause unestablished'
+    evidence: '10-02 classification (imported); filed from: split from #680 by hand; severity: closeout usd not refreshed; confidence: probable; introduced in: operator-run fr-goal (lean pipeline 4.22.0)'
+  super-fr#757:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''out of scope there, pre-existing'''
+    evidence: '10-02 classification (imported); filed from: review of PR #753; severity: low exposure, local ff only'
+  super-fr#758:
+    category: latent
+    source: recording
+    pr: derio-net/super-fr#536
+    severity: high
+    reason: 'absolute compare Path(target)==log since #536 (09-22); OpenCode check first enforced by #688'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 8 recording (fr arm, macOS /tmp); severity: deliver refused on macOS /tmp; introduced in: pre-window (09-22); fixed by #772'
+  super-fr#759:
+    category: gap
+    source: recording
+    severity: high
+    reason: 'design: nothing checks spec against brief'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 8 recording analysis; severity: requirements lost brief-to-code; fixed by #762'
+  super-fr#760:
+    category: new-feature
+    source: hand
+    pr: derio-net/super-fr#674
+    severity: low
+    reason: '''Prefer 4-6 phases'' (#465, 09-09) left in when #674 made one phase first-class'
+    evidence: '10-02 classification (imported); filed from: filing #759 (operator analysis); severity: contradictory planner guidance; confidence: probable; introduced in: wave 1 (triage batches 09-26, all claude-sonnet-5); fixed by #792'
+  super-fr#761:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#536
+    severity: med
+    reason: gate-opens-on-advance mechanism predates window; skill never said to advance first
+    evidence: '10-02 classification (imported); filed from: #759 brainstorm run (standalone fr-brainstorming); severity: operator answers invisible to gate; confidence: probable; introduced in: pre-window (09-22)'
+  super-fr#763:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#762
+    severity: low
+    reason: 'out-of-scope finding of #762'
+    evidence: '10-02 classification (imported); filed from: phase-2 review of PR #762 (p2-d5); severity: hand edits only; introduced in: fr-goal run (#759 requirements traceability)'
+  super-fr#764:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#762
+    severity: med
+    reason: '''matches spec §G as written''; deferred; closed not planned 09-29 with the input-layer cut (5.0.0)'
+    evidence: '10-02 classification (imported); filed from: phase-3 review of PR #762 (p3-e6); severity: adopt disables requirements gates; introduced in: fr-goal run (#759 requirements traceability)'
+  super-fr#765:
+    category: gap
+    source: pipeline
+    severity: low
+    reason: '#771: ''That diagnosis is wrong''; gate correct, skill ordering unclear'
+    evidence: '10-02 classification (imported); filed from: deliver of run for #762 (deliver-tmpdir-log); severity: guidance: run suite after advance; fixed by #771'
+  super-fr#766:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#689
+    severity: low
+    reason: '''Round X of N'' labelling added by #689 (git log -S)'
+    evidence: '10-02 classification (imported); filed from: live walk of PR #762 Test Plan item 17; severity: confusing round labels; confidence: confirmed; introduced in: fr-goal run (dynamic questions); fixed by #767'
+  super-fr#768:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#604
+    severity: med
+    reason: '_proportionality_witness added by #604 (git log -S) takes no --base'
+    evidence: '10-02 classification (imported); filed from: live walk of PR #762 Test Plan item 17; severity: no-remote repo cannot deliver; confidence: probable; introduced in: operator-run fr-goal (4.20.0, #597/#593)'
+  super-fr#769:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#628
+    severity: low
+    reason: '''acceptance — X → Y'' commit text added by #628 (git log -S)'
+    evidence: '10-02 classification (imported); filed from: live walk of PR #762 Test Plan item 17; severity: misleading commit messages; confidence: probable; introduced in: operator-run fr-goal (lean pipeline 4.22.0)'
+  super-fr#773:
+    category: gap
+    source: recording
+    pr: derio-net/super-fr#762
+    severity: high
+    reason: '#762 checks coverage by design, not fidelity'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 9 recording analysis; severity: invented UI passes spec review; introduced in: fr-goal run (#759 requirements traceability); fixed by #819'
+  super-fr#774:
+    category: gap
+    source: recording
+    severity: med
+    reason: 'enhancement: split forge/ci/tracking'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 9 recording analysis; severity: one backend key, three uses; fixed by #794'
+  super-fr#775:
+    category: latent
+    source: recording
+    pr: derio-net/super-fr#372
+    severity: med
+    reason: 'gitlab-ci scaffold since #372 (2026-07-09, git log -S)'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 9 recording; severity: dirties worktree, blocks closeout; introduced in: pre-window; fixed by #787'
+  super-fr#776:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#762
+    severity: med
+    reason: 'requirements gate (fr/requirements.py) shipped by #762'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 9 recording; severity: gate grammar undocumented, truncates quotes; confidence: confirmed; introduced in: fr-goal run (#759 requirements traceability); fixed by #786'
+  super-fr#777:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#762
+    severity: med
+    reason: 'coverage-partition check shipped by #762'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 9 recording; severity: reviewer evidence rewritten by author; confidence: confirmed; introduced in: fr-goal run (#759 requirements traceability); fixed by #788'
+  super-fr#778:
+    category: gap
+    source: recording
+    pr: derio-net/super-fr#762
+    severity: med
+    reason: 'enhancement follow-up of #759'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 9 recording analysis; severity: executors never see raw brief; introduced in: fr-goal run (#759 requirements traceability); fixed by #791'
+  super-fr#779:
+    category: gap
+    source: recording
+    severity: med
+    reason: 'enhancement: visual browser evidence'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 9 recording analysis; severity: UI evidence not visual; fixed by #789'
+  super-fr#780:
+    category: gap
+    source: recording
+    severity: med
+    reason: 'enhancement: light path'
+    evidence: '10-02 classification (imported); filed from: super-fr-3 take 9 recording analysis; severity: fixed overhead dominates small goals; fixed by #820'
+  super-fr#781:
+    category: gap
+    source: hand
+    severity: med
+    reason: 'process: duplicate check before filing; closed not planned 09-29 (duplicate search belongs in an async sweep); the closing-keyword half is #821'
+    evidence: '10-02 classification (imported); filed from: architecture page analysis (by hand); severity: duplicates inflate backlog'
+  super-fr#783:
+    category: new-feature
+    source: hand
+    pr: derio-net/super-fr#767
+    severity: high
+    reason: 'the split-round dialogs added by #767 (fix of #766) were sent as parallel calls'
+    evidence: '10-02 classification (imported); filed from: operator, first question of a wave-6 batch; severity: every waiting batch showed its last question first; introduced in: fr-goal run (fix #766); fixed by #784'
+  super-fr#785:
+    category: gap
+    source: hand
+    severity: low
+    reason: enhancement; cancelled by the operator
+    evidence: '10-02 classification (imported); filed from: operator request; severity: tab labels overflow'
+  super-fr#793:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#792
+    severity: low
+    reason: 'items 4–5 of #745 deferred by #792'
+    evidence: '10-02 classification (imported); filed from: operator decision d4 in batch phase-sizing-2; severity: measurement deferred; introduced in: wave 5 (phase-sizing-2)'
+  super-fr#795:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#794
+    severity: low
+    reason: step 1 refuses jenkins/jira by design
+    evidence: '10-02 classification (imported); filed from: #774 step 2, filed before merging #794; severity: adapters not built; introduced in: wave 6 (service-split-2)'
+  super-fr#797:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#789
+    severity: med
+    reason: 'read_file_since reads Claude Code JSONL only; #817 shows it PARTIAL live'
+    evidence: '10-02 classification (imported); filed from: review of PR #789; severity: visual gate unobservable on OpenCode; introduced in: wave 6 (ui-evidence-2)'
+  super-fr#799:
+    category: gap
+    source: hand
+    severity: low
+    reason: enhancement to fr-goal §8
+    evidence: '10-02 classification (imported); filed from: operator, mid-deliver on #789; severity: CI and local suite never overlap; fixed by #828'
+  super-fr#800:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#641
+    severity: med
+    reason: git rename detection, exposed once an archive emptied runs/
+    evidence: '10-02 classification (imported); filed from: batch merge of #789; severity: false conflict stops batch merge; introduced in: wave 6 merges (batch merge)'
+  super-fr#803:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#794
+    severity: low
+    reason: 'judged not caused by #794'
+    evidence: '10-02 classification (imported); filed from: review of PR #794 (p4r-other-forge-writes); severity: tracker writes under tracking: none; introduced in: wave 6 (service-split-2)'
+  super-fr#804:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#794
+    severity: low
+    reason: spec silent
+    evidence: '10-02 classification (imported); filed from: review of PR #794 (p4r-cross-repo-tracking); severity: undefined for cross-repo plans; introduced in: wave 6 (service-split-2)'
+  super-fr#805:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: '''pre-existing on main'''
+    evidence: '10-02 classification (imported); filed from: review of PR #794 (p5r-comment-roundtrip); severity: comments dropped'
+  super-fr#806:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#794
+    severity: low
+    reason: three low findings bundled
+    evidence: '10-02 classification (imported); filed from: review of PR #794; severity: minor; introduced in: wave 6 (service-split-2)'
+  super-fr#808:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#762
+    severity: high
+    reason: 'the coverage refusal from #762 names no divergence; closed not planned 09-29 with the input-layer cut (5.0.0)'
+    evidence: '10-02 classification (imported); filed from: take 10 live walk (#817), OpenCode + GitLab; severity: 13 reviewer dispatches, 31 min; introduced in: fr-goal run (#759 requirements traceability)'
+  super-fr#809:
+    category: latent
+    source: recording
+    severity: high
+    reason: 'skill and parity.yaml predate OpenCode''s question tool; default answered_by: agent'
+    evidence: '10-02 classification (imported); filed from: take 10 live walk (#817), OpenCode + GitLab; severity: false ''no operator answered'' in PR body'
+  super-fr#810:
+    category: gap
+    source: recording
+    severity: med
+    reason: no sanctioned path for a round raised in spec review; closed not planned 09-29 with the input-layer cut (5.0.0)
+    evidence: '10-02 classification (imported); filed from: take 10 live walk (#817), OpenCode + GitLab; severity: operator round unrecorded'
+  super-fr#811:
+    category: latent
+    source: recording
+    pr: derio-net/super-fr#616
+    severity: med
+    reason: pickup/status read the local tree
+    evidence: '10-02 classification (imported); filed from: take 10 live walk (#817), OpenCode + GitLab; severity: stale ''nothing owed''; introduced in: pre-window; fixed by #836'
+  super-fr#812:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#628
+    severity: med
+    reason: 'every *.records/*.yaml is treated as a record since #628'
+    evidence: '10-02 classification (imported); filed from: take 10 live walk (#817), OpenCode + GitLab; severity: misleading ''must be migrated''; introduced in: operator-run fr-goal (lean pipeline 4.22.0); fixed by #834'
+  super-fr#813:
+    category: gap
+    source: recording
+    severity: med
+    reason: fr-plan lists tiers without criteria
+    evidence: '10-02 classification (imported); filed from: take 10 live walk (#817), OpenCode + GitLab; severity: run A all on the costliest model; fixed by #834'
+  super-fr#814:
+    category: latent
+    source: recording
+    severity: high
+    reason: fr-goal §8 never said the approval is the operator's
+    evidence: '10-02 classification (imported); filed from: take 10 live walk (#817), OpenCode + GitLab; severity: orchestrator readied its own MR; fixed by #828'
+  super-fr#815:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#792
+    severity: low
+    reason: 'stray line after #792''s ''N of N requirements served'''
+    evidence: '10-02 classification (imported); filed from: take 10 live walk (#817), OpenCode + GitLab; severity: misleading output; introduced in: wave 5 (phase-sizing-2); fixed by #834'
+  super-fr#816:
+    category: latent
+    source: recording
+    severity: high
+    reason: reviewer unobserved on OpenCode; record taken at its word
+    evidence: '10-02 classification (imported); filed from: take 10 live walk (#817), OpenCode + GitLab; severity: made-up reviewer and dropped findings accepted'
+  super-fr#818:
+    category: gap
+    source: hand
+    severity: med
+    reason: cites 18 first defects of shipped features in this window
+    evidence: '10-02 classification (imported); filed from: operator design issue; severity: verification kind missing'
+  super-fr#821:
+    category: latent
+    source: hand
+    severity: med
+    reason: deliver's PR-body gate never checked closing references
+    evidence: '10-02 classification (imported); filed from: split from #781 at its cancellation; severity: fixed issues stay open'
+  super-fr#822:
+    category: gap
+    source: hand
+    severity: med
+    reason: 'a process rule: deliver refuses Closes #n while the matrix row awaits a live walk'
+    evidence: '10-02 classification (imported); filed from: operator''s discussion after #817; severity: a run-behaviour promise closes on the PR, not on its evidence'
+  super-fr#823:
+    category: gap
+    source: hand
+    severity: high
+    reason: one umbrella issue, one batch; re-scoped after the cut to what never touched the input
+    evidence: '10-02 classification (imported); filed from: operator''s design after #817; severity: fr cannot observe OpenCode sessions'
+  super-fr#824:
+    category: latent
+    source: recording
+    severity: med
+    reason: the devcontainer CLI writes an untracked lock file; predates the window
+    evidence: '10-02 classification (imported); filed from: take 10 close-out (run B); severity: isolation down refuses at close-out; fixed by #836'
+  super-fr#825:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#790
+    severity: low
+    reason: the close-out flow opens a chore workspace and never closes it
+    evidence: '10-02 classification (imported); filed from: take 10 close-out; severity: the housekeeping workspace is never downed; introduced in: wave 5 (closeout-always-2); fixed by #836'
+  super-fr#826:
+    category: latent
+    source: recording
+    severity: low
+    reason: the wrapper text predates the window
+    evidence: '10-02 classification (imported); filed from: take 10 (stray committed file in the demo repo); severity: a committed wrapper execs a Claude Code path; fixed by #836'
+  super-fr#829:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#819
+    severity: low
+    reason: closed not planned after the cut
+    evidence: '10-02 classification (imported); filed from: phase 2 review of #819, filed at close-out; severity: a parse failure reads as ''cited by: none''; introduced in: wave 7 (spec-fidelity)'
+  super-fr#830:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#819
+    severity: low
+    reason: closed not planned after the cut
+    evidence: '10-02 classification (imported); filed from: phase 2 review of #819, filed at close-out; severity: a test pins the record stamp at 5; introduced in: wave 7 (spec-fidelity)'
+  super-fr#838:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#834
+    severity: low
+    reason: 'fixed in part by #834'
+    evidence: '10-02 classification (imported); filed from: split from #813 by the plan-inputs batch; severity: the PR body does not show tier and model; introduced in: wave 9 (plan-inputs)'
+  super-fr#843:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#836
+    severity: low
+    reason: fr appends without checking the last newline
+    evidence: '10-02 classification (imported); filed from: review of PR #836; severity: a hand-edited exclude file gets a glued line; introduced in: wave 9 (closeout-run)'
+  super-fr#844:
+    category: latent
+    source: pipeline
+    severity: high
+    reason: gc matches a merged PR by name; a re-used close-out branch name had one
+    evidence: '10-02 classification (imported); filed from: close-out of fix/batch-requirements-precheck; severity: gc reaps a fresh workspace by branch name'
+  super-fr#846:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#819
+    severity: high
+    reason: 'the live test of #773: the executor added it under a vague Design sentence; closed not planned with the cut'
+    evidence: '10-02 classification (imported); filed from: take 11 (super-fr-3 recording, OpenCode + GitLab); severity: invented behaviour still ships after spec review; introduced in: wave 7 (spec-fidelity)'
+  super-fr#847:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#819
+    severity: med
+    reason: draft-era rows; closed not planned with the cut
+    evidence: '10-02 classification (imported); filed from: take 11 (super-fr-3 recording, OpenCode + GitLab); severity: the PR body''s Design inventory is stale; introduced in: wave 7 (spec-fidelity)'
+  super-fr#848:
+    category: latent
+    source: recording
+    severity: med
+    reason: 'fr run cost --recompute; #823 part 1 is still open'
+    evidence: '10-02 classification (imported); filed from: take 11 (super-fr-3 recording, OpenCode + GitLab); severity: a foreign transcript is attributed to an OpenCode run'
+  super-fr#854:
+    category: gap
+    source: recording
+    severity: high
+    reason: the release commit gets no CI (pushed with GITHUB_TOKEN) and release.py checks which lines changed, not how the code behaves at the new number
+    evidence: '10-02 classification (imported); filed from: take 12 on 5.0.0 (the run hit the ceiling live); severity: 5.0.0 shipped refusing its own plans; nothing tests the code at the version about to be released'
+  super-fr#855:
+    category: latent
+    source: pipeline
+    severity: med
+    reason: two gaps that predate the window, same class as the 5.0.0 ceiling bug
+    evidence: '10-02 classification (imported); filed from: review of the ceiling fix (#856); severity: an explicit --fr-version is never checked against the installed fr; dev installs fall outside every spec'
+  super-fr#892:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#641
+    severity: med
+    reason: 'make_client in triage batch (added with batches in #641) drops the self-hosted host, same class as #490; found by the bridge audit and left out of scope'
+    evidence: 'issue body read; git log -S confirms make_client was added in #641'
+  super-fr#893:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#866
+    severity: low
+    reason: 'is_test_node follows pytest default names only; out-of-scope review finding deliberately left by #866'
+    evidence: 'issue body read; git log -S confirms is_test_node arrived in #866'
+  super-fr#899:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#898
+    severity: low
+    reason: 'out-of-scope review finding from #898: the board cannot see the archived check the driver uses, so the stale row stays'
+    evidence: 'issue body read; git log -S confirms is_archived arrived in #898'
+  super-fr#900:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#898
+    severity: low
+    reason: 'out-of-scope review finding from #898: archived batches get no closeout event so every pass re-checks them'
+    evidence: 'issue body read; git log -S confirms is_archived arrived in #898'
+  super-fr#901:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: 'architecture page (added in #876) clips long unbreakable tokens at 400px; found by the post-merge render check'
+    evidence: issue body read; not checked against the code
+  super-fr#902:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#876
+    severity: med
+    reason: 'open PRs in facts issues count as unplaced on the board and architecture page; the unplaced set and those views were added in #876'
+    evidence: 'issue body read; git log -S unplaced shows it first appears in #876'
+  super-fr#909:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#876
+    severity: med
+    reason: the wave driver (#876) re-collects with unbounded gh calls, so one stalled read blocked the loop for 16 minutes in the live wave
+    evidence: 'issue body read; git log -S GH_TIMEOUT shows no timeout before #916'
+  super-fr#910:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#876
+    severity: med
+    reason: 'driver loop mode exits on a single failed forge read; seen in the live two-batch wave on #876''s driver'
+    evidence: issue body read; not checked against the code
+  super-fr#911:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: 'the driver re-collects all facts every pass (200+ serial gh calls); performance defect in #876''s driver found in the live wave'
+    evidence: issue body read; not checked against the code
+  super-fr#912:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#898
+    severity: med
+    reason: 'hand-opened close-out PRs are not recognised by the archived check added in #898, so a named drive would start a second close-out'
+    evidence: 'issue body read; git log -S confirms is_archived arrived in #898'
+  super-fr#913:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: 'driver plan and summary say nothing when the global in-flight cap holds the selected batches; missing output in #876''s driver'
+    evidence: issue body read; not checked against the code
+  super-fr#917:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: 'snapshot tabs on the architecture page (added in #876) dump 82 batch stages as a wall of text'
+    evidence: 'issue body read; git log -S confirms the .stages block arrived in #876'
+  super-fr#918:
+    category: gap
+    source: recording
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: driver never closes a finished batch's runner sessions; the spec knowingly left it, and the fix needs a new runner-protocol operation
+    evidence: issue body read; not checked against the code
+  super-fr#919:
+    category: gap
+    source: hand
+    severity: low
+    reason: 'operator-requested feature: group each wave''s herdr sessions in its own workspace'
+    evidence: issue body read; not checked against the code
+  super-fr#921:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#916
+    severity: med
+    reason: 'degraded-forge gaps left after #909/#910, listed by #916''s independent review as out of scope'
+    evidence: issue body read; not checked against the code
+  super-fr#923:
+    category: gap
+    source: pipeline
+    pr: derio-net/super-fr#877
+    severity: low
+    reason: 'feature request to offer the Pages acceptance report to other repos via fr acceptance init, queued behind #877'
+    evidence: issue body read; not checked against the code
+  super-fr#924:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#877
+    severity: low
+    reason: 'review finding p1-r3 from #877 filed out of scope: migration-gate refusal fails the whole Pages deploy; cancel-in-progress predates the PR'
+    evidence: 'issue body read; git log -S confirms cancel-in-progress was in pages.yml since #389'
+  super-fr#927:
+    category: new-feature
+    source: hand
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: the driver's update-behind-PRs rule (R4) makes every merge and release commit re-update every ready PR; slow, not wrong
+    evidence: issue body read; not checked against the code
+  super-fr#930:
+    category: gap
+    source: hand
+    pr: derio-net/super-fr#925
+    severity: low
+    reason: fr archive does not refresh earlier closeouts' unpriced usage sessions, so a third usage-backfill PR or lost cost is the result; the manual backfill was the designed answer in gh#756
+    evidence: issue body read; not checked against the code
+  super-fr#931:
+    category: new-feature
+    source: hand
+    pr: derio-net/super-fr#641
+    severity: med
+    reason: 'herdr runner dispatch (added in #641) races the new tab''s shell, and the driver ends loop mode on one failed dispatch'
+    evidence: 'issue body read; git log -S confirms agent start arrived in #641'
+  super-fr#936:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: high
+    reason: batch PR attribution by branch name alone lets a fork PR be auto-merged by the unattended driver (#876); found by the push security review
+    evidence: issue body read; not checked against the code
+  super-fr#937:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#933
+    severity: low
+    reason: 'review of #933 noted the overlap rule compares paths, not content refs; narrow case left out of scope'
+    evidence: issue body read; not checked against the code
+  super-fr#938:
+    category: latent
+    source: hand
+    severity: med
+    reason: install.sh was never serialised or atomic; the driver's post_merge install makes overlaps likely, cause not yet established
+    evidence: issue body read; not checked against the code
+  super-fr#940:
+    category: latent
+    source: hand
+    severity: med
+    reason: CI never pinned an interpreter, so it tests whatever Python the runner has; a 3.13-only API passed locally and failed in CI
+    evidence: issue body read; not checked against the code
+  super-fr#941:
+    category: latent
+    source: hand
+    severity: low
+    reason: ci.yml has triggered on [push, pull_request] since the repo's first scaffold, so every PR push runs CI twice
+    evidence: issue body read; git log -S confirms the trigger dates from the initial scaffold commit
+  super-fr#942:
+    category: gap
+    source: hand
+    pr: derio-net/super-fr#933
+    severity: low
+    reason: 'operator-decided follow-up to #927: merge ready PRs as a merge train; an enhancement, not a defect'
+    evidence: issue body read; not checked against the code
+  super-fr#947:
+    category: new-feature
+    source: recording
+    pr: derio-net/super-fr#641
+    severity: med
+    reason: 'batch merge (added in #641) crashes on ''no required checks reported'' after an update push instead of treating it as pending'
+    evidence: 'issue body read; git log -S confirms wait_required_checks arrived in #641; not re-verified on current code per the issue'
+  super-fr#952:
+    category: new-feature
+    source: hand
+    pr: derio-net/super-fr#916
+    severity: med
+    reason: 'after #916 the driver treats ''no checks reported'' as a failed read and skips the whole pass; should be pending for that PR only'
+    evidence: issue body read; not checked against the code
+  super-fr#954:
+    category: latent
+    source: pipeline
+    severity: med
+    reason: judgement keys have been owner-blind since issue_key was written; found by a spec review of the scoped-collect work
+    evidence: 'issue body read; git log -S confirms issue_key dates from #542'
+  super-fr#956:
+    category: new-feature
+    source: hand
+    pr: derio-net/super-fr#641
+    severity: med
+    reason: 'herdr runner dispatch (#641) can leave the brief unsubmitted in the input box, silently; same race family as #931'
+    evidence: issue body read; not checked against the code
+  super-fr#959:
+    category: gap
+    source: hand
+    severity: low
+    reason: 'feature request: the driver should hand real merge conflicts back to the batch''s session instead of only reporting them'
+    evidence: issue body read; not checked against the code
+  super-fr#962:
+    category: latent
+    source: pipeline
+    pr: derio-net/super-fr#951
+    severity: low
+    reason: 'a head moving before pr_merge is reported as a plain forge refusal; behaviour predates the merge train, found by #951''s phase review'
+    evidence: issue body read; not checked against the code
+  super-fr#964:
+    category: gap
+    source: hand
+    severity: low
+    reason: 'feature request: restart idle Claude sessions in place so they load plugins after post_merge installs'
+    evidence: issue body read; not checked against the code
+  super-fr#965:
+    category: regression
+    source: hand
+    pr: derio-net/super-fr#866
+    severity: high
+    reason: '#866''s name-anchor rule resolves only pytest''s Class::test, so existing unittest-style Class.test anchors began failing as ''renamed or deleted test'''
+    evidence: 'issue body read and repro; git log -S NODE_SEP confirms it arrived in #866'
+  super-fr#968:
+    category: leftover
+    source: hand
+    pr: derio-net/super-fr#876
+    severity: low
+    reason: 'the wave-driver spec''s R20 promised the three pages keep everything they showed; #876 gave only the architecture page a fragment mechanism'
+    evidence: found 2026-10-05 comparing the 10-02 hand-built pages with the fr 5.5.0 renders; spec R20 and architecture.py load_manifest read
+causes:
+- title: Wave-driver review findings filed out of scope at close-out
+  categories:
+  - new-feature
+  - leftover
+  - gap
+  batches: []
+  process_change: fix in-scope review findings before merge, or batch the close-out filings into one follow-up batch right away
+- title: Closing-keyword gate shipped with edges its review left open
+  categories:
+  - new-feature
+  batches:
+  - closing-keywords
+  process_change: settle the gate's grammar against GitHub's real closing-keyword rules before shipping a refusal
