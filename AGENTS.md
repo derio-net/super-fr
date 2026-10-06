@@ -107,7 +107,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` or `owner`, lowercased;
     `--dir` overrides): `facts.json` (collect), `judgements.yaml` (the
     agent's, shape in spec §3.D), `triage.html` (render). It is never
-    committed by default, so it is NOT an artifact kind. `collect.py`'s
+    committed by default, so it is NOT an artifact kind. This repo keeps a
+    durable copy of its own scope's inputs and history (judgements, origins,
+    subsystems, snapshots, the architecture fragments' sources) in
+    `docs/triage/`, moved by `docs/triage/sync.sh export|import`; the cache
+    stays the working copy (see `docs/triage/README.md`). `collect.py`'s
     `Forge` protocol (one implementation, `GhForge` over `fr.gh`) is the one
     place a second forge lands — a new class, not an edit to the collector.
     `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` (it never
