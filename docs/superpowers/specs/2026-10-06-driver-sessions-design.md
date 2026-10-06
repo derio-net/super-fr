@@ -291,3 +291,9 @@ Only what no pre-merge strategy can exercise. The CI tests are listed under `## 
   check that each `ok` pane resumed the same session id, in the same tab, with the same label
   and launch flags, and that a pane with a draft was skipped and untouched
   (row `herdr-restart-idle-live`).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-06-driver-sessions | `derio-net/super-fr` | `2026-10-06-driver-sessions` | — |

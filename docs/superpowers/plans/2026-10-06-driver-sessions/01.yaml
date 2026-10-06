@@ -1,0 +1,238 @@
+schema_version: 2
+phase:
+  number: 1
+  title: fr-herdr restart-idle — live captures, restart engine, console script, install
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - herdr-restart-idle
+  - herdr-restart-idle-live
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr-herdr/src/fr_herdr/*
+  - packages/fr-herdr/pyproject.toml
+  - tests/fixtures/herdr/restart/*
+  - tests/unit/test_fr_herdr_restart.py
+  - tests/unit/test_fr_herdr_cli.py
+  - tests/unit/test_fr_herdr_runner.py
+  - tests/integration/test_install_sh.py
+  - tests/integration/test_runner_package_lists.py
+  - tests/scenarios/herdr-restart-idle.sh
+  - tests/scenarios/fixtures/herdr-restart/*
+  - scripts/install.sh
+  - .fr/candidate-install
+  - .changes/feat-batch-driver-sessions.yaml
+  - docs/acceptance/*
+  - uv.lock
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: SMOKE — capture live herdr surfaces and load them in a trivial test
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      From inside herdr (HERDR_ENV=1), capture into tests/fixtures/herdr/restart/. Capture
+      READ-ONLY: never send a key to an operator pane.
+      - `herdr agent list` → agent-list.json.
+      - `herdr pane process-info --pane <an idle claude pane>` → process-info.json.
+      - `herdr pane read <pane> --source visible --ansi`, three times:
+        - an idle pane showing Claude's faint prompt suggestion → screen-suggestion.json;
+        - an empty prompt → screen-empty.json;
+        - a pane whose status line shows `N shells` / `← N agent` → screen-background.json.
+      Redact home paths to /home/user, and any non-derio-net names per
+      .claude/rules/third-party-privacy.md. Write README.md with the date, herdr 0.9.1, the
+      exact command for each file, and what was redacted.
+  - id: P1.T1.S2
+    text: |-
+      Probe in a SCRATCH tab you create (`herdr tab create --label fr-restart-probe --cwd
+      <tmp dir>`), never in an operator's tab:
+      1. Start `herdr agent start fr-probe --kind claude --pane <root pane>`.
+      2. Type a draft with `herdr pane send-text` (no Enter), capture screen-draft.json,
+         then clear it.
+      3. Send `/exit` + enter and wait for the shell.
+      4. Run `herdr agent start fr-probe --kind claude --pane <same pane> -- --resume
+         <its session id>`. Capture whether herdr accepts the reused name or refuses
+         (agent-start-reuse.json, with the error envelope if refused).
+      Close the scratch tab. Record the outcome in the README: it decides §A step 3's path.
+  - id: P1.T1.S3
+    text: |-
+      Smoke test: tests/unit/test_fr_herdr_restart.py::test_live_fixtures_load parses every
+      JSON fixture and asserts that the fields §A relies on exist: agent, agent_status,
+      agent_session.value, name, pane_id; foreground_processes[].argv; the screen text.
+      Run `uv run pytest tests/unit/test_fr_herdr_restart.py -q --no-cov`; it must be green.
+      Add .changes/feat-batch-driver-sessions.yaml (`bump: minor`, a one-line summary).
+      Commit, push.
+- number: 2
+  title: RED/GREEN — pure classify and kept_args
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests for fr_herdr.restart.classify over the fixtures. The first failing check
+      wins, in this order:
+      - status not idle/done → `status <s>`;
+      - no agent_session → `no-session`;
+      - transcript missing → `no-transcript` (use a tmp CLAUDE_CONFIG_DIR; slug = cwd with
+        every non-[A-Za-z0-9] char → '-');
+      - argv with an unknown flag or a positional → `unknown-flag <flag>`;
+      - non-faint text after `❯` → `draft` (a faint SGR 2 suggestion is NOT a draft);
+      - status-line shells/agents → `background-work`;
+      - the HERDR_PANE_ID pane → `self`;
+      - --exclude → `excluded`.
+
+      kept_args keeps these flags with their values: --model, --permission-mode,
+      --dangerously-skip-permissions, --add-dir, --settings, --mcp-config, --plugin-dir,
+      --agent. It drops --resume/-r, --continue/-c and --session-id. Run: it fails (no
+      module yet).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: packages/fr-herdr/src/fr_herdr/restart.py, with the Skip/Plan/Outcome/
+      RestartReport dataclasses, classify, kept_args and transcript_path(cwd, session_id).
+      Pure: no herdr call. Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR — tidy names and docstrings to match spec §A; the module docstring cites the spec. Tests stay green.
+- number: 3
+  title: RED/GREEN — the restart sequence and restart_idle
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: replace `_run_herdr` with a scripted fake and inject the sleep and clock, then
+      test restart():
+      - it sends /exit, then enter;
+      - exit dialog seen → `fail exit-dialog`, no further call;
+      - 30 s without leaving the foreground → `fail exit-timeout`, no further key;
+      - a named pane → `agent start <name> --kind claude --pane <p> -- <kept> --resume <id>`;
+      - a name-reuse refusal (the fixture code from P1.T1.S2) falls back to send-text;
+      - an unnamed pane → send-text `claude <kept> --resume <id>` + enter;
+      - 90 s without the same agent_session → fail;
+      - every failure after /exit carries `resume by hand: claude <kept> --resume <id>`.
+
+      And restart_idle:
+      - a dry run sends no key;
+      - one failed pane does not stop the next;
+      - panes are handled serially.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement restart() and restart_idle(*, yes, exclude) in restart.py, through
+      runner._run_herdr. runner.py imports fr_herdr.restart at MODULE TOP LEVEL (sr-13). To
+      avoid an import cycle, keep _run_herdr/HerdrError in a module restart.py can import
+      (for example, move them to fr_herdr/_herdr.py and re-export from runner.py). Tests
+      green; the existing tests/unit/test_fr_herdr_runner.py stays green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR — share one polling helper between the exit and resume waits; tests green.
+- number: 4
+  title: RED/GREEN — fr-herdr console script
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_fr_herdr_cli.py — `main(["restart-idle"])`:
+      - prints one line per claude pane (`ok|skip <reason>|fail <reason>` + pane id + tab
+        label), then a summary;
+      - exits 0 with no failure and 1 with any fail;
+      - exits 2 with a refusal outside herdr (HERDR_ENV unset), using the same predicate
+        as HerdrRunner.preflight;
+      - executes with `--yes`; `--exclude` can be repeated.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: packages/fr-herdr/src/fr_herdr/cli.py (argparse, one subcommand) and
+      `[project.scripts] fr-herdr = "fr_herdr.cli:main"` in packages/fr-herdr/pyproject.toml.
+      Run `uv lock` if needed; never edit a version. Tests green.
+- number: 5
+  title: Install — fr-herdr on PATH, candidate walk scenario
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/integration/test_install_sh.py:
+      - install.sh passes `--with-executables-from fr-herdr` to both uv tool installs
+        (staged and final);
+      - it manages a `fr-herdr` PATH link beside `fr`'s, created only when fr-herdr was
+        installed, staged then repointed exactly as `fr`'s is (gh#938);
+      - .fr/candidate-install passes the flag.
+      Check tests/integration/test_runner_package_lists.py for a literal that must follow.
+  - id: P1.T5.S2
+    text: |-
+      GREEN — edit scripts/install.sh and .fr/candidate-install; tests green.
+  - id: P1.T5.S3
+    text: |-
+      Scenario tests/scenarios/herdr-restart-idle.sh, with fixtures/herdr-restart/ holding
+      a fake `herdr` script on PATH that replays the captured JSON:
+      - with HERDR_ENV=1, `fr-herdr restart-idle` prints a line per pane with the expected
+        skips and a summary, exits 0, and sends no key (the fake logs every call);
+      - without HERDR_ENV, it exits 2.
+      Run tests/integration/test_scenarios.py for it; green.
+  - id: P1.T5.S4
+    text: |-
+      Move row herdr-restart-idle to ci with `fr acceptance set-status --id
+      herdr-restart-idle --status ci --level unit=super-fr:tests/unit/test_fr_herdr_restart.py
+      --level unit=super-fr:tests/unit/test_fr_herdr_cli.py --scenario
+      tests/scenarios/herdr-restart-idle.sh --notes "..."`. Run the full suite into a
+      host-visible log (uv run pytest -q --no-cov -n auto), then ruff and mypy; commit; push.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

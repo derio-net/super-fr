@@ -1,0 +1,158 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Idle sessions reported by the driver and on the board; herdr-only constraint
+    documented
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - drive-idle-session-report
+  - board-idle-session
+  - herdr-outside-refusal
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/unit/test_triage_*.py
+  - tests/unit/test_fr_herdr_runner.py
+  - tests/unit/test_fr_triage_skill*.py
+  - docs/acceptance/*
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: RED/GREEN — the pure idle_session rule
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: batch_drive.idle_session.
+      - Batch item: idle/done, last dispatch older than the threshold, no PR →
+        IdleSession(item, batch, closeout=False, since, minutes).
+      - working/blocked/absent/unknown → None; younger than the threshold → None; a PR
+        exists → None.
+      - Close-out item: idle/done, close-out event older than the threshold, no attributed
+        archive PR → IdleSession(closeout=True). An attributed archive PR → None.
+  - id: P3.T1.S2
+    text: |-
+      GREEN — implement idle_session and IdleSession in batch_drive.py; tests green.
+- number: 2
+  title: RED/GREEN — the driver reports idle sessions once
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED:
+      - drive_pass with Snapshot.idle set emits one warn per IdleSession, with head
+        `idle-session\0<item>\0<event.at iso>` and detail `<item> has sat <status> for <N>
+        min with no PR|archive PR; focus it: <cmd>`. The cmd is shlex.join(["fr","triage",
+        "batch","focus",batch,(--closeout),*scope_args]), carried in on the Snapshot.
+      - A warned head is not repeated, and the summary is unchanged.
+      - Snapshot.idle defaults to (), and views.drive_snapshot(...).idle == () (the sr-10
+        pin).
+      - Command level: _Driver.snapshot probes session_statuses only for candidates (a
+        dispatch older than the threshold with no PR; a recorded, unfinished close-out
+        older than the threshold). It is soft on a runner load or preflight failure, and
+        it fills Snapshot.idle.
+  - id: P3.T2.S2
+    text: |-
+      GREEN — implement in batch_drive.py and triage_batch_cmd.py; tests green.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR — share the candidate probe with _sessions where that reads cleaner; tests green. Move row drive-idle-session-report to ci via set-status, with its test refs.
+- number: 3
+  title: RED/GREEN — the board marks idle cards needs-you
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED:
+      - build_board and _card take `now`.
+      - A card whose batch or close-out session is idle per idle_session (threshold from
+        facts.config_for(repo)) is needs_you, with the line `idle <N> min, no PR as of
+        <collected_at>` (or `no archive PR`).
+      - A card with a PR is not flagged.
+      - write_board passes the wall clock.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: kanban.py, kanban_render.py (render the reason line), triage_kanban_cmd.py.
+      Tests green.
+
+      Browser check (fr-execute; row board-idle-session carries visual): render a board from
+      fixture facts and judgements, with statuses for the three visual states
+      (idle-batch-card-needs-you, idle-closeout-card-needs-you,
+      idle-card-with-pr-not-flagged), into a git-ignored dir. Screenshot and open each, and
+      fill the record's visual section. Move row board-idle-session to ci via set-status.
+- number: 4
+  title: '#878 — refusal text and fr-triage skill paragraph'
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED:
+      - HerdrRunner.preflight's refusal outside herdr names `fr triage batch drive` /
+        `dispatch` and a herdr pane.
+      - A test over plugins/super-fr/skills/fr-triage/SKILL.md finds the "Runner constraints
+        and session upkeep" paragraph, naming the herdr-only rule, post_merge_restart,
+        idle_session_minutes and `fr-herdr restart-idle`.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: edit runner.py's message and the canonical skill, then run BOTH
+      `uv run --no-project python scripts/sync-opencode.py` and `scripts/sync-hermes.py`.
+      Tests green, including the three mirror tripwires and
+      test_tripwire_skill_tool_neutrality. Move row herdr-outside-refusal to ci via
+      set-status.
+  - id: P3.T4.S3
+    text: |-
+      Run the full suite into a host-visible log, then ruff format + check and mypy; commit; push.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

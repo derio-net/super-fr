@@ -1,0 +1,122 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Driver restarts idle sessions once per pass after post_merge (protocol, config,
+    facts 6)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - drive-post-merge-restart
+  tier: standard
+  files:
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - .fr/triage.yaml
+  - tests/unit/test_fr_herdr_runner.py
+  - tests/unit/test_triage_*.py
+  - tests/fixtures/triage/*
+  - tests/scenarios/fixtures/*
+  - docs/acceptance/*
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: RED/GREEN — SessionRestarter protocol and HerdrRunner.restart_idle
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: HerdrRunner is a runtime SessionRestarter; restart_idle(exclude=...) returns a
+      RestartSummary(ok, skipped, failed) built from fr_herdr.restart.restart_idle(yes=True).
+      Add the mypy conformance assignment beside the others in runner.py.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: fr_dispatch.protocols gains RestartSummary (a frozen dataclass) and a
+      runtime-checkable SessionRestarter beside SessionCloser/Inspector/Focuser/Messenger.
+      Implement it in runner.py. Tests green; tests/unit/test_import_direction.py green.
+- number: 2
+  title: RED/GREEN — config fields and FACTS_SCHEMA 6
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED:
+      - TriageConfig has post_merge_restart (none|idle, default none) and
+        idle_session_minutes (int>=1, default 60);
+      - a schema-6 facts file round-trips, and a schema-5 one still loads;
+      - Facts.schema_ accepts 6 and defaults to it.
+  - id: P2.T2.S2
+    text: |-
+      GREEN in model.py:
+      - the two fields;
+      - FACTS_SCHEMA 6, FACTS_READS (3,4,5,6), and Facts.schema_ Literal[3,4,5,6] defaulting
+        to 6;
+      - the comment above FACTS_SCHEMA records why.
+      Fix every test or fixture that pins 5 as the written schema. `.fr/triage.yaml` gets
+      `post_merge_restart: idle`, with a comment. Tests green.
+- number: 3
+  title: RED/GREEN — driver restarts once per pass
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED, in the style of tests/unit/test_triage_batch_drive_disruption.py. Use a fake
+      runner that is a SessionRestarter, with config post_merge_restart idle:
+      - a pass that closes out two batches whose post_merge succeeded calls restart_idle
+        ONCE, after both close-outs started;
+      - it prints `restart: N ok, M skipped, K failed` and a line per failure;
+      - config none → no call; post_merge failed → no call;
+      - a runner that is not a SessionRestarter, or that refuses preflight, is reported once
+        per process, and the close-outs still start;
+      - restart raising → reported, the drive continues, and `--once`'s exit code is
+        unaffected;
+      - the restart happens before the exec-restart check.
+  - id: P2.T3.S2
+    text: |-
+      GREEN in triage_batch_cmd.py:
+      - _close_out records the runner name and the probe item (probe_item(repo, batch,
+        closeout=True, prefix=self.workspace_prefix)) after a successful post_merge, when
+        the repo opts in;
+      - run_pass ends by calling a new _restart_sessions() once per recorded runner. It is
+        soft: _try_runner, preflight on the probe, an isinstance SessionRestarter check, and
+        a catch-all reported via _report_once.
+      Tests green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR — keep _restart_sessions small and documented (spec §B, sr-7). Move row
+      drive-post-merge-restart to ci via `fr acceptance set-status ... --level unit=<test>`.
+      Run the full suite into a host-visible log, then ruff and mypy; commit; push.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
