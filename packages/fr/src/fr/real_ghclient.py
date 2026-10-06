@@ -452,7 +452,9 @@ class RealGhClient:
         self, repo: str, state: str, limit: int, fields: str | None = None
     ) -> list[dict[str, Any]]:
         if fields is None:
-            return cast("list[dict[str, Any]]", _gh.list_issues(repo=repo, state=state, limit=limit))
+            return cast(
+                "list[dict[str, Any]]", _gh.list_issues(repo=repo, state=state, limit=limit)
+            )
         return cast(
             "list[dict[str, Any]]",
             _gh.list_issues(repo=repo, state=state, limit=limit, fields=fields),

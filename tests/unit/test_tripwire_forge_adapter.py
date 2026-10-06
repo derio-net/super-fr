@@ -34,6 +34,7 @@ BACKEND = {
     "fr/src/fr/hostclient.py",
 }
 
+
 def offences(source: str) -> list[str]:
     """Each direct `fr.gh` import or `["gh", …]` argv in *source*."""
     found: list[str] = []

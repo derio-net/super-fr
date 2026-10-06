@@ -46,7 +46,9 @@ from fr.triage.stage import pr_rank
 ISSUE_LIMIT = 1000
 PR_LIMIT = 200
 REPO_LIMIT = 200
-ORIGINS_ISSUE_LIST_FIELDS = real_ghclient.ORIGINS_ISSUE_LIST_FIELDS  # origins' own, wider issue fields
+ORIGINS_ISSUE_LIST_FIELDS = (
+    real_ghclient.ORIGINS_ISSUE_LIST_FIELDS
+)  # origins' own, wider issue fields
 BODY_LIMIT = 2000
 CONFIG_PATH = ".fr/triage.yaml"
 # GitHub's contents API resolves HEAD to the default branch (verified live
@@ -87,6 +89,10 @@ GH_MISSING = (
 )
 
 
+# A forge CLI's own error, and an operation the backend does not implement.
+_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeOperation)
+
+
 @contextmanager
 def _forge_errors() -> Iterator[None]:
     """Translate every way a forge call fails into triage's own `ForgeError`:
@@ -94,7 +100,7 @@ def _forge_errors() -> Iterator[None]:
     CLI that is not installed at all."""
     try:
         yield
-    except (*FORGE_ERRORS, UnsupportedForgeOperation) as exc:
+    except _FAILURES as exc:
         raise ForgeError(str(exc)) from exc
     except FileNotFoundError as exc:  # subprocess could not exec `gh` at all
         raise ForgeError(GH_MISSING) from exc

@@ -42,7 +42,15 @@ _CLIENTS: dict[str, Any] = {
 }
 
 _DEFAULT_BRANCH_ARGV = {
-    "github": ["gh", "repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+    "github": [
+        "gh",
+        "repo",
+        "view",
+        "--json",
+        "defaultBranchRef",
+        "--jq",
+        ".defaultBranchRef.name",
+    ],
     "gitlab": ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"],
     "gitea": ["tea", "repos", "--fields", "default_branch", "--output", "json"],
 }

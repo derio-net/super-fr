@@ -20,7 +20,7 @@ from fr.tea import TeaError
 @pytest.mark.parametrize(
     ("exc", "kind"),
     [
-        (GhError("API rate limit exceeded", stderr="HTTP 403: API rate limit exceeded"), "rate_limit"),
+        (GhError("rate limited", stderr="HTTP 403: API rate limit exceeded"), "rate_limit"),
         (GlabError("boom", stderr="429 Too Many Requests: rate limit reached"), "rate_limit"),
         (TeaError("429 Too Many Requests: rate limit exceeded"), "rate_limit"),
         (GlabError("403 Forbidden: API rate limit exceeded"), "rate_limit"),
