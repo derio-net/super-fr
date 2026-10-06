@@ -272,6 +272,13 @@ feature's reach. One exists today (`matrix.yaml`, the
 `2026-09-27-spec-ref-writers` spec ref), and this PR retargets it by hand so
 the baseline is zero.
 
+## Verification
+
+- archive-prices-earlier-closeouts: live — pricing needs a real harness transcript whose session has exited; a fixture repo has none, and the unit suite covers the refresh against recorded transcripts
+- archive-retargets-matrix-refs: live — `fr archive` refuses to move work that is not on the remote default ref, so only a real merged close-out exercises it; the unit suite drives the retarget with real git
+- archive-files-open-ends: live — filing needs a forge, which a scenario never reaches; the unit suite covers it with a fake forge and real journals
+- closeout-brief-files-via-archive: live — the brief is printed for a merged run's close-out; the unit suite pins its text
+
 ## Implementation Plans
 
 | Plan | Repo | File | Depends on |
