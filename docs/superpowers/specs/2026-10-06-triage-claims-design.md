@@ -284,7 +284,8 @@ re-read applies R17's filter, so an untrusted marker never wins R4 here either. 
   on each own card. The page stays within the existing tokens and the 16px gutter.
 - `publish_board(config, board_path, name, scope_id)`: substitutes the
   placeholders, runs the argv with no shell and a 120-second timeout, and
-  returns the failure cause or None. `_write_board` calls it after a successful
+  returns the failure cause or None; it runs with the operator's environment, the
+  scope's state directory as its working directory, and no shell. `_write_board` calls it after a successful
   render; `fr triage board --publish` calls it after each render. A failure warns
   once per cause per process, like `_write_board`'s own warnings.
 - The skill names the harness-neutral reading: a CLI command publishes; an agent

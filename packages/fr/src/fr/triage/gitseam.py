@@ -497,7 +497,8 @@ class Worktree:
 
 def run_publish(argv: list[str], cwd: Path, timeout: float) -> str | None:
     """Run the scope's `publish` argument list as is, with no shell (triage-claims R14), in
-    *cwd*. None when it exited 0, else the cause on one line (`_run`'s words). Never raises."""
+    *cwd* (the scope's state directory), inheriting the caller's full environment. None
+    when it exited 0, else the cause on one line (`_run`'s words). Never raises."""
     try:
         _run(argv, cwd, timeout=timeout)
     except GitError as exc:
