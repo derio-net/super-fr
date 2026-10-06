@@ -46,7 +46,12 @@ steps:
           reviewer: a7b94262f3cd81541
           findings: spr-f1,spr-f2,spr-f3,spr-f4,spr-f5,spr-f6,spr-f7,spr-f8,spr-f9,spr-f10,spr-f11,spr-f12
   plan-review:
-    state: pending
+    state: failed
+    at: '2026-10-06T18:02:39+00:00'
+    exit: 1
+    stdout: "[error] phase 1 (agentic) step P1.T1.S1 reads like a manual operation\
+      \ (matched \n'\\\\bby hand\\\\b') — move it into a manual phase; agentic phases\
+      \ must be pure \nagentic.\n"
   implement:
     state: pending
     members:
