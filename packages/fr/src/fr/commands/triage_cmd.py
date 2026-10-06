@@ -144,7 +144,8 @@ def _report(facts: Facts) -> None:
     for u in facts.unviewed:
         err_console.print(
             f"[yellow]unviewed[/yellow] {escape(u.key)}: {escape(u.reason)} "
-            "(judged, but the forge would not show it; not treated as orphaned)",
+            "(judged or named by `duplicate_of`, but the forge would not show it; "
+            "not treated as orphaned)",
             soft_wrap=True,
         )
     for w in facts.warnings:
@@ -189,7 +190,11 @@ def collect_into(
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
-    judged = list(loaded.issues) if loaded else []
+    # Every judged key, and every `duplicate_of` target (R6: a closed original must
+    # read `closed`, not `missing`); one view each, whichever way it was named.
+    judged = (
+        list(dict.fromkeys([*loaded.issues, *sorted(loaded.duplicate_targets())])) if loaded else []
+    )
     # The branch and time of each batch's last dispatch, unless it was cancelled
     # since (spec 2026-09-25-triage-batches §3.A): collect looks each one up by
     # head, unless the previous facts already show it terminal (review r2p-f3).

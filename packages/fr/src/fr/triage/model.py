@@ -237,7 +237,8 @@ class Skipped(_Strict):
 
 
 class Unviewed(_Strict):
-    """A judged issue whose `view_issue` failed (review r-p2-unviewed).
+    """A judged issue, or one named by a `duplicate_of`, whose `view_issue` failed
+    (review r-p2-unviewed).
 
     A deleted issue, a rate limit, a 5xx and a token without access all fail
     the same way, and only the forge could tell them apart. So none of them is
