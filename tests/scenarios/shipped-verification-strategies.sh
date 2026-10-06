@@ -13,8 +13,42 @@ for s in candidate client-live prerelease live; do
 done
 run_fr out verification check --all;          require_exit 0 "$out"
 
-# A walk with no such run is refused; this fixture has no install contract
-# either, and nothing is installed on the way to either refusal.
-run_fr out verification walk --run no-such-run --model scenario
-[ "$RC" -ne 0 ] || fail "a walk with no run succeeded"
+# A candidate walk in a repo WITHOUT the install contract is refused by name
+# (R8), before anything is installed: a committed fixture with a run cursor, a
+# spec whose `## Verification` says `strategy: candidate`, and one row citing it
+# with a scenario.
+mkdir -p docs/superpowers/runs docs/superpowers/specs docs/acceptance scenarios
+cat > docs/superpowers/runs/w1.yaml <<'YAML'
+schema_version: 1
+run: w1
+workflow: fr-goal@1
+branch: b
+started: '2026-10-06T11:00:00+00:00'
+cursor: deliver
+steps:
+  spec:
+    state: done
+    at: '2026-10-06T12:00:00+00:00'
+    emitted:
+      spec: docs/superpowers/specs/s.md
+YAML
+printf '# S\n\n## Verification\n\nstrategy: candidate\n' > docs/superpowers/specs/s.md
+cat > docs/acceptance/matrix.yaml <<'YAML'
+schema_version: 4
+org: o
+repo: proj
+rows:
+  - id: row-a
+    capability: c
+    acceptance: a works
+    origin: ["proj:docs/superpowers/specs/s.md#R1"]
+    status: not-implemented
+    scenario: scenarios/row-a.sh
+YAML
+printf '#!/bin/sh\nexit 0\n' > scenarios/row-a.sh
+chmod +x scenarios/row-a.sh
+git add -A && git commit -qm fixture --no-verify
+run_fr out verification walk --run w1 --model scenario
+require_exit 2 "$out"
+expect_grep 'candidate-install' "$out" "a repo without the install contract is refused by name"
 echo "ok: shipped-verification-strategies"
