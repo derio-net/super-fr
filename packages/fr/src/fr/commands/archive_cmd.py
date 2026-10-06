@@ -19,10 +19,12 @@ tree, usage, legacy layout; 5 parse error.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import functools
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import typer
 from rich.console import Console
@@ -31,6 +33,7 @@ from rich.markup import escape
 from fr.archive import (
     ArchiveError,
     MergeEvidence,
+    MoveLog,
     SpecSweepResult,
     archive_blockers,
     archive_journal,
@@ -39,6 +42,7 @@ from fr.archive import (
     emitted_plan,
     merge_evidence,
     paths_dirty,
+    recording_moves,
     spec_archive_sweep,
 )
 from fr.closeout import BranchArtifact, branch_artifacts, journal_scope_and_slug, owed_artifacts
@@ -370,6 +374,70 @@ def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> Path | str:
     return dst.relative_to(repo_root)
 
 
+@dataclass(frozen=True)
+class _ArchiveOpts:
+    """What the follow-ups need from the invocation (the issues selection is
+    added by the open-ends phase)."""
+
+    branch: str | None = None
+
+
+def _after_moves(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
+    """The follow-ups an archive that staged a move owes (spec 2026-10-06 §0).
+
+    A no-op on an empty log. Each step runs in its own try: one failure never
+    stops the next, and none of them changes the exit code the body chose."""
+    if not log:
+        return
+    for name, step in (("usage refresh", _refresh_usage),):
+        try:
+            step(repo_root, log, opts)
+        except Exception as e:  # noqa: BLE001 — a follow-up never fails an archive
+            err_console.print(f"note: {name} skipped — {type(e).__name__}: {escape(str(e))}")
+
+
+def _refresh_usage(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
+    """§A: price earlier closeouts' sessions and stage each refreshed file."""
+    import os
+    import subprocess
+
+    from fr.usage.backfill import refresh_archived
+
+    report = refresh_archived(repo_root, os.environ, skip=lambda p: paths_dirty(repo_root, p))
+    for path in report.refreshed:
+        subprocess.run(
+            ["git", "-C", str(repo_root), "add", "--", str(path.relative_to(repo_root))],
+            check=True,
+            capture_output=True,
+        )
+        typer.echo(f"  priced: {path.relative_to(repo_root)}")
+    for run_id in report.dirty:
+        err_console.print(f"note: usage for {run_id} has uncommitted changes — not refreshed")
+    for run_id, why in report.failed:
+        err_console.print(f"note: usage for {run_id} not refreshed — {escape(why)}")
+
+
+def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
+    """Run `fn` inside one move log, and `_after_moves` in a `finally` — on
+    every entry mode and every exit path (spec 2026-10-06 §0)."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> None:
+        with recording_moves() as log:
+            try:
+                fn(*args, **kwargs)
+            finally:
+                try:
+                    root = resolve_repo_root()
+                except Exception:  # noqa: BLE001 — outside a repo there is nothing to follow up
+                    root = None
+                if root is not None:
+                    _after_moves(root, log, _ArchiveOpts(branch=kwargs.get("branch")))
+
+    return wrapper
+
+
+@_with_followups
 def archive_command(
     plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
     all_plans: bool = typer.Option(
