@@ -128,8 +128,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     subsystems, snapshots, the architecture fragments' sources) in
     `docs/triage/`, moved by `docs/triage/sync.sh export|import`; the cache
     stays the working copy (see `docs/triage/README.md`). `collect.py`'s
-    `Forge` protocol (one implementation, `GhForge` over `fr.gh`) is the one
-    place a second forge lands — a new class, not an edit to the collector.
+    `Forge` protocol (one implementation, `ClientForge` over the forge
+    adapter) is the one place a second forge lands — that backend's adapter
+    implementing the reads, not an edit to the collector.
     `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` (it never
     touches a registered artifact), so the migration gate never refuses it.
     `check` always exits 0; its core sets are unranked (issues and PRs), settled,

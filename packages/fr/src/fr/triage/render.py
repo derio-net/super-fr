@@ -21,6 +21,7 @@ from __future__ import annotations
 import html
 import re
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from fr.triage.batch import BATCH_STAGES, derive_batch_stage, last_dispatch, planned_merge_order
@@ -47,6 +48,7 @@ from fr.triage.views import (
     UNWAVED,
     batch_stages,
     batch_tier,
+    cancelled_waves,
     kind_counts,
     needs_you,
     next_up,
@@ -57,6 +59,7 @@ from fr.triage.views import (
 
 if TYPE_CHECKING:
     from fr.triage.batch import MergeStep
+    from fr.triage.dedupe import CandidateGroup
     from fr.triage.model import Batch, Facts, Issue, Judgement, Judgements, PullRequest
     from fr.triage.snapshot import SnapshotDiff
 
@@ -147,6 +150,9 @@ details.row > summary::-webkit-details-marker { display: none; }
 .pill.stage-in-progress { background: transparent; color: var(--live);
   border: 1px solid var(--live); }
 .tag.batch { color: var(--live); border-color: var(--live); }
+.tag.dupe { color: var(--muted); border-style: dashed; }
+.possible-duplicates p, .possible-duplicates li, .detail ul.dupes li { overflow-wrap: anywhere; }
+.possible-duplicates ul.dupes, .detail ul.dupes { margin: 4px 0 8px; padding-left: 20px; }
 .batches p { margin: 4px 0; font-size: .9rem; overflow-wrap: anywhere; }
 fieldset.stage-filter { border: 1px solid var(--line); border-radius: 6px; margin: 0 0 8px;
   padding: 4px 10px 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .88rem; }
@@ -355,8 +361,8 @@ FILTER_BAR = """<div class="bar" role="toolbar" aria-label="Filter and sort">
 </div>"""
 
 GENERATED = (
-    "since", "needs", "next-up", "waves", "backlog", "features", "parked", "patterns", "prs",
-    "batches",
+    "since", "needs", "next-up", "waves", "possible-duplicates", "backlog", "features", "parked",
+    "patterns", "prs", "batches",
 )  # fmt: skip
 """The board's generated sections, in default order (spec 2026-10-05-triage-pages-goal §C).
 The masthead and nav sit outside the manifest, always first; `FILTER_BAR` belongs to
@@ -410,6 +416,70 @@ def _safe_url(url: str) -> str | None:
     return esc(url) if url.startswith("https://") else None
 
 
+@dataclass(frozen=True)
+class Nested:
+    """A judged duplicate rendered inside its open original's row (R8)."""
+
+    issue: Issue
+    command: str  # "" for a closed one: there is nothing left to close
+
+
+def _duplicates_block(duplicates: Sequence[Nested]) -> str:
+    lines = []
+    for d in duplicates:
+        url = _safe_url(d.issue.url)
+        link = (
+            f'<a href="{url}" rel="noopener noreferrer">{esc(d.issue.key)}</a>'
+            if url
+            else esc(d.issue.key)
+        )
+        closed = ' <span class="tag">closed</span>' if d.issue.state == "closed" else ""
+        cmd = f" <code>{esc(d.command)}</code>" if d.command else ""
+        lines.append(f"<li>{link} {esc(d.issue.title)}{closed}{cmd}</li>")
+    return (
+        f'<p class="dupes"><strong>Duplicates</strong></p><ul class="dupes">{"".join(lines)}</ul>'
+    )
+
+
+PAIRS_SHOWN = 10
+"""Pairs listed per candidate group on the board; the rest read "+N more"."""
+
+
+def _possible_duplicates(groups: Sequence[CandidateGroup], by_key: dict[str, Issue]) -> str:
+    if not groups:
+        body = '<p class="empty">No candidate duplicates among the open issues.</p>'
+    else:
+
+        def link(key: str) -> str:
+            issue = by_key.get(key)
+            url = _safe_url(issue.url) if issue else None
+            return f'<a href="{url}" rel="noopener noreferrer">{esc(key)}</a>' if url else esc(key)
+
+        blocks = []
+        for g in groups:
+            shown, hidden = g.pairs[:PAIRS_SHOWN], len(g.pairs) - PAIRS_SHOWN
+            pairs = "".join(
+                f"<li>{link(p.a)} ~ {link(p.b)}: {esc('; '.join(p.reasons))}</li>" for p in shown
+            )
+            if hidden > 0:  # `fr triage check --json` keeps every pair (review p1-r8)
+                pairs += f'<li class="more">+{hidden} more</li>'
+            blocks.append(
+                f'<div class="dupe-group"><p>{", ".join(link(k) for k in g.keys)}</p>'
+                f'<ul class="dupes">{pairs}</ul></div>'
+            )
+        body = (
+            '<p class="tier-desc">Proposed by the engine, not judged: set '
+            "<code>duplicate_of</code> or <code>distinct_from</code> to settle each.</p>"
+            + "".join(blocks)
+        )
+    return collapsed(
+        "possible-duplicates",
+        "Possible duplicates",
+        len(groups),
+        f'<div class="possible-duplicates">{body}</div>',
+    )
+
+
 def _sev_pill(severity: str | None) -> str:
     """The severity pill (R11), or an em dash: always present so a row's cells line up."""
     if severity is None:
@@ -427,6 +497,7 @@ def _row(
     show_repo: bool,
     patterns: list[str],
     batches: Sequence[str] = (),
+    duplicates: Sequence[Nested] = (),
 ) -> str:
     stage = issue.stage
     cx = judgement.cx if judgement else "-"
@@ -459,12 +530,16 @@ def _row(
         tags.append('<span class="tag ok">verified in code</span>')
     tags.extend(f'<span class="tag mono">PR #{pr.number}</span>' for pr in issue.prs)
     tags.extend(f'<span class="tag batch">batch {esc(b)}</span>' for b in batches)
+    if duplicates:
+        tags.append(f'<span class="tag dupe">+{plural(len(duplicates), "duplicate")}</span>')
     detail: list[str] = []
     if judgement and judgement.detail:
         detail.append(f"<p>{inline(judgement.detail)}</p>")
     if judgement and judgement.note:
         detail.append(f'<p class="note"><strong>Note.</strong> {inline(judgement.note)}</p>')
     detail.extend(f'<p class="pattern">Pattern: {p}</p>' for p in patterns)
+    if duplicates:
+        detail.append(_duplicates_block(duplicates))
     if judgement is None and issue.body:
         excerpt = issue.body[:EXCERPT] + ("…" if len(issue.body) > EXCERPT else "")
         detail.append(f'<div class="body">{esc(excerpt)}</div>')
@@ -802,23 +877,30 @@ def wave_table(
 ) -> str:
     """One wave's table; *href_prefix* is put before each batch link's `#batch-<id>`, so the
     history page (another file) links to the board's cards."""
+    cols = ("Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
     rows = []
     for b in batches:
         stage = derive_batch_stage(b, facts)
         tier = batch_tier(b.ids, judgements.issues)
-        rows.append(
-            f'<tr data-batch="{esc(b.id)}"><td>'
-            f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a></td>'
-            f'<td class="n">{DASH if tier is None else tier}</td><td>{esc(b.skill)}</td>'
-            f'<td class="mono">{esc(", ".join(b.ids))}</td>'
-            f"<td>{inline(b.rationale)}</td><td>{esc(size_of(b.ids, judgements.issues))}</td>"
-            f"<td>{esc(', '.join(b.after) or '-')}</td>"
-            f'<td><span class="pill bstage-{stage}">{stage}</span></td></tr>'
+        cells = (
+            ("", f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a>'),
+            (' class="n"', f"{DASH if tier is None else tier}"),
+            ("", esc(b.skill)),
+            (' class="mono"', esc(", ".join(b.ids))),
+            ("", inline(b.rationale)),
+            ("", esc(size_of(b.ids, judgements.issues))),
+            ("", esc(", ".join(b.after) or "-")),
+            ("", f'<span class="pill bstage-{stage}">{stage}</span>'),
         )
-    cols = ("Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
+        # data-label names the column on each cell, for the stacked phone layout (gh#1001)
+        tds = "".join(
+            f'<td{attrs} data-label="{label}">{body}</td>'
+            for label, (attrs, body) in zip(cols, cells, strict=True)
+        )
+        rows.append(f'<tr data-batch="{esc(b.id)}">{tds}</tr>')
     head = "".join(f"<th>{c}</th>" for c in cols)
     return (
-        f'<div class="tablewrap"><table class="grid"><thead><tr>{head}</tr></thead>'
+        f'<div class="tablewrap"><table class="grid stack"><thead><tr>{head}</tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
 
@@ -877,7 +959,8 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         '<section class="decide waves" id="waves"><h2>Waves</h2>'
         f'<div id="closing-order"><h3>Closing order</h3><div class="counts">{chips}</div></div>'
     )
-    done = finished_waves(judgements.batches, batch_stages(facts, judgements))
+    stages = batch_stages(facts, judgements)
+    done = finished_waves(judgements.batches, stages)
     grouped = {k: v for k, v in waves(judgements).items() if k not in done}
     if grouped:
         picked = preselected_wave(facts, judgements, among=set(grouped))
@@ -895,6 +978,15 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         body = (
             '<p class="quiet">Every wave is finished: see '
             '<a href="history.html">the history page</a>.</p>' + (body if grouped else "")
+        )
+    if cancelled := sorted(cancelled_waves(judgements.batches, stages), key=int):
+        # gh#1000: a wave of cancelled batches is finished and leaves the tabs; say so.
+        names = ", ".join(f"Wave {k}" for k in cancelled)
+        verb = "was" if len(cancelled) == 1 else "were"
+        body += (
+            f'<p class="quiet">{names} {verb} cancelled: every batch in it was cancelled '
+            'or abandoned, so it left the board; see <a href="history.html">the history '
+            "page</a>.</p>"
         )
     return f"{head}{body}</section>"
 
@@ -949,6 +1041,13 @@ def render(
                 batches_by_key.setdefault(key, []).append(b.id)
     order = 0
 
+    commands = {d.key: d.command for d in result.duplicates}
+    nested: dict[str, list[Nested]] = {}  # original key -> the duplicates shown in its row
+    for key, j in judgements.issues.items():
+        original = by_key.get(j.duplicate_of) if j.duplicate_of else None
+        if key in by_key and original is not None and original.state == "open":
+            nested.setdefault(original.key, []).append(Nested(by_key[key], commands.get(key, "")))
+
     def row(issue: Issue, judgement: Judgement | None, tier: str) -> str:
         nonlocal order
         order += 1
@@ -960,6 +1059,7 @@ def render(
             show_repo=show_repo,
             patterns=patterns_by_key.get(issue.key, []),
             batches=batches_by_key.get(issue.key, []),
+            duplicates=nested.get(issue.key, []),
         )
 
     def backlog() -> str:
@@ -994,6 +1094,7 @@ def render(
         "needs": lambda: _needs_section(facts, judgements),
         "next-up": lambda: _next_section(facts, judgements),
         "waves": lambda: _waves_section(facts, judgements),
+        "possible-duplicates": lambda: _possible_duplicates(result.candidates, by_key),
         "backlog": backlog,
         "features": lambda: _features_table(judgements, facts),
         "parked": lambda: _parked(facts, judgements),

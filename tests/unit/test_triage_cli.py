@@ -294,3 +294,48 @@ def test_an_unreadable_state_file_error_prints_on_one_line(
 
     assert result.exit_code == 2
     assert f"{tmp_path / 'facts.json'}: " in result.output
+
+
+def test_a_duplicate_of_target_that_is_not_open_is_viewed_like_a_judged_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Triage-dedupe R6: a closed original reads `closed`, not `missing`."""
+    (tmp_path / "judgements.yaml").write_text(
+        "schema: 3\ntiers: [{n: 1, title: T}]\nissues:\n"
+        '  "super-fr#430": {tier: 1, duplicate_of: "Super-FR#431"}\n',
+        encoding="utf-8",
+    )
+    forge = _Forge()
+
+    result = _run(monkeypatch, forge, "--repo", "derio-net/super-fr", "--dir", str(tmp_path))
+
+    assert result.exit_code == 0, result.output
+    assert ("derio-net/super-fr", 431) in forge.viewed
+    facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
+    assert {"super-fr#431"} <= {f"super-fr#{i['number']}" for i in facts["issues"]}
+
+
+def test_a_failed_view_of_a_duplicate_target_is_unviewed_and_reported_as_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "judgements.yaml").write_text(
+        "schema: 3\ntiers: [{n: 1, title: T}]\nissues:\n"
+        '  "super-fr#430": {tier: 1, duplicate_of: "super-fr#431"}\n',
+        encoding="utf-8",
+    )
+    forge = _Forge()
+    real = forge.view_issue
+
+    def view_issue(*, repo: str, number: int) -> dict[str, Any]:
+        if number == 431:
+            raise ForgeError("HTTP 502")
+        return real(repo=repo, number=number)
+
+    forge.view_issue = view_issue  # type: ignore[method-assign]
+
+    result = _run(monkeypatch, forge, "--repo", "derio-net/super-fr", "--dir", str(tmp_path))
+
+    assert result.exit_code == 0, result.output
+    facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
+    assert [u["key"] for u in facts["unviewed"]] == ["super-fr#431"]
+    assert "judged or named by `duplicate_of`" in " ".join(result.output.split())

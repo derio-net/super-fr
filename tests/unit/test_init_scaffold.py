@@ -936,6 +936,11 @@ def test_a_self_hosted_gitlab_is_asked_on_its_own_host(
 
     monkeypatch.undo()
     monkeypatch.setenv("HOME", str(repo.parent / "home"))
+    # glab is logged into the host (gh#1014's trust gate).
+    glab_config = repo.parent / "glab-config"
+    glab_config.mkdir()
+    (glab_config / "config.yml").write_text("hosts:\n    gl.example.invalid: {}\n")
+    monkeypatch.setenv("GLAB_CONFIG_DIR", str(glab_config))
     seen: list[tuple[list[str], str | None]] = []
 
     def run(args: list[str], *, host: str | None = None, cwd: object = None) -> str:
@@ -958,6 +963,11 @@ def test_github_enterprise_is_asked_as_host_owner_repo(
 
     monkeypatch.undo()
     monkeypatch.setenv("HOME", str(repo.parent / "home"))
+    # gh is logged into the host (spec 2026-10-06-forge-remainder §4.E's gate).
+    gh_config = repo.parent / "gh-config"
+    gh_config.mkdir()
+    (gh_config / "hosts.yml").write_text("ghe.example.invalid:\n    user: someone\n")
+    monkeypatch.setenv("GH_CONFIG_DIR", str(gh_config))
     seen: list[list[str]] = []
 
     def run(args: list[str]) -> str:
@@ -982,6 +992,45 @@ def test_github_enterprise_is_asked_as_host_owner_repo(
     assert seen == [
         ["repo", "view", "ghe.example.invalid/acme/widgets", "--json", "hasIssuesEnabled"]
     ]
+
+
+def test_a_github_host_gh_is_not_logged_into_is_refused_not_probed(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host may come from a cloned repo's committed config or its origin, and
+    gh sends GH_ENTERPRISE_TOKEN to the host a HOST/OWNER/REPO names: an unknown
+    host is never probed, and the refusal names the login and the flags."""
+    import subprocess as _subprocess
+
+    monkeypatch.undo()
+    monkeypatch.setenv("HOME", str(repo.parent / "home"))
+    monkeypatch.setenv("GH_CONFIG_DIR", str(repo.parent / "no-gh-config"))
+    _initial_commit(repo)
+    _origin(repo, "https://ghe.example.invalid/acme/widgets.git")
+    real_run = _subprocess.run
+    started: list[list[str]] = []
+
+    def run(argv, *a, **k):  # noqa: ANN001, ANN002, ANN003, ANN202
+        if argv and argv[0] == "gh":
+            started.append(list(argv))
+        return real_run(argv, *a, **k)
+
+    monkeypatch.setattr(_subprocess, "run", run)
+    res = scaffold(
+        repo,
+        "--backend",
+        "github",
+        "--host",
+        "ghe.example.invalid",
+        "--ci",
+        "none",
+        "--tracking",
+        "auto",
+    )
+    assert res.exit_code != 0
+    assert "gh auth login --hostname ghe.example.invalid" in res.output
+    assert "--tracking none" in res.output
+    assert started == []
 
 
 def test_over_a_v1_file_auto_detects_what_the_migration_derived(

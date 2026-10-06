@@ -8,7 +8,8 @@ process spawning.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import os
+import subprocess
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -36,6 +37,51 @@ class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec 
         super().__init__(
             f"`{op}` is not supported on the {backend} backend yet (tracked in {tracked_by})"
         )
+
+
+class HostRefusedError(Exception):
+    """A forge adapter's host trust gate refused to point its CLI at a host
+    the CLI is not logged into (spec 2026-10-06-forge-remainder §4.E; gh#1014).
+    Each backend's refusal (`GhHostRefusedError`, `GlabHostRefusedError`) also
+    subclasses that backend's own error, so existing `except` clauses still
+    see it. Classify a refusal by THIS type, never by its message: the message
+    names the host, and a host can be called anything (gh#1013)."""
+
+
+class CommandRunner(Protocol):
+    """How an adapter's lookup runs one CLI command (spec
+    2026-10-06-forge-remainder §4.B). The isolation lifecycle injects its own
+    `Runner`, so its network env and timeout apply; `None` means the adapter's
+    default, `run_cli`.
+
+    `env` is the adapter's overlay: the variables that point the CLI at its
+    host (`GH_HOST`, `GITLAB_HOST`), to set ON TOP of whatever environment the
+    runner would use anyway — None when there is nothing to add. A runner that
+    drops it talks to whatever host the checkout's remote names, not the one
+    the trust gate passed (gh#1015)."""
+
+    def __call__(
+        self, argv: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]: ...
+
+
+# The exit a shell gives a command it cannot find: what `run_cli` answers for a
+# missing binary, so a lookup reads it like any other failed call.
+_NOT_FOUND_EXIT = 127
+
+
+def run_cli(
+    argv: list[str], *, cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """The adapters' default `CommandRunner`. Never raises for a missing
+    binary: it comes back as exit 127, which every lookup reads as `None`.
+    `env` is the overlay (see `CommandRunner`); none passes `env=None`, so the
+    child inherits this process's environment unchanged."""
+    full = {**os.environ, **env} if env else None
+    try:
+        return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, env=full)
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(argv, _NOT_FOUND_EXIT, stdout="", stderr=str(exc))
 
 
 class GhClient(Protocol):
@@ -170,26 +216,14 @@ class GhClient(Protocol):
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         """The PR's REQUIRED checks: `{name, bucket, state}`, where `bucket` is
-        pass | fail | pending | skipping | cancel. Empty when none are required."""
+        pass | fail | pending | skipping | cancel. Empty when none are required, or
+        when the head has no check yet: R4 (`batch_drive.checks_verdict`) tells
+        those apart by reading `pr_checks`."""
         ...
 
-    def wait_required_checks(
-        self,
-        repo: str,
-        number: int,
-        *,
-        interval: float = 30.0,
-        timeout: float = 3600.0,
-        grace: float = 120.0,
-        sleep: Callable[[float], None] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Poll `pr_required_checks` until none is pending, or *timeout* seconds of
-        waiting have passed; return the last answer either way (the caller reads
-        the buckets).
-
-        An empty answer is not trusted for the first *grace* seconds: right
-        after a push the forge has registered no check runs yet, so `[]` then
-        means "not started", not "none required" (review r2p-f10)."""
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """Every check on the PR's head, required or not, in the shape of
+        `pr_required_checks`. Empty when none is reported (yet)."""
         ...
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
@@ -219,6 +253,56 @@ class GhClient(Protocol):
         answers once the dispatch is accepted, not when the run finishes. A
         refusal raises with the forge's own message. Implemented for GitHub
         only (`fr verification prerelease`, spec 2026-10-06-verification-strategies §H)."""
+        ...
+
+    # ---- triage collect's reads (spec 2026-10-06-forge-remainder §4.A) ----
+    # Implemented for GitHub with `fr.gh`'s records unchanged; the glab/tea
+    # adapters raise `UnsupportedForgeOperation` for each (triage is
+    # GitHub-only by its own scope).
+
+    def list_repos(self, owner: str, limit: int) -> list[dict[str, Any]]:
+        """Every repo of *owner*, archived ones included (`{name, isArchived}`),
+        so the caller can count the raw list against *limit*."""
+        ...
+
+    def list_issues(
+        self, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
+        """One bulk issue list; *fields* None means the forge's default set."""
+        ...
+
+    def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
+
+    def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]: ...
+
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        """Raw text of *path* at *ref*; raises the backend's error when absent."""
+        ...
+
+    def viewer_login(self) -> str:
+        """The login the forge CLI is authenticated as."""
+        ...
+
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        """The RAW issue record (on GitHub, `gh issue view --json
+        ISSUE_VIEW_FIELDS`: title, url, label objects…) — distinct from the
+        projected `view_issue` that observe, apply and the bridge rely on."""
+        ...
+
+    def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
+        """The default branch of the repository checked out at *cwd*, as the
+        forge reports it; None when the CLI fails, is missing or prints
+        nothing usable. Never raises for a CLI failure (spec
+        2026-10-06-forge-remainder R2)."""
+        ...
+
+    def pr_for_branch(
+        self, branch: str, *, cwd: Path, run: CommandRunner | None = None
+    ) -> dict[str, Any] | None:
+        """The PR/MR whose head is *branch* in the repository at *cwd*:
+        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str, "mergedAt": str|None}`,
+        each forge's own state vocabulary coerced to that one. None when there
+        is none, or the CLI fails, is missing or prints something unparseable."""
         ...
 
     def issues_enabled(self, repo: str | None = None) -> bool | None:
@@ -257,17 +341,8 @@ class UnsupportedBatchOps:
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         raise self._unsupported("pr_required_checks")
 
-    def wait_required_checks(
-        self,
-        repo: str,
-        number: int,
-        *,
-        interval: float = 30.0,
-        timeout: float = 3600.0,
-        grace: float = 120.0,
-        sleep: Callable[[float], None] | None = None,
-    ) -> list[dict[str, Any]]:
-        raise self._unsupported("wait_required_checks")
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        raise self._unsupported("pr_checks")
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         raise self._unsupported("pr_merge")
@@ -283,3 +358,28 @@ class UnsupportedBatchOps:
 
     def dispatch_workflow(self, repo: str, workflow: str, *, inputs: dict[str, str]) -> None:
         raise self._unsupported("dispatch_workflow")
+
+    # Triage collect's reads (spec 2026-10-06-forge-remainder §4.A).
+
+    def list_repos(self, owner: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_repos")
+
+    def list_issues(
+        self, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
+        raise self._unsupported("list_issues")
+
+    def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_prs")
+
+    def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_open_prs")
+
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        raise self._unsupported("read_file_at_ref")
+
+    def viewer_login(self) -> str:
+        raise self._unsupported("viewer_login")
+
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        raise self._unsupported("view_issue_record")

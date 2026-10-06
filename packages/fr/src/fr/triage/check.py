@@ -32,7 +32,14 @@ Pure: facts and judgements in, sets out. The command only formats them.
   and a post-merge acceptance row still waits for its walk (spec
   2026-10-06-verification-strategies §F, R18). It is not ranked or proposed as work,
   so it is in neither unranked, unplaced, no severity nor stale dispatch, and the
-  board shows it in a group of its own.
+  board shows it in a group of its own;
+- **duplicate candidates** — groups of open issues the engine (`fr.triage.dedupe`)
+  proposes as duplicates, with each flagged pair's reasons. A proposal, never a
+  verdict: the fr-triage skill judges each into `duplicate_of` or `distinct_from`;
+- **duplicates** — every open issue judged `duplicate_of` an original, with that
+  original's state (`open`, `closed`, or `missing` plus why) and, when it exists, the
+  exact `gh issue close … --duplicate-of …` command to print. Never run by fr. A
+  judged duplicate is placed, so it is never **unplaced**.
 
 Every key comparison goes through `fr.triage.model.normalize_key` (or
 `issue_key`, which is built on it). There is no second normaliser here.
@@ -42,10 +49,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS
 from fr.triage.batch import is_open
+from fr.triage.dedupe import CandidateGroup, candidates
 from fr.triage.model import (
     Batch,
     Facts,
@@ -82,6 +90,19 @@ class Stale:
 
 
 @dataclass(frozen=True)
+class Duplicate:
+    """An open issue judged a duplicate, with its original's state (spec §3.C)."""
+
+    key: str
+    title: str
+    url: str
+    original: str  # key
+    state: Literal["open", "closed", "missing"]
+    reason: str = ""  # missing: why
+    command: str = ""  # "" when missing
+
+
+@dataclass(frozen=True)
 class CheckResult:
     unranked: list[Issue]
     unranked_prs: list[PullRequest]
@@ -97,6 +118,8 @@ class CheckResult:
     # leaves no original on the board for its members (review p3-r2).
     duplicate_chained: list[str] = field(default_factory=list)
     awaiting_live: list[Issue] = field(default_factory=list)
+    candidates: list[CandidateGroup] = field(default_factory=list)
+    duplicates: list[Duplicate] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -123,6 +146,25 @@ class CheckResult:
             "duplicate_unknown": list(self.duplicate_unknown),
             "duplicate_chained": list(self.duplicate_chained),
             "awaiting_live": [row(i) for i in self.awaiting_live],
+            "duplicate_candidates": [
+                {
+                    "keys": list(g.keys),
+                    "pairs": [{"a": p.a, "b": p.b, "reasons": list(p.reasons)} for p in g.pairs],
+                }
+                for g in self.candidates
+            ],
+            "duplicates": [
+                {
+                    "key": d.key,
+                    "title": d.title,
+                    "url": d.url,
+                    "original": d.original,
+                    "state": d.state,
+                    "reason": d.reason,
+                    "command": d.command,
+                }
+                for d in self.duplicates
+            ],
             "stale_dispatch": [
                 {
                     "key": s.key,
@@ -150,6 +192,56 @@ def _unreachable_reason(key: str, facts: Facts) -> str | None:
             if issue_key(repo, int(number)) == key:
                 return JUDGED_AFTER_COLLECT
     return None
+
+
+def _missing_reason(key: str, facts: Facts) -> str:
+    """Why a `duplicate_of` target is in no issue list, the first that applies (§3.C).
+
+    Not `_unreachable_reason`: its "judged after the last collect" wording would be
+    false here, because a target is named, not judged.
+    """
+    prs = [
+        *facts.prs,
+        *facts.batch_prs,
+        *facts.judged_prs,
+        *(p for i in facts.issues for p in i.prs),
+    ]
+    if any(issue_key(p.repo, p.number) == key for p in prs):
+        return "a pull request, not an issue"
+    for u in facts.unviewed:
+        if normalize_key(u.key) == key:
+            return u.reason
+    _, _, number = key.rpartition("#")
+    if number.isdigit():
+        for s in facts.skipped:
+            if issue_key(s.repo, int(number)) == key:
+                return s.reason
+        for repo in facts.collected:
+            if issue_key(repo, int(number)) == key:
+                return "added since the last collect; run `fr triage collect` again"
+    return "not in any collected repo"
+
+
+def duplicates(facts: Facts, judgements: Judgements) -> list[Duplicate]:
+    """The duplicates set: see the module docstring."""
+    found = {i.key: i for i in facts.issues}
+    out: list[Duplicate] = []
+    for issue in sorted(facts.issues, key=lambda i: i.key):
+        judged = judgements.issues.get(issue.key)
+        if issue.state != "open" or judged is None or not judged.duplicate_of:
+            continue
+        original = found.get(judged.duplicate_of)
+        common = dict(key=issue.key, title=issue.title, url=issue.url, original=judged.duplicate_of)
+        if original is None:
+            out.append(
+                Duplicate(
+                    **common, state="missing", reason=_missing_reason(judged.duplicate_of, facts)
+                )
+            )
+            continue
+        command = f"gh issue close {issue.number} --repo {issue.repo} --duplicate-of {original.url}"
+        out.append(Duplicate(**common, state=original.state, command=command))
+    return out
 
 
 def _aware(stamp: str | None) -> datetime | None:
@@ -303,4 +395,6 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
         ),
         settled_prs=settled_prs,
         awaiting_live=awaiting_live_issues(facts),
+        candidates=candidates(facts, judgements),
+        duplicates=duplicates(facts, judgements),
     )

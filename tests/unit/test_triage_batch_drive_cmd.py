@@ -26,6 +26,7 @@ from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
 from fr.triage.gitseam import Checkout
+from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
 
@@ -59,6 +60,7 @@ class World:
         self.calls: list[str] = []
         self.comments: dict[int, list[dict[str, Any]]] = {}
         self.config: dict[str, Any] | None = None
+        self.titles: dict[int, str] = {}
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -89,7 +91,7 @@ class World:
                 Issue(
                     repo=REPO,
                     number=i,
-                    title=f"issue {i}",
+                    title=self.titles.get(i, f"issue {i}"),
                     state=s,  # type: ignore[arg-type]
                     url=f"https://github.com/{REPO}/issues/{i}",
                     prs=linked[i],
@@ -131,8 +133,14 @@ class World:
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
 
-    def wait_required_checks(self, repo: str, number: int, **kw: Any) -> list[dict[str, Any]]:
-        raise AssertionError("the driver never waits for checks")
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """Every check, live: the same counts the collect reports for the PR."""
+        counts = self.all_checks.get(number, {"pass": 1, "fail": 0, "pending": 0})
+        return [
+            {"name": f"{bucket}-{i}", "bucket": bucket}
+            for bucket in ("pass", "fail", "pending")
+            for i in range(counts.get(bucket, 0))
+        ]
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         self.calls.append(f"pr_merge {number}")
@@ -278,6 +286,8 @@ class _Worktree:
 
 
 # ---------------------------------------------------------------- fixtures
+# Registered by name; the functions are named apart so another module can import
+# them (test_triage_batch_drive_disruption.py) without F811 on its parameters.
 
 
 @pytest.fixture(autouse=True)
@@ -288,8 +298,8 @@ def _sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: False)
 
 
-@pytest.fixture
-def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
+@pytest.fixture(name="world")
+def world_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
     w = World()
     passes: list[int] = []
 
@@ -303,23 +313,25 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
     return w
 
 
-@pytest.fixture
-def checkout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World) -> DriveCheckout:
+@pytest.fixture(name="checkout")
+def checkout_fixture(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World
+) -> DriveCheckout:
     fake = DriveCheckout(tmp_path / "clone", world)
     fake.path.mkdir()
     monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
     return fake
 
 
-@pytest.fixture
-def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
+@pytest.fixture(name="runner")
+def runner_fixture(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
     fake = FakeRunner()
     monkeypatch.setattr(triage_batch_cmd, "load_runner", lambda name: fake)
     return fake
 
 
-@pytest.fixture
-def sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+@pytest.fixture(name="sleeps")
+def sleeps_fixture(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     out: list[float] = []
 
     def _sleep(seconds: float) -> None:
@@ -626,6 +638,30 @@ def test_a_failing_check_warns_once_per_head_across_loop_passes(
     assert _lines(out, "warn") == ["warn b1: PR #101 CI failing at sha-101: lint"]
     assert world.merged == [(101, "sha-101", "squash")]
     assert sleeps[:2] == [5, 5]
+
+
+def test_a_ci_none_declared_mid_drive_reaches_the_merge_too(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#880 review: the merge context outlives a pass, so the `ci none` its R4
+    reads is the one each pass reads, not the one the first merge attempt saw."""
+    _pr_open(world, tmp_path)
+    world.refuse_merge = "protected"  # pass 1 builds the merge context, and stops
+    sleeps: list[float] = []
+
+    def _declare_ci_none(seconds: float) -> None:
+        sleeps.append(seconds)
+        world.refuse_merge = None
+        world.checks[101] = []
+        world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}
+        monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: True)
+        assert len(sleeps) < 5, "the loop did not end"
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _declare_ci_none)
+    world.config = None
+    code, out = _drive(tmp_path, "--yes", "--interval", "5")
+    assert world.merged == [(101, "sha-101", "squash")], out
 
 
 @pytest.mark.parametrize(
@@ -2189,6 +2225,33 @@ def test_a_refused_head_is_reported_and_stepped_over(
     assert code == 1
 
 
+def test_a_stopped_merge_is_recorded_for_the_board_and_cleared_when_it_lands(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    """gh#987: the board read "merge ready" for a merge the driver had stopped on, because
+    the stop lived only in the driver's memory. It is written down, at the head it stopped
+    at, and the board says the driver needs you; a later pass that merges it clears it."""
+    _three_ready(world, tmp_path)
+    train.script[101] = MergeStopError("PR #101: conflicts with origin/main: a.py")
+    _drive(tmp_path, "--once", "--yes")
+    stop = load_stops(tmp_path)["b1"]
+    assert (stop.head, stop.reason) == ("sha-101", "PR #101: conflicts with origin/main: a.py")
+    assert "needs you: merge stopped: PR #101" in (tmp_path / "board.html").read_text("utf-8")
+    del train.script[101]
+    _drive(tmp_path, "--once", "--yes")
+    assert "b1" not in load_stops(tmp_path)
+
+
+def test_a_moved_head_is_not_recorded_as_a_stop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    """A moved head is a hold the next pass re-judges, not something the operator owes."""
+    _three_ready(world, tmp_path)
+    train.script[101] = HeadMovedError("PR #101: head moved since the plan was printed")
+    _drive(tmp_path, "--once", "--yes")
+    assert load_stops(tmp_path) == {}
+
+
 @pytest.mark.parametrize(
     "answer",
     [
@@ -2289,6 +2352,58 @@ def test_no_train_line_without_a_ready_pr(
     _proposed(world, tmp_path)
     code, out = _drive(tmp_path)
     assert "train " not in out
+
+
+# ------------------------------------------- dedupe wiring (triage-dedupe R10, sr-1, sr-5)
+
+
+def test_the_driver_fills_the_dedupe_fields_and_carries_unfinished_waves(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    world.titles = {1: "deliver gate refuses X", 2: "deliver gate refuses X again"}
+    _proposed(world, tmp_path)
+    seen: list[Any] = []
+    real = triage_batch_cmd.drive_pass
+
+    def _spy(snap: Any) -> Any:
+        seen.append(snap)
+        return real(snap)
+
+    scope_args = ["--repo", REPO, "--dir", str(tmp_path)]
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd.Scope(kind="repo", target=REPO), tmp_path, named=None,
+        checkouts={}, max_inflight=4, yes=False, scope_args=scope_args,
+    )  # fmt: skip
+    monkeypatch.setattr(triage_batch_cmd, "drive_pass", _spy)
+    driver.run_pass()
+    driver.run_pass()
+
+    first, second = seen
+    assert first.unfinished_waves is None  # a first pass reports nothing
+    assert second.unfinished_waves == {"1"}  # b1 and b2 are unfinished: carried forward
+    assert first.duplicate_groups == 1
+    assert first.dedupe_command == f"fr triage check --repo {REPO} --dir {tmp_path}"
+
+
+def test_a_dedupe_action_is_reported_under_yes_and_acts_on_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    from fr.triage.batch_drive import Action
+
+    _proposed(world, tmp_path)
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd.Scope(kind="repo", target=REPO), tmp_path, named=None,
+        checkouts={}, max_inflight=4, yes=True,
+    )  # fmt: skip
+    before = (tmp_path / "judgements.yaml").read_text()
+
+    outcome = driver._act(Action("dedupe", "", "2 duplicate candidate groups after wave 1"),
+                          world.facts(), 0)  # fmt: skip
+
+    assert outcome == ("2 duplicate candidate groups after wave 1", False, 0)
+    assert (tmp_path / "judgements.yaml").read_text() == before
+    assert runner.dispatched == [] and world.calls == []
 
 
 # ------------------------------------- per-wave state export (pages-goal R13, §I)
@@ -3370,3 +3485,27 @@ def test_the_conflict_brief_carries_the_repos_mirrors(
     _drive(tmp_path, "--once", "--yes")
     (item,) = runner.dispatched
     assert "uv run scripts/sync-opencode.py" in item.payload["brief"]
+
+
+@pytest.mark.parametrize(("unfinished", "passes"), [(frozenset({"1"}), 2), (frozenset(), 1)])
+def test_a_finishing_loop_runs_one_observation_pass_only_when_a_wave_was_unfinished(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, unfinished: frozenset[str], passes: int,
+) -> None:  # fmt: skip
+    """Review p1-r4: the pass that ends the drive may finish the last wave itself (an
+    adopt, an archive merge); only one more pass observes it, so the loop runs it once."""
+    from fr.triage.batch_drive import Summary
+
+    _proposed(world, tmp_path, 1)
+    calls: list[int] = []
+
+    def _done_pass(self: Any) -> tuple[bool, Summary, list[str]]:
+        calls.append(1)
+        self._unfinished = unfinished if len(calls) == 1 else frozenset()
+        return False, Summary(in_flight=0, merged=1, pending=0, closing=0), []
+
+    monkeypatch.setattr(triage_batch_cmd._Driver, "run_pass", _done_pass)
+    code, _ = _drive(tmp_path, "--yes", "--checkout", f"{REPO}={checkout.path}")
+
+    assert code == 0
+    assert len(calls) == passes

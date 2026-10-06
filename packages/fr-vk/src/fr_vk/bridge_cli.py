@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import IO, Any, cast
 
 from fr import hostclient
-from fr.gh import GhError, _classify_error
+from fr.hostclient import FORGE_ERRORS, forge_error_kind
 from fr.workflow.resolve import workflow_for_plan
 from fr_dispatch import discover_plans
 from fr_dispatch import tick as _tick
@@ -254,13 +254,14 @@ def _construct_mcp_client() -> VkMcpClient:
 
 
 def _gh_rate_limit_guard(op: Callable[[], Any]) -> Any:
-    """Run `op()`; on a gh rate-limit error, push a metric and return None (I3)."""
+    """Run `op()`; on any forge's rate-limit error, push a metric and return
+    None (I3). The metric reason stays `gh_rate_limited` for every forge:
+    dashboards key on it (spec 2026-10-06-forge-remainder §4.C)."""
     try:
         return op()
-    except GhError as exc:
-        stderr_text = (exc.stderr or "") + " " + str(exc)
-        if _classify_error(stderr_text) == "rate_limit":
-            logger.warning("bridge: gh rate limit hit; backing off this tick")
+    except FORGE_ERRORS as exc:
+        if forge_error_kind(exc) == "rate_limit":
+            logger.warning("bridge: forge rate limit hit; backing off this tick")
             _metrics.push_failure_total(reason="gh_rate_limited")
             return None
         raise

@@ -3557,6 +3557,24 @@ rows:
       its own first fr run status read HELD BY agent ses_... with the tier agent recorded,
       matching opencode.db. The live run is evidence, not CI; the claim is fail-open,
       so parity dispatch-holder-identity stays partial.'
+  - id: run-tests-log-claude-code-self-detached
+    capability: Run cursor
+    acceptance: On Claude Code, a suite log written by a command that detached itself
+      with & (with or without run_in_background) is witnessed — for implement-phase
+      evidence.tests from the executor transcript and for deliver tests= from the orchestrator
+      — with the window running from the launch to the first later command that names
+      the log and prints its exit=0 line; a failed, unfinished or other-log exit line
+      yields no extension
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-06-run-evidence-witness.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_witness_detached.py
+    status: ci
+    notes: 'gh#1002. Live: a phase executor started the suite with run_in_background
+      AND a trailing &, the call ended in 0.4 s and the 8.5 min suite log was refused;
+      replayed against that transcript the fixed reader opens a window to the poll that
+      printed exit=0.'
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
@@ -5590,10 +5608,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_evidence_visual.py
       - super-fr:tests/unit/test_skill_visual_evidence.py
+      - super-fr:tests/unit/test_run_telemetry_visual.py#test_a_uv_run_flag_value_is_not_the_program
     status: ci
-    notes: 'Phase 3: gate half already required a named, executed script (test_a_named_script_*
-      in test_run_evidence_visual.py, phase 2); the skills-prefer-a-script prose half
-      lands here (test_skill_visual_evidence.py).'
+    notes: 'gh#999: the executes-the-script matcher skips the values of uv run flags
+      (uv run --with <pkg> python <script>), pinned in test_run_telemetry_visual.py.'
   - id: visual-evidence-live-run
     capability: fr-goal-evidence
     acceptance: On a live fr-goal run of a UI feature with a `visual` row, the executor,
@@ -6026,11 +6044,15 @@ rows:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+      - super-fr:tests/unit/test_triage_batch_drive_disruption.py
     status: ci
-    notes: Pure pass (cap, wave/merge/id order, unmet and unsatisfiable dependencies,
+    notes: 'Pure pass (cap, wave/merge/id order, unmet and unsatisfiable dependencies,
       a merge freeing a slot) and the command (plan without --yes, one line per action,
       exit codes 0/3/2/1, drive.lock, kill-safety) are unit-tested with a fake runner
-      and forge client.
+      and forge client. Disruption (gh#921, gh#998): a failed fetch, archive merge,
+      update push or broken main config skips the pass or that PR in loop mode; a repo
+      collect skipped sits the pass out; an unknown config key is ignored; a post_merge-installed
+      fr restarts the driver.'
   - id: batch-drive-operator-boundary
     capability: triage-batch-drive
     acceptance: The driver merges a batch PR only when it is not a draft and every check
@@ -6058,11 +6080,14 @@ rows:
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py
       - super-fr:tests/unit/test_fr_herdr_closeout.py
       - super-fr:tests/unit/test_triage_gitseam.py
+      - super-fr:tests/unit/test_triage_batch_drive_disruption.py
     status: ci
-    notes: post_merge runs once after the release commit (or the ten-minute fallback)
+    notes: 'post_merge runs once after the release commit (or the ten-minute fallback)
       and before the close-out, a failure holds it; the close-out goes through the runner
       as a run item with payload.kind closeout and --run/--branch; an attributed archive
-      PR is merged; herdr characterised unchanged.
+      PR is merged; herdr characterised unchanged. gh#883: the close-out is recorded
+      before its session starts, so a restart after the session ended starts no second
+      one; a runner failure takes the record back.'
   - id: wave-driven-live
     capability: triage-batch-drive
     acceptance: A real wave of two batches runs from dispatch to a merged archive PR
@@ -6657,6 +6682,166 @@ rows:
       reloads keeping expansion, jump switching the tab, two blocked sessions shown
       as needs-you). Manual and post-merge only, so not in CI.'
     verify: live
+  - id: triage-dedupe-candidates
+    capability: triage-dedupe
+    acceptance: fr triage check lists candidate duplicate groups among open issues,
+      each pair with the reason it was flagged, excluding judged duplicates and pairs
+      judged distinct
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dedupe.py#test_the_calibration_fixture_groups_the_known_duplicates
+      - super-fr:tests/unit/test_triage_dedupe.py#test_distinct_from_on_either_side_silences_the_pair
+      - super-fr:tests/unit/test_triage_dedupe.py#test_an_issue_judged_a_duplicate_is_in_no_group
+      - super-fr:tests/unit/test_triage_check.py#test_candidates_come_from_the_dedupe_engine_and_json_carries_both
+    status: ci
+    notes: Engine, four signals, exclusions and the check output are unit-tested; the
+      calibration fixture is a live capture of this repo's issues (2026-10-06).
+  - id: triage-dedupe-judged
+    capability: triage-dedupe
+    acceptance: duplicate_of and distinct_from are validated at load, a judged duplicate is never unplaced, and check reports it with its original's state and the gh close --duplicate-of command, which fr never runs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_check.py#test_an_open_duplicate_of_an_open_original_carries_the_close_command
+      - super-fr:tests/unit/test_triage_check.py#test_a_judged_duplicate_is_never_unplaced
+      - super-fr:tests/unit/test_triage_cli.py#test_a_duplicate_of_target_that_is_not_open_is_viewed_like_a_judged_key
+      - super-fr:tests/unit/test_triage_model.py#test_a_duplicate_chain_loads_so_check_can_report_it
+    status: ci
+    notes: 'Merged with main''s triage-pages-goal duplicate_of: a chain loads and is
+      reported by check''s duplicate_chained set instead of being refused at load.'
+  - id: triage-dedupe-board
+    capability: triage-dedupe
+    acceptance: The triage board lists every judged duplicate under Parked and on its open original's row, with the close command, and lists candidate duplicate groups in a Possible duplicates section
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py#test_an_open_duplicate_nests_in_its_originals_row_with_the_close_command
+      - super-fr:tests/unit/test_triage_render.py#test_possible_duplicates_lists_each_group_escaped_before_the_backlog
+    status: ci
+    notes: Unit-tested render; browser check 2026-10-06 (headless Chrome, 1280px and
+      375px, every visual state and the expand interaction opened and checked, no horizontal
+      scroll at 375px).
+    visual:
+      states:
+      - original-with-one-duplicate
+      - original-with-two-duplicates
+      - duplicate-of-closed-original
+      - duplicate-of-missing-original
+      - possible-duplicates-groups
+      - possible-duplicates-empty
+      - phone-width-long-reason
+      interactions:
+      - expand-original-row-shows-duplicates
+  - id: triage-dedupe-driver
+    capability: triage-dedupe
+    acceptance: The wave driver reports the candidate-group count once, in the pass that observes a wave finish, and never acts on duplicates
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_wave_going_from_unfinished_to_finished_reports_the_candidates_last
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_driver_fills_the_dedupe_fields_and_carries_unfinished_waves
+    status: ci
+    notes: 'Unit level only: drive_pass is pure and a live wave cannot be finished on
+      demand.'
+  - id: triage-dedupe-skill
+    capability: triage-dedupe
+    acceptance: The fr-triage skill teaches judging candidate groups into duplicate_of
+      or distinct_from and leaves the printed close commands to the operator
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_triage_skill_example.py#test_the_skill_teaches_judging_candidates_and_leaves_the_close_to_the_operator
+      - super-fr:tests/unit/test_tripwire_hermes_skills_sync.py
+    status: ci
+    notes: Skill prose and example are pinned by tests; mirrors regenerated by both
+      sync scripts.
+  - id: forge-calls-through-adapter
+    capability: forge-adapter
+    acceptance: Every forge call fr's packages make goes through the forge adapter;
+      a tripwire with no allowlist fails CI on any direct gh import or argv outside
+      the GitHub backend
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_forge_adapter.py#test_no_forge_call_bypasses_the_adapter
+      - super-fr:tests/unit/test_tripwire_forge_adapter.py#test_a_planted_gh_import_outside_the_backend_is_reported
+      - super-fr:tests/unit/test_forge_error_kind.py#test_the_bridge_guard_backs_off_on_any_forges_rate_limit
+    status: ci
+    notes: 'super-fr#742: the forge-adapter tripwire has no allowlist; the planted-module
+      test runs its real scan; the fr-vk guard classifies every forge''s errors.'
+  - id: isolation-lookups-every-forge
+    capability: forge-adapter
+    acceptance: The isolation lifecycle's default-branch and PR-for-branch lookups work
+      on GitHub, GitLab and Gitea through the forge adapter, with the same normalised
+      PR state
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_adapter_lookups.py#test_pr_for_branch_sends_todays_argv_and_normalises_the_record
+      - super-fr:tests/unit/test_forge_adapter_lookups.py#test_default_branch_sends_todays_argv_and_reads_the_bare_name
+      - super-fr:tests/unit/test_isolation_network_timeouts.py#test_default_branch_lookup_is_bounded_and_falls_back_on_timeout
+      - super-fr:tests/unit/test_isolation_forge_refusal.py#test_gc_skips_the_refused_workspace_and_finishes_the_sweep
+      - super-fr:tests/unit/test_forge_host_trust.py#test_the_isolation_lifecycle_applies_the_host_on_both_lookups
+    status: ci
+    notes: 'super-fr#742: default_branch/pr_for_branch on gh, glab and tea through the
+      adapter, same argv and normalised shape; isolation runs them on its own runner,
+      and a refused host degrades per call site. super-fr#1015: the runner is handed
+      the adapter''s host (GH_HOST / GITLAB_HOST) on top of its network env.'
+  - id: glab-host-trust-gate
+    capability: forge-adapter
+    acceptance: 'fr never points glab, or a GITLAB_TOKEN, at a self-hosted GitLab glab
+      is not logged into: the refusal comes before any process, on every adapter method,
+      and is classified by its type (fail fast, never retried)'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-06-glab-host-trust.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_host_trust.py#test_every_public_glab_method_refuses_an_unknown_host_before_any_process
+      - super-fr:tests/unit/test_forge_host_trust.py#test_the_bare_glab_helpers_refuse_an_unknown_host_too
+      - super-fr:tests/unit/test_forge_host_trust.py#TestGlabKnownHosts::test_home_dot_config_wins_over_xdg
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_refusal_is_classified_by_type_not_by_its_text
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_refused_host_is_never_retried
+      - super-fr:tests/unit/test_forge_host_trust.py#test_an_argument_naming_its_own_host_is_refused
+      - super-fr:tests/unit/test_forge_host_trust.py#test_an_mr_url_with_an_embedded_url_never_reaches_glab
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_repo_path_led_by_a_host_glab_knows_is_refused
+      - super-fr:tests/unit/test_forge_host_trust.py#test_an_argv_fr_does_not_write_is_refused
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_branch_glab_would_parse_as_a_flag_never_reaches_it
+    status: ci
+    notes: 'super-fr#1014/#1013: the GitLab twin of #994 gh gate; known hosts read from
+      the config glab itself uses (GLAB_CONFIG_DIR, else ~/.config/glab-cli ahead of
+      XDG, probed against glab 1.89). A GITLAB_TOKEN alone is not a login, as for gh.
+      Every glab argv is checked against an allow-list of what fr writes (its own value-taking
+      flags, a strict GitLab path for --repo not led by a host glab knows, projects/
+      api endpoints), since glab follows a host carried by an argument past GITLAB_HOST.'
+  - id: triage-batch-self-hosted-host
+    capability: triage-batches
+    acceptance: Triage batch verbs talk to the forge instance the batch's repo lives
+      on, a self-hosted (GitHub Enterprise) instance included, never the SaaS default
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hostclient.py#TestTriageBatchMakeClient::test_a_ghe_repo_url_keeps_its_host
+      - super-fr:tests/unit/test_gh_host.py#test_a_hosted_client_sets_gh_host_on_a_run_gh_path
+      - super-fr:tests/unit/test_gh_host.py#test_an_unknown_host_fails_closed_on_the_run_gh_path
+    status: ci
+    notes: 'super-fr#892: make_client resolves through hostclient.client_for_url, keeping
+      a self-hosted host; RealGhClient threads it as GH_HOST only for a host gh is logged
+      into (fail closed).'
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin

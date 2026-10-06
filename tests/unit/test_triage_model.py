@@ -286,3 +286,75 @@ def test_collected_is_the_scope_minus_the_skipped_repos(tmp_path: Path) -> None:
 
     assert facts.repos == ["example-org/alpha", "example-org/beta"]
     assert facts.collected == ["example-org/alpha"]
+
+
+# ------------------------------------------------ duplicate_of / distinct_from (R3)
+
+
+def _dupe_doc(schema: int = 3, **issues: str) -> str:
+    rows = "\n".join(f'  "{k}": {{tier: 1, {v}}}' for k, v in issues.items())
+    return f"schema: {schema}\ntiers:\n  - {{n: 1, title: T}}\nissues:\n{rows}\n"
+
+
+def _refused(tmp_path: Path, text: str) -> str:
+    path = _write(tmp_path / "judgements.yaml", text)
+    with pytest.raises(TriageError, match=str(path)) as exc:
+        load_judgements(path)
+    return str(exc.value)
+
+
+@pytest.mark.parametrize("schema", [1, 2, 3])
+def test_duplicate_of_loads_normalised_on_every_schema(tmp_path: Path, schema: int) -> None:
+    text = _dupe_doc(schema, **{"x#1": 'duplicate_of: "Super-FR#7"'})
+    j = load_judgements(_write(tmp_path / "judgements.yaml", text))
+
+    assert j.issues["x#1"].duplicate_of == "super-fr#7"
+    assert j.duplicate_targets() == {"super-fr#7"}
+
+
+def test_distinct_from_loads_normalised(tmp_path: Path) -> None:
+    text = _dupe_doc(**{"x#1": 'distinct_from: ["A#1", "b#2"]'})
+    j = load_judgements(_write(tmp_path / "judgements.yaml", text))
+
+    assert j.issues["x#1"].distinct_from == ["a#1", "b#2"]
+    assert j.duplicate_targets() == set()
+
+
+def test_distinct_from_listing_a_key_twice_is_refused(tmp_path: Path) -> None:
+    msg = _refused(tmp_path, _dupe_doc(**{"x#1": 'distinct_from: ["a#1", "A#1"]'}))
+    assert "a#1" in msg
+
+
+@pytest.mark.parametrize("field", ["duplicate_of", "distinct_from"])
+def test_a_bad_key_in_either_duplicate_field_is_refused(tmp_path: Path, field: str) -> None:
+    value = '"7"' if field == "duplicate_of" else '["7"]'
+    msg = _refused(tmp_path, _dupe_doc(**{"x#1": f"{field}: {value}"}))
+    assert "7" in msg
+
+
+def test_a_judgement_may_not_be_a_duplicate_of_itself(tmp_path: Path) -> None:
+    msg = _refused(tmp_path, _dupe_doc(**{"x#1": 'duplicate_of: "X#1"'}))
+    assert "x#1" in msg
+
+
+def test_a_judgement_may_not_be_distinct_from_itself(tmp_path: Path) -> None:
+    msg = _refused(tmp_path, _dupe_doc(**{"x#1": 'distinct_from: ["x#1"]'}))
+    assert "x#1" in msg
+
+
+def test_a_duplicate_chain_loads_so_check_can_report_it(tmp_path: Path) -> None:
+    """A chain is `check`'s `duplicate_chained` set (triage-pages-goal), never a load refusal."""
+    text = _dupe_doc(**{"x#1": 'duplicate_of: "x#2"', "x#2": 'duplicate_of: "x#3"'})
+    loaded = load_judgements(_write(tmp_path / "j.yaml", text))
+    assert loaded.issues["x#1"].duplicate_of == "x#2"
+
+
+def test_an_original_that_is_not_itself_judged_is_not_a_chain(tmp_path: Path) -> None:
+    text = _dupe_doc(**{"x#1": 'duplicate_of: "x#2"', "x#2": "cx: S"})
+    assert load_judgements(_write(tmp_path / "j.yaml", text)).issues["x#1"].duplicate_of == "x#2"
+
+
+def test_one_key_in_both_duplicate_fields_is_refused(tmp_path: Path) -> None:
+    text = _dupe_doc(**{"x#1": 'duplicate_of: "x#2", distinct_from: ["x#2"]'})
+    msg = _refused(tmp_path, text)
+    assert "x#2" in msg

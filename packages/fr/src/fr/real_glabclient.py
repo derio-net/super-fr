@@ -26,14 +26,16 @@ code — see docs/superpowers/specs/
 from __future__ import annotations
 
 import base64
+import functools
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 from urllib.parse import quote
 
 from fr import glab as _glab
-from fr.ghclient import UnsupportedBatchOps
+from fr.ghclient import CommandRunner, UnsupportedBatchOps, run_cli
 from fr.labels import LabelDef
 
 # GitLab-specific MR URL shape — deliberately NOT in the shared fr._urls
@@ -43,7 +45,10 @@ from fr.labels import LabelDef
 # parse — see real_teaclient.py). Mirrors _urls.py's lazy-quantifier +
 # optional `-/`-infix technique for the same reason (GitLab subgroups
 # nest arbitrarily, and the dash infix is optional across GitLab versions).
-_MR_URL_RE = re.compile(r"^https://[^/]+/(.+?)(?:/-)?/merge_requests/(\d+)/?$")
+# The repo capture excludes `:` and `@`: no GitLab path holds them, and a
+# capture that could would hand glab's `--repo` a URL or `user@host:` remote,
+# which glab follows to that host past the trust gate (gh#1014 review).
+_MR_URL_RE = re.compile(r"^https://[^/]+/([^:@]+?)(?:/-)?/merge_requests/(\d+)/?$")
 
 # GitLab's contents endpoint REQUIRES `ref`; GitHub's equivalent does
 # not, which is why this adapter was written without one (gh-486).
@@ -52,14 +57,37 @@ _MR_URL_RE = re.compile(r"^https://[^/]+/(.+?)(?:/-)?/merge_requests/(\d+)/?$")
 # against a master-default self-hosted instance (spec §2.A).
 _CONTENTS_REF = "HEAD"
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def _hosted(
+    method: Callable[Concatenate[RealGlabClient, _P], _R],
+) -> Callable[Concatenate[RealGlabClient, _P], _R]:
+    """Run the host trust gate (`fr.glab.host_env`, gh#1014) BEFORE `method`'s
+    body, as `fr.real_ghclient._hosted` does for gh: five methods soft-fail on
+    `GlabError`, and would otherwise turn a refused host into "no MR" / "no
+    file". Every public method carries it;
+    `test_every_public_glab_method_refuses_an_unknown_host_before_any_process`
+    keeps it that way."""
+
+    @functools.wraps(method)
+    def wrapper(self: RealGlabClient, /, *args: _P.args, **kwargs: _P.kwargs) -> _R:
+        _glab.host_env(self._host)
+        return method(self, *args, **kwargs)
+
+    return wrapper
+
 
 class RealGlabClient(UnsupportedBatchOps):
     """Wraps `fr.glab` to satisfy the `GhClient` Protocol for GitLab repos.
 
     `host` names a self-hosted instance and is carried into every glab
     call this client makes (as the child's GITLAB_HOST — see
-    `fr.glab._run_glab`). `None`, the default, leaves glab's own host
-    resolution alone. The client is deliberately dumb about where the
+    `fr.glab._run_glab`), an injected runner's included. `None`, the
+    default, leaves glab's own host resolution alone. A host glab is not
+    logged into is never threaded: each call fails closed with
+    `GlabHostRefusedError` (gh#1014). The client is deliberately dumb about where the
     host came from: `fr.hostclient.client_for` resolves it from a
     checkout, `fr_vk.pr_observe` from a bare PR URL, and neither
     provenance changes what this class does with it (gh-486; spec §4.C).
@@ -83,6 +111,7 @@ class RealGlabClient(UnsupportedBatchOps):
         re-spelled at each call site."""
         return self._glab(["api", endpoint])
 
+    @_hosted
     def view_issue(self, repo: str, number: int) -> dict[str, Any]:
         raw = cast("dict[str, Any]", _glab.view_issue(repo, number, host=self._host))
         labels_raw = raw.get("labels", []) or []
@@ -100,6 +129,7 @@ class RealGlabClient(UnsupportedBatchOps):
             "body": raw.get("description", "") or "",
         }
 
+    @_hosted
     def list_linked_prs(self, repo: str, issue_number: int) -> list[dict[str, Any]]:
         """Return MRs related to this Issue, shaped for `observe._to_pr_observation`.
 
@@ -131,6 +161,7 @@ class RealGlabClient(UnsupportedBatchOps):
             )
         return result
 
+    @_hosted
     def pr_status_by_url(self, url: str) -> dict[str, Any] | None:
         """`glab mr view` does NOT accept a bare URL (its usage is
         `{<id> | <branch>}` — verified directly against the installed
@@ -142,6 +173,8 @@ class RealGlabClient(UnsupportedBatchOps):
         repo, iid = m.group(1), m.group(2)
         try:
             out = self._glab(["mr", "view", iid, "--repo", repo, "--output", "json"])
+        except _glab.GlabHostRefusedError:
+            raise  # a refusal is not "no MR" (gh#1014)
         except _glab.GlabError:
             return None
         raw = json.loads(out)
@@ -154,6 +187,7 @@ class RealGlabClient(UnsupportedBatchOps):
             state = "OPEN"
         return {"state": state, "draft": bool(raw.get("draft", False))}
 
+    @_hosted
     def pr_body(self, ref: str, *, cwd: Path) -> str:
         """The MR's `description`. A URL is parsed into (repo, iid), as in
         `pr_status_by_url` — `glab mr view` takes no URL; an iid or branch
@@ -175,6 +209,7 @@ class RealGlabClient(UnsupportedBatchOps):
             raise _glab.GlabError("unreadable `glab mr view` output: not a JSON object")
         return str(raw.get("description") or "")
 
+    @_hosted
     def edit_issue_labels(
         self,
         repo: str,
@@ -191,6 +226,7 @@ class RealGlabClient(UnsupportedBatchOps):
             host=self._host,
         )
 
+    @_hosted
     def edit_issue_state(
         self,
         repo: str,
@@ -207,9 +243,11 @@ class RealGlabClient(UnsupportedBatchOps):
             return
         raise ValueError(f"unknown issue state: {state!r}")
 
+    @_hosted
     def edit_issue_body(self, repo: str, number: int, body: str) -> None:
         _glab.edit_issue_body(repo=repo, number=number, body=body, host=self._host)
 
+    @_hosted
     def create_issue(
         self,
         repo: str,
@@ -226,6 +264,7 @@ class RealGlabClient(UnsupportedBatchOps):
             host=self._host,
         )
 
+    @_hosted
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         """Coerce `list[str]` or `list[LabelDef]` to LabelDefs, then delegate."""
         defs: list[LabelDef] = []
@@ -241,11 +280,57 @@ class RealGlabClient(UnsupportedBatchOps):
                 defs.append(LabelDef(name=name, color=color, description=description))
         _glab.ensure_labels(repo=repo, labels=defs, host=self._host)
 
+    @_hosted
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         """Post a comment via `glab issue note` (glab's name for gh's
         `issue comment` — verified directly against `glab issue --help`)."""
         self._glab(["issue", "note", str(number), "--repo", repo, "--message", body])
 
+    @_hosted
+    def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
+        argv = ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"]
+        _glab.check_argv(argv[1:], self._host)
+        result = (run or run_cli)(
+            argv,
+            cwd=cwd,
+            env=_glab.host_env(self._host),
+        )
+        out = (result.stdout or "").strip()
+        # glab's --jq already extracts the bare branch name — no prefix to strip
+        return out if result.returncode == 0 and out else None
+
+    @_hosted
+    def pr_for_branch(
+        self, branch: str, *, cwd: Path, run: CommandRunner | None = None
+    ) -> dict[str, Any] | None:
+        """`glab mr view <branch>` — a single-shot query like gh's (`glab mr
+        view` accepts a bare branch name directly, per its own `--help`,
+        unlike the URL case in `pr_status_by_url`)."""
+        argv = ["glab", "mr", "view", branch, "--output", "json"]
+        _glab.check_argv(argv[1:], self._host)
+        result = (run or run_cli)(
+            argv,
+            cwd=cwd,
+            env=_glab.host_env(self._host),
+        )
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            return None
+        try:
+            raw = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(raw, dict):
+            return None
+        raw_state = raw.get("state", "opened")
+        if raw_state == "merged":
+            state = "MERGED"
+        elif raw_state in ("closed", "locked"):
+            state = "CLOSED"
+        else:
+            state = "OPEN"
+        return {"state": state, "url": raw.get("web_url", ""), "mergedAt": raw.get("merged_at")}
+
+    @_hosted
     def issues_enabled(self, repo: str | None = None) -> bool | None:
         """`issues_enabled` of GitLab's `projects/:id` object, via `glab api`."""
         if not repo:
@@ -257,6 +342,7 @@ class RealGlabClient(UnsupportedBatchOps):
         value = raw.get("issues_enabled") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None
 
+    @_hosted
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe via `glab api
         projects/:id/repository/files/:path?ref=HEAD`. A NOT-FOUND reads
@@ -278,6 +364,7 @@ class RealGlabClient(UnsupportedBatchOps):
                 return False
             raise
 
+    @_hosted
     def list_dir(self, repo: str, path: str) -> list[str]:
         """Entry names under `path` via the repository tree endpoint.
         `[]` on a NOT-FOUND — same fail-soft posture as `file_exists`;
@@ -300,6 +387,7 @@ class RealGlabClient(UnsupportedBatchOps):
         entries = json.loads(out) if out else []
         return [e["name"] for e in entries if isinstance(e, dict) and "name" in e]
 
+    @_hosted
     def read_file(self, repo: str, path: str) -> str:
         """Raw file text via the repository files endpoint. GitLab's API
         returns base64-encoded content (unlike GitHub's raw-media-type

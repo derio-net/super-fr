@@ -33,6 +33,7 @@ from fr.triage.batch_drive import (
     is_finished,
     summary_line,
     train_line,
+    unfinished_waves,
     wave_group,
 )
 from fr.triage.model import Batch, Export, PullRequest
@@ -1331,3 +1332,75 @@ def test_a_batch_whose_members_all_await_a_live_walk_is_held_not_dispatched() ->
     held = got.actions[1]
     assert "await" in held.detail and "live walk" in held.detail
     assert got.summary.pending == 0
+
+
+# ------------------------------------------- dedupe: a wave finishing (triage-dedupe R10)
+
+_CLOSEOUT_DONE = {
+    "kind": "closeout", "at": "2026-10-02T11:00:00Z", "runner": "fake", "handle": "h",
+    "archived": 5,
+}  # fmt: skip
+CHECK = "fr triage check --repo o/r"
+
+
+def _wave(bid: str, n: int, wave: int, *, done: bool) -> Batch:
+    return _merged(bid, n, wave=wave, events=[_CLOSEOUT_DONE] if done else [])
+
+
+def test_unfinished_waves_are_the_wave_keys_finished_does_not_hold() -> None:
+    """The dedupe step reads `snap.finished` (main's one `finished_waves` predicate);
+    `unfinished_waves` is only its complement over the state file's wave keys."""
+    done, open_, loose = (
+        _wave("a", 1, 2, done=True),
+        _wave("b", 2, 3, done=False),
+        _batch("c", 3, wave=None),
+    )
+    stages = {"a": "merged", "b": "merged", "c": "proposed"}
+    snap = _snap([done, open_, loose], stages, finished=frozenset({"2"}))
+
+    assert unfinished_waves(snap) == {"3"}  # a batch with no wave makes no wave
+
+
+def _dedupe_snap(**kw: Any) -> Snapshot:
+    done = _wave("a", 1, 2, done=True)
+    kw.setdefault("finished", frozenset({"2"}))
+    return _snap([done], {"a": "merged"}, dedupe_command=CHECK, **kw)
+
+
+def test_a_wave_going_from_unfinished_to_finished_reports_the_candidates_last() -> None:
+    got = drive_pass(_dedupe_snap(unfinished_waves=frozenset({"2"}), duplicate_groups=3))
+
+    assert got.actions[-1] == Action(
+        "dedupe", "",
+        "3 duplicate candidate groups after wave 2 finished; run `fr triage check --repo o/r` "
+        "to judge them",
+    )  # fmt: skip
+    assert [a.kind for a in got.actions].count("dedupe") == 1
+    assert action_line(got.actions[-1]).startswith("dedupe: 3 duplicate candidate groups")
+
+
+def test_one_group_reads_singular() -> None:
+    got = drive_pass(_dedupe_snap(unfinished_waves=frozenset({"2"}), duplicate_groups=1))
+    assert "1 duplicate candidate group after" in got.actions[-1].detail
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        dict(unfinished_waves=None, duplicate_groups=3),  # the first pass
+        dict(unfinished_waves=frozenset(), duplicate_groups=3),  # finished last pass too
+        dict(unfinished_waves=frozenset({"2"}), duplicate_groups=0),  # nothing to report
+    ],
+)
+def test_no_dedupe_line_unless_a_wave_just_finished_with_candidates(kw: dict[str, Any]) -> None:
+    assert all(a.kind != "dedupe" for a in drive_pass(_dedupe_snap(**kw)).actions)
+
+
+def test_two_waves_finishing_together_report_in_numeric_order() -> None:
+    batches = [_wave("b", 2, 10, done=True), _wave("a", 1, 9, done=True)]
+    snap = _snap(batches, {"a": "merged", "b": "merged"}, dedupe_command=CHECK,
+                 finished=frozenset({"9", "10"}), unfinished_waves=frozenset({"9", "10"}),
+                 duplicate_groups=2)  # fmt: skip
+    lines = [a.detail for a in drive_pass(snap).actions if a.kind == "dedupe"]
+
+    assert [("wave 9 " in d, "wave 10 " in d) for d in lines] == [(True, False), (False, True)]

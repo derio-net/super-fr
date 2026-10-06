@@ -386,14 +386,15 @@ def test_org_scope_views_a_judged_closed_issue_in_its_own_repo() -> None:
     assert "beta#40" in {i.key for i in facts.issues}
 
 
-# ------------------------------------------------------------ P2.T4 GhForge
+# ------------------------------------------------------------ P2.T4 ClientForge
 
 
-def test_gh_forge_raises_the_triage_forge_error_not_gh_error(
+def test_client_forge_raises_the_triage_forge_error_not_gh_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from fr import gh
-    from fr.triage.collect import GhForge
+    from fr.real_ghclient import RealGhClient
+    from fr.triage.collect import ClientForge
 
     def boom(args: list[str]) -> str:
         raise gh.GhError("HTTP 404: Not Found", stderr="HTTP 404", returncode=1)
@@ -408,30 +409,32 @@ def test_gh_forge_raises_the_triage_forge_error_not_gh_error(
         lambda f: f.read_file_at_ref(repo="example-org/alpha", path="intent.md", ref="head"),
     ):
         with pytest.raises(ForgeError, match="HTTP 404") as exc:
-            call(GhForge())
+            call(ClientForge(RealGhClient()))
         assert not isinstance(exc.value, gh.GhError)
 
 
-def test_gh_forge_with_no_gh_binary_raises_a_one_line_forge_error(
+def test_client_forge_with_no_gh_binary_raises_a_one_line_forge_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.triage.collect import GhForge
+    from fr.real_ghclient import RealGhClient
+    from fr.triage.collect import ClientForge
 
     monkeypatch.setenv("PATH", str(tmp_path))  # an empty dir: no gh anywhere
 
     with pytest.raises(ForgeError) as exc:
-        GhForge().list_issues(repo="example-org/alpha", state="open", limit=1000)
+        ClientForge(RealGhClient()).list_issues(repo="example-org/alpha", state="open", limit=1000)
 
     message = str(exc.value)
     assert "\n" not in message
     assert "gh" in message and "install" in message.lower()
 
 
-def test_gh_forge_asks_gh_for_archived_repos_too_so_the_limit_is_countable(
+def test_client_forge_asks_gh_for_archived_repos_too_so_the_limit_is_countable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from fr import gh
-    from fr.triage.collect import GhForge
+    from fr.real_ghclient import RealGhClient
+    from fr.triage.collect import ClientForge
 
     captured: list[list[str]] = []
 
@@ -441,10 +444,65 @@ def test_gh_forge_asks_gh_for_archived_repos_too_so_the_limit_is_countable(
 
     monkeypatch.setattr(gh, "_run_gh", fake)
 
-    repos = GhForge().list_repos(owner="example-org", limit=7)
+    repos = ClientForge(RealGhClient()).list_repos(owner="example-org", limit=7)
 
     assert [r["name"] for r in repos] == ["a", "b"]
     assert captured[0][captured[0].index("--limit") + 1] == "7"
+
+
+@pytest.mark.parametrize("backend", ["gitlab", "gitea"])
+def test_client_forge_on_a_forge_without_the_reads_raises_a_forge_error_naming_the_op(
+    backend: str,
+) -> None:
+    """Triage is GitHub-only (spec 2026-10-06-forge-remainder R1): a GitLab or
+    Gitea adapter refuses each read, and collect reports that as its own
+    `ForgeError`, never a traceback."""
+    from fr.hostclient import client_for_backend
+    from fr.triage.collect import ClientForge
+
+    forge = ClientForge(client_for_backend(backend))  # type: ignore[arg-type]
+    for op, call in (
+        ("list_repos", lambda f: f.list_repos(owner="example-org", limit=200)),
+        ("list_issues", lambda f: f.list_issues(repo="example-org/a", state="open", limit=9)),
+        ("list_prs", lambda f: f.list_prs(repo="example-org/a", state="all", limit=9)),
+        ("list_open_prs", lambda f: f.list_open_prs(repo="example-org/a", limit=9)),
+        ("view_issue_record", lambda f: f.view_issue(repo="example-org/a", number=1)),
+        (
+            "read_file_at_ref",
+            lambda f: f.read_file_at_ref(repo="example-org/a", path="x", ref="HEAD"),
+        ),
+        ("viewer_login", lambda f: f.viewer_login()),
+        ("list_issue_comments", lambda f: f.list_issue_comments(repo="example-org/a", number=1)),
+    ):
+        with pytest.raises(ForgeError, match=f"`{op}` is not supported on the {backend}"):
+            call(forge)
+
+
+def test_client_forge_view_issue_returns_the_raw_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`view_issue_record`, not the projected `view_issue` observe relies on:
+    title, url and label OBJECTS come through untouched (spec §4.A, sr-f1)."""
+    from fr import gh
+    from fr.real_ghclient import RealGhClient
+    from fr.triage.collect import ClientForge
+
+    raw = {
+        "number": 7,
+        "title": "A bug",
+        "body": "b",
+        "labels": [{"name": "bug", "color": "d73a4a"}],
+        "state": "OPEN",
+        "url": "https://github.com/example-org/a/issues/7",
+        "closedAt": None,
+    }
+    seen: list[list[str]] = []
+
+    def fake(args: list[str]) -> str:
+        seen.append(args)
+        return json.dumps(raw)
+
+    monkeypatch.setattr(gh, "_run_gh", fake)
+    assert ClientForge(RealGhClient()).view_issue(repo="example-org/a", number=7) == raw
+    assert seen[0][-1] == gh.ISSUE_VIEW_FIELDS
 
 
 def _seam_violations() -> dict[str, list[str]]:
