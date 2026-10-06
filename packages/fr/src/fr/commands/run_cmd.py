@@ -2571,12 +2571,25 @@ def _verify_walk(
             raise typer.Exit(2)
         return "none"
     given = Path(value).expanduser()
-    path = (given if given.is_absolute() else repo_root / given).resolve()
-    directory = walk_log_dir(state.run)
-    if not path.is_relative_to(directory.resolve()):
+    named = given if given.is_absolute() else repo_root / given
+    # The REAL path, symlinks followed, must sit in this run's walk dir, and
+    # the name itself must be a regular file — a link placed there is not a
+    # log the walk wrote (security review of p3-r1).
+    path = Path(os.path.realpath(named))
+    # `$HOME` may itself sit behind a link (macOS `/var`); the run's own dir
+    # may not — it is compared unresolved under the resolved walks root.
+    directory = Path(os.path.realpath(walk_log_dir(state.run).parent)) / state.run
+    if named.is_symlink():
         err_console.print(
-            f"[red]{key}: --evidence walk={value} is not in {directory} — name the log "
+            f"[red]{key}: --evidence walk={value} is a symlink — name the log "
             f"`fr verification walk --run {state.run}` wrote.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if not path.is_relative_to(directory) or not path.is_file():
+        err_console.print(
+            f"[red]{key}: --evidence walk={value} is not a regular file in {directory} — "
+            f"name the log `fr verification walk --run {state.run}` wrote.[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2)
@@ -2593,7 +2606,7 @@ def _verify_walk(
         raise typer.Exit(2) from e
     if dirty:
         problems.append(f"uncommitted code since the walk ({dirty[0]}...)")
-    problems += _walk_provenance(key, state.run, path, modified, opened=opened)
+    problems += _walk_provenance(key, state.run, modified, opened=opened)
     if problems:
         err_console.print(f"[red]{key}: --evidence walk={value} is refused:[/red]", soft_wrap=True)
         for problem in problems:
@@ -2603,18 +2616,18 @@ def _verify_walk(
 
 
 def _walk_provenance(
-    key: str, run: str, log: Path, modified: _dt.datetime, *, opened: str | None
+    key: str, run: str, modified: _dt.datetime, *, opened: str | None
 ) -> list[str]:
-    """Why the walk log `log`, modified at `modified`, is not one a command of
-    yours wrote during this unit (empty when it is). A command that also
-    writes `log` from the shell does not count (`walks_run`). Unobservable:
+    """Why the walk log, modified at `modified`, is not one a command of
+    yours wrote during this unit (empty when it is) — only a command that is
+    exactly the walk counts (`walks_run`). Unobservable:
     `unobserved=walk`, warned — and a log older than the unit is still
     refused."""
     from fr.run.observed import walks_run
     from fr.run.telemetry import orchestrator_ran_since, parse_timestamp
 
     windows = (
-        orchestrator_ran_since(os.environ, lambda command: walks_run(command, run, log=log), opened)
+        orchestrator_ran_since(os.environ, lambda command: walks_run(command, run), opened)
         if opened
         else None
     )

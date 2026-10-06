@@ -272,17 +272,6 @@ def test_an_unreadable_transcript_records_the_walk_unobserved(
     assert "unobserved=walk" in capsys.readouterr().err.replace("\n", " ")
 
 
-def test_walks_run_reads_the_program_not_an_argument() -> None:
-    from fr.run.observed import walks_run
-
-    assert walks_run("uv run --project /w fr verification walk --run w1 --model m", "w1")
-    assert walks_run("cd /w && fr verification walk --model m --run=w1", "w1")
-    assert walks_run("fr isolation exec -- 'fr verification walk --run w1'", "w1")
-    assert not walks_run("echo fr verification walk --run w1", "w1")
-    assert not walks_run("fr verification walk --run w2", "w1")
-    assert not walks_run("fr verification check --run w1", "w1")
-
-
 def test_a_tilde_path_is_expanded_before_it_is_judged_relative(
     tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -300,60 +289,70 @@ def test_a_tilde_path_is_expanded_before_it_is_judged_relative(
     assert got.startswith("forged.log@")
 
 
-# --- the command-match predicate, hardened (security review of p3-r1) -------------
-
-
-def _walk_log() -> Path:
-    return Path.home() / ".cache/fr/walks/w1/20261006T160800Z.log"
+# --- the command-match predicate: an allowlist (security review of p3-r1) ---------
 
 
 @pytest.mark.parametrize(
     "command",
     [
-        'echo "fr verification walk --run w1"',
+        "fr verification walk --run w1 --model m",
+        "uv run fr verification walk --run=w1 --model m",
+        "uv run --project /w fr verification walk --model m --run w1",
+        "FR_X=1 /opt/bin/fr verification walk --run w1 --model m",
+        "cd /w && uv run fr verification walk --run w1 --model m",
+        "cd '/w space' && FR_X=1 fr verification walk --run w1",
+    ],
+)
+def test_the_two_allowed_shapes_are_a_walk(command: str) -> None:
+    from fr.run.observed import walks_run
+
+    assert walks_run(command, "w1")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
         "echo fr verification walk --run w1",
-        "printf '%s' 'fr verification walk --run w1'",
+        'echo "fr verification walk --run w1"',
+        "'fr verification walk --run w1'",
+        "fr isolation exec -- 'fr verification walk --run w1'",
+        "sh -c 'fr verification walk --run w1'",
         "# fr verification walk --run w1",
-        "true # ; fr verification walk --run w1",
-        "cat <<EOF > /tmp/x\nfr verification walk --run w1\nEOF",
+        "fr verification walk --run w1 # trailing",
         "fr verification walk --run w1-other",
         "fr verification walk --run=w1x",
         "fr verification walks --run w1",
         "fr verification --run w1 walk",
+        "fr verification walk --run w1 --run w2",
+        "fr verification walk --run w1 --run=w1",
+        "fr verification walk --model m --run",
+        "fr verification walk --run w1; cp /tmp/forged /x.log",
+        "fr verification walk --run w1 && cp /tmp/forged /x.log",
+        "cd /w && cd /v && fr verification walk --run w1",
+        "cd /w x && fr verification walk --run w1",
+        "true && fr verification walk --run w1",
+        "fr verification walk --run w1 || true",
+        "fr verification walk --run w1 > /x.log",
+        "fr verification walk --run w1 2> /x.log",
+        "fr verification walk --run w1 &> /x.log",
+        "fr verification walk --run w1 < /dev/null",
+        "fr verification walk --run w1 | tee /x.log",
+        "fr verification walk --run $(echo w1)",
+        "fr verification walk --run `echo w1`",
+        "fr verification walk --run w1 &",
+        "(fr verification walk --run w1)",
+        "{ fr verification walk --run w1; }",
+        "fr verification walk --run w1 <<EOF\nx\nEOF",
+        "fr verification walk --run w1\ncp /tmp/f /x.log",
+        "fr verification walk --run 'w1",
+        "uv run python fr verification walk --run w1",
+        "./fr-wrapper verification walk --run w1",
     ],
 )
-def test_text_that_only_mentions_the_walk_is_not_a_walk(command: str) -> None:
+def test_every_other_shape_is_not_a_walk(command: str) -> None:
     from fr.run.observed import walks_run
 
-    assert not walks_run(command, "w1", log=_walk_log())
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "fr verification walk --run w1 --model m > {log}",
-        "fr verification walk --run w1 --model m | tee {log}",
-        "fr verification walk --run w1 --model m; cp /tmp/forged {log}",
-        "fr verification walk --run w1 --model m && cp /tmp/forged ~/.cache/fr/walks/w1/",
-        "fr verification walk --run w1 --model m && touch -d 2026-10-06 {log}",
-        "fr verification walk --run w1 --model m; cat > {log} <<EOF\nforged\nEOF",
-    ],
-)
-def test_a_walk_that_also_writes_its_log_from_the_shell_is_a_forgery(command: str) -> None:
-    from fr.run.observed import walks_run
-
-    log = _walk_log()
-    command = command.format(log=log)
-    assert walks_run(command.split(" >")[0].split(" |")[0].split(";")[0].split(" &&")[0], "w1")
-    assert not walks_run(command, "w1", log=log)
-
-
-def test_a_real_walk_with_a_cd_and_a_read_of_its_log_still_counts() -> None:
-    from fr.run.observed import walks_run
-
-    log = _walk_log()
-    command = f"cd /w && uv run fr verification walk --run w1 --model m; tail -3 {log}"
-    assert walks_run(command, "w1", log=log)
+    assert not walks_run(command, "w1")
 
 
 def test_the_gate_refuses_a_walk_command_that_copies_a_forgery_onto_the_log(
@@ -369,3 +368,34 @@ def test_the_gate_refuses_a_walk_command_that_copies_a_forgery_onto_the_log(
 
     with pytest.raises(Exit):
         _gate(root, log)
+
+
+def test_a_symlinked_log_is_refused(
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The log must be a regular file under the run's walk dir — a link
+    placed there, pointing anywhere, is not a log the walk wrote."""
+    root = _owed_good(tmp_path)
+    real = _forged(root, _home)
+    link = real.parent / "link.log"
+    link.symlink_to(real)
+    _session(tmp_path, monkeypatch, "fr verification walk --run w1 --model m")
+
+    with pytest.raises(Exit):
+        _gate(root, link)
+
+    assert "symlink" in capsys.readouterr().err
+
+
+def test_a_symlink_out_of_the_walk_dir_is_refused(
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _owed_good(tmp_path)
+    outside = _forged(root, _home, where=tmp_path / "elsewhere" / "walk.log")
+    walks = _home / ".cache/fr/walks" / RUN
+    walks.parent.mkdir(parents=True, exist_ok=True)
+    walks.symlink_to(outside.parent)  # the walk dir itself points elsewhere
+    _session(tmp_path, monkeypatch, "fr verification walk --run w1 --model m")
+
+    with pytest.raises(Exit):
+        _gate(root, walks / "walk.log")

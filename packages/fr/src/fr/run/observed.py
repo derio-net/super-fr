@@ -582,126 +582,89 @@ def opencode_unscoped(env: Mapping[str, str]) -> OpenCodeUnscoped:
 
 # --- what a command line runs ------------------------------------------------
 
-_UV_VALUE_FLAGS = frozenset({"--project", "--directory", "--with", "--python", "--package"})
-"""`uv run` flags that take a value as the next word."""
-_COMMAND_DEPTH = 4
+_NEVER_IN_A_WALK = ("$(", "`", "<<", "\n", "#")
+"""Text a walk command never carries: command substitution, a here-doc, a
+second line, a comment. Present anywhere — quoted or not — and it is not one."""
+_OPERATOR_CHARS = frozenset("();<>|&")
 
 
-def walks_run(command: str, run: str, *, log: Path | None = None) -> bool:
-    """Does `command` run `fr verification walk --run <run>`? The command-match
-    witness beside the write-target one (`fr.run.telemetry._writes`): the walk
-    writes its own log, so the command names no `>` target to match.
+def walks_run(command: str, run: str) -> bool:
+    """Is `command` EXACTLY a run of `fr verification walk --run <run>`? The
+    command-match witness beside the write-target one
+    (`fr.run.telemetry._writes`): the walk writes its own log, so the command
+    names no `>` target to match.
 
-    The `fr` must be a simple command's PROGRAM — bare, by path, after `uv run
-    [flags]`, inside `fr isolation exec … --` or `sh -c` — and `verification
-    walk` its first two arguments, `--run` an argument whose value is exactly
-    `run`. Text that only MENTIONS a walk runs nothing: an argument (`echo fr
-    …`), a quoted string, a comment, a here-doc body.
+    An allowlist, not a denylist of writers (no list of the ways a shell can
+    write a file is complete — security review of p3-r1). After shlex-splitting,
+    the command is one of:
 
-    Given `log`, a command that ALSO writes it from the shell — a redirect,
-    `tee`, or a copying program (`cp`, `mv`, `touch`, …) naming it or its
-    directory — does not count (security review of p3-r1): the walk writes its
-    own log, so a shell write to that path is the forgery shape. Syntax, not
-    execution, as every reader here: the caller ties the log's mtime to the
-    window."""
-    from fr.run.telemetry import _simple_commands
+    (a) `[NAME=value …] <fr> verification walk <args…>`
+    (b) `cd <path> && [NAME=value …] <fr> verification walk <args…>`
 
-    clean = _structure(command)
-    if log is not None and _writes_walk_log(command, clean, log):
+    where `<fr>` is `fr`, `uv run fr`, `uv run --project <p> fr`, or an absolute
+    path named `fr`, and the args hold exactly one `--run`, equal to `run`.
+    Anything else is not a walk: another segment, any other operator
+    (redirect, pipe, `;`, `||`, background `&`, subshell, braces), command
+    substitution, a here-doc, a comment, unbalanced quotes.
+
+    The residual this cannot close: a process the agent started EARLIER (in
+    the background) can still write the log during this command's window. That
+    is the trust boundary the `tests` witness already has — the gate proves the
+    orchestrator ran the walk then, not that nothing else wrote meanwhile.
+    """
+    import shlex
+
+    if any(text in command for text in _NEVER_IN_A_WALK):
         return False
-    return any(
-        args[:2] == ["verification", "walk"] and _run_option(args[2:]) == run
-        for words in _simple_commands(clean)
-        for args in _fr_args(words, 0)
-    )
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except ValueError:
+        return False
+    segments: list[list[str]] = [[]]
+    for token in tokens:
+        if token == "&&":
+            segments.append([])
+        elif token and set(token) <= _OPERATOR_CHARS:
+            return False
+        else:
+            segments[-1].append(token)
+    if len(segments) == 2 and len(segments[0]) == 2 and segments[0][0] == "cd":
+        segments = segments[1:]
+    return len(segments) == 1 and _is_walk(segments[0], run)
 
 
-_COPIERS = frozenset(
-    {"cp", "mv", "install", "ln", "rsync", "dd", "tee", "touch", "sed", "truncate"}
-)
-"""Programs that write (or re-date) a path named among their arguments."""
+def _is_walk(words: list[str], run: str) -> bool:
+    """`words` is `[NAME=value …] <fr> verification walk <args…>` with exactly
+    one `--run`, equal to `run`."""
+    from fr.run.telemetry import _LEADING_ASSIGNMENT
 
-
-def _structure(command: str) -> str:
-    """`command` with here-doc bodies and comments blanked, newlines kept — so
-    neither is read as a command. Quotes are left for `_simple_commands`."""
-    from fr.run.telemetry import _COMMENT, _HEREDOC, _QUOTED
-
-    spans = [d.span(3) for d in _HEREDOC.finditer(command)]
-    masked = command
-    for start, end in [*spans, *(m.span() for m in _QUOTED.finditer(command))]:
-        masked = masked[:start] + "_" * (end - start) + masked[end:]
-    spans += [m.span() for m in _COMMENT.finditer(masked)]
-    out = list(command)
-    for start, end in spans:
-        for i in range(start, end):
-            if out[i] != "\n":
-                out[i] = " "
-    return "".join(out)
-
-
-def _writes_walk_log(command: str, clean: str, log: Path) -> bool:
-    """Does `command` write `log` from the shell: a redirect or `tee` naming it,
-    or a `_COPIERS` program naming it or its directory?"""
-    from fr.run.telemetry import _LEADING_ASSIGNMENT, _is_log, _simple_commands, _writes
-
-    home = os.path.expanduser("~")
-    if _writes(command.replace("~/", home + "/"), log):
-        return True
-    for words in _simple_commands(clean):
-        while words and _LEADING_ASSIGNMENT.match(words[0]):
-            words = words[1:]
-        if not words or os.path.basename(words[0]) not in _COPIERS:
-            continue
-        for word in words[1:]:
-            target = os.path.expanduser(word.split("=", 1)[-1] if "=" in word else word)
-            if _is_log(target, log) or _is_log(target.rstrip("/"), log.parent):
-                return True
-    return False
-
-
-def _fr_args(words: list[str], depth: int) -> list[list[str]]:
-    """The arguments of every `fr` invocation `words` (one simple command) runs."""
-    from fr.run.telemetry import _LEADING_ASSIGNMENT, _simple_commands
-
-    if depth > _COMMAND_DEPTH:
-        return []
     while words and _LEADING_ASSIGNMENT.match(words[0]):
         words = words[1:]
-    if not words:
-        return []
-    name = os.path.basename(words[0])
-    if name == "fr":
-        args = words[1:]
-        if args[:2] != ["isolation", "exec"]:
-            return [args]
-        rest = args[args.index("--") + 1 :] if "--" in args else []
-        if len(rest) == 1:
-            return [a for sub in _simple_commands(rest[0]) for a in _fr_args(sub, depth + 1)]
-        return _fr_args(rest, depth + 1)
-    if name == "uv" and words[1:2] == ["run"]:
-        rest = words[2:]
-        while rest and rest[0].startswith("-"):
-            rest = rest[2:] if rest[0] in _UV_VALUE_FLAGS else rest[1:]
-        return _fr_args(rest, depth + 1)
-    if name in ("sh", "bash") and "-c" in words:
-        after = words[words.index("-c") + 1 :]
-        return (
-            [a for sub in _simple_commands(after[0]) for a in _fr_args(sub, depth + 1)]
-            if after
-            else []
-        )
-    return []
-
-
-def _run_option(args: list[str]) -> str | None:
-    """The value of `--run` in `args` (`--run x` or `--run=x`), else `None`."""
+    if words[:2] == ["uv", "run"]:
+        words = words[2:]
+        if words[:1] == ["--project"]:
+            words = words[2:]
+        elif words and words[0].startswith("--project="):
+            words = words[1:]
+        if words[:1] != ["fr"]:
+            return False
+    if not words or os.path.basename(words[0]) != "fr":
+        return False
+    if words[0] != "fr" and not os.path.isabs(words[0]):
+        return False
+    if words[1:3] != ["verification", "walk"]:
+        return False
+    runs: list[str | None] = []
+    args = words[3:]
     for i, arg in enumerate(args):
-        if arg == "--run" and i + 1 < len(args):
-            return args[i + 1]
-        if arg.startswith("--run="):
-            return arg.removeprefix("--run=")
-    return None
+        if arg == "--run":
+            runs.append(args[i + 1] if i + 1 < len(args) else None)
+        elif arg.startswith("--run="):
+            runs.append(arg.removeprefix("--run="))
+    return runs == [run]
 
 
 _ROOT_HOPS = 32
