@@ -17,6 +17,7 @@ from fr import _hosts
 from fr.gh import GhError
 from fr.ghclient import GhClient
 from fr.glab import GlabError
+from fr.labels import LabelDef
 from fr.real_ghclient import RealGhClient
 from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
@@ -40,6 +41,12 @@ FORGE_ERRORS: tuple[type[Exception], ...] = (GhError, GlabError, TeaError)
 # Issue ops (spec 2026-10-06-verification-strategies §E, R16): `{number}` and
 # `{repo}` come from an `owner/repo#n` ref, `{comment}` and `{label}` are
 # shell-quoted by `issue_command`. glab's `issue close` takes no comment.
+#
+# Label op (p4-r4): `label-create` makes a repo's label before an issue op adds it,
+# which fails on a repo that never had it. `{name}`, `{description}` are shell-quoted
+# by `label_command` and `{color}` is the 6-char hex with no `#`. Flags checked against
+# `glab label create --help` and `tea labels create --help`; only gh's `--force`
+# makes it idempotent, so on glab and tea an "already exists" refusal is harmless.
 FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
     "github": {
         "create": "gh pr create --draft --body-file {body}",
@@ -49,6 +56,8 @@ FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
         "issue-close": "gh issue close {number} --repo {repo} --comment {comment}",
         "issue-label": "gh issue edit {number} --repo {repo} --add-label {label}",
         "issue-unlabel": "gh issue edit {number} --repo {repo} --remove-label {label}",
+        "label-create": "gh label create {name} --color {color} --description {description}"
+        " --force --repo {repo}",
     },
     "gitlab": {
         "create": 'glab mr create --draft --description "$(cat {body})"',
@@ -58,6 +67,8 @@ FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
         "issue-close": "glab issue close {number} --repo {repo}",
         "issue-label": "glab issue update {number} --repo {repo} --label {label}",
         "issue-unlabel": "glab issue update {number} --repo {repo} --unlabel {label}",
+        "label-create": "glab label create --name {name} --color '#{color}'"
+        " --description {description} --repo {repo}",
     },
     "gitea": {
         "create": 'tea pulls create --draft --description "$(cat {body})"',
@@ -67,13 +78,16 @@ FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
         "issue-close": "tea issues close {number} --repo {repo}",
         "issue-label": "tea issues edit {number} --repo {repo} --add-labels {label}",
         "issue-unlabel": "tea issues edit {number} --repo {repo} --remove-labels {label}",
+        "label-create": "tea labels create --name {name} --color {color}"
+        " --description {description} --repo {repo}",
     },
 }
 
 _ISSUE_OPS = ("issue-close", "issue-label", "issue-unlabel")
+_LABEL_OPS = ("label-create",)
 
 PR_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
-    backend: {op: t for op, t in table.items() if op not in _ISSUE_OPS}
+    backend: {op: t for op, t in table.items() if op not in (*_ISSUE_OPS, *_LABEL_OPS)}
     for backend, table in FORGE_COMMANDS.items()
 }
 """The PR half of `FORGE_COMMANDS`."""
@@ -83,6 +97,12 @@ ISSUE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
     for backend, table in FORGE_COMMANDS.items()
 }
 """The issue half of `FORGE_COMMANDS`."""
+
+LABEL_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
+    backend: {op: t for op, t in table.items() if op in _LABEL_OPS}
+    for backend, table in FORGE_COMMANDS.items()
+}
+"""The repo-label part of `FORGE_COMMANDS`."""
 
 
 _TRAILING_NUMBER = re.compile(r"^https?://.*/(\d+)/?$")  # a URL only: `fix/742` is a branch
@@ -113,6 +133,21 @@ def issue_command(repo_root: Path, op: str, *, ref: str, comment: str = "", labe
     template = ISSUE_COMMANDS[_hosts.detect_backend(repo_root)][op]
     return template.format(
         repo=m["repo"], number=m["number"], comment=shlex.quote(comment), label=shlex.quote(label)
+    )
+
+
+def label_command(repo_root: Path, label: LabelDef, *, repo: str) -> str:
+    """The `label-create` command for `repo_root`'s forge, creating *label* (its
+    name, colour and description from `fr.labels`) in *repo* (`owner/repo`) — see
+    `LABEL_COMMANDS`. The name and description are shell-quoted."""
+    import shlex
+
+    template = LABEL_COMMANDS[_hosts.detect_backend(repo_root)]["label-create"]
+    return template.format(
+        name=shlex.quote(label.name),
+        color=label.color,
+        description=shlex.quote(label.description),
+        repo=repo,
     )
 
 

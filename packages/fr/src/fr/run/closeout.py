@@ -301,13 +301,15 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
     """One label-add command per issue the run's PR `Refs` that a post-merge,
     not-walk-verified row cites (spec 2026-10-06-verification-strategies §F,
     R17): that issue stays open until the walk, so it carries `fr:awaiting-live`
-    and triage keeps it out of the ranked backlog. The PR body is read through
+    and triage keeps it out of the ranked backlog. Each repo's add commands follow
+    one command creating the label there, which may not exist yet (p4-r4). The PR
+    body is read through
     the forge adapter, as `deliver` does (gh#742). Nothing under `tracking:
     none`; an unreadable PR or matrix is said, never read as "nothing owed"."""
     from fr.acceptance.check import resolve_identity
     from fr.acceptance.model import AcceptanceError, load_matrix
     from fr.commands.acceptance_cmd import MATRIX_REL
-    from fr.hostclient import FORGE_ERRORS, client_for, issue_command
+    from fr.hostclient import FORGE_ERRORS, client_for, issue_command, label_command
     from fr.labels import FR_AWAITING_LIVE
     from fr.record.pr_body import holds_open_for_run, normalize_issue_ref, referenced_refs
     from fr.requirements import load_spec_matrix, run_spec
@@ -353,13 +355,17 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
     )
     if not refd:
         return []
-    return [
-        header,
-        *(
+    # The label may not exist yet on the repo, and adding a missing label fails, so
+    # each repo's add lines follow one create line (p4-r4).
+    lines = [header]
+    for repo in sorted({ref.split("#", 1)[0] for ref in refd}):
+        lines.append("    " + label_command(repo_root, FR_AWAITING_LIVE, repo=repo))
+        lines.extend(
             "    " + issue_command(repo_root, "issue-label", ref=ref, label=FR_AWAITING_LIVE.name)
             for ref in refd
-        ),
-    ]
+            if ref.split("#", 1)[0] == repo
+        )
+    return lines
 
 
 def closeout_brief(repo_root: Path, state: RunState) -> str:

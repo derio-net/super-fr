@@ -127,3 +127,63 @@ def test_an_unreadable_pr_is_said_not_silently_skipped(
 
     assert "awaiting-live" in brief and "could not read" in brief
     _git(root, "status")  # the brief wrote nothing
+
+
+@pytest.mark.parametrize(
+    ("backend", "create"),
+    [
+        (
+            "github",
+            "gh label create fr:awaiting-live --color FBCA04 --description "
+            "'Merged; a post-merge acceptance row still awaits its live walk' --force --repo o/r",
+        ),
+        (
+            "gitlab",
+            "glab label create --name fr:awaiting-live --color '#FBCA04' --description "
+            "'Merged; a post-merge acceptance row still awaits its live walk' --repo o/r",
+        ),
+        (
+            "gitea",
+            "tea labels create --name fr:awaiting-live --color FBCA04 --description "
+            "'Merged; a post-merge acceptance row still awaits its live walk' --repo o/r",
+        ),
+    ],
+)
+def test_the_command_table_renders_label_create_per_backend(
+    tmp_path: Path, backend: str, create: str
+) -> None:
+    """p4-r4: the label may not exist yet on the repo; the brief creates it first."""
+    from fr.hostclient import label_command
+
+    from tests.unit.test_acceptance_walks import _repo_on
+
+    root = _repo_on(tmp_path, backend)
+    assert label_command(root, labels.FR_AWAITING_LIVE, repo="o/r") == create
+
+
+def test_the_brief_creates_the_label_once_per_repo_before_its_add_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path)
+    _matrix(
+        root,
+        [
+            {"id": "held", "verify": "live", "issues": ["o/proj#5", "o/proj#6"]},
+            {"id": "other", "verify": "live", "issues": ["o/other#8"]},
+        ],
+    )
+
+    brief = _brief(root, monkeypatch, "Refs o/proj#5\nRefs o/proj#6\nRefs o/other#8\n")
+
+    lines = [ln.strip() for ln in brief.splitlines() if "fr:awaiting-live" in ln]
+    assert [ln.split(" --repo ")[1].split()[0] if "--repo" in ln else ln for ln in lines] == [
+        "o/other", "o/other", "o/proj", "o/proj", "o/proj",
+    ]  # fmt: skip
+    assert lines[0].startswith("gh label create fr:awaiting-live")
+    assert lines[1] == "gh issue edit 8 --repo o/other --add-label fr:awaiting-live"
+    assert lines[2].startswith("gh label create fr:awaiting-live")
+    assert lines[2].endswith("--force --repo o/proj")
+    assert lines[3:] == [
+        "gh issue edit 5 --repo o/proj --add-label fr:awaiting-live",
+        "gh issue edit 6 --repo o/proj --add-label fr:awaiting-live",
+    ]
