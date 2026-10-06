@@ -46,6 +46,7 @@ from fr.triage.views import (
     NEED_LABELS,
     UNWAVED,
     batch_stages,
+    cancelled_waves,
     batch_tier,
     kind_counts,
     needs_you,
@@ -875,7 +876,8 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         '<section class="decide waves" id="waves"><h2>Waves</h2>'
         f'<div id="closing-order"><h3>Closing order</h3><div class="counts">{chips}</div></div>'
     )
-    done = finished_waves(judgements.batches, batch_stages(facts, judgements))
+    stages = batch_stages(facts, judgements)
+    done = finished_waves(judgements.batches, stages)
     grouped = {k: v for k, v in waves(judgements).items() if k not in done}
     if grouped:
         picked = preselected_wave(facts, judgements, among=set(grouped))
@@ -893,6 +895,15 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         body = (
             '<p class="quiet">Every wave is finished: see '
             '<a href="history.html">the history page</a>.</p>' + (body if grouped else "")
+        )
+    if cancelled := sorted(cancelled_waves(judgements.batches, stages), key=int):
+        # gh#1000: a wave of cancelled batches is finished and leaves the tabs; say so.
+        names = ", ".join(f"Wave {k}" for k in cancelled)
+        verb = "was" if len(cancelled) == 1 else "were"
+        body += (
+            f'<p class="quiet">{names} {verb} cancelled: every batch in it was cancelled '
+            'or abandoned, so it left the board; see <a href="history.html">the history '
+            "page</a>.</p>"
         )
     return f"{head}{body}</section>"
 
