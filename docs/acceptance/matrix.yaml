@@ -6044,11 +6044,15 @@ rows:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+      - super-fr:tests/unit/test_triage_batch_drive_disruption.py
     status: ci
-    notes: Pure pass (cap, wave/merge/id order, unmet and unsatisfiable dependencies,
+    notes: 'Pure pass (cap, wave/merge/id order, unmet and unsatisfiable dependencies,
       a merge freeing a slot) and the command (plan without --yes, one line per action,
       exit codes 0/3/2/1, drive.lock, kill-safety) are unit-tested with a fake runner
-      and forge client.
+      and forge client. Disruption (gh#921, gh#998): a failed fetch, archive merge,
+      update push or broken main config skips the pass or that PR in loop mode; a repo
+      collect skipped sits the pass out; an unknown config key is ignored; a post_merge-installed
+      fr restarts the driver.'
   - id: batch-drive-operator-boundary
     capability: triage-batch-drive
     acceptance: The driver merges a batch PR only when it is not a draft and every check
@@ -6076,11 +6080,14 @@ rows:
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py
       - super-fr:tests/unit/test_fr_herdr_closeout.py
       - super-fr:tests/unit/test_triage_gitseam.py
+      - super-fr:tests/unit/test_triage_batch_drive_disruption.py
     status: ci
-    notes: post_merge runs once after the release commit (or the ten-minute fallback)
+    notes: 'post_merge runs once after the release commit (or the ten-minute fallback)
       and before the close-out, a failure holds it; the close-out goes through the runner
       as a run item with payload.kind closeout and --run/--branch; an attributed archive
-      PR is merged; herdr characterised unchanged.
+      PR is merged; herdr characterised unchanged. gh#883: the close-out is recorded
+      before its session starts, so a restart after the session ended starts no second
+      one; a runner failure takes the record back.'
   - id: wave-driven-live
     capability: triage-batch-drive
     acceptance: A real wave of two batches runs from dispatch to a merged archive PR

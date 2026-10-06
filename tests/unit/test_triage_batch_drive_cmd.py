@@ -286,6 +286,8 @@ class _Worktree:
 
 
 # ---------------------------------------------------------------- fixtures
+# Registered by name; the functions are named apart so another module can import
+# them (test_triage_batch_drive_disruption.py) without F811 on its parameters.
 
 
 @pytest.fixture(autouse=True)
@@ -296,8 +298,8 @@ def _sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: False)
 
 
-@pytest.fixture
-def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
+@pytest.fixture(name="world")
+def world_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
     w = World()
     passes: list[int] = []
 
@@ -311,23 +313,25 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
     return w
 
 
-@pytest.fixture
-def checkout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World) -> DriveCheckout:
+@pytest.fixture(name="checkout")
+def checkout_fixture(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World
+) -> DriveCheckout:
     fake = DriveCheckout(tmp_path / "clone", world)
     fake.path.mkdir()
     monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
     return fake
 
 
-@pytest.fixture
-def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
+@pytest.fixture(name="runner")
+def runner_fixture(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
     fake = FakeRunner()
     monkeypatch.setattr(triage_batch_cmd, "load_runner", lambda name: fake)
     return fake
 
 
-@pytest.fixture
-def sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+@pytest.fixture(name="sleeps")
+def sleeps_fixture(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     out: list[float] = []
 
     def _sleep(seconds: float) -> None:
