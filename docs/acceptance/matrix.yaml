@@ -4890,9 +4890,9 @@ rows:
   - id: drive-post-merge-restart
     capability: Backlog triage
     acceptance: With post_merge_restart idle in the repo's triage config, the wave driver
-      restarts idle sessions after a successful post_merge and before the close-out,
-      reports the outcome, and never holds the close-out or ends the drive over a restart
-      failure or a runner that cannot restart
+      restarts idle sessions once per pass in which that repo's post_merge succeeded, reports
+      the outcome, and never holds a close-out or ends the drive over a restart failure or
+      a runner that cannot restart
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R6
     levels: {}

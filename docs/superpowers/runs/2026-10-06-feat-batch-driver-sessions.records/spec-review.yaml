@@ -1,0 +1,152 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-driver-sessions
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: sr-1
+  title: 'install.sh never puts fr-herdr on PATH: uv''s entry points go to a private bin dir and only
+    `fr` is symlinked'
+  body: install.sh installs into $HOME/.local/share/fr/uv-bin and atomic_symlinks only fr onto PATH (scripts/install.sh:776-807,
+    :856), so --with-executables-from alone leaves fr-herdr off PATH.
+  review_scope: in
+- kind: finding
+  id: sr-2
+  title: The draft check reads Claude's prompt-suggestion ghost text as an unsent draft
+  body: A plain pane read cannot tell Claude's prompt suggestion after an idle prompt from typed input.
+  review_scope: in
+- kind: finding
+  id: sr-3
+  title: The run strategy is `candidate`, but no Verification row is candidate-walked
+  body: Every Verification row was none or live, so the candidate walk verified nothing.
+  review_scope: in
+- kind: finding
+  id: sr-4
+  title: The Test Plan names only the live row; CI tests are missing
+  body: The spec relied on CI tests that no section listed.
+  review_scope: in
+- kind: finding
+  id: sr-5
+  title: The design depends on herdr surfaces the repo has never called or captured
+  body: agent list / pane read / process-info / HERDR_PANE_ID / agent start name reuse were unconfirmed.
+  review_scope: in
+- kind: finding
+  id: sr-6
+  title: The transcript check can pass for a session `claude --resume` cannot find from the pane's cwd
+  body: A glob across every project dir accepts a transcript the relaunch will not find, stranding the
+    pane after /exit.
+  review_scope: in
+- kind: finding
+  id: sr-7
+  title: The restart runs synchronously inside each _close_out, restarting every pane k times per pass
+  body: post_merge runs per close-out, so k close-outs meant k full restarts.
+  review_scope: in
+- kind: finding
+  id: sr-8
+  title: '''once per dispatch'' and ''once per drive'' vs the warned set dying at every exec-restart'
+  body: Requirements promised more than the in-memory warned set gives.
+  review_scope: in
+- kind: finding
+  id: sr-9
+  title: The board's `now` is ambiguous, and build_board's signature change is missing
+  body: Mixing live status with collected facts needed a stated clock.
+  review_scope: in
+- kind: finding
+  id: sr-10
+  title: views.needs_you labels every drive_pass warn 'failing-ci'
+  body: An idle warn reaching drive_snapshot would show as Failing CI.
+  review_scope: in
+- kind: finding
+  id: sr-11
+  title: The R7 focus command omits scope options
+  body: A pasted focus command may read another scope's state.
+  review_scope: in
+- kind: finding
+  id: sr-12
+  title: 'Spec names do not match code: _snapshot, FACTS Literal, test path, protocol list'
+  body: Several names pointed at code that does not exist.
+  review_scope: in
+- kind: finding
+  id: sr-13
+  title: Restart preflight items unspecified; lazy import of fr_herdr.restart after post_merge mixes versions
+  body: preflight takes items; a lazy import after the env rebuild loads new restart.py beside old runner.py.
+  review_scope: in
+- kind: finding
+  id: sr-14
+  title: kept_args drops other launch flags silently
+  body: A resumed session could quietly lose --add-dir, --settings, --mcp-config...
+  review_scope: in
+- kind: review
+  id: spec-review-1
+  title: 'independent spec review: 14 findings'
+  body: fr-spec-reviewer (separate context) raised sr-1..sr-14, all in scope; all fixed in the spec. Decisions
+    q1-q5 honoured; q6 was partly honoured (sr-3), now fixed.
+resolves:
+- id: sr-1
+  state: fixed
+  body: 'Spec §A Install: install.sh manages a second fr-herdr link beside fr''s through the staged rebuild
+    (gh#938); drift guards in tests/integration/test_install_sh.py; R5 states the outcome (on PATH beside
+    fr).'
+- id: sr-2
+  state: fixed
+  body: 'Verified live: `pane read --ansi` shows the suggestion as `❯\xa0\x1b[0m\x1b[2m<text>` (SGR 2
+    faint). Spec §A Draft now means non-faint text after the prompt on the ANSI screen; fixtures hold
+    suggestion, draft and empty prompt; R2 says a suggestion is not a draft.'
+- id: sr-3
+  state: fixed
+  body: 'Added `herdr-restart-idle: candidate` with scenario tests/scenarios/herdr-restart-idle.sh against
+    a fake herdr (dry-run lines, skips, exit codes, refusal).'
+- id: sr-4
+  state: fixed
+  body: Added a `## Testing` section mapping R1-R9 and the facts bump to their tests. The Test Plan stays
+    post-merge-only, as fr-goal's brainstorm contract requires (the Test Plan holds only rows no pre-merge
+    strategy can exercise), and now says so.
+- id: sr-5
+  state: fixed
+  body: 'Seen live while revising (agent list fields incl. name/agent_session, process-info foreground
+    argv, pane read --ansi, HERDR_PANE_ID in the pane env); spec §A requires live captures under tests/fixtures/herdr/restart/
+    with READMEs, quotes the exit-dialog text from #964''s live report, and specifies the name-collision
+    fallback to send-text, probed live in a scratch tab and pinned by fixture.'
+- id: sr-6
+  state: fixed
+  body: 'Transcript is looked up only under the project dir derived from the pane''s foreground claude
+    cwd; every failure after /exit prints `resume by hand: claude <kept> --resume <id>`; exit timeout
+    is `fail exit-timeout` with no further keys (R2, R3, §A).'
+- id: sr-7
+  state: fixed
+  body: _close_out only records the runner; the driver restarts once per recorded runner at the end of
+    run_pass, after the close-outs (fresh sessions already load the merged plugins); bound stated (panes
+    x 120 s per pass) (R6, §B).
+- id: sr-8
+  state: fixed
+  body: R6 and R7 now say once per driver process, matching §D and Not in scope.
+- id: sr-9
+  state: fixed
+  body: '§D Board: build_board and _card gain `now`; write_board passes the wall clock; the threshold
+    comes from facts.config_for in _card; the card states `no PR as of <collected_at>` so the stale-facts
+    window is visible; --watch recollect narrows it.'
+- id: sr-10
+  state: fixed
+  body: Snapshot.idle defaults to (); views.drive_snapshot never fills it; a test pins drive_snapshot(...).idle
+    == (); R8 states the needs-you list never shows an idle session as failing CI.
+- id: sr-11
+  state: fixed
+  body: The command is shlex.join of `fr triage batch focus <batch> [--closeout]` plus self.scope_args,
+    as dedupe_command does (R7, §D).
+- id: sr-12
+  state: fixed
+  body: 'Fixed: `_Driver.snapshot`; Facts.schema_ Literal and default widen with FACTS_SCHEMA 6; tests/integration/test_install_sh.py;
+    SessionFocuser added to the protocol list.'
+- id: sr-13
+  state: fixed
+  body: Preflight uses probe_item(repo, batch, closeout=True, prefix=...); runner.py imports fr_herdr.restart
+    at module top level (§A, §B).
+- id: sr-14
+  state: fixed
+  body: kept_args keeps --model, --permission-mode, --dangerously-skip-permissions, --add-dir, --settings,
+    --mcp-config, --plugin-dir, --agent; drops only resume/continue/session-id; any other flag or positional
+    makes the pane `skip unknown-flag <flag>` (R2, R3, §A).
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: a95a7a757406d58fe
