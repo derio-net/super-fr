@@ -27,12 +27,14 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
+from fr.ghclient import HostRefusedError
 from fr.labels import LabelDef
 
 T = TypeVar("T")
@@ -52,6 +54,133 @@ class GlabError(Exception):
         self.returncode = returncode
 
 
+class GlabHostRefusedError(GlabError, HostRefusedError):
+    """The host trust gate refused a host glab is not logged into (gh#1014) —
+    `fr.gh.GhHostRefusedError`'s GitLab twin. A `GlabError` so existing
+    handlers see it; `RealGlabClient` checks the gate before any method body
+    runs, so a soft-fail method can never read it as "no MR" / "no file"."""
+
+
+def _config_yml() -> Path | None:
+    """The config file glab itself reads (probed against glab 1.89):
+    `$GLAB_CONFIG_DIR/config.yml` alone when that is set; otherwise the FIRST
+    of `~/.config/glab-cli/config.yml` and `$XDG_CONFIG_HOME/glab-cli/
+    config.yml` that exists — glab warns about the second and ignores it. Not
+    gh's order: there XDG comes first. None when glab would find no file."""
+    if config_dir := os.environ.get("GLAB_CONFIG_DIR"):
+        return Path(config_dir) / "config.yml"
+    candidates = [Path.home() / ".config" / "glab-cli" / "config.yml"]
+    if xdg := os.environ.get("XDG_CONFIG_HOME"):
+        candidates.append(Path(xdg) / "glab-cli" / "config.yml")
+    return next((p for p in candidates if p.is_file()), None)
+
+
+def known_hosts() -> frozenset[str]:
+    """The hosts glab is configured for — the keys of its config's `hosts:`
+    mapping (lowercased). `glab auth login` writes one, but so does `glab
+    config set --host`, and glab seeds a token-less `gitlab.com`: a key is an
+    OPERATOR's choice to point glab there, never a cloned repo's, which is
+    what the gate needs. A missing,
+    unreadable or malformed file is the empty set: nothing is trusted."""
+    import yaml
+
+    path = _config_yml()
+    if path is None:
+        return frozenset()
+    try:
+        data = yaml.safe_load(path.read_text())
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return frozenset()
+    hosts = data.get("hosts") if isinstance(data, dict) else None
+    if not isinstance(hosts, dict):
+        return frozenset()
+    return frozenset(str(k).lower() for k in hosts)
+
+
+def host_env(host: str | None) -> dict[str, str] | None:
+    """The host overlay for a `glab` subprocess: None for no host (glab's own
+    resolution), else `{"GITLAB_HOST": host}`.
+
+    The ONE place the GitLab host trust gate is enforced (gh#1014), as
+    `fr.gh.host_env` is for gh. glab sends `GITLAB_TOKEN` to whichever host
+    it targets, and the hosts fr threads come from MR URLs and a cloned repo's
+    committed `fr-profiles.yaml` — neither fully trusted. So a host glab is not
+    logged into raises, before any subprocess starts."""
+    if not host:  # "" is no host, as in `_run_glab`
+        return None
+    if host.lower() not in known_hosts():
+        raise GlabHostRefusedError(
+            f"GitLab host {host!r} is not one glab is logged into; run "
+            f"`glab auth login --hostname {host}` (fr will not point glab, or a "
+            "GITLAB_TOKEN, at an unknown host; a GITLAB_TOKEN alone does not "
+            "count as a login)"
+        )
+    return {"GITLAB_HOST": host}
+
+
+# The flags fr itself writes, every one of them value-taking. Anything else
+# that starts with `-` is refused: see `check_argv`.
+_FLAGS = frozenset(
+    {"--repo", "--title", "--description", "--label", "--unlabel", "--message",
+     "--name", "--color", "--output", "--jq", "-F"}
+)  # fmt: skip
+
+# A GitLab project path: two or more segments, each starting with a letter,
+# digit or `_` (GitLab's own rule) — no spaces, no `:` or `@`, no leading `-`.
+_REPO_PATH = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_][A-Za-z0-9_.-]*)+")
+
+
+def check_argv(args: list[str], host: str | None) -> None:
+    """Refuse, before any process starts, a glab argv fr itself never writes
+    (gh#1014 review). glab follows a host carried by an ARGUMENT whatever
+    GITLAB_HOST says — probed live against glab 1.89: a URL or `user@host:`
+    remote as the repo, in any flag spelling (`--repo=`, `-R`, `-Rv`, `-wRv`);
+    a repo path led by a host glab is configured for, even one with a space
+    in front (glab trims it); a positional value it parses as a flag (a
+    branch `-R<url>`); a full-URL `api` endpoint.
+
+    A deny-list of those shapes mirrors glab's parser and loses to the next
+    corner of it, which happened twice. So this is an ALLOW-list of what fr
+    writes, and needs no model of glab's parser:
+
+    - a token starting with `-` is one of fr's own value-taking `_FLAGS`, or
+      the value right after one (glab consumes a value as a value whatever it
+      looks like — a body may say anything);
+    - a `--repo` value is a strict GitLab path (`_REPO_PATH`) whose first
+      segment is not a host glab knows: its config's, gitlab.com, the
+      threaded host (compared lowercased; glab is case-sensitive, so this
+      refuses more, never less);
+    - an `api` endpoint starts with `projects/`."""
+    if args[:1] == ["api"] and not (len(args) > 1 and args[1].startswith("projects/")):
+        raise GlabHostRefusedError(
+            f"glab api endpoint {args[1:2]!r} is not a `projects/` path fr writes; "
+            "fr points glab at a host only through GITLAB_HOST"
+        )
+    known: frozenset[str] | None = None
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in _FLAGS:
+            value = args[i + 1] if i + 1 < len(args) else ""
+            if arg == "--repo":
+                if known is None:
+                    known = known_hosts() | {"gitlab.com"} | ({host.lower()} if host else set())
+                if not _REPO_PATH.fullmatch(value) or value.split("/", 1)[0].lower() in known:
+                    raise GlabHostRefusedError(
+                        f"glab --repo {value!r} is not a plain GitLab path, or names its own "
+                        "host; fr points glab at a host only through GITLAB_HOST, where the "
+                        "trust gate checks it"
+                    )
+            i += 2
+            continue
+        if arg.startswith("-"):
+            raise GlabHostRefusedError(
+                f"glab argument {arg!r} is not a flag fr writes, and glab would parse it "
+                "as one (a flag can name its own host); refused"
+            )
+        i += 1
+
+
 def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = None) -> str:
     """Run a glab command and return stdout. Raises GlabError on failure.
 
@@ -67,8 +196,12 @@ def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = No
     `env=None`, so the child inherits this process's environment unchanged
     and glab's own resolution from the current git directory still
     applies. `cwd` picks that git directory for a call that names no
-    `--repo` (gh#742); `None` keeps this process's."""
-    env = {**os.environ, "GITLAB_HOST": host} if host else None
+    `--repo` (gh#742); `None` keeps this process's. A host glab is not logged
+    into is refused first (`host_env`, gh#1014), and so is an argument that
+    would make glab pick a host of its own (`check_argv`)."""
+    check_argv(args, host)
+    overlay = host_env(host)
+    env = {**os.environ, **overlay} if overlay else None
     try:
         result = subprocess.run(
             ["glab", *args],
@@ -283,7 +416,12 @@ def is_transient(err: GlabError) -> bool:
     contain "timeout" or "http 5" would now be retried. No captured
     GitLab error body contains that vocabulary (spec §2.A), and a real
     gateway timeout SHOULD retry, so the widening is deliberate — but it
-    is a widening, recorded here rather than discovered later."""
+    is a widening, recorded here rather than discovered later.
+
+    A host trust refusal is never transient, by TYPE: its message names the
+    host, and a host can be called anything (gh#1013)."""
+    if isinstance(err, HostRefusedError):
+        return False
     return any(p in _haystack(err) for p in _TRANSIENT_PATTERNS)
 
 
@@ -335,7 +473,10 @@ def is_not_found(err: GlabError) -> bool:
 
     Reads stdout as well as stderr via `_haystack`, which is a wider
     surface than these patterns were written against — the same deliberate,
-    recorded widening `is_transient` carries."""
+    recorded widening `is_transient` carries. A host trust refusal is never
+    "absent", by type (gh#1013)."""
+    if isinstance(err, HostRefusedError):
+        return False
     return any(p in _haystack(err) for p in _NOT_FOUND_PATTERNS)
 
 

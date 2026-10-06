@@ -6788,10 +6788,38 @@ rows:
       - super-fr:tests/unit/test_forge_adapter_lookups.py#test_default_branch_sends_todays_argv_and_reads_the_bare_name
       - super-fr:tests/unit/test_isolation_network_timeouts.py#test_default_branch_lookup_is_bounded_and_falls_back_on_timeout
       - super-fr:tests/unit/test_isolation_forge_refusal.py#test_gc_skips_the_refused_workspace_and_finishes_the_sweep
+      - super-fr:tests/unit/test_forge_host_trust.py#test_the_isolation_lifecycle_applies_the_host_on_both_lookups
     status: ci
     notes: 'super-fr#742: default_branch/pr_for_branch on gh, glab and tea through the
       adapter, same argv and normalised shape; isolation runs them on its own runner,
-      and a refused host degrades per call site.'
+      and a refused host degrades per call site. super-fr#1015: the runner is handed
+      the adapter''s host (GH_HOST / GITLAB_HOST) on top of its network env.'
+  - id: glab-host-trust-gate
+    capability: forge-adapter
+    acceptance: 'fr never points glab, or a GITLAB_TOKEN, at a self-hosted GitLab glab
+      is not logged into: the refusal comes before any process, on every adapter method,
+      and is classified by its type (fail fast, never retried)'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-06-glab-host-trust.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_host_trust.py#test_every_public_glab_method_refuses_an_unknown_host_before_any_process
+      - super-fr:tests/unit/test_forge_host_trust.py#test_the_bare_glab_helpers_refuse_an_unknown_host_too
+      - super-fr:tests/unit/test_forge_host_trust.py#TestGlabKnownHosts::test_home_dot_config_wins_over_xdg
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_refusal_is_classified_by_type_not_by_its_text
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_refused_host_is_never_retried
+      - super-fr:tests/unit/test_forge_host_trust.py#test_an_argument_naming_its_own_host_is_refused
+      - super-fr:tests/unit/test_forge_host_trust.py#test_an_mr_url_with_an_embedded_url_never_reaches_glab
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_repo_path_led_by_a_host_glab_knows_is_refused
+      - super-fr:tests/unit/test_forge_host_trust.py#test_an_argv_fr_does_not_write_is_refused
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_branch_glab_would_parse_as_a_flag_never_reaches_it
+    status: ci
+    notes: 'super-fr#1014/#1013: the GitLab twin of #994 gh gate; known hosts read from
+      the config glab itself uses (GLAB_CONFIG_DIR, else ~/.config/glab-cli ahead of
+      XDG, probed against glab 1.89). A GITLAB_TOKEN alone is not a login, as for gh.
+      Every glab argv is checked against an allow-list of what fr writes (its own value-taking
+      flags, a strict GitLab path for --repo not led by a host glab knows, projects/
+      api endpoints), since glab follows a host carried by an argument past GITLAB_HOST.'
   - id: triage-batch-self-hosted-host
     capability: triage-batches
     acceptance: Triage batch verbs talk to the forge instance the batch's repo lives

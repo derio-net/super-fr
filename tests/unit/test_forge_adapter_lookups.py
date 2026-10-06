@@ -30,7 +30,9 @@ class _Scripted:
         self.out = out
         self.calls: list[tuple[list[str], Path]] = []
 
-    def __call__(self, argv: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    def __call__(
+        self, argv: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         self.calls.append((list(argv), cwd))
         return subprocess.CompletedProcess(argv, self.rc, stdout=self.out, stderr="")
 

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import TypeVar
 from urllib.parse import quote
 
+from fr.ghclient import HostRefusedError
 from fr.labels import LabelDef
 
 T = TypeVar("T")
@@ -37,11 +38,12 @@ class GhError(Exception):
         self.stdout = stdout
 
 
-class GhHostRefusedError(GhError):
+class GhHostRefusedError(GhError, HostRefusedError):
     """The host trust gate refused a host gh is not logged into (spec
     2026-10-06-forge-remainder §4.E). A subclass so a soft-fail method can
     never mistake it for an ordinary forge miss: `RealGhClient` checks the
-    gate before any method body runs (review p1-r1)."""
+    gate before any method body runs (review p1-r1). `HostRefusedError` is
+    the forge-neutral type `classify` reads it by (gh#1013)."""
 
 
 GH_TIMEOUT_SECONDS = 120.0
@@ -81,9 +83,10 @@ def known_hosts() -> frozenset[str]:
     return frozenset(str(k).lower() for k in data)
 
 
-def _env() -> dict[str, str] | None:
-    """The `env` for a `gh` subprocess: None (inherit, the SaaS path untouched)
-    when no host is in scope, else a copy of `os.environ` plus `GH_HOST`.
+def host_env() -> dict[str, str] | None:
+    """The host overlay for a `gh` subprocess: None when no host is in scope
+    (the SaaS path untouched), else `{"GH_HOST": host}` — what an injected
+    `CommandRunner` is handed on top of its own environment (gh#1015).
 
     The ONE place the host trust gate is enforced, so every `gh` subprocess
     path inherits it (plan journal `p1-gh-host-trust-gate`). `GH_HOST` makes gh
@@ -102,7 +105,14 @@ def _env() -> dict[str, str] | None:
             "tokens, at an unknown host; a GH_ENTERPRISE_TOKEN alone does not "
             "count as a login)"
         )
-    return {**os.environ, "GH_HOST": host}
+    return {"GH_HOST": host}
+
+
+def _env() -> dict[str, str] | None:
+    """The full `env` for one of `fr.gh`'s own subprocesses: None (inherit) when
+    no host is in scope, else a copy of `os.environ` plus `host_env()`."""
+    overlay = host_env()
+    return {**os.environ, **overlay} if overlay else None
 
 
 @contextmanager
@@ -568,10 +578,23 @@ def _classify_error(stderr: str) -> str:
     return "unknown"
 
 
+def classify(err: GhError) -> str:
+    """`_classify_error`'s kinds for a `GhError`, by TYPE first: a host trust
+    refusal is `unknown` (fail fast — never backed off, never retried) whatever
+    its message says. Its message names the host, so by text a host called
+    `git.timeout.example` read as transient (gh#1013). Only a raw gh failure
+    falls through to the stderr text."""
+    if isinstance(err, HostRefusedError):
+        return "unknown"
+    return _classify_error((err.stderr or "") + " " + str(err))
+
+
 def is_transient(err: GhError) -> bool:
     """True if the error looks like a transient network/server failure
     that warrants retry. False for auth, 404, validation, and unknown
-    errors (fail fast)."""
+    errors (fail fast) — and, by type, for a host trust refusal (gh#1013)."""
+    if isinstance(err, HostRefusedError):
+        return False
     text = (err.stderr + " " + str(err)).lower()
     return any(p in text for p in _TRANSIENT_PATTERNS)
 

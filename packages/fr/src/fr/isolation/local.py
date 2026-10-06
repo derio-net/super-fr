@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import IO, Any, ClassVar, cast
 
 from fr._hosts import detect_backend
+from fr.ghclient import CommandRunner
 from fr.hostclient import FORGE_ERRORS, client_for
 from fr.isolation import preserve as _preserve
 from fr.isolation.preserve import TeardownReport
@@ -879,13 +880,34 @@ def network_env(run: Runner, repo_root: Path) -> dict[str, str]:
 
 
 def run_network(
-    run: Runner, repo_root: Path, argv: list[str], cwd: Path | None = None
+    run: Runner,
+    repo_root: Path,
+    argv: list[str],
+    cwd: Path | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """A bounded, non-interactive git call against origin. A timeout comes
-    back as a non-zero, non-2 exit — `unknown`, never `absent`."""
-    return run(
-        argv, cwd=cwd or repo_root, env=network_env(run, repo_root), timeout=_NETWORK_TIMEOUT_S
-    )
+    back as a non-zero, non-2 exit — `unknown`, never `absent`. `extra_env`
+    is a forge adapter's host overlay, set on top of the network env
+    (gh#1015)."""
+    env = {**network_env(run, repo_root), **(extra_env or {})}
+    return run(argv, cwd=cwd or repo_root, env=env, timeout=_NETWORK_TIMEOUT_S)
+
+
+def _forge_runner(run: Runner) -> CommandRunner:
+    """This lifecycle's runner as a forge adapter's `CommandRunner`: the
+    adapter's host overlay (`GH_HOST` / `GITLAB_HOST`) is applied on top of
+    this process's environment, never dropped (gh#1015). With no host the
+    call is exactly what it was before the overlay existed."""
+
+    def call(
+        argv: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        if not env:
+            return run(argv, cwd=cwd)
+        return run(argv, cwd=cwd, env={**os.environ, **env})
+
+    return call
 
 
 def resolve_branch_refs(
@@ -2823,11 +2845,13 @@ class LocalWorktreeDevcontainerTarget:
 
         # The forge step runs on this lifecycle's own runner, with the
         # non-interactive network env and timeout (spec
-        # 2026-10-06-forge-remainder §4.B).
+        # 2026-10-06-forge-remainder §4.B), plus the adapter's host (gh#1015).
         try:
             branch = client_for(self.repo_root).default_branch(
                 cwd=self.repo_root,
-                run=lambda argv, *, cwd: run_network(self.run, self.repo_root, argv, cwd),
+                run=lambda argv, *, cwd, env=None: run_network(
+                    self.run, self.repo_root, argv, cwd, extra_env=env
+                ),
             )
         except FORGE_ERRORS as exc:  # the lookup soft-fails all else: the host refusal
             raise _forge_refused(exc) from exc
@@ -2935,8 +2959,6 @@ class LocalWorktreeDevcontainerTarget:
         gc's #844 check), or None.
         """
         try:
-            return client_for(cwd).pr_for_branch(
-                branch, cwd=cwd, run=lambda argv, *, cwd: self.run(argv, cwd=cwd)
-            )
+            return client_for(cwd).pr_for_branch(branch, cwd=cwd, run=_forge_runner(self.run))
         except FORGE_ERRORS as exc:  # the lookup soft-fails all else: the host refusal
             raise _forge_refused(exc) from exc

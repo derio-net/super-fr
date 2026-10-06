@@ -936,6 +936,11 @@ def test_a_self_hosted_gitlab_is_asked_on_its_own_host(
 
     monkeypatch.undo()
     monkeypatch.setenv("HOME", str(repo.parent / "home"))
+    # glab is logged into the host (gh#1014's trust gate).
+    glab_config = repo.parent / "glab-config"
+    glab_config.mkdir()
+    (glab_config / "config.yml").write_text("hosts:\n    gl.example.invalid: {}\n")
+    monkeypatch.setenv("GLAB_CONFIG_DIR", str(glab_config))
     seen: list[tuple[list[str], str | None]] = []
 
     def run(args: list[str], *, host: str | None = None, cwd: object = None) -> str:

@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 from fr import _hosts
 from fr import gh as _gh
 from fr.gh import GhError
-from fr.ghclient import GhClient
+from fr.ghclient import GhClient, HostRefusedError
 from fr.glab import GlabError
 from fr.real_ghclient import RealGhClient
 from fr.real_glabclient import RealGlabClient
@@ -39,12 +39,16 @@ def forge_error_kind(exc: BaseException) -> ForgeErrorKind:
     2026-10-06-forge-remainder §4.C): `rate_limit` (back off the whole tick),
     `info` (the target is gone), `warn` (transient) or `unknown`.
 
-    A `GhError` is `fr.gh._classify_error`'s call. A `GlabError` / `TeaError`
-    gets the same text rules over its stderr and message, with GitLab's and
-    Gitea's 429 counted as a rate limit beside GitHub's 403. Anything that is
-    not a forge error is `unknown`."""
+    A host trust refusal (`HostRefusedError`, any backend) is `unknown` by
+    TYPE, before any text is read: its message names the host, and a host can
+    be called anything (gh#1013). Otherwise a `GhError` is `fr.gh.classify`'s
+    call, and a `GlabError` / `TeaError` gets the same text rules over its
+    stderr and message, with GitLab's and Gitea's 429 counted as a rate limit
+    beside GitHub's 403. Anything that is not a forge error is `unknown`."""
+    if isinstance(exc, HostRefusedError):
+        return "unknown"
     if isinstance(exc, GhError):
-        kind = _gh._classify_error((exc.stderr or "") + " " + str(exc))
+        kind = _gh.classify(exc)
         return cast("ForgeErrorKind", kind) if kind in _KINDS else "unknown"
     if not isinstance(exc, (GlabError, TeaError)):
         return "unknown"
@@ -126,7 +130,9 @@ def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) 
     the GitHub one as `GH_HOST` (spec 2026-10-06-forge-remainder §4.E);
     `tea` still resolves its own host."""
     if backend == "gitlab":
-        return RealGlabClient(host=host)
+        # gitlab.com likewise: never a GITLAB_HOST, so a SaaS repo needs no
+        # glab config login past the trust gate (gh#1014).
+        return RealGlabClient(host=_hosts.self_hosted_hostname(host))
     if backend == "gitea":
         return RealTeaClient()
     # A SaaS host (github.com) is gh's own default, never a GH_HOST: threading
