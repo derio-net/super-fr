@@ -212,10 +212,12 @@ def summarize(entries: Iterable[SessionEntry], step_order: Sequence[str] = ()) -
             steps[name] = replace(
                 row, usd=_plus_usd(row.usd, figure.usd), turns=_plus_turns(row.turns, figure.turns)
             )
-        for role, attr in ((MAIN, "main"), (SUBAGENT, "subagent")):
-            for name, figure in entry.steps_by_role.get(role, {}).items():
-                row = steps.get(name, StepRow(name, None, None))
-                steps[name] = replace(row, **{attr: plus_figure(getattr(row, attr), figure)})
+        for name, figure in entry.steps_by_role.get(MAIN, {}).items():
+            row = steps.get(name, StepRow(name, None, None))
+            steps[name] = replace(row, main=plus_figure(row.main, figure))
+        for name, figure in entry.steps_by_role.get(SUBAGENT, {}).items():
+            row = steps.get(name, StepRow(name, None, None))
+            steps[name] = replace(row, subagent=plus_figure(row.subagent, figure))
         for model, m in entry.models.items():
             acc = models.setdefault(model, _ModelAcc())
             acc.input += m.input
