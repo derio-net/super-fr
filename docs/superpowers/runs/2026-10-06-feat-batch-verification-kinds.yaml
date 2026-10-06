@@ -265,8 +265,10 @@ steps:
     stdout: |
       1 out-of-scope finding(s): p2-tea-remove-labels
   deliver:
-    state: running
-    at: '2026-10-06T15:43:52+00:00'
+    state: done
+    at: '2026-10-06T15:52:28+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1012
     units:
       step/deliver:
         attempts:
@@ -274,3 +276,10 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: a4557f5a-3a30-4673-856d-3f9329d47f77
+          returned: '2026-10-06T15:52:25+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-suite.log@91e01db057f7
+          walk: 20261006T155039Z.log@97d1e68ce624
+          proportionality: f4b9eb9d8a4230ae0082f01b807371fd447ed1c8:3f3b66b2c0ad9a367730ad55ef6a8084c8c414460691f97cd79b0de0a411d34d
+          visual: none
