@@ -314,3 +314,8 @@ Plain assignment after the call.
 ### p3-r4-resolved · finding [fixed] · resolves p3-r4: drive_lock decided lock liveness inline, duplicating live_driver (phase 3)
 
 fr.triage.drive_lock.lock_holder(path, text) is the one rule; live_driver and the drive's compare-and-swap both call it on the same snapshot; the drive tests' pid seam moved to drive_lock.pid_alive.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved-2 created=2026-10-06T05:45:16+00:00 state=open resolves=p2-r6 tracked_by=#985 -->
+### p2-r6-resolved-2 · finding [deferred → #985] · resolves p2-r6: partial batch in Done shows a close-out hint
+
+Filed at closeout as #985.
