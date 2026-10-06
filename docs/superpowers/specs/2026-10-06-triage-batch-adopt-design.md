@@ -59,8 +59,9 @@ R15. The fr-triage skill documents `batch adopt` and the sweep (list, create, ad
 ### A. The verb
 
 `batch adopt` lives in `fr/commands/triage_batch_cmd.py` beside `dispatch`, taking
-the usual `--repo/--org/--dir`, `--checkout REPO=PATH` (defaulting as `drive` does),
-`--tab`, `--branch`, `--yes`, and `--list`. `--list` takes no batch and ignores the
+the usual `--repo/--org/--dir`, `--checkout PATH` (the one clone of the batch's repo,
+as `dispatch` takes it: a batch is always one repo, so `drive`'s `REPO=PATH` form has
+nothing to choose between), `--tab`, `--branch`, `--yes`, and `--list`. `--list` takes no batch and ignores the
 rest. Its name is distinct from the driver's `adopt` action kind
 (`batch_drive.ActionKind`, close-outs started by hand), which keeps its name; the
 help text says so.
