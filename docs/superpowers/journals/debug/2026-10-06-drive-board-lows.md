@@ -24,3 +24,8 @@ batch_merge._behind_only_routinely: a PR touching docs/acceptance/ is not routin
 ### f-962 · finding [fixed] · #962 fixed: a refused merge re-reads the head
 
 batch_merge._merge: on a FORGE_ERRORS refusal, re-read pr_view; a head other than the one merged raises HeadMovedError (stop the train, re-plan), else the generic refusal. A failed re-read keeps the refusal. Pinned by test_a_head_that_moves_just_before_the_merge_is_a_moved_head / test_a_refusal_with_the_head_unmoved_stays_a_refusal.
+
+<!-- fr:journal kind=finding scope=debug id=f-884 created=2026-10-06T17:02:04+00:00 state=fixed -->
+### f-884 · finding [fixed] · #884 fixed: the group cap tests prove group behaviour
+
+test_a_fifth_batch_is_held_by_four_in_flight_across_two_owners: 2+2 in flight across example-org/other-org, a fifth proposed under cap 4 -> held naming all four; control run at cap 5 dispatches it. test_a_dispatched_batch_in_one_repo_uses_the_cap_of_the_other now asserts the positive held line. Verified by mutation: per-repo and per-owner cap counting both turn the new test red; the shipped code keeps it green.
