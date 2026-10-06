@@ -69,10 +69,16 @@ acceptance:
     origin: ["super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R8", "super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R9"]
     status: not-implemented
     visual:
-      - "row of an open original with one and with two nested duplicates (Duplicates paragraph, +N tag)"
-      - "a duplicate whose original is closed, and one whose original is missing, staying in its tier with the tag"
-      - "Possible duplicates section with groups and pair reasons, and its empty state"
-      - "phone width (16px gutter, no horizontal scroll) with a long reason line"
+      states:
+        - original-with-one-duplicate
+        - original-with-two-duplicates
+        - duplicate-of-closed-original
+        - duplicate-of-missing-original
+        - possible-duplicates-groups
+        - possible-duplicates-empty
+        - phone-width-long-reason
+      interactions:
+        - expand-original-row-shows-duplicates
   - id: triage-dedupe-driver
     capability: triage-dedupe
     acceptance: "The wave driver reports the candidate-group count once, in the pass that finishes a wave, and never acts on duplicates"
