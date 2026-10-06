@@ -390,7 +390,8 @@ def test_a_dirty_matrix_is_warned_about_and_nothing_is_touched(tmp_path, monkeyp
     matrix.write_text(_MATRIX + "# mid-edit\n")
     result = _archive_plan(monkeypatch, repo)
     assert result.exit_code == 0, result.output
-    assert "matrix retarget skipped" in result.output and "uncommitted" in result.output
+    assert "warning: matrix retarget skipped" in result.output and "uncommitted" in result.output
+    assert "RuntimeError" not in result.output
     assert matrix.read_text() == _MATRIX + "# mid-edit\n"
     assert "docs/acceptance/matrix.yaml" not in _staged(repo)
 
@@ -423,7 +424,8 @@ def test_a_retarget_error_warns_and_touches_nothing(tmp_path, monkeypatch):
     repo = _matrix_repo(tmp_path)
     result = _archive_plan(monkeypatch, repo)
     assert result.exit_code == 0, result.output
-    assert "matrix retarget skipped" in result.output and "differs" in result.output
+    assert "warning: matrix retarget skipped" in result.output and "differs" in result.output
+    assert "RetargetError" not in result.output
     assert (repo / "docs/acceptance/matrix.yaml").read_text() == _MATRIX
     assert "docs/acceptance/matrix.yaml" not in _staged(repo)
 

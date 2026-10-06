@@ -458,17 +458,24 @@ def _retarget_matrix(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
     matrix_path = repo_root / MATRIX_REL
     if not matrix_path.is_file():
         return
-    text = matrix_path.read_text()
-    matrix = parse_matrix(text)
-    own = resolve_identity(matrix, repo_root)[1]
-    new_text, changes = retarget_text(text, own, log.moves)
-    if not changes:
+    try:
+        text = matrix_path.read_text()
+        own = resolve_identity(parse_matrix(text), repo_root)[1]
+        new_text, changes = retarget_text(text, own, log.moves)
+        if not changes:
+            return
+        renders = render_committed_set(parse_matrix(new_text), repo_root)
+    except Exception as e:  # noqa: BLE001 — a refusal is a warning, never a failure
+        err_console.print(f"[yellow]warning:[/yellow] matrix retarget skipped — {escape(str(e))}")
         return
-    renders = render_committed_set(parse_matrix(new_text), repo_root)
     targets = {str(MATRIX_REL): new_text, **renders}
     dirty = [rel for rel in targets if _edited_in_worktree(repo_root, repo_root / rel)]
     if dirty:
-        raise RuntimeError(f"{', '.join(dirty)} has uncommitted changes — not retargeted")
+        err_console.print(
+            f"[yellow]warning:[/yellow] matrix retarget skipped — {', '.join(dirty)} "
+            "has uncommitted changes"
+        )
+        return
     for rel, content in targets.items():
         write_text_atomic(repo_root / rel, content)
     subprocess.run(
