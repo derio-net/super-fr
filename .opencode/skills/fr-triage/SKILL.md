@@ -36,17 +36,17 @@ Stages (`backlog`, `blocked`, `in-progress`, `pr-draft`, `pr-ready`, `merged`, `
      the repo is gone. This is the only set you may act on without the forge.
    - **unreachable**: collect could not settle it; the reason is printed. Transient (rate limit, 5xx, lost
      access): **never prune on it**. "Judged after the last collect" means collect again; not-found is a deleted
-     issue or typo'd number: confirm with `gh issue view`, then fix the number or recommend removing it.
+     issue or typo'd number: confirm on the forge (on GitHub, `gh issue view`), then fix the number or recommend removing it.
    - **stale dispatch**: a batch dispatch with no PR after `stale_dispatch_days`. Report it.
    - **unplaced**: open, in no open batch, no `features` group and not `kind: parked` (a cancelled batch's members
      count). Place each: a batch, a feature group, or park it.
-3. **Judge the unranked.** Read each from `facts.json` (bodies stop at 2,000 characters; `gh issue view` when cut
-   off) and the code; a first run creates the file with `schema: 3` and `tiers`. Compare against ALL judgements.
+3. **Judge the unranked.** Read each from `facts.json` (bodies stop at 2,000 characters; read the issue on the forge when cut
+   off: on GitHub, `gh issue view`) and the code; a first run creates the file with `schema: 3` and `tiers`. Compare against ALL judgements.
 4. **Render.** `fr triage render --repo OWNER/REPO --open` writes `triage.html` and a snapshot. The board reads: **Since last report**
    (the diff from the previous snapshot), **Needs you now** (computed, never typed: green drafts, failing CI, blocked batches,
    stale dispatches, unfinished `post_merge`, unplaced issues), **Next up** (the driver's own order), **Waves** (tabs, closing
    order, features, parked), then the backlog by tier. Report back the board's path, what changed, what needs the operator
-   and the `gh` commands you recommend.
+   and the forge commands you recommend (on GitHub, `gh …`).
 5. **Batch.** Propose groups of judged issues to ship as one run and one PR (`fr triage batch suggest` is input,
    never the answer); create the accepted ones with `fr triage batch create <id> --title T --issue KEY...`.
 
@@ -109,8 +109,8 @@ file. Set `ranked_at` to today whenever you change a judgement. Keys are case-in
 4. **Hunt duplicates and batches.** Same predicate, same file, same sentence: link duplicates in `note`, and
    name the batch when issues share a subsystem. A shared root cause across three or more issues becomes a
    `patterns` entry.
-5. **Forge actions are unrun commands.** A close, a dedupe or a relabel is the exact `gh` command in `note` or your
-   report, for the operator to run. Never act on the forge unasked. `batch dispatch|merge|cancel|drive` act only
+5. **Forge actions are unrun commands.** A close, a dedupe or a relabel is the exact forge CLI command (on GitHub, `gh …`) in
+   `note` or your report, for the operator to run. Never act on the forge unasked. `batch dispatch|merge|cancel|drive` act only
    with `--yes` (without it they print the plan; `drive` with no ids plans the batches with a wave, else all); pass
    `--yes` only when the operator asked for that action in this session.
 
