@@ -191,7 +191,7 @@ hands the conflict back. If the batch's session is idle, drive sends it the brie
 If no session is live, drive starts a fresh session on the batch's existing branch
 through the batch's runner. If the session is working or blocked, drive sends
 nothing and records nothing, and retries on a later pass. The brief tells the
-session to merge `origin/main` without rebasing or force-pushing, resolve the named
+session to enter the batch's workspace (`fr isolation up --branch <branch>`), merge `origin/main` without rebasing or force-pushing, resolve the named
 paths, regenerate generated mirrors instead of hand-resolving them, run the suite,
 and push.
 
@@ -463,7 +463,8 @@ labels (`triage/model.py:207`), so `facts.json` keeps its schema.
   longer open or a new dispatch resets the count. The executor keeps its
   `stopped again at` line for skipped repeats.
 - **The brief.** `batch_dispatch.conflict_brief` names the batch, the PR, the head,
-  the refused paths and the five steps in R20. When `.fr/triage.yaml` declares a new
+  the refused paths and the six steps in R20 (entering the batch's workspace first, so a fresh session
+  never switches the driver's clone off its branch). When `.fr/triage.yaml` declares a new
   optional `mirrors: [argv…]` key, the brief adds the repo's mirror-sync commands
   from it.
 
