@@ -4895,9 +4895,15 @@ rows:
       closes it out and closes its tab
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R1
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_adopt_with_an_open_pr_moves_everything_in_order
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_adopt_renames_the_tab_then_the_agent_and_returns_the_tab
     status: not-implemented
-    notes: ''
+    notes: Unit-covered on fakes (and herdr against a live capture); stays not-implemented
+      until the post-merge operator sweep of the six hand-started sessions (spec Test
+      Plan 5) proves it live.
     verify: live
   - id: triage-batch-adopt-branch-rename
     capability: Backlog triage
