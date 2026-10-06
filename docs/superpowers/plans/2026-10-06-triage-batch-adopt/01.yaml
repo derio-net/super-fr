@@ -47,11 +47,11 @@ tasks:
   title: SessionAdopter protocol + herdr implementation (spec §E, R3, R12)
   steps:
   - id: P1.T1.S1
-    text: 'Capture live, never construct: in a scratch herdr tab started by hand (`herdr tab create` +
-      `herdr agent start` is NOT hand-started — start `claude` by typing it into the pane), capture `herdr
+    text: 'Capture live, never construct: in a scratch herdr tab started outside `herdr agent start` (`herdr tab create` +
+      `herdr agent start` does not count — start `claude` by sending its command line to the pane with `herdr pane send-text` or equivalent, so herdr detects an agent it did not launch), capture `herdr
       agent list` and `herdr agent rename <that agent> <new-name>` output into tests/fixtures/herdr/ (labels
       naming any repo outside derio-net replaced with RFC 2606 names; provenance in the fixtures README),
-      then close the scratch tab. If herdr cannot rename a hand-started agent, STOP the phase and report
+      then close the scratch tab. If herdr cannot rename an agent herdr did not launch, STOP the phase and report
       blocked: spec R3/R6 must be re-planned.'
   - id: P1.T1.S2
     text: 'RED in tests/unit/test_fr_herdr_runner.py, using the existing `_Herdr` fake answering from
