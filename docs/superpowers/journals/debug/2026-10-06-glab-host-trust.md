@@ -34,3 +34,8 @@ af50241a1: _run_glab refuses a --repo/-R URL or user@host: value and a full-URL 
 ### glab-repo-arg-parser-differentials · finding [fixed] · Security review: two parser differentials in the argument host gate (fixed)
 
 Background security review flagged parser differentials in glab.py and real_glabclient.py (titles only). Confirmed live, glab 1.89: (a) --repo HOST/g/p goes to HOST when HOST is a host glab is configured for (case-sensitive; an unknown dotted segment stays a group) — no : or @, so the af50241a1 rule missed it, reachable via an MR link https://gitlab.com/HOST/g/p/-/merge_requests/1; (b) -R=v and -Rv redirect too, unread by the gate. Fixed in the next commit: _repo_values reads every pflag spelling; _argument_host refuses a first segment in known_hosts | gitlab.com | the threaded host. Leading-slash repo (/evil/g/p) probed: no redirect. Full suite 9239 passed.
+
+<!-- fr:journal kind=hypothesis scope=debug id=5a70ec3e4c79 created=2026-10-06T14:42:28+00:00 -->
+### 5a70ec3e4c79 · hypothesis · The argument gate is the wrong shape: a deny-list mirroring a foreign parser
+
+Two fixes to the argument host gate (af50241a1, 3c7dea1d6) each left a differential the next security review found. Probed live (glab 1.89) after the third flag: bundled shorthand -wR<url>/-cR<url> redirect; a leading-space repo " HOST/g/p" is trimmed by glab into a known host; a positional branch "-R<url>" is parsed as a flag; GITLAB_REPO env redirects (ambient operator env, not attacker input); a flag VALUE starting with -R stays a value; a positional after -- stays a positional. Verdict: each deny-list rule models one more corner of glab parser; replace with an allow-list of what fr writes, needing no model of glab at all.
