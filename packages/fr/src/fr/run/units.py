@@ -57,8 +57,10 @@ __all__ = [
     "last_attempt",
     "open_attempt",
     "unit_keys",
+    "unit_record",
     "unit_state",
     "unit_states",
+    "with_unit_record",
     "with_attempt_appended",
     "with_evidence",
     "with_last_attempt_replaced",
@@ -98,6 +100,19 @@ def unit_state(record: StepRecord, key: str) -> str | None:
     """
     unit = (record.units or {}).get(key)
     return None if unit is None else unit.state
+
+
+def unit_record(record: StepRecord, key: str) -> UnitRecord | None:
+    """`key`'s whole `UnitRecord` (state, attempts, evidence), or `None`."""
+    return (record.units or {}).get(key)
+
+
+def with_unit_record(record: StepRecord, key: str, unit: UnitRecord) -> StepRecord:
+    """`record` with `key` set to `unit` wholesale — for a writer that has
+    already composed the whole unit (`fr.run.adopt.carry_forward`)."""
+    mapping = _units(record)
+    mapping[key] = unit
+    return _with_units(record, mapping)
 
 
 def unit_states(record: StepRecord) -> dict[str, str]:

@@ -1,0 +1,154 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Reshape a drifted cursor, and read one without refusing (R1-R4)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - run-reshape-drifted-cursor
+  - run-read-drifted-cursor
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/reshape.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - tests/unit/test_run_reshape.py
+  - tests/unit/test_run_reshape_cmd.py
+  - .changes/feat-batch-run-upgrade-midflight.yaml
+  - docs/acceptance/*
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: Smoke — skeleton test for reshape's no-drift no-op
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_run_reshape.py with one test,
+      `test_a_run_with_no_drift_reshapes_to_itself`: build a RunState for the shipped
+      fr-goal manifest (resolve it with fr.workflow.resolve.resolve_workflow("fr-goal", repo)
+      the way tests/unit/test_run_adopt.py builds states) and assert
+      `fr.run.reshape.reshape(state, manifest) == state`. Run
+      `uv run pytest tests/unit/test_run_reshape.py -q --no-cov` — fails (no module).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/run/reshape.py with `class ReshapeError(Exception)`
+      and `reshape(state: RunState, manifest: WorkflowManifest) -> RunState` returning the
+      state unchanged when recorded step ids and members match. Test green. Add the change
+      fragment `.changes/feat-batch-run-upgrade-midflight.yaml` (`bump: minor`, summary:
+      "fr run reshape, fr run adopt --supersede and historical review evidence let a run
+      started on an older fr finish after an upgrade"). Commit and push so CI runs on the
+      skeleton.
+- number: 2
+  title: reshape's rules (spec §A rules 1-5)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_run_reshape.py add one test per rule, each building a
+      manifest by editing the shipped one's step list (model_copy(update=...)):
+      (a) an added step after the cursor (the #891 case: drop `journal-check` from the
+      recorded steps, cursor `implement`) is inserted `pending` in manifest order, every
+      other record equal; (b) an added step at/behind the cursor raises ReshapeError naming
+      it and `fr run adopt --supersede`; (c) a removed step that holds nothing is dropped;
+      (d) a removed step that holds a unit / `gate: cleared` / `answered_by` / `emitted`
+      raises, one case each; (e) a removed step that is `state.cursor` raises; (f) a group's
+      members changed with no units -> `members` rewritten; with units -> raises; (g) schema
+      mismatch (state.workflow `fr-goal@2`) raises; (h) `started`/`driver` unchanged.
+      Run — red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement the rules in reshape.py exactly as spec §A states them, with a
+      `_holds_something(record)` helper (units, gate, answered_by, emitted). Build the new
+      `steps` dict in manifest order; never mutate the input (models are frozen —
+      model_copy). Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: make the added/removed diff computation shared with
+      run_cmd._check_step_drift if the two now duplicate it (one helper returning
+      (added, removed)); rerun tests/unit/test_run_reshape.py and the drift tests
+      (`uv run pytest tests/unit -q --no-cov -n auto -k "drift or reshape"`).
+- number: 3
+  title: The `fr run reshape` command and the drift message (R1, R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: create tests/unit/test_run_reshape_cmd.py using typer's CliRunner over
+      fr.cli.app in a tmp git repo with a drifted cursor (pattern: existing run_cmd CLI
+      tests in tests/unit/test_run_adopt.py): preview prints `added: journal-check` and
+      leaves the file byte-identical; `--yes` rewrites it and makes one `chore(fr):` commit;
+      no-drift prints `nothing to reshape`, exit 0; a refusal exits 2 with nothing written;
+      `fr run advance` on the drifted cursor exits 2 and its message contains
+      `fr run reshape <run-id>`. Run — red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add `reshape` to run_app in run_cmd.py (dry-run default, `--yes` applies) writing
+      via `_save_run_state` inside `_commits_run_writes`, as other cursor writes do; map
+      ReshapeError to exit 2. Append the `fr run reshape <run-id>` line to both
+      `_check_step_drift` messages. Tests green.
+- number: 4
+  title: Read-only commands answer a drifted cursor (R4)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_run_reshape_cmd.py: on a drifted cursor `fr run gates` exits 0,
+      prints the gate lines, and prints exactly one warning naming the drift and
+      `fr run reshape`; same for `fr run status`; a schema-version mismatch still makes
+      `gates` exit 2. Run — red (gates refuses today).
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `_resolve_manifest_for_read` beside `_resolve_manifest_for_state` (spec §B).
+      Audit every call site of `_resolve_manifest_for_state` (grep) and switch the read-only
+      ones — gates_cmd, status, check, cost where they resolve it — keeping mutating ones
+      strict. Record the audited list in the step record's discoveries. Tests green.
+  - id: P1.T4.S3
+    text: |-
+      Run the full suite `uv run pytest -q --no-cov -n auto`, ruff check/format and mypy
+      (AGENTS.md dev commands). Move rows run-reshape-drifted-cursor and
+      run-read-drifted-cursor to `ci` through the step record's `acceptance` section with
+      the new tests as `unit` levels (name-anchored refs).
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-10-05T21:30:22+00:00'
+      note: null
+  completion:
+    at: '2026-10-05T21:30:22+00:00'
+    note: null
+    observed_prs: []

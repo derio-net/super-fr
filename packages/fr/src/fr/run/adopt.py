@@ -43,28 +43,43 @@ from __future__ import annotations
 import datetime as _dt
 import re
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from fr.journal.model import (
+    JournalEntry,
+    JournalParseError,
+    parse_journal,
+    phase_finding_states,
+    resolve_journal_read_path,
+    reviews_phase,
+    unauthorized_fixes,
+)
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.render import plan_locally_complete
 from fr.run import units
+from fr.run.historical import HISTORICAL_REVIEWER, findings_witness, historical_review_refusal
 from fr.run.model import (
     RunState,
     RunStateError,
     StepRecord,
+    UnitRecord,
     current_run_schema_version,
+    load_run_state,
     run_path,
     save_run_state,
     validate_run_id,
 )
-from fr.workflow.model import WorkflowError, WorkflowManifest
+from fr.workflow.model import Step, WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
 
 __all__ = [
     "AdoptError",
     "Adoption",
+    "Superseded",
+    "carry_forward",
+    "open_holds",
     "MANUAL_ITEM",
     "PLANS_REL",
     "adopt_run",
@@ -108,6 +123,23 @@ PrStateFn = Callable[[str], str | None]
 
 class AdoptError(Exception):
     """Adoption could not produce a run. The CLI maps it to exit 2."""
+
+
+@dataclass
+class Superseded:
+    """What `adopt_run(..., supersede=True)` found and did over an existing run
+    — an outparam, like `notes`: the CLI previews from it and commits from it."""
+
+    old: str
+    """The run id replaced."""
+    holds: list[tuple[str, str, str | None, str | None]] = field(default_factory=list)
+    """`(step, unit key, agent, session)` of each open attempt the carry closes."""
+    removed: list[Path] = field(default_factory=list)
+    """Files this removed (the old cursor, the old usage file after its move)."""
+    written: list[Path] = field(default_factory=list)
+    """Files this wrote beyond the new cursor (the moved usage file)."""
+    written_new: bool = False
+    """False under a preview, where nothing was written."""
 
 
 @dataclass(frozen=True)
@@ -304,6 +336,10 @@ def build_run_state(
     run_id: str,
     branch: str,
     started: str,
+    journal: Sequence[JournalEntry] = (),
+    visual_phases: Collection[int] = (),
+    notes: list[str] | None = None,
+    prior: RunState | None = None,
 ) -> RunState:
     """An adopted `RunState`: the cursor, everything before it `done`, the
     cursor and everything after it `pending`.
@@ -401,7 +437,7 @@ def build_run_state(
         )
         for index, step in enumerate(manifest.steps)
     }
-    return RunState(
+    state = RunState(
         # Born stamped with the version this fr writes — an adopted cursor is
         # a new artifact, not an old one, so it must not arrive stale.
         schema_version=current_run_schema_version(),
@@ -412,6 +448,210 @@ def build_run_state(
         cursor=adoption.cursor,
         steps=steps,
     )
+    if grouped and adoption.phases:
+        assert group is not None
+        state = _infer_historical_reviews(
+            state,
+            manifest,
+            group,
+            adoption,
+            journal=journal,
+            visual_phases=frozenset(visual_phases),
+            notes=notes,
+            prior=prior,
+        )
+    return state
+
+
+def _infer_historical_reviews(
+    state: RunState,
+    manifest: WorkflowManifest,
+    group: Step,
+    adoption: Adoption,
+    *,
+    journal: Sequence[JournalEntry],
+    visual_phases: frozenset[int],
+    notes: list[str] | None,
+    prior: RunState | None = None,
+) -> RunState:
+    """R8 (spec 2026-10-05-run-upgrade-midflight §D): a complete phase whose
+    plan journal holds a review satisfying the historical bound, with no
+    finding against it still open and none fixed without the operator, gets
+    its review member `done` as `{review, reviewer: historical, findings}`.
+    Every other phase's review member stays pending, and a note says why.
+    When that leaves every unit of the group done, the group is done and the
+    cursor moves to the step after it."""
+    review = next((m for m in group.steps if "review" in m.evidence), None)
+    if review is None:
+        return state
+    entries = list(journal)
+    unauthorized = set(unauthorized_fixes(entries))
+    record = state.steps[group.id]
+    said: list[str] = []
+    manual = set(adoption.manual)
+    # What clause 2 reads: the new cursor holds no attempts, so a superseded
+    # cursor's steps stand in for it.
+    seen = state.model_copy(update={"steps": {**state.steps, **(prior.steps if prior else {})}})
+    for item, value in adoption.phases.items():
+        n = int(item.removeprefix("phase/"))
+        if value != "done" or n in manual:
+            continue
+        candidates = [e for e in entries if reviews_phase(e, n)]
+        if not candidates:
+            said.append(f"no `kind=review` entry for phase {n} — its review stays pending.")
+            continue
+        if n in visual_phases:
+            said.append(f"phase {n} owes visual evidence — its review stays pending.")
+            continue
+        refusals = [
+            historical_review_refusal(
+                seen, n, e, owes_visual=False, review_key=f"{item}/{review.id}"
+            )
+            for e in reversed(candidates)
+        ]
+        chosen = next(
+            (e for e, r in zip(reversed(candidates), refusals, strict=True) if r is None), None
+        )
+        if chosen is None:
+            said.append(f"phase {n}'s review is not historical: {refusals[0]}.")
+            continue
+        states = phase_finding_states(entries, n)
+        still_open = [fid for fid, st in states.items() if st == "open"]
+        if still_open:
+            said.append(f"phase {n} has open findings: {', '.join(still_open)}.")
+            continue
+        unauth = [fid for fid in states if fid in unauthorized]
+        if unauth:
+            said.append(f"phase {n} has findings fixed without the operator: {', '.join(unauth)}.")
+            continue
+        key = f"{item}/{review.id}"
+        record = units.with_unit_state(record, key, "done")
+        record = units.with_evidence(
+            record,
+            key,
+            {
+                "review": chosen.id,
+                "reviewer": HISTORICAL_REVIEWER,
+                "findings": findings_witness(states),
+            },
+        )
+    steps = {**state.steps, group.id: record}
+    ids = [s.id for s in manifest.steps]
+    cursor = state.cursor
+    settled = all(
+        value == "done"
+        and (
+            int(item.removeprefix("phase/")) in manual
+            or all(units.unit_state(record, f"{item}/{m.id}") == "done" for m in group.steps)
+        )
+        for item, value in adoption.phases.items()
+    )
+    if cursor == group.id and settled and ids.index(cursor) + 1 < len(ids):
+        cursor = ids[ids.index(cursor) + 1]
+        steps[group.id] = record.model_copy(update={"state": "done"})
+        said.append(
+            f"every phase was reviewed before this cursor existed — the cursor lands on {cursor!r}."
+        )
+    if notes is not None:
+        notes.extend(said)
+    return state.model_copy(update={"steps": steps, "cursor": cursor})
+
+
+# --- carry-forward (spec 2026-10-05-run-upgrade-midflight §C) ----------------
+
+
+def open_holds(state: RunState) -> list[tuple[str, str, str | None, str | None]]:
+    """`(step id, unit key, agent, session)` of every attempt still open — the
+    holds `carry_forward` closes as `abandoned`, listed so the preview can name
+    whose work a supersede cuts off."""
+    found: list[tuple[str, str, str | None, str | None]] = []
+    for step_id, record in state.steps.items():
+        for key in units.unit_keys(record):
+            held = units.open_attempt(record, key)
+            if held is not None:
+                found.append((step_id, key, held.agent, held.session))
+    return found
+
+
+def _carry_unit(old: UnitRecord, fresh: UnitRecord | None, *, now: str) -> UnitRecord:
+    """One carried unit: the old attempts (an open one closed `abandoned`), the
+    old state when it was `done` (or `manual`), else the inference's, else
+    `pending`; the old evidence when the old unit was done (real evidence beats
+    an inferred historical one), else the inference's when it set any."""
+    attempts = tuple(
+        a.model_copy(update={"returned": now, "outcome": "abandoned"})
+        if a.returned is None and not a.synthesized
+        else a
+        for a in old.attempts
+    )
+    state: str | None
+    if old.state is None:
+        state = None
+    elif old.state in ("done", "manual"):
+        state = old.state
+    elif fresh is not None and fresh.state is not None:
+        state = fresh.state
+    else:
+        state = "pending"
+    if fresh is not None and fresh.state == "manual":
+        state = "manual"
+    keep_old = old.state == "done" or fresh is None or not fresh.evidence
+    evidence = old.evidence if keep_old and old.evidence else (fresh.evidence if fresh else None)
+    return UnitRecord.model_validate(
+        {
+            "state": state,
+            "attempts": [a.model_dump(exclude_none=True) for a in attempts],
+            "evidence": evidence,
+        }
+    )
+
+
+def _carried_key_exists(key: str, step_id: str, members: list[str] | None) -> bool:
+    """Is `key` a unit the current shape still has under `step_id`?"""
+    parts = key.split("/")
+    if parts[0] == "step":
+        return key == f"step/{step_id}"
+    if parts[0] != "phase" or len(parts) < 2 or not parts[1].isdigit():
+        return False
+    if len(parts) == 2:
+        return True
+    return members is not None and "/".join(parts[2:]) in members
+
+
+def carry_forward(old: RunState, new: RunState, *, now: str) -> RunState:
+    """`new` with every fact of `old` that is still meaningful in `new`'s shape
+    merged in (R6): gate clearance and who answered it, emitted keys `new` lacks,
+    EVERY unit whose step and member `new` still has (with attempts and evidence),
+    `driver`, and the `at` of a step both call `done`. Pure.
+
+    An open attempt arrives with `returned=now` and `outcome=abandoned` — what
+    `fr run claim --abandoned` writes — so the result holds nothing and `advance`
+    can re-brief. Steps and members `new` no longer has are dropped."""
+    steps: dict[str, StepRecord] = {}
+    for step_id, fresh in new.steps.items():
+        prior = old.steps.get(step_id)
+        if prior is None:
+            steps[step_id] = fresh
+            continue
+        update: dict[str, object] = {}
+        if prior.gate is not None:
+            update["gate"] = prior.gate
+        if prior.answered_by is not None:
+            update["answered_by"] = prior.answered_by
+        if prior.emitted:
+            update["emitted"] = {**prior.emitted, **(fresh.emitted or {})}
+        if prior.state == "done" and fresh.state == "done" and prior.at is not None:
+            update["at"] = prior.at
+        record = fresh.model_copy(update=update)
+        for key in units.unit_keys(prior):
+            unit = units.unit_record(prior, key)
+            if unit is None or not _carried_key_exists(key, step_id, fresh.members):
+                continue
+            record = units.with_unit_record(
+                record, key, _carry_unit(unit, units.unit_record(fresh, key), now=now)
+            )
+        steps[step_id] = record
+    return new.model_copy(update={"steps": steps, "driver": old.driver or new.driver})
 
 
 def _rel(repo_root: Path, path: Path) -> str:
@@ -560,8 +800,18 @@ def adopt_run(
     pr_state: PrStateFn | None = None,
     shipped_root: Path | None = None,
     notes: list[str] | None = None,
+    supersede: bool = False,
+    dry_run: bool = False,
+    superseded: Superseded | None = None,
 ) -> RunState:
     """Reconstruct and save a run cursor for `target`. Returns the saved state.
+
+    `supersede` (spec 2026-10-05-run-upgrade-midflight §C) replaces the plan's
+    existing run: the old cursor is parsed and carried forward
+    (`carry_forward`), its file removed, its usage file moved to the new id. With
+    no existing run it is a plain adopt. `dry_run` previews that replacement —
+    nothing is written — and is ignored when there is nothing to replace.
+    `superseded` is the outparam describing it.
 
     The run file is written beside the artifacts it describes — in
     `repo_root`, never through `ensure_run_workspace`. `fr run start` enters
@@ -591,6 +841,8 @@ def adopt_run(
     except WorkflowError as e:
         raise AdoptError(str(e)) from e
 
+    old_id: str | None = None
+    old_state: RunState | None = None
     if plan_rel is not None:
         # IDEMPOTENT (review r5-e4). A plan that already has a run has a
         # cursor; minting a second splits the control log in two, and
@@ -600,11 +852,17 @@ def adopt_run(
 
         existing = find_run_for_plan(repo_root, Path(plan_rel))
         if existing is not None:
-            raise AdoptError(
-                f"{plan_rel} already has a run: {existing}. Inspect it with "
-                f"`fr run status {existing}`, or advance it with "
-                f"`fr run advance {existing}`."
-            )
+            if not supersede:
+                raise AdoptError(
+                    f"{plan_rel} already has a run: {existing}. Inspect it with "
+                    f"`fr run status {existing}`, move it onto the current shape with "
+                    f"`fr run reshape {existing}`, or replace it with "
+                    f"`fr run adopt {plan_rel} --supersede` (carries its gate answers, "
+                    "units and evidence forward)."
+                )
+            old_id = existing
+            old_state = _owning_old_cursor(repo_root, existing, plan_rel)
+            _refuse_live_step_records(repo_root, existing)
 
     if pr_url is not None and plan is not None:
         _check_pr_repo(pr_url, plan.meta.target_repo)
@@ -631,7 +889,9 @@ def adopt_run(
     except RunStateError as e:
         raise AdoptError(str(e)) from e
     path = run_path(repo_root, rid)
-    if path.exists():
+    # The same-day case: the derived path IS the old cursor's, and overwriting
+    # it is the point. Any OTHER existing path still refuses.
+    if path.exists() and not (old_id is not None and rid == old_id):
         raise AdoptError(
             f"run {rid!r} already exists at {path} — adoption reconstructs a cursor for "
             "work that has none; use `fr run status` to see the one that exists"
@@ -640,15 +900,162 @@ def adopt_run(
     if notes is not None:
         notes.extend(adoption.notes)
 
+    journal, visual_phases = _review_inputs(repo_root, plan_rel, adoption, notes)
+    started = _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
     state = build_run_state(
         manifest,
         adoption,
         run_id=rid,
         branch=resolved_branch,
-        started=_dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
+        started=started,
+        journal=journal,
+        visual_phases=visual_phases,
+        notes=notes,
+        prior=old_state,
     )
+    if old_id is None or old_state is None:
+        save_run_state(repo_root, state)
+        return state
+
+    # The carried units are applied AFTER inference (§D): a review the old
+    # cursor resolved keeps its real evidence over an inferred historical one.
+    state = carry_forward(old_state, state, now=started)
+    effects = superseded if superseded is not None else Superseded(old=old_id)
+    effects.old = old_id
+    effects.holds = open_holds(old_state)
+    moved = _usage_move(repo_root, old_id, rid)
+    if dry_run:
+        return state
     save_run_state(repo_root, state)
+    effects.written_new = True
+    if old_id != rid:
+        run_path(repo_root, old_id).unlink()
+        effects.removed.append(run_path(repo_root, old_id))
+    if moved is not None:
+        src, dst = moved
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        src.rename(dst)
+        effects.removed.append(src)
+        effects.written.append(dst)
     return state
+
+
+def _readable_old_cursor(repo_root: Path, run_id: str) -> RunState:
+    """The run `--supersede` replaces, parsed with the CURRENT model. One fr
+    cannot read refuses: carrying forward from a file it cannot read would be a
+    guess, and `fr migrate artifacts --yes` is the fix."""
+    try:
+        return load_run_state(repo_root, run_id)
+    except RunStateError as e:
+        raise AdoptError(
+            f"run {run_id!r} was written for a different fr and cannot be read by this "
+            f"one ({e}) — carrying its facts forward would be a guess. Run "
+            "`fr migrate artifacts --yes` first, then retry."
+        ) from e
+
+
+def _owning_old_cursor(repo_root: Path, run_id: str, plan_rel: str) -> RunState:
+    """The cursor `--supersede` replaces — and proof that the file it will read,
+    carry from and DELETE is the one that names this plan (reviews p3-r1, p3-r2).
+
+    `find_run_for_plan` returns the `run:` string from inside the matching file,
+    not that file's name. Used as a path segment unchecked, a crafted `run:
+    ../…` steers the read, the unlink and the usage rename outside `runs/`; and a
+    file whose name disagrees with its `run:` sends all three to a DIFFERENT
+    run's file. So: the id must be a valid run id, and `runs/<id>.yaml` must
+    itself record this plan — otherwise refuse, touching nothing."""
+    try:
+        validate_run_id(run_id)
+    except RunStateError as e:
+        raise AdoptError(
+            f"the run file that names {plan_rel} records an invalid run id {run_id!r} "
+            f"({e}) — fr will not build a path from it. Inspect docs/superpowers/runs/ "
+            "by hand."
+        ) from e
+    mismatch = AdoptError(
+        f"a run file names {plan_rel} with `run: {run_id}`, but "
+        f"{run_path(repo_root, run_id).relative_to(repo_root)} is not that cursor — "
+        "a run file whose name disagrees with its `run:` field. Superseding would "
+        "read and delete the wrong file; rename the file to match its `run:` first."
+    )
+    if not run_path(repo_root, run_id).is_file():
+        raise mismatch
+    state = _readable_old_cursor(repo_root, run_id)
+    owns = any(
+        (record.emitted or {}).get("plan", "").rstrip("/") == plan_rel.rstrip("/")
+        for record in state.steps.values()
+    )
+    if state.run != run_id or not owns:
+        raise mismatch
+    return state
+
+
+def _refuse_live_step_records(repo_root: Path, run_id: str) -> None:
+    """A step record under `<old>.records/` is work in hand whose `run:` names the
+    old id. `pr-body.md` is a rendering, not a record."""
+    from fr.record.model import records_dir
+
+    folder = records_dir(repo_root, run_id)
+    if not folder.is_dir():
+        return
+    live = sorted(p.name for p in folder.iterdir() if p.is_file() and p.name != "pr-body.md")
+    if live:
+        raise AdoptError(
+            f"run {run_id!r} has a live step record ({', '.join(live)} under "
+            f"{folder.relative_to(repo_root).as_posix()}/) — work in hand that names it. "
+            "Resolve it (`fr run resolve --record`) or delete it, then retry."
+        )
+
+
+def _usage_move(repo_root: Path, old_id: str, new_id: str) -> tuple[Path, Path] | None:
+    """`(old usage file, new usage file)` when the old run has one that must move
+    to the new id; refuses (before anything is written) when the destination
+    already exists."""
+    from fr.usage.file import usage_path
+
+    if old_id == new_id:
+        return None
+    src, dst = usage_path(repo_root, old_id), usage_path(repo_root, new_id)
+    if not src.is_file():
+        return None
+    if dst.exists():
+        raise AdoptError(
+            f"{dst} already exists — the usage file of run {old_id!r} cannot move onto it. "
+            "Pick another --run-id, or remove that file."
+        )
+    return src, dst
+
+
+def _review_inputs(
+    repo_root: Path, plan_rel: str | None, adoption: Adoption, notes: list[str] | None
+) -> tuple[list[JournalEntry], frozenset[int]]:
+    """What R8's inference reads from disk: the plan journal's entries (the
+    reader the resolve-time evidence gate uses) and the complete phases that
+    owe `visual` evidence. Fail-soft and downward: an unreadable journal infers
+    no review, an unreadable matrix or plan counts the phase as owing visual."""
+    if plan_rel is None:
+        return [], frozenset()
+    from fr.run.visual import VisualRefusedError, owed_for_unit
+
+    entries: list[JournalEntry] = []
+    path = resolve_journal_read_path(repo_root, "plan", Path(plan_rel).name)
+    if path.is_file():
+        try:
+            entries = parse_journal(path.read_text())
+        except (JournalParseError, OSError) as e:
+            if notes is not None:
+                notes.append(f"the plan journal {path} is unreadable ({e}) — no review inferred.")
+    visual: set[int] = set()
+    for item, value in adoption.phases.items():
+        n = int(item.removeprefix("phase/"))
+        if value != "done":
+            continue
+        try:
+            if owed_for_unit(repo_root, plan_rel=plan_rel, phase=n, spec_rel=None):
+                visual.add(n)
+        except VisualRefusedError:
+            visual.add(n)
+    return entries, frozenset(visual)
 
 
 # --- what the migration offers -------------------------------------------

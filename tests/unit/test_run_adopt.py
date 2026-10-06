@@ -1098,3 +1098,133 @@ def test_a_plan_whose_cursor_is_still_in_the_v4_shape_is_not_offered_for_adoptio
 
     assert find_run_for_plan(repo, Path("docs/superpowers/plans") / slug) == fixture.stem
     assert adoptable_plans(repo) == ()
+
+
+# --- R8: adoption infers historical reviews (spec 2026-10-05 §D) -------------
+
+
+def _review_entry(phase: int, **extra: object) -> dict[str, object]:
+    return {"kind": "review", "id": f"rev-{phase}", "phase": phase, "title": "r", **extra}
+
+
+def _adopt_reviewed(
+    tmp_path: Path, repo_root: Path, entries: list[dict[str, object]], *, visual: bool = False
+) -> tuple[object, list[str]]:
+    """Adopt a two-phase, all-complete plan against the shipped `fr-goal`
+    shape, with `entries` in its plan journal."""
+    from fr.test_support import build_plan_journal
+
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2, complete=2)
+    if visual:
+        from tests.unit.requirements_support import row, write_matrix
+
+        phase = plan_dir / "02.yaml"
+        phase.write_text(
+            phase.read_text().replace("tag: agentic\n", "tag: agentic\n  acceptance:\n  - ui-row\n")
+        )
+        out = row(SPEC_REL, rid="ui-row", status="ci")
+        out["visual"] = {"states": ["accepted"], "interactions": ["20 cap"]}
+        write_matrix(repo, [out])
+    if entries:
+        build_plan_journal(repo, PLAN_SLUG, entries)
+    notes: list[str] = []
+    state = adopt_run(repo, plan_dir, branch=BRANCH, shipped_root=shipped, notes=notes)
+    return state, notes
+
+
+def test_adoption_marks_journal_reviewed_phases_done_as_historical(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    fixed = [
+        {"kind": "finding", "id": "f-1", "phase": 1, "state": "open", "title": "f"},
+        {"kind": "finding", "id": "f-1-fix", "state": "fixed", "resolves": "f-1", "title": "x"},
+    ]
+    state, _ = _adopt_reviewed(tmp_path, repo_root, [*fixed, _review_entry(1), _review_entry(2)])
+
+    record = state.steps["implement"]  # type: ignore[attr-defined]
+    assert units.unit_state(record, "phase/1/review-phase") == "done"
+    assert units.evidence_of(record, "phase/1/review-phase") == {
+        "review": "rev-1",
+        "reviewer": "historical",
+        "findings": "f-1",
+    }
+    assert units.evidence_of(record, "phase/2/review-phase") == {
+        "review": "rev-2",
+        "reviewer": "historical",
+        "findings": "none",
+    }
+    assert record.state == "done"
+    assert state.cursor == "journal-check"  # type: ignore[attr-defined]
+
+
+def test_adoption_leaves_a_phase_with_an_open_finding_pending(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    open_f = {"kind": "finding", "id": "f-2", "phase": 2, "state": "open", "title": "f"}
+    state, notes = _adopt_reviewed(
+        tmp_path, repo_root, [_review_entry(1), _review_entry(2), open_f]
+    )
+
+    record = state.steps["implement"]  # type: ignore[attr-defined]
+    assert units.unit_state(record, "phase/1/review-phase") == "done"
+    assert units.unit_state(record, "phase/2/review-phase") in (None, "pending")
+    assert state.cursor == "implement"  # type: ignore[attr-defined]
+    assert any("phase 2 has open findings: f-2" in n for n in notes)
+
+
+def test_adoption_leaves_a_phase_with_an_unauthorized_fix_pending(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    chain = [
+        {"kind": "finding", "id": "f-2", "phase": 2, "state": "open", "title": "f"},
+        {"kind": "finding", "id": "f-2-oos", "state": "open", "out_of_scope": True,
+         "resolves": "f-2", "title": "oos"},
+        {"kind": "finding", "id": "f-2-fix", "state": "fixed", "resolves": "f-2", "title": "x"},
+    ]  # fmt: skip
+    state, notes = _adopt_reviewed(
+        tmp_path, repo_root, [_review_entry(1), _review_entry(2), *chain]
+    )
+
+    record = state.steps["implement"]  # type: ignore[attr-defined]
+    assert units.unit_state(record, "phase/2/review-phase") in (None, "pending")
+    assert state.cursor == "implement"  # type: ignore[attr-defined]
+    assert any("phase 2" in n and "f-2" in n and "without the operator" in n for n in notes)
+
+
+def test_adoption_leaves_a_phase_with_no_review_entry_pending(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    state, notes = _adopt_reviewed(tmp_path, repo_root, [_review_entry(1)])
+
+    record = state.steps["implement"]  # type: ignore[attr-defined]
+    assert units.unit_state(record, "phase/1/review-phase") == "done"
+    assert units.unit_state(record, "phase/2/review-phase") in (None, "pending")
+    assert state.cursor == "implement"  # type: ignore[attr-defined]
+    assert any("no `kind=review` entry for phase 2" in n for n in notes)
+
+
+def test_adoption_leaves_a_phase_owing_visual_evidence_pending(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    state, notes = _adopt_reviewed(
+        tmp_path, repo_root, [_review_entry(1), _review_entry(2)], visual=True
+    )
+
+    record = state.steps["implement"]  # type: ignore[attr-defined]
+    assert units.unit_state(record, "phase/2/review-phase") in (None, "pending")
+    assert state.cursor == "implement"  # type: ignore[attr-defined]
+    assert any("phase 2 owes visual evidence" in n for n in notes)
+
+
+def test_a_review_entry_created_after_adoption_started_is_not_historical(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    state, notes = _adopt_reviewed(
+        tmp_path, repo_root, [_review_entry(1), _review_entry(2, created="2999-01-01T00:00:00")]
+    )
+
+    record = state.steps["implement"]  # type: ignore[attr-defined]
+    assert units.unit_state(record, "phase/2/review-phase") in (None, "pending")
+    assert any("phase 2" in n and "not before this run started" in n for n in notes)
