@@ -313,3 +313,8 @@ fr-audit SKILL.md reworded (compare writes nothing, --steps listed); both mirror
 ### p3-r7-resolved · finding [fixed] · resolves p3-r7: _journal_counts re-implemented the journal fold via private _record_state (phase 3)
 
 public fr.journal.model.finding_states_and_reopens on a shared _fold_full walk; test_the_journal_fold_reports_reopens_without_a_second_walk.
+
+<!-- fr:journal kind=discovery scope=plan id=deliver-merge-1042-model-semantics created=2026-10-06T22:18:04+00:00 -->
+### deliver-merge-1042-model-semantics · discovery · Merging main: #1042's binding guard asserted the substituted binding in Attempt.model
+
+This branch's R7 moved the dispatch-time binding to Attempt.bound; test_run_binding_guard.py's two assertions now check bound (3db8897ac). Only the full suite on the merged tree could see it.
