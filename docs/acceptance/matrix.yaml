@@ -6695,9 +6695,15 @@ rows:
       on, a self-hosted (GitHub Enterprise) instance included, never the SaaS default
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-forge-remainder-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hostclient.py#TestTriageBatchMakeClient::test_a_ghe_repo_url_keeps_its_host
+      - super-fr:tests/unit/test_gh_host.py#test_a_hosted_client_sets_gh_host_on_a_run_gh_path
+      - super-fr:tests/unit/test_gh_host.py#test_an_unknown_host_fails_closed_on_the_run_gh_path
+    status: ci
+    notes: 'super-fr#892: make_client resolves through hostclient.client_for_url, keeping
+      a self-hosted host; RealGhClient threads it as GH_HOST only for a host gh is logged
+      into (fail closed).'
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin
