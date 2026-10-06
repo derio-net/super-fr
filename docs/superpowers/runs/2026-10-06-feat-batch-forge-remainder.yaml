@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-forge-remainder
 workflow: fr-goal@1
 branch: feat/batch-forge-remainder
 started: '2026-10-06T06:34:45+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -44,7 +44,11 @@ steps:
           returned: '2026-10-06T07:47:47+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-10-06T07:47:48+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
