@@ -4927,6 +4927,15 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
+  - id: triage-batch-adopt-resumable
+    capability: Backlog triage
+    acceptance: A batch adopt that fails part-way is finished by running the same command
+      again, with no step done twice
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
