@@ -45,6 +45,7 @@ __all__ = [
     "pre_merge_owed_lines",
     "premature_closes",
     "prerelease_route",
+    "referenced_refs",
     "render_out_of_scope",
     "render_pr_body",
     "shared_closing_keywords",
@@ -98,7 +99,7 @@ def _one_ref_per_link(match: re.Match[str]) -> str:
 
 
 def _closing_lines(
-    body: str, *, as_github: bool = False
+    body: str, *, as_github: bool = False, keyword: re.Pattern[str] = _KEYWORD
 ) -> Iterator[tuple[str, str, list[re.Match[str]], list[re.Match[str]]]]:
     """`(raw line, cleaned line, keyword matches, reference matches)` for every line of `body`
     that carries both a closing keyword and an issue reference. Code (fenced or
@@ -123,7 +124,7 @@ def _closing_lines(
                     fence = None
             continue
         line = _LINK.sub(_one_ref_per_link, _CODE_SPAN.sub("", raw)).replace("*", "")
-        keywords = list(_KEYWORD.finditer(line))
+        keywords = list(keyword.finditer(line))
         refs = list(pattern.finditer(line))
         if keywords and refs:
             yield raw, line, keywords, refs
@@ -142,6 +143,23 @@ def closing_refs(body: str, *, as_github: bool = False) -> list[tuple[str, str, 
             before = [k for k in keywords if k.end() <= r.start()]
             out.append((raw.strip(), (before[-1] if before else keywords[0]).group(1), r.group(0)))
     return out
+
+
+_REFS_KEYWORD = re.compile(r"\brefs?\b", re.IGNORECASE)
+
+
+def referenced_refs(body: str) -> list[str]:
+    """Every issue reference written on a `Refs` line of `body`, as written —
+    the mention that does NOT close (spec 2026-10-06-verification-strategies §D),
+    read with `closing_refs`' skipping of code and fr's own render, and its
+    GitHub spellings (`GH-<n>`)."""
+    return [
+        r.group(0)
+        for _raw, _line, _keywords, refs in _closing_lines(
+            body, as_github=True, keyword=_REFS_KEYWORD
+        )
+        for r in refs
+    ]
 
 
 def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:

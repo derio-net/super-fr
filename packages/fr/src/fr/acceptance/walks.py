@@ -13,10 +13,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr.acceptance.model import AcceptanceError, Matrix, Row, split_ref
+from fr.labels import FR_AWAITING_LIVE
 
 __all__ = ["AWAITING_LIVE_LABEL", "holds_open", "issues_now_closable", "walk_verified"]
 
-AWAITING_LIVE_LABEL = "fr:awaiting-live"
+AWAITING_LIVE_LABEL = FR_AWAITING_LIVE.name
 """The label an issue carries while a post-merge row citing it waits for its
 walk (R17)."""
 

@@ -106,6 +106,15 @@ FR_PR_READY = LabelDef("fr:pr-ready", "0E8A16", "PR is open; awaiting review")
 # phase ("already handed to a runner, don't re-dispatch").
 FR_SYNCED = LabelDef("fr:synced", "6A630D", "Handed to the runner")
 
+# An issue whose fix has merged but whose post-merge acceptance row still waits
+# for its walk (spec 2026-10-06-verification-strategies §F, R17). Not a queue
+# marker: triage keeps it out of the ranked backlog, nothing dispatches on it.
+FR_AWAITING_LIVE = LabelDef(
+    "fr:awaiting-live",
+    "FBCA04",
+    "Merged; a post-merge acceptance row still awaits its live walk",
+)
+
 RUNNER_LABEL_COLOR = "1D76DB"
 
 
