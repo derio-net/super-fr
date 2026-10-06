@@ -653,3 +653,8 @@ Filed at closeout as #1001.
 ### p2-suite-log-background-unwitnessed-resolved-2 · finding [deferred → #1002] · resolves p2-suite-log-background-unwitnessed: fr cannot witness a suite log written by a run_in_background command, which the brief's own long_commands rule prescribes
 
 Filed at closeout as #1002.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11-resolved-2 created=2026-10-06T08:02:11+00:00 state=open resolves=p4-r11 tracked_by=#1003 -->
+### p4-r11-resolved-2 · finding [deferred → #1003] · resolves p4-r11: local check-to-write race between the symlink check and copy2 in state_sync (local attacker only)
+
+Filed at closeout as #1003.
