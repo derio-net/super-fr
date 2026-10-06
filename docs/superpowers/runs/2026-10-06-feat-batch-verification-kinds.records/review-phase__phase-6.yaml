@@ -1,0 +1,61 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-verification-kinds
+step: review-phase
+item: phase/6
+outcome: done
+journal:
+- kind: finding
+  id: p6-r1
+  phase: 6
+  review_scope: in
+  title: prerelease SHA could come from a local-only or stale ref
+  body: Raised by the independent phase-6 reviewer with file:line evidence (see p6-review).
+- kind: finding
+  id: p6-r2
+  phase: 6
+  review_scope: in
+  title: workflow checked out any ref as 'branch'
+  body: Raised by the independent phase-6 reviewer with file:line evidence (see p6-review).
+- kind: finding
+  id: p6-r3
+  phase: 6
+  review_scope: in
+  title: workflow tests did not assert the security properties
+  body: Raised by the independent phase-6 reviewer with file:line evidence (see p6-review).
+- kind: finding
+  id: p6-r4
+  phase: 6
+  review_scope: in
+  title: --dry-run succeeded on glab/tea
+  body: Raised by the independent phase-6 reviewer with file:line evidence (see p6-review).
+- kind: review
+  id: p6-review
+  phase: 6
+  title: Phase 6 independent code review — 4 findings, all in scope, all fixed
+  body: 'Reviewer confirmed no script injection (branch only via env, always quoted), tags stay under
+    rc/, no overwrite, only the tag pushed, minimal permissions (pull-requests: read needed for the PR
+    link), SHA-pinned checkout, ci-budget watch list, and that the Python slug, bash slug and PR-body
+    route agree. Raised p6-r1..r4 plus three sub-bar nits; all were fixed test-first by a separate fixer,
+    the nits too (SSH remote → git+ssh:// source, one remote for SHA/URL/dispatch, GitRefusal keeps its
+    reason; 2c9f37f03). Suite: 9355 passed, 105 skipped.'
+resolves:
+- id: p6-r1
+  state: fixed
+  body: SHA from `git ls-remote <remote> refs/heads/<branch>`; absent on remote → exit 2; workflow takes
+    a required `sha` input and refuses a moved head. ad246f2d2.
+- id: p6-r2
+  state: fixed
+  body: Checkout refs/heads/<branch>; ls-remote --exit-code --heads check; BRANCH and SHA via env only.
+    f376a5c96.
+- id: p6-r3
+  state: fixed
+  body: 'Assert no ${{ in run:, inputs via env, every uses: SHA-pinned, bash slug line equals rc_tag (proven
+    to fail when changed). bb450c0cc.'
+- id: p6-r4
+  state: fixed
+  body: Backend decided before dry-run; non-GitHub exits 2 UnsupportedForgeOperation; dry-run cases tested.
+    d0079c899.
+evidence:
+  review: p6-review
+  reviewer: ae7ca271c87fd8716
+  model: claude-opus-5-5
