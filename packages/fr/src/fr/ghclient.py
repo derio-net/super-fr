@@ -8,6 +8,7 @@ process spawning.
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -36,6 +37,31 @@ class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec 
         super().__init__(
             f"`{op}` is not supported on the {backend} backend yet (tracked in {tracked_by})"
         )
+
+
+class CommandRunner(Protocol):
+    """How an adapter's lookup runs one CLI command (spec
+    2026-10-06-forge-remainder §4.B). The isolation lifecycle injects its own
+    `Runner`, so its network env and timeout apply; `None` means the adapter's
+    default, `run_cli`."""
+
+    def __call__(self, argv: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]: ...
+
+
+# The exit a shell gives a command it cannot find: what `run_cli` answers for a
+# missing binary, so a lookup reads it like any other failed call.
+_NOT_FOUND_EXIT = 127
+
+
+def run_cli(
+    argv: list[str], *, cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """The adapters' default `CommandRunner`. Never raises for a missing
+    binary: it comes back as exit 127, which every lookup reads as `None`."""
+    try:
+        return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, env=env)
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(argv, _NOT_FOUND_EXIT, stdout="", stderr=str(exc))
 
 
 class GhClient(Protocol):
@@ -205,6 +231,22 @@ class GhClient(Protocol):
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         """`{default, allowed}`: the viewer's default merge method for *repo*
         (one of `MERGE_METHODS`, or None) and the methods the repo allows."""
+        ...
+
+    def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
+        """The default branch of the repository checked out at *cwd*, as the
+        forge reports it; None when the CLI fails, is missing or prints
+        nothing usable. Never raises for a CLI failure (spec
+        2026-10-06-forge-remainder R2)."""
+        ...
+
+    def pr_for_branch(
+        self, branch: str, *, cwd: Path, run: CommandRunner | None = None
+    ) -> dict[str, Any] | None:
+        """The PR/MR whose head is *branch* in the repository at *cwd*:
+        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str, "mergedAt": str|None}`,
+        each forge's own state vocabulary coerced to that one. None when there
+        is none, or the CLI fails, is missing or prints something unparseable."""
         ...
 
     def issues_enabled(self, repo: str | None = None) -> bool | None:

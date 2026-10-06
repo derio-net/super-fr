@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from fr import gh as _gh
-from fr.ghclient import MERGE_METHODS
+from fr.ghclient import MERGE_METHODS, CommandRunner, run_cli
 from fr.labels import LabelDef
 
 # `gh pr checks` exits 8 when any check is still pending; its JSON is on stdout.
@@ -434,6 +434,39 @@ class RealGhClient:
         }
 
     @_hosted
+    def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
+        result = _gh_runner(run)(
+            [
+                "gh",
+                "repo",
+                "view",
+                "--json",
+                "defaultBranchRef",
+                "--jq",
+                ".defaultBranchRef.name",
+            ],
+            cwd=cwd,
+        )
+        out = (result.stdout or "").strip()
+        return out if result.returncode == 0 and out else None
+
+    @_hosted
+    def pr_for_branch(
+        self, branch: str, *, cwd: Path, run: CommandRunner | None = None
+    ) -> dict[str, Any] | None:
+        result = _gh_runner(run)(
+            ["gh", "pr", "view", branch, "--json", "state,url,mergedAt"],
+            cwd=cwd,
+        )
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            return None
+        try:
+            data = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    @_hosted
     def issues_enabled(self, repo: str | None = None) -> bool | None:
         if not repo:
             return None
@@ -448,6 +481,14 @@ class RealGhClient:
 _CI_PASS = {"SUCCESS"}
 _CI_FAIL = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"}
 _CI_PENDING = {"PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS"}
+
+
+def _gh_runner(run: CommandRunner | None) -> CommandRunner:
+    """*run*, else `run_cli` carrying `GH_HOST` — `_gh._env()` read at call
+    time, so it is the calling method's `@_hosted` scope that applies."""
+    if run is not None:
+        return run
+    return lambda argv, *, cwd: run_cli(argv, cwd=cwd, env=_gh._env())
 
 
 def _coerce_ci_state(rollup: str) -> str:

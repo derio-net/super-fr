@@ -33,7 +33,7 @@ from typing import Any, cast
 from urllib.parse import quote
 
 from fr import glab as _glab
-from fr.ghclient import UnsupportedBatchOps
+from fr.ghclient import CommandRunner, UnsupportedBatchOps, run_cli
 from fr.labels import LabelDef
 
 # GitLab-specific MR URL shape — deliberately NOT in the shared fr._urls
@@ -245,6 +245,38 @@ class RealGlabClient(UnsupportedBatchOps):
         """Post a comment via `glab issue note` (glab's name for gh's
         `issue comment` — verified directly against `glab issue --help`)."""
         self._glab(["issue", "note", str(number), "--repo", repo, "--message", body])
+
+    def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
+        result = (run or run_cli)(
+            ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"], cwd=cwd
+        )
+        out = (result.stdout or "").strip()
+        # glab's --jq already extracts the bare branch name — no prefix to strip
+        return out if result.returncode == 0 and out else None
+
+    def pr_for_branch(
+        self, branch: str, *, cwd: Path, run: CommandRunner | None = None
+    ) -> dict[str, Any] | None:
+        """`glab mr view <branch>` — a single-shot query like gh's (`glab mr
+        view` accepts a bare branch name directly, per its own `--help`,
+        unlike the URL case in `pr_status_by_url`)."""
+        result = (run or run_cli)(["glab", "mr", "view", branch, "--output", "json"], cwd=cwd)
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            return None
+        try:
+            raw = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(raw, dict):
+            return None
+        raw_state = raw.get("state", "opened")
+        if raw_state == "merged":
+            state = "MERGED"
+        elif raw_state in ("closed", "locked"):
+            state = "CLOSED"
+        else:
+            state = "OPEN"
+        return {"state": state, "url": raw.get("web_url", ""), "mergedAt": raw.get("merged_at")}
 
     def issues_enabled(self, repo: str | None = None) -> bool | None:
         """`issues_enabled` of GitLab's `projects/:id` object, via `glab api`."""
