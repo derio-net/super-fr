@@ -302,3 +302,6 @@ R7 matches §B (verify, override, strategy, shape); a spec line may give a reaso
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-verification-strategies-p7 created=2026-10-06T11:17:09+00:00 -->
 ### phase-split-2026-10-06-verification-strategies-p7 · decision · ask: dogfood install contract and scenarios (R25) plus skills and docs
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-06-verification-strategies-p2 created=2026-10-06T11:17:10+00:00 -->
+### tier-2026-10-06-verification-strategies-p2 · decision · hard: two artifact shape changes with a body-rewriting migration and frozen readers every caller relies on
