@@ -1,0 +1,140 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Tier and bound model on the attempt; per-phase tables in fr run cost and
+    the PR body (R7-R9)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - cost-evidence-bound-model
+  - cost-evidence-phase-table
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/model.py
+  - packages/fr/src/fr/run/cost.py
+  - packages/fr/src/fr/models.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/run_bound_model.py
+  - packages/fr/src/fr/artifacts/run_usage_split.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - docs/superpowers/runs/*.yaml
+  - tests/unit/test_run*.py
+  - tests/unit/test_migration*.py
+  - tests/unit/test_pr_body*.py
+  - tests/unit/test_record*.py
+  - docs/explainers/*.md
+  - docs/explainers/*.html
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: tier and bound on subagent attempts (spec §D, R7)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests that `advance` opening a subagent dispatch (agent_type set) records `tier` (the phase's resolved
+      tier) and `bound` (the tier's binding) and leaves `model` unset; that `resolve` keeps `tier`/`bound` and sets
+      `model` to the observed subagent model (compared against `bound`, falling back to `model`); that an
+      orchestrator-run attempt keeps `orchestrator_model`'s observation and has no tier/bound; that an unobservable
+      model stays None; that a synthesized attempt carrying `tier` or `bound` is refused. Confirm they fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `tier` and `bound` to `fr.run.model.Attempt` and to the synthesized-attempt validator's list;
+      change `_open_dispatch` and `_observed_model` in commands/run_cmd.py per spec §D; move `_model_family` to
+      `fr/models.py` (re-export or update callers). Tests green.
+- number: 2
+  title: run kind 8 → 9 (spec §D)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests that the 8 → 9 migration stamps a v8 cursor without rewriting it, refuses a body that does not read
+      as v8 under the live model, and that the run chain test asserts every hop up to `[..., 8, 9]`. Confirm they
+      fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: `run` `current_version` 9; new `fr/artifacts/run_bound_model.py` following `run_driver.py`'s 7 → 8
+      precedent (an `_already_v8` live-model check beside `_already_v7` in run_usage_split.py, never
+      `cursor_guard`), imported from `fr/artifacts/__init__.py`. Run `uv run fr migrate artifacts --yes`, commit,
+      and confirm `uv run fr validate artifacts` passes. Tests green.
+- number: 3
+  title: Per-phase rows and the role-split step table (spec §E, R8)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests for `fr.run.cost.phase_rows(state, entries)`: tier/bound/ran from the phase's latest
+      non-synthesized implement-phase attempt; ran `—` when that attempt has no `bound`; mismatch flag by model
+      family; executor/reviewer/orchestrator figures summed from `units` (orchestrator = implement + review units);
+      `summarize` step rows carrying main and subagent figures. Priced and unpriced cases. Confirm they fail.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement `PhaseRow`, `phase_rows`, and the role split in `summarize`; print both tables from the
+      `fr run cost` command (turns, `cache-read / output` compacted like `1.2M / 34k`, dollars, `—` when
+      unobserved). Tests green.
+- number: 4
+  title: The PR body's Cost section (spec §E, R9)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: `render_pr_body` tests: `## Cost` carries the step table with main/subagent columns and the per-phase
+      table (tier, bound, ran, mismatch mark, executor/reviewer/orchestrator), with tokens beside dollars and `—`
+      for unobserved figures; the existing required-section checks still pass. Confirm they fail.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: rewrite `pr_body._cost` to render both tables from `summarize` and `phase_rows`. Tests green.
+- number: 5
+  title: REFACTOR + quality gate, explainer currency
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Check `docs/explainers/*.md` for prose describing `fr run cost` or the PR body's cost table; if one would now
+      mislead, update the `.md` and regenerate its `.html` with the `--isolated` renderer command from
+      `.claude/rules/explainers-currency.md` (verify the unmodified re-render is byte-identical first), else note
+      "no explainer describes it" in the step record. Tidy any duplication between the CLI and PR-body
+      renderers (one shared formatter). Run ruff format, ruff check, mypy, then the full suite into a log outside
+      `.records/`, after the last code commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

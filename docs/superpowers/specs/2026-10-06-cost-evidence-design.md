@@ -316,3 +316,9 @@ runs, and no foreign host appears in usage files (`file.py`'s allowlist).
   medians, `n`, a missing input shown as `—`, determinism.
 - Post-merge — operator-driven: the next real `/fr-goal` run's PR body shows
   the per-phase table with tier, bound and ran filled.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-06-cost-evidence | `derio-net/super-fr` | `2026-10-06-cost-evidence` | — |

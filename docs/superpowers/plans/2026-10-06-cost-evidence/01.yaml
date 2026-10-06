@@ -1,0 +1,188 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Usage capture splits main vs subagent per step and per unit; usage kind v2
+    (R1-R6)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - cost-evidence-unit-attribution
+  - cost-evidence-usage-v2-migration
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/usage/model.py
+  - packages/fr/src/fr/usage/file.py
+  - packages/fr/src/fr/usage/rollup.py
+  - packages/fr/src/fr/usage/capture.py
+  - packages/fr/src/fr/usage/backfill.py
+  - packages/fr/src/fr/usage/readers/*.py
+  - packages/fr/src/fr/run/cost.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/usage_split_v2.py
+  - packages/fr/src/fr/artifacts/run_usage_split.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - docs/superpowers/usage/*.yaml
+  - tests/unit/test_usage*.py
+  - tests/unit/test_migration*.py
+  - tests/unit/test_validate_artifacts.py
+  - tests/fixtures/usage/**
+  - .changes/feat-batch-cost-evidence.yaml
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Smoke — the usage suite is green on this branch before any change
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Smoke: run `uv run pytest tests/unit -q --no-cov -n auto -k "usage or migration"` from the workspace and confirm
+      it passes, and that CI on draft PR #1041 is not red for a reason this branch caused (`gh pr checks 1041`).
+      Record anything red as the phase's first discovery.
+- number: 2
+  title: Agent id on every message (spec §A, R1)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in the reader tests (tests/unit/test_usage_readers*.py or the existing per-reader files), assert
+      `Message.agent_id`: None on main-thread messages; the `<id>` of `agent-<id>.jsonl` on Claude Code subagent
+      messages; the child session id on OpenCode and Hermes child messages. Run and confirm the tests fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add `agent_id: str | None = None` to `fr.usage.model.Message`. Claude Code: pass the stream id into
+      `_messages(records, agent, agent_id)`. OpenCode and Hermes: set `agent_id=owner` when `owner != session`.
+      Run the reader tests and confirm they are green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: the `agent-<id>.jsonl` → id parsing is now needed twice in claude_code.py (briefs and messages); fold
+      it into one helper. Rerun the reader tests.
+- number: 3
+  title: Shared per-message dollars and the per-step role split (spec §B Dollars,
+    R2, R4)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests for a public `fr.usage.rollup.message_dollars(record, weights)` returning (per-message dollars in
+      message order, remainder), equal to what `rollup` attributes today. Tests for `session_entry` writing
+      `steps_by_role` {main, subagent} → step → Figure with usd/turns/input/cache_write/cache_read/output, and the
+      two step invariants of spec §B (main+subagent == steps[s]; `(outside run)` plus remainder for usd), priced
+      and unpriced (usd None everywhere when the session has no dollar figure). Confirm they fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: extract `message_dollars` from `rollup` (rollup calls it; behaviour unchanged, the existing rollup tests
+      stay green). Extend `Figure` with optional `input`, `cache_write`, `cache_read`, `output`. Add
+      `steps_by_role: dict[str, dict[str, Figure]] = {}` to `SessionEntry`, computed in `session_entry`; write it in
+      `_session` field by field (allowlist). Extend `_unavailable_carries_no_figures` to cover it. Tests green.
+- number: 4
+  title: Unit attribution via unit_index (spec §B, R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests for `fr.usage.file.unit_index(cursor)` and `session_entry(record, windows, index)` per the spec's
+      Test Plan bullet 2: executor (implement-phase attempt agent), reviewer (review-phase evidence.reviewer), flat
+      `step/spec-review` → role `agent`, orchestrator by half-open `(dispatched, returned]` interval, a retried
+      unit overlapping a later unit (latest-dispatched interval wins, counted once), a synthesized attempt (no
+      interval, no agent), an open attempt open-ended only when `fr.run.units.open_attempt` holds, and an unmatched
+      subagent under `(unattributed)` role `subagent`. Assert the third §B invariant (units + unattributed ≤
+      per-message total). Confirm they fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: implement `UnitIndex` / `unit_index(cursor)` (reads raw mappings like `units_by_agent`; also yields
+      the agent→unit map so brief re-keying is unchanged), `units: dict[str, dict[str, Figure]] = {}` on
+      `SessionEntry`, computed in `session_entry` when an index is passed, written field by field in `_session`.
+      Replace `units_by_agent` call sites with the index (keep `units_by_agent` as a thin wrapper if other callers
+      need it). Tests green.
+  - id: P1.T4.S3
+    text: |-
+      Callers (spec §B "Callers of session_entry"): `capture.build_capture` and `cost.recompute_entries` pass
+      `unit_index(cursor)`; `backfill` and `refreshed_file` pass None. Add a test that backfill and refreshed_file
+      write neither `steps_by_role` nor `units`. Run tests/unit -k usage and confirm green.
+- number: 5
+  title: Usage kind 1 → 2 (spec §C, R5)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests that a fresh capture (and backfill, and run_usage_split's writer) writes `schema_version: 2`; that
+      the registered 1 → 2 migration stamps a v1 file without rewriting its body and refuses an unparseable one;
+      that `validate_usage` refuses an unknown role key, a non-unit `units` key other than `(unattributed)`, and a
+      negative figure. Extend the usage-kind chain assertion to `[2]`. Confirm they fail.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: `usage` `current_version` 2 in registry.py; `current_usage_schema_version()` helper; pass it at every
+      new-file `UsageFile(...)` constructor (capture.py ×2, backfill.py, artifacts/run_usage_split.py); new
+      `fr/artifacts/usage_split_v2.py` with the `SchemaMigration`, imported from `fr/artifacts/__init__.py`;
+      extend `structure.validate_usage`. Tests green.
+  - id: P1.T5.S3
+    text: |-
+      Dogfood: run `uv run fr migrate artifacts --yes` in the workspace, commit the result, then
+      `uv run fr validate artifacts` and confirm it passes.
+- number: 6
+  title: REFACTOR + quality gate, change fragment
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Add `.changes/feat-batch-cost-evidence.yaml` with `bump: minor` and a one-line summary (per-phase tier, bound
+      model and overhead in fr run cost and the PR body; main vs subagent usage split; fr usage compare).
+      Tidy session_entry if it has grown past one screen (extract the split into a helper module or function).
+      Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the mypy command from
+      AGENTS.md, then the full suite `uv run pytest -q --no-cov -n auto` into a log outside `.records/`, after the
+      last code commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
