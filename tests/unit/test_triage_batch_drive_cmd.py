@@ -1088,6 +1088,100 @@ def test_an_archive_pr_merged_by_hand_is_recorded_so_batch_list_reads_archived(
     assert code == 0 and _lines(out, "adopt") == [], out
 
 
+def test_a_wave_less_archived_batch_is_adopted_by_an_unnamed_drive(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """gh#990: a waved batch makes the default selection drop every wave-less one, so
+    a wave-less batch closed out by hand was never adopted. Adoption ignores the
+    selection; nothing else is done for the wave-less batch."""
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(days=3)).isoformat(), merge_commit="m101")  # fmt: skip
+    checkout.added["m101"] = ("docs/superpowers/journals/debug/b1.md",)
+    loose = _batch("b1", 1, events=_dispatch_event("b1")).replace("    wave: 1\n", "")
+    _state(tmp_path, world, loose, _batch("b2", 2))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "adopt") == ["adopt b1: archived on the default branch already"]
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+    assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
+
+
+def test_a_wave_less_batch_still_owed_is_not_closed_out_outside_the_selection(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """The other half of gh#990: a close-out session is a real action, so it still
+    follows the selection."""
+    world.issues.update({1: "closed", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(days=3)).isoformat(), merge_commit="m101")  # fmt: skip
+    journal = "docs/superpowers/journals/debug/b1.md"
+    checkout.added["m101"] = (journal,)
+    checkout.live.add(journal)
+    checkout.released = True
+    loose = _batch("b1", 1, events=_dispatch_event("b1")).replace("    wave: 1\n", "")
+    _state(tmp_path, world, loose, _batch("b2", 2))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "adopt") == [] and _lines(out, "closeout") == []
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+
+
+def test_plan_mode_with_an_unreadable_clone_says_so_and_plans_no_closeout(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#991: plan mode read a failed clone read as "not archived" and planned a
+    close-out for 37 batches that were archived already. A read it needs that fails
+    is reported, and nothing is planned on it."""
+    from fr.triage.gitseam import GitError
+
+    def _fetch() -> None:
+        raise GitError("not a git repository")
+
+    _merged(world, tmp_path)
+    # merged long enough ago that a close-out is due whatever the release reads
+    world.prs[101].update(merge_commit="m101", merged_at=(NOW - timedelta(days=3)).isoformat())
+    checkout.added["m101"] = ("docs/superpowers/journals/debug/2026-10-01-b1.md",)
+    monkeypatch.setattr(checkout, "fetch", _fetch)
+    before = (tmp_path / "judgements.yaml").read_text()
+    code, out = _drive(tmp_path, "--once")
+    assert _lines(out, "closeout") == [] and _lines(out, "adopt") == [], out
+    assert f"cannot read {REPO}'s clone (not a git repository)" in out
+    assert "b1" in out.split("cannot read", 1)[1].splitlines()[0]
+    assert "closing 1" in out
+    assert (tmp_path / "judgements.yaml").read_text() == before
+
+
+def test_an_archive_pr_retargeted_off_the_default_branch_is_reported_and_never_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """gh#1004: the archive merge never read the PR's base, so a PR retargeted off
+    the default branch would have merged into its new base. It is read fresh, as
+    the export path reads it (p4-r15)."""
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _merged(world, tmp_path, events=closeout)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"],
+             base="release")  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [], out
+    assert _lines(out, "blocked") == [
+        "blocked b1: archive PR #201 (chore/archive-p1) is based on release, not main; "
+        "it is never merged"
+    ], out
+    code, out = _drive(tmp_path, "--yes")  # the loop names the batch it stops on
+    assert code == 3 and world.merged == [], out
+    assert "only blocked batches remain (b1)" in out, out
+    world.prs[201]["base"] = "main"  # retargeted back by the operator
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [m[0] for m in world.merged] == [201]
+
+
 # ------------------------------------------------- the board, every pass (R11)
 
 

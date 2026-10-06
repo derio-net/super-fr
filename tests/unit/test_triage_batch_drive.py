@@ -93,6 +93,7 @@ def _snap(
     live = live if live is not None else {
         e.batch.id: _live(e.pr.number, e.pr.head_oid) for e in queue
     }  # fmt: skip
+    kw.setdefault("default_branch", {REPO: "main"})
     return Snapshot(
         batches=tuple(batches),
         stages=stages,  # type: ignore[arg-type]
@@ -484,7 +485,9 @@ def _closed(bid: str, n: int, *, archive: str | None = None, run: str | None = N
 
 
 def _archive(n: int, head_ref: str, **kw: Any) -> LivePr:
-    return _live(n, f"h{n}", head_ref=head_ref, trusted=kw.pop("trusted", True), **kw)
+    """An archive PR candidate based on the default branch, as `_snap` names it."""
+    return _live(n, f"h{n}", head_ref=head_ref, trusted=kw.pop("trusted", True),
+                 base=kw.pop("base", "main"), **kw)  # fmt: skip
 
 
 def test_an_attributed_ready_green_archive_pr_is_merged() -> None:
@@ -679,12 +682,48 @@ def test_settle_moves_a_merge_that_did_not_land_back_in_flight() -> None:
     assert (settled.in_flight, settled.merged, settled.pending, settled.closing) == (1, 0, 1, 0)
 
 
-def test_archived_evidence_wins_over_a_hand_pr_and_only_the_selection_is_adopted() -> None:
+def test_archived_evidence_wins_over_a_hand_pr_and_an_unselected_batch_is_adopted_too() -> None:
+    """Adopting a finished close-out is bookkeeping, so it ignores the selection
+    (gh#990, reversing #922's selection-only adoption)."""
     hand = _live(895, "h895", head_ref="chore/closeout-feat-batch-x")
     x, y = _merged("x", 1), _merged("y", 2)
     snap = _snap([x, y], {"x": "merged", "y": "merged"}, archived=frozenset({"x", "y"}),
                  adopted={"x": hand}, selected=frozenset({"x"}))  # fmt: skip
-    assert [(a.kind, a.batch, a.archived) for a in drive_pass(snap).actions] == [("adopt", "x", 0)]
+    assert [(a.kind, a.batch, a.archived) for a in drive_pass(snap).actions] == [
+        ("adopt", "x", 0), ("adopt", "y", 0),
+    ]  # fmt: skip
+
+
+def test_a_wave_less_finished_batch_is_adopted_but_only_the_selection_is_closed_out() -> None:
+    """gh#990: once any batch has a wave, the default selection drops every wave-less
+    one, and 49 merged batches stayed "close-out not recorded" forever. Recording a
+    close-out that already finished dispatches nothing, so it runs on every landed
+    batch; starting a close-out session (a real action) still follows the selection."""
+    waved = _batch("w", 1)
+    done, owed = _merged("done", 2, wave=None), _merged("owed", 3, wave=None)
+    by_hand, open_hand = _merged("by-hand", 4, wave=None), _merged("open-hand", 5, wave=None)
+    merged_pr = _live(895, "", state="MERGED", head_ref="chore/closeout-feat-batch-by-hand")
+    open_pr = _live(896, "h896", head_ref="chore/closeout-feat-batch-open-hand")
+    landed = {"done": "merged", "owed": "merged", "by-hand": "merged", "open-hand": "merged"}
+    snap = _snap([waved, done, owed, by_hand, open_hand], {"w": "proposed", **landed},
+                 released=frozenset({"owed"}), archived=frozenset({"done"}),
+                 adopted={"by-hand": merged_pr, "open-hand": open_pr},
+                 selected=frozenset({"w"}))  # fmt: skip
+    got = drive_pass(snap)
+    assert [(a.kind, a.batch, a.archived) for a in got.actions] == [
+        ("adopt", "done", 0), ("adopt", "by-hand", 895), ("dispatch", "w", None),
+    ]  # fmt: skip
+    assert got.summary.closing == 0
+
+
+def test_a_batch_whose_closeout_evidence_was_unreadable_is_neither_closed_out_nor_adopted() -> None:
+    """gh#991: a clone the plan could not read is no evidence that the batch is not
+    archived, so no close-out is planned for it; it stays closing."""
+    b = _merged("x", 1)
+    snap = _snap([b], {"x": "merged"}, released=frozenset({"x"}), unverified=frozenset({"x"}))
+    got = drive_pass(snap)
+    assert got.actions == ()
+    assert got.summary.closing == 1 and not got.summary.idle
 
 
 # ------------------------------------------------------------- wave groups
@@ -947,7 +986,7 @@ def _export_snap(
         batches,
         stages,
         export_path={REPO: "docs/triage"} if export_path is None else export_path,
-        export_default={REPO: "main"},
+        default_branch={REPO: "main"},
         exports=tuple(exports),
         export_prs=prs or {},
         finished=finished,
@@ -1071,7 +1110,7 @@ def _three_waves(**kw: Any) -> Snapshot:
     ]
     stages = {b.id: "merged" for b in batches}
     kw.setdefault("finished", frozenset({"1", "2", "10"}))
-    kw.setdefault("export_default", {REPO: "main"})
+    kw.setdefault("default_branch", {REPO: "main"})
     return _snap(batches, stages, export_path={REPO: "docs/triage"}, **kw)
 
 
@@ -1249,7 +1288,7 @@ def test_a_crash_then_a_new_wave_reuses_the_orphan_and_opens_no_second_pr() -> N
     batches = [_finished("a", 1), _merged("b", 2, wave=2, events=[{**_CLOSEOUT, "archived": 8}])]
     snap = _snap(
         batches, {"a": "merged", "b": "merged"}, export_path={REPO: "docs/triage"},
-        export_default={REPO: "main"},
+        default_branch={REPO: "main"},
         finished=frozenset({"1", "2"}), export_orphans={REPO: (_trusted(40, wave="1"),)},
     )  # fmt: skip
     got = drive_pass(snap)
@@ -1404,3 +1443,24 @@ def test_two_waves_finishing_together_report_in_numeric_order() -> None:
     lines = [a.detail for a in drive_pass(snap).actions if a.kind == "dedupe"]
 
     assert [("wave 9 " in d, "wave 10 " in d) for d in lines] == [(True, False), (False, True)]
+
+
+def test_an_archive_pr_retargeted_off_the_default_branch_is_never_merged() -> None:
+    """gh#1004: the archive merge reads the PR's base as the export does (p4-r15). A
+    PR based anywhere but the default branch is never merged; only the operator can
+    retarget it, so the batch is blocked (named every pass), not closing."""
+    from dataclasses import replace
+
+    b = _merged("x", 1, events=[_CLOSEOUT])
+    pr = _live(5, "h5", head_ref="chore/closeout-feat-batch-x", trusted=True, base="release")
+    snap = _snap([b], {"x": "merged"}, archives={REPO: (pr,)}, default_branch={REPO: "main"})
+    got = drive_pass(snap)
+    assert [(a.kind, a.batch, a.pr) for a in got.actions] == [("blocked", "x", 5)]
+    assert "is based on release, not main" in got.actions[0].detail
+    assert (got.summary.closing, got.summary.blocked) == (0, 1)
+    assert got.summary.waiting_on_operator
+    # a default the clone could not give proves nothing: no merge, no blame, it waits
+    unknown = drive_pass(replace(snap, default_branch={}))
+    assert unknown.actions == () and (unknown.summary.closing, unknown.summary.blocked) == (1, 0)
+    on_main = drive_pass(replace(snap, archives={REPO: (replace(pr, base="main"),)}))
+    assert [(a.kind, a.pr) for a in on_main.actions] == [("archive", 5)]
