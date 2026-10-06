@@ -825,9 +825,7 @@ class TestFrHerdrOnPath:
         """`--with-executables-from` is only passed when `uv tool install --help` lists it
         (an older uv refuses the whole install over an unknown flag); the link is made from
         the tool env's bin all the same."""
-        _, path_bin, tooldir, log = self._run(
-            fake_home, tmp_path, preexisting_fr=True, old_uv=True
-        )
+        _, path_bin, tooldir, log = self._run(fake_home, tmp_path, preexisting_fr=True, old_uv=True)
         installs = self._installs(log)
         assert len(installs) == 2
         assert all("--with-executables-from" not in block for block in installs)
