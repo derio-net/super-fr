@@ -8,6 +8,7 @@ import os
 import subprocess
 import time
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -579,6 +580,8 @@ class TestRunGhTimeout:
         stub.chmod(0o755)
         monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
         monkeypatch.setattr(gh, "GH_TIMEOUT_SECONDS", 0.5)
+        # A ten-page list gets more time (gh#1025), but the cap still bounds it.
+        monkeypatch.setattr(gh, "GH_LIST_TIMEOUT_CAP_SECONDS", 0.5)
         started = time.monotonic()
         with pytest.raises(gh.GhError) as exc_info:
             gh._run_gh(["issue", "list", "--limit", "1000"])
@@ -598,3 +601,44 @@ class TestRunGhTimeout:
         assert gh._run_gh(["api", "user"]) == "ok"
         assert seen == [gh.GH_TIMEOUT_SECONDS]
         assert 0 < gh.GH_TIMEOUT_SECONDS <= 600
+
+    @pytest.mark.parametrize(
+        ("call", "kw"),
+        [
+            (gh.list_issues, {"repo": "o/r", "state": "all", "limit": 1000}),
+            (gh.list_prs, {"repo": "o/r", "state": "all", "limit": 1000}),
+            (gh.list_open_prs, {"repo": "o/r", "limit": 1000}),
+            (gh.list_repos, {"owner": "o", "limit": 1000}),
+        ],
+        ids=["issues", "prs", "open-prs", "repos"],
+    )
+    def test_a_big_paginated_list_gets_time_for_its_pages(
+        self, monkeypatch: pytest.MonkeyPatch, call: Any, kw: dict[str, Any]
+    ) -> None:
+        """gh#1025 (4): one `--limit 1000` call fetches ten pages; the single-call
+        bound would fail a list that is slow but legitimate on every pass."""
+        seen: list[object] = []
+
+        def fake_run(*a, **k):  # type: ignore[no-untyped-def]
+            seen.append(k.get("timeout"))
+            return subprocess.CompletedProcess(a[0], 0, stdout="[]\n", stderr="")
+
+        monkeypatch.setattr(gh.subprocess, "run", fake_run)
+        call(**kw)
+        (timeout,) = seen
+        assert isinstance(timeout, float)
+        assert gh.GH_TIMEOUT_SECONDS < timeout <= gh.GH_LIST_TIMEOUT_CAP_SECONDS
+
+    def test_a_small_list_keeps_the_one_call_bound(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[object] = []
+
+        def fake_run(*a, **k):  # type: ignore[no-untyped-def]
+            seen.append(k.get("timeout"))
+            return subprocess.CompletedProcess(a[0], 0, stdout="[]\n", stderr="")
+
+        monkeypatch.setattr(gh.subprocess, "run", fake_run)
+        gh.list_issues(repo="o/r", state="open", limit=100)
+        assert seen == [gh.GH_TIMEOUT_SECONDS]
+
+    def test_the_list_bound_is_capped(self) -> None:
+        assert gh.list_timeout(10**6) == gh.GH_LIST_TIMEOUT_CAP_SECONDS <= 600
