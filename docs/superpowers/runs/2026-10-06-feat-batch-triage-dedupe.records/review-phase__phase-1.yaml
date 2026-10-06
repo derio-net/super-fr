@@ -1,0 +1,134 @@
+schema_version: 7
+run: 2026-10-06-feat-batch-triage-dedupe
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+- kind: finding
+  id: p1-r1
+  phase: 1
+  title: main (#976) already ships duplicate_of with other semantics; spec and code reconciled
+  body: 'Review p1 finding p1-r1: main (#976) already ships duplicate_of with other semantics; spec and code reconciled.'
+  review_scope: in
+- kind: finding
+  id: p1-r2
+  phase: 1
+  title: _FINDING matched hyphenated prose such as finding out-of-scope
+  body: 'Review p1 finding p1-r2: _FINDING matched hyphenated prose such as finding out-of-scope.'
+  review_scope: in
+- kind: finding
+  id: p1-r3
+  phase: 1
+  title: 'finding and #ref signals read only the body'
+  body: 'Review p1 finding p1-r3: finding and #ref signals read only the body.'
+  review_scope: in
+- kind: finding
+  id: p1-r4
+  phase: 1
+  title: R10 could miss the final wave when the finishing pass ends the drive
+  body: 'Review p1 finding p1-r4: R10 could miss the final wave when the finishing pass ends the drive.'
+  review_scope: in
+- kind: finding
+  id: p1-r5
+  phase: 1
+  title: an unselected member's hand-merged archive was never fetched
+  body: 'Review p1 finding p1-r5: an unselected member''s hand-merged archive was never fetched.'
+  review_scope: in
+- kind: finding
+  id: p1-r6
+  phase: 1
+  title: keys sorted as text
+  body: 'Review p1 finding p1-r6: keys sorted as text.'
+  review_scope: in
+- kind: finding
+  id: p1-r7
+  phase: 1
+  title: capture script not self-contained, no per-state shots
+  body: 'Review p1 finding p1-r7: capture script not self-contained, no per-state shots.'
+  review_scope: in
+- kind: finding
+  id: p1-r8
+  phase: 1
+  title: a large candidate group listed every pair
+  body: 'Review p1 finding p1-r8: a large candidate group listed every pair.'
+  review_scope: in
+- kind: finding
+  id: p1-r9
+  phase: 1
+  title: 'captured #454/#458 never asserted'
+  body: 'Review p1 finding p1-r9: captured #454/#458 never asserted.'
+  review_scope: in
+- kind: finding
+  id: p1-r10
+  phase: 1
+  title: intro paragraph indented, group lines flush
+  body: 'Review p1 finding p1-r10: intro paragraph indented, group lines flush.'
+  review_scope: in
+- kind: finding
+  id: p1-o1
+  phase: 1
+  review_scope: out
+  title: fr's capture-script witness reads a value-taking uv flag as the program
+  body: fr.run.telemetry._executes treats `uv run --with playwright python script.py` as running `playwright`, so a capture run that way is never witnessed; `--with=playwright` passes. Documented limit in shell_named_since's docstring, not caused by this change.
+- kind: review
+  id: p1-review
+  phase: 1
+  title: Phase 1 code review (independent reviewer)
+  body: 'Reviewer re-read spec, plan and the committed diff from a detached HEAD worktree, ran the 8 affected test files (407 passed), stress-tested escaping, drove the board UI itself and opened fresh screenshots. Findings raised: p1-r1, p1-r2, p1-r3, p1-r4, p1-r5, p1-r6, p1-r7, p1-r8, p1-r9, p1-r10 (all in scope). Plus p1-o1 (out of scope) from the orchestrator.'
+resolves:
+- id: p1-r1
+  state: fixed
+  body: 'Merged origin/main and reconciled per spec §2.1 (decision d-merge-976): one duplicate_of; chains load and are reported by duplicate_chained; duplicates leave tiers into Parked plus the original-row Duplicates paragraph; finished = #976''s finished_waves; spec R3/R5/R8/R10, §3.D, §3.E amended. Stored docs/triage judgements (255) still load.'
+- id: p1-r2
+  state: fixed
+  body: A finding id now needs a digit or backticks; tests test_a_hyphenated_word_after_finding_is_prose_not_an_id and test_a_backticked_finding_id_needs_no_digit.
+- id: p1-r3
+  state: fixed
+  body: Both read title plus body (_text); test test_the_finding_and_reference_may_sit_in_the_title.
+- id: p1-r4
+  state: fixed
+  body: _Driver.observation_owed grants one extra pass when a wave was unfinished at the last pass's start; loop-level test test_a_finishing_loop_runs_one_observation_pass_only_when_a_wave_was_unfinished.
+- id: p1-r5
+  state: refuted
+  body: 'After the #976 merge the dedupe step reads Snapshot.finished = finished_waves(judgements.batches, stages), computed over EVERY batch from close-out events (archived set) and derived stages; no archive PR list is read for the decision, so the selection no longer affects it.'
+- id: p1-r6
+  state: fixed
+  body: dedupe.key_order sorts by (repo, number); test test_keys_order_by_number_not_text.
+- id: p1-r7
+  state: fixed
+  body: New capture_dedupe_board.py renders the boards from code and writes one shot per named state at 1280px and 375px (used for deliver's fresh screenshots).
+- id: p1-r8
+  state: fixed
+  body: Board shows 10 pairs per group then +N more (PAIRS_SHOWN); check --json keeps all; test test_a_large_candidate_group_lists_ten_pairs_then_a_count.
+- id: p1-r9
+  state: fixed
+  body: Calibration test now asserts the (454, 458) group.
+- id: p1-r10
+  state: fixed
+  body: After the merge main's .tier-desc has no left margin; re-captured phone/desktop Possible duplicates shots show intro and groups flush.
+- id: p1-o1
+  state: out-of-scope
+  body: A limit of fr's run telemetry, not of triage dedupe; this change neither introduced nor touches it.
+evidence:
+  review: p1-review
+  reviewer: aec058da657e26ec0
+  model: claude-opus-5-5
+visual:
+- row: triage-dedupe-board
+  shots:
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-review-visual/desktop-expanded-originals.png
+    shows:
+    - original-with-one-duplicate
+    - original-with-two-duplicates
+    - duplicate-of-closed-original
+    - duplicate-of-missing-original
+    - expand-original-row-shows-duplicates
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-review-visual/desktop-full-collapsed.png
+    shows:
+    - possible-duplicates-groups
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-review-visual/phone-possible-groups.png
+    shows:
+    - phone-width-long-reason
+  - path: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0ff4fc40-6789-4cab-8c02-9ebb25134314/scratchpad/p1-review-visual/phone-possible-empty.png
+    shows:
+    - possible-duplicates-empty
