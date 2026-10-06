@@ -219,3 +219,43 @@ Two tests drive two run_pass calls on one _Driver; the non-restarter and the ref
 ### p2-r4-resolved · finding [fixed] · resolves p2-r4: no test that a recorded close-out, or one whose post_merge is not owed, does not restart (phase 2)
 
 New tests: a recorded close-out and a close-out whose PostMergeEvent already exists never call restart_idle.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-board-now-optional created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-board-now-optional · discovery · build_board's now is optional: None judges no idleness (phase 3)
+
+build_board and _card take `now`, but as an optional keyword defaulting to None, which means no idle judgement. Roughly sixty existing board tests pass statuses of `idle` against fixtures dated in the past; a required or defaulted-to-wall-clock `now` would flip every one of them. write_board passes the wall clock, which is the only caller that should.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-idle-warn-exit-3 created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-idle-warn-exit-3 · discovery · an idle-session warn leaves --once at exit 3, as any in-flight batch does (phase 3)
+
+The warn never touches the Summary, so a drive with an idle batch session still reads in flight and --once exits 3 (waiting). The command-level tests assert 0 or 3 for that reason; the point of the rule (reporting never ends or keeps alive the drive) is pinned in the pure tests by comparing summaries with and without the warn.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-headless-chrome-hangs created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-headless-chrome-hangs · discovery · Google Chrome --headless=new writes the screenshot then hangs here; the Playwright headless shell does not (phase 3)
+
+For the board's visual check the installed Chrome produced the PNG and then never exited (or exited 2). The chrome-headless-shell from the local Playwright cache, with --no-sandbox and a 60 s timeout, exits cleanly. The capture script lives in the git-ignored visual directory under /private/tmp.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-no-explainer-describes-the-driver created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-no-explainer-describes-the-driver · discovery · no docs/explainers page describes the wave driver or the board (phase 3)
+
+Grepped docs/explainers/*.md for herdr, triage and idle: the only hits are fr run check --idle and prose about a phase running long. Nothing describes the wave driver's behaviour that changes here, so no explainer was edited and no page regeneration is owed.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-board-archive-attribution-from-facts created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-board-archive-attribution-from-facts · discovery · the board attributes archive PRs from the collected facts, not the forge (phase 3)
+
+A close-out card has no archive PR when the collected facts hold none that `attributed` claims (head under chore/archive- or chore/closeout-, trusted when not cross-repo), or when the event records `archived`. A PR opened since the last collect reads as missing until the next one; the card line says `as of <collected_at>` so the window is visible (sr-9).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-06T22:17:44+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+a pure rule and one dataclass added beside the existing close-out helpers; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-06T22:17:44+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+the idle lookup is one helper beside _card; no duplicated logic to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-10-06T22:17:44+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+a message string and one skill paragraph; nothing to clean
