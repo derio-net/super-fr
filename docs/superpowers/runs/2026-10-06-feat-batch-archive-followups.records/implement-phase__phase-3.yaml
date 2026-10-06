@@ -1,0 +1,17 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-archive-followups
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T3.S1, P3.T3.S2, P3.T3.S3, P3.T4.S1, P3.T4.S2, P3.T5.S1, P3.T5.S2, P3.T5.S3]
+refactor:
+  P3.T1: "the extraction itself was the refactor; apply.py lost its inline builder and the duplicate _CARRIED_OPEN"
+  P3.T2: "new pure module with no duplication to remove"
+  P3.T4: "the closeout change replaced one line shape with another; the shared services_invalid_text helper was extracted in T3"
+journal:
+  - {kind: decision, id: p3-validate-in-wrapper, title: "--issues with --no-issues is refused in the _with_followups wrapper", body: "The usage error fires in the decorator before recording_moves opens, so nothing moves and no follow-up runs (the finally would otherwise honour the explicit qids). Exit 2.", phase: 3}
+  - {kind: decision, id: p3-services-text-shared, title: "closeout.services_invalid_text is the one invalid-services wording", body: "The brief and archive's open-ends step both print it; the brief appends its own suffix about the --issues line.", phase: 3}
+  - {kind: discovery, id: p3-skill-resolve-example-gone, title: "fr-goal keeps no fr journal resolve example any more", body: "The close-out line was the only one, so test_the_scan_finds_the_fr_goal_examples became a pin that fr-goal routes through fr archive --issues and carries no resolve example.", phase: 3}
+  - {kind: discovery, id: p3-explainer-regenerated, title: "01-fr-goal.html regenerated", body: "The unmodified render was byte-identical to the committed html first (from /, --isolated); the edited render then differs only in the close-out paragraph. Nothing owed.", phase: 3}
+  - {kind: discovery, id: p3-explicit-qid-no-moves, title: "explicit --issues <qids> runs the open-ends step on an empty move log", body: "_after_moves now builds its step list: usage/matrix only on a non-empty log, open ends when the log is non-empty or --issues is given.", phase: 3}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/1ee7f0e3-bfd3-449b-a323-8c290d481fc5/scratchpad/af/p3-suite.log}
