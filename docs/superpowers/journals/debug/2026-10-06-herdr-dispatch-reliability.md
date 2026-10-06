@@ -24,3 +24,8 @@ Scratch herdr workspaces (herdr 0.9.1, cwd a trusted checkout, closed afterwards
 ### bae2531e02ad · root-cause · Runner: HerdrRunner.dispatch confirms neither the pane nor the submit
 
 agent start is attempted once against a pane whose shell may not be up (herdr fails fast with agent_pane_busy), and agent prompt is fire-and-forget (no --wait), so a brief that lands unsubmitted reads as a successful dispatch. Fix: retry agent_pane_busy (bounded), submit with --wait --until working --until blocked, and on agent_prompt_stalled press Enter once and wait again before failing loudly.
+
+<!-- fr:journal kind=root-cause scope=debug id=1567b0469681 created=2026-10-06T15:41:28+00:00 -->
+### 1567b0469681 · root-cause · Driver: a failed runner dispatch is a typer.Exit that ends loop mode
+
+Operator decision 2026-10-06: fix both causes in the one PR. _Driver._close_out and dispatch_batch _fail(code=1) on a runner exception; nothing in run_pass or the loop catches it. Fix: a typed failure the driver reports once per cause and retries on a later pass (failed_write set, so --once still exits 1); 'batch dispatch' keeps exiting 1.
