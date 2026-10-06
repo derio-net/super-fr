@@ -190,3 +190,6 @@ Pre-existing: brief re-keying ignored evidence.reviewer before this change; no r
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-cost-evidence-p3 created=2026-10-06T17:45:37+00:00 -->
 ### phase-split-2026-10-06-cost-evidence-p3 · decision · ask: #627 / #793 item 5 / #593 before-after comparison and audit (R10-R11)
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-06-cost-evidence-p2 created=2026-10-06T17:45:38+00:00 -->
+### tier-2026-10-06-cost-evidence-p2 · decision · hard: changes _open_dispatch, which every dispatch relies on, and adds a run-kind 8->9 migration
