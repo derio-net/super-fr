@@ -19,3 +19,8 @@ Investigation found three causes; the batch rule required stopping to ask, and t
 ### adopt-beyond-selection · finding [fixed] · gh#990: finished close-outs are adopted whatever the selection
 
 drive_pass step 2 iterates every batch; archived/merged-hand adoption ignores the selection, starting or recording an open close-out does not. The snapshot reads archive evidence for every landed batch outside unread repos. Pinned by test_a_wave_less_finished_batch_is_adopted_but_only_the_selection_is_closed_out, test_a_wave_less_archived_batch_is_adopted_by_an_unnamed_drive, test_a_wave_less_batch_still_owed_is_not_closed_out_outside_the_selection. Reverses #922's review-added 'unselected batch gets no adopt' test (renamed ..._an_unselected_batch_is_adopted_too).
+
+<!-- fr:journal kind=finding scope=debug id=plan-mode-unreadable-clone created=2026-10-06T16:20:44+00:00 state=fixed -->
+### plan-mode-unreadable-clone · finding [fixed] · gh#991: plan mode reports an unreadable clone instead of planning phantom close-outs
+
+_archived/_released return None in plan mode on a TriageError; the batch goes to Snapshot.unverified (no close-out, no adopt, still closing) and one warning per repo names the reason and the batches. _ci_none records its failure too. --yes behaviour unchanged (ForgeReadError). Pinned by test_plan_mode_with_an_unreadable_clone_says_so_and_plans_no_closeout and test_a_batch_whose_closeout_evidence_was_unreadable_is_neither_closed_out_nor_adopted.
