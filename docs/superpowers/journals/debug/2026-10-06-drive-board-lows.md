@@ -44,3 +44,8 @@ batch_drive._stale_closeout: a close-out event older than STALE_CLOSEOUT (15 min
 ### f-1025-4 · finding [fixed] · #1025 item 4 fixed: bulk gh lists get a page-scaled bound
 
 gh._bound: a call carrying --limit N is bounded by list_timeout(N) = GH_TIMEOUT_SECONDS + 30s per 100-record page past the first, capped at GH_LIST_TIMEOUT_CAP_SECONDS (600s); every other call keeps 120s. Derived in _run_gh from the args so no call site or test fake changes. The gh#909 stall test now pins the cap. Tests: test_gh.py TestRunGhTimeout.
+
+<!-- fr:journal kind=finding scope=debug id=f-985 created=2026-10-06T17:13:22+00:00 state=fixed -->
+### f-985 · finding [fixed] · #985 fixed: a Partial column between Closing out and Done
+
+Operator decision 2026-10-06: own column. kanban.column_of puts stage partial in the new partial column until closeout_state is archived, then Done with the partial pill; its fallback hint is the closing-out one. The board grid widens to one track per column, pinned by test_the_wide_grid_has_one_track_per_column. Tests: test_triage_kanban.py, test_triage_kanban_render.py.
