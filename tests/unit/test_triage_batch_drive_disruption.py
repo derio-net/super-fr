@@ -47,7 +47,7 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 — fixtures
     _state,
     _StopError,
     checkout_fixture,
-    git_checkout,
+    git_checkout_fixture,
     runner_fixture,
     sleeps_fixture,
     world_fixture,
@@ -720,9 +720,8 @@ def test_batch_dispatch_by_hand_still_exits_2_on_a_failed_fetch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
     """The verb keeps its exit code: only the driver reads a failed fetch as a skip."""
-    from typer.testing import CliRunner
-
     from fr.cli import app
+    from typer.testing import CliRunner
 
     _proposed(world, tmp_path, n=1)
 

@@ -115,9 +115,9 @@ from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     DEFAULT_MAX_INFLIGHT,
     DEFAULT_WORKSPACE_PREFIX,
-    STALE_CLOSEOUT,
     EXPORT_KINDS,
     RUNS_DIR,
+    STALE_CLOSEOUT,
     Action,
     LivePr,
     Snapshot,
@@ -1040,7 +1040,12 @@ def dispatch_batch(
     runner_name, model = str(launch.runner), str(launch.model)
     runner = load_runner(runner_name)  # step 1
     reserved = _reservation(  # step 2
-        checkout, facts, judgements, batch, owner_repo, lenient=lenient_config,
+        checkout,
+        facts,
+        judgements,
+        batch,
+        owner_repo,
+        lenient=lenient_config,
         read_errors=read_errors,
     )
     try:
@@ -2851,7 +2856,9 @@ class _Driver:
             except UnsupportedForgeOperation as exc:
                 _fail(str(exc))
             except FORGE_ERRORS as exc:
-                return self._export_failed(wave, f"export wave {wave}: the forge refused the PR: {exc}")
+                return self._export_failed(
+                    wave, f"export wave {wave}: the forge refused the PR: {exc}"
+                )
             self._record_export(repo, _covers(action), pr=number, head=head)  # the pin
             return f"opened PR #{number} from {branch} at {head[:12]}{suffix}"
         finally:

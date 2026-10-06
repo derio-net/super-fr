@@ -313,7 +313,11 @@ def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Actio
         return None
     since = event.at.strftime("%Y-%m-%dT%H:%M")
     last = last_dispatch(batch)
-    pickup = f"--run {event.run}" if event.run else f"--branch {last.branch if last else batch_branch(batch)}"
+    pickup = (
+        f"--run {event.run}"
+        if event.run
+        else f"--branch {last.branch if last else batch_branch(batch)}"
+    )
     return Action(
         "warn", batch.id,
         f"close-out {item} was recorded at {since}Z but no runner holds it and no archive "

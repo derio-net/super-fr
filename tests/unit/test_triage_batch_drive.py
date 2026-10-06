@@ -514,7 +514,6 @@ def test_an_unattributed_archive_pr_is_never_merged() -> None:
     assert got.actions == ()
 
 
-
 # ---------------------------- gh#1025 (3): a close-out recorded, never started
 
 
