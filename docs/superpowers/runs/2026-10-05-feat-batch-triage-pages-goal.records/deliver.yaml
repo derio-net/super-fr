@@ -1,0 +1,152 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-triage-pages-goal
+step: deliver
+outcome: done
+journal:
+- kind: discovery
+  id: deliver-wave-table-390-paint
+  title: 'one deliver capture frame (p2-wave-table-390-light) came out blank: a stale paint in the capture script''s
+    long-lived page, not a product defect'
+  body: A fresh page load at 390px renders the wave table correctly (4 rows, scrollLeft 0, 120px tall, probe screenshots
+    probe-waves-390-0/400). The frame backs no named state of any row and is left out of the visual evidence.
+resolves: []
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/976
+visual:
+- row: triage-page-goals
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots.py
+  shots:
+  - path: .shots/png/triage-1280-light.png
+    shows:
+    - board-page
+  - path: .shots/png/origins-1280-light.png
+    shows:
+    - origins-page
+  - path: .shots/png/architecture-1280-light.png
+    shows:
+    - architecture-page
+  - path: .shots/png/history-1280-light.png
+    shows:
+    - history-page
+  - path: .shots/png/triage-390-light.png
+    shows:
+    - phone-width
+  - path: .shots/png/origins-390-light.png
+    shows:
+    - phone-width
+  - path: .shots/png/architecture-390-light.png
+    shows:
+    - phone-width
+  - path: .shots/png/history-390-light.png
+    shows:
+    - phone-width
+  - path: .shots/png/triage-1280-dark.png
+    shows:
+    - dark-theme
+  - path: .shots/png/origins-1280-dark.png
+    shows:
+    - dark-theme
+  - path: .shots/png/architecture-1280-dark.png
+    shows:
+    - dark-theme
+  - path: .shots/png/history-1280-dark.png
+    shows:
+    - dark-theme
+  - path: .shots/png/interaction-follow-nav-link-history.png
+    shows:
+    - follow-nav-link
+  - path: .shots/png/interaction-follow-nav-link-from-origins.png
+    shows:
+    - follow-nav-link
+- row: triage-history-page
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots.py
+  shots:
+  - path: .shots/png/history-none-1280-light.png
+    shows:
+    - no-finished-waves
+  - path: .shots/png/history-1280-light.png
+    shows:
+    - finished-waves
+  - path: .shots/png/triage-every-wave-finished.png
+    shows:
+    - finished-waves
+  - path: .shots/png/interaction-switch-wave-tab.png
+    shows:
+    - switch-wave-tab
+  - path: .shots/png/interaction-switch-wave-tab-keyboard.png
+    shows:
+    - switch-wave-tab
+  - path: .shots/png/interaction-follow-batch-link-board.png
+    shows:
+    - follow-batch-link
+- row: triage-board-first-screen
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots-p2.py
+  shots:
+  - path: .shots/png/p2-since-table-with-changes-1280-light.png
+    shows:
+    - since-table-with-changes
+  - path: .shots/png/p2-since-table-with-changes-1280-dark.png
+    shows:
+    - since-table-with-changes
+  - path: .shots/png/p2-since-table-with-changes-390-light.png
+    shows:
+    - since-table-with-changes
+  - path: .shots/png/p2-since-table-empty-1280-light.png
+    shows:
+    - since-table-empty
+  - path: .shots/png/p2-since-table-empty-1280-dark.png
+    shows:
+    - since-table-empty
+  - path: .shots/png/p2-since-table-empty-390-light.png
+    shows:
+    - since-table-empty
+  - path: .shots/png/p2-every-wave-finished-1280-light.png
+    shows:
+    - every-wave-finished
+  - path: .shots/png/p2-every-wave-finished-1280-dark.png
+    shows:
+    - every-wave-finished
+  - path: .shots/png/p2-every-wave-finished-390-light.png
+    shows:
+    - every-wave-finished
+  - path: .shots/png/p2-sections-collapsed-1280-light.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-sections-collapsed-1280-dark.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-sections-collapsed-390-light.png
+    shows:
+    - sections-collapsed
+  - path: .shots/png/p2-interaction-switch-wave-tab.png
+    shows:
+    - switch-wave-tab
+  - path: .shots/png/p2-interaction-expand-collapsed-section.png
+    shows:
+    - expand-collapsed-section
+- row: triage-board-batch-filter
+  script: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/shots-p2.py
+  shots:
+  - path: .shots/png/p2-batch-filter-all-stages-on.png
+    shows:
+    - all-stages-on
+  - path: .shots/png/p2-batch-filter-merged-and-cancelled-off.png
+    shows:
+    - merged-and-cancelled-off
+    - toggle-stage
+  - path: .shots/png/p2-batch-filter-every-stage-off.png
+    shows:
+    - every-stage-off
+    - toggle-stage
+  - path: .shots/png/p2-batch-filter-no-javascript.png
+    shows:
+    - no-javascript
+  - path: .shots/png/p2-interaction-follow-batch-link.png
+    shows:
+    - follow-batch-link
+  - path: .shots/png/p2-interaction-open-card.png
+    shows:
+    - open-card
+evidence:
+  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/deliver-full-suite.log
