@@ -24,3 +24,8 @@ gh#883: _Driver._close_out appended the CloseoutEvent only after runner.dispatch
 ### rc-921-boundary · root-cause · Batch drive-restart-forge: investigation
 
 gh#921 (2, 3, push comment) and the gh#998 exit: the drive loop has exactly one per-pass retry boundary, ForgeReadError. Git failures (_archived/_released/merge_ctx fetch), the archive pr_merge refusal, a rejected update push (GitError in _merge_batch) and a config refusal (recollect, _fresh_config) all routed to _fail and ended the process; gitseam._run started git with no timeout, so a stalled fetch blocked the loop.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-921-skipped created=2026-10-06T13:58:46+00:00 -->
+### rc-921-skipped · root-cause · Batch drive-restart-forge: investigation
+
+gh#921 (1): collect_facts records a failing repo under facts.skipped in org/group scope, but the drive never read skipped; the repo stays in facts.repos, so its batches resolved with no PRs and derive_batch_stage misread pr-open/merged as dispatched (and a proposed one would dispatch on default config).
