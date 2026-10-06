@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr run: a suite log written by a command that detached itself with & is now witnessed on Claude Code (implement-phase evidence.tests and deliver tests=), and the capture-script witness skips uv run flag values such as --with <pkg>"
