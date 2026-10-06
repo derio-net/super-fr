@@ -44,7 +44,7 @@ journal:
     phase: 3
     title: "the board attributes archive PRs from the collected facts, not the forge"
     body: "A close-out card has no archive PR when the collected facts hold none that `attributed` claims (head under chore/archive- or chore/closeout-, trusted when not cross-repo), or when the event records `archived`. A PR opened since the last collect reads as missing until the next one; the card line says `as of <collected_at>` so the window is visible (sr-9)."
-evidence: {}
+evidence: {tests: /private/tmp/claude-502/driver-sessions-p3-suite.log}
 visual:
   - row: board-idle-session
     script: /private/tmp/claude-502/driver-sessions-visual/capture.py
