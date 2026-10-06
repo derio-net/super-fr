@@ -594,3 +594,21 @@ def test_check_prints_the_claim_sets_and_exits_0(
     for label in ("held elsewhere", "expired claims", "claims owed"):
         assert label in result.output
     assert "s-aaaaaaaa" in result.output
+
+
+def test_claims_owed_skips_a_member_held_elsewhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1-r6: a member another scope holds is listed held elsewhere, never owed."""
+    monkeypatch.setenv("FR_HOST_ID", "0123456789abcdef")
+    judged = CLAIM_JUDGED.replace('ids: ["super-fr#3", "super-fr#4"]', 'ids: ["super-fr#1"]')
+    _write(
+        tmp_path,
+        _facts(
+            [_issue(1, claims=[_claim("s-aaaaaaaa", "theirs", expires="2999-01-01T00:00:00Z")])]
+        ),
+        judged,
+    )
+    data = json.loads(_check(tmp_path, "--json").output)
+    assert [h["key"] for h in data["held_elsewhere"]] == ["super-fr#1"]
+    assert data["claims_owed"] == []

@@ -154,9 +154,10 @@ def claim_sets(facts: Facts, judgements: Judgements, me: str, now: datetime) -> 
     stages = {b.id: derive_batch_stage(b, facts) for b in batches}
     archived = {b.id for b in batches if closeout_state(b) == "archived"}
     owed: list[OwedClaim] = []
+    held_keys = {h.key for h in held}
     for key, bid in owed_claims(batches, stages, archived):
         issue = open_issues.get(key)
-        if issue is None:
+        if issue is None or key in held_keys:  # held elsewhere is not owed (p1-r6)
             continue
         own = next((c for c in issue.claims if c.signer == me), None)
         if own is None or own.batch != bid:
