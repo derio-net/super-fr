@@ -55,6 +55,7 @@ description: TDD feature delivery, goal to reviewed PR.
 
 unit: run
 requires: [git, tests, scm]
+verification: candidate
 
 steps:
   - id: brainstorm
@@ -113,7 +114,7 @@ steps:
         emits: [journal:plan, plan:ticks]
         # `visual` (spec 2026-09-28-ui-visual-evidence §C) is DERIVED from the
         # record's `visual:` section: for each `visual` acceptance row the phase
-        # header links (no `verify: post-merge`), shots covering every named
+        # header links (no `verify: live`), shots covering every named
         # state/interaction, each opened — and any named capture script re-run —
         # in the holder's transcript (the orchestrator's when inline) since the
         # unit opened. No such row: `visual=none`.
@@ -207,4 +208,6 @@ steps:
     # `visual` (spec 2026-09-28-ui-visual-evidence §C): for the rows citing the
     # run's spec, screenshots captured and opened by the orchestrator itself
     # during delivery, on the delivered branch.
-    evidence: [tests, proportionality, visual]
+    # `walk` (2026-10-06-verification-strategies §C): the log `fr verification walk`
+    # wrote on this code tree; owed only when the spec asks for a pre-merge walk.
+    evidence: [tests, proportionality, visual, walk]

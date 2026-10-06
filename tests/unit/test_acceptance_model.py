@@ -148,10 +148,11 @@ def test_load_missing_file(tmp_path: Path) -> None:
 # ── matrix 1 -> 2 (spec 2026-09-28 §H): Row.verify, Matrix.schema_version ──
 
 
-def test_row_verify_accepts_post_merge(tmp_path: Path) -> None:
-    text = HEADER + ROW.format(id="a", status="ci") + "    verify: post-merge\n"
+def test_row_verify_names_a_strategy(tmp_path: Path) -> None:
+    """Matrix kind 4 (spec 2026-10-06 §B): `verify` names a strategy or `none`."""
+    text = HEADER + ROW.format(id="a", status="ci") + "    verify: live\n"
     (row,) = load_matrix(_write_matrix(tmp_path, text)).rows
-    assert row.verify == "post-merge"
+    assert row.verify == "live"
 
 
 def test_row_verify_defaults_to_none(tmp_path: Path) -> None:
@@ -159,9 +160,11 @@ def test_row_verify_defaults_to_none(tmp_path: Path) -> None:
     assert row.verify is None
 
 
-def test_row_verify_refuses_anything_else(tmp_path: Path) -> None:
-    text = HEADER + ROW.format(id="a", status="ci") + "    verify: someday\n"
-    with pytest.raises(AcceptanceError, match="post-merge"):
+def test_row_verify_refuses_the_v3_spelling(tmp_path: Path) -> None:
+    """Whether a name RESOLVES is `fr validate artifacts`' check; the model
+    refuses only the old spelling, naming the migration."""
+    text = HEADER + ROW.format(id="a", status="ci") + "    verify: post-merge\n"
+    with pytest.raises(AcceptanceError, match="fr migrate artifacts"):
         load_matrix(_write_matrix(tmp_path, text))
 
 

@@ -206,16 +206,20 @@ def ran_at(
     session_id: str,
     until: str | None = None,
     log: Path | None = None,
+    command: str | None = None,
 ) -> Path:
     """A session whose captured orchestrator `Bash` exchange runs from
     `timestamp` to `until` (default: the same instant), writing `log` (default:
-    the captured path). Only the timestamps and that one path are varied."""
+    the captured path) — or, given `command`, running that command line
+    instead. Only the timestamps and that one input are varied."""
     call, result = copy_of(records(BASH))
     call["timestamp"] = timestamp
     result["timestamp"] = until or timestamp
+    block = call["message"]["content"][0]
     if log is not None:
-        block = call["message"]["content"][0]
         block["input"]["command"] = block["input"]["command"].replace(CAPTURED_LOG, str(log))
+    if command is not None:
+        block["input"]["command"] = command
     return write_session(root, session_id=session_id, rows=[*records(ORCHESTRATOR), call, result])
 
 

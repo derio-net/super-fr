@@ -237,8 +237,8 @@ def test_a_write_upgrades_schema_1_to_2_and_touches_only_the_batches_section(
     save_batches(path, [batch], read=judgements.batches)
 
     text = path.read_text(encoding="utf-8")
-    assert JUDGEMENTS_SCHEMA == 4
-    assert text.startswith("schema: 4\n")
+    assert JUDGEMENTS_SCHEMA == 5
+    assert text.startswith("schema: 5\n")
     assert "# the agent's own comment survives" in text
     assert "super-fr#577: {tier: 1, note: 'keep: me'}" in text
     again = load_judgements(path)
@@ -305,7 +305,7 @@ def test_a_quoted_batches_key_is_replaced_not_duplicated(tmp_path: Path, quote: 
 
     text = path.read_text(encoding="utf-8")
     assert text.count("batches") == 1
-    assert text.startswith(f"schema: 4\n{_REST}batches:\n")
+    assert text.startswith(f"schema: 5\n{_REST}batches:\n")
     assert [b.id for b in load_judgements(path).batches] == ["new"]
 
 
@@ -330,7 +330,7 @@ def test_a_leading_document_marker_stays_one_document(
     save_batches(path, [batch], read=[])
 
     text = path.read_text(encoding="utf-8")
-    assert text.startswith(f"{head}schema: 4\n{_REST}batches:\n")
+    assert text.startswith(f"{head}schema: 5\n{_REST}batches:\n")
     assert load_judgements(path).batches == [batch]
 
 
@@ -342,7 +342,7 @@ def test_a_document_end_marker_keeps_the_batches_inside_the_document(tmp_path: P
     save_batches(path, [batch], read=[])
 
     text = path.read_text(encoding="utf-8")
-    assert text.startswith(f"---\nschema: 4\n{_REST}batches:\n")
+    assert text.startswith(f"---\nschema: 5\n{_REST}batches:\n")
     assert text.endswith("...\n")
     assert load_judgements(path).batches == [batch]
 
@@ -358,7 +358,7 @@ def test_a_prepended_key_goes_after_the_document_start(head: str) -> None:
 
 def test_a_write_keeps_every_other_byte(tmp_path: Path) -> None:
     path = tmp_path / "judgements.yaml"
-    head = "schema: 4\n"
+    head = "schema: 5\n"
     path.write_text("schema: 2\n" + _REST, encoding="utf-8")
 
     save_batches(path, [Batch.model_validate(_batch())], read=[])

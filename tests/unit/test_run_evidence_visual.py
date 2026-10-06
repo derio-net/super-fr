@@ -29,7 +29,7 @@ def _row(rid: str = "ui-row", *, post_merge: bool = False, visual: bool = True) 
         acceptance="a",
         origin=("super-fr:docs/superpowers/specs/s.md#R1",),
         status="ci",
-        verify="post-merge" if post_merge else None,
+        verify="live" if post_merge else None,
         visual=Visual(states=("accepted",), interactions=("20 cap",)) if visual else None,
     )
 

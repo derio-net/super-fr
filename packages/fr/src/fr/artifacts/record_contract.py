@@ -45,11 +45,15 @@ class UnconvertibleRecordError(UnreadableRecordError):
 
 
 def _is_v7(data: dict[str, Any]) -> bool:
-    from fr.record.model import RECORD_SCHEMA_VERSION, StepRecord
+    """Whether `data` already reads as version 7 — asked of the FROZEN
+    `fr.record.legacy.RecordV7` since the 7 -> 8 hop (spec
+    2026-10-06-verification-strategies §B): the live model answers "is this
+    v8?", which is not this hop's question."""
+    from fr.record.legacy import RecordV7Error, record_v7_from_data
 
     try:
-        StepRecord.model_validate({**data, "schema_version": RECORD_SCHEMA_VERSION})
-    except ValueError:  # pydantic's ValidationError is one
+        record_v7_from_data({**data, "schema_version": 7})
+    except RecordV7Error:
         return False
     return True
 
@@ -57,7 +61,6 @@ def _is_v7(data: dict[str, Any]) -> bool:
 def drop_removed_fields(path: Path) -> None:
     """Rewrite `path` from v6 to v7 in place, or raise leaving it untouched."""
     from fr.record.legacy import RecordV6Error, record_v6_from_data
-    from fr.record.model import RECORD_SCHEMA_VERSION
 
     try:
         text = path.read_text()
@@ -102,7 +105,7 @@ def drop_removed_fields(path: Path) -> None:
         body.pop("journal", None)
     if not _is_v7(body):
         raise UnconvertibleRecordError(
-            f"{path}: does not read as a version-{RECORD_SCHEMA_VERSION} record once "
+            f"{path}: does not read as a version-7 record once "
             "`delegated` is dropped. Left on version 6, byte-identical."
         )
     if body != data:

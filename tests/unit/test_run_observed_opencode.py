@@ -135,6 +135,17 @@ def test_wrote_windows_are_the_run_sessions_own() -> None:
     assert _run().wrote_windows(LOG, SINCE) == [(_at(50_000), _at(80_000))]
 
 
+def test_ran_windows_match_a_command_line_not_a_write_target() -> None:
+    """Review p3-r1: the command-match witness reads the same parts as the
+    write-target one — here, the parts that wrote LOG, matched by their line."""
+    from fr.run.telemetry import _writes
+
+    assert _run().ran_windows(lambda c: _writes(c, LOG), SINCE) == [(_at(50_000), _at(80_000))]
+    assert _run().ran_windows(lambda c: False, SINCE) == []
+    unscoped = observed.opencode_unscoped(_env(session=None))
+    assert len(unscoped.ran_windows(lambda c: _writes(c, LOG), SINCE) or []) == 2
+
+
 def test_without_a_session_id_every_top_level_session_counts() -> None:
     assert observed.observed_session(_env(session=None)) is None
     windows = observed.opencode_unscoped(_env(session=None)).wrote_windows(LOG, SINCE)

@@ -43,7 +43,7 @@ def render_row_block(row: Row, indent: str = "  ") -> str:
     Empty levels are dropped (`levels: {}`) rather than written as four empty
     lists — what `add` has always emitted, kept identical here.
     """
-    data = {
+    data: dict[str, object] = {
         "id": row.id,
         "capability": row.capability,
         "acceptance": row.acceptance,
@@ -61,6 +61,16 @@ def render_row_block(row: Row, indent: str = "  ") -> str:
         if row.visual.interactions:
             visual_data["interactions"] = list(row.visual.interactions)
         data["visual"] = visual_data
+    # Matrix kind 4 (spec 2026-10-06 §B): each absent when unset, so a row that
+    # carries none of them renders exactly as it did at kind 3.
+    if row.scenario is not None:
+        data["scenario"] = row.scenario
+    if row.issues:
+        data["issues"] = list(row.issues)
+    if row.harnesses:
+        data["harnesses"] = list(row.harnesses)
+    if row.walks:
+        data["walks"] = [w.model_dump() for w in row.walks]
     block = yaml.dump([data], default_flow_style=False, sort_keys=False, allow_unicode=True)
     return "".join(
         (indent + line if line.strip() else line) + "\n" for line in block.rstrip("\n").split("\n")
@@ -283,4 +293,12 @@ def describe_move(old: Row, new: Row) -> str:
         parts.append("notes")
     if new.verify != old.verify:
         parts.append(f"verify: {new.verify}")
+    if new.scenario != old.scenario:
+        parts.append("scenario")
+    if added := len(new.issues) - len(old.issues):
+        parts.append(f"+{added} issue{'s' if added != 1 else ''}")
+    if added := len(new.harnesses) - len(old.harnesses):
+        parts.append(f"+{added} harness{'es' if added != 1 else ''}")
+    for walk in new.walks[len(old.walks) :]:
+        parts.append(f"walk {walk.outcome} on {walk.harness}")
     return f"{new.status} ({', '.join(parts) or 'unchanged'})"

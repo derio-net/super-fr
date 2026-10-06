@@ -1,0 +1,12 @@
+# Shipped strategy `live` — spec 2026-10-06-verification-strategies §A (R3).
+# Post-merge and operator-driven: today's walk. There is nothing to install —
+# the operator runs the released build.
+verification: live
+schema: 1
+description: After merge and release, the operator runs the released build and records the result.
+when: post-merge
+driver: operator
+install: null
+scenario: null
+source: none
+notes: Only for behaviour that cannot run before merge; a row on it needs a one-line reason in the spec's `## Verification`.

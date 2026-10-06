@@ -67,14 +67,11 @@ def _record_file(root: Path, text: str, stem: str) -> Path:
     return path
 
 
-def test_the_record_kind_is_at_version_seven() -> None:
-    assert RECORD_SCHEMA_VERSION == 7
-    assert artifact_kind("record").current_version == 7
-
-
-def test_the_chain_from_one_reaches_seven_hop_by_hop() -> None:
+def test_the_six_to_seven_hop_is_in_the_chain() -> None:
+    """The chain's full span is `test_record_acceptance_v8`'s to pin."""
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
-    assert [s.to_version for s in chain] == [2, 3, 4, 5, 6, 7]
+    assert [s.to_version for s in chain][:6] == [2, 3, 4, 5, 6, 7]
+    assert artifact_kind("record").current_version == RECORD_SCHEMA_VERSION
 
 
 def test_a_v6_record_carrying_delegated_migrates_with_the_key_dropped(tmp_path: Path) -> None:
@@ -85,7 +82,7 @@ def test_a_v6_record_carrying_delegated_migrates_with_the_key_dropped(tmp_path: 
     assert report.ok, report.failed
     assert "delegated" not in path.read_text()
     record = load_record(path)
-    assert record.schema_version == 7
+    assert record.schema_version == RECORD_SCHEMA_VERSION
     assert [j.id for j in record.journal] == ["d1", "operator-input"]
     assert record.journal[1].input is True
 
@@ -100,7 +97,7 @@ def test_a_v6_record_resolving_unconfirmed_is_left_byte_identical(tmp_path: Path
     assert [f.path for f in report.failed] == [stuck]
     assert "unconfirmed" in str(report.failed[0])
     assert stuck.read_bytes() == before
-    assert artifact_kind("record").read_version(healthy) == 7
+    assert artifact_kind("record").read_version(healthy) == RECORD_SCHEMA_VERSION
 
 
 def test_an_older_record_carrying_delegated_climbs_the_whole_chain(tmp_path: Path) -> None:
@@ -113,7 +110,7 @@ def test_an_older_record_carrying_delegated_climbs_the_whole_chain(tmp_path: Pat
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert load_record(path).schema_version == 7
+    assert load_record(path).schema_version == RECORD_SCHEMA_VERSION
 
 
 def test_a_wholly_v7_body_under_a_v6_stamp_lets_the_runner_finish(tmp_path: Path) -> None:
@@ -124,14 +121,20 @@ def test_a_wholly_v7_body_under_a_v6_stamp_lets_the_runner_finish(tmp_path: Path
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == _V6_PLAIN.replace("schema_version: 6", "schema_version: 7")
+    assert path.read_text() == _V6_PLAIN.replace(
+        "schema_version: 6", f"schema_version: {RECORD_SCHEMA_VERSION}"
+    )
 
 
 def test_the_live_model_refuses_the_removed_fields() -> None:
     with pytest.raises(RecordError, match="delegated"):
-        parse_record(_V6_DELEGATED.replace("schema_version: 6", "schema_version: 7"))
+        parse_record(
+            _V6_DELEGATED.replace("schema_version: 6", f"schema_version: {RECORD_SCHEMA_VERSION}")
+        )
     with pytest.raises(RecordError, match="state"):
-        parse_record(_V6_UNCONFIRMED.replace("schema_version: 6", "schema_version: 7"))
+        parse_record(
+            _V6_UNCONFIRMED.replace("schema_version: 6", f"schema_version: {RECORD_SCHEMA_VERSION}")
+        )
 
 
 def test_the_frozen_v6_reader_reads_both_removed_fields() -> None:

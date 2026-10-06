@@ -626,6 +626,26 @@ def _no_ci_reason(repo_root: Path) -> str | None:
     return ci_reason(repo_root)
 
 
+def _union(old: tuple[str, ...], new: tuple[str, ...]) -> tuple[str, ...]:
+    """`old` then whatever of `new` it lacks, in order — an add, never a reorder."""
+    return old + tuple(x for x in dict.fromkeys(new) if x not in old)
+
+
+def strategy_error(name: str, repo_root: Path) -> str | None:
+    """Why `verify: name` cannot be written, or None: it must resolve to a
+    strategy or be `none` (spec 2026-10-06-verification-strategies §B)."""
+    from fr.verification.model import RESERVED, StrategyError
+    from fr.verification.resolve import resolve_strategy
+
+    if name == RESERVED:
+        return None
+    try:
+        resolve_strategy(name, repo_root)
+    except StrategyError as e:
+        return f"verify {name!r}: {e}"
+    return None
+
+
 def _acceptance_writes(
     record: StepRecord,
     overlay: _Overlay,
@@ -700,6 +720,10 @@ def _acceptance_writes(
                     notes=item.notes or "",
                     verify=item.verify,
                     visual=item.visual,
+                    scenario=item.scenario,
+                    issues=item.issues,
+                    harnesses=item.harnesses,
+                    walks=(item.walk,) if item.walk is not None else (),
                 )
             else:
                 assert existing is not None  # refused above when absent
@@ -724,7 +748,16 @@ def _acceptance_writes(
                     # `visual` is create-only — set-status never touches it (spec
                     # 2026-09-28 §A), so a move always keeps the existing value.
                     visual=existing.visual,
+                    # Matrix kind 4 (spec 2026-10-06 §B): `scenario` is kept
+                    # unless named; `issues`/`harnesses` are ADDED to; a `walk`
+                    # is APPENDED — the row's walks are its history.
+                    scenario=item.scenario if item.scenario is not None else existing.scenario,
+                    issues=_union(existing.issues, item.issues),
+                    harnesses=_union(existing.harnesses, item.harnesses),
+                    walks=existing.walks + ((item.walk,) if item.walk is not None else ()),
                 )
+            if item.verify is not None and (why := strategy_error(item.verify, repo_root)):
+                raise RecordRefusedError(f"acceptance {item.id}: {why}")
             for ref in row.refs():
                 split_ref(ref)
             # Only the refs this write adds: refused where written, not where

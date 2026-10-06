@@ -1,6 +1,6 @@
 """`fr workflow check` semantic validation — spec §4.A/§4.F, Phase 6.
 
-`check_workflow(manifest)` is pure and takes an already-PARSED
+`check_workflow(manifest, None)` is pure and takes an already-PARSED
 `WorkflowManifest` — a manifest with a structurally invalid schema (unknown
 `schema:` version, unknown top-level/step key) can never reach it, because
 `fr.workflow.model.parse_manifest` already refuses to construct one (see
@@ -39,7 +39,7 @@ def test_clean_manifest_has_no_errors() -> None:
         "  - id: a\n    kind: cli\n    run: echo hi\n    emits: [spec]\n"
         "  - id: b\n    kind: cli\n    run: echo bye\n    needs: [spec]\n"
     )
-    assert check_workflow(manifest) == []
+    assert check_workflow(manifest, None) == []
 
 
 def test_duplicate_step_ids_reported() -> None:
@@ -49,7 +49,7 @@ def test_duplicate_step_ids_reported() -> None:
         "  - id: a\n    kind: cli\n    run: echo 1\n"
         "  - id: a\n    kind: cli\n    run: echo 2\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("duplicate" in e and "'a'" in e for e in errors)
 
 
@@ -59,7 +59,7 @@ def test_needs_an_artifact_no_earlier_step_emits() -> None:
         "steps:\n"
         "  - id: a\n    kind: cli\n    run: echo hi\n    needs: [ghost]\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("ghost" in e and "'a'" in e for e in errors)
 
 
@@ -70,7 +70,7 @@ def test_needs_an_artifact_only_a_later_step_emits_is_dangling() -> None:
         "  - id: a\n    kind: cli\n    run: echo hi\n    needs: [late]\n"
         "  - id: b\n    kind: cli\n    run: echo bye\n    emits: [late]\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("late" in e for e in errors)
 
 
@@ -81,7 +81,7 @@ def test_cycle_in_needs_emits_is_reported() -> None:
         "  - id: a\n    kind: cli\n    run: echo a\n    needs: [y]\n    emits: [x]\n"
         "  - id: b\n    kind: cli\n    run: echo b\n    needs: [x]\n    emits: [y]\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("cycle" in e.lower() for e in errors)
 
 
@@ -89,7 +89,7 @@ def test_unknown_capability_in_requires_reported() -> None:
     manifest = _manifest(
         "workflow: x\nschema: 1\nunit: run\nrequires: [git, telepathy]\nsteps: []\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("telepathy" in e for e in errors)
 
 
@@ -98,7 +98,7 @@ def test_known_capabilities_produce_no_error() -> None:
         "workflow: x\nschema: 1\nunit: run\n"
         "requires: [git, tests, scm, browser, network, devcontainer]\nsteps: []\n"
     )
-    assert check_workflow(manifest) == []
+    assert check_workflow(manifest, None) == []
 
 
 def test_for_each_phase_is_legal_in_a_run_unit_shape() -> None:
@@ -106,7 +106,7 @@ def test_for_each_phase_is_legal_in_a_run_unit_shape() -> None:
         "workflow: x\nschema: 1\nunit: run\n"
         "steps:\n  - id: a\n    kind: agent\n    agent: x\n    for_each: phase\n"
     )
-    assert check_workflow(manifest) == []
+    assert check_workflow(manifest, None) == []
 
 
 def test_for_each_phase_is_an_error_in_a_phase_unit_shape() -> None:
@@ -114,7 +114,7 @@ def test_for_each_phase_is_an_error_in_a_phase_unit_shape() -> None:
         "workflow: x\nschema: 1\nunit: phase\n"
         "steps:\n  - id: a\n    kind: agent\n    agent: x\n    for_each: phase\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("for_each" in e and "'a'" in e for e in errors)
 
 
@@ -125,7 +125,7 @@ def test_multiple_problems_all_reported_together() -> None:
         "  - id: a\n    kind: cli\n    run: echo hi\n"
         "  - id: a\n    kind: cli\n    run: echo bye\n    needs: [ghost]\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert len(errors) >= 3
 
 
@@ -207,7 +207,7 @@ def test_a_cli_step_with_no_run_command_is_an_error() -> None:
     manifest = _manifest(
         "workflow: x\nschema: 1\nunit: run\nsteps:\n  - id: silent\n    kind: cli\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert len(errors) == 1
     assert "silent" in errors[0]
     assert "run:" in errors[0]
@@ -217,7 +217,7 @@ def test_a_cli_step_whose_run_is_only_whitespace_is_an_error() -> None:
     manifest = _manifest(
         'workflow: x\nschema: 1\nunit: run\nsteps:\n  - id: blank\n    kind: cli\n    run: "   "\n'
     )
-    assert [e for e in check_workflow(manifest) if "blank" in e]
+    assert [e for e in check_workflow(manifest, None) if "blank" in e]
 
 
 def test_an_agent_step_with_no_run_command_is_fine() -> None:
@@ -225,7 +225,7 @@ def test_an_agent_step_with_no_run_command_is_fine() -> None:
     manifest = _manifest(
         "workflow: x\nschema: 1\nunit: run\nsteps:\n  - id: think\n    kind: agent\n"
     )
-    assert check_workflow(manifest) == []
+    assert check_workflow(manifest, None) == []
 
 
 # ── review r5-b5: `--all` must not pass vacuously ─────────────────────
@@ -325,7 +325,7 @@ _CLEAN_NEST = (
 
 
 def test_clean_nested_group_has_no_errors() -> None:
-    assert check_workflow(_manifest(_CLEAN_NEST)) == []
+    assert check_workflow(_manifest(_CLEAN_NEST), None) == []
 
 
 def test_nested_member_with_unsatisfied_needs_is_dangling() -> None:
@@ -340,7 +340,7 @@ def test_nested_member_with_unsatisfied_needs_is_dangling() -> None:
         "      - id: review-phase\n        kind: agent\n"
         "        needs: [ghost]\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("ghost" in e and "review-phase" in e for e in errors)
 
 
@@ -356,7 +356,7 @@ def test_cyclic_nest_is_refused() -> None:
         "      - id: m-b\n        kind: agent\n"
         "        needs: [x]\n        emits: [y]\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("cycle" in e.lower() for e in errors)
 
 
@@ -371,7 +371,7 @@ def test_member_with_for_each_is_refused() -> None:
         "      - id: m-a\n        kind: agent\n"
         "        for_each: phase\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("m-a" in e and "for_each" in e for e in errors)
 
 
@@ -383,7 +383,7 @@ def test_members_on_a_step_without_for_each_are_refused() -> None:
         "    steps:\n"
         "      - id: m-a\n        kind: agent\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("solo" in e for e in errors)
 
 
@@ -397,7 +397,7 @@ def test_duplicate_ids_across_nest_are_reported() -> None:
         "    steps:\n"
         "      - id: dup\n        kind: agent\n"
     )
-    errors = check_workflow(manifest)
+    errors = check_workflow(manifest, None)
     assert any("duplicate" in e and "'dup'" in e for e in errors)
 
 

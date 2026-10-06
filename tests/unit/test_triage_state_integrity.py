@@ -154,7 +154,7 @@ def test_repo_and_org_facts_are_stamped_schema_4_because_their_shape_moved(
     result = _invoke("collect", *flag, "--dir", str(tmp_path))
     assert result.exit_code == 0, result.output
     written = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
-    assert written["schema"] == FACTS_SCHEMA == 4
+    assert written["schema"] == FACTS_SCHEMA == 5
     assert {"viewer", "judged_prs"} <= written.keys()
 
 

@@ -1,0 +1,71 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Awaiting-live — label, close-out brief, triage set and board
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - awaiting-live-triage
+  tier: standard
+  files:
+  - packages/fr/src/fr/labels.py
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - tests/unit/test_labels*.py
+  - tests/unit/test_run_closeout*.py
+  - tests/unit/test_triage_*.py
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: RED/GREEN — label and close-out brief
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: labels test — FR_AWAITING_LIVE ("fr:awaiting-live") is registered. Close-out
+      brief test — given a run whose PR body (fake forge adapter) has `Refs o/r#5` and a
+      matrix row citing o/r#5 that is post-merge and not walk-verified, the brief prints the
+      label-add command for #5 (from the forge command table's issue-label); a Refs'd issue
+      with no such row and every Closes'd issue get none.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: labels.py, run/closeout.py. Green.
+- number: 2
+  title: RED/GREEN — triage awaiting-live set, exclusions, board group
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: triage tests on fixture facts — CheckResult.awaiting_live lists open issues
+      labelled fr:awaiting-live; they are excluded from unranked, unplaced, next_up and
+      preselected_wave; `fr triage check --json` carries the set; the rendered board shows
+      them in their own collapsed group and nowhere else.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: check.py, views.py, render.py (+ components if the group needs a token).
+      Green; full fast suite; commit.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T13:29:40+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T13:29:40+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T13:29:40+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-10-06T13:29:40+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T13:29:40+00:00'
+    note: null
+    observed_prs: []

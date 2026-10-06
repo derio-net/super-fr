@@ -8,6 +8,7 @@ checks and local links (spec trap 3).
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -26,6 +27,19 @@ from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL, SCOPE_DIRS
 LEVELS: tuple[str, ...] = ("unit", "api", "int", "ui")
 
 Status = Literal["ci", "scheduled", "skipped", "not-implemented", "failing"]
+
+
+# A row's `issues` entry (spec 2026-10-06-verification-strategies R13): the
+# issue whose promise the row carries, always fully qualified so a matrix row
+# never depends on which checkout reads it.
+ISSUE_REF_RE = re.compile(r"^[\w.-]+/[\w.-]+#\d+$")
+
+WalkOutcome = Literal["pass", "fail"]
+
+# The matrix-v3 spelling of "only verifiable after merge". Matrix kind 3 -> 4
+# (`fr.artifacts.matrix_strategies`) rewrites it to the `live` strategy; the
+# live row refuses it, so a body still carrying it is visibly not v4.
+LEGACY_POST_MERGE = "post-merge"
 
 
 class AcceptanceError(Exception):
@@ -129,6 +143,39 @@ class Visual(BaseModel):
         return self
 
 
+class Walk(BaseModel):
+    """One recorded walk of a row (spec 2026-10-06-verification-strategies
+    R14): which strategy, on which harness and model, with what outcome, when,
+    and the evidence (a log path or a note)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    strategy: StrictStr
+    harness: StrictStr
+    model: StrictStr
+    outcome: WalkOutcome
+    at: StrictStr
+    evidence: StrictStr
+
+
+def check_issue_refs(issues: tuple[str, ...]) -> None:
+    """Shared by `Row` and `AcceptanceItem`: every entry is `owner/repo#n`."""
+    for ref in issues:
+        if not ISSUE_REF_RE.match(ref):
+            raise ValueError(f"issue {ref!r} must be owner/repo#n")
+
+
+def check_verify(value: str | None) -> None:
+    """Shared by `Row` and `AcceptanceItem`: the v3 spelling is refused by
+    name, with the way forward. Whether a name RESOLVES needs a repo root, so
+    that is `fr validate artifacts`' check (`fr.artifacts.structure`)."""
+    if value == LEGACY_POST_MERGE:
+        raise ValueError(
+            f"verify: {LEGACY_POST_MERGE} is the matrix-v3 spelling — name a strategy "
+            "(`live` is what it became) or `none`; `fr migrate artifacts --yes` "
+            "rewrites an existing matrix"
+        )
+
+
 class Row(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     # StrictStr: YAML scalars like `yes` / `1.0` arrive as bool/float and must
@@ -142,14 +189,35 @@ class Row(BaseModel):
     levels: dict[str, tuple[StrictStr, ...]] = Field(default={}, validate_default=True)
     status: Status
     notes: StrictStr = ""
-    # A row whose verification can only run after merge (spec 2026-09-28 §F):
-    # the PR body lists it as owed. Matrix kind 1 -> 2 (§H), because an older
-    # fr would reject the key on this `extra="forbid"` row.
-    verify: Literal["post-merge"] | None = None
+    # The row's verification strategy, or `none` (spec 2026-10-06 §B, R7):
+    # matrix kind 3 -> 4 widened it from `Literal["post-merge"]` (spec
+    # 2026-09-28 §F, kind 1 -> 2) and rewrote that value to `live`. Whether
+    # it is post-merge is the strategy manifest's answer
+    # (`fr.verification.effective.is_post_merge`), never a string compare.
+    verify: StrictStr | None = None
     # A user-visible UI requirement's evidence obligation (spec 2026-09-28
     # §A). Matrix kind 2 -> 3 (§G), because an older fr would reject the key
     # on this `extra="forbid"` row.
     visual: Visual | None = None
+    # Matrix kind 4 (spec 2026-10-06 §B): the row's walk scenario (R10), the
+    # issues whose promise it carries (R13), the harnesses that promise covers
+    # and the walks recorded against it (R14).
+    scenario: StrictStr | None = None
+    issues: tuple[StrictStr, ...] = ()
+    harnesses: tuple[StrictStr, ...] = ()
+    walks: tuple[Walk, ...] = ()
+
+    @field_validator("verify")
+    @classmethod
+    def _not_the_v3_spelling(cls, v: str | None) -> str | None:
+        check_verify(v)
+        return v
+
+    @field_validator("issues")
+    @classmethod
+    def _issues_are_qualified(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        check_issue_refs(v)
+        return v
 
     @field_validator("levels")
     @classmethod

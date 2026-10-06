@@ -9,6 +9,7 @@ from fr_dispatch.protocols import (
     Runner,
     SessionFocuser,
     SessionInspector,
+    SessionMessenger,
     SessionStatus,
 )
 
@@ -57,3 +58,24 @@ def test_neither_is_a_member_of_runner() -> None:
     members = set(Runner.__protocol_attrs__)
     assert "dispatch" in members  # the check reads real members
     assert not {"session_statuses", "focus"} & members
+
+
+class _Messages:
+    def message(self, item: Any, text: str) -> None:
+        return None
+
+
+def test_session_messenger_is_structural() -> None:
+    """Spec 2026-10-06-verification-strategies §G, R23: an optional protocol."""
+    assert isinstance(_Messages(), SessionMessenger)
+    assert not isinstance(_Neither(), SessionMessenger)
+    assert not isinstance(_Inspects(), SessionMessenger)
+
+
+def test_session_messenger_is_no_member_of_runner_and_no_capability() -> None:
+    from fr_dispatch.capabilities import CAPABILITIES
+
+    assert CAPABILITIES == frozenset({"git", "tests", "scm", "browser", "network", "devcontainer"})
+    if not hasattr(Runner, "__protocol_attrs__"):
+        pytest.skip("typing.Protocol exposes no __protocol_attrs__ before Python 3.12")
+    assert "message" not in set(Runner.__protocol_attrs__)

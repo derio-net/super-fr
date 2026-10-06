@@ -338,11 +338,11 @@ def test_add_verify_post_merge_writes_it_and_regenerates_reports(
 
     root = make_repo(tmp_path, row())
     d = root / "docs" / "acceptance"
-    result = _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "post-merge")
+    result = _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "live")
     assert result.exit_code == 0, result.output
-    assert "verify: post-merge" in (d / "matrix.yaml").read_text()
+    assert "verify: live" in (d / "matrix.yaml").read_text()
     (added,) = [r for r in load_matrix(d / "matrix.yaml").rows if r.id == "new-row"]
-    assert added.verify == "post-merge"
+    assert added.verify == "live"
     for f in ("report_local.html", "report_linked.html", "report_linked.md"):
         assert (d / f).exists(), f
     assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
@@ -369,11 +369,11 @@ def test_set_status_preserves_verify(tmp_path: Path, monkeypatch: pytest.MonkeyP
     from fr.acceptance.model import load_matrix
 
     root = make_repo(tmp_path, row())
-    assert _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "post-merge").exit_code == 0
+    assert _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "live").exit_code == 0
     moved = _invoke(
         root, monkeypatch, "set-status", "--id", "new-row", "--status", "skipped",
         "--notes", "verified live once",
     )  # fmt: skip
     assert moved.exit_code == 0, moved.output
     (r,) = [r for r in load_matrix(root / "docs/acceptance/matrix.yaml").rows if r.id == "new-row"]
-    assert (r.status, r.verify) == ("skipped", "post-merge")
+    assert (r.status, r.verify) == ("skipped", "live")

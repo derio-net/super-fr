@@ -1,0 +1,197 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Shape changes — matrix 3→4 and record 7→8, consumers, acceptance CLI, self-review
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - spec-verification-section
+  - walk-recording-prints-close
+  tier: hard
+  files:
+  - packages/fr/src/fr/acceptance/*
+  - packages/fr/src/fr/artifacts/*
+  - packages/fr/src/fr/record/*
+  - packages/fr/src/fr/run/visual.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/hostclient.py
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/verification/*
+  - packages/fr/src/fr/commands/plan_cmd.py
+  - docs/acceptance/*
+  - docs/superpowers/runs/*
+  - docs/superpowers/plans/**
+  - tests/unit/test_acceptance_*.py
+  - tests/unit/test_migration_*.py
+  - tests/unit/test_record_*.py
+  - tests/unit/test_hostclient*.py
+  - tests/unit/test_plan_self_review*.py
+  - tests/unit/test_validate_artifacts.py
+  - tests/unit/test_run_visual*.py
+  - tests/unit/test_acceptance_legacy.py
+  estimate_lines: 1400
+tasks:
+- number: 1
+  title: RED/GREEN — frozen MatrixV3 reader on every matrix hop
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_legacy.py — MatrixV3 (fr/acceptance/legacy.py,
+      frozen, extra="forbid", vocabularies INLINED: Status, LEVELS, verify
+      Literal["post-merge"], Visual) reads a v1, v2 and v3 matrix fixture; its source hash
+      is pinned (FROZEN_CLASS_SHA256, the fr.run.legacy pattern). In the matrix migration
+      tests: guard_matrix (artifacts/matrix_verify.py:36-49) validates through MatrixV3,
+      not parse_matrix — a v2 matrix carrying `verify: post-merge` passes the 1→2 and 2→3
+      guards after the live Row stops accepting it.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: write legacy.py and re-point guard_matrix (shared by matrix_visual.py:22-28).
+      Green.
+- number: 2
+  title: RED/GREEN — Row v4 and the matrix 3→4 body-rewrite migration
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: Row tests — verify is a StrictStr (a strategy name or `none`); new optional
+      scenario, issues (owner/repo#n), harnesses, walks (Walk: strategy, harness, model,
+      outcome pass|fail, at, evidence; frozen). Migration tests
+      (tests/unit/test_migration_matrix_strategies.py): 3→4 rewrites every
+      `verify: post-merge` to `verify: live` and nothing else (byte-diff limited to those
+      lines + stamp); writes once via write_text_atomic; a body already wholly v4 under a
+      v3 stamp is left alone and the runner stamps it; an unconvertible file stays
+      byte-identical and is that artifact's failure; the chain from 1 asserts [2, 3, 4].
+  - id: P2.T2.S2
+    text: |-
+      GREEN: widen Row in acceptance/model.py; artifacts/matrix_strategies.py
+      (SchemaMigration, imported by fr/artifacts/__init__.py); registry matrix
+      current_version=4; structure validator: verify resolves (resolve_strategy) or is
+      `none`, issues match ^[\w.-]+/[\w.-]+#\d+$, walk outcome in vocabulary. Green.
+- number: 3
+  title: RED/GREEN — record 7→8 (AcceptanceItem) and apply path
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: record tests — AcceptanceItem accepts verify <strategy|none>, scenario, issues,
+      harnesses, and `walk` (one Walk to append); apply_record writes them to the row
+      (a `walk` appends to walks). RecordV7 frozen reader beside record/legacy.py reads a
+      v7 record; a stamp-only migration moves live records 7→8; registry record
+      current_version=8.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: record/model.py, record/legacy.py (RecordV7, pinned), record/apply.py
+      (_apply_rows / around apply.py:701,723), migration module + registry. Green.
+- number: 4
+  title: RED/GREEN — switch every post-merge consumer to is_post_merge
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests that a row with `verify: live` (and one whose spec override says live)
+      is listed by pr_body._post_merge_owed with its reason or `no reason recorded
+      (legacy)`; is NOT counted as owing visual evidence by run/visual.py:67; and that
+      `fr acceptance set-status --verify live` is accepted while `--verify bogus` is
+      refused (acceptance_cmd.py:430-432). Template hint (record/template.py:109) names a
+      strategy, not post-merge.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: route all four through fr.verification.effective. Green.
+- number: 5
+  title: RED/GREEN — acceptance CLI flags, walk-verified, close command table
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: tests/unit/test_acceptance_walks.py — `fr acceptance add --issue o/r#1
+      --scenario tests/scenarios/x.sh --harness claude-code --verify candidate`;
+      `set-status --issue`; `set-status --walk <log> --harness h --model m --strategy live`
+      appends a Walk (missing --harness/--model/--strategy refused, exit 2);
+      walk_verified(row) true iff a passing walk on every named harness (any one if none
+      named); after the walk that verifies the last open row citing o/r#1, set-status
+      prints the forge's close + unlabel commands (gh, glab; tea prints a manual unlabel
+      line) and prints nothing under `tracking: none`. hostclient tests: the command table
+      renders issue-close, issue-label and issue-unlabel per backend.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: acceptance_cmd.py flags through the record engine; acceptance/walks.py
+      (walk_verified, issues_now_closable); widen hostclient.PR_COMMANDS
+      (hostclient.py:61-70) into a per-backend command table. Green.
+- number: 6
+  title: RED/GREEN — `fr plan self-review` checks the Verification section
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      RED: self-review tests — a spec whose `## Verification` is malformed fails, naming
+      the line; a run row (citing the spec) whose effective strategy is post-merge or
+      `none` with no reason line fails; an agent pre-merge row with no `scenario` fails;
+      a spec with no section passes unchanged.
+  - id: P2.T6.S2
+    text: |-
+      GREEN: add the check where self-review reads the spec (find with
+      `grep -n "def self_review" -r packages/fr/src`). Green.
+- number: 7
+  title: Migrate this repo, regenerate reports, full gate
+  steps:
+  - id: P2.T7.S1
+    text: |-
+      Run `uv run fr migrate artifacts --yes` in the worktree (matrix 3→4, live records
+      7→8, run cursor untouched); `uv run fr acceptance report --deterministic`;
+      `uv run fr validate artifacts`; `uv run fr acceptance check`. Commit the migrated
+      artifacts. Full fast suite + ruff + mypy green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T6.S1:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T6.S2:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+    P2.T7.S1:
+      state: x
+      ticked_at: '2026-10-06T12:16:40+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T12:16:40+00:00'
+    note: null
+    observed_prs: []

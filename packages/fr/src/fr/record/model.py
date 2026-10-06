@@ -25,7 +25,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, model_validator
 
-from fr.acceptance.model import Visual
+from fr.acceptance.model import Visual, Walk, check_issue_refs, check_verify
 from fr.journal.model import FindingState, JournalKind, ReviewScope
 from fr.run.model import AnsweredBy
 from fr.workflow.artifacts import ALWAYS_RECORD_SECTIONS, record_sections
@@ -51,7 +51,7 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 7
+RECORD_SCHEMA_VERSION = 8
 """Bumped 1 -> 2 for `questions` (spec
 `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
 change under `.claude/rules/artifact-versioning.md`. Migration:
@@ -69,7 +69,11 @@ change under `.claude/rules/artifact-versioning.md`. Migration:
 the `unconfirmed` resolution state (spec
 `2026-09-29-spec-is-the-contract-design.md` §C). Migration:
 `fr.artifacts.record_contract`; versions 1-6 are read through the frozen
-`fr.record.legacy.RecordV6`."""
+`fr.record.legacy.RecordV6`. Bumped 7 -> 8 for `AcceptanceItem.verify` naming a
+strategy and `scenario`/`issues`/`harnesses`/`walk` (spec
+`2026-10-06-verification-strategies-design.md` §B). Migration:
+`fr.artifacts.record_strategies`; version 7 is read through the frozen
+`fr.record.legacy.RecordV7`."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
@@ -166,13 +170,29 @@ class AcceptanceItem(_Strict):
     levels: dict[str, tuple[StrictStr, ...]] = {}
     status: StrictStr
     notes: StrictStr | None = None
-    verify: Literal["post-merge"] | None = None
-    """A row whose verification can only happen after merge (spec
-    2026-09-28 §F): the PR body lists it as owed."""
+    verify: StrictStr | None = None
+    """The row's verification strategy, or `none` (spec
+    2026-10-06-verification-strategies §B, R7). On a move, absent keeps the
+    row's value. Whether it resolves is checked where the repo is known
+    (`apply_record`)."""
     visual: Visual | None = None
     """A user-visible UI requirement's evidence obligation (spec
     2026-09-28-ui-visual-evidence-design.md §A). `fr acceptance set-status`
     never sets this — it is create-only, like `capability`/`acceptance`."""
+    scenario: StrictStr | None = None
+    """The row's walk scenario, repo-relative (R10). On a move, absent keeps it."""
+    issues: tuple[StrictStr, ...] = ()
+    """`owner/repo#n` issues whose promise the row carries (R13); a move ADDS them."""
+    harnesses: tuple[StrictStr, ...] = ()
+    """Harnesses the row's promise covers (R14); a move ADDS them."""
+    walk: Walk | None = None
+    """One walk to APPEND to the row's `walks` (R14) — `set-status --walk`."""
+
+    @model_validator(mode="after")
+    def _v8_fields_are_well_formed(self) -> AcceptanceItem:
+        check_verify(self.verify)
+        check_issue_refs(self.issues)
+        return self
 
 
 class VisualShot(_Strict):

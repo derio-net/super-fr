@@ -346,21 +346,21 @@ def test_a_move_record_can_set_verify_on_an_existing_row(tmp_path: Path) -> None
     root = _matrix_repo(tmp_path)
     assert _verify(root) is None
 
-    apply_record(root, None, _move(verify="post-merge"), target=RecordTarget(message="m"))
+    apply_record(root, None, _move(verify="live"), target=RecordTarget(message="m"))
 
-    assert _verify(root) == "post-merge"
+    assert _verify(root) == "live"
 
 
 def test_a_move_record_without_verify_preserves_the_existing_value(tmp_path: Path) -> None:
     from fr.record.apply import RecordTarget, apply_record
 
     root = _matrix_repo(tmp_path)
-    apply_record(root, None, _move(verify="post-merge"), target=RecordTarget(message="m"))
-    assert _verify(root) == "post-merge"
+    apply_record(root, None, _move(verify="live"), target=RecordTarget(message="m"))
+    assert _verify(root) == "live"
 
     apply_record(root, None, _move(status="ci"), target=RecordTarget(message="m2"))
 
-    assert _verify(root) == "post-merge", "a move that names no verify must preserve it"
+    assert _verify(root) == "live", "a move that names no verify must preserve it"
 
 
 def test_an_absent_ref_drop_is_refused_and_changes_nothing(tmp_path: Path) -> None:
@@ -719,7 +719,7 @@ def test_a_spec_review_record_applies_input_post_merge_and_a_resolve_together(
                     "capability": "Requirements trace",
                     "acceptance": "Operator can trace an input to its acceptance row",
                     "status": "not-implemented",
-                    "verify": "post-merge",
+                    "verify": "live",
                 }
             ],
         ),
@@ -740,4 +740,4 @@ def test_a_spec_review_record_applies_input_post_merge_and_a_resolve_together(
 
     matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
     (row,) = [r for r in matrix.rows if r.id == "trace-row"]
-    assert row.verify == "post-merge"
+    assert row.verify == "live"

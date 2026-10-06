@@ -29,7 +29,7 @@ from fr.triage.batch import (
     batch_branch,
     batch_item_id,
 )
-from fr.triage.model import Batch, CloseoutEvent, Export
+from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
@@ -37,6 +37,10 @@ CLOSEOUT_FALLBACK = timedelta(minutes=10)
 (a PR with no change fragment releases nothing)."""
 
 DEFAULT_MAX_INFLIGHT = 4
+
+AWAITING_LIVE_HOLD = "its members await a live walk: no work to dispatch"
+"""The `held` detail of a planned batch whose open members all carry `fr:awaiting-live`
+(spec 2026-10-06-verification-strategies §F, R18): the one rule the board reads too."""
 
 IN_FLIGHT: frozenset[BatchStage] = frozenset({"dispatched", "pr-open"})
 LANDED: frozenset[BatchStage] = frozenset({"merged", "partial"})
@@ -161,6 +165,9 @@ class Snapshot:
     export_orphans: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)
     # repo -> its default branch: the only base an export PR may have (p4-r15)
     export_default: Mapping[str, str] = field(default_factory=dict)
+    # The batches whose open members all await their live walk (`batch_awaits_live`):
+    # a planned one is held, never dispatched (spec §F, R18).
+    awaiting: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -341,6 +348,83 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
         f"Close out batch {batch.id} ({batch.title}): its PR on {branch} has merged.\n"
         f"In {checkout}, run `{pickup}` and follow the brief it prints, in order."
     )
+
+
+# ------------------------------------------------- conflict hand-back (§G)
+
+HANDBACKS_PER_DISPATCH = 2
+"""R22: hand-backs a batch gets per dispatch; the next conflict is held."""
+
+ConflictKind = Literal["skip", "wait-behind", "held", "handback"]
+
+
+@dataclass(frozen=True)
+class ConflictDecision:
+    """What drive does with a real merge conflict (spec 2026-10-06-verification-
+    strategies §G): `behind` names the batch a `wait-behind` waits on."""
+
+    kind: ConflictKind
+    behind: str | None = None
+
+
+def conflict_decision(
+    events: Sequence[object],
+    head: str,
+    paths: Sequence[str],
+    earlier_in_pass: Sequence[tuple[str, Sequence[str]]],
+) -> ConflictDecision:
+    """The pure decision on a conflict at *head* refusing *paths* (R21, R22).
+
+    `skip`: a `conflict` event already exists for this head, so a restarted driver
+    never hands the same head back twice. `wait-behind`: a refused path is shared
+    with a conflict met earlier in this pass (*earlier_in_pass*, `(batch, paths)` in
+    train order), which is fixed first. `held`: two `session|fresh` hand-backs were
+    made since the batch's latest `dispatch` event (held ones never count). Else
+    `handback`.
+    """
+    if any(isinstance(e, ConflictEvent) and e.head == head for e in events):
+        return ConflictDecision("skip")
+    mine = set(paths)
+    for batch_id, theirs in earlier_in_pass:
+        if mine.intersection(theirs):
+            return ConflictDecision("wait-behind", behind=batch_id)
+    handed = 0
+    for event in reversed(events):
+        if isinstance(event, DispatchEvent):
+            break
+        if isinstance(event, ConflictEvent) and event.delivered != "held":
+            handed += 1
+    if handed >= HANDBACKS_PER_DISPATCH:
+        return ConflictDecision("held")
+    return ConflictDecision("handback")
+
+
+def held_conflict(batch: Batch) -> ConflictEvent | None:
+    """The batch's latest `conflict` event when it is `held` and no `dispatch` came after
+    it (R22): the operator owns that conflict. A new dispatch resets the count."""
+    for event in reversed(batch.events):
+        if isinstance(event, DispatchEvent):
+            return None
+        if isinstance(event, ConflictEvent):
+            return event if event.delivered == "held" else None
+    return None
+
+
+def fresh_conflicts(batch: Batch, *, since_dispatch: bool) -> int:
+    """How many fresh conflict sessions the batch started: all of them (the next one's
+    number), or only since its latest dispatch (whether one is the message target)."""
+    count = 0
+    for event in reversed(batch.events):
+        if since_dispatch and isinstance(event, DispatchEvent):
+            break
+        if isinstance(event, ConflictEvent) and event.delivered == "fresh":
+            count += 1
+    return count
+
+
+def conflict_item_id(repo: str, batch_id: str, n: int) -> str:
+    """`<OWNER>/<REPO>/run/conflict-<batch-id>-<n>`: the *n*th fresh conflict session."""
+    return f"{repo}/run/conflict-{batch_id}-{n}"
 
 
 def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
@@ -797,6 +881,10 @@ def drive_pass(snap: Snapshot) -> Pass:
     pending, blocked = 0, exports_blocked
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed":
+            continue
+        if batch.id in snap.awaiting:
+            # No work, so not pending either: it never keeps a drive alive.
+            actions.append(Action("held", batch.id, AWAITING_LIVE_HOLD))
             continue
         dead = [
             f"{d} is {stages.get(d, 'unknown')}"

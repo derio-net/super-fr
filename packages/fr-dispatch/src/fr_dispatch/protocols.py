@@ -165,6 +165,18 @@ class SessionFocuser(Protocol):
         ...
 
 
+@runtime_checkable
+class SessionMessenger(Protocol):
+    """An optional protocol beside `Runner`, never part of it and never a capability:
+    send text to a session the runner dispatched (spec 2026-10-06-verification-
+    strategies §G, R23). The wave driver hands a merge conflict back through it, and
+    only to an `idle` session; a runner without it always gets a fresh session."""
+
+    def message(self, item: WorkItem, text: str) -> None:
+        """Submit *text* to the item's session as a prompt. Raising is a failed send."""
+        ...
+
+
 class Source(Protocol):
     """Where `WorkItem`s come from — the seam the future poller consumes
     (spec §4.H, guides part (b) of the brainstorm). **Nothing is extracted

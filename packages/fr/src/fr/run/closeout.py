@@ -12,7 +12,7 @@ session that inherits none of it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fr.git import GitUnavailableError, git_answer
@@ -29,6 +29,7 @@ from fr.services import ServicesError, TrackerRequiredError, require_tracker
 __all__ = [
     "CloseoutNotReadyError",
     "RunExtras",
+    "awaiting_live_lines",
     "branch_closeout_brief",
     "closeout_brief",
     "primary_checkout",
@@ -163,6 +164,7 @@ class RunExtras:
     plan_path: str | None
     has_test_plan: bool
     out_of_scope: list[str]
+    awaiting_live: list[str] = field(default_factory=list)
 
 
 def _housekeeping_branch(branch: str, run_extras: RunExtras | None) -> str:
@@ -236,6 +238,9 @@ def branch_closeout_brief(
     if run_extras is not None and run_extras.spec_path and run_extras.has_test_plan:
         lines.append(f"  run the spec's Test Plan: {run_extras.spec_path}")
 
+    if run_extras is not None:
+        lines.extend(run_extras.awaiting_live)
+
     plan_path = run_extras.plan_path if run_extras is not None else None
     out_of_scope = run_extras.out_of_scope if run_extras is not None else []
     if out_of_scope:
@@ -292,6 +297,77 @@ def branch_closeout_brief(
     return "\n".join(lines)
 
 
+def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> list[str]:
+    """One label-add command per issue the run's PR `Refs` that a post-merge,
+    not-walk-verified row cites (spec 2026-10-06-verification-strategies §F,
+    R17): that issue stays open until the walk, so it carries `fr:awaiting-live`
+    and triage keeps it out of the ranked backlog. Each repo's add commands follow
+    one command creating the label there, which may not exist yet (p4-r4). The PR
+    body is read through
+    the forge adapter, as `deliver` does (gh#742). Nothing under `tracking:
+    none`; an unreadable PR or matrix is said, never read as "nothing owed"."""
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.model import AcceptanceError, load_matrix
+    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.hostclient import FORGE_ERRORS, client_for, issue_command, label_command
+    from fr.labels import FR_AWAITING_LIVE
+    from fr.record.pr_body import holds_open_for_run, normalize_issue_ref, referenced_refs
+    from fr.requirements import load_spec_matrix, run_spec
+    from fr.services.resolve import resolve_tracking
+
+    header = "  issues the PR Refs whose post-merge row still awaits its walk:"
+    path = repo_root / MATRIX_REL
+    if pr is None or not path.is_file() or resolve_tracking(repo_root, lenient=True).type == "none":
+        return []
+    try:
+        matrix = load_matrix(path)
+        if not any(row.issues for row in matrix.rows):
+            return []
+        identity = resolve_identity(matrix, repo_root)
+        spec_rel = run_spec(state)
+        spec_ref = load_spec_matrix(repo_root, spec_rel)[1] if spec_rel is not None else None
+    except AcceptanceError as exc:
+        return [f"  WARNING: awaiting-live labels not computed — the matrix is unreadable ({exc})"]
+    holds = holds_open_for_run(repo_root, state, matrix, spec_ref)
+    waiting = {
+        normalize_issue_ref(issue, identity) or issue.lower()
+        for row in matrix.rows
+        if holds(row)
+        for issue in row.issues
+    }
+    if not waiting:
+        return []
+    try:
+        body = client_for(repo_root).pr_body(pr, cwd=repo_root)
+    except FORGE_ERRORS as exc:
+        return [
+            f"  WARNING: could not read PR {pr} ({exc}), so the awaiting-live labels are not "
+            "computed — add fr:awaiting-live by hand to each issue it Refs that a post-merge "
+            "row still holds open"
+        ]
+    refd = sorted(
+        {
+            ref
+            for written in referenced_refs(body)
+            if (ref := normalize_issue_ref(written, identity))
+        }
+        & waiting
+    )
+    if not refd:
+        return []
+    # The label may not exist yet on the repo, and adding a missing label fails, so
+    # each repo's add lines follow one create line (p4-r4).
+    lines = [header]
+    for repo in sorted({ref.split("#", 1)[0] for ref in refd}):
+        lines.append("    " + label_command(repo_root, FR_AWAITING_LIVE, repo=repo))
+        lines.extend(
+            "    " + issue_command(repo_root, "issue-label", ref=ref, label=FR_AWAITING_LIVE.name)
+            for ref in refd
+            if ref.split("#", 1)[0] == repo
+        )
+    return lines
+
+
 def closeout_brief(repo_root: Path, state: RunState) -> str:
     """A self-contained closeout brief for a run whose `deliver` step is done.
 
@@ -332,5 +408,6 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         plan_path=plan_path,
         has_test_plan=has_test_plan,
         out_of_scope=out_of_scope,
+        awaiting_live=awaiting_live_lines(repo_root, state, pr),
     )
     return branch_closeout_brief(repo_root, state.branch, run_extras=run_extras)

@@ -517,7 +517,7 @@ def test_dropping_the_only_ref_of_a_ci_row_succeeds(
 # --- set-status --verify (phase 4 review g2) ---------------------------------
 #
 # Before this, a row created before it was known to be live-only had no way to
-# be marked `verify: post-merge` after the fact: `add` is create-only, there is
+# be marked a post-merge `verify:` strategy after the fact: `add` is create-only, there is
 # no delete verb, and matrix.yaml must never be hand-edited.
 
 
@@ -536,10 +536,10 @@ def test_set_status_verify_post_merge_sets_it_on_an_existing_row(
         "--notes",
         "live-only, marked post-merge",
         "--verify",
-        "post-merge",
+        "live",
     )
     assert result.exit_code == 0, result.output
-    assert _row(root, "target").verify == "post-merge"
+    assert _row(root, "target").verify == "live"
     # the report set regenerates in the same call, as every other flip does
     d = root / "docs" / "acceptance"
     for name in ("report_local.html", "report_linked.html", "report_linked.md"):
@@ -563,11 +563,11 @@ def test_set_status_without_verify_preserves_the_existing_value(
             "--notes",
             "first, mark post-merge",
             "--verify",
-            "post-merge",
+            "live",
         ).exit_code
         == 0
     )
-    assert _row(root, "target").verify == "post-merge"
+    assert _row(root, "target").verify == "live"
 
     result = _invoke(
         root,
@@ -581,7 +581,7 @@ def test_set_status_without_verify_preserves_the_existing_value(
         "now proven in CI",
     )
     assert result.exit_code == 0, result.output
-    assert _row(root, "target").verify == "post-merge", (
+    assert _row(root, "target").verify == "live", (
         "omitting --verify on a later move must preserve the existing value"
     )
 

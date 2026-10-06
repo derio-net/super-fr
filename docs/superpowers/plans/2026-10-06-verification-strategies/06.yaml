@@ -1,0 +1,67 @@
+schema_version: 2
+phase:
+  number: 6
+  title: On-demand pre-release — workflow and `fr verification prerelease`
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - prerelease-command-shape
+  - prerelease-on-demand
+  tier: standard
+  files:
+  - .github/workflows/prerelease.yml
+  - .github/workflows/ci-budget.yml
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/commands/verification_cmd.py
+  - packages/fr/src/fr/verification/*
+  - tests/unit/test_verification_prerelease.py
+  - tests/unit/test_ci_budget.py
+  - tests/unit/test_ghclient*.py
+  estimate_lines: 300
+tasks:
+- number: 1
+  title: RED/GREEN — dispatch_workflow and the prerelease command
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED: tests/unit/test_verification_prerelease.py — on a GitHub forge,
+      `fr verification prerelease --branch feat/x --dry-run` prints the
+      `gh workflow run prerelease.yml -f branch=feat/x` argv and the rc tag shape
+      `rc/feat-x/<sha12>` with the install source `git+<remote>@<tag>`; without --dry-run
+      it calls GhClient.dispatch_workflow (fake); on glab/tea it exits 2 with
+      UnsupportedForgeOperation. ghclient test for dispatch_workflow's argv.
+  - id: P6.T1.S2
+    text: |-
+      GREEN: GhClient.dispatch_workflow; prerelease subcommand. Green.
+- number: 2
+  title: The prerelease workflow
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Write .github/workflows/prerelease.yml (name: Prerelease; on workflow_dispatch input
+      `branch`, required; permissions contents: write): checkout the branch, compute slug
+      (`/` -> `-`) and sha12, `git tag rc/<slug>/<sha12>` and push the tag only,
+      `gh release create rc/<slug>/<sha12> --prerelease --target <sha> --notes "<PR link>"`.
+      No version edit, no commit, no push to main. Add `Prerelease` to ci-budget.yml's
+      on.workflow_run.workflows; run tests/unit/test_ci_budget.py (watch-list tripwire)
+      green; commit.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T14:54:15+00:00'
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T14:54:15+00:00'
+      note: null
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T14:54:15+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T14:54:15+00:00'
+    note: null
+    observed_prs: []

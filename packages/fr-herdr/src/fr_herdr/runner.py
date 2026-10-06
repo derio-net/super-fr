@@ -34,7 +34,8 @@ agent has taken the prompt up (it left `idle`), not merely once it was typed.
   all items and reports a session's most urgent tab (`blocked` > `working` >
   `idle` > `done`; a value herdr adds later is `unknown`; no tab is `absent`);
   `focus` selects the item's workspace, then its tab (`workspace focus`, `tab
-  focus`), and is False when there is no tab.
+  focus`), and is False when there is no tab. `message` prompts the item's agent
+  (`agent prompt`), the wave driver's conflict hand-back (spec 2026-10-06 §G).
 - **Inside herdr only.** `preflight` refuses unless `HERDR_ENV=1` and `herdr`
   is on PATH: herdr's own rule is never to drive a session from outside it.
 
@@ -223,6 +224,11 @@ class HerdrRunner:
         _run_herdr(["workspace", "focus", str(tab["workspace_id"])])
         _run_herdr(["tab", "focus", str(tab["tab_id"])])
         return True
+
+    def message(self, item: WorkItem, text: str) -> None:
+        """Prompt the item's agent with *text* (spec 2026-10-06-verification-strategies
+        §G, R23): `herdr agent prompt <agent_name(item.id)> <text>`."""
+        _run_herdr(["agent", "prompt", agent_name(item.id), text])
 
     def can_dispatch(self, item: WorkItem) -> bool:
         return item.unit in self.units and item.payload.get("harness") in HARNESSES
@@ -455,7 +461,13 @@ def _close_workspace(workspace: str | None) -> None:
 
 
 if TYPE_CHECKING:
-    from fr_dispatch.protocols import Runner, SessionCloser, SessionFocuser, SessionInspector
+    from fr_dispatch.protocols import (
+        Runner,
+        SessionCloser,
+        SessionFocuser,
+        SessionInspector,
+        SessionMessenger,
+    )
 
     # Conformance check: `Runner` is not runtime-checkable, so this assignment is
     # what makes CI's mypy fail when a signature here drifts from the protocol.
@@ -463,3 +475,4 @@ if TYPE_CHECKING:
     _closes: SessionCloser = HerdrRunner()
     _inspects: SessionInspector = HerdrRunner()
     _focuses: SessionFocuser = HerdrRunner()
+    _messages: SessionMessenger = HerdrRunner()

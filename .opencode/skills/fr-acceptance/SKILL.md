@@ -11,9 +11,7 @@ description: >
 
 # fr-acceptance
 
-The matrix (`docs/acceptance/matrix.yaml`) is the registry of business-level
-acceptance tests × verification levels (unit/api/int/ui) × automation status.
-This skill drives the agent-side work; the mechanics live in the CLI.
+The matrix (`docs/acceptance/matrix.yaml`) is the registry of business-level acceptance tests × verification levels (unit/api/int/ui) × automation status. This skill drives the agent-side work; the mechanics live in the CLI.
 
 **Announce at start:** "I'm using fr-acceptance to work the acceptance matrix."
 
@@ -114,7 +112,8 @@ weekly "Acceptance debt" issue upsert.
 
 A row born from a spec's `## Requirements` list cites the requirement, not just
 the spec: `--origin <repo>:<spec-path>#R<n>` (repeat `--origin` for several ids).
-A row only a live, operator-driven run can prove — never a unit test — carries
-`--verify post-merge`; it keeps nagging in `fr acceptance status` whatever its
-status, and the PR body lists it under `## Post-merge verification owed`. `set-status --verify post-merge` sets it
-too; omitting the flag preserves what the row already carries.
+A row only a live, operator-driven run can prove — never a unit test — carries `--verify live` (the old `post-merge` spelling migrates to it); it keeps nagging in `fr acceptance status` whatever its status, and the PR body lists it under `## Post-merge verification owed`. `--verify <strategy|none>` takes any strategy `fr verification list` resolves, or `none` (verified some other way; the spec's `## Verification` says what); `set-status --verify` sets it too, and omitting the flag preserves what the row already carries.
+
+## Walks, issues and closing on live evidence
+
+A row may cite the issues whose promise it carries (`--issue owner/repo#n`, repeatable), name its walk script (`--scenario <repo-relative path>`; a row on an agent-driven pre-merge strategy needs one) and the harnesses its promise covers (`--harness` on `add`). `set-status --walk <evidence> --harness <h> --model <m> --strategy <s>` appends a walk (all three flags required; `--walk-outcome` defaults to `pass`; evidence is a log path or a note). A row is **walk-verified** once it has a passing walk on every harness it names, or on any one if it names none; until then a post-merge row holds its issues open, and `deliver` refuses a PR body that closes one (it says `Refs`). When a recorded walk makes a row walk-verified, `set-status` PRINTS, for each issue it cites that no other row still holds open, the forge's commands to close it and remove the `fr:awaiting-live` label (manual steps where a forge's command line lacks one; nothing under `tracking: none`) — run them yourself, fr never closes an issue; the post-merge close-out brief prints the matching command that ADDS the label to each issue the PR only `Refs`. Authoring a strategy such as `staging`: `docs/verification-strategies.md`.

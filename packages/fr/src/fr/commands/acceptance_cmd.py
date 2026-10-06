@@ -11,7 +11,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
-from fr.acceptance.model import AcceptanceError, Matrix, Row, load_matrix
+from fr.acceptance.model import AcceptanceError, Matrix, Row, Walk, load_matrix
 from fr.commands.common import resolve_repo_root
 
 console = Console(highlight=False)
@@ -316,6 +316,91 @@ def _parse_levels(level: list[str], flag: str = "--level") -> dict[str, list[str
     return levels
 
 
+def _check_verify(root: Path, verify: str | None) -> None:
+    """`--verify` names a strategy that resolves here, or `none` (spec
+    2026-10-06-verification-strategies §B) — refused before anything moves."""
+    if verify is None:
+        return
+    from fr.record.apply import strategy_error
+
+    if (why := strategy_error(verify, root)) is not None:
+        err_console.print(f"[red]error:[/red] --verify: {escape(why)}")
+        raise typer.Exit(2)
+
+
+def _walk_from_flags(
+    root: Path,
+    evidence: str | None,
+    harness: str | None,
+    model: str | None,
+    strategy: str | None,
+    outcome: str,
+) -> Walk | None:
+    """`--walk` and its companions as a `Walk`, or `None` without `--walk`.
+    Each companion is required; the strategy must resolve (spec 2026-10-06 R14)."""
+    import datetime as _dt
+
+    from fr.record.apply import strategy_error
+    from fr.verification.model import RESERVED
+
+    if evidence is None:
+        stray = [f for f, v in (("--harness", harness), ("--model", model),
+                                ("--strategy", strategy)) if v is not None]  # fmt: skip
+        if stray:
+            err_console.print(f"[red]error:[/red] {', '.join(stray)} only go with --walk")
+            raise typer.Exit(2)
+        return None
+    missing = [f for f, v in (("--harness", harness), ("--model", model),
+                              ("--strategy", strategy)) if not v]  # fmt: skip
+    if missing:
+        err_console.print(
+            f"[red]error:[/red] --walk needs {', '.join(missing)} — a walk names the harness, "
+            "model and strategy it ran on; nothing changed"
+        )
+        raise typer.Exit(2)
+    assert strategy is not None
+    why = (
+        f"{RESERVED!r} is not a strategy a walk can run"
+        if strategy == RESERVED
+        else strategy_error(strategy, root)
+    )
+    if why is not None:
+        err_console.print(f"[red]error:[/red] --strategy: {escape(why)}")
+        raise typer.Exit(2)
+    try:
+        return Walk(
+            strategy=strategy,
+            harness=harness,  # type: ignore[arg-type]  # checked non-empty above
+            model=model,  # type: ignore[arg-type]
+            outcome=outcome,  # type: ignore[arg-type]  # pydantic validates the literal
+            at=_dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            evidence=evidence,
+        )
+    except Exception as e:  # pydantic ValidationError → operator-readable
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+
+
+def _print_close_commands(root: Path, before: Row) -> None:
+    """R16: the issues this walk freed, each with the forge's close and
+    unlabel commands — nothing under `tracking: none`. fr never closes them."""
+    from fr.acceptance.walks import AWAITING_LIVE_LABEL, issues_now_closable
+    from fr.hostclient import issue_command
+    from fr.services.resolve import resolve_tracking
+
+    matrix = _load(root)
+    after = next(r for r in matrix.rows if r.id == before.id)
+    freed = issues_now_closable(matrix, before, after, root)
+    if not freed or resolve_tracking(root, lenient=True).type == "none":
+        return
+    w = after.walks[-1]
+    comment = f"Walk-verified ({w.strategy}, {w.harness}, {w.model}): {w.evidence}"
+    for ref in freed:
+        typer.echo(f"{ref}: every row citing it is walk-verified — close it:")
+        typer.echo("  " + issue_command(root, "issue-close", ref=ref, comment=comment))
+        typer.echo("  " + issue_command(root, "issue-unlabel", ref=ref, label=AWAITING_LIVE_LABEL))
+
+
 def _validate_refs(row: Row) -> None:
     """Ref grammar checked BEFORE the file is touched — a shell-mangled ref
     (zsh's `$VAR:t` modifier eating "…:tests/…") must not land and surface
@@ -386,10 +471,34 @@ def set_status_cmd(
     verify: str | None = typer.Option(
         None,
         "--verify",
-        help="post-merge: mark the row as verifiable only after merge (spec 2026-09-28 "
-        "§F). Omit to leave the row's existing `verify` alone — set-status never "
-        "clears it.",
+        help="<strategy|none>: the row's verification strategy (`fr verification list`; "
+        "spec 2026-10-06 §B). Omit to leave the row's existing `verify` alone — "
+        "set-status never clears it.",
     ),
+    issue: list[str] = typer.Option(
+        [],
+        "--issue",
+        help="'owner/repo#n' issue whose promise the row carries, ADDED to its `issues` "
+        "(repeatable; spec 2026-10-06 R13).",
+    ),
+    scenario: str | None = typer.Option(
+        None,
+        "--scenario",
+        help="Repo-relative walk scenario for the row (spec 2026-10-06 R10); omit to keep "
+        "the row's existing one.",
+    ),
+    walk: str | None = typer.Option(
+        None,
+        "--walk",
+        help="Record a walk of this row: its evidence (a log path or a note). Needs "
+        "--harness, --model and --strategy (spec 2026-10-06 R14).",
+    ),
+    harness: str | None = typer.Option(None, "--harness", help="--walk: the harness walked."),
+    model: str | None = typer.Option(None, "--model", help="--walk: the model that walked it."),
+    strategy: str | None = typer.Option(
+        None, "--strategy", help="--walk: the verification strategy the walk ran."
+    ),
+    walk_outcome: str = typer.Option("pass", "--walk-outcome", help="--walk: pass | fail."),
 ) -> None:
     """Move an existing row's status, in place, with a reason (spec §3.G.2).
 
@@ -407,8 +516,14 @@ def set_status_cmd(
     one call. A drop naming a ref not on the row, an unknown level, or a ref
     also named in `--level` is refused (exit 2) with nothing changed.
 
-    `--verify post-merge` marks a row created before it was known to be
-    live-only, in the same rewrite; omitting the flag preserves whatever the
+    `--issue` adds issues the row carries; `--walk` appends a walk (spec
+    2026-10-06 §E). When that walk makes the row walk-verified and no other
+    row still holds one of its issues open, the forge's close and unlabel
+    commands are printed — fr never closes the issue itself, and prints
+    nothing under `tracking: none`.
+
+    `--verify <strategy|none>` names the row's verification strategy, in the
+    same rewrite; omitting the flag preserves whatever the
     row already carries (`add`'s create-only, and there is no delete verb, so
     this is the only way to set it on an existing row without hand-editing
     matrix.yaml).
@@ -427,9 +542,8 @@ def set_status_cmd(
             f"[red]error:[/red] unknown status {status!r} (valid: {' | '.join(valid)})"
         )
         raise typer.Exit(2)
-    if verify is not None and verify != "post-merge":
-        err_console.print(f"[red]error:[/red] --verify must be 'post-merge', got {verify!r}")
-        raise typer.Exit(2)
+    _check_verify(root, verify)
+    new_walk = _walk_from_flags(root, walk, harness, model, strategy, walk_outcome)
     target = next((r for r in matrix.rows if r.id == row_id), None)
     if target is None:
         known = ", ".join(r.id for r in matrix.rows) or "none"
@@ -465,8 +579,12 @@ def set_status_cmd(
             levels=merged,
             status=status,  # type: ignore[arg-type]  # pydantic validates the literal
             notes=notes,
-            verify=new_verify,  # type: ignore[arg-type]  # pydantic validates the literal
+            verify=new_verify,
             visual=target.visual,  # set-status never touches `visual` (spec 2026-09-28 §A)
+            scenario=scenario if scenario is not None else target.scenario,
+            issues=target.issues + tuple(i for i in dict.fromkeys(issue) if i not in target.issues),
+            harnesses=target.harnesses,
+            walks=target.walks + ((new_walk,) if new_walk is not None else ()),
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
@@ -482,12 +600,17 @@ def set_status_cmd(
             status=status,
             notes=notes,
             levels={k: tuple(v) for k, v in additions.items()},
-            verify=verify,  # type: ignore[arg-type]  # None preserves; apply.py falls back to existing
+            verify=verify,  # None preserves; apply.py falls back to existing
+            issues=tuple(issue),
+            scenario=scenario,
+            walk=new_walk,
         ),
         f"chore(fr): acceptance — {row_id} {describe_move(target, new_row)}",
         {row_id: {k: tuple(v) for k, v in drops.items()}} if drops else None,
     )
     typer.echo(f"{row_id}: {describe_move(target, new_row)}")
+    if new_walk is not None:
+        _print_close_commands(root, target)
 
 
 @acceptance_app.command("add")
@@ -508,8 +631,8 @@ def add_cmd(
     verify: str | None = typer.Option(
         None,
         "--verify",
-        help="post-merge: the row can only be verified after merge — the PR body lists "
-        "it as owed (spec 2026-09-28 §F).",
+        help="<strategy|none>: the row's verification strategy (`fr verification list`); "
+        "a post-merge one is listed as owed in the PR body (spec 2026-10-06 §B).",
     ),
     visual_state: list[str] = typer.Option(
         [],
@@ -522,6 +645,20 @@ def add_cmd(
         help="A named UI interaction (limits included) visual evidence must cover "
         "(repeatable; spec 2026-09-28 §A).",
     ),
+    issue: list[str] = typer.Option(
+        [],
+        "--issue",
+        help="'owner/repo#n' issue whose promise the row carries (repeatable; "
+        "spec 2026-10-06 R13).",
+    ),
+    scenario: str | None = typer.Option(
+        None, "--scenario", help="Repo-relative walk scenario for the row (spec 2026-10-06 R10)."
+    ),
+    harness: list[str] = typer.Option(
+        [],
+        "--harness",
+        help="A harness the row's promise covers (repeatable; spec 2026-10-06 R14).",
+    ),
 ) -> None:
     """Insert a schema-validated row after its capability's last row (agents
     never hand-edit YAML shapes); a new capability appends at the end.
@@ -533,6 +670,7 @@ def add_cmd(
 
     root = resolve_repo_root()
     matrix = _load(root)
+    _check_verify(root, verify)
 
     levels = _parse_levels(level)
     try:
@@ -549,8 +687,11 @@ def add_cmd(
             levels={k: tuple(v) for k, v in levels.items()},
             status=status,  # type: ignore[arg-type]  # pydantic validates the literal
             notes=notes,
-            verify=verify,  # type: ignore[arg-type]  # pydantic validates the literal
+            verify=verify,
             visual=visual,
+            scenario=scenario,
+            issues=tuple(dict.fromkeys(issue)),
+            harnesses=tuple(dict.fromkeys(harness)),
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
@@ -579,6 +720,9 @@ def add_cmd(
             notes=new_row.notes,
             verify=new_row.verify,
             visual=new_row.visual,
+            scenario=new_row.scenario,
+            issues=new_row.issues,
+            harnesses=new_row.harnesses,
         ),
         f"chore(fr): acceptance — add {new_row.id}",
     )
