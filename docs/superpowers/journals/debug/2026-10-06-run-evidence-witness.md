@@ -19,3 +19,8 @@ telemetry.wrote_since never consults _detaches: a writer that backgrounds itself
 ### rc-999 · root-cause · _program treats a value-taking uv run flag value as the program
 
 telemetry._program picks the first word not starting with - after uv run; --with/--python/--project etc. take a separate value word.
+
+<!-- fr:journal kind=hypothesis scope=debug id=h-1002-notice created=2026-10-06T08:49:51+00:00 -->
+### h-1002-notice · hypothesis · Subagent transcripts lack the background notice, so the #693 fix never reaches implement-phase
+
+Ruled out: 182 of 184 subagent transcripts with a background ack carry a task-notification; the phase-2 one does too.
