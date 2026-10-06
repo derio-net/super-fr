@@ -236,3 +236,8 @@ The brief line now says `--no-issues files none`.
 ### sr-14-resolved · finding [fixed] · resolves sr-14: The repo-slug source cites a precedent that does not exist
 
 §C Filing: the slug comes from resolve_identity; its two-segment limit is noted.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-archive-followups-p2 created=2026-10-06T17:29:15+00:00 -->
+### phase-split-2026-10-06-archive-followups-p2 · decision · ask: phase 2 serves its own issue (#528)
+
+One agentic phase per independently reviewable ask; each phase maps to one member issue.
