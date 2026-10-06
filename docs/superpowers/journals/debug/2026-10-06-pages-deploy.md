@@ -14,3 +14,8 @@ The deploy job is all-or-nothing: the report render is an ordinary step ahead of
 ### pages-deploy-coupled · finding [fixed] · Render fails alone; deploy is never cancelled
 
 pages.yml: render step gets id report + continue-on-error; on steps.report.outcome == failure a placeholder /acceptance/index.html names the commit and links the run and the committed report_linked.md; after deploy-pages a step fails the run, so the refusal stays red without holding the explainers back. concurrency cancel-in-progress: false. FR_SKIP_MIGRATION still absent (spec 2026-10-03 §A step 5 kept). Pinned first by five failing tests in tests/unit/test_pages_workflow.py (one executes the placeholder script); matrix row pages-deploy-survives-report-refusal.
+
+<!-- fr:journal kind=review scope=debug id=148252a4bb8c created=2026-10-06T16:54:09+00:00 -->
+### 148252a4bb8c · review · Independent review: one finding, fixed
+
+A read-only reviewer checked outcome-vs-conclusion semantics, the heredoc inside the YAML block scalar, injection (runner-controlled vars only, no ${{ }} in run blocks), placeholder overwrite of a partial report, cancel-in-progress: false queue semantics, and that the tests are not tautological: no high-confidence issues. One lower-confidence observation acted on: a failing step inside the job carrying environment: github-pages would mark the deployment record failed though the site went live. The red signal moved to a separate report-status job (needs: deploy, gated on the deploy job's report output); test_a_failed_render_still_fails_the_run_after_deploying was rewritten first and seen red.
