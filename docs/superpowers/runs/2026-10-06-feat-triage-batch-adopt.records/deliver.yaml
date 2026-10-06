@@ -1,0 +1,9 @@
+schema_version: 8
+run: 2026-10-06-feat-triage-batch-adopt
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1058
+evidence:
+  tests: /var/folders/28/d4n60x_92gbgh3rtf4vstb0h0000gn/T/adopt-deliver-suite.log
