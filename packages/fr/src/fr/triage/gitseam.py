@@ -62,6 +62,27 @@ def git(args: list[str], cwd: Path) -> str:
     return out
 
 
+def show_bytes(cwd: Path, ref: str, file: str) -> bytes | None:
+    """*file*'s content at *ref*, exactly as stored, or None when it does not exist there."""
+    if not git_ok(["cat-file", "-e", f"{ref}:{file}"], cwd):
+        return None
+    return git_bytes(["show", f"{ref}:{file}"], cwd)
+
+
+def show_text(cwd: Path, ref: str, file: str) -> str | None:
+    """*file*'s content at *ref* as UTF-8 text, line endings untouched, or None when it
+    does not exist there. A blob that is not UTF-8 (a binary file) is a `GitError` naming
+    it, never a `UnicodeDecodeError` (gh#889): every text caller reads a manifest or a
+    config, and a copy that must keep any file intact reads `show_bytes` instead."""
+    content = show_bytes(cwd, ref, file)
+    if content is None:
+        return None
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise GitError(f"{file} at {ref} is not UTF-8 text ({exc.reason}); cannot read it") from exc
+
+
 def git_ok(args: list[str], cwd: Path) -> bool:
     """Whether `git <args>` exits 0 (for predicates such as `merge-base --is-ancestor`)."""
     try:
@@ -141,10 +162,13 @@ class Checkout:
         git(["fetch", "--quiet", "--prune", "origin"], self.path)
 
     def show(self, ref: str, file: str) -> str | None:
-        """*file*'s text at *ref*, or None when it does not exist there."""
-        if not git_ok(["cat-file", "-e", f"{ref}:{file}"], self.path):
-            return None
-        return git(["show", f"{ref}:{file}"], self.path)
+        """*file*'s UTF-8 text at *ref*, or None when it does not exist there (`show_text`:
+        a non-UTF-8 blob is a `GitError`)."""
+        return show_text(self.path, ref, file)
+
+    def show_bytes(self, ref: str, file: str) -> bytes | None:
+        """*file*'s exact content at *ref*, or None when it does not exist there."""
+        return show_bytes(self.path, ref, file)
 
     def remote_branch_exists(self, branch: str) -> bool:
         out = git(["ls-remote", "--heads", "origin", f"refs/heads/{branch}"], self.path)
@@ -276,14 +300,15 @@ class Checkout:
         rg-5). Nothing in this clone changes."""
         git(["init", "--quiet", str(dest)], self.path)
         git(["remote", "add", "origin", self.origin_url()], dest)
-        listed = git(["ls-tree", "-r", "--name-only", ref, "--", *paths], self.path)
-        for name in listed.splitlines():
-            text = self.show(ref, name)
-            if text is None:
+        # `-z`: names unquoted, so a non-ASCII path is copied, not skipped as unknown.
+        listed = git_bytes(["ls-tree", "-r", "-z", "--name-only", ref, "--", *paths], self.path)
+        for name in (os.fsdecode(n) for n in listed.split(b"\0") if n):
+            content = self.show_bytes(ref, name)  # any file, binary included (gh#889)
+            if content is None:
                 continue
             target = dest / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(text, encoding="utf-8")
+            target.write_bytes(content)
 
     def run_command(self, argv: list[str]) -> str:
         """Run the repo's declared `post_merge` argument list in this clone (R14).
@@ -367,10 +392,8 @@ class Worktree:
         return git(["merge-base", "HEAD", ref], self.path).strip()
 
     def show(self, ref: str, file: str) -> str | None:
-        """*file*'s text at *ref*, or None when it does not exist there."""
-        if not git_ok(["cat-file", "-e", f"{ref}:{file}"], self.path):
-            return None
-        return git(["show", f"{ref}:{file}"], self.path)
+        """*file*'s UTF-8 text at *ref*, or None when it does not exist there (`show_text`)."""
+        return show_text(self.path, ref, file)
 
     def take_theirs(self, paths: list[str]) -> None:
         """Resolve *paths* to main's side, so no file keeps conflict markers."""

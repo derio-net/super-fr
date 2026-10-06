@@ -41,6 +41,7 @@ from fr.triage.model import (
     issue_key,
     load_facts,
     load_judgements,
+    load_scope_facts,
     state_dir,
 )
 from fr.triage.render import plural, render
@@ -230,14 +231,15 @@ def _previous_facts(path: Path, scope: Scope) -> Facts | None:
         facts = load_facts(path)
     except TriageError:
         return None
-    return facts if facts.scope == scope.name and facts.kind == scope.kind else None
+    return facts if facts.matches(scope) else None
 
 
 def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, Judgements]:
     """The scope's facts and judgements, through the `fr.triage.model` loaders.
 
-    No facts.json is an error naming `collect`; no judgements.yaml is allowed —
-    everything is then unranked.
+    No facts.json is an error naming `collect`, and so are facts collected for
+    another scope (a `--dir` can point anywhere, gh#886); no judgements.yaml is
+    allowed — everything is then unranked.
     """
     target_dir = state_dir(scope, dir_override)
     facts_path = target_dir / "facts.json"
@@ -251,7 +253,7 @@ def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, J
         raise typer.Exit(code=2)
     judgements_path = target_dir / "judgements.yaml"
     try:
-        facts = load_facts(facts_path)
+        facts = load_scope_facts(facts_path, scope)
         judgements = (
             load_judgements(judgements_path)
             if judgements_path.exists()

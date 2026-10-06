@@ -204,7 +204,7 @@ def column_of(batch: Batch, facts: Facts, batches: Sequence[Batch]) -> Column:
     stage = derive_batch_stage(batch, facts)
     if stage in _COLUMN_OF_STAGE:
         return _COLUMN_OF_STAGE[stage]
-    archived = closeout_state(batch, facts) == "archived"
+    archived = closeout_state(batch) == "archived"
     return "done" if archived else "closing-out"
 
 
