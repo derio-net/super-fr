@@ -189,3 +189,28 @@ adopt --supersede passes the old cursor to the inference (clause 2 sees its impl
 ### p2-r5-resolved-3 · finding [fixed] · resolves p2-r5: spec's supersede ordering (carry after inference) hides carried implement returns from clause 2 at adoption
 
 Operator approved recording p2-r5 as fixed: phase 3 implemented it (spec §D amended; clause 2 checked against the old cursor's implement attempts; two tests pin it).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-06T05:42:17+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · supersede used the old cursor's unvalidated `run:` as a path segment (read, records dir, unlink, usage rename) (phase 3)
+
+find_run_for_plan returns the `run:` string from inside the file; a crafted `run: ../…` steered the read, delete and rename outside docs/superpowers/runs, and a `../` id aliased usage_path onto run_path. Also the background security scan's path-traversal flag.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-06T05:42:17+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · old cursor located by a path rebuilt from its content id, not the file that matched (phase 3)
+
+A file whose name disagrees with its `run:` sent the read, carry-forward and delete to a different file, and the same-day exemption could overwrite a different live run.
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-10-06T05:42:17+00:00 phase=3 -->
+### p3-review-1 · review · phase 3 review: p3-r1, p3-r2 (in) (phase 3)
+
+Independent adversarial reviewer checked carry_forward against validate_run, done-vs-historical precedence (p2-r5 pinned), preview/refusals writing nothing, the one-commit supersede, and the prose/mirrors. Raised p3-r1 and p3-r2, both in scope.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-06T05:42:17+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: supersede used the old cursor's unvalidated `run:` as a path segment (read, records dir, unlink, usage rename) (phase 3)
+
+adopt._owning_old_cursor validates the id with validate_run_id before any path is built; test_supersede_refuses_a_traversal_run_id_and_touches_nothing (fails without the fix) asserts every yaml under docs/superpowers is byte-identical and no commit was made.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-06T05:42:17+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: old cursor located by a path rebuilt from its content id, not the file that matched (phase 3)
+
+_owning_old_cursor requires runs/<id>.yaml to exist, record `run: <id>` and name this plan in emitted.plan; otherwise one refusal naming the mismatch. Tests for a mismatch whose content id equals the derived new id (the other run is neither read, deleted nor overwritten) and for a missing runs/<id>.yaml; both fail without the fix.
