@@ -43,29 +43,31 @@ titles (thresholds in §3.B). Flagged pairs are joined into groups by
 connectivity.
 R3. A judgement may carry `duplicate_of: <key>` and `distinct_from: [<key>, ...]`
 on every judgements schema. At load, fr refuses a malformed key, a self
-reference, a `duplicate_of` whose target is itself judged a duplicate (no
-chains), and an issue that names one key in both fields.
+reference, and an issue that names one key in both fields. A chain loads, and
+`check` reports it in triage-pages-goal's `duplicate chained` set (§2.1).
 R4. Candidates never include an issue judged `duplicate_of` anything, nor a pair
 where either issue lists the other in `distinct_from`.
 R5. `fr triage check` reports a `duplicates` set: every open issue judged a
 duplicate, with its original's state (`open`, `closed` or `missing`, plus a
 reason). For an open or closed original it prints the exact
 `gh issue close <n> --repo <OWNER/REPO> --duplicate-of <original url>` command.
-For a missing one it names the dangling key and prints no command.
+For a missing one it names the dangling key and prints no command. The set sits
+beside triage-pages-goal's `duplicate target unknown`, which lists the same
+missing keys without the reason or the command (§2.1).
 R6. `fr triage collect` views every `duplicate_of` target that is not an open
 issue, the same way it views a judged key, so a closed original reads `closed`,
 not `missing`.
 R7. A judged duplicate is never in the `unplaced` set.
-R8. On the board, a judged duplicate whose original is an open issue in the facts
-is rendered inside its original's row, not in its own tier. An open duplicate
-shows its close command there, and a closed one shows a `closed` tag and no
-command. Any other judged duplicate stays in its tier with a tag naming its
-original and that original's state.
+R8. On the board, every judged duplicate leaves Backlog by tier and is listed under
+Parked as "duplicate of <link>" (triage-pages-goal R11, §2.1). In addition, an
+open original's row carries a `Duplicates` paragraph and a `+N duplicate(s)` tag
+listing its judged duplicates: an open one with its close command, a closed one
+with a `closed` tag and no command.
 R9. The board has a "Possible duplicates" section listing the candidate groups
 with each pair's reasons, and it says so when there are none.
 R10. In loop mode, `fr triage batch drive` prints one `dedupe` line when it
 observes a wave go from unfinished to finished while the candidate set is not
-empty. The line gives the count and the scope-qualified `fr triage check`
+empty. Finished is main's one `finished_waves` predicate (§2.1). The line gives the count and the scope-qualified `fr triage check`
 command. The driver never judges and never writes a duplicate to the forge.
 R11. The fr-triage skill teaches the loop: read the candidates, judge each group
 into `duplicate_of` or `distinct_from`, and leave the printed close commands to
@@ -97,6 +99,32 @@ the operator. The skill's prose-only "link duplicates in `note`" goes away.
   archive PR has merged, and `archive` actions merge those PRs.
 - `gh issue close --duplicate-of <number|url>` exists (gh 2.101.0, checked here). It
   sets GitHub's own duplicate state and links the issues.
+
+### 2.1 Reconciled with triage-pages-goal (#976, merged mid-run)
+
+#976 landed on main while this run was in review. Its R11 already ships part of
+this design, so the two features are merged rather than layered (decision
+`d-merge-976`):
+
+- **One field.** `Judgement.duplicate_of` and `severity` come from #976. This
+  change adds `distinct_from` beside them.
+- **Chains** load. `check`'s `duplicate chained` set (#976) reports them. This
+  spec's earlier load-time refusal is dropped, because it would have made that
+  set dead and refused files #976 accepts.
+- **Missing originals.** #976's `duplicate target unknown` set stays. This
+  change's `duplicates` set adds the state, the reason and the close command.
+- **Board.** #976 moves every duplicate off the tiers into Parked. This change
+  keeps that and adds the `Duplicates` paragraph on an open original's row.
+  "Possible duplicates" is a generated board section (`render.GENERATED`), so a
+  board manifest can place it. One that omits it gets it appended.
+- **Collect** viewing `duplicate_of` targets (R6) is the same rule in both. One
+  implementation is kept.
+- **Driver.** "Finished" is #976's `finished_waves(batches, stages)`, every
+  batch terminal (cancelled, abandoned, or a close-out whose `archived` is set),
+  read once into `Snapshot.finished`. This change's own predicate (§3.E as
+  first written) is dropped, so the board, the history page and the driver
+  cannot disagree. `unfinished_waves` is that set's complement over the state
+  file's wave keys.
 
 ### Calibration (2026-10-06, this repo, 438 issues of which 61 open)
 
@@ -186,8 +214,9 @@ same cap `collect` already applies).
    the universe name it (sr-10).
 3. **finding**: the two issues name the same journal finding id after the word
    `finding` (`finding r2-2`, ``finding `deliver-flaky-columns` ``), and both
-   reference at least one same `#<n>`. A finding id contains a digit or a hyphen,
-   so prose words never match. Finding ids repeat across journals (`r2-2`), and
+   reference at least one same `#<n>`. A finding id contains a digit, or is
+   backticked (``finding `deliver-flaky-columns` ``), so prose such as
+   "finding out-of-scope" never matches (review p1-r2). Finding ids repeat across journals (`r2-2`), and
    the shared reference ties both issues to the same run.
 4. **theme**: both are judged with the same non-empty `theme_key(theme)` and a
    title Jaccard ≥ 0.25.
@@ -253,16 +282,16 @@ per pair with its reasons. Under **duplicates**, each entry prints
 
 ### D. Board (`fr/triage/render.py`)
 
-- The tier sections skip a judged duplicate (open or closed) whose original is
-  an open issue in the facts. Its original's row gets a `Duplicates` paragraph:
+- Every judged duplicate leaves the tier sections and is listed under Parked
+  (#976, §2.1). An open original's row also gets a `Duplicates` paragraph:
   one line per duplicate, giving the key (linked) and the title. An open
   duplicate also gets its `gh` command in `<code>`, and a closed one gets a
   `closed` tag and no command (sr-6). The original's summary gets a
   `+N duplicate(s)` tag (R8).
-- Any other judged duplicate (original closed or missing) keeps its row in its
-  tier, with a `duplicate of <key> (<state>)` tag.
-- A new `Possible duplicates` section (`id="possible-duplicates"`) goes directly
-  before "Backlog by tier". It shows one block per group: the keys linked to
+- A new `Possible duplicates` section (`id="possible-duplicates"`, a generated
+  section in `render.GENERATED`, collapsed like its neighbours) goes directly
+  before "Backlog by tier". A group lists at most 10 pairs, then "+N more"; the
+  `check` JSON keeps all of them (review p1-r8). It shows one block per group: the keys linked to
   their issues, then the pair reasons. With no candidates it reads "No candidate
   duplicates among the open issues." (R9).
 - `render` stays deterministic: same inputs, same bytes. Snapshots
@@ -275,21 +304,19 @@ The trigger is an **observed** transition, a wave going from unfinished to
 finished. It is never inferred from a planned action: an `archive` action is a
 plan, and its merge may still fail (spec review sr-2, sr-3).
 
-- **Wave members.** For wave `w`, the members are every batch in the state file
-  with `wave == w` whose stage is not `cancelled` or `abandoned`. A batch
-  outside `--selection` still counts, because a wave is finished globally, not
-  per selection. A wave with no members is never finished (sr-4).
-- **Finished.** `finished_waves(snap) -> frozenset[int]` is a pure helper in
-  `batch_drive.py`. It returns the waves whose members are all `is_finished`.
+- **Finished** is #976's `finished_waves(batches, stages)`, read once into
+  `Snapshot.finished` (wave keys, `str(batch.wave)`), over every batch whatever
+  the selection (§2.1). `unfinished_waves(snap)` is its complement over the
+  state file's wave keys.
 - **`Snapshot`** gains three fields:
-  - `unfinished_waves: frozenset[int] | None = None` holds the waves that were
+  - `unfinished_waves: frozenset[str] | None = None` holds the waves that were
     unfinished on this process's previous pass, or `None` on its first pass.
   - `duplicate_groups: int = 0` is the candidate-group count.
   - `dedupe_command: str = ""` is the scope-qualified check command, for
     example `fr triage check --repo derio-net/super-fr`. The command builds it
     from its own scope args, because the pure pass has none (sr-5).
 - **`drive_pass`**, as its last step, emits one action per wave `w` in
-  `finished_waves(snap) & (snap.unfinished_waves or ∅)`, in ascending order,
+  `snap.finished & (snap.unfinished_waves or ∅)`, in numeric order,
   provided `duplicate_groups > 0`: `Action("dedupe", "", "<n> duplicate
   candidate group(s) after wave <w> finished; run `<dedupe_command>` to judge
   them")`. It uses a new `ActionKind` value, `dedupe`, which names no batch.
@@ -299,6 +326,9 @@ plan, and its merge may still fail (spec review sr-2, sr-3).
   mode (no `--yes`), the line prints like any other action.
 
 So loop mode reports each wave once, in the pass that first sees it finished.
+When a pass finishes the drive (nothing left to do) while some wave that was
+unfinished at its start is now finished, the loop runs one more observation
+pass before it exits, so the last wave is reported too (review p1-r4).
 A wave already finished when the process starts is never reported. `--once`
 never reports, because every `--once` run is a first pass. This is stated
 rather than worked around: `check` and the board always show the candidates.
