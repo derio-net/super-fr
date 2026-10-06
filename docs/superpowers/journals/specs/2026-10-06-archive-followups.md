@@ -241,3 +241,8 @@ The brief line now says `--no-issues files none`.
 ### phase-split-2026-10-06-archive-followups-p2 · decision · ask: phase 2 serves its own issue (#528)
 
 One agentic phase per independently reviewable ask; each phase maps to one member issue.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-archive-followups-p3 created=2026-10-06T17:29:16+00:00 -->
+### phase-split-2026-10-06-archive-followups-p3 · decision · ask: phase 3 serves its own issue (#458)
+
+One agentic phase per independently reviewable ask; each phase maps to one member issue.
