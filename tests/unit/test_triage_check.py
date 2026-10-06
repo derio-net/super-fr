@@ -287,3 +287,148 @@ def test_check_with_no_facts_names_collect(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "fr triage collect" in result.output
+
+
+# ------------------------------------------------ duplicates and candidates (R1, R5, R7)
+
+
+def _dupes(**rows: str | None) -> Judgements:
+    """Judgements where each `key=original` row (key written `super-fr#N`) duplicates it."""
+    return Judgements.model_validate(
+        {
+            "schema": 3,
+            "tiers": [{"n": 1, "title": "T"}],
+            "issues": {
+                k.replace("super_fr_", "super-fr#"): {
+                    "tier": 1,
+                    **({"duplicate_of": v} if v else {}),
+                }
+                for k, v in rows.items()
+            },
+        }
+    )
+
+
+def test_an_open_duplicate_of_an_open_original_carries_the_close_command() -> None:
+    facts = _facts([_issue(3, title="orig"), _issue(9, title="dupe")])
+    result = classify(facts, _dupes(super_fr_9="super-fr#3"))
+
+    [d] = result.duplicates
+    assert (d.key, d.original, d.state, d.reason) == ("super-fr#9", "super-fr#3", "open", "")
+    assert d.command == (
+        "gh issue close 9 --repo derio-net/super-fr "
+        "--duplicate-of https://github.com/derio-net/super-fr/issues/3"
+    )
+
+
+def test_a_closed_original_reads_closed_with_the_same_command_shape() -> None:
+    facts = _facts([_issue(3, state="closed"), _issue(9)])
+    [d] = classify(facts, _dupes(super_fr_9="super-fr#3")).duplicates
+
+    assert d.state == "closed"
+    assert d.command.endswith("--duplicate-of https://github.com/derio-net/super-fr/issues/3")
+
+
+def test_a_closed_duplicate_is_not_listed() -> None:
+    facts = _facts([_issue(3), _issue(9, state="closed")])
+    assert classify(facts, _dupes(super_fr_9="super-fr#3")).duplicates == []
+
+
+def test_a_group_scope_builds_the_repo_flag_from_the_duplicates_own_repo() -> None:
+    facts = _facts(
+        [_issue(3, repo="o/other"), _issue(9, repo="o/mine")], repos=["o/other", "o/mine"]
+    )
+    judgements = Judgements.model_validate(
+        {
+            "schema": 3,
+            "tiers": [{"n": 1, "title": "T"}],
+            "issues": {"mine#9": {"tier": 1, "duplicate_of": "other#3"}},
+        }
+    )
+    [d] = classify(facts, judgements).duplicates
+
+    assert (
+        d.command
+        == "gh issue close 9 --repo o/mine --duplicate-of https://github.com/derio-net/super-fr/issues/3"
+    )
+
+
+def test_a_pr_key_is_a_missing_original_that_says_so() -> None:
+    facts = _facts([_issue(9)], prs=[_pr(3)])
+    [d] = classify(facts, _dupes(super_fr_9="super-fr#3")).duplicates
+
+    assert (d.state, d.command) == ("missing", "")
+    assert d.reason == "a pull request, not an issue"
+
+
+def test_a_missing_original_reason_follows_the_spec_order() -> None:
+    cases = [
+        (
+            dict(unviewed=[Unviewed(key="super-fr#3", reason="HTTP 404")]),
+            "HTTP 404",
+        ),
+        (dict(skipped=[Skipped(repo=REPO, reason="archived")], repos=[]), "archived"),
+        ({}, "added since the last collect; run `fr triage collect` again"),
+        (dict(repos=["o/else"]), "not in any collected repo"),
+    ]
+    for extra, reason in cases:
+        facts = _facts([_issue(9, repo=REPO)], **extra)
+        [d] = classify(facts, _dupes(super_fr_9="super-fr#3")).duplicates
+        assert (d.state, d.reason, d.command) == ("missing", reason, ""), extra
+
+
+def test_a_judged_duplicate_is_never_unplaced() -> None:
+    facts = _facts([_issue(3), _issue(9)])
+    result = classify(facts, _dupes(super_fr_9="super-fr#3", super_fr_3=None))
+
+    assert [i.key for i in result.unplaced] == ["super-fr#3"]
+
+
+def test_candidates_come_from_the_dedupe_engine_and_json_carries_both() -> None:
+    facts = _facts(
+        [
+            _issue(1, title="deliver gate refuses X"),
+            _issue(2, title="deliver gate refuses X again"),
+            _issue(3, title="orig"),
+            _issue(9, title="dupe"),
+        ]
+    )
+    result = classify(facts, _dupes(super_fr_9="super-fr#3"))
+    data = result.to_json()
+
+    assert [g.keys for g in result.candidates] == [("super-fr#1", "super-fr#2")]
+    assert data["duplicate_candidates"] == [
+        {
+            "keys": ["super-fr#1", "super-fr#2"],
+            "pairs": [{"a": "super-fr#1", "b": "super-fr#2", "reasons": ["title 0.75"]}],
+        }
+    ]
+    assert data["duplicates"][0]["key"] == "super-fr#9"
+    assert data["duplicates"][0]["state"] == "open"
+
+
+def test_check_text_prints_candidates_and_duplicates_after_unplaced(tmp_path: Path) -> None:
+    facts = _facts(
+        [
+            _issue(1, title="deliver gate refuses X"),
+            _issue(2, title="deliver gate refuses X again"),
+            _issue(3, title="orig"),
+            _issue(9, title="[dupe] x [/red]"),
+        ]
+    )
+    _write(
+        tmp_path,
+        facts,
+        "schema: 3\ntiers: [{n: 1, title: T}]\nissues:\n"
+        '  "super-fr#9": {tier: 1, duplicate_of: "super-fr#3"}\n',
+    )
+    result = _check(tmp_path)
+
+    assert result.exit_code == 0 and result.exception is None, result.output
+    out = result.output
+    assert (
+        out.index("unplaced") < out.index("duplicate candidates (1)") < out.index("duplicates (1)")
+    )
+    assert "super-fr#1" in out and "super-fr#2" in out and "title 0.75" in out
+    assert "super-fr#9 → super-fr#3 (open)" in out
+    assert "--duplicate-of https://github.com/derio-net/super-fr/issues/3" in out

@@ -272,7 +272,8 @@ def check_command(
     dir_override: DirOpt = None,
     as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
-    """Report unranked issues and PRs, settled, orphaned, unreachable, stale and unplaced.
+    """Report unranked issues and PRs, settled, orphaned, unreachable, stale, unplaced,
+    duplicate candidates and duplicates.
 
     Always exits 0.
     """
@@ -325,6 +326,23 @@ def check_command(
     )
     for i in result.unplaced:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+    console.print(
+        f"[bold]duplicate candidates[/bold] ({len(result.candidates)}) — open issues that "
+        "may duplicate each other; judge each group"
+    )
+    for g in result.candidates:
+        console.print(f"  {escape(', '.join(g.keys))}", soft_wrap=True)
+        for p in g.pairs:
+            console.print(
+                f"    {escape(p.a)} ~ {escape(p.b)}: {escape('; '.join(p.reasons))}", soft_wrap=True
+            )
+    console.print(
+        f"[bold]duplicates[/bold] ({len(result.duplicates)}) — judged duplicate_of an "
+        "original; the printed command is never run by fr"
+    )
+    for d in result.duplicates:
+        console.print(f"  {escape(d.key)} → {escape(d.original)} ({d.state})", soft_wrap=True)
+        console.print(f"    {escape(d.command or d.reason)}", soft_wrap=True)
 
 
 @triage_app.command("render")
