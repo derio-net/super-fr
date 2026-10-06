@@ -120,6 +120,8 @@ def test_pr_view_shapes_state_draft_head_oid_and_mergeable(
         "mergeable": "MERGEABLE",
         "merge_state": "BEHIND",
         "merge_commit": "",
+        "title": "",
+        "body": "",
     }
 
 
@@ -302,6 +304,12 @@ _CALLS: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
     "closing_ref": ((REPO, 1), {}),
     "repo_merge_methods": ((REPO,), {}),
     "pr_create": ((REPO,), {"head": "h", "base": "main", "title": "t", "body": "b"}),
+    "create_pr": (
+        (REPO,),
+        {"head": "h", "base": "main", "title": "t", "body": "b", "draft": False},
+    ),
+    "close_pr": ((REPO, 1), {}),
+    "delete_branch": ((REPO, "feat/old"), {}),
 }
 
 
@@ -342,7 +350,23 @@ _BATCH_GLOBS = (
     "packages/fr/src/fr/triage/batch*.py",
     "packages/fr/src/fr/commands/triage_batch*.py",
 )
-_FORGE_CLIS = ("fr.gh", "fr.glab", "fr.tea", "subprocess", "fr.triage.collect")
+_FORGE_CLIS = (
+    "fr.gh",
+    "fr.glab",
+    "fr.tea",
+    "subprocess",
+    "fr.triage.collect",
+    "fr.isolation",
+)
+# The one call outside the seams (spec 2026-10-06-triage-batch-adopt §A): isolation
+# owns its own keys and the git calls that move them, so `batch adopt` renames a
+# branch through `fr.isolation.rename.rename_branch` and catches its error.
+_ISOLATION_ALLOWED = frozenset(
+    {
+        "from fr.isolation.rename import rename_branch",
+        "from fr.isolation.rename import IsolationError",
+    }
+)
 _GIT_SEAM = "packages/fr/src/fr/triage/gitseam.py"
 
 
@@ -366,7 +390,25 @@ def test_no_batch_module_reaches_a_forge_cli_or_triage_forge(path: Path) -> None
     from tests.unit.triage_fixtures import forbidden_imports
 
     package = ".".join(path.relative_to(_root() / "packages/fr/src").with_suffix("").parts[:-1])
-    assert forbidden_imports(path, package, _FORGE_CLIS) == []
+    found = forbidden_imports(path, package, _FORGE_CLIS)
+    assert [f for f in found if f not in _ISOLATION_ALLOWED] == []
+
+
+def test_the_isolation_allowance_is_the_rename_alone(tmp_path: Path) -> None:
+    from tests.unit.triage_fixtures import forbidden_imports
+
+    plant = tmp_path / "plant.py"
+    plant.write_text(
+        "from fr.isolation.rename import rename_branch, IsolationError\n"
+        "from fr.isolation.types import save_state\n"
+        "from fr.isolation import local\n",
+        encoding="utf-8",
+    )
+    found = forbidden_imports(plant, "fr.triage", _FORGE_CLIS)
+    assert [f for f in found if f not in _ISOLATION_ALLOWED] == [
+        "from fr.isolation.types import save_state",
+        "from fr.isolation import local",
+    ]
 
 
 def test_the_git_seam_runs_git_and_declared_commands_only() -> None:

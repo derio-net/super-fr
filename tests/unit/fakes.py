@@ -55,8 +55,32 @@ class FakeGhClient:
         # (repo, number) -> comments, oldest first, in the adapter's
         # `list_issue_comments` shape (spec 2026-09-25-triage-batches §3.J).
         self.issue_comments: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        # (repo, number) -> PR record: `{number, title, body, state, draft, head_ref,
+        # base_ref, url, created_at}` (batch adopt's supersede, spec 2026-10-06 §C).
+        self.prs: dict[tuple[str, int], dict[str, Any]] = {}
+        # (repo, branch) the fake forge holds; delete_branch removes one.
+        self.remote_branches: set[tuple[str, str]] = set()
+        self._next_pr_number: int = 100
+        # When set, every PR create_pr opens is stamped with this creation time.
+        self.pr_created_at: str = "2026-10-06T12:00:00Z"
 
     # ---- preload helpers (test setup) ----
+
+    def add_pr(self, repo: str, number: int, **fields: Any) -> dict[str, Any]:
+        record = {
+            "number": number,
+            "title": "",
+            "body": "",
+            "state": "OPEN",
+            "draft": False,
+            "head_ref": "",
+            "base_ref": "main",
+            "url": f"https://github.com/{repo}/pull/{number}",
+            "created_at": "2026-10-01T00:00:00Z",
+            **fields,
+        }
+        self.prs[(repo, number)] = record
+        return record
 
     def add_issue(
         self,
@@ -173,6 +197,65 @@ class FakeGhClient:
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
         self.calls.append(("list_issue_comments", {"repo": repo, "number": number}))
         return list(self.issue_comments.get((repo, number), []))
+
+    def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
+        """`gh pr list --head` records (`number, title, state, isDraft, createdAt, url,
+        headRefName`)."""
+        self.calls.append(("list_prs_by_head", {"repo": repo, "branch": branch}))
+        return [
+            {
+                "number": p["number"],
+                "title": p["title"],
+                "state": p["state"],
+                "isDraft": p["draft"],
+                "createdAt": p["created_at"],
+                "url": p["url"],
+                "headRefName": p["head_ref"],
+            }
+            for (r, _), p in sorted(self.prs.items())
+            if r == repo and p["head_ref"] == branch
+        ]
+
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+        self.calls.append(("pr_view", {"repo": repo, "number": number}))
+        p = self.prs[(repo, number)]
+        return {
+            "state": p["state"],
+            "draft": p["draft"],
+            "head_ref": p["head_ref"],
+            "base_ref": p["base_ref"],
+            "title": p["title"],
+            "body": p["body"],
+        }
+
+    def create_pr(
+        self, repo: str, *, head: str, base: str, title: str, body: str, draft: bool
+    ) -> dict[str, Any]:
+        self._gate()
+        self.calls.append(
+            (
+                "create_pr",
+                {"repo": repo, "head": head, "base": base, "title": title, "body": body,
+                 "draft": draft},
+            )
+        )  # fmt: skip
+        number = self._next_pr_number
+        self._next_pr_number += 1
+        made = self.add_pr(
+            repo, number, title=title, body=body, draft=draft, head_ref=head, base_ref=base,
+            created_at=self.pr_created_at,
+        )  # fmt: skip
+        return {"number": number, "url": made["url"]}
+
+    def close_pr(self, repo: str, number: int) -> None:
+        self._gate()
+        self.calls.append(("close_pr", {"repo": repo, "number": number}))
+        self.prs[(repo, number)]["state"] = "CLOSED"
+
+    def delete_branch(self, repo: str, branch: str) -> None:
+        self._gate()
+        self.calls.append(("delete_branch", {"repo": repo, "branch": branch}))
+        self.remote_branches.discard((repo, branch))
 
     def closing_ref(self, repo: str, number: int) -> str:
         """GitHub's closing line, as `RealGhClient.closing_ref` spells it."""
