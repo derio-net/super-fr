@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-triage-claims
 workflow: fr-goal@1
 branch: feat/batch-triage-claims
 started: '2026-10-06T18:11:42+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -141,6 +141,10 @@ steps:
           visual: triage-claims-board-publish:6:11ebc63f6a15
           findings: p3-r1,p3-r2,p3-r3,p3-r4
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-06T22:28:41+00:00'
+    exit: 0
+    stdout: |
+      3 out-of-scope finding(s): p1-r17-default-trust-across-users, p1-r10, p2-r6
   deliver:
     state: pending
