@@ -684,8 +684,10 @@ def batch_cancel_command(
     claimed = any(_own_claim_batch(facts, k, env.me) for k in batch.ids)
     releases = owes or claimed
     withdraws = [k for k in batch.ids if k not in held] if stage != "proposed" else []
-    # a proposed batch reached the forge only when its claims were written
-    touches_forge = stage != "proposed" or claimed
+    # a proposed batch reached the forge only when its claims were written; a wave owes
+    # claims from the moment it is set, so ones written since the last collect may
+    # exist whatever facts say (p1-r8)
+    touches_forge = stage != "proposed" or claimed or batch.wave is not None
     if touches_forge:
         # gh#803: withdrawing writes labels and comments to the tracker, so it
         # is gated as dispatch is — a proposed batch writes nothing and needs

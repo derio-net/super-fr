@@ -999,3 +999,18 @@ def test_cancelling_a_proposed_batch_with_written_claims_uses_the_client(
     assert markers(gh, REPO, 577)[0].released is not None
     assert "edit_issue_comment" in calls(gh)
     assert [e.kind for e in _batches(tmp_path)[0].events] == ["cancel", "claims_released"]
+
+
+def test_cancelling_a_waved_proposed_batch_releases_claims_facts_never_saw(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    """p1-r8: a wave owes claims from the moment it is set, so a proposed batch with a
+    wave may hold claims written after the last collect; cancel releases them."""
+    own = marker(_me(), "lifecycle", expires=FAR)
+    _with6(tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "wave": 1})
+    put_marker(gh, REPO, 577, own, 7)
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+    assert code == 0, out
+    assert markers(gh, REPO, 577)[0].released is not None
+    assert "fr:claimed" not in gh.issues[(REPO, 577)].labels
+    assert [e.kind for e in _batches(tmp_path)[0].events] == ["cancel", "claims_released"]
