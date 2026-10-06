@@ -438,9 +438,7 @@ def test_a_filesystem_error_is_a_clean_triage_error(tmp_path: Path) -> None:
 # which is the window a path-based copy leaves open.
 
 
-def _swap_after_check(
-    monkeypatch: pytest.MonkeyPatch, rel: str, swap: Callable[[], None]
-) -> None:
+def _swap_after_check(monkeypatch: pytest.MonkeyPatch, rel: str, swap: Callable[[], None]) -> None:
     from fr.triage import state_sync
 
     check = state_sync._symlinked_dest
@@ -529,3 +527,19 @@ def test_a_copy_keeps_the_source_mtime_and_mode(tmp_path: Path) -> None:
     copy = (dest / "judgements.yaml").stat()
     assert copy.st_mtime_ns == 1_000_000_000_000_000_000
     assert copy.st_mode & 0o777 == 0o640
+
+
+def test_a_source_directory_swapped_for_a_symlink_is_not_followed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = _state(tmp_path / "state")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "manifest.yaml").write_text("SECRET\n", encoding="utf-8")
+    dest = tmp_path / "dest"
+    _swap_after_check(monkeypatch, "board/manifest.yaml", lambda: _relink(state / "board", outside))
+
+    report = export_state(state, *_at(dest))
+
+    assert not (dest / "board" / "manifest.yaml").exists()
+    assert _skipped(report)["board/manifest.yaml"] == SYMLINK
