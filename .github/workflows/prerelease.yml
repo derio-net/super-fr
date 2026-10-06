@@ -28,8 +28,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.branch }}
+          ref: refs/heads/${{ inputs.branch }}
           fetch-depth: 0
+      - name: Refuse anything that is not a branch of this repository
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          git ls-remote --exit-code --heads origin "refs/heads/$BRANCH"
       - name: Refuse a branch head that is not the dispatched sha
         env:
           SHA: ${{ inputs.sha }}

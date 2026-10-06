@@ -214,6 +214,16 @@ def test_the_workflow_takes_a_required_sha_and_refuses_a_head_that_is_not_it() -
     assert 'git rev-parse HEAD' in script and '"$SHA"' in script and "exit 1" in script
 
 
+def test_the_workflow_accepts_a_branch_head_and_nothing_else_ref() -> None:
+    steps = _steps()
+    checkout = next(s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@"))
+    assert checkout["with"]["ref"] == "refs/heads/${{ inputs.branch }}"
+    probe = next(s for s in steps if "git ls-remote" in s.get("run", ""))
+    assert 'git ls-remote --exit-code --heads origin "refs/heads/$BRANCH"' in probe["run"]
+    assert probe["env"]["BRANCH"] == "${{ inputs.branch }}"
+    assert steps.index(probe) < steps.index(next(s for s in steps if "git tag" in s.get("run", "")))
+
+
 def test_the_workflow_may_write_contents_and_read_the_rest() -> None:
     perms = _wf()["permissions"]
     assert perms["contents"] == "write"
