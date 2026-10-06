@@ -69,15 +69,7 @@ cheap session. Never drop it from the comparison silently or count it as zero.
 
 ## Pages
 
-Four triage pages answer different questions, each with its own generated sections and hand-written analysis:
-
-- **Board** ("What do I do next?"): `fr triage render` writes `triage.html`. Shows transitions, needs, priorities and waves, plus backlog by tier and your fragments.
-- **Origins** ("Where do defects come from?"): `fr triage origins render` writes `origins.html`. Shows where issues came from, their process implications, filings per day and your fragments.
-- **Architecture** ("What is the system, and where does it hurt?"): `fr triage architecture render` writes `architecture.html`. Shows subsystem source lines, measured sections and your fragments.
-- **History** ("How did we get here?"): `fr triage history render` writes `history.html`. Shows the timeline and finished waves, plus your fragments.
-
-Each page holds authored fragments in a manifest (`board/manifest.yaml`, `origins/manifest.yaml`, `architecture/manifest.yaml`, `history/manifest.yaml`), with fragment files beside it. Hand-written analysis lives in fragments — diagrams, narrative, your own voice — and never in a page edited after it is rendered: the next render rebuilds generated sections and erases any hand edits.
-
+Four triage pages (`fr triage render`, `origins render`, `architecture render`, `history render`) answer: "What do I do next?" (board), "Where do defects come from?" (origins), "What is the system?" (architecture), and "How did we get here?" (history). Each holds hand-written analysis in fragments (`board/manifest.yaml`, etc.): the next render rebuilds generated sections and erases any hand edits to pages.
 **Audit page (measured).** `fr usage report --session <id>… --format html -o
 $HOME/.cache/fr/usage/<name>.html`. Report the pooled shares and the per-session
 range, name the sessions, and state what was unavailable.

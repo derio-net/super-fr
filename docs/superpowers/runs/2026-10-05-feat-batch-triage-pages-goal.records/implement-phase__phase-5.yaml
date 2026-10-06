@@ -8,7 +8,7 @@ ticks:
   - P5.T1.S2
   - P5.T1.S3
 refactor:
-  P5.T1.S3: "Prose skills have no refactor step; documentation additions are minimal"
+  P5.T1: "Prose skills have no refactor step; documentation additions are minimal"
   P5.T2: "Task 2 blocked on PR #969 (docs/triage/ not yet on main)"
 journal:
   - kind: discovery

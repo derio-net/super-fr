@@ -10,14 +10,13 @@ description: >
 
 **Announce at start:** "I'm using fr-triage to triage <repo or org>."
 
-You can already read an issue, check it against the code and rank it. A triage done in chat dies with the session; `fr triage` keeps your ranking in a file, so a refresh costs only the delta.
+You can already rank issues; `fr triage` keeps your ranking in a file, so a refresh costs only the delta.
 
 ## Pages and state
 
-Four pages answer your questions: **board** ("What do I do next?"), **origins** ("Where do defects come from?"), **architecture** ("What is the system?") and **history** ("How did we get here?"). Render them with `fr triage render`, `fr triage origins render`, `fr triage architecture render` and `fr triage history render`. Each page holds authored fragments in a manifest: `board/manifest.yaml`, `origins/manifest.yaml`, `architecture/manifest.yaml`, `history/manifest.yaml`, each with fragment files beside it. Hand-written analysis lives in fragments and never in a page edited after it is rendered: use `fr triage state export --to <dir>` to carry the state to a repo commit and `fr triage state import --from <dir>` to read it back.
+Four pages answer your questions: **board** ("What do I do next?"), **origins** ("Where do defects come from?"), **architecture** ("What is the system?") and **history** ("How did we get here?"), each with authored fragments in manifests (`board/manifest.yaml`, etc.). Use `fr triage state export --to <dir>` and `fr triage state import --from <dir>` to keep state in a repo.
 
-Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for
-`--org OWNER`, lowercased; `--dir D` overrides). Pass the same `--repo`/`--org`/`--dir` to every command. `--repo A/B,C/D` is a **group** (owners may differ): one board, one directory (sorted `owner--repo` slugs joined by `+`, hashed past 80 characters), one `--max-inflight` cap. Two repos with the same name are refused (exit 2: keys are `<repo-name>#<n>`); batches stay single-repo; every repo of a group needs a `--checkout REPO=PATH`, even one with no batches (`batch drive` and a plan print without `--yes` are refused the same way).
+Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for `--org OWNER`, lowercased). Pass the same scope option to every command. `--repo A/B,C/D` is a group (one board, one `--max-inflight` cap); two repos with the same name are refused (keys are `<repo-name>#<n>`); batches stay single-repo.
 
 | File | Written by | Holds |
 |---|---|---|
@@ -25,8 +24,7 @@ Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo
 | `judgements.yaml` | **you**, plus the `batch` verbs for `batches:` | tiers, per-issue rankings and `kind`, patterns, `features`, batches |
 | `triage.html`, `snapshots/` | `fr triage render` | the board, built from both; a snapshot per render (latest 30), none if identical to the latest: a re-render keeps the diff against the last different one |
 
-Stages (`backlog`, `blocked`, `in-progress`, `pr-draft`, `pr-ready`, `merged`, `closed`) are derived by `check` and `render`, never stored. Never set one, and never write facts yourself.
-
+Stages are derived by `check` and `render`, never stored. Never write facts yourself.
 ## The loop (a re-run of it is the sync)
 
 1. **Collect.** `fr triage collect --repo OWNER/REPO` (or `--org OWNER`). If the **PR list** hit its limit, re-run
@@ -94,7 +92,7 @@ batches:                    # written by the `batch` verbs; judged keys, one rep
     ids: ["super-fr#435"]   # optional: rationale, order, wave, after, bump (patch|minor|major), skill, launch
 ```
 
-Set `export: {path: <repo-relative dir>}` in `.fr/triage.yaml` to have the driver export finished waves to that directory in one PR per wave.
+Set `export: {path: <repo-relative dir>}` in `.fr/triage.yaml` to export finished waves to that directory.
 
 Quote every title, description, detail, note and body: a `: ` inside unquoted text, or a leading `-`, breaks the
 file. Set `ranked_at` to today whenever you change a judgement. Keys are case-insensitive (two differing only by case conflict). `detail`, `note` and pattern `body` interpret only `` `code` `` and `**bold**`.
