@@ -287,3 +287,6 @@ R7 matches §B (verify, override, strategy, shape); a spec line may give a reaso
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-verification-strategies-p2 created=2026-10-06T11:17:05+00:00 -->
 ### phase-split-2026-10-06-verification-strategies-p2 · decision · ask: matrix/record shape changes and walk recording (R7, R13, R14, R16) reviewed apart from the vocabulary
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-verification-strategies-p3 created=2026-10-06T11:17:06+00:00 -->
+### phase-split-2026-10-06-verification-strategies-p3 · decision · ask: the walk and deliver gates (R9, R11, R12, R15)
