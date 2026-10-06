@@ -1,9 +1,0 @@
-schema_version: 7
-run: 2026-10-05-feat-batch-run-upgrade-midflight
-step: deliver
-outcome: done
-acceptance: []
-emitted:
-  pr: https://github.com/derio-net/super-fr/pull/977
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/eb6807d8-033c-4096-8b10-e6487f0bf0be/scratchpad/full-suite.log
