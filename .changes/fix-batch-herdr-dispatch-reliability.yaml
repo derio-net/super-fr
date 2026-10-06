@@ -1,0 +1,2 @@
+bump: patch
+summary: herdr dispatch retries a pane whose shell is not up yet and confirms the brief was submitted, and `fr triage batch drive` retries a failed dispatch on a later pass instead of exiting (#931, #956)

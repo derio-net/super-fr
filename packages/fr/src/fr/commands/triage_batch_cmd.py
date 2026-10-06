@@ -940,18 +940,21 @@ def batch_dispatch_command(
     """Hand a batch to a runner as one fr-goal run, and mark its issues taken."""
     target, facts, judgements = _load_state(_scope(repo, org), dir_override)
     batch = _find(judgements.batches, batch_id)
-    dispatch_batch(
-        target,
-        facts,
-        judgements,
-        batch,
-        to=to,
-        checkout_path=checkout_path,
-        repair=repair,
-        handle=handle,
-        reserved_version=reserved_version,
-        yes=yes,
-    )
+    try:
+        dispatch_batch(
+            target,
+            facts,
+            judgements,
+            batch,
+            to=to,
+            checkout_path=checkout_path,
+            repair=repair,
+            handle=handle,
+            reserved_version=reserved_version,
+            yes=yes,
+        )
+    except RunnerDispatchError as exc:
+        _fail(str(exc), code=1)
 
 
 def dispatch_batch(
@@ -973,7 +976,9 @@ def dispatch_batch(
 
     `batch dispatch` and the wave driver share it, so a driver dispatch runs the same
     preflight, version reservation, brief, event write and forge labels. A refusal is
-    `typer.Exit` with the verb's own exit code, exactly as at the command line.
+    `typer.Exit` with the verb's own exit code, exactly as at the command line; a
+    runner that fails to dispatch raises `RunnerDispatchError`, which each caller
+    handles its own way (gh#931).
     *lenient_config* is the driver's `.fr/triage.yaml` read (gh#998).
     """
     owner_repo = batch_repo(batch, facts)
@@ -1090,7 +1095,9 @@ def dispatch_batch(
     try:
         launched = runner.dispatch(item)
     except Exception as exc:  # the runner's own failure: nothing is written
-        _fail(f"runner `{runner_name}` failed to dispatch {item.id}: {exc}", code=1)
+        raise RunnerDispatchError(
+            f"runner `{runner_name}` failed to dispatch {item.id}: {exc}"
+        ) from exc
     # Review r2p-handle: a runner with no handle of its own returns None; the
     # item id is its identity for the dispatch (`existing_dispatches` matches it).
     event = event.model_copy(update={"handle": launched if launched else item.id})
@@ -1219,6 +1226,12 @@ DriveCheckoutOpt = Annotated[
         "defaults to this directory's git toplevel.",
     ),
 ]
+
+
+class RunnerDispatchError(Exception):
+    """A runner's `dispatch` raised, so nothing started and nothing was written
+    (gh#931). `batch dispatch` exits 1 with it; the driver reports it once per cause
+    and dispatches again on a later pass, as it does a refused merge (rg-4)."""
 
 
 class ForgeReadError(Exception):
@@ -1504,9 +1517,9 @@ class _Driver:
         self.checkout_paths = checkouts
         self.max_inflight, self.yes = max_inflight, yes
         self.warned: set[str] = set()
-        self.reported: set[str] = set()  # merge refusals already printed in full
+        self.reported: set[str] = set()  # merge and dispatch refusals already printed in full
         self.read_failures: set[str] = set()  # forge read failures, since the last good pass
-        self.failed_write = False  # a forge write failed this pass (--once exits 1)
+        self.failed_write = False  # a forge write or a dispatch failed this pass (--once exits 1)
         self._first_seen: dict[str, datetime] = {}  # merged with no merge time known
         self._ci: dict[str, bool] = {}  # per pass: repo -> origin/<default> says ci none
         self._unlanded: set[str] = set()  # per pass: planned merges that did not land
@@ -2249,17 +2262,20 @@ class _Driver:
         if in_flight >= self.max_inflight:  # a planned merge did not land this pass
             self._held += 1
             return "held: the in-flight cap is reached", False, in_flight
-        with console.capture():  # dispatch_batch's own plan: one line per action here
-            dispatch_batch(
-                self.target,
-                facts,
-                judgements,
-                batch,
-                checkout_path=self.path_of(repo),
-                yes=True,
-                group=self.group_of(batch),
-                lenient_config=True,
-            )
+        try:
+            with console.capture():  # dispatch_batch's own plan: one line per action here
+                dispatch_batch(
+                    self.target,
+                    facts,
+                    judgements,
+                    batch,
+                    checkout_path=self.path_of(repo),
+                    yes=True,
+                    group=self.group_of(batch),
+                    lenient_config=True,
+                )
+        except RunnerDispatchError as exc:
+            return self._dispatch_failed(batch, str(exc), exc.__cause__), False, in_flight
         after = _find(load_judgements(self.target / "judgements.yaml").batches, batch.id)
         event = last_dispatch(after)
         assert event is not None
@@ -2404,13 +2420,30 @@ class _Driver:
         except Exception as exc:  # the runner's own failure: nothing started, so
             # the record is taken back and a later pass starts it
             _write(self.target, judgements.batches, facts, read=after)
-            _fail(f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", code=1)
+            return self._dispatch_failed(
+                batch, f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", exc
+            ), False
         if handle and handle != item.id:  # the runner's own handle, once it is known
             known = started.model_copy(update={"handle": handle})
             final = recorded.model_copy(update={"events": [*recorded.events[:-1], known]})
             _write(self.target, _replace(after, final), facts, read=after)
         pickup = f"--run {run}" if run else f"--branch {branch}"
         return f"started {item.id} (fr pickup {pickup})", True
+
+    def _dispatch_failed(self, batch: Batch, message: str, cause: BaseException | None) -> str:
+        """A runner failed to start *batch*'s session (gh#931): as a refused merge
+        (rg-4), reported in full once per batch and cause and tried again on a later
+        pass; `--once` exits 1. Nothing was written, so the retry is a fresh start.
+
+        The cause is the runner error's `code` when it carries one: each retry opens a
+        new tab, so herdr's words name a different pane every pass."""
+        self.failed_write = True
+        code = getattr(cause, "code", None)
+        key = f"dispatch\0{batch.id}\0{code if isinstance(code, str) else message}"
+        if key in self.reported:
+            return "stopped again: the runner failed to dispatch (reported above)"
+        self.reported.add(key)
+        return f"stopped: {message}"
 
     def _append(self, judgements: Judgements, facts: Facts, batch: Batch, event: Any) -> Batch:
         new = batch.model_copy(update={"events": [*batch.events, event]})

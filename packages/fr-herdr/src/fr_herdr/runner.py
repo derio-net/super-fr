@@ -5,7 +5,15 @@ by the batch's skill (spec 2026-09-27-triage-batch-launch §B): a new tab
 labelled with the item id, the harness started in its root pane with the
 batch's model, and the engine-rendered brief submitted as the first prompt. fr
 makes no model call and does not wait on the run; `dispatch` returns once the
-prompt is in.
+agent has taken the prompt up (it left `idle`), not merely once it was typed.
+
+- **Confirmed handoffs** (gh#931, gh#956). A new tab's shell may still be
+  starting, so `agent start` retries herdr's `agent_pane_busy` a bounded number
+  of times. The brief is submitted with `agent prompt --wait --until working
+  --until blocked`; on herdr's `agent_prompt_stalled` the runner presses Enter
+  once (never re-sends the brief, which may already sit in the input box) and
+  waits again, then fails the dispatch loudly rather than report a session that
+  never started.
 
 - **One subprocess seam.** Every herdr call goes through `_run_herdr`, which
   parses herdr's JSON envelope and raises `HerdrError` on failure; tests
@@ -41,6 +49,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -52,7 +61,27 @@ if TYPE_CHECKING:
 
 
 class HerdrError(Exception):
-    """A herdr CLI call failed; the message carries herdr's own words."""
+    """A herdr CLI call failed; the message carries herdr's own words, and *code* the
+    `.error.code` of herdr's JSON envelope when it printed one."""
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+PANE_BUSY_TRIES = 15
+"""`agent start` attempts against a pane whose shell is not up yet (`agent_pane_busy`)."""
+PANE_BUSY_WAIT = 2.0
+"""Seconds between them: 28s in all, for rc files and a slow prompt."""
+PROMPT_TIMEOUT_MS = 30000
+"""How long `agent prompt --wait` may take to see the agent leave `idle`."""
+ENTER_TIMEOUT_MS = 10000
+"""How long the agent may take to start once Enter re-submits a stalled brief."""
+_STARTED = ("--until", "working", "--until", "blocked")
+"""The states that prove a turn began: never the default `--wait`, which waits for
+the turn to settle, i.e. for the whole run."""
+
+_sleep = time.sleep
 
 
 @dataclass(frozen=True)
@@ -79,7 +108,9 @@ def _run_herdr(args: list[str]) -> dict[str, Any]:
         raise HerdrError("herdr is not on PATH") from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
-        raise HerdrError(f"herdr {' '.join(args[:2])} failed: {detail}") from exc
+        raise HerdrError(
+            f"herdr {' '.join(args[:2])} failed: {detail}", code=_error_code(detail)
+        ) from exc
     out = done.stdout.strip()
     if not out:
         return {}
@@ -88,6 +119,17 @@ def _run_herdr(args: list[str]) -> dict[str, Any]:
     except ValueError:
         return {"raw": out}
     return parsed
+
+
+def _error_code(detail: str) -> str | None:
+    """`.error.code` of herdr's JSON error envelope, if *detail* is one."""
+    try:
+        envelope = json.loads(detail)
+    except ValueError:
+        return None
+    error = envelope.get("error") if isinstance(envelope, dict) else None
+    code = error.get("code") if isinstance(error, dict) else None
+    return str(code) if code is not None else None
 
 
 def agent_name(item_id: str) -> str:
@@ -188,10 +230,11 @@ class HerdrRunner:
     def dispatch(self, item: WorkItem) -> str:
         """Open the tab, start the harness with the model, submit the brief.
 
-        Returns the root pane id as the handle. Each step raises `HerdrError`
-        on failure, and nothing later runs. A failure after the tab exists
-        closes it before re-raising (review r2p-f9): a labelled tab left behind
-        would read as a live dispatch to `existing_dispatches` forever.
+        Returns the root pane id as the handle once the agent has left `idle`.
+        Each step raises `HerdrError` on failure, and nothing later runs. A
+        failure after the tab exists closes it before re-raising (review r2p-f9):
+        a labelled tab left behind would read as a live dispatch to
+        `existing_dispatches` forever.
         """
         payload = item.payload
         harness = HARNESSES[str(payload["harness"])]
@@ -199,7 +242,7 @@ class HerdrRunner:
         pane, cleanup = self._open_tab(item, checkout)
         try:
             name = agent_name(item.id)
-            _run_herdr(
+            _start_agent(
                 [
                     "agent",
                     "start",
@@ -212,7 +255,7 @@ class HerdrRunner:
                     *harness.model_args(str(payload["model"])),
                 ]
             )
-            _run_herdr(["agent", "prompt", name, str(payload["brief"])])
+            _submit(name, str(payload["brief"]))
         except BaseException:
             cleanup()
             raise
@@ -274,6 +317,52 @@ class HerdrRunner:
             cleanup()
             raise
         return pane, cleanup
+
+
+def _start_agent(argv: list[str]) -> None:
+    """`agent start`, retried while the new tab's shell is not up yet (gh#931).
+
+    herdr needs the pane at its interactive shell prompt and refuses at once with
+    `agent_pane_busy` otherwise; any other refusal (`agent_not_ready` is a dialog
+    the operator must answer) is raised as it is.
+    """
+    for attempt in range(1, PANE_BUSY_TRIES + 1):
+        try:
+            _run_herdr(argv)
+            return
+        except HerdrError as exc:
+            if exc.code != "agent_pane_busy" or attempt == PANE_BUSY_TRIES:
+                raise
+        _sleep(PANE_BUSY_WAIT)
+
+
+def _submit(name: str, brief: str) -> None:
+    """Submit *brief* and confirm the agent took it up (gh#956).
+
+    Without `--wait`, `agent prompt` reports success once the text and Enter are
+    written, so a brief left in the input box read as a started session. On
+    `agent_prompt_stalled` the brief may already be there: herdr's guidance is not to
+    send it again, so one Enter submits what is there, and a turn must then begin.
+    """
+    try:
+        _run_herdr(["agent", "prompt", name, brief, "--wait", *_STARTED,
+                    "--timeout", str(PROMPT_TIMEOUT_MS)])  # fmt: skip
+        return
+    except HerdrError as exc:
+        if exc.code != "agent_prompt_stalled":
+            raise
+    # Enter cannot answer a dialog here: `agent start` returned only once the agent
+    # was ready for input, and a dialog since would have read `blocked`, which the
+    # wait above accepts, so a stall means an input box that holds the brief.
+    _run_herdr(["agent", "send-keys", name, "enter"])
+    try:
+        _run_herdr(["agent", "wait", name, *_STARTED, "--timeout", str(ENTER_TIMEOUT_MS)])
+    except HerdrError as exc:
+        raise HerdrError(
+            f"the brief to agent {name} was not submitted: no turn began after the "
+            f"prompt or after Enter ({exc})",
+            code=exc.code,
+        ) from exc
 
 
 def _root_pane(created: dict[str, Any], what: str) -> str:
