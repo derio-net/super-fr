@@ -346,3 +346,76 @@ def test_a_raw_gh_failure_is_still_classified_by_its_text() -> None:
         "rate_limit"
     )
     assert _gh.classify(_gh.GhError("connection reset")) == "warn"
+
+
+# ------------------------------------------ gh#1014: a host inside an argument --
+# glab honours a host carried by an ARGUMENT, whatever GITLAB_HOST says (probed
+# live, glab 1.89): `--repo https://h/g/p`, `--repo git@h:g/p.git` and
+# `glab api https://h/...` all call h. A plain path (`h/g/p`, even 4 parts)
+# stays on the configured host as a group path, and a URL given positionally
+# to `mr view` is read for its path only.
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["mr", "view", "1", "--repo", "https://evil.invalid/g/p"],
+        ["mr", "view", "1", "--repo=https://evil.invalid/g/p"],
+        ["issue", "view", "1", "-R", "git@evil.invalid:g/p.git"],
+        ["issue", "view", "1", "--repo", "ssh://git@evil.invalid/g/p.git"],
+        ["api", "https://evil.invalid/api/v4/user"],
+    ],
+)
+def test_an_argument_naming_its_own_host_is_refused(recorder: _Recorder, args: list[str]) -> None:
+    with pytest.raises(GlabHostRefusedError, match="evil.invalid"):
+        _glab._run_glab(args, host="gitlab.example")
+    with pytest.raises(GlabHostRefusedError, match="evil.invalid"):
+        _glab._run_glab(args)
+    assert recorder.calls == []
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["mr", "view", "1", "--repo", "evil.invalid/g/sub/p"],
+        ["issue", "create", "--repo", "g/p", "--description", "see https://x.example/a@b:c"],
+        ["api", "projects/g%2Fp"],
+    ],
+)
+def test_a_plain_path_or_a_body_carrying_a_url_is_not_refused(
+    recorder: _Recorder, args: list[str]
+) -> None:
+    _glab._run_glab(args, host="gitlab.example")
+    assert len(recorder.calls) == 1
+
+
+def test_a_repo_from_a_card_title_cannot_redirect_glab(recorder: _Recorder) -> None:
+    with pytest.raises(GlabHostRefusedError):
+        RealGlabClient(host="gitlab.example").view_issue("https://evil.invalid/g/p", 1)
+    assert recorder.calls == []
+
+
+def test_an_mr_url_with_an_embedded_url_never_reaches_glab(recorder: _Recorder) -> None:
+    """`_MR_URL_RE`'s repo capture used to swallow 'https://evil.invalid/g/p'
+    from this link, then hand it to `--repo` — and the link's own host is SaaS,
+    so no host was threaded and no gate ran."""
+    url = "https://gitlab.com/https://evil.invalid/g/p/-/merge_requests/1"
+    assert RealGlabClient().pr_status_by_url(url) is None
+    assert recorder.calls == []
+
+
+def test_pr_status_by_url_does_not_swallow_a_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refuse(*_a: Any, **_k: Any) -> str:
+        raise GlabHostRefusedError("GitLab host 'evil.invalid' is not one glab is logged into")
+
+    monkeypatch.setattr(_glab, "_run_glab", refuse)
+    with pytest.raises(GlabHostRefusedError):
+        RealGlabClient().pr_status_by_url("https://gitlab.com/g/p/-/merge_requests/1")
+
+
+def test_an_empty_host_is_no_host(recorder: _Recorder, tmp_path: Path) -> None:
+    recorder.out = json.dumps({"state": "opened"})
+    RealGlabClient(host="").view_issue("g/p", 1)
+    assert recorder.calls[-1][1] is None

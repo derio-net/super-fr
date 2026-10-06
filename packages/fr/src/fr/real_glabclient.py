@@ -45,7 +45,10 @@ from fr.labels import LabelDef
 # parse — see real_teaclient.py). Mirrors _urls.py's lazy-quantifier +
 # optional `-/`-infix technique for the same reason (GitLab subgroups
 # nest arbitrarily, and the dash infix is optional across GitLab versions).
-_MR_URL_RE = re.compile(r"^https://[^/]+/(.+?)(?:/-)?/merge_requests/(\d+)/?$")
+# The repo capture excludes `:` and `@`: no GitLab path holds them, and a
+# capture that could would hand glab's `--repo` a URL or `user@host:` remote,
+# which glab follows to that host past the trust gate (gh#1014 review).
+_MR_URL_RE = re.compile(r"^https://[^/]+/([^:@]+?)(?:/-)?/merge_requests/(\d+)/?$")
 
 # GitLab's contents endpoint REQUIRES `ref`; GitHub's equivalent does
 # not, which is why this adapter was written without one (gh-486).
@@ -170,6 +173,8 @@ class RealGlabClient(UnsupportedBatchOps):
         repo, iid = m.group(1), m.group(2)
         try:
             out = self._glab(["mr", "view", iid, "--repo", repo, "--output", "json"])
+        except _glab.GlabHostRefusedError:
+            raise  # a refusal is not "no MR" (gh#1014)
         except _glab.GlabError:
             return None
         raw = json.loads(out)

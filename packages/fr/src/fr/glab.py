@@ -75,8 +75,11 @@ def _config_yml() -> Path | None:
 
 
 def known_hosts() -> frozenset[str]:
-    """The hosts glab is logged into — the keys of its config's `hosts:`
-    mapping, the ones `glab auth login` wrote (lowercased). A missing,
+    """The hosts glab is configured for — the keys of its config's `hosts:`
+    mapping (lowercased). `glab auth login` writes one, but so does `glab
+    config set --host`, and glab seeds a token-less `gitlab.com`: a key is an
+    OPERATOR's choice to point glab there, never a cloned repo's, which is
+    what the gate needs. A missing,
     unreadable or malformed file is the empty set: nothing is trusted."""
     import yaml
 
@@ -102,7 +105,7 @@ def host_env(host: str | None) -> dict[str, str] | None:
     it targets, and the hosts fr threads come from MR URLs and a cloned repo's
     committed `fr-profiles.yaml` — neither fully trusted. So a host glab is not
     logged into raises, before any subprocess starts."""
-    if host is None:
+    if not host:  # "" is no host, as in `_run_glab`
         return None
     if host.lower() not in known_hosts():
         raise GlabHostRefusedError(
@@ -112,6 +115,29 @@ def host_env(host: str | None) -> dict[str, str] | None:
             "count as a login)"
         )
     return {"GITLAB_HOST": host}
+
+
+_REPO_FLAGS = ("--repo", "-R")
+
+
+def _argument_host(args: list[str]) -> str | None:
+    """The argument in *args* that would make glab pick its OWN host, else
+    None. glab honours a host carried by an argument whatever GITLAB_HOST
+    says (probed live, glab 1.89): `--repo https://h/g/p`, `--repo
+    git@h:g/p.git` and `glab api https://h/...` all call h, so the trust gate
+    on the threaded host would be bypassed (gh#1014 review). A plain path —
+    `h/g/p`, even `h/g/sub/p` — stays on the configured host as a group path,
+    and is left alone. Only the repo flags and the `api` endpoint are read:
+    an issue body may carry any URL, and is no host selector."""
+    values = [args[1]] if args[:1] == ["api"] and len(args) > 1 else []
+    for i, arg in enumerate(args):
+        if arg in _REPO_FLAGS and i + 1 < len(args):
+            values.append(args[i + 1])
+        elif arg.startswith("--repo="):
+            values.append(arg.removeprefix("--repo="))
+    # A URL (`scheme://`) or an scp-like remote (`user@host:path`): a GitLab
+    # path never holds `:` or `@`.
+    return next((v for v in values if ":" in v or "@" in v), None)
 
 
 def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = None) -> str:
@@ -130,8 +156,14 @@ def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = No
     and glab's own resolution from the current git directory still
     applies. `cwd` picks that git directory for a call that names no
     `--repo` (gh#742); `None` keeps this process's. A host glab is not logged
-    into is refused first (`host_env`, gh#1014)."""
-    overlay = host_env(host or None)
+    into is refused first (`host_env`, gh#1014), and so is an argument that
+    would make glab pick a host of its own (`_argument_host`)."""
+    if (arg := _argument_host(args)) is not None:
+        raise GlabHostRefusedError(
+            f"glab argument {arg!r} names its own host; fr points glab at a host "
+            "only through GITLAB_HOST, where the trust gate checks it"
+        )
+    overlay = host_env(host)
     env = {**os.environ, **overlay} if overlay else None
     try:
         result = subprocess.run(
