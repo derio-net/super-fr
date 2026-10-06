@@ -19,3 +19,8 @@ _behind_only_routinely skips the update when no path the archive commit touched 
 ### f-937 · finding [fixed] · #937 fixed: docs/acceptance/** overlaps every archive commit
 
 batch_merge._behind_only_routinely: a PR touching docs/acceptance/ is not routine-mergeable past an archive commit (_is_archive, now shared with routine_commit). Pinned by test_an_archive_merge_updates_a_pr_that_changes_the_acceptance_matrix; test_a_release_commit_alone_still_merges_a_pr_that_changes_the_matrix keeps a release routine.
+
+<!-- fr:journal kind=finding scope=debug id=f-962 created=2026-10-06T16:59:57+00:00 state=fixed -->
+### f-962 · finding [fixed] · #962 fixed: a refused merge re-reads the head
+
+batch_merge._merge: on a FORGE_ERRORS refusal, re-read pr_view; a head other than the one merged raises HeadMovedError (stop the train, re-plan), else the generic refusal. A failed re-read keeps the refusal. Pinned by test_a_head_that_moves_just_before_the_merge_is_a_moved_head / test_a_refusal_with_the_head_unmoved_stays_a_refusal.
