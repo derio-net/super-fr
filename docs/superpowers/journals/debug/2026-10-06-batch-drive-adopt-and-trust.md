@@ -24,3 +24,8 @@ drive_pass step 2 iterates every batch; archived/merged-hand adoption ignores th
 ### plan-mode-unreadable-clone · finding [fixed] · gh#991: plan mode reports an unreadable clone instead of planning phantom close-outs
 
 _archived/_released return None in plan mode on a TriageError; the batch goes to Snapshot.unverified (no close-out, no adopt, still closing) and one warning per repo names the reason and the batches. _ci_none records its failure too. --yes behaviour unchanged (ForgeReadError). Pinned by test_plan_mode_with_an_unreadable_clone_says_so_and_plans_no_closeout and test_a_batch_whose_closeout_evidence_was_unreadable_is_neither_closed_out_nor_adopted.
+
+<!-- fr:journal kind=finding scope=debug id=archive-pr-base created=2026-10-06T16:20:45+00:00 state=fixed -->
+### archive-pr-base · finding [fixed] · gh#1004: archive PRs merge only into the default branch
+
+_archive_prs reads base_ref fresh (pr_view) for open PRs attributed to the batch; step 3 merges only a ready PR whose base is the default branch (_wrong_base, shared with the export), else warns once (keyed on head) and counts the batch blocked. Snapshot.export_default renamed default_branch. Pinned by test_an_archive_pr_retargeted_off_the_default_branch_is_never_merged and ..._is_reported_and_never_merged.
