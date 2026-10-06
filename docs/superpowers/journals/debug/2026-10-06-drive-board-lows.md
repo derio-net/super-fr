@@ -49,3 +49,8 @@ gh._bound: a call carrying --limit N is bounded by list_timeout(N) = GH_TIMEOUT_
 ### f-985 · finding [fixed] · #985 fixed: a Partial column between Closing out and Done
 
 Operator decision 2026-10-06: own column. kanban.column_of puts stage partial in the new partial column until closeout_state is archived, then Done with the partial pill; its fallback hint is the closing-out one. The board grid widens to one track per column, pinned by test_the_wide_grid_has_one_track_per_column. Tests: test_triage_kanban.py, test_triage_kanban_render.py.
+
+<!-- fr:journal kind=review scope=debug id=784f6b5eeb21 created=2026-10-06T17:33:38+00:00 -->
+### 784f6b5eeb21 · review · Independent review: two findings, both fixed
+
+An independent read-only reviewer checked all eight claims. Confirmed: #937, #962, #884, #1025 items 2 and 4, #985. Findings: (1) medium: the stale-close-out probe went through _existing, whose preflight refusal _fails, so a refusing runner plus any batch whose archive PR has been open 15+ min would exit 2 every pass; fixed: _existing(soft=True) skips a runner that cannot load or refuses and reports only the items it asked, so closeout_probed holds only those (test_a_runner_that_refuses_the_stale_probe_does_not_stop_the_drive). (2) low-medium: dispatch_batch's ls-remote (remote_branch_exists) still _failed on a forge read; fixed: read_errors converts it to ForgeReadError(code=2) (test_a_failed_remote_branch_read_for_a_dispatch_does_not_end_the_loop). (3) cosmetic: build_board docstring said six columns; fixed. Noted, not changed: export failure dedupe keys on the message, so stderr that varies per attempt would repeat the line, unverified in practice.
