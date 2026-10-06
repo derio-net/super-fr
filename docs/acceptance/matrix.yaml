@@ -6792,6 +6792,25 @@ rows:
     notes: 'super-fr#742: default_branch/pr_for_branch on gh, glab and tea through the
       adapter, same argv and normalised shape; isolation runs them on its own runner,
       and a refused host degrades per call site.'
+  - id: glab-host-trust-gate
+    capability: forge-adapter
+    acceptance: 'fr never points glab, or a GITLAB_TOKEN, at a self-hosted GitLab glab
+      is not logged into: the refusal comes before any process, on every adapter method,
+      and is classified by its type (fail fast, never retried)'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-06-glab-host-trust.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_host_trust.py#test_every_public_glab_method_refuses_an_unknown_host_before_any_process
+      - super-fr:tests/unit/test_forge_host_trust.py#test_the_bare_glab_helpers_refuse_an_unknown_host_too
+      - super-fr:tests/unit/test_forge_host_trust.py#TestGlabKnownHosts::test_home_dot_config_wins_over_xdg
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_refusal_is_classified_by_type_not_by_its_text
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_refused_host_is_never_retried
+    status: ci
+    notes: 'super-fr#1014/#1013: the GitLab twin of #994''s gh gate; known hosts read
+      from the config glab itself uses (GLAB_CONFIG_DIR, else ~/.config/glab-cli ahead
+      of XDG — probed against glab 1.89). A GITLAB_TOKEN alone is not a login, as for
+      gh.'
   - id: triage-batch-self-hosted-host
     capability: triage-batches
     acceptance: Triage batch verbs talk to the forge instance the batch's repo lives
