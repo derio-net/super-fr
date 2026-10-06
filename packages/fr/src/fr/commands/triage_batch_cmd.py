@@ -155,8 +155,8 @@ from fr.triage.model import (
     Launch,
     PostMergeEvent,
     Scope,
-    load_facts,
     load_judgements,
+    load_scope_facts,
     state_dir,
 )
 from fr.triage.render import plural
@@ -279,7 +279,7 @@ def _wave_columns(batch: Batch, batches: list[Batch], facts: Facts | None) -> st
         f"{d}({dependency_state(d, batches, facts)})" if facts is not None else d
         for d in batch.after
     )
-    closeout = closeout_state(batch, facts) if facts is not None else "none"
+    closeout = closeout_state(batch)
     wave = "-" if batch.wave is None else str(batch.wave)
     after = f"  after {deps}" if deps else ""
     return f"  wave {wave}{after}  close-out {closeout}"
@@ -302,7 +302,8 @@ def batch_list_command(
     dir_override: DirOpt = None,
 ) -> None:
     """Print one line per batch in judgements.yaml, or "no batches"."""
-    path = state_dir(_scope(repo, org), dir_override) / "judgements.yaml"
+    scope = _scope(repo, org)
+    path = state_dir(scope, dir_override) / "judgements.yaml"
     try:
         batches = load_judgements(path).batches if path.exists() else []
     except TriageError as exc:
@@ -310,9 +311,11 @@ def batch_list_command(
     if not batches:
         console.print("no batches")
         return
-    facts = (
-        load_facts(path.with_name("facts.json")) if path.with_name("facts.json").exists() else None
-    )
+    facts_path = path.with_name("facts.json")
+    try:
+        facts = load_scope_facts(facts_path, scope) if facts_path.exists() else None
+    except TriageError as exc:
+        _fail(str(exc))
     for b in batches:
         console.print(
             f"{b.id}  {plural(len(b.ids), 'issue')}  {b.title}{_wave_columns(b, batches, facts)}",
@@ -1933,12 +1936,17 @@ class _Driver:
         if action.kind == "archive":
             return self._archive(action, facts, judgements, batch, repo), True, in_flight
         if action.kind == "adopt":
+            started = closeout_event(batch)
             self._append(
                 judgements, facts, batch,
-                CloseoutEvent(kind="closeout", at=_now_after(batch), runner="hand",
-                              handle=f"PR #{action.pr}" if action.pr else "archived",
-                              archive=_closeout_head(batch) if action.pr else None,
-                              archived=action.archived),
+                # A close-out this driver started: the same event again, now archived,
+                # as `_archive` records one it merged itself (gh#882).
+                started.model_copy(update={"at": _now_after(batch), "archived": action.archived})
+                if started is not None
+                else CloseoutEvent(kind="closeout", at=_now_after(batch), runner="hand",
+                                   handle=f"PR #{action.pr}" if action.pr else "archived",
+                                   archive=_closeout_head(batch) if action.pr else None,
+                                   archived=action.archived),
             )  # fmt: skip
             return action.detail, True, in_flight
         waits = sorted(d for d in batch.after if d in self._unlanded)

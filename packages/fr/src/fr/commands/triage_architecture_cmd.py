@@ -39,7 +39,7 @@ from fr.triage.origins import (
     Origins,
     OriginsFacts,
     load_origins,
-    load_origins_facts,
+    load_scope_origins_facts,
 )
 from fr.triage.render import plural
 from fr.triage.snapshot import stored_snapshots
@@ -86,7 +86,9 @@ def render_command(
     target, facts, judgements = triage_cmd._load_state(scope, dir_override)
     try:
         origins_facts: OriginsFacts | None = (
-            load_origins_facts(target / FACTS_FILE) if (target / FACTS_FILE).exists() else None
+            load_scope_origins_facts(target / FACTS_FILE, scope)
+            if (target / FACTS_FILE).exists()
+            else None
         )
         origins: Origins | None = (
             load_origins(target / CLASSIFICATION_FILE)

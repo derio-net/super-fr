@@ -135,6 +135,9 @@ def test_an_explicit_matrix_is_read_whatever_the_cwd(
     bare.mkdir()
     monkeypatch.chdir(bare)
     state = _state(tmp_path)
+    # A repo no sibling checkout is named after; its facts must say so (gh#886).
+    facts = json.loads((state / "facts.json").read_text(encoding="utf-8"))
+    (state / "facts.json").write_text(json.dumps({**facts, "scope": "other-org--other"}))
     mx = _matrix(tmp_path / "elsewhere" / "matrix.yaml", {"row-z": "skipped"})
     _render(state, "--matrix", str(mx), repo="other-org/other")
     assert _stored_acceptance(state) == {"row-z": "skipped"}

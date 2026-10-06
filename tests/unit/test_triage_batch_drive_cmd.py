@@ -813,7 +813,7 @@ def test_an_archived_batch_is_recorded_once_and_never_probed_again(
     batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
     event = batch.events[-1]
     assert (event.kind, event.runner, event.archived) == ("closeout", "hand", 0)  # type: ignore[union-attr]
-    assert closeout_state(batch, world.facts()) == "archived"
+    assert closeout_state(batch) == "archived"
     assert views.needs_you(world.facts(), load_judgements(tmp_path / "judgements.yaml")) == []
     world.calls.clear()
     code, out = _drive(tmp_path, "--once", "--yes")
@@ -1004,6 +1004,39 @@ def test_the_attributed_archive_pr_is_merged_and_the_batch_finishes(
     assert _lines(out, "archive") == ["archive b1: merged archive PR #201"]
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0 and "closing 0" in out
+
+
+def test_an_archive_pr_merged_by_hand_is_recorded_so_batch_list_reads_archived(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """gh#882: the driver started the close-out, someone else merged its archive PR.
+    One pass records it on the close-out event; `batch list` reads that, never
+    `facts.prs`, which holds open PRs only."""
+    from fr.triage.batch import closeout_state
+
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _merged(world, tmp_path, events=closeout)
+    world.pr(201, "chore/archive-p1", [], state="MERGED", files=["docs/superpowers/runs/r1.yaml"])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    listed = CliRunner().invoke(app, ["triage", "batch", "list", "--repo", REPO,
+                                      "--dir", str(tmp_path)])  # fmt: skip
+    assert "close-out started" in listed.output, listed.output
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == []
+    assert _lines(out, "adopt") == ["adopt b1: archive PR #201 merged"]
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    event = batch.events[-1]
+    assert (event.kind, event.runner, event.run, event.archived) == ("closeout", "fake", "r1", 201)  # type: ignore[union-attr]
+    assert closeout_state(batch) == "archived"
+    listed = CliRunner().invoke(app, ["triage", "batch", "list", "--repo", REPO,
+                                      "--dir", str(tmp_path)])  # fmt: skip
+    assert "close-out archived" in listed.output, listed.output
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0 and _lines(out, "adopt") == [], out
 
 
 # ------------------------------------------------- the board, every pass (R11)

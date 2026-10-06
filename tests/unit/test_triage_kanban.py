@@ -121,14 +121,16 @@ def test_a_closeout_event_with_archived_is_done() -> None:
     assert _col("m", f, jd) == "done"
 
 
-def test_a_merged_closeout_pr_in_the_facts_is_done() -> None:
+def test_done_reads_the_closeout_event_never_a_merged_pr_in_the_facts() -> None:
+    """gh#882: `facts.prs` holds open PRs only, so a merged close-out PR is never there;
+    the driver records the merge on the close-out event, whoever merged it."""
     closeout_pr = pr(12, "chore/closeout-feat-batch-m", state="MERGED")
     f, jd = _world(
         [batch("m", [1], events=[dispatch("m"), SESSION])],
         _merged_issues(),
         prs=[closeout_pr],
     )
-    assert _col("m", f, jd) == "done"
+    assert _col("m", f, jd) == "closing-out"
 
 
 @pytest.mark.parametrize("word", ["cancelled", "abandoned", "partial"])
