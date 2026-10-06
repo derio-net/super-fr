@@ -93,3 +93,17 @@ def test_a_prefix_that_is_not_a_directory_boundary_does_not_match() -> None:
 def test_a_rewrite_that_does_not_reparse_raises() -> None:
     with pytest.raises(RetargetError):
         retarget_text(MATRIX, "own", [(Path(LIVE), Path("a: [b"))])
+
+
+def test_a_row_without_origin_does_not_break_another_rows_retarget() -> None:
+    text = MATRIX.replace(f"    origin:\n      - 'own:{LIVE}#sec'\n", "")
+    assert "origin" not in text.split("id: r2")[1].split("levels:")[0]
+    new, changes = retarget_text(text, "own", _moves())
+    assert f"- own:{DONE}\n" in new
+    assert [c[0] for c in changes] == ["r1", "r1"]
+
+
+def test_an_item_the_walker_skips_makes_the_verify_refuse() -> None:
+    text = MATRIX.replace(f"    - frank:{LIVE}\n", f"    - own:{LIVE} # keep\n")
+    with pytest.raises(RetargetError, match="more than the retargeted refs"):
+        retarget_text(text, "own", _moves())

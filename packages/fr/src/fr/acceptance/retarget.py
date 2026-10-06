@@ -123,7 +123,8 @@ def _verify(old: str, new: str, own: str, moves: Sequence[tuple[Path, Path]]) ->
     for row in before.get("rows") or []:
         if not isinstance(row, dict):
             continue
-        row["origin"] = [mapped(r) for r in row.get("origin") or []]
+        if "origin" in row:
+            row["origin"] = [mapped(r) for r in row.get("origin") or []]
         lv = row.get("levels")
         if isinstance(lv, dict):
             row["levels"] = {k: [mapped(r) for r in v or []] for k, v in lv.items()}
