@@ -52,9 +52,11 @@ def _write(target: Path, stops: Mapping[str, MergeStop]) -> None:
 
 
 def record_stop(target: Path, batch_id: str, stop: MergeStop) -> None:
-    """Record (or replace) *batch_id*'s stop."""
+    """Record *batch_id*'s stop. The same head and reason again is not news: nothing is
+    written, so `at` stays the time the driver FIRST stopped there."""
     stops = load_stops(target)
-    if stops.get(batch_id) != stop:
+    old = stops.get(batch_id)
+    if old is None or (old.head, old.reason) != (stop.head, stop.reason):
         _write(target, {**stops, batch_id: stop})
 
 

@@ -348,6 +348,12 @@ def test_a_merge_stop_at_a_head_since_moved_no_longer_counts() -> None:
     assert (card.hint, card.needs_you) == ("merge ready", False)
 
 
+def test_a_merge_stop_on_a_pr_no_longer_open_no_longer_counts() -> None:
+    merged = pr(11, "feat/batch-a", state="MERGED")
+    f, jd = _world([batch("a", [1], events=[dispatch("a")])], [issue(1, prs=[merged])])
+    assert not build_board(f, jd, {}, stops=_stopped("sha-11")).card("a").needs_you
+
+
 def test_a_batch_waiting_on_a_stopped_merge_says_so() -> None:
     f, jd = _world(
         [

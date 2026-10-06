@@ -36,3 +36,11 @@ def test_an_unreadable_file_is_no_stops_never_an_error(tmp_path: Path) -> None:
     assert load_stops(tmp_path) == {}
     (tmp_path / MERGE_STOPS_FILE).write_text('{"schema": 1, "stops": {"a": 3}}', "utf-8")
     assert load_stops(tmp_path) == {}
+
+
+def test_the_same_stop_again_keeps_the_first_time(tmp_path: Path) -> None:
+    record_stop(tmp_path, "a", MergeStop(head="sha-1", reason="conflict", at="t1"))
+    record_stop(tmp_path, "a", MergeStop(head="sha-1", reason="conflict", at="t2"))
+    assert load_stops(tmp_path)["a"].at == "t1"
+    record_stop(tmp_path, "a", MergeStop(head="sha-2", reason="conflict", at="t3"))
+    assert load_stops(tmp_path)["a"].at == "t3"
