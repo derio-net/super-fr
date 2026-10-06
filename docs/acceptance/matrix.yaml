@@ -6677,9 +6677,7 @@ rows:
       calibration fixture is a live capture of this repo's issues (2026-10-06).
   - id: triage-dedupe-judged
     capability: triage-dedupe
-    acceptance: A judged duplicate_of is validated at load, never unplaced, and reported
-      by check with its original's state and the gh close --duplicate-of command, which
-      fr never runs
+    acceptance: duplicate_of and distinct_from are validated at load, a judged duplicate is never unplaced, and check reports it with its original's state and the gh close --duplicate-of command, which fr never runs
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R3
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R5
@@ -6696,8 +6694,7 @@ rows:
       reported by check''s duplicate_chained set instead of being refused at load.'
   - id: triage-dedupe-board
     capability: triage-dedupe
-    acceptance: The triage board nests a judged duplicate under its open original and
-      lists candidate duplicate groups in a Possible duplicates section
+    acceptance: The triage board lists every judged duplicate under Parked and on its open original's row, with the close command, and lists candidate duplicate groups in a Possible duplicates section
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R9
@@ -6722,8 +6719,7 @@ rows:
       - expand-original-row-shows-duplicates
   - id: triage-dedupe-driver
     capability: triage-dedupe
-    acceptance: The wave driver reports the candidate-group count once, in the pass
-      that finishes a wave, and never acts on duplicates
+    acceptance: The wave driver reports the candidate-group count once, in the pass that observes a wave finish, and never acts on duplicates
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R10
     levels:
