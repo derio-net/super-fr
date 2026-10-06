@@ -1,0 +1,142 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-triage-claims
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+- kind: finding
+  id: p1-r1
+  title: R17 default trust (pr_authors else viewer) makes hosts on different GitHub accounts silently
+    ignore each other's claims
+  body: R17 default trust (pr_authors else viewer) makes hosts on different GitHub accounts silently ignore
+    each other's claims.
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r2
+  title: with pr_authors set the viewer is excluded from the trusted set, so every own claim is refused
+  body: with pr_authors set the viewer is excluded from the trusted set, so every own claim is refused.
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r3
+  title: 'owed_releases/release not batch-scoped: releasing an old batch releases a claim rewritten for
+    a new live batch'
+  body: 'owed_releases/release not batch-scoped: releasing an old batch releases a claim rewritten for
+    a new live batch.'
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r4
+  title: batch dispatch skips the R4 re-read for members already claimed for the batch
+  body: batch dispatch skips the R4 re-read for members already claimed for the batch.
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r5
+  title: release removes fr:claimed from a pre-edit read; refresh/rewrite never re-add it; orphan labels
+    on error paths
+  body: release removes fr:claimed from a pre-edit read; refresh/rewrite never re-add it; orphan labels
+    on error paths.
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r6
+  title: check's claims_owed also lists members held elsewhere
+  body: check's claims_owed also lists members held elsewhere.
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r7
+  title: malformed/untrusted marker counts are never surfaced
+  body: malformed/untrusted marker counts are never surfaced.
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r8
+  title: cancel of a proposed wave'd batch with stale facts skips the release
+  body: cancel of a proposed wave'd batch with stale facts skips the release.
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r9
+  title: R4 race test uses a back-dated rival and has no case where our older marker wins
+  body: R4 race test uses a back-dated rival and has no case where our older marker wins.
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r10
+  title: batch merge with no ids refuses every queued batch when one is held
+  body: Follows R6's literal wording ('the commands refuse with exit 2'); whether a default merge should
+    skip held batches is a spec question, not a defect of this change.
+  review_scope: out
+  phase: 1
+- kind: decision
+  id: p1-claim-trust-member
+  phase: 1
+  title: Claims trust org MEMBER association (accepted residual from a background security review)
+  body: 'Trusting authorAssociation MEMBER also trusts an org member with read-only repo access. Kept:
+    drivers usually get write access through team membership, which GitHub reports as MEMBER, and dropping
+    it reintroduces p1-r1. GitHub computes the association server-side, so it can''t be spoofed; strangers
+    on public repos (NONE/CONTRIBUTOR/FIRST_TIME_CONTRIBUTOR) stay excluded, which is R17''s threat. A
+    claim coordinates trusted actors and is not a security boundary between them; pr_authors remains for
+    repos that want an explicit list.'
+- kind: review
+  id: p1-review-1
+  phase: 1
+  title: 'phase 1 independent review: 9 in-scope findings fixed, 1 out of scope'
+  body: 'An independent reviewer (separate context, hard tier) read spec R1-R17, plan phase 1 and the
+    diff f0e5b0fb1..HEAD, and ran the claim test files (343 passed, no real ~/.config writes). It confirmed
+    the R4 race, refresh-not-resurrecting, in-place rewrite, release timing, dispatch-before-launch, held
+    cancel, schema bumps, host-id exclusivity and R17 coverage. It raised p1-r1..p1-r9 (in) and p1-r10
+    (out). The orchestrator verified r1/r2 (model.py trusted_logins), r3 (claim_writes.release ignores
+    the batch) and r5 (label removal decided pre-edit) against the code and gh''s comment fields (authorAssociation
+    present). All nine in-scope findings were fixed test-first in 66892d334..4be36b54c, and a new row
+    triage-claims-trusted-authors (R17) was added. Full suite after the fixes: 9867 passed, 105 skipped.'
+resolves:
+- id: p1-r1
+  state: fixed
+  body: 'claim_trusted: viewer ∪ pr_authors ∪ authorAssociation OWNER/MEMBER/COLLABORATOR; PR merge guard
+    unchanged (66892d334).'
+- id: p1-r2
+  state: fixed
+  body: claim_trusted always includes the viewer (66892d334).
+- id: p1-r3
+  state: fixed
+  body: owed_releases drops keys still owed by a non-releasing batch; release(batch=) skips a marker naming
+    another batch (6a6530956).
+- id: p1-r4
+  state: fixed
+  body: dispatch sends every member through claim_writes.claim before the runner launch (09ac39f65).
+- id: p1-r5
+  state: fixed
+  body: release re-reads after removal and restores; refresh/rewrite ensure the label; error paths clean
+    an orphan label (87023cfea).
+- id: p1-r6
+  state: fixed
+  body: claims_owed skips held-elsewhere members (4d73a05c2).
+- id: p1-r7
+  state: fixed
+  body: collect warns once per issue with the counts (74031e4ab).
+- id: p1-r8
+  state: fixed
+  body: cancel treats any batch with a wave as touching the forge (2de99fa80).
+- id: p1-r9
+  state: fixed
+  body: two-writer test with near-simultaneous created_at where ours is older (4be36b54c).
+- id: p1-r10
+  state: out-of-scope
+  body: 'Not caused by this change''s code: it implements R6 as worded. A default merge skipping held
+    batches would be a spec change.'
+- id: p1-r17-origin-not-on-matrix
+  state: fixed
+  body: R17 got its own row, triage-claims-trusted-authors (status ci, 9 unit refs), added with fr acceptance
+    add (855dd503c).
+- id: p1-r17-default-trust-across-users
+  state: out-of-scope
+  body: Duplicate of p1-r1, which the independent reviewer raised in scope and which was fixed in 66892d334;
+    this executor-tagged out-of-scope entry is closed in favour of that one rather than reclassified.
+evidence:
+  review: p1-review-1
+  reviewer: ac28dbac623610918
+  model: claude-opus-5-5
