@@ -1073,8 +1073,9 @@ def read_file_since(
 
 _INTERPRETERS = frozenset({"node", "python", "python3", "bash", "sh", "npx", "deno", "bun"})
 """Words whose first non-flag argument is the program they execute."""
-_SUBCOMMAND_RUNNERS = frozenset({"deno", "bun", "uv"})
-"""Interpreters that may put a `run` subcommand before the program."""
+_SUBCOMMAND_RUNNERS = frozenset({"deno", "bun"})
+"""Interpreters that may put a `run` subcommand before the program (`uv` has
+its own walk, `_uv_run_program`)."""
 _UV_VALUE_FLAGS = frozenset(
     {
         *("-w", "--with", "--with-editable", "--with-requirements"),
@@ -1088,6 +1089,7 @@ _UV_VALUE_FLAGS = frozenset(
         *("--link-mode", "-C", "--config-setting", "--config-settings-package"),
         *("--no-build-isolation-package", "--no-build-package", "--no-binary-package"),
         *("--cache-dir", "--color", "--allow-insecure-host", "--config-file"),
+        "--python-preference",
     }
 )
 """`uv run` flags whose value is the NEXT word (`uv run --help`), so that word
@@ -1409,7 +1411,9 @@ def wrote_since(
     # A writer that detached ITSELF with `&` (gh#1002) ends its tool call —
     # foreground result or background notice — before the suite it started
     # does. As OpenCode's reader does (gh#719), close its window at the first
-    # later command that named the log and showed its `exit=0`.
+    # later command that named the log and showed its `exit=0`. That line is
+    # the suite's own `echo "exit=$?"`: a detached writer that prints none is
+    # still refused.
     calls.sort(key=lambda c: (c.began, c.ended))
     for tool_use_id, (began, ended) in closed.items():
         command = commands[tool_use_id][1]

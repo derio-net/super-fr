@@ -21,7 +21,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from fr.run.telemetry import parse_timestamp, wrote_since
 
 LOG = "/tmp/scratch/p2-suite.log"
@@ -213,3 +212,55 @@ def test_the_first_exit_line_seen_is_final(tmp_path: Path) -> None:
     windows = _windows(tmp_path, rows)
 
     assert all(end <= parse_timestamp(ACKED) for _, end in windows)
+
+
+DONE = "2026-10-05T22:12:01.229Z"
+
+
+def test_a_subagents_poll_does_not_extend_the_orchestrators_window(tmp_path: Path) -> None:
+    """Review finding 2: a main-thread writer, a SIDECHAIN poll showing exit=0,
+    read as the main thread — the subagent's poll is not the orchestrator's."""
+    rows = [
+        *_launched(sidechain=False),
+        *_poll("2026-10-05T22:11:10.552Z", DONE, "exit=0", n=1, sidechain=True),
+    ]
+
+    windows = _windows(tmp_path, rows, main_thread=True)
+
+    assert windows and _span(ISSUED, DONE) not in windows
+
+
+def test_a_foreground_writer_that_detaches_is_extended_too(tmp_path: Path) -> None:
+    """No `run_in_background`: the call's own result closes it at once."""
+    rows = [
+        _use(ISSUED, "toolu_launch", LAUNCH, sidechain=True),
+        _result(NOTICED, "toolu_launch", "started", sidechain=True),
+        *_poll("2026-10-05T22:11:10.552Z", DONE, "exit=0", n=1),
+    ]
+
+    assert _span(ISSUED, DONE) in _windows(tmp_path, rows)
+
+
+def test_a_poll_issued_before_the_writer_returned_does_not_count(tmp_path: Path) -> None:
+    rows = [
+        _use(ISSUED, "toolu_launch", LAUNCH, sidechain=True),
+        *_poll("2026-10-05T22:03:23.800Z", DONE, "exit=0", n=1),
+        _result("2026-10-05T22:03:24.100Z", "toolu_launch", "started", sidechain=True),
+    ]
+
+    assert _span(ISSUED, DONE) not in _windows(tmp_path, rows)
+
+
+@pytest.mark.parametrize("variant", ["launch-ack", "is-error"])
+def test_an_exit_0_outside_a_completed_foreground_result_does_not_count(
+    tmp_path: Path, variant: str
+) -> None:
+    """A backgrounded poll's ack is not its output, and an errored call ran to
+    no completion: neither one's text shows the suite's exit."""
+    poll = _poll("2026-10-05T22:11:10.552Z", DONE, "exit=0", n=1)
+    if variant == "launch-ack":
+        poll[1]["toolUseResult"] = {"backgroundTaskId": "bpoll"}
+    else:
+        poll[1]["message"]["content"][0]["is_error"] = True
+
+    assert _span(ISSUED, DONE) not in _windows(tmp_path, [*_launched(), *poll])
