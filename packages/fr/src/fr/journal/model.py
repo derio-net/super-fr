@@ -607,6 +607,42 @@ def resolution_record_id(finding_id: str, taken: set[str]) -> str:
     return f"{base}-{n}"
 
 
+_CARRIED_OPEN = frozenset({"deferred", "out-of-scope"})
+"""Resolution states written `state=open` plus a header token, so an older fr
+reads the finding as open (fail closed) rather than failing to parse."""
+
+
+def resolution_entry(
+    *,
+    target: JournalEntry,
+    taken: set[str],
+    created: str,
+    state: str,
+    body: str,
+    phase: int | None = None,
+    tracked_by: str | None = None,
+    answered_by: AnsweredBy | None = None,
+) -> JournalEntry:
+    """The resolution record that closes `target` — THE one builder, used by
+    the step-record engine (`fr journal resolve`, `resolves:`) and by `fr
+    archive`'s write-back, so the two cannot drift. Raises `ValueError` when
+    the combination is not a valid entry."""
+    return JournalEntry(
+        kind="finding",
+        scope=target.scope,
+        id=resolution_record_id(target.id, taken),
+        created=created,
+        phase=phase,
+        title=f"resolves {target.id}: {target.title}",
+        body=body,
+        state="open" if state in _CARRIED_OPEN else state,  # type: ignore[arg-type]
+        resolves=target.id,
+        tracked_by=tracked_by,
+        out_of_scope=state == "out-of-scope",
+        answered_by=answered_by,
+    )
+
+
 def reviews_phase(entry: JournalEntry, phase: int) -> bool:
     """Is `entry` a recorded review OF `phase`? (spec §B)
 
