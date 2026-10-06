@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -3913,3 +3914,61 @@ def test_a_loop_with_only_held_batches_names_no_operator_need(
     assert "need the operator" not in out
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 3, out
+
+
+# ------------------------------------------------------------ publishing (R14)
+
+
+def _publish_config(tmp_path: Path, argv: list[str]) -> Path:
+    out = tmp_path / "published.txt"
+    code = "import sys; open(sys.argv[1], 'a').write(sys.argv[2] + '\\n')"
+    cfg = {"publish": [sys.executable, "-c", code, str(out), *argv]}
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return out
+
+
+def test_a_drive_pass_publishes_the_board_it_rendered(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    out = _publish_config(tmp_path, ["{name}"])
+    code, said = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, said
+    assert out.read_text(encoding="utf-8") == "super-fr batches\n"
+
+
+def test_a_plan_pass_writes_no_board_and_publishes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    out = _publish_config(tmp_path, ["{name}"])
+    assert _drive(tmp_path)[0] == 0 and not out.exists()
+
+
+def test_a_failing_publish_warns_once_per_cause_and_changes_no_exit_code(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _proposed(world, tmp_path, 1)
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump({"publish": ["/no/such"]}))
+    sleeps: list[float] = []
+
+    def _stop(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise RuntimeError("end of the test loop")
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop)
+    _, out = _drive(tmp_path, "--yes", "--interval", "5")
+    assert out.count("could not publish the board") == 1 and "/no/such" in out
+    assert len(sleeps) == 3
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1"]
+
+
+def test_a_failing_publish_leaves_a_once_drive_exit_code_alone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump({"publish": ["/no/such"]}))
+    code, said = _drive(tmp_path, "--once", "--yes")
+    assert code == 0 and "could not publish the board" in said

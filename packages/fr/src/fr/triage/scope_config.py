@@ -14,6 +14,7 @@ import hashlib
 import os
 import re
 import secrets
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.model import Scope
 
+PUBLISH_TIMEOUT = 120.0  # seconds; tests shorten it
 HOST_ID_ENV = "FR_HOST_ID"
 SCOPE_CONFIG_FILE = "scope.yaml"
 _HOST_ID_RE = re.compile(r"[0-9a-f]{16}")
@@ -111,3 +113,37 @@ def default_board_name(scope: Scope) -> str:
     if scope.kind == "org":
         return f"{scope.target} batches"
     return f"{scope.name} batches"
+
+
+def publish_board(scope: Scope, config: ScopeConfig, board: Path) -> str | None:
+    """Run the scope's `publish` command for the rendered *board* (R14); None when it
+    succeeded or there is none, else the cause of the failure on one line.
+
+    The argument list is run as is, with no shell: `{board}`, `{name}` and `{scope_id}`
+    are substituted inside each word, so a value is never parsed as syntax. A command
+    that does not finish in `PUBLISH_TIMEOUT` seconds is killed. Nothing here raises:
+    publishing is a view's afterthought and never changes a command's exit code."""
+    if not config.publish:
+        return None
+    values = {
+        "{board}": str(board),
+        "{name}": config.board_name or default_board_name(scope),
+        "{scope_id}": scope_id(scope),
+    }
+    argv = []
+    for word in config.publish:
+        for placeholder, value in values.items():
+            word = word.replace(placeholder, value)
+        argv.append(word)
+    try:
+        done = subprocess.run(  # noqa: S603 - an argument list, never a shell string
+            argv, capture_output=True, text=True, timeout=PUBLISH_TIMEOUT, check=False
+        )
+    except subprocess.TimeoutExpired:
+        return f"`{argv[0]}` timed out after {PUBLISH_TIMEOUT:g}s"
+    except OSError as exc:
+        return f"`{argv[0]}` could not run: {exc}"
+    if done.returncode == 0:
+        return None
+    tail = " ".join(done.stderr.split())[:200]
+    return f"`{argv[0]}` failed (exit {done.returncode})" + (f": {tail}" if tail else "")

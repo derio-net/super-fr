@@ -324,12 +324,12 @@ def _card(card: Card, scope_args: Sequence[str]) -> str:
 
 def _held_item(h: HeldIssue) -> str:
     flag = ' <span class="pill flag">expired</span>' if h.expired else ""
+    hint = '<br><span class="meta">' + esc(h.line) + "</span>" if h.expired else ""
     return (
         f'<li>{_link(h.title, h.url)} <span class="mono">{esc(h.key)}</span> · held by '
         f'<span class="mono">{esc(h.holder)}</span> for batch '
         f'<span class="mono">{esc(h.batch)}</span> · expires '
-        f'<time datetime="{esc(h.expires.isoformat())}">{_when(h.expires)}</time>{flag}'
-        f"{f'<br><span class="meta">{esc(h.line)}</span>' if h.expired else ''}</li>"
+        f'<time datetime="{esc(h.expires.isoformat())}">{_when(h.expires)}</time>{flag}{hint}</li>'
     )
 
 

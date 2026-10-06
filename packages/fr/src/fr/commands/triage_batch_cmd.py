@@ -170,7 +170,7 @@ from fr.triage.claim_sync import (
     plan_sync,
     record_releases,
 )
-from fr.triage.claims import Claim, held_line, held_map, held_members
+from fr.triage.claims import held_line, held_map, held_members
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
@@ -1801,6 +1801,7 @@ class _Driver:
         # found held (the pass stops acting on them), and the claim writes done so far
         self._claims: ClaimEnv | None = None
         self._held_now: dict[str, str] = {}
+        self.publish_failures: set[str] = set()  # R14: one warning per distinct cause
         self.held_by: tuple[tuple[str, tuple[str, ...]], ...] = ()  # last pass: waiting on others
         self._claim_done = SyncResult()
 
@@ -2558,7 +2559,7 @@ class _Driver:
         """Render `board.html` from what this pass left on disk (R11). A board that cannot
         be written is one warning per distinct cause and never changes the pass."""
         try:
-            triage_kanban_cmd.write_board(
+            out, _ = triage_kanban_cmd.write_board(
                 self.scope,
                 self.target,
                 scope_args=self.scope_args,
@@ -2574,6 +2575,7 @@ class _Driver:
                 )
         else:
             self.board_failures.clear()
+            triage_kanban_cmd.publish(self.scope, self.target, out, self.publish_failures)
 
     def _act(self, action: Action, facts: Facts, in_flight: int) -> tuple[str, bool, int]:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""

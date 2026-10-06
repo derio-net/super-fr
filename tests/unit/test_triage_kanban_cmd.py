@@ -8,17 +8,21 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from fr.cli import app
 from fr.commands import triage_kanban_cmd
 from fr.commands.triage_kanban_cmd import scope_args, session_statuses, write_board
+from fr.triage import scope_config
 from fr.triage.drive_lock import LOCK_GRACE
 from fr.triage.errors import ForgeError
 from fr.triage.model import Scope, load_facts, load_judgements
+from fr.triage.scope_config import ScopeConfig, publish_board
 from typer.testing import CliRunner
 
 from tests.unit.test_triage_batch_drive_cmd import (
@@ -509,3 +513,105 @@ def test_write_board_shows_what_another_scope_holds(
     facts_path.write_text(json.dumps(data), encoding="utf-8")
     path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
     assert "Held elsewhere" in path.read_text(encoding="utf-8")
+
+
+# ------------------------------------------------------------ publishing (R14)
+
+
+def _recorder(tmp_path: Path) -> tuple[list[str], Path]:
+    """A publish argv that records its own arguments, one per line, into a file."""
+    out = tmp_path / "argv.txt"
+    code = "import sys, pathlib; pathlib.Path(sys.argv[1]).write_text('\\n'.join(sys.argv[2:]))"
+    return [sys.executable, "-c", code, str(out)], out
+
+
+def test_publish_board_substitutes_board_name_and_scope_id_and_runs_no_shell(
+    tmp_path: Path,
+) -> None:
+    argv, out = _recorder(tmp_path)
+    config = ScopeConfig(publish=[*argv, "{board}", "{name}", "{scope_id}", "a;b $HOME `x`"])
+    board = tmp_path / "board.html"
+    assert publish_board(SCOPE, config, board) is None
+    got = out.read_text(encoding="utf-8").split("\n")
+    assert got == [str(board), "super-fr batches", scope_config.scope_id(SCOPE), "a;b $HOME `x`"]
+
+
+def test_publish_board_uses_the_configured_board_name(tmp_path: Path) -> None:
+    argv, out = _recorder(tmp_path)
+    config = ScopeConfig(board_name="my board", publish=[*argv, "{name}"])
+    assert publish_board(SCOPE, config, tmp_path / "b.html") is None
+    assert out.read_text(encoding="utf-8") == "my board"
+
+
+def test_publish_board_with_no_command_does_nothing(tmp_path: Path) -> None:
+    assert publish_board(SCOPE, ScopeConfig(), tmp_path / "b.html") is None
+
+
+def test_publish_board_returns_the_cause_of_each_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    missing = publish_board(SCOPE, ScopeConfig(publish=["/no/such/program"]), tmp_path / "b")
+    assert missing and "/no/such/program" in missing
+    failing = ScopeConfig(
+        publish=[sys.executable, "-c", "import sys; sys.stderr.write('denied\\n'); sys.exit(3)"]
+    )
+    cause = publish_board(SCOPE, failing, tmp_path / "b")
+    assert cause and "exit 3" in cause and "denied" in cause
+    monkeypatch.setattr(scope_config, "PUBLISH_TIMEOUT", 0.3)
+    slow = ScopeConfig(publish=[sys.executable, "-c", "import time; time.sleep(30)"])
+    cause = publish_board(SCOPE, slow, tmp_path / "b")
+    assert cause and "timed out" in cause
+
+
+def _publishing(tmp_path: Path) -> Path:
+    """scope.yaml in *tmp_path* publishing by appending the board name to a file."""
+    out = tmp_path / "published.txt"
+    code = "import sys; open(sys.argv[1], 'a').write(sys.argv[2] + '|' + sys.argv[3] + '\\n')"
+    cfg = {"publish": [sys.executable, "-c", code, str(out), "{name}", "{board}"]}
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return out
+
+
+def test_board_publish_publishes_after_the_render_with_the_default_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    out = _publishing(tmp_path)
+    code, said = _board(tmp_path, "--publish")
+    assert code == 0, said
+    assert out.read_text(encoding="utf-8") == f"super-fr batches|{tmp_path / 'board.html'}\n"
+
+
+def test_board_without_publish_never_runs_the_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    out = _publishing(tmp_path)
+    assert _board(tmp_path)[0] == 0 and not out.exists()
+
+
+def test_a_failing_publish_warns_and_keeps_the_exit_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump({"publish": ["/no/such"]}))
+    code, said = _board(tmp_path, "--publish")
+    assert code == 0 and "could not publish the board" in said and "/no/such" in said
+
+
+def test_a_watch_publishes_each_iteration_and_warns_once_per_cause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    watch = _Watch(tmp_path, monkeypatch, stop=3)
+    _setup(tmp_path)
+    out = _publishing(tmp_path)
+    code, said = _board(tmp_path, "--watch", "--publish", "--interval", "7")
+    assert code == 0, said
+    assert out.read_text(encoding="utf-8").count("super-fr batches") == 3
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump({"publish": ["/no/such"]}))
+    watch.sleeps.clear()
+    code, said = _board(tmp_path, "--watch", "--publish", "--interval", "7")
+    assert said.count("could not publish the board") == 1 and len(watch.sleeps) == 3
