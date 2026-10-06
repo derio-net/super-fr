@@ -245,3 +245,29 @@ def test_pickup_makes_the_records_dir_its_template_points_into(tmp_path: Path) -
 
     assert _pickup(root).exit_code == 0
     assert records.is_dir()
+
+
+def test_pickup_on_a_drifted_cursor_keeps_the_record_and_warns_once(tmp_path: Path) -> None:
+    """gh#988: the shape gains a step after the run started. `fr pickup` used
+    the strict resolver, whose drift refusal its optional-section `except`
+    swallowed, so the brief lost its `## Step record` and said nothing. It now
+    reads leniently, as `fr run gates/status` do (spec
+    2026-10-05-run-upgrade-midflight §B): the record stays, plus ONE warning
+    naming `fr run reshape`."""
+    root = started_run(tmp_path)
+    override = root / "docs/superpowers/workflows/fr-goal.yaml"
+    override.parent.mkdir(parents=True, exist_ok=True)
+    override.write_text(
+        _SHIPPED_MANIFEST.read_text() + '  - id: after-deliver\n    kind: cli\n    run: "true"\n'
+    )
+    commit_all(root, "the shape gains a step")
+
+    out = _pickup(root)
+
+    assert out.exit_code == 0, out.output
+    assert "## Step record" in out.stdout
+    assert "--record docs/superpowers/runs/r1.records/implement-phase__phase-1.yaml" in out.stdout
+    warning = " ".join(out.stderr.split())
+    assert warning.count("fr run reshape") == 1
+    assert "after-deliver" in warning
+    assert "fr run reshape" not in out.stdout  # the brief itself stays clean
