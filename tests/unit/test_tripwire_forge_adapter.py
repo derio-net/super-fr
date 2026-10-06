@@ -13,9 +13,10 @@ outside the files that ARE the GitHub backend:
   `import fr.gh`);
 - a `["gh", …]` argv literal.
 
-`KNOWN` is a closed set of the sites that predate this tripwire, each with
-the reason it stays for now. A file listed there that no longer offends
-fails too, so the set only shrinks: delete its line.
+There is no allowlist (spec 2026-10-06-forge-remainder §4.G, R7): the sites
+that predated this tripwire — triage collect, the isolation lookups and the
+fr-vk rate-limit guard — now all go through the adapter. A future exemption
+means arguing for a `BACKEND` entry in a diff.
 """
 
 from __future__ import annotations
@@ -32,18 +33,6 @@ BACKEND = {
     "fr/src/fr/real_ghclient.py",
     "fr/src/fr/hostclient.py",
 }
-
-KNOWN = {
-    # Triage collection is GitHub-only by design today (its own `Forge`
-    # protocol has one implementation, `GhForge`) — gh#742 item 1.
-    "fr/src/fr/triage/collect.py": "triage is GitHub-only (gh#742)",
-    # A second copy of the adapter's backend branching (gh/glab/tea), which
-    # works on every forge but duplicates `client_for` — gh#742 item 1.
-    "fr/src/fr/isolation/local.py": "own gh/glab/tea branching (gh#742)",
-    # Classifies a `GhError` from the GitHub-issue bridge as a rate limit.
-    "fr-vk/src/fr_vk/bridge_cli.py": "rate-limit classification of GhError",
-}
-
 
 def offences(source: str) -> list[str]:
     """Each direct `fr.gh` import or `["gh", …]` argv in *source*."""
@@ -92,7 +81,7 @@ def test_no_forge_call_bypasses_the_adapter() -> None:
     offenders = {
         rel: hits
         for rel, text in _sources().items()
-        if rel not in BACKEND and rel not in KNOWN and (hits := offences(text))
+        if rel not in BACKEND and (hits := offences(text))
     }
     assert not offenders, (
         "direct `gh` use outside the GitHub backend — route it through "
@@ -102,7 +91,9 @@ def test_no_forge_call_bypasses_the_adapter() -> None:
     )
 
 
-def test_every_known_site_still_offends() -> None:
-    sources = _sources()
-    stale = sorted(rel for rel in KNOWN if not offences(sources.get(rel, "")))
-    assert not stale, f"no longer bypasses the adapter — remove it from KNOWN: {stale}"
+def test_a_planted_gh_import_outside_the_backend_is_reported(tmp_path: Path) -> None:
+    """Test Plan 1: with no allowlist, a non-backend module importing `fr.gh`
+    is caught by the same scan `test_no_forge_call_bypasses_the_adapter` runs."""
+    plant = tmp_path / "plant.py"
+    plant.write_text("from fr import gh\n\ngh.viewer_login()\n", encoding="utf-8")
+    assert offences(plant.read_text(encoding="utf-8")) == ["line 1: import of fr.gh"]
