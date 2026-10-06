@@ -213,7 +213,7 @@ from fr.commands import archive_cmd  # noqa: E402
 from fr.ghclient import UnsupportedForgeOperation  # noqa: E402
 
 from tests.unit.fakes import FakeGhClient, FakeGhError  # noqa: E402
-from tests.unit.test_archive_cmd import _add_plan, _invoke, _repo, _seed  # noqa: E402
+from tests.unit.test_archive_cmd import _add_plan, _commit, _invoke, _repo, _seed  # noqa: E402
 
 SLUG = "2026-05-25-bookmarks"
 OWN = "acme/widgets"
@@ -525,8 +525,7 @@ def test_explicit_qids_file_even_when_nothing_moved(
     """R9: the brief's command works after an earlier archive already moved the journal."""
     repo = _open_ends_repo(tmp_path)
     assert _archive(monkeypatch, repo, DedupGh(), "--no-issues").exit_code == 0
-    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
-    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "archived"], check=True)
+    _commit(repo, "archived")
     gh = DedupGh()
     result = _invoke(
         monkeypatch,
@@ -586,8 +585,7 @@ def test_explicit_qids_with_nothing_moved_still_carry_their_context(
 ) -> None:
     repo = _open_ends_repo(tmp_path)
     assert _archive(monkeypatch, repo, DedupGh(), "--no-issues").exit_code == 0
-    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
-    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "archived"], check=True)
+    _commit(repo, "archived")
     gh = DedupGh()
     result = _invoke(monkeypatch, repo, gh, ["archive", "--all", "--issues", f"plan/{SLUG}/f1"])
     assert result.exit_code == 0, result.output
