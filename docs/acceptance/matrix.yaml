@@ -7160,9 +7160,26 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R10
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R11
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_a_claim_racing_an_older_expired_foreign_marker_loses_and_withdraws
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_an_own_marker_naming_another_batch_is_rewritten_in_place
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_refresh_never_resurrects_a_marker_another_scope_took
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_release_edits_to_released_and_removes_the_label_when_none_remain
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_an_untrusted_older_marker_never_wins
+      - super-fr:tests/unit/test_triage_claims.py#test_an_untrusted_authors_older_marker_is_ignored_and_counted
+      - super-fr:tests/unit/test_triage_claims.py#test_owed_claims_cover_waved_and_dispatched_batches_never_releasing_ones
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_create_with_a_wave_and_yes_writes_the_claims_after_the_judgements
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_yes_claims_every_member_before_the_runner_launch
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_claim_sync_yes_writes_claims_refreshes_releases_and_records
+      - super-fr:tests/unit/test_real_ghclient.py#TestIssueComments::test_list_issue_comments_parses_the_id_from_the_url
+      - super-fr:tests/unit/test_triage_collect.py#test_a_claimed_issue_carries_its_claims_and_an_unlabelled_one_is_never_read
+      - super-fr:tests/unit/test_triage_model.py#test_a_claims_released_event_is_refused_in_schema_5
+    status: ci
+    notes: 'phase 1: claim, the race over expired claims, in-place rewrite, refresh,
+      release on open and closed issues, the label rule, untrusted markers ignored (R17),
+      create/edit --yes, dispatch claims first, the comment-id parse, collect and the
+      facts/judgements schema 6 (R2-R4, R10-R12, R17)'
     verify: none
   - id: triage-claims-driver
     capability: triage-claims
