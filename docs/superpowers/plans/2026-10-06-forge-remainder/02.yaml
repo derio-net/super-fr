@@ -1,0 +1,200 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Empty the tripwire allowlist — collect, isolation lookups, bridge guard,
+    skill prose (#742)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - forge-calls-through-adapter
+  - isolation-lookups-every-forge
+  tier: standard
+  files:
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/gh.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/hostclient.py
+  - packages/fr/src/fr/isolation/local.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/errors.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr-vk/src/fr_vk/bridge_cli.py
+  - tests/unit/*.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - plugins/super-fr-dispatch/skills/fr-dispatch/SKILL.md
+  - .opencode/*
+  - .hermes/*
+  - AGENTS.md
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Adapter lookups default_branch / pr_for_branch on all three backends (spec
+    §4.B, R2)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: create tests/unit/test_forge_adapter_lookups.py (Test Plan 6), parametrised over RealGhClient,
+      RealGlabClient and RealTeaClient, with a scripted `run(argv, *, cwd)` returning CompletedProcess.
+      Assert the exact argv local.py sends today:
+      - `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`
+      - `glab repo view -F json --jq .default_branch`
+      - `tea repos --fields default_branch --output json`
+      - `gh pr view <b> --json state,url,mergedAt`
+      - `glab mr view <b> --output json`
+      - `tea pulls list --state all --fields state,merged,url,head --output json`
+      Also assert:
+      - the normalised {state OPEN|MERGED|CLOSED, url, mergedAt};
+      - None on a non-zero exit and on unparseable output;
+      - None with run=None when the binary is missing (monkeypatch subprocess.run to raise FileNotFoundError);
+      - the default runner of RealGhClient(host="ghe.example") passes GH_HOST.
+      Confirm the tests are red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in ghclient.py add the `CommandRunner` Protocol and the two methods to `GhClient`.
+      Implement them on RealGhClient, RealGlabClient and RealTeaClient by moving these bodies from local.py
+      verbatim: the backend branch of `_resolve_default_branch`, `_pr_from`, `_pr_from_gitlab` and `_pr_from_gitea`.
+      Use the default runner described in spec §4.B; the GitHub one runs under `host_scope` with `env=_env()`.
+      Confirm the tests are green.
+- number: 2
+  title: isolation/local.py onto the adapter (spec §4.B, R3)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: re-point
+      tests/unit/test_isolation_network_timeouts.py::test_default_branch_lookup_is_bounded_and_falls_back_on_timeout
+      to patch `fr._hosts.detect_backend` (and `fr._hosts.declared_host` to return None) instead of
+      `fr.isolation.local.detect_backend`. Grep tests/ for other `local, "detect_backend"` patches that select a
+      backend for these lookups, and re-point them the same way without changing any assertion.
+      Add a scan test (Test Plan 7) that parses packages/fr/src/fr/isolation/local.py with ast and fails on any
+      list literal whose first element is "gh", "glab" or "tea" and that has more elements. Confirm the scan is red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN:
+      - `_resolve_default_branch`: symbolic-ref first, then
+        `client_for(self.repo_root).default_branch(cwd=self.repo_root, run=lambda argv, *, cwd: run_network(self.run, self.repo_root, argv, cwd))`,
+        else "main";
+      - `_pr_from(cwd, branch)`: `client_for(cwd).pr_for_branch(branch, cwd=cwd, run=<adapter over self.run>)`;
+      - delete `_pr_from_gitlab`, `_pr_from_gitea` and the now-unused json branch.
+      Run every tests/unit/test_isolation*.py and the scan, and confirm green.
+- number: 3
+  title: Triage collect on the adapter (spec §4.A, R1)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: write tests (Test Plan 8):
+      - reads through `ClientForge(RealGlabClient())` and `ClientForge(RealTeaClient())`, e.g. `list_issues(...)`,
+        raise `ForgeError` naming the operation;
+      - `ClientForge(RealGhClient()).view_issue(...)` returns the raw record (title, url, label objects) with
+        `gh._run_gh` monkeypatched.
+      Rename the three GhForge tests in tests/unit/test_triage_collect.py to ClientForge. Confirm red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN:
+      - Add list_repos, list_issues, list_prs, list_open_prs, read_file_at_ref, viewer_login and view_issue_record
+        to the GhClient protocol. RealGhClient delegates each to fr.gh (under host_scope), and UnsupportedBatchOps
+        gets a raising stub for each.
+      - Rename GhForge to ClientForge(client), delegating every read to `client`.
+      - `_forge_errors` catches FORGE_ERRORS and UnsupportedForgeOperation (plus FileNotFoundError → GH_MISSING).
+      - Re-export ORIGINS_ISSUE_LIST_FIELDS via fr.real_ghclient, and drop `from fr import gh` from collect.py.
+      - `triage_cmd.make_forge` returns `ClientForge(client_for_backend("github"))`.
+      - Update the docstrings in triage/errors.py and collect.py, and the AGENTS.md `GhForge` line.
+      Run tests/unit/test_triage*.py and test_origins*.py, and confirm green.
+- number: 4
+  title: forge_error_kind and the fr-vk rate-limit guard (spec §4.C, R4)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: write tests (Test Plan 9):
+      - `hostclient.forge_error_kind` returns rate_limit for a GhError 403 rate limit, and for a GlabError and a
+        TeaError carrying "429 ... rate limit";
+      - it returns info for 404, and unknown for ValueError;
+      - `_gh_rate_limit_guard` returns None on a GlabError rate limit and re-raises a non-rate-limit one.
+      Confirm red.
+  - id: P2.T4.S2
+    text: |-
+      GREEN:
+      - implement forge_error_kind in hostclient.py: GhError goes to gh._classify_error, and Glab/Tea errors use
+        the same text rules;
+      - bridge_cli imports `FORGE_ERRORS, forge_error_kind` from fr.hostclient and catches FORGE_ERRORS;
+      - the metric reason stays gh_rate_limited.
+      Confirm the tests are green.
+- number: 5
+  title: Tripwire with no allowlist (spec §4.G, R7)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Delete KNOWN and test_every_known_site_still_offends from tests/unit/test_tripwire_forge_adapter.py.
+      Update its docstring: there is no allowlist, and an exemption is a BACKEND entry argued in a diff.
+      Add the Test Plan 1 case: a planted `from fr import gh` in a non-backend module is reported by `offences`.
+      Run it and confirm green.
+- number: 6
+  title: Forge-neutral skill prose and mirrors (spec §4.F, R8)
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-triage/SKILL.md (:39, :43, :49 and :112; keep :96) and
+      plugins/super-fr-dispatch/skills/fr-dispatch/SKILL.md (:39-40 and :91) per spec §4.F. Then run both
+      `uv run --no-project python scripts/sync-opencode.py` AND `uv run --no-project python scripts/sync-hermes.py`,
+      then `uv run pytest tests/unit -q --no-cov -n auto -k "tripwire or skill or mirror or sync"`. Confirm green.
+- number: 7
+  title: REFACTOR + quality gate
+  steps:
+  - id: P2.T7.S1
+    text: |-
+      Remove dead code the move left behind (an unused json import or helpers in local.py and collect.py).
+      Then run ruff format, ruff check, mypy (the AGENTS.md command) and the full suite
+      `uv run pytest -q --no-cov -n auto > <host-visible log> 2>&1`, and confirm all green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

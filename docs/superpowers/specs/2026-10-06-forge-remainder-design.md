@@ -374,3 +374,9 @@ diff. `BACKEND` stays `{gh.py, real_ghclient.py, hostclient.py}`.
 
 R8 is skill prose, checked by review. It is a process obligation, not a
 product claim, so it gets no row.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-06-forge-remainder | `derio-net/super-fr` | `2026-10-06-forge-remainder` | — |
