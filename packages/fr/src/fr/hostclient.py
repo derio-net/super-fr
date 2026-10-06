@@ -27,35 +27,70 @@ from fr.tea import TeaError
 # exactly these, so a programming error is never reported as a forge failure.
 FORGE_ERRORS: tuple[type[Exception], ...] = (GhError, GlabError, TeaError)
 
-# The command fr names when it tells an agent to open, edit or ready a PR,
-# per backend (gh#742: a refusal that says `gh pr create` on a GitLab
-# checkout sends the agent to a CLI that cannot help). `{body}` is a file
-# holding the body and `{ref}` the PR. Each template was checked against its
-# CLI's own `--help`: glab and tea take the description as a value, not a
-# file, and tea's `--draft`/`--ready` are its WIP-title-prefix toggles.
-PR_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
+# The command fr names when it tells an agent (or the operator) to act on a
+# forge, per backend (gh#742: a refusal that says `gh pr create` on a GitLab
+# checkout sends the agent to a CLI that cannot help). One table, so a backend
+# cannot gain a PR verb and silently lack an issue verb.
+#
+# PR ops: `{body}` is a file holding the body and `{ref}` the PR. Each template
+# was checked against its CLI's own `--help`: glab and tea take the description
+# as a value, not a file, and tea's `--draft`/`--ready` are its
+# WIP-title-prefix toggles.
+#
+# Issue ops (spec 2026-10-06-verification-strategies §E, R16): `{number}` and
+# `{repo}` come from an `owner/repo#n` ref, `{comment}` and `{label}` are
+# shell-quoted by `issue_command`. glab's `issue close` takes no comment. The
+# spec records tea as having no unlabel command, so fr prints a one-line manual
+# instruction there instead of a command (a `#` line, so pasting it runs nothing).
+FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
     "github": {
         "create": "gh pr create --draft --body-file {body}",
         "edit": "gh pr edit {ref} --body-file {body}",
         "ready": "gh pr ready {ref}",
         "fill": "gh pr create --fill",
+        "issue-close": "gh issue close {number} --repo {repo} --comment {comment}",
+        "issue-label": "gh issue edit {number} --repo {repo} --add-label {label}",
+        "issue-unlabel": "gh issue edit {number} --repo {repo} --remove-label {label}",
     },
     "gitlab": {
         "create": 'glab mr create --draft --description "$(cat {body})"',
         "edit": 'glab mr update {ref} --description "$(cat {body})"',
         "ready": "glab mr update {ref} --ready",
         "fill": "glab mr create --fill --yes",
+        "issue-close": "glab issue close {number} --repo {repo}",
+        "issue-label": "glab issue update {number} --repo {repo} --label {label}",
+        "issue-unlabel": "glab issue update {number} --repo {repo} --unlabel {label}",
     },
     "gitea": {
         "create": 'tea pulls create --draft --description "$(cat {body})"',
         "edit": 'tea pulls edit {ref} --description "$(cat {body})"',
         "ready": "tea pulls edit {ref} --ready",
         "fill": 'tea pulls create --title "<title>"',
+        "issue-close": "tea issues close {number} --repo {repo}",
+        "issue-label": "tea issues edit {number} --repo {repo} --add-labels {label}",
+        "issue-unlabel": (
+            "# tea has no unlabel command: remove the {label} label from {repo}#{number} by hand"
+        ),
     },
 }
 
+_ISSUE_OPS = ("issue-close", "issue-label", "issue-unlabel")
+
+PR_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
+    backend: {op: t for op, t in table.items() if op not in _ISSUE_OPS}
+    for backend, table in FORGE_COMMANDS.items()
+}
+"""The PR half of `FORGE_COMMANDS`."""
+
+ISSUE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
+    backend: {op: t for op, t in table.items() if op in _ISSUE_OPS}
+    for backend, table in FORGE_COMMANDS.items()
+}
+"""The issue half of `FORGE_COMMANDS`."""
+
 
 _TRAILING_NUMBER = re.compile(r"^https?://.*/(\d+)/?$")  # a URL only: `fix/742` is a branch
+_ISSUE_REF = re.compile(r"^(?P<repo>[\w.-]+/[\w.-]+)#(?P<number>\d+)$")
 
 
 def pr_command(repo_root: Path, op: str, **fields: str) -> str:
@@ -68,6 +103,23 @@ def pr_command(repo_root: Path, op: str, **fields: str) -> str:
     if backend != "github" and ref and (m := _TRAILING_NUMBER.search(ref)):
         fields = {**fields, "ref": m.group(1)}
     return PR_COMMANDS[backend][op].format(**fields)
+
+
+def issue_command(repo_root: Path, op: str, *, ref: str, comment: str = "", label: str = "") -> str:
+    """The `op` (issue-close | issue-label | issue-unlabel) command for
+    `repo_root`'s forge against the issue `ref` (`owner/repo#n`) — see
+    `ISSUE_COMMANDS`. `comment` and `label` are shell-quoted; the manual line
+    a backend prints instead of a command uses them as written."""
+    import shlex
+
+    m = _ISSUE_REF.match(ref)
+    if m is None:
+        raise ValueError(f"issue ref {ref!r} must be owner/repo#n")
+    template = ISSUE_COMMANDS[_hosts.detect_backend(repo_root)][op]
+    quote = (lambda v: v) if template.startswith("#") else shlex.quote
+    return template.format(
+        repo=m["repo"], number=m["number"], comment=quote(comment), label=quote(label)
+    )
 
 
 # Warn-once guard for a DECLARED host fr cannot thread to the resolved
