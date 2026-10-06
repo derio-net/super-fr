@@ -28,7 +28,6 @@ from fr.triage.batch_drive import (
     default_selection,
     drive_pass,
     find_run,
-    finished_waves,
     housekeeping_branch,
     is_archived,
     is_finished,
