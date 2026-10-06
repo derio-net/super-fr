@@ -281,7 +281,7 @@ def check_command(
     dir_override: DirOpt = None,
     as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
-    """Report unranked issues and PRs, settled, orphaned, unreachable, stale, unplaced, awaiting-live.
+    """Report unranked issues and PRs, settled, orphaned, unreachable, stale, unplaced and more.
 
     Always exits 0.
     """
