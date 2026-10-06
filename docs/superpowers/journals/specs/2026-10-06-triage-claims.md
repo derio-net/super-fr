@@ -206,3 +206,8 @@ Every Verification row now names the tests that cover each requirement it maps.
 ### tier-2026-10-06-triage-claims-p1 · decision · hard: phase 1 owns the claim race and release lifecycle, a concurrency path every triage write relies on
 
 R4's oldest-un-released-wins race, the exclusive host-id create, release timing against close-out, and batch-command gates ordered before the runner launch are concurrency and gate paths; spec review sr-1..sr-7 showed how easily they go subtly wrong.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-triage-claims-p2 created=2026-10-06T18:46:42+00:00 -->
+### phase-split-2026-10-06-triage-claims-p2 · decision · ask: the driver integration (claims in every drive pass) is its own reviewable ask
+
+The drive pass is a separate surface from the claim core, reviewed against batch_drive's pure-pass contract.
