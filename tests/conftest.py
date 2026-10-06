@@ -49,6 +49,18 @@ def _skip_artifact_migration_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
 
 
+@pytest.fixture(autouse=True)
+def _no_inherited_fr_binary_pin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drop the session's `FR_HARNESS_FR` pin (super-fr#746).
+
+    A suite run from a harness shell inherits the pin naming the harness's
+    global `fr`, while the suite runs the worktree's — so every CLI test would
+    warn, or refuse, by where it was launched. `tests/unit/test_fr_binary_identity.py`
+    sets the pin itself where it must."""
+    monkeypatch.delenv("FR_HARNESS_FR", raising=False)
+    monkeypatch.delenv("FR_SKIP_IDENTITY", raising=False)
+
+
 WIDE_TERMINAL_COLUMNS = "200"
 """Terminal width every in-process CLI test renders at (review r5-e15).
 
