@@ -169,3 +169,78 @@ Both call sites (start notice, gated brief) and later the guard read `run_cmd._b
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 skill prose, generated mirrors, a parity row, an AGENTS.md paragraph and a matrix status: no code to clean
+
+<!-- fr:journal kind=review scope=plan id=p2-review-r1 created=2026-10-06T19:27:19+00:00 phase=2 -->
+### p2-review-r1 · review · phase 2 independent review: 7 findings (p2-r1..r6 in scope, fixed in 8244ae448; p2-r7 out of scope) (phase 2)
+
+Reviewed spec R6–R9, R11, §C, §D against git diff 25c7c4bb6..HEAD. Ran test_run_binding_guard + test_run_cli (287 passed), the four mirror/neutrality/parity tripwires (26 passed), sync-opencode/sync-hermes --check, fr harness parity --check, fr acceptance check, ruff/mypy — all green. Confirmed R8 placement on both dispatch paths with the exact `_open_dispatch` tier, byte-identical cursor on refusal, redispatch/retry coverage, autonomy only via is_autonomous, R9 repo-layer refusal, R11 write order and same-commit journal entry, R6 brief keys, R7 skill text, generated mirrors, parity row partial. Raised p2-r1..p2-r7; the orchestrator verified each against the code; p2-r1..r6 fixed test-first in 8244ae448 (full suite after: 9775 passed, 105 skipped); p2-r7 predates this change.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-06T19:27:19+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · guard runs full check_bindings on every tiered OpenCode dispatch (phase 2)
+
+_guard_dispatch_binding → _binding_health → check_bindings: an uncached `opencode models` spawn plus live offer probes per dispatch, discarded. Fix: read the cached verdict first; catalogue and choose only on dead; no offers.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-06T19:27:19+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · partial materialise reported as SUBSTITUTED (phase 2)
+
+materialize_agents reports change.problem without raising; the guard warned and printed SUBSTITUTED while the dispatched tier's agent file could still name the dead model. Fix: treat a problem on the dispatched tier's file as a failed apply (restore, exit 2).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-06T19:27:19+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · substitution journal id is count-based and can collide (phase 2)
+
+run_cmd.py:3731 n = 1 + count of numeric suffixes; non-contiguous suffixes give a duplicate id that fr validate artifacts fails. Fix: max suffix + 1.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-06T19:27:19+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · guard tests miss restore, flat refusal, redispatch, repeated id (phase 2)
+
+Only set_binding raising was pinned. Fix: tests for materialise raising, flat-path refusal byte-identity, guard on --redispatch, repeated substitution id.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-06T19:27:19+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · no-op _remember(journal) and duplicated set+materialise path (phase 2)
+
+run_cmd.py:3720 _remember is a no-op on advance (guard=None); the guard re-implemented models_cmd._apply_binding, which spec §B calls the one write path. Fix: drop the call; one shared apply_binding.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-06T19:27:19+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · member briefs lack dead_bindings/binding_offers (phase 2)
+
+_build_member_brief (run_cmd.py:4026) claims the same keys as the step brief; R6 says every agent-step brief carries them. Fix: add both as null.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-10-06T19:27:19+00:00 phase=2 state=open review_scope=out -->
+### p2-r7 · finding [open] (reviewer: out of scope) · corrupt models.yaml crashes fr run start after save (phase 2)
+
+load_models raises ModelsError/YAMLError; _orchestrator_model_notice → _resolved_model already raises it before the new code. Pre-existing; _binding_health is equally unguarded but never reached first.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-06T19:27:19+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: guard runs full check_bindings on every tiered OpenCode dispatch (phase 2)
+
+8244ae448: the guard reads the cached verdict only; on dead it reads the catalogue and chooses via health.propose_for; never offers. Test test_run_binding_guard::test_a_live_binding_at_dispatch_reads_no_catalogue_and_probes_no_offer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-06T19:27:19+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: partial materialise reported as SUBSTITUTED (phase 2)
+
+8244ae448: a problem on the dispatched tier's agent file takes the restore path (SUBSTITUTION NOT APPLIED, exit 2). Test test_run_binding_guard::test_a_dispatched_tier_agent_file_left_unrewritten_is_not_a_substitution.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-06T19:27:19+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: substitution journal id is count-based and can collide (phase 2)
+
+8244ae448: _substitution_id = max numeric suffix + 1. Tests test_run_binding_guard::test_two_substitutions_of_one_tier_get_distinct_ids, ::test_a_substitution_id_never_reuses_a_taken_suffix.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-06T19:27:19+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: guard tests miss restore, flat refusal, redispatch, repeated id (phase 2)
+
+8244ae448: tests test_a_raising_materialise_restores_and_rematerialises_the_old_binding, test_a_flat_path_refusal_leaves_the_cursor_byte_identical, test_the_guard_runs_on_redispatch, plus the two p2-r3 tests (test_run_binding_guard).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-06T19:27:19+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: no-op _remember(journal) and duplicated set+materialise path (phase 2)
+
+8244ae448: _remember(journal) removed; new fr.bindings.apply.apply_binding is the one write path used by models_cmd._apply_binding and the guard (which keeps its restore).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-06T19:27:19+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: member briefs lack dead_bindings/binding_offers (phase 2)
+
+8244ae448: _build_member_brief carries dead_bindings/binding_offers as null; _MEMBER_BRIEF_KEYS and test_member_briefs_carry_no_operator_input pin it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-10-06T19:27:19+00:00 phase=2 state=open resolves=p2-r7 out_of_scope=true -->
+### p2-r7-resolved · finding [out-of-scope] · resolves p2-r7: corrupt models.yaml crashes fr run start after save (phase 2)
+
+Not caused by this change: a corrupt models.yaml already crashed fr run start via _orchestrator_model_notice → _resolved_model → load_models before this PR; the new _binding_health is never reached first. Worth its own fix (warn instead of crash in both notices).

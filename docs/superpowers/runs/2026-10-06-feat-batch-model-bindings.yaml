@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-model-bindings
 workflow: fr-goal@1
 branch: feat/batch-model-bindings
 started: '2026-10-06T16:35:09+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -50,8 +50,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-06T18:57:35+00:00'
+    state: done
+    at: '2026-10-06T19:27:20+00:00'
     members:
     - implement-phase
     - review-phase
@@ -100,13 +100,20 @@ steps:
           tests: p2-full-suite.log@c3eba9c55458;tree=0fd33de6267ce09ce4e273211592b608194d15477141f2e39ab2c5d1beb94f56
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T18:57:35+00:00'
           agent: a06216418e14709d9
           harness: claude-code
           model: claude-opus-5-5
           session: 63cfb522-ee1d-4d86-ab42-2a133eed737e
+          returned: '2026-10-06T19:27:20+00:00'
+          outcome: done
+        evidence:
+          review: p2-review-r1
+          reviewer: a06216418e14709d9
+          visual: none
+          findings: p2-r1,p2-r2,p2-r3,p2-r4,p2-r5,p2-r6,p2-r7
   journal-check:
     state: pending
   deliver:
