@@ -305,3 +305,6 @@ R7 matches §B (verify, override, strategy, shape); a spec line may give a reaso
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-10-06-verification-strategies-p2 created=2026-10-06T11:17:10+00:00 -->
 ### tier-2026-10-06-verification-strategies-p2 · decision · hard: two artifact shape changes with a body-rewriting migration and frozen readers every caller relies on
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-06-verification-strategies-p5 created=2026-10-06T11:17:11+00:00 -->
+### tier-2026-10-06-verification-strategies-p5 · decision · hard: changes the drive executor's merge-stop path and adds persisted event semantics every batch passes through
