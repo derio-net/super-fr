@@ -162,7 +162,14 @@ from fr.triage.batch_merge import (
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
-from fr.triage.claim_sync import ClaimEnv, ClaimOp, SyncResult, execute
+from fr.triage.claim_sync import (
+    ClaimEnv,
+    ClaimOp,
+    SyncResult,
+    execute,
+    plan_sync,
+    record_releases,
+)
 from fr.triage.claims import Claim, from_issue_claim, holder
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
@@ -1803,6 +1810,11 @@ class _Driver:
         # checks that needed it were skipped, never guessed (gh#991)
         self._clone_unread: dict[str, str] = {}
         self.restart_to: str | None = None  # a newer fr post_merge installed (gh#998)
+        # per pass: the claim env (this scope's id and config), the batches a claim write
+        # found held (the pass stops acting on them), and the claim writes done so far
+        self._claims: ClaimEnv | None = None
+        self._held_now: dict[str, str] = {}
+        self._claim_done = SyncResult()
 
     # -------------------------------------------------------------- reaching out
 
@@ -1981,6 +1993,7 @@ class _Driver:
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         done_waves = finished_waves(judgements.batches, stages)
+        claim_plan = self._claim_plan(facts, judgements, repos, unread, now)
         export_path, export_refused = self._export_config(facts)
         export_prs, export_orphans = self._export_reads(
             facts, judgements, repos, done_waves, export_path
@@ -2034,7 +2047,46 @@ class _Driver:
             finished=done_waves,
             export_refused=export_refused,
             awaiting=frozenset(b.id for b in judgements.batches if batch_awaits_live(b, facts)),
+            **claim_plan,
         )
+
+    def _claim_plan(
+        self,
+        facts: Facts,
+        judgements: Judgements,
+        repos: dict[str, str],
+        unread: dict[str, str],
+        now: datetime,
+    ) -> dict[str, Any]:
+        """The Snapshot's claim fields (triage-claims §3.F), from facts alone: nothing here
+        reaches the forge, so plan mode shows them too. `plan_sync` decides what is owed
+        (the same reading `claim sync` has); a batch of a repo collect skipped is left
+        out, its issues' comments were not read."""
+        env = self._claims = claim_env(self.target, facts)
+        plan = plan_sync(env, judgements.batches, now)
+
+        def blind(op: ClaimOp) -> bool:
+            """A refresh of a member facts cannot see (closed: collect reads no closed
+            issue's comments): a read that writes only when the marker is due, so it is
+            made with --yes and never announced in a plan."""
+            issue = env.issue(op.key)
+            return op.kind == "refresh" and (issue is None or issue.state != "open")
+
+        def owed(kind: str) -> tuple[tuple[str, str], ...]:
+            return tuple(
+                (op.key, op.batch) for op in plan.ops
+                if op.kind == kind and repos.get(op.batch) not in unread
+                and (self.yes or not blind(op))
+            )  # fmt: skip
+
+        keys = {k for b in judgements.batches for k in b.ids}
+        return {
+            "me": env.me,
+            "held": {k: c for k, c in held_members(sorted(keys), facts, env.me)},
+            "claims_owed": owed("claim"),
+            "refresh_owed": owed("refresh"),
+            "releases_owed": owed("release"),
+        }
 
     def _default_branch(self, repo: str) -> str:
         """*repo*'s default branch, the only base an export PR may have (p4-r15); ""
@@ -2454,6 +2506,7 @@ class _Driver:
         self._stopped, self._queued, self._conflicts = {}, 0, {}
         self._export_refusals = 0
         self._export_failures = 0
+        self._held_now, self._claim_done = {}, SyncResult()
         self.failed_write = False
         snap = self.snapshot(facts, judgements, _now())
         for repo, why in sorted(self._unread.items()):
@@ -2486,8 +2539,11 @@ class _Driver:
             acted = acted or did
             if self._export_refusals > refused:  # refused before any write: a warning
                 action = replace(action, kind="warn")
-            if outcome or action.kind != "close":  # a close reported already stays quiet
+            if outcome or action.kind not in ("close", "claim", "refresh", "release"):
+                # a close reported already stays quiet, as does a claim write that wrote nothing
                 _say(action_line(action, outcome))
+        if self.yes:
+            self._record_released(facts)
         summary = settle(
             plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
         )
@@ -2545,6 +2601,11 @@ class _Driver:
             return action.detail, False, in_flight
         if action.kind in ("blocked", "held"):
             return action.detail, False, in_flight
+        if action.kind in ("claim", "refresh", "release"):
+            line, did = self._claim_write(action)
+            return line, did, in_flight
+        if action.batch in self._held_now:  # a claim write found it held: leave it alone (R6)
+            return f"held: {self._held_now[action.batch]}", False, in_flight
         judgements = load_judgements(self.target / "judgements.yaml")
         batch = _find(judgements.batches, action.batch)
         repo = batch_repo(batch, facts)
@@ -2616,6 +2677,46 @@ class _Driver:
             True,
             in_flight + 1,
         )
+
+    def _claim_write(self, action: Action) -> tuple[str, bool]:
+        """Execute one claim, refresh or release through `claim_sync.execute` (R3, R8,
+        R10). A claim that turned out held (R4) stops the pass acting on its batch; a
+        failed write is reported, makes `--once` exit 1, and is retried next pass."""
+        assert self._claims is not None
+        op = ClaimOp(action.kind, action.key, action.batch)  # type: ignore[arg-type]
+        try:
+            result = execute(self._claims, [op], _now())
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        if result.held:
+            line = _held_line(op.key, result.held[0].holder, _now())
+            self._held_now.setdefault(action.batch, line)
+            return line, False
+        if result.failed:
+            self.failed_write = True
+            return f"failed: {result.failed[0][1]}", False
+        self._claim_done.done.extend(result.done)
+        done = result.done[0][1].action
+        # Never `acted`: a claim write moves no batch, so it must not make a pass that
+        # does nothing else read as progress (exit 3, "nothing to do", still holds).
+        return ("" if done == "none" else done), False
+
+    def _record_released(self, facts: Facts) -> None:
+        """One `claims_released` event per batch released this pass, after its releases,
+        through the one judgements writer, so the next pass owes nothing (R10)."""
+        if not any(op.kind == "release" for op, _ in self._claim_done.done):
+            return
+        batches = load_judgements(self.target / "judgements.yaml").batches
+        recorded = record_releases(batches, self._claim_done, _now())
+        if recorded == batches:
+            return
+        try:
+            _save(self.target, recorded, facts, read=batches)
+        except TriageError as exc:  # idempotent at the forge: the next pass records it
+            self._report_once(
+                f"claims_released\0{exc}",
+                f"could not record the released claims ({exc}); recorded on a later pass",
+            )
 
     def _merge_batch(
         self,

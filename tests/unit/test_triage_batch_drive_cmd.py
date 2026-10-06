@@ -23,6 +23,7 @@ from fr.commands import triage_batch_cmd, triage_cmd, triage_kanban_cmd
 from fr.gh import GhError
 from fr.triage import drive_lock
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
+from fr.triage.claims import claims_from_comments, to_issue_claim
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
 from fr.triage.gitseam import Checkout
@@ -95,6 +96,7 @@ class World:
                     state=s,  # type: ignore[arg-type]
                     url=f"https://github.com/{REPO}/issues/{i}",
                     prs=linked[i],
+                    claims=self._claims(i) if s == "open" else [],
                 )
                 for i, s in self.issues.items()
             ],  # fmt: skip
@@ -102,6 +104,11 @@ class World:
             config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
             viewer="operator",
         )
+
+    def _claims(self, number: int) -> list[Any]:
+        """The un-released markers in the issue's comments, as collect records them."""
+        found = claims_from_comments(self.comments.get(number, []), {"operator"})
+        return [to_issue_claim(c) for c in found]
 
     def _pr(self, n: int) -> PullRequest:
         p = self.prs[n]
@@ -879,7 +886,11 @@ def test_an_archived_batch_is_recorded_once_and_never_probed_again(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert "pr_view 101" not in world.calls and checkout.release_probes == []
-    assert _lines(out, "adopt") == [] and _events(tmp_path, "b1") == ["dispatch", "closeout"]
+    assert _lines(out, "adopt") == [] and _events(tmp_path, "b1") == [
+        "dispatch",
+        "closeout",
+        "claims_released",
+    ]
 
 
 def test_a_hand_opened_closeout_pr_is_adopted_then_merged(
@@ -2971,10 +2982,13 @@ def test_a_group_scope_that_opts_in_is_warned_to_use_repo(
 
 
 def _finish(state: Path, n: int) -> None:
-    """Wave *n*'s batch is closed out and archived now."""
+    """Wave *n*'s batch is closed out and archived now. Read as YAML, not as text: an
+    earlier pass may have rewritten the file (it records released claims)."""
     path = state / "judgements.yaml"
-    line = _dispatch_event(f"w{n}")
-    path.write_text(path.read_text("utf-8").replace(line, line + ARCHIVED), "utf-8")
+    doc = yaml.safe_load(path.read_text("utf-8"))
+    batch = next(b for b in doc["batches"] if b["id"] == f"w{n}")
+    batch["events"].append(yaml.safe_load(ARCHIVED.strip().removeprefix("- ")))
+    path.write_text(yaml.safe_dump(doc), "utf-8")
 
 
 def test_one_pr_covers_three_finished_waves_and_its_merge_marks_all_three(
@@ -3616,3 +3630,106 @@ def test_a_finishing_loop_runs_one_observation_pass_only_when_a_wave_was_unfinis
 
     assert code == 0
     assert len(calls) == passes
+
+
+# ------------------------------------------------- claims (triage-claims R3, R6, R8, R10, R11)
+
+
+def _me() -> str:
+    from fr.triage.scope_config import scope_id
+
+    return scope_id("derio-net--super-fr")
+
+
+def _markers(world: World, n: int) -> list[Any]:
+    from fr.triage.claims import parse_marker
+
+    found = (parse_marker(c["body"]) for c in world.comments.get(n, []))
+    return [m for m in found if m is not None and m.released is None]
+
+
+def _put(world: World, n: int, signer: str, bid: str, *, hours: float = 0, cid: int = 90) -> None:
+    from fr.triage.claims import Marker, render_marker
+
+    at = NOW - timedelta(hours=hours)
+    m = Marker(signer=signer, batch=bid, claimed=at, heartbeat=at, expires=at + timedelta(hours=4))
+    world.comments.setdefault(n, []).append(
+        {"author": "operator", "body": render_marker(m), "created_at": at.isoformat(), "id": cid}
+    )
+
+
+def test_the_snapshot_reads_owed_claims_from_facts_and_prints_them_without_yes(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once")
+    assert code == 0, out
+    assert _lines(out, "claim") == ["claim super-fr#1 (b1): owed"]
+    assert out.index("claim super-fr#1") < out.index("dispatch b1")
+    assert world.comments == {}  # plan mode writes nothing
+
+
+def test_the_scope_config_sets_when_a_refresh_is_owed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    _put(world, 1, _me(), "b1", hours=2)
+    _state(tmp_path, world, _batch("b1", 1))  # facts now carry the claim
+    code, out = _drive(tmp_path, "--once")
+    assert code == 0, out
+    assert not _lines(out, "refresh")  # 24 hours by default: a quarter is six
+    (tmp_path / "scope.yaml").write_text("claim_expiry_hours: 4\n", encoding="utf-8")
+    code, out = _drive(tmp_path, "--once")
+    assert _lines(out, "refresh") == ["refresh super-fr#1 (b1): heartbeat due"]
+
+
+def test_a_yes_pass_claims_before_dispatch_backfills_and_owes_nothing_after(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    _state(tmp_path, world, _batch("old", 1, events=_dispatch_event("old")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out  # a claim write is no progress: the batch is still in flight
+    assert [m.batch for m in _markers(world, 1)] == ["old"]  # a pre-claims batch, backfilled
+    assert _lines(out, "claim") == ["claim super-fr#1 (old): posted"]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not _lines(out, "claim") and not _lines(out, "release")
+
+
+def test_a_cancelled_batchs_claims_are_released_and_recorded_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    cancel = "      - {kind: cancel, at: 2026-10-01T12:00:00Z}\n"
+    _put(world, 1, _me(), "gone")
+    _state(tmp_path, world, _batch("gone", 1, events=_dispatch_event("gone") + cancel))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "release") == ["release super-fr#1 (gone): released"]
+    assert _markers(world, 1) == []  # the released form is no longer a claim
+    assert _events(tmp_path, "gone")[-1] == "claims_released"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not _lines(out, "release")
+    assert _events(tmp_path, "gone").count("claims_released") == 1
+
+
+def test_a_claim_that_turns_out_held_stops_the_pass_acting_on_that_batch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 2)
+    # facts (read first) know nothing of the rival marker the forge shows at write time
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    original = world.facts
+
+    def _stale() -> Facts:
+        f = original()
+        return f.model_copy(
+            update={"issues": [i.model_copy(update={"claims": []}) for i in f.issues]}
+        )
+
+    world.facts = _stale  # type: ignore[method-assign]
+    _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "super-fr#1 is claimed by triage scope s-22222222" in out
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+    assert _events(tmp_path, "b1") == []
