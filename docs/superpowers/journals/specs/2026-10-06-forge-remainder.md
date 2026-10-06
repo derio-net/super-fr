@@ -49,3 +49,88 @@ hostclient.forge_error_kind(exc); bridge_cli catches FORGE_ERRORS so glab/tea ra
 ### d5-skill-prose-neutral · decision · Forge-neutral skill prose, no prose tripwire
 
 fr-triage and fr-dispatch name operations with "on GitHub, `gh …`" examples; both mirror syncs run.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f1 created=2026-10-06T07:45:30+00:00 state=open review_scope=in -->
+### sr-f1 · finding [open] (reviewer: in scope) · ClientForge cannot reuse the projected GhClient.view_issue
+
+See spec-review-r1; reviewer tagged in scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f2 created=2026-10-06T07:45:30+00:00 state=open review_scope=in -->
+### sr-f2 · finding [open] (reviewer: in scope) · GH_HOST contextvar misses view_pr_body and the new lookups
+
+See spec-review-r1; reviewer tagged in scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f3 created=2026-10-06T07:45:30+00:00 state=open review_scope=in -->
+### sr-f3 · finding [open] (reviewer: in scope) · test_isolation_network_timeouts patches local.detect_backend
+
+See spec-review-r1; reviewer tagged in scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f4 created=2026-10-06T07:45:30+00:00 state=open review_scope=in -->
+### sr-f4 · finding [open] (reviewer: in scope) · R6 widens client_for for every caller; test_hostclient warning test
+
+See spec-review-r1; reviewer tagged in scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f5 created=2026-10-06T07:45:30+00:00 state=open review_scope=in -->
+### sr-f5 · finding [open] (reviewer: in scope) · GhForge rename leaves make_forge, tests, AGENTS.md unnamed
+
+See spec-review-r1; reviewer tagged in scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f6 created=2026-10-06T07:45:30+00:00 state=open review_scope=in -->
+### sr-f6 · finding [open] (reviewer: in scope) · Test Plan lacks lookup, contextvar-leak and local.py argv items
+
+See spec-review-r1; reviewer tagged in scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f7 created=2026-10-06T07:45:30+00:00 state=open review_scope=in -->
+### sr-f7 · finding [open] (reviewer: in scope) · R8 vs §4.F cover different gh mentions
+
+See spec-review-r1; reviewer tagged in scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f8 created=2026-10-06T07:45:30+00:00 state=open review_scope=in -->
+### sr-f8 · finding [open] (reviewer: in scope) · 'mypy will name them' is false for test fakes
+
+See spec-review-r1; reviewer tagged in scope.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-r1 created=2026-10-06T07:45:30+00:00 -->
+### spec-review-r1 · review · independent spec review: 8 findings (sr-f1..sr-f8)
+
+fr-spec-reviewer checked decisions d1-d5, every named file/line/helper, the callers and fakes the design touches, and internal consistency. Findings raised: sr-f1..sr-f8, all in scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f1-resolved created=2026-10-06T07:45:30+00:00 state=fixed resolves=sr-f1 -->
+### sr-f1-resolved · finding [fixed] · resolves sr-f1: ClientForge cannot reuse the projected GhClient.view_issue
+
+§4.A adds a new view_issue_record (raw ISSUE_VIEW_FIELDS record), stubbed on glab/tea; view_issue's contract untouched; R1 says so.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f2-resolved created=2026-10-06T07:45:30+00:00 state=fixed resolves=sr-f2 -->
+### sr-f2-resolved · finding [fixed] · resolves sr-f2: GH_HOST contextvar misses view_pr_body and the new lookups
+
+§4.E: one fr.gh._env() used by _run_gh AND view_pr_body, and by the GitHub adapter's default runner; R6 names all three; GH_HOST semantics stated per gh's docs; Test Plan 3 covers each path.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f3-resolved created=2026-10-06T07:45:30+00:00 state=fixed resolves=sr-f3 -->
+### sr-f3-resolved · finding [fixed] · resolves sr-f3: test_isolation_network_timeouts patches local.detect_backend
+
+§4.B names the test and re-points its patch at fr._hosts.detect_backend; §5's red-flag rule narrowed to assertion changes.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f4-resolved created=2026-10-06T07:45:30+00:00 state=fixed resolves=sr-f4 -->
+### sr-f4-resolved · finding [fixed] · resolves sr-f4: R6 widens client_for for every caller; test_hostclient warning test
+
+R6/§4.E: client_for threads only a DECLARED GitHub host (a derived/SSH-alias host never becomes GH_HOST); reach stated; Test Plan 5 rewrites test_hostclient.py:134.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f5-resolved created=2026-10-06T07:45:30+00:00 state=fixed resolves=sr-f5 -->
+### sr-f5-resolved · finding [fixed] · resolves sr-f5: GhForge rename leaves make_forge, tests, AGENTS.md unnamed
+
+§4.A names triage_cmd.make_forge, the three GhForge tests, the two docstrings and the AGENTS.md line; no alias.
+
+<!-- fr:journal kind=finding scope=spec id=sr-f6-resolved created=2026-10-06T07:45:30+00:00 state=fixed resolves=sr-f6 -->
+### sr-f6-resolved · finding [fixed] · resolves sr-f6: Test Plan lacks lookup, contextvar-leak and local.py argv items
+
+Test Plan items 4, 6 and 7 added (per-backend lookups incl. run=None missing binary, contextvar reset, glab/tea argv scan of local.py).
+
+<!-- fr:journal kind=finding scope=spec id=sr-f7-resolved created=2026-10-06T07:45:30+00:00 state=fixed resolves=sr-f7 -->
+### sr-f7-resolved · finding [fixed] · resolves sr-f7: R8 vs §4.F cover different gh mentions
+
+§4.F extended to fr-triage:49,112 and fr-dispatch:91; R8 states the one kept kind (fr-triage:96, a fact about the GitHub-only collector).
+
+<!-- fr:journal kind=finding scope=spec id=sr-f8-resolved created=2026-10-06T07:45:30+00:00 state=fixed resolves=sr-f8 -->
+### sr-f8-resolved · finding [fixed] · resolves sr-f8: 'mypy will name them' is false for test fakes
+
+§5 rewritten: names tests/unit/fakes.py FakeGhClient, states mypy does not check tests, and when the plan adds methods to a fake.
