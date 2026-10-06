@@ -208,3 +208,19 @@ def test_a_worktree_on_another_branch_is_refused(ws: tuple[Path, Path]) -> None:
     repo, wt = ws
     _git(wt, "switch", "-q", "-c", "feat/elsewhere")
     _refused(repo, wt, "not on")
+
+
+def test_a_dry_run_names_the_moves_and_writes_nothing(ws: tuple[Path, Path]) -> None:
+    repo, wt = ws
+    before = _snapshot(repo, wt)
+    steps = rename_branch(repo, wt, OLD, NEW, dry_run=True)
+    assert steps[0] == f"git branch -m {OLD} {NEW}"
+    assert any("marker" in s for s in steps) and any("cursor" in s for s in steps)
+    assert _snapshot(repo, wt) == before
+
+
+def test_a_dry_run_refuses_as_the_real_call_does(ws: tuple[Path, Path]) -> None:
+    repo, wt = ws
+    _git(repo, "branch", NEW, "main")
+    with pytest.raises(IsolationError, match="already exists"):
+        rename_branch(repo, wt, OLD, NEW, dry_run=True)

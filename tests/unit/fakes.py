@@ -12,6 +12,7 @@ Errors can be configured to fire on the Nth attempted mutation
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from fr.gh import GhError
@@ -61,8 +62,9 @@ class FakeGhClient:
         # (repo, branch) the fake forge holds; delete_branch removes one.
         self.remote_branches: set[tuple[str, str]] = set()
         self._next_pr_number: int = 100
-        # When set, every PR create_pr opens is stamped with this creation time.
-        self.pr_created_at: str = "2026-10-06T12:00:00Z"
+        # When set, every PR create_pr opens is stamped with this creation time;
+        # otherwise with the real clock, as the forge would.
+        self.pr_created_at: str | None = None
 
     # ---- preload helpers (test setup) ----
 
@@ -243,7 +245,7 @@ class FakeGhClient:
         self._next_pr_number += 1
         made = self.add_pr(
             repo, number, title=title, body=body, draft=draft, head_ref=head, base_ref=base,
-            created_at=self.pr_created_at,
+            created_at=self.pr_created_at or datetime.now(UTC).isoformat(),
         )  # fmt: skip
         return {"number": number, "url": made["url"]}
 

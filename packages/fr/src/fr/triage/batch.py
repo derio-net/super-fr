@@ -120,6 +120,16 @@ def recorded_branch(batch: Batch) -> str:
     return event.branch if event is not None else batch_branch(batch)
 
 
+_LABEL_REF = re.compile(r"(?<![\w./-])([A-Za-z0-9][\w.-]*)#(\d+)\b")
+
+
+def label_refs(label: str) -> list[str]:
+    """The `<repo>#<n>` issue refs in a session label, in order (`batch adopt --list`,
+    spec 2026-10-06-triage-batch-adopt R12). A bare `#<n>` names no repo, so it is
+    not one: a runner's labels stay raw, and reading them is triage's vocabulary."""
+    return [f"{m[1]}#{m[2]}" for m in _LABEL_REF.finditer(label)]
+
+
 # ------------------------------------------------------------------- stage
 
 

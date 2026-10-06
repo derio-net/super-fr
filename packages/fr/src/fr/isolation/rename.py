@@ -27,6 +27,8 @@ from pathlib import Path
 from .sessions import _write_index, read_session_index
 from .types import IsolationError, delete_state, load_state, save_state
 
+__all__ = ["IsolationError", "RenamePlan", "plan_rename", "rename_branch"]
+
 MARKER = ".fr-isolation"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
@@ -64,9 +66,12 @@ class RenamePlan:
 
 
 def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", "-C", str(cwd), *args], check=check, capture_output=True, text=True
-    )
+    """`git -C cwd args`; a failure with *check* is an `IsolationError` naming git's words."""
+    done = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
+    if check and done.returncode != 0:
+        detail = (done.stderr or done.stdout).strip() or f"exit {done.returncode}"
+        raise IsolationError(f"git {' '.join(args[:2])} failed in {cwd}: {detail}")
+    return done
 
 
 def _has_branch(cwd: Path, name: str) -> bool:
@@ -140,9 +145,17 @@ def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePl
     )
 
 
-def rename_branch(repo_root: Path, worktree: Path, old: str, new: str) -> list[str]:
-    """Rename *old* to *new* in git and every fr key; return the moves made (`[]`: done)."""
+def rename_branch(
+    repo_root: Path, worktree: Path, old: str, new: str, *, dry_run: bool = False
+) -> list[str]:
+    """Rename *old* to *new* in git and every fr key; return the moves made (`[]`: done).
+
+    *dry_run* refuses exactly as the real call would and returns the moves it would
+    make, writing nothing. Every failure is an `IsolationError`.
+    """
     plan = plan_rename(repo_root, worktree, old, new)
+    if dry_run:
+        return plan.steps()
     wt = plan.worktree
     if plan.branch:
         _git(wt, "branch", "-m", old, new)
