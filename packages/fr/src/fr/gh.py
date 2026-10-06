@@ -7,10 +7,13 @@ we leverage gh's existing auth.
 
 from __future__ import annotations
 
+import contextvars
+import os
 import shlex
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TypeVar
 from urllib.parse import quote
@@ -40,6 +43,33 @@ error. A stalled GraphQL call otherwise blocks its caller indefinitely: the wave
 driver's loop once sat 16 minutes on a single `gh issue list` (gh#909)."""
 
 
+_HOST: contextvars.ContextVar[str | None] = contextvars.ContextVar("fr_gh_host", default=None)
+"""The GitHub host the `gh` calls of the current context run against (spec
+2026-10-06-forge-remainder §4.E). Only `host_scope` sets it — in fr, only
+`RealGhClient(host=...)` — so a bare `fr.gh` call never sees a host."""
+
+
+def _env() -> dict[str, str] | None:
+    """The `env` for a `gh` subprocess: None (inherit, the SaaS path untouched)
+    when no host is in scope, else a copy of `os.environ` plus `GH_HOST`."""
+    host = _HOST.get()
+    if host is None:
+        return None
+    return {**os.environ, "GH_HOST": host}
+
+
+@contextmanager
+def host_scope(host: str | None) -> Iterator[None]:
+    """Run the enclosed `gh` calls against `host` (None: gh's own resolution).
+    The previous value is restored on exit, raise or not, so a host can never
+    leak into a later call."""
+    token = _HOST.set(host)
+    try:
+        yield
+    finally:
+        _HOST.reset(token)
+
+
 def _run_gh(args: list[str]) -> str:
     """Run a gh command and return stdout.  Raises GhError on failure, and on a
     call that outlives `GH_TIMEOUT_SECONDS` (transient: `is_transient` is true)."""
@@ -50,6 +80,7 @@ def _run_gh(args: list[str]) -> str:
             text=True,
             check=True,
             timeout=GH_TIMEOUT_SECONDS,
+            env=_env(),
         )
     except subprocess.TimeoutExpired as exc:
         raise GhError(
@@ -74,6 +105,7 @@ def view_pr_body(ref: str, *, cwd: Path | None = None) -> str:
             text=True,
             check=True,
             cwd=cwd,
+            env=_env(),
         )
     except FileNotFoundError as exc:
         raise GhError("gh is not installed") from exc
