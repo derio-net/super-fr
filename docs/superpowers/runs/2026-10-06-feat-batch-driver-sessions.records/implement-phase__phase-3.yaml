@@ -1,0 +1,57 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-driver-sessions
+step: implement-phase
+item: phase/3
+outcome: done
+ticks:
+  - P3.T1.S1
+  - P3.T1.S2
+  - P3.T2.S1
+  - P3.T2.S2
+  - P3.T2.S3
+  - P3.T3.S1
+  - P3.T3.S2
+  - P3.T4.S1
+  - P3.T4.S2
+  - P3.T4.S3
+refactor:
+  P3.T1: "a pure rule and one dataclass added beside the existing close-out helpers; nothing to clean"
+  P3.T3: "the idle lookup is one helper beside _card; no duplicated logic to fold"
+  P3.T4: "a message string and one skill paragraph; nothing to clean"
+journal:
+  - kind: discovery
+    id: p3-board-now-optional
+    phase: 3
+    title: "build_board's now is optional: None judges no idleness"
+    body: "build_board and _card take `now`, but as an optional keyword defaulting to None, which means no idle judgement. Roughly sixty existing board tests pass statuses of `idle` against fixtures dated in the past; a required or defaulted-to-wall-clock `now` would flip every one of them. write_board passes the wall clock, which is the only caller that should."
+  - kind: discovery
+    id: p3-idle-warn-exit-3
+    phase: 3
+    title: "an idle-session warn leaves --once at exit 3, as any in-flight batch does"
+    body: "The warn never touches the Summary, so a drive with an idle batch session still reads in flight and --once exits 3 (waiting). The command-level tests assert 0 or 3 for that reason; the point of the rule (reporting never ends or keeps alive the drive) is pinned in the pure tests by comparing summaries with and without the warn."
+  - kind: discovery
+    id: p3-headless-chrome-hangs
+    phase: 3
+    title: "Google Chrome --headless=new writes the screenshot then hangs here; the Playwright headless shell does not"
+    body: "For the board's visual check the installed Chrome produced the PNG and then never exited (or exited 2). The chrome-headless-shell from the local Playwright cache, with --no-sandbox and a 60 s timeout, exits cleanly. The capture script lives in the git-ignored visual directory under /private/tmp."
+  - kind: discovery
+    id: p3-no-explainer-describes-the-driver
+    phase: 3
+    title: "no docs/explainers page describes the wave driver or the board"
+    body: "Grepped docs/explainers/*.md for herdr, triage and idle: the only hits are fr run check --idle and prose about a phase running long. Nothing describes the wave driver's behaviour that changes here, so no explainer was edited and no page regeneration is owed."
+  - kind: discovery
+    id: p3-board-archive-attribution-from-facts
+    phase: 3
+    title: "the board attributes archive PRs from the collected facts, not the forge"
+    body: "A close-out card has no archive PR when the collected facts hold none that `attributed` claims (head under chore/archive- or chore/closeout-, trusted when not cross-repo), or when the event records `archived`. A PR opened since the last collect reads as missing until the next one; the card line says `as of <collected_at>` so the window is visible (sr-9)."
+evidence: {}
+visual:
+  - row: board-idle-session
+    script: /private/tmp/claude-502/driver-sessions-visual/capture.py
+    shots:
+      - path: /private/tmp/claude-502/driver-sessions-visual/idle-batch-card-needs-you.png
+        shows: [idle-batch-card-needs-you]
+      - path: /private/tmp/claude-502/driver-sessions-visual/idle-closeout-card-needs-you.png
+        shows: [idle-closeout-card-needs-you]
+      - path: /private/tmp/claude-502/driver-sessions-visual/idle-card-with-pr-not-flagged.png
+        shows: [idle-card-with-pr-not-flagged]
