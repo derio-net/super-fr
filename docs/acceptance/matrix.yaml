@@ -7135,8 +7135,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R5
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: candidate walk scenario named at plan time; written in phase 1
     verify: candidate
+    scenario: tests/scenarios/herdr-restart-idle.sh
   - id: herdr-restart-idle-live
     capability: herdr runner
     acceptance: A restarted pane resumes the same Claude session id in the same pane
