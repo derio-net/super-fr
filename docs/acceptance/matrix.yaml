@@ -6810,12 +6810,14 @@ rows:
       - super-fr:tests/unit/test_forge_host_trust.py#test_a_refused_host_is_never_retried
       - super-fr:tests/unit/test_forge_host_trust.py#test_an_argument_naming_its_own_host_is_refused
       - super-fr:tests/unit/test_forge_host_trust.py#test_an_mr_url_with_an_embedded_url_never_reaches_glab
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_repo_path_led_by_a_host_glab_knows_is_refused
     status: ci
     notes: 'super-fr#1014/#1013: the GitLab twin of #994 gh gate; known hosts read from
       the config glab itself uses (GLAB_CONFIG_DIR, else ~/.config/glab-cli ahead of
       XDG, probed against glab 1.89). A GITLAB_TOKEN alone is not a login, as for gh.
-      A --repo URL / user@host: remote or a full-URL api endpoint (which glab follows
-      past GITLAB_HOST) is refused too.'
+      An argument glab follows past GITLAB_HOST is refused too: a --repo URL or user@host:
+      remote in any flag spelling, a repo path led by a host glab knows, a full-URL
+      api endpoint.'
   - id: triage-batch-self-hosted-host
     capability: triage-batches
     acceptance: Triage batch verbs talk to the forge instance the batch's repo lives
