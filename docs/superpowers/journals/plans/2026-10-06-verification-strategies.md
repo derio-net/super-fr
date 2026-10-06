@@ -247,3 +247,98 @@ one verifier branch beside the tests branch; nothing duplicated to extract
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 shared_closing_keywords was refactored onto the _closing_lines generator that closing_refs shares, as part of the change
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-06T13:13:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · walk evidence trusts the log's self-declared header (forgeable) (phase 3)
+
+Raised by the independent phase-3 reviewer with file:line evidence (see review p3-review).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-06T13:13:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · check_walk_log never binds log.strategy or log.run to what is owed (phase 3)
+
+Raised by the independent phase-3 reviewer with file:line evidence (see review p3-review).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-06T13:13:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · gh#683 guard raised after writing an all-pass log deliver accepts (phase 3)
+
+Raised by the independent phase-3 reviewer with file:line evidence (see review p3-review).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-06T13:13:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · premature_closes misses closes GitHub honours (phase 3)
+
+Raised by the independent phase-3 reviewer with file:line evidence (see review p3-review).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-06T13:13:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · pre-merge-owed section printed a walk command prerelease rows always refuse (phase 3)
+
+Raised by the independent phase-3 reviewer with file:line evidence (see review p3-review).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-06T13:13:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · prose ## Verification in older specs made every deliver refuse (phase 3)
+
+Raised by the independent phase-3 reviewer with file:line evidence (see review p3-review).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-06T13:13:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · walk= ~ path never expanded (phase 3)
+
+Raised by the independent phase-3 reviewer with file:line evidence (see review p3-review).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-10-06T13:13:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · walk's throwaway prefix never removed (phase 3)
+
+Raised by the independent phase-3 reviewer with file:line evidence (see review p3-review).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-10-06T13:13:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · git failure in walk_cmd gave a traceback (phase 3)
+
+Raised by the independent phase-3 reviewer with file:line evidence (see review p3-review).
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-10-06T13:13:10+00:00 phase=3 -->
+### p3-review · review · Phase 3 independent code review — 9 findings, all in scope, all fixed (phase 3)
+
+Independent reviewer checked 6fa8c9f50 against spec §C/§D and 03.yaml, and confirmed or refuted three background security flags: forgeable walk evidence (confirmed, p3-r1), gate field mismatch (partly, p3-r2), and parser differential (partly, p3-r4; the keyword-adjacency case is refuted because shared_closing_keywords already refuses it). It also raised p3-r3 and p3-r5 through p3-r9. All fixes were made test-first by a separate fixer context. Three further background security flags on the new observed.py predicate (a parser differential, an incomplete denylist, an allowlist semantic escape) drove the switch to the structural allowlist plus binding to the manifest sha, all red-tested. The residual trust boundary, a background writer during the window, equals the tests witness's and is documented beside the predicate. Full suite after the fixes: 9254 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-06T13:13:10+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: walk evidence trusts the log's self-declared header (forgeable) (phase 3)
+
+Log must sit under walk_log_dir(run) as a regular non-symlink file; its mtime must lie inside the window of THIS session's command that is exactly `[cd <p> &&] fr|uv run fr verification walk … --run <run>` (allowlist: no env prefix, custom binary, uv flags, redirects, substitution, extra segments, background, duplicate --run), opened after deliver; unreadable transcript → unobserved=walk; the log records the strategy manifest's source+sha256 and deliver refuses a mismatch. Commits 7c81292b4, 17556fac0, aedbfc3fc, 275c5b736.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-06T13:13:10+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: check_walk_log never binds log.strategy or log.run to what is owed (phase 3)
+
+check_walk_log(..., run=) refuses another run's or another strategy's log; WalkOwed.strategy carries the owed one. 83644164e.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-06T13:13:10+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: gh#683 guard raised after writing an all-pass log deliver accepts (phase 3)
+
+Fingerprint checked right after INSTALL and at the end; a change is a failing operator-fr-unchanged step in the log. 316e293f7.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-06T13:13:10+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: premature_closes misses closes GitHub honours (phase 3)
+
+Reads the whole body incl. fr's render; accepts GH-<n>; owner/repo compared case-insensitively; shared_closing_keywords unchanged. 7dab954fa.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-06T13:13:10+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: pre-merge-owed section printed a walk command prerelease rows always refuse (phase 3)
+
+Prerelease rows print the prerelease command plus an executable install-and-run line, tested by running it. 4c18cb2f4.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-06T13:13:10+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: prose ## Verification in older specs made every deliver refuse (phase 3)
+
+A section with no grammar line is no section; one grammar line keeps the strict parse. 2530e95d0.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-06T13:13:10+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: walk= ~ path never expanded (phase 3)
+
+expanduser before is_absolute. 0b6517280.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-10-06T13:13:10+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: walk's throwaway prefix never removed (phase 3)
+
+rmtree in finally after log + fingerprint. 316e293f7.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-10-06T13:13:10+00:00 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: git failure in walk_cmd gave a traceback (phase 3)
+
+GitUnavailableError refused with exit 2. 3e22530c8.
