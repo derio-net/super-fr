@@ -7074,3 +7074,52 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: archive-prices-earlier-closeouts
+    capability: archive
+    acceptance: An fr archive that moves anything prices the sessions earlier closeouts
+      left unpriced, staging the refreshed implemented/usage files, and never fails
+      the archive doing so
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: archive-retargets-matrix-refs
+    capability: archive
+    acceptance: After a successful archive, every same-repo matrix ref naming a moved
+      path points at its new location (only those bytes change) and the three reports
+      are regenerated, so fr acceptance check stays clean after closeout
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: archive-files-open-ends
+    capability: archive
+    acceptance: fr archive lists the open and out-of-scope findings of the journals
+      it moves, files the chosen ones as tracker issues (deduplicated by marker, never
+      blocking the archive) and records each as deferred to its issue in the archived
+      journal
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: closeout-brief-files-via-archive
+    capability: closeout
+    acceptance: The closeout brief hands out-of-scope findings to one fr archive --branch
+      <b> --issues <ids> command instead of per-finding manual journal lines
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
