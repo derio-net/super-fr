@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from fr import tea as _tea
-from fr.ghclient import UnsupportedBatchOps
+from fr.ghclient import CommandRunner, UnsupportedBatchOps, run_cli
 from fr.labels import LabelDef
 
 # Gitea-specific PR URL shape (https://{host}/{owner}/{repo}/pulls/{n}).
@@ -217,6 +217,66 @@ class RealTeaClient(UnsupportedBatchOps):
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         """Post a comment via `tea comments add <n> <body> --repo <repo>`."""
         _tea._run_tea(["comments", "add", str(number), body, "--repo", repo])
+
+    def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
+        result = (run or run_cli)(
+            ["tea", "repos", "--fields", "default_branch", "--output", "json"], cwd=cwd
+        )
+        out = (result.stdout or "").strip()
+        if result.returncode != 0 or not out:
+            return None
+        # tea's `--output json` on a single-repo view returns a JSON object
+        # (unlike glab's --jq, which already extracts the bare string) — parse
+        # it here. Field name confirmed against Gitea's live swagger spec
+        # (Repository.default_branch).
+        try:
+            parsed = json.loads(out)
+        except json.JSONDecodeError:
+            return None
+        branch = parsed.get("default_branch") if isinstance(parsed, dict) else None
+        return branch if isinstance(branch, str) and branch else None
+
+    def pr_for_branch(
+        self, branch: str, *, cwd: Path, run: CommandRunner | None = None
+    ) -> dict[str, Any] | None:
+        """No single-shot branch→PR query exists (`tea pulls` only takes a
+        numeric index), so list ALL PRs (`--state all`, so a merged/closed PR
+        for a torn-down branch is still found) and match `head.label`
+        client-side — a real, bounded degradation vs. gh/glab, not a bug."""
+        result = (run or run_cli)(
+            [
+                "tea",
+                "pulls",
+                "list",
+                "--state",
+                "all",
+                "--fields",
+                "state,merged,url,head",
+                "--output",
+                "json",
+            ],
+            cwd=cwd,
+        )
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            return None
+        try:
+            entries = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(entries, list):
+            return None
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            head = entry.get("head") or {}
+            if not isinstance(head, dict) or head.get("label") != branch:
+                continue
+            merged = entry.get("merged", False)
+            state = "MERGED" if merged else ("CLOSED" if entry.get("state") == "closed" else "OPEN")
+            # tea renders `merged` as the merge time when there is one.
+            merged_at = merged if isinstance(merged, str) else None
+            return {"state": state, "url": entry.get("url", ""), "mergedAt": merged_at}
+        return None
 
     def issues_enabled(self, repo: str | None = None) -> bool | None:
         """tea has no command that says — unknown (spec §3.C)."""

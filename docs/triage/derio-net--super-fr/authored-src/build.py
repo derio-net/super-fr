@@ -1,23 +1,20 @@
-"""Build the authored fragments of the architecture and history pages from this directory's
-sources (spec 2026-10-05-triage-pages-goal R15: the dated fragments live on the history page).
+"""Build the architecture page's authored fragments from this directory's sources.
 
-  pipeline.html       - architecture/, by pipeline.py: the diagram with open issues pinned (pin table in the
+  pipeline.html       - pipeline.py: the diagram with open issues pinned (pin table in the
                         script; pins naming a closed issue fail the build), plus the nine
                         2026-10-02 diagram versions as tabs.
-  closing-order.html  - history/: the 2026-10-02 board's closing-order section, with each batch's
+  closing-order.html  - the 2026-10-02 board's closing-order section, with each batch's
                         outcome looked up live with gh.
   origins-2026-10-02.html, history-2026-10-02.html
-                      - history/: sections of the 2026-10-02 hand-built pages, extracted with their
+                      - sections of the 2026-10-02 hand-built pages, extracted with their
                         styles inlined (extracted/*.json, made by extract.js in a browser).
 
-Run from anywhere: python3 build.py   (then: fr triage architecture render ... and
-fr triage history render ...)
+Run from anywhere: python3 build.py   (then: fr triage architecture render ...)
 """
 import html, json, os, subprocess, runpy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(os.path.dirname(HERE), "history")  # the dated fragments; pipeline.py writes architecture/
-os.makedirs(OUT, exist_ok=True)
+OUT = os.path.join(os.path.dirname(HERE), "architecture")
 esc = lambda s: html.escape(str(s), quote=True)
 
 ARCH_TOK = ("--new:var(--accent);--new-soft:color-mix(in srgb,var(--accent) 14%,transparent);"

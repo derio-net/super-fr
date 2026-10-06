@@ -13,9 +13,10 @@ outside the files that ARE the GitHub backend:
   `import fr.gh`);
 - a `["gh", …]` argv literal.
 
-`KNOWN` is a closed set of the sites that predate this tripwire, each with
-the reason it stays for now. A file listed there that no longer offends
-fails too, so the set only shrinks: delete its line.
+There is no allowlist (spec 2026-10-06-forge-remainder §4.G, R7): the sites
+that predated this tripwire — triage collect, the isolation lookups and the
+fr-vk rate-limit guard — now all go through the adapter. A future exemption
+means arguing for a `BACKEND` entry in a diff.
 """
 
 from __future__ import annotations
@@ -31,17 +32,6 @@ BACKEND = {
     "fr/src/fr/gh.py",
     "fr/src/fr/real_ghclient.py",
     "fr/src/fr/hostclient.py",
-}
-
-KNOWN = {
-    # Triage collection is GitHub-only by design today (its own `Forge`
-    # protocol has one implementation, `GhForge`) — gh#742 item 1.
-    "fr/src/fr/triage/collect.py": "triage is GitHub-only (gh#742)",
-    # A second copy of the adapter's backend branching (gh/glab/tea), which
-    # works on every forge but duplicates `client_for` — gh#742 item 1.
-    "fr/src/fr/isolation/local.py": "own gh/glab/tea branching (gh#742)",
-    # Classifies a `GhError` from the GitHub-issue bridge as a rate limit.
-    "fr-vk/src/fr_vk/bridge_cli.py": "rate-limit classification of GhError",
 }
 
 
@@ -64,10 +54,19 @@ def offences(source: str) -> list[str]:
     return found
 
 
-def _sources() -> dict[str, str]:
+def _sources(root: Path = PACKAGES) -> dict[str, str]:
     return {
-        path.relative_to(PACKAGES).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted(PACKAGES.glob("*/src/**/*.py"))
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(root.glob("*/src/**/*.py"))
+    }
+
+
+def _bypasses(root: Path = PACKAGES) -> dict[str, list[str]]:
+    """Every non-backend module under *root*'s `*/src` with a direct `gh` use."""
+    return {
+        rel: hits
+        for rel, text in _sources(root).items()
+        if rel not in BACKEND and (hits := offences(text))
     }
 
 
@@ -89,11 +88,7 @@ def test_the_scan_ignores_prose_and_other_forges() -> None:
 
 
 def test_no_forge_call_bypasses_the_adapter() -> None:
-    offenders = {
-        rel: hits
-        for rel, text in _sources().items()
-        if rel not in BACKEND and rel not in KNOWN and (hits := offences(text))
-    }
+    offenders = _bypasses()
     assert not offenders, (
         "direct `gh` use outside the GitHub backend — route it through "
         "`fr.hostclient.client_for(repo_root)` (add the operation to the "
@@ -102,7 +97,13 @@ def test_no_forge_call_bypasses_the_adapter() -> None:
     )
 
 
-def test_every_known_site_still_offends() -> None:
-    sources = _sources()
-    stale = sorted(rel for rel in KNOWN if not offences(sources.get(rel, "")))
-    assert not stale, f"no longer bypasses the adapter — remove it from KNOWN: {stale}"
+def test_a_planted_gh_import_outside_the_backend_is_reported(tmp_path: Path) -> None:
+    """Test Plan 1, through the REAL scan (review p2-r3): with no allowlist, a
+    non-backend module importing `fr.gh` is reported, and a backend file is not."""
+    src = tmp_path / "fr" / "src" / "fr"
+    src.mkdir(parents=True)
+    (src / "plant.py").write_text("from fr import gh\n\ngh.viewer_login()\n", encoding="utf-8")
+    (src / "gh.py").write_text(
+        'import subprocess\nsubprocess.run(["gh", "api"])\n', encoding="utf-8"
+    )
+    assert _bypasses(tmp_path) == {"fr/src/fr/plant.py": ["line 1: import of fr.gh"]}

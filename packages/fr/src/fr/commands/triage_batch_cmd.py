@@ -49,7 +49,6 @@ import yaml
 from pydantic import ValidationError
 from rich.markup import escape
 
-from fr._hosts import backend_for_url
 from fr.acceptance.ci import CI_CONFIG_PATHS
 from fr.commands import triage_kanban_cmd
 from fr.commands.triage_cmd import (
@@ -66,7 +65,7 @@ from fr.commands.triage_cmd import (
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
-from fr.hostclient import FORGE_ERRORS, client_for_backend
+from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.labels import FR_IN_PROGRESS
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.services import ServicesError, require_tracker
@@ -183,8 +182,9 @@ DISPATCH_INSTALL_HINT = (
 
 
 def make_client(url: str) -> GhClient:
-    """The forge adapter for the repo *url* lives on (§3.J). Tests replace this."""
-    return client_for_backend(backend_for_url(url))
+    """The forge adapter for the repo *url* lives on, on its own instance (§3.J;
+    spec 2026-10-06-forge-remainder §4.D). Tests replace this."""
+    return client_for_url(url)
 
 
 def make_checkout(path: Path | None) -> Checkout:

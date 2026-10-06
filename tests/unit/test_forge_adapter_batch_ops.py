@@ -393,7 +393,7 @@ def test_the_git_seam_runs_git_and_declared_commands_only() -> None:
 
 @pytest.mark.parametrize(
     "source",
-    ["from fr import gh", "import subprocess", "from fr.triage.collect import GhForge",
+    ["from fr import gh", "import subprocess", "from fr.triage.collect import ClientForge",
      "from fr import tea", "import fr.glab"],
 )  # fmt: skip
 def test_the_batch_tripwire_catches_each_forbidden_import(tmp_path: Path, source: str) -> None:

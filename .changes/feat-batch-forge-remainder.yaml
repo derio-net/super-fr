@@ -1,0 +1,2 @@
+bump: patch
+summary: "Forge calls all go through the adapter: triage collect, isolation lookups and the fr-vk rate-limit guard. Triage batch verbs and a declared GitHub Enterprise host now reach the right instance (#742, #892)"
