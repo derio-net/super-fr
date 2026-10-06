@@ -6810,9 +6810,13 @@ rows:
       a branch and its rc tag, and refuses on a non-GitHub forge
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R24
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_prerelease_command_shape
+    status: ci
+    notes: scenario tests/scenarios/prerelease-command-shape.sh runs against a candidate
+      install in CI (tests/integration/test_scenarios.py)
+    scenario: tests/scenarios/prerelease-command-shape.sh
   - id: awaiting-live-triage
     capability: triage
     acceptance: Issues labelled fr:awaiting-live are listed as their own set, never
