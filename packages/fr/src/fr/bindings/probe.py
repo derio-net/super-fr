@@ -23,7 +23,13 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from fr.bindings.catalogue import CatalogueEntry, models_cache_dir, parse_catalogue
+from fr.bindings.catalogue import (
+    CatalogueEntry,
+    models_cache_dir,
+    parse_catalogue,
+    write_json_atomic,
+)
+from fr.bindings.ids import valid_model_id, valid_provider
 
 Verdict = Literal["live", "dead", "unknown", "unprobed"]
 
@@ -123,9 +129,7 @@ class OpenCodeProber:
         self._clock = clock
 
     def probe(self, model: str) -> ProbeResult:
-        import fr.bindings as _b  # the validators live beside the factory
-
-        if not _b.valid_model_id(model):
+        if not valid_model_id(model):
             return ProbeResult(
                 "unknown", f"{model} is not a provider/model id", None, self._clock()
             )
@@ -144,6 +148,9 @@ class OpenCodeProber:
                 return ProbeResult(
                     "unknown", f"no answer within {PROBE_TIMEOUT_SECONDS}s", None, self._clock()
                 )
+            except (OSError, UnicodeDecodeError) as exc:
+                # PermissionError, a bad executable, output that is not text: never a crash.
+                return ProbeResult("unknown", f"could not run opencode: {exc}", None, self._clock())
         return replace(
             classify(done.stdout or "", done.stderr or "", done.returncode), at=self._clock()
         )
@@ -151,16 +158,14 @@ class OpenCodeProber:
     def catalogue(self, provider: str) -> list[CatalogueEntry]:
         """The provider's catalogue, or ``[]`` when it cannot be read (or the
         provider is not a plain name, which is never spawned)."""
-        import fr.bindings as _b
-
-        if not _b.valid_provider(provider):
+        if not valid_provider(provider):
             return []
         with tempfile.TemporaryDirectory(prefix="fr-probe-") as tmp:
             try:
                 done = self._run(
                     ["opencode", "models", provider, "--verbose"], cwd=Path(tmp), timeout=30
                 )
-            except (FileNotFoundError, subprocess.TimeoutExpired):
+            except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError):
                 return []
         entries, _skipped = parse_catalogue(done.stdout or "")
         return entries
@@ -189,25 +194,35 @@ class ProbeCache:
             return {}
         return raw if isinstance(raw, dict) else {}
 
+    @staticmethod
+    def _valid(raw: object) -> ProbeResult | None:
+        """A stored entry, or ``None`` for anything malformed — a miss, never a crash."""
+        if not isinstance(raw, dict) or set(raw) != {"verdict", "detail", "hint", "at"}:
+            return None
+        at = raw["at"]
+        if (
+            raw["verdict"] not in ("live", "dead")
+            or not isinstance(raw["detail"], str)
+            or not (raw["hint"] is None or isinstance(raw["hint"], str))
+            or isinstance(at, bool)
+            or not isinstance(at, int | float)
+        ):
+            return None
+        return ProbeResult(raw["verdict"], raw["detail"], raw["hint"], float(at))
+
     def probe(
         self, prober: Prober, harness: str, model: str, *, fresh: bool = False
     ) -> ProbeResult:
         key = f"{harness}::{model}"
         data = self._load()
         if not fresh:
-            raw = data.get(key)
-            if isinstance(raw, dict):
-                try:
-                    cached = ProbeResult(**raw)
-                except TypeError:
-                    cached = None
-                if cached is not None and 0 <= self._clock() - cached.at < self._ttl:
-                    return cached
+            cached = self._valid(data.get(key))
+            if cached is not None and 0 <= self._clock() - cached.at < self._ttl:
+                return cached
         result = prober.probe(model)
         if result.verdict in ("live", "dead"):
             data[key] = asdict(replace(result, at=self._clock()))
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(data, indent=2, sort_keys=True))
+            write_json_atomic(self.path, data)
         return result
 
 

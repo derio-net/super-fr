@@ -131,3 +131,34 @@ def test_a_vanished_model_is_reasoned_about_from_its_snapshot(tmp_path: Path) ->
     cfg = {"opencode": {"standard": f"{P}/gone"}}
     (h,) = check_bindings("opencode", {}, cfg, prober, fresh=True, snapshots=snaps)
     assert h.proposal == Choice(f"{P}/g2", "family", 1.0)
+
+
+def test_two_dead_tiers_never_get_the_same_replacement(tmp_path: Path) -> None:
+    # Both mechanical and standard are dead, and each one's best candidate is the
+    # same `shared` model (different families, so no family successor): the second
+    # choice must see the first one's pick as taken.
+    entries = [
+        ent("mech", "m", "2026-01-01", 5.0),
+        ent("std", "s", "2026-01-01", 5.0),
+        ent("hard", "h", "2026-01-01", 20.0),
+        ent("orch", "o", "2026-01-01", 5.0),
+        ent("shared", "x", "2026-03-01", 5.0),
+        ent("second", "y", "2026-02-01", 5.0),
+    ]
+    prober = FakeProber(entries, dead={f"{P}/mech": None, f"{P}/std": None})
+    got = {h.tier: h for h in run(prober, tmp=tmp_path)}
+    picks = [got["mechanical"].proposal, got["standard"].proposal]
+    assert all(isinstance(p, Choice) for p in picks)
+    assert picks[0].model != picks[1].model  # type: ignore[union-attr]
+    assert {p.model for p in picks} == {f"{P}/shared", f"{P}/second"}  # type: ignore[union-attr]
+
+
+def test_propose_for_remembers_the_snapshot_and_chooses(tmp_path: Path) -> None:
+    from fr.bindings.health import propose_for
+
+    prober = FakeProber(ENTRIES, dead={})
+    snaps = SnapshotStore(tmp_path / "snap.json")
+    bound = {"standard": f"{P}/std"}
+    chosen = propose_for("standard", f"{P}/std", None, bound, prober, snapshots=snaps)
+    assert chosen == Choice(f"{P}/std2", "family", 1.0)
+    assert snaps.get(f"{P}/std") is not None  # R3: the dead model's entry was kept

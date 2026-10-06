@@ -160,7 +160,8 @@ def choose_replacement(
 
     if known is None and hint:
         model = hint if "/" in hint else f"{provider}/{hint}"
-        if model != dead and budget() and live(model):
+        # A hint naming another provider is not this binding's to take.
+        if _provider(model) == provider and model != dead and budget() and live(model):
             return Choice(model, "hint", None)
 
     reason = (

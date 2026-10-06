@@ -15,10 +15,11 @@ still be reasoned about (its family, its price).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -105,10 +106,29 @@ def parse_catalogue(text: str) -> tuple[list[CatalogueEntry], int]:
     return entries, skipped
 
 
+def write_json_atomic(path: Path, data: object) -> None:
+    """Write ``data`` as JSON through a sibling temp file and `os.replace`. A cache
+    is never worth a crash: a read-only or missing HOME is swallowed, and no temp
+    file is left behind."""
+    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(data, indent=2, sort_keys=True))
+        os.replace(tmp, path)
+    except OSError:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+
+
+def _opt_str(value: object) -> bool:
+    return value is None or isinstance(value, str)
+
+
 class SnapshotStore:
     """Last-known catalogue entry per model id, in one JSON file.
 
-    A corrupt or missing file reads as empty and never raises: a snapshot is a
+    A corrupt or missing file reads as empty, a field of the wrong type makes
+    that one entry absent, and a failed write is swallowed: a snapshot is a
     convenience for reasoning about a vanished model, never a prerequisite."""
 
     def __init__(self, path: Path) -> None:
@@ -123,12 +143,28 @@ class SnapshotStore:
 
     def get(self, model_id: str) -> CatalogueEntry | None:
         raw = self._load().get(model_id)
-        if not isinstance(raw, dict):
+        if not isinstance(raw, dict) or set(raw) != {f.name for f in fields(CatalogueEntry)}:
             return None
-        try:
-            return CatalogueEntry(**raw)
-        except TypeError:
+        price = raw["price"]
+        if (
+            not isinstance(raw["id"], str)
+            or not isinstance(raw["provider"], str)
+            or not _opt_str(raw["family"])
+            or not _opt_str(raw["release_date"])
+            or not isinstance(raw["toolcall"], bool)
+            or not (
+                price is None or (isinstance(price, int | float) and not isinstance(price, bool))
+            )
+        ):
             return None
+        return CatalogueEntry(
+            raw["id"],
+            raw["provider"],
+            raw["family"],
+            raw["release_date"],
+            None if price is None else float(price),
+            raw["toolcall"],
+        )
 
     def remember(self, entries: list[CatalogueEntry]) -> None:
         """Merge ``entries`` over what is stored; an id absent from them keeps
@@ -138,7 +174,4 @@ class SnapshotStore:
         data = self._load()
         for entry in entries:
             data[entry.id] = asdict(entry)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_name(self.path.name + f".{os.getpid()}.tmp")
-        tmp.write_text(json.dumps(data, indent=2, sort_keys=True))
-        os.replace(tmp, self.path)
+        write_json_atomic(self.path, data)

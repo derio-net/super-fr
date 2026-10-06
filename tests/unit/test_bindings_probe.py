@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 import fr.bindings
+import pytest
 from fr.bindings.probe import (
     OpenCodeProber,
     ProbeCache,
@@ -102,11 +103,15 @@ def test_the_prober_runs_the_spec_argv_in_a_fresh_cwd() -> None:
 def test_a_model_id_must_be_provider_slash_model() -> None:
     from fr.bindings import valid_model_id, valid_model_name
 
-    for ok in ("prov/m", "github-copilot/claude-haiku-4.5", "p1/a_b:c.d"):
+    for ok in (
+        "prov/m", "github-copilot/claude-haiku-4.5", "p1/a_b:c.d",
+        "openrouter/anthropic/claude-3.5", "vertex/claude@20240620", "p/a+b/c@d:e",
+    ):  # fmt: skip
         assert valid_model_id(ok), ok
     for bad in (
         "--auto", "--dir=/x", "-m", "prov/--auto", "prov/-x", "-p/m", "prov", "prov/",
-        "/m", "prov/a b", "prov /m", "prov/a=b", "prov/m\n", "", "a/b/c",
+        "/m", "prov/a b", "prov /m", "prov/a=b", "prov/m\n", "", "a//b", "a/b/",
+        "prov/x/-y", "prov/x/--auto", "prov/x=y", "prov/x/ y", "prov/@a",
     ):  # fmt: skip
         assert not valid_model_id(bad), bad
     assert valid_model_name("claude-sonnet-5") and valid_model_name("prov/m")
@@ -194,3 +199,87 @@ def test_an_unknown_verdict_is_not_cached(tmp_path: Path) -> None:
     cache.probe(p, "opencode", "p/m")
     cache.probe(p, "opencode", "p/m")
     assert p.n == 2
+
+
+def test_the_validators_live_in_a_leaf_module_and_are_re_exported() -> None:
+    import fr.bindings.ids as ids
+
+    assert fr.bindings.valid_model_id is ids.valid_model_id
+    assert fr.bindings.valid_provider is ids.valid_provider
+
+
+def test_os_and_decode_errors_are_unknown_and_empty_never_a_crash() -> None:
+    for exc in (
+        PermissionError("denied"),
+        OSError("exec format"),
+        UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad"),
+    ):
+        prober = OpenCodeProber(run_opencode=_Seam(raises=exc))
+        got = prober.probe("p/m")
+        assert got.verdict == "unknown" and got.detail
+        assert prober.catalogue("p") == []
+
+
+def _entry_json(**over: object) -> dict[str, object]:
+    base = {"verdict": "live", "detail": "", "hint": None, "at": 1000.0}
+    return {**base, **over}
+
+
+def test_a_corrupt_probe_cache_is_a_miss_never_a_crash(tmp_path: Path) -> None:
+    import json
+
+    path = tmp_path / "probes.json"
+    bad_files = [
+        "{ not json",
+        json.dumps({"opencode::p/m": _entry_json(at="1000")}),
+        json.dumps({"opencode::p/m": _entry_json(verdict="garbage")}),
+        json.dumps({"opencode::p/m": _entry_json(verdict="unknown")}),
+        json.dumps({"opencode::p/m": _entry_json(detail=3)}),
+        json.dumps({"opencode::p/m": _entry_json(hint=["x"])}),
+        json.dumps({"opencode::p/m": _entry_json(at=True)}),
+        json.dumps({"opencode::p/m": {"verdict": "live"}}),
+        json.dumps({"opencode::p/m": "live"}),
+        json.dumps(["list"]),
+    ]
+    for body in bad_files:
+        path.write_text(body)
+        prober = _Counting()
+        cache = ProbeCache(path, clock=lambda: 1001.0)
+        assert cache.probe(prober, "opencode", "p/m").verdict == "live"
+        assert prober.n == 1, body  # a miss: the prober was asked
+    # A well-formed entry is a hit.
+    path.write_text(json.dumps({"opencode::p/m": _entry_json()}))
+    prober = _Counting()
+    ProbeCache(path, clock=lambda: 1001.0).probe(prober, "opencode", "p/m")
+    assert prober.n == 0
+
+
+def test_a_failing_cache_write_never_crashes_and_leaves_no_temp_file(tmp_path: Path) -> None:
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    cache = ProbeCache(blocker / "sub" / "probes.json", clock=lambda: 1.0)  # parent is a file
+    assert cache.probe(_Counting(), "opencode", "p/m").verdict == "live"
+
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)
+    try:
+        cache = ProbeCache(ro / "probes.json", clock=lambda: 1.0)
+        assert cache.probe(_Counting(), "opencode", "p/m").verdict == "live"
+        assert list(ro.iterdir()) == []
+    finally:
+        ro.chmod(0o700)
+
+
+def test_the_cache_is_written_atomically_via_replace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    calls: list[tuple[str, str]] = []
+    real = os.replace
+    monkeypatch.setattr(os, "replace", lambda a, b: (calls.append((str(a), str(b))), real(a, b))[1])
+    cache = ProbeCache(tmp_path / "probes.json", clock=lambda: 1.0)
+    cache.probe(_Counting(), "opencode", "p/m")
+    assert calls and calls[0][1] == str(tmp_path / "probes.json")
+    assert [p.name for p in tmp_path.iterdir()] == ["probes.json"]

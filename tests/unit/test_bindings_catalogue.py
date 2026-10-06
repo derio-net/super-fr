@@ -72,3 +72,46 @@ def test_a_corrupt_snapshot_file_reads_as_empty(tmp_path: Path) -> None:
     path = tmp_path / "snapshots.json"
     path.write_text("{ nope")
     assert SnapshotStore(path).get("x/y") is None
+
+
+def test_corrupt_snapshot_fields_count_as_absent(tmp_path: Path) -> None:
+    import json
+
+    good = {
+        "id": "p/m", "provider": "p", "family": "f", "release_date": "2026-01-01",
+        "price": 1.0, "toolcall": True,
+    }  # fmt: skip
+    bad = [
+        {**good, "toolcall": "yes"},
+        {**good, "price": "1.0"},
+        {**good, "family": 3},
+        {**good, "release_date": []},
+        {**good, "id": None},
+        {**good, "provider": 1},
+        {**good, "price": True},
+        {k: v for k, v in good.items() if k != "id"},
+        {**good, "extra": 1},
+        "not a dict",
+    ]
+    path = tmp_path / "snapshots.json"
+    for entry in bad:
+        path.write_text(json.dumps({"p/m": entry}))
+        assert SnapshotStore(path).get("p/m") is None, entry
+    path.write_text(json.dumps({"p/m": {**good, "price": 2}}))
+    got = SnapshotStore(path).get("p/m")
+    assert got is not None and got.price == 2.0 and isinstance(got.price, float)
+
+
+def test_a_failing_snapshot_write_never_crashes(tmp_path: Path) -> None:
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    entries, _ = parse_catalogue(FIXTURE.read_text())
+    SnapshotStore(blocker / "sub" / "snapshots.json").remember(entries)  # must not raise
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)
+    try:
+        SnapshotStore(ro / "snapshots.json").remember(entries)
+        assert list(ro.iterdir()) == []
+    finally:
+        ro.chmod(0o700)

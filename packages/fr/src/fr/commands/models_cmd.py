@@ -31,9 +31,8 @@ from rich.console import Console
 
 import fr.bindings
 from fr.artifacts import trigger
-from fr.bindings.catalogue import SnapshotStore, models_cache_dir
-from fr.bindings.choose import Choice, choose_replacement, is_autonomous
-from fr.bindings.health import BindingHealth, check_bindings
+from fr.bindings.choose import Choice, is_autonomous
+from fr.bindings.health import BindingHealth, check_bindings, propose_for
 from fr.bindings.probe import default_probe_cache
 from fr.commands.common import resolve_repo_root
 from fr.models import (
@@ -201,16 +200,12 @@ def set_cmd(
                 style="yellow",
             )
         elif result.verdict == "dead":
-            bound = {**_resolved_config().get(harness, {}), tier: model}
-            provider = model.split("/", 1)[0]
-            chosen = choose_replacement(
+            chosen = propose_for(
                 tier,
                 model,
-                bound,
-                prober.catalogue(provider),
-                SnapshotStore(models_cache_dir() / "snapshots.json").get(model),
                 result.hint,
-                lambda m: prober.probe(m).verdict == "live",
+                {**_resolved_config().get(harness, {}), tier: model},
+                prober,
             )
             err_console.print(f"error: the provider does not serve {model}: {result.detail}")
             proposal = chosen if isinstance(chosen, Choice) else None

@@ -337,6 +337,18 @@ class TestSetRefusesInjectableIds:
         assert "claude-opus-5-5" in _models_yaml(tmp_path).read_text()
 
 
+class TestSetProposalSharesTheHealthChooser:
+    def test_a_dead_set_remembers_the_snapshot_of_the_dead_model(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fr.bindings.catalogue import SnapshotStore, models_cache_dir
+
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES, {"prov/std": "dead"}))
+        _interactive(monkeypatch, False)
+        assert _set("prov/std").exit_code == 2
+        assert SnapshotStore(models_cache_dir() / "snapshots.json").get("prov/std") is not None
+
+
 class TestSetProbes:
     def test_a_dead_model_off_a_terminal_is_refused_with_the_error_and_the_proposal(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -450,6 +462,43 @@ class TestCheck:
         )
         # Off a terminal it only reports.
         assert "standard: prov/std\n" in _models_yaml(tmp_path).read_text()
+
+    def test_two_dead_tiers_get_distinct_proposals(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        entries = [
+            _ent("mech", "m", "2026-01-01"),
+            _ent("std", "s", "2026-01-01"),
+            _ent("shared", "x", "2026-03-01"),
+            _ent("second", "y", "2026-02-01"),
+        ]
+        _bind(tmp_path, mechanical="prov/mech", standard="prov/std")
+        _patch_prober(monkeypatch, _FakeProber(entries, {"prov/mech": "dead", "prov/std": "dead"}))
+        _interactive(monkeypatch, False)
+        res = runner.invoke(app, ["models", "check"])
+        assert res.exit_code == 1, res.output
+        assert "prov/shared" in res.output and "prov/second" in res.output
+        assert res.output.count("prov/shared (") == 1
+
+    def test_an_accepted_change_is_folded_into_the_next_choice(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        entries = [
+            _ent("mech", "m", "2026-01-01"),
+            _ent("std", "s", "2026-01-01"),
+            _ent("shared", "x", "2026-03-01"),
+            _ent("second", "y", "2026-02-01"),
+        ]
+        _bind(tmp_path, mechanical="prov/mech", standard="prov/std")
+        _patch_prober(monkeypatch, _FakeProber(entries, {"prov/mech": "dead", "prov/std": "dead"}))
+        _interactive(monkeypatch, True)
+        res = runner.invoke(app, ["models", "check"], input="\n\n")
+        assert res.exit_code == 0, res.output
+        import yaml
+
+        cfg = yaml.safe_load(_models_yaml(tmp_path).read_text())["opencode"]
+        assert cfg["mechanical"] != cfg["standard"]
+        assert {cfg["mechanical"], cfg["standard"]} == {"prov/shared", "prov/second"}
 
     def test_other_harnesses_are_unprobed(self, tmp_path: Path) -> None:
         import yaml

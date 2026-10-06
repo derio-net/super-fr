@@ -216,3 +216,15 @@ def test_no_offer_for_an_unknown_family_or_a_retired_newer_model() -> None:
     assert offers({"standard": f"{P}/missing"}, [e("n")], Probe()) == []
     entries = [e("std"), e("std2", date="2026-06-01")]
     assert offers({"standard": f"{P}/std"}, entries, Probe({f"{P}/std2"})) == []
+
+
+def test_a_hint_naming_another_provider_is_not_used() -> None:
+    entries = [e("sol-2", family="sol", date="2026-09-01")]
+    other = choose("orchestrator", "sol-1", entries, hint="elsewhere/sol-2")
+    assert isinstance(other, NoChoice)
+    same = choose("orchestrator", "sol-1", entries, hint=f"{P}/sol-2")
+    assert same == Choice(f"{P}/sol-2", "hint", None)
+    assert choose("orchestrator", "sol-1", entries, hint="sol-2") == same  # bare: prefixed
+    probe = Probe()
+    choose("orchestrator", "sol-1", entries, hint="elsewhere/sol-2", probe=probe)
+    assert probe.calls == []  # never probed

@@ -7,6 +7,7 @@ choose a replacement for each dead one, collect upgrade offers for each live one
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from fr.bindings.catalogue import CatalogueEntry, SnapshotStore, models_cache_dir
@@ -40,6 +41,35 @@ class BindingHealth:
     proposal: Choice | None = None
     no_choice: NoChoice | None = None
     offers: list[Offer] = field(default_factory=list)
+
+
+def propose_for(
+    tier: str,
+    model: str,
+    hint: str | None,
+    bound: dict[str, str],
+    prober: Prober,
+    *,
+    entries: list[CatalogueEntry] | None = None,
+    snapshots: SnapshotStore | None = None,
+    is_live: Callable[[str], bool] | None = None,
+) -> Choice | NoChoice:
+    """The ONE place a replacement for a dead ``model`` is chosen — `check_bindings`
+    (so `fr models check`, `fr run start` and the brief) and `fr models set`
+    both call it. It reads the provider's catalogue (unless ``entries`` are
+    passed), remembers the entries of every bound model as its last-known
+    snapshot (R3), looks up the dead model's snapshot, and applies R4's rules.
+    ``bound`` is the harness's whole tier -> model map, as it would stand after
+    the change."""
+    store = (
+        snapshots if snapshots is not None else SnapshotStore(models_cache_dir() / "snapshots.json")
+    )
+    if entries is None:
+        entries = prober.catalogue(model.split("/", 1)[0])
+    wanted = {model, *bound.values()}
+    store.remember([x for x in entries if x.id in wanted])
+    live = is_live if is_live is not None else (lambda m: prober.probe(m).verdict == "live")
+    return choose_replacement(tier, model, bound, entries, store.get(model), hint, live)
 
 
 def check_bindings(
@@ -83,17 +113,29 @@ def check_bindings(
     def is_live(model: str) -> bool:
         return verdict_of(model, force=False)[0] == "live"
 
+    # Replacements are chosen one tier at a time in `ALL_TIERS` order, each pick
+    # folded into the map the next choice sees, so no two dead tiers are ever
+    # proposed the same model and the price ordering holds across them.
+    working = dict(bound)
     report: list[BindingHealth] = []
     for tier in wanted:
         model = bound[tier]
         verdict, detail, hint = verdict_of(model, force=fresh)
         health = BindingHealth(tier, model, layer[tier], verdict, detail, hint)
         if verdict == "dead":
-            chosen = choose_replacement(
-                tier, model, bound, entries, store.get(model), hint, is_live
+            chosen = propose_for(
+                tier,
+                model,
+                hint,
+                working,
+                prober,
+                entries=entries,
+                snapshots=store,
+                is_live=is_live,
             )
             if isinstance(chosen, Choice):
                 health.proposal = chosen
+                working[tier] = chosen.model
             else:
                 health.no_choice = chosen
         elif verdict == "live":
