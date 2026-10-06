@@ -13,7 +13,7 @@ sources (spec 2026-10-05-triage-pages-goal R15: the dated fragments live on the 
 Run from anywhere: python3 build.py   (then: fr triage architecture render ... and
 fr triage history render ...)
 """
-import html, json, os, subprocess, runpy
+import html, json, os, re, subprocess, runpy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(os.path.dirname(HERE), "history")  # the dated fragments; pipeline.py writes architecture/
@@ -33,6 +33,8 @@ def load(name):
     return json.load(open(os.path.join(HERE, "extracted", f"extract-{name}.json")))
 
 def frame(tok, title, lede, body):
+    # the 10-02 pages' own <h1> titles come over with their intro sections; one page, one h1
+    body = re.sub(r"<(/?)h1\b", r"<\1h3", body)
     return (f'<div style="{tok}"><h2>{esc(title)}</h2>'
             f'<p style="color:var(--muted);max-width:75ch">{lede}</p>{body}</div>\n')
 
