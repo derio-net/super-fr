@@ -214,3 +214,8 @@ adopt._owning_old_cursor validates the id with validate_run_id before any path i
 ### p3-r2-resolved · finding [fixed] · resolves p3-r2: old cursor located by a path rebuilt from its content id, not the file that matched (phase 3)
 
 _owning_old_cursor requires runs/<id>.yaml to exist, record `run: <id>` and name this plan in emitted.plan; otherwise one refusal naming the mismatch. Tests for a mismatch whose content id equals the derived new id (the other run is neither read, deleted nor overwritten) and for a missing runs/<id>.yaml; both fail without the fix.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved-2 created=2026-10-06T06:21:59+00:00 state=open resolves=p1-r3 tracked_by=#988 -->
+### p1-r3-resolved-2 · finding [deferred → #988] · resolves p1-r3: fr pickup's _run_unit_record uses the strict resolver and swallows the error on a drifted cursor
+
+Filed at closeout as #988 (same defect as spec finding sr-12).
