@@ -138,7 +138,9 @@ UNIT_CURSOR = _cursor(
                 }
             }
         },
-        "implement-phase": {
+        # the REAL nesting: phase units live under the group step `implement`
+        "implement": {
+            "members": ["implement-phase", "review-phase"],
             "units": {
                 "phase/1/implement-phase": {
                     "attempts": [_att(f"{T}10:10:00+00:00", f"{T}10:30:00+00:00", "ex1")]
@@ -155,10 +157,6 @@ UNIT_CURSOR = _cursor(
                         {"dispatched": f"{T}10:55:00+00:00", "synthesized": True},
                     ]
                 },
-            }
-        },
-        "review-phase": {
-            "units": {
                 "phase/1/review-phase": {
                     "attempts": [_att(f"{T}10:55:00+00:00", f"{T}11:00:00+00:00")],
                     "evidence": {"review": "r1", "reviewer": "rv1"},
@@ -166,7 +164,7 @@ UNIT_CURSOR = _cursor(
                 "phase/4/review-phase": {
                     "attempts": [_att(f"{T}11:00:00+00:00", None)],  # held: open-ended
                 },
-            }
+            },
         },
     }
 )
@@ -203,7 +201,8 @@ def test_the_index_maps_agents_roles_and_open_ended_intervals() -> None:
 def test_an_unreturned_attempt_that_is_not_the_last_is_not_open_ended() -> None:
     cursor = _cursor(
         **{
-            "implement-phase": {
+            "implement": {
+                "members": ["implement-phase", "review-phase"],
                 "units": {
                     "phase/1/implement-phase": {
                         "attempts": [
@@ -211,7 +210,7 @@ def test_an_unreturned_attempt_that_is_not_the_last_is_not_open_ended() -> None:
                             _att(f"{T}10:10:00+00:00", f"{T}10:20:00+00:00", "b"),
                         ]
                     }
-                }
+                },
             }
         }
     )
@@ -369,7 +368,7 @@ def _overlap_cursor(*, reverse: bool) -> dict:
     units = {"phase/1/implement-phase": {"attempts": a}, "phase/2/implement-phase": {"attempts": b}}
     if reverse:
         units = {k: {"attempts": list(reversed(v["attempts"]))} for k, v in reversed(units.items())}
-    return _cursor(**{"implement-phase": {"units": units}})
+    return _cursor(implement={"members": ["implement-phase", "review-phase"], "units": units})
 
 
 def test_two_different_overlapping_units_attribute_to_the_latest_dispatch_in_any_order() -> None:

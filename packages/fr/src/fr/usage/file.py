@@ -275,7 +275,11 @@ def unit_index(cursor: Mapping[str, Any]) -> UnitIndex:
             if not isinstance(unit, Mapping):
                 continue
             unit_key = str(key)
-            roles[unit_key] = step_role_of(str(step))
+            # a phase unit lives under its group step (`implement`), so its role
+            # is the MEMBER in `phase/<n>/<member>`; a flat unit's is its step's
+            parts = unit_key.split("/")
+            member = parts[2] if len(parts) == 3 and parts[0] == "phase" else str(step)
+            roles[unit_key] = step_role_of(member)
             attempts = unit.get("attempts")
             recorded = (
                 [a for a in attempts if isinstance(a, Mapping)]
