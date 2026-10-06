@@ -34,6 +34,7 @@ from fr.triage.batch_drive import (
     default_selection,
     drive_pass,
 )
+from fr.triage.merge_stops import MergeStop, live_stop
 from fr.triage.model import (
     Batch,
     CancelEvent,
@@ -92,6 +93,7 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "export-closed": "state export PR closed; the drive re-exports",
 }
 NEEDS_YOU = "needs you: session blocked"
+NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason
 # R6's per-column fallbacks.
 HINT_QUEUED = "queued"
 HINT_NOT_DRIVEN = "not driven"
@@ -308,6 +310,7 @@ def _card(
     statuses: Mapping[str, BoardStatus],
     actions: Mapping[str, Action],
     selected: frozenset[str],
+    stops: Mapping[str, MergeStop],
 ) -> Card:
     column = column_of(batch, facts, batches)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
@@ -320,9 +323,16 @@ def _card(
     if closeout is not None and closeout.runner != "hand":
         key = closeout_item_id(repo, batch.id) if repo else ""
         closeout_status = statuses.get(key, "unknown")
-    needs_you = "blocked" in (status, closeout_status)
-    if needs_you:
+    stop = stops.get(batch.id)
+    needs_you = "blocked" in (status, closeout_status) or stop is not None
+    if "blocked" in (status, closeout_status):
         hint = NEEDS_YOU
+    elif stop is not None:
+        hint = f"{NEEDS_YOU_MERGE_STOPPED}: {stop.reason}"
+    elif held := [d for d in batch.after if d in stops]:
+        # The pass plans this batch's dispatch on the dependency merging first; a
+        # stopped merge never lands, so it waits on it as the driver does ("held").
+        hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
     elif batch.id in actions:
         hint = action_phrase(actions[batch.id])
     else:
@@ -360,12 +370,34 @@ def _card(
     )
 
 
-def build_board(facts: Facts, judgements: Judgements, statuses: Mapping[str, BoardStatus]) -> Board:
-    """One card per batch in six columns, sorted by wave (none last) then id (R2)."""
+def live_stops(
+    batches: Sequence[Batch], facts: Facts, stops: Mapping[str, MergeStop]
+) -> dict[str, MergeStop]:
+    """The recorded stops that still hold: the batch's PR is open, at the stopped head."""
+    out: dict[str, MergeStop] = {}
+    for b in batches:
+        pr = batch_pr(b, facts)
+        if pr is not None and pr.state == "OPEN":
+            if (stop := live_stop(stops.get(b.id), pr.head_oid)) is not None:
+                out[b.id] = stop
+    return out
+
+
+def build_board(
+    facts: Facts,
+    judgements: Judgements,
+    statuses: Mapping[str, BoardStatus],
+    *,
+    stops: Mapping[str, MergeStop] | None = None,
+) -> Board:
+    """One card per batch in six columns, sorted by wave (none last) then id (R2).
+    *stops* are the driver's recorded merge stops (gh#987); one counts only while the
+    batch's PR is open at the head it was recorded at."""
     batches = judgements.batches
     actions = first_actions(facts, judgements)
     selected = default_selection(batches)
-    cards = [_card(b, facts, batches, statuses, actions, selected) for b in batches]
+    live = live_stops(batches, facts, stops or {})
+    cards = [_card(b, facts, batches, statuses, actions, selected, live) for b in batches]
     cards.sort(key=lambda c: (c.batch.wave is None, c.batch.wave or 0, c.batch.id))
     columns = tuple(
         ColumnView(key, COLUMN_TITLES[key], tuple(c for c in cards if c.column == key))
