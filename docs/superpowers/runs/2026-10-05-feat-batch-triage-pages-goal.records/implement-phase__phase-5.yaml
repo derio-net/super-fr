@@ -8,12 +8,28 @@ ticks:
   - P5.T1.S2
   - P5.T1.S3
 refactor:
-  P5.T1: "Prose skills have no refactor step; documentation additions are minimal"
-  P5.T2: "Task 2 blocked on PR #969 (docs/triage/ not yet on main)"
+  P5.T1: "Prose skills have no refactor step; documentation additions are concise and targeted"
+  P5.T2: "Task 2 blocked on PR #969 merging; orchestrator handles after rebase"
 journal:
   - kind: discovery
     id: p5-blocked-on-969
-    title: "Task 2 blocked on PR #969"
-    body: "PR #969 (chore/triage-state) has not merged yet. Checked with `git cat-file -e origin/main:docs/triage/sync.sh` and file not found. P5.T2.* remains unticked. The orchestrator will handle task 2 after #969 merges and rebases this branch."
+    title: "Task 2 (P5.T2.S1–S2) blocked: PR #969 not merged"
+    body: |
+      PR #969 (chore/triage-state, adds `docs/triage/`) has not merged to origin/main yet.
+      Verified with `git fetch origin && git cat-file -e origin/main:docs/triage/sync.sh`.
+      File not found on main; P5.T2.* unticked. The orchestrator will rebase this branch
+      after #969 merges and handle task 2 then. Outcome: done (task 1 complete).
+  - kind: discovery
+    id: p5-t1-skills-documented
+    title: "Task 1 complete: Skills document pages, fragments, and fields"
+    body: |
+      All three skills (fr-triage, fr-origins, fr-audit) now document:
+      - Four page goals and their use cases
+      - Fragment manifests for hand-written analysis
+      - New fields: severity, duplicate_of, fixed_by, introduced_in
+      - Schema versions and export config
+      - History verb and state export/import verbs
+      Tests pass: 13 new tests validate the documentation, tripwires enforce skill length and tool neutrality.
 resolves: []
-evidence: {}
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/p5-suite.log
