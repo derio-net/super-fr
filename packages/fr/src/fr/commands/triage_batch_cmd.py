@@ -239,6 +239,12 @@ def _replace(batches: list[Batch], new: Batch) -> list[Batch]:
     return [new if b.id == new.id else b for b in batches]
 
 
+def _with_event(judgements: Judgements, batch: Batch, event: DispatchEvent) -> list[Batch]:
+    """The batches *judgements* will hold once *event* is appended to *batch*: what
+    `dispatch`, `dispatch --repair` (recording a missing event) and `adopt` write."""
+    return _replace(judgements.batches, batch.model_copy(update={"events": [*batch.events, event]}))
+
+
 IssueOpt = Annotated[
     list[str] | None, typer.Option("--issue", help="A member key, <repo-name>#<n>; repeat.")
 ]
@@ -895,9 +901,9 @@ def _record_missing(
         branch=branch,
         reserved_version=reserved,
     )
-    dispatched = batch.model_copy(update={"events": [*batch.events, event]})
-    _write(target, _replace(judgements.batches, dispatched), facts, read=judgements.batches)
-    _report_forge_writes(_forge_writes(client, owner_repo, dispatched, probe.id), batch)
+    after = _with_event(judgements, batch, event)
+    _write(target, after, facts, read=judgements.batches)
+    _report_forge_writes(_forge_writes(client, owner_repo, _find(after, batch.id), probe.id), batch)
     console.print(f"recorded and repaired batch {batch.id}", markup=False)
 
 
@@ -1093,9 +1099,7 @@ def dispatch_batch(
     )
 
     def _after(ev: DispatchEvent) -> list[Batch]:
-        return _replace(
-            judgements.batches, batch.model_copy(update={"events": [*batch.events, ev]})
-        )
+        return _with_event(judgements, batch, ev)
 
     _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
     if not runner.can_dispatch(item):
@@ -1301,9 +1305,7 @@ def adopt_batch(
         kind="dispatch", at=at, runner=runner_name, handle=tab, branch=new,
         reserved_version=reserved,
     )  # fmt: skip
-    after = _replace(
-        judgements.batches, batch.model_copy(update={"events": [*batch.events, event]})
-    )
+    after = _with_event(judgements, batch, event)
     if not recorded:
         _write(target, after, facts, read=judgements.batches, dry_run=True)
 
