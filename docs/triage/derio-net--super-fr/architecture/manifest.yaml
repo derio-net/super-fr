@@ -1,12 +1,5 @@
 sections:
   - summary
-  - waves
   - subsystems
   - size-table
-  - filings-per-day
-  - origin-counts
-  - operator-actions
   - pipeline.html
-  - closing-order.html
-  - origins-2026-10-02.html
-  - history-2026-10-02.html

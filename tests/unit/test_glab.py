@@ -11,6 +11,7 @@ where gh uses `--body`, and glab's `#`-prefixed label color).
 
 import os
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -43,6 +44,16 @@ from tests.unit.test_real_glabclient import (
     GLAB_STDOUT_404_TREE,
     GLAB_STDOUT_UNAUTHENTICATED,
 )
+
+
+@pytest.fixture(autouse=True)
+def _glab_logged_in(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """glab logged into the fixture host `gl.corp.com`, so the host trust gate
+    (`fr.glab.host_env`, gh#1014) lets this file's hosted calls through."""
+    d = tmp_path / "glab-config"
+    d.mkdir()
+    (d / "config.yml").write_text("hosts:\n    gl.corp.com: {}\n")
+    monkeypatch.setenv("GLAB_CONFIG_DIR", str(d))
 
 
 class TestCreateIssue:
@@ -225,7 +236,7 @@ class TestRunGlabError:
 
         monkeypatch.setattr(glab.subprocess, "run", fake_run)
         with pytest.raises(glab.GlabError) as exc_info:
-            glab._run_glab(["api", "user"])
+            glab._run_glab(["api", "projects/g%2Fp"])
         assert exc_info.value.stderr == "HTTP 403 Forbidden\n"
         assert exc_info.value.returncode == 1
 
@@ -301,6 +312,11 @@ def test_the_table_covers_every_public_glab_helper() -> None:
         "is_not_found",
         "is_already_exists",
         "with_retry",
+        # The host trust gate itself (gh#1014): `test_forge_host_trust.py` pins it.
+        "GlabHostRefusedError",
+        "known_hosts",
+        "host_env",
+        "check_argv",
     }
     assert public == set(_HOST_FORWARDING_CALLS)
 
@@ -336,7 +352,7 @@ class TestRunGlabHost:
 
         monkeypatch.setattr(subprocess, "run", _fake_run)
         monkeypatch.delenv("GITLAB_HOST", raising=False)
-        assert glab._run_glab(["api", "user"], host="gl.corp.com") == "ok"
+        assert glab._run_glab(["api", "projects/g%2Fp"], host="gl.corp.com") == "ok"
         env = seen["env"]
         assert isinstance(env, dict)
         assert env["GITLAB_HOST"] == "gl.corp.com"
@@ -356,7 +372,7 @@ class TestRunGlabHost:
 
         monkeypatch.setattr(subprocess, "run", _fake_run)
         monkeypatch.setenv("FR_SENTINEL_FOR_TEST", "kept")
-        glab._run_glab(["api", "user"], host="gl.corp.com")
+        glab._run_glab(["api", "projects/g%2Fp"], host="gl.corp.com")
         env = seen["env"]
         assert isinstance(env, dict)
         assert env["FR_SENTINEL_FOR_TEST"] == "kept"
@@ -373,7 +389,7 @@ class TestRunGlabHost:
             return SimpleNamespace(stdout="", stderr="", returncode=0)
 
         monkeypatch.setattr(subprocess, "run", _fake_run)
-        glab._run_glab(["api", "user"])
+        glab._run_glab(["api", "projects/g%2Fp"])
         assert seen["env"] is None
 
 

@@ -38,3 +38,9 @@ nothing was redacted.
 
 To refresh: re-run the commands, subset whole records again, and update the
 date above. Never hand-edit a record to fit a test.
+
+- `dedupe-calibration.json` — captured live on **2026-10-06** with
+  `gh issue view N --repo derio-net/super-fr --json number,title,body,state` for
+  594 607 631 640 647 724 725 868 869 454 458, one JSON list, each body cut to 2,000
+  characters (collect's `BODY_LIMIT`). The duplicate-candidate calibration set
+  (`tests/unit/test_triage_dedupe.py`).

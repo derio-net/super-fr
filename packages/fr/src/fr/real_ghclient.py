@@ -17,6 +17,7 @@ from __future__ import annotations
 import functools
 import json
 import re
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
@@ -55,7 +56,7 @@ def _hosted(
             # The trust gate runs BEFORE the body: a soft-fail method catches
             # `GhError` and would turn a refused host into "no PR" / "no
             # file" (review p1-r1). `GhHostRefusedError` propagates instead.
-            _gh._env()
+            _gh.host_env()
             return method(self, *args, **kwargs)
 
     wrapper.__fr_hosted__ = True  # type: ignore[attr-defined]
@@ -531,12 +532,13 @@ _CI_FAIL = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"}
 _CI_PENDING = {"PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS"}
 
 
-def _gh_runner(run: CommandRunner | None) -> CommandRunner:
-    """*run*, else `run_cli` carrying `GH_HOST` — `_gh._env()` read at call
-    time, so it is the calling method's `@_hosted` scope that applies."""
-    if run is not None:
-        return run
-    return lambda argv, *, cwd: run_cli(argv, cwd=cwd, env=_gh._env())
+def _gh_runner(run: CommandRunner | None) -> Callable[..., subprocess.CompletedProcess[str]]:
+    """*run* (else `run_cli`), handed the `GH_HOST` overlay — `_gh.host_env()`
+    read at call time, so it is the calling method's `@_hosted` scope that
+    applies. An injected runner is handed it too: returning *run* bare let the
+    gate pass one host while gh talked to the remote's (gh#1015)."""
+    runner = run or run_cli
+    return lambda argv, *, cwd: runner(argv, cwd=cwd, env=_gh.host_env())
 
 
 def _coerce_ci_state(rollup: str) -> str:

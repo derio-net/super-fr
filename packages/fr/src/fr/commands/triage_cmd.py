@@ -151,7 +151,8 @@ def _report(facts: Facts) -> None:
     for u in facts.unviewed:
         err_console.print(
             f"[yellow]unviewed[/yellow] {escape(u.key)}: {escape(u.reason)} "
-            "(judged, but the forge would not show it; not treated as orphaned)",
+            "(judged or named by `duplicate_of`, but the forge would not show it; "
+            "not treated as orphaned)",
             soft_wrap=True,
         )
     for w in facts.warnings:
@@ -203,12 +204,10 @@ def collect_into(
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
-    # Judged keys, plus each `duplicate_of` target: a closed original is viewed too, so the
-    # board can link it and `check` does not call it unknown (triage-pages-goal R11).
+    # Every judged key, and every `duplicate_of` target (R6: a closed original must
+    # read `closed`, not `missing`); one view each, whichever way it was named.
     judged = (
-        [*loaded.issues, *(j.duplicate_of for j in loaded.issues.values() if j.duplicate_of)]
-        if loaded
-        else []
+        list(dict.fromkeys([*loaded.issues, *sorted(loaded.duplicate_targets())])) if loaded else []
     )
     # The branch and time of each batch's last dispatch, unless it was cancelled
     # since (spec 2026-09-25-triage-batches §3.A): collect looks each one up by
@@ -293,7 +292,8 @@ def check_command(
     dir_override: DirOpt = None,
     as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
-    """Report unranked issues and PRs, settled, orphaned, unreachable, stale and unplaced.
+    """Report unranked issues and PRs, settled, orphaned, unreachable, stale, unplaced,
+    duplicate candidates and duplicates.
 
     Always exits 0.
     """
@@ -363,6 +363,23 @@ def check_command(
     )
     for key in result.duplicate_chained:
         console.print(f"  {escape(key)}", soft_wrap=True)
+    console.print(
+        f"[bold]duplicate candidates[/bold] ({len(result.candidates)}) — open issues that "
+        "may duplicate each other; judge each group"
+    )
+    for g in result.candidates:
+        console.print(f"  {escape(', '.join(g.keys))}", soft_wrap=True)
+        for p in g.pairs:
+            console.print(
+                f"    {escape(p.a)} ~ {escape(p.b)}: {escape('; '.join(p.reasons))}", soft_wrap=True
+            )
+    console.print(
+        f"[bold]duplicates[/bold] ({len(result.duplicates)}) — judged duplicate_of an "
+        "original; the printed command is never run by fr"
+    )
+    for d in result.duplicates:
+        console.print(f"  {escape(d.key)} → {escape(d.original)} ({d.state})", soft_wrap=True)
+        console.print(f"    {escape(d.command or d.reason)}", soft_wrap=True)
 
 
 @triage_app.command("render")

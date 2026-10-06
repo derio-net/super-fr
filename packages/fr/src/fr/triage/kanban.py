@@ -91,6 +91,7 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "export-merge": "state export PR ready to merge",
     "export-reconcile": "state export merged; the drive records it",
     "export-closed": "state export PR closed; the drive re-exports",
+    "dedupe": "duplicate candidates to judge",  # names no batch; never a card hint
 }
 NEEDS_YOU = "needs you: session blocked"
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason

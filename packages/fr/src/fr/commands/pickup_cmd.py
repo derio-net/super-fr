@@ -229,7 +229,10 @@ def _record_section(plan: object, phase: int) -> list[str]:
 
 
 def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
-    from fr.commands.run_cmd import _resolve_manifest_for_state
+    # The read-only resolver (spec 2026-10-05-run-upgrade-midflight §B): pickup
+    # only reads the cursor, so a step drift is one warning naming `fr run
+    # reshape`, not a refusal `_record_section` would swallow (gh#988).
+    from fr.commands.run_cmd import _resolve_manifest_for_read
     from fr.record.template import record_brief
     from fr.run.model import RUNS_REL, parse_run_state
 
@@ -244,7 +247,7 @@ def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
             continue
         if not any(r.emitted and r.emitted.get("plan") == str(rel) for r in state.steps.values()):
             continue
-        manifest = _resolve_manifest_for_state(repo_root, state)
+        manifest = _resolve_manifest_for_read(repo_root, state)
         for group in manifest.steps:
             for member in group.steps:
                 if "plan:ticks" in (member.emits or group.emits):
