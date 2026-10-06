@@ -46,3 +46,58 @@ client_for gained one backend branch and a narrowed warning condition; the two h
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 client_for_url is the promoted body of pr_state's private helper, moved unchanged; pr_state and make_client each became a one-line call. Nothing left to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-06T08:23:42+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · Soft-fail methods swallowed the trust-gate refusal into []/None/False (phase 1)
+
+list_linked_prs, pr_status_by_url, file_exists, list_dir and issues_enabled catch GhError, so a refused host read as "no PR" / "no file", and a test enshrined it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-06T08:23:42+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · A declared github.com host was threaded, demanding a hosts.yml login in token-only CI (phase 1)
+
+client_for passed the declared host straight through. github.com is gh's own default and must never become GH_HOST.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-10-06T08:23:42+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · Test gaps: nested host_scope, pr_state routing, weak hosted-method scan (phase 1)
+
+The reviewer asked for a nested-scope test, a pr_state call-site test and a stricter test_every_gh_method_is_hosted heuristic.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-10-06T08:23:42+00:00 phase=1 state=open review_scope=out -->
+### p1-r4 · finding [open] (reviewer: out of scope) · _classify_error classifies by stderr text; the refusal reads as unknown (phase 1)
+
+Pre-existing text classification. The refusal message matches no pattern today, so nothing changes. It is fragile only if someone later adds a pattern that catches it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-x1 created=2026-10-06T08:23:42+00:00 phase=1 state=open review_scope=out -->
+### p1-x1 · finding [open] (reviewer: out of scope) · GitLab host threading (gh#490) passes URL/config hosts to glab without a trust gate (phase 1)
+
+Raised by the orchestrator while handling the background security review. glab is handed hosts derived from MR URLs and from fr-profiles.yaml, and a GITLAB_TOKEN in the environment may be sent to whichever host glab targets. It predates this change (gh#490/#865), so it is not caused here. It is the same class as the GitHub gate this phase added.
+
+<!-- fr:journal kind=review scope=plan id=p1-review-r1 created=2026-10-06T08:23:42+00:00 phase=1 -->
+### p1-review-r1 · review · Independent review of phase 1: 4 findings (p1-r1..p1-r4) (phase 1)
+
+A dispatched reviewer checked the ContextVar/host_scope/_env mechanics, subprocess coverage in fr.gh, the hosts.yml trust gate, client_for/client_for_backend/client_for_url and the tests. Raised p1-r1, p1-r2, p1-r3 (in scope) and p1-r4 (out of scope). The orchestrator added p1-x1 (out of scope).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-06T08:23:42+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: Soft-fail methods swallowed the trust-gate refusal into []/None/False (phase 1)
+
+GhHostRefusedError(GhError) is raised by _env(), and RealGhClient's @_hosted wrapper runs the gate before any method body, so no soft-fail except block sees it. Parametrised test over all five methods asserts the raise and that no subprocess started (04efa619c).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-06T08:23:42+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: A declared github.com host was threaded, demanding a hosts.yml login in token-only CI (phase 1)
+
+client_for_backend normalises the GitHub host through _hosts.self_hosted_hostname, so github.com is never threaded. test_a_declared_saas_github_host_is_not_threaded. The refusal text now says a GH_ENTERPRISE_TOKEN alone does not count as a login.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-10-06T08:23:42+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: Test gaps: nested host_scope, pr_state routing, weak hosted-method scan (phase 1)
+
+Added test_a_nested_host_scope_restores_the_outer_host. The hosted-method scan now also matches `from fr.gh import` / `from fr import gh`. pr_state routing was already pinned by test_the_default_close_targets_the_self_hosted_host and test_..._passes_no_host_for_a_saas_url, which patch hostclient.client_for_backend under client_for_url, so no new test was needed there.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-10-06T08:23:42+00:00 phase=1 state=open resolves=p1-r4 out_of_scope=true -->
+### p1-r4-resolved · finding [out-of-scope] · resolves p1-r4: _classify_error classifies by stderr text; the refusal reads as unknown (phase 1)
+
+Pre-existing stderr-text classification, unchanged by this phase. The refusal is its own subclass now, so a caller can match on type rather than text.
+
+<!-- fr:journal kind=finding scope=plan id=p1-x1-resolved created=2026-10-06T08:23:42+00:00 phase=1 state=open resolves=p1-x1 out_of_scope=true -->
+### p1-x1-resolved · finding [out-of-scope] · resolves p1-x1: GitLab host threading (gh#490) passes URL/config hosts to glab without a trust gate (phase 1)
+
+It predates this change (gh#490). File it as a follow-up to give glab the same hosts trust gate.
