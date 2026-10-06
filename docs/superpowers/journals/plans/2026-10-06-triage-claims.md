@@ -351,3 +351,53 @@ publish_board and the command-level publish helper are each one short function s
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 A documentation paragraph and regenerated mirrors only; no code to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-06T22:28:39+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · capture script never rendered a card with an expired own claim, and did not assert no horizontal scroll (phase 3)
+
+capture script never rendered a card with an expired own claim, and did not assert no horizontal scroll.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-06T22:28:39+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · publish_board substituted placeholders sequentially, re-expanding a value that contains another placeholder (phase 3)
+
+publish_board substituted placeholders sequentially, re-expanding a value that contains another placeholder.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-06T22:28:39+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · publish_board docstring claimed nothing raises while scope_id/default_board_name can raise TriageError (phase 3)
+
+publish_board docstring claimed nothing raises while scope_id/default_board_name can raise TriageError.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-06T22:28:39+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · publish runs with the inherited env and cwd = state dir, undocumented and untested (phase 3)
+
+publish runs with the inherited env and cwd = state dir, undocumented and untested.
+
+<!-- fr:journal kind=decision scope=plan id=p3-publish-in-gitseam created=2026-10-06T22:28:39+00:00 phase=3 -->
+### p3-publish-in-gitseam · decision · The publish command runs through gitseam.run_publish (phase 3)
+
+gitseam is the one module triage starts processes from (a tripwire bans subprocess elsewhere), and it already runs repo-declared commands (post_merge). An operator-declared publish argv is the same kind of call. The reviewer judged this the right home; the git-specific names (GitError) are a known misfit, not renamed here.
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-10-06T22:28:39+00:00 phase=3 -->
+### p3-review-1 · review · phase 3 independent review: 4 in-scope findings fixed; visual states checked on fresh shots (phase 3)
+
+An independent reviewer (separate context, standard tier) checked R13/R14/R16/R17 against §3.G/§3.I and the diff f7e106aa9..HEAD: held group and card expiry, the shared held formatter, page tokens and gutter, publish with no shell, a 120 s timeout and warn-once, default names, and skill accuracy with mirrors in sync. It judged the gitseam home legitimate. It raised p3-r1..p3-r4 (in); all fixed (40b96ffc7, 75d565cf6, capture script). On a follow-up it re-ran the updated capture into its own directory and opened six fresh shots covering every named state and interaction; scrollWidth was 400 at phone width. Full suite: 9924 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-06T22:28:39+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: capture script never rendered a card with an expired own claim, and did not assert no horizontal scroll (phase 3)
+
+Capture now renders the expired own-claim card and asserts scrollWidth <= 400 at phone width; the reviewer re-ran it and opened fresh shots (script outside the repo).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-06T22:28:39+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: publish_board substituted placeholders sequentially, re-expanding a value that contains another placeholder (phase 3)
+
+Single-pass regex substitution; x{scope_id} and unknown braces stay literal, a spaced name stays one argument (40b96ffc7).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-06T22:28:39+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: publish_board docstring claimed nothing raises while scope_id/default_board_name can raise TriageError (phase 3)
+
+Docstring states what raises and that the caller warns (40b96ffc7).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-06T22:28:39+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: publish runs with the inherited env and cwd = state dir, undocumented and untested (phase 3)
+
+Documented in run_publish/publish_board, spec §3.G and the fr-triage skill (mirrors synced); a test pins cwd and env (75d565cf6).
