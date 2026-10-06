@@ -24,3 +24,8 @@ Adversarial review, confirmed live against glab 1.89 (.invalid hosts, dummy toke
 ### glab-repo-arg-host-bypass-resolved · finding [fixed] · resolves glab-repo-arg-host-bypass: Review: glab --repo URL / git@ form bypasses the host gate
 
 af50241a1: _run_glab refuses a --repo/-R URL or user@host: value and a full-URL api endpoint before any process; _MR_URL_RE excludes : and @; pr_status_by_url re-raises a refusal. Pinned by test_forge_host_trust.py (red first, then green); full suite 9231 passed.
+
+<!-- fr:journal kind=review scope=debug id=7b1cdbbf98e9 created=2026-10-06T14:16:53+00:00 -->
+### 7b1cdbbf98e9 · review · Adversarial review (independent agent, read-only): 1 blocker fixed, 1 should-fix resolved, 4 nits
+
+1 BLOCKER, in scope — glab --repo URL/git@ and api-URL host bypass: fixed (af50241a1, finding glab-repo-arg-host-bypass). 2 SHOULD-FIX — my uncommitted gitlab.com pin rested on a false premise (live: with no GITLAB_HOST glab refuses an unknown remote host): pin reverted before commit; committed behaviour (SaaS host dropped, as client_for_url / pr_observe / gh do) kept. 3 NIT empty host: fixed ("" is no host). 4 NIT known_hosts docstring overstated "logged in": corrected (a key is an operator choice, never a clone's). 5 NIT adapters always pass env= to an injected runner: kept — the CommandRunner protocol now declares env, both in-repo injectors take it, and isolation's _forge_runner keeps the old bare call when no host. 6 NIT no suite-wide glab/gh config isolation in tests/conftest.py: not done here (latent, pre-existing for gh too). OUT OF SCOPE, reported to the operator, not filed: gh honours --repo HOST/OWNER/REPO the same way, sending GH_ENTERPRISE_TOKEN to any GHES host — the gh twin of the blocker, pre-existing.
