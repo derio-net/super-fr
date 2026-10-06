@@ -288,8 +288,10 @@ class RealGlabClient(UnsupportedBatchOps):
 
     @_hosted
     def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
+        argv = ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"]
+        _glab.check_argv(argv[1:], self._host)
         result = (run or run_cli)(
-            ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"],
+            argv,
             cwd=cwd,
             env=_glab.host_env(self._host),
         )
@@ -304,8 +306,10 @@ class RealGlabClient(UnsupportedBatchOps):
         """`glab mr view <branch>` — a single-shot query like gh's (`glab mr
         view` accepts a bare branch name directly, per its own `--help`,
         unlike the URL case in `pr_status_by_url`)."""
+        argv = ["glab", "mr", "view", branch, "--output", "json"]
+        _glab.check_argv(argv[1:], self._host)
         result = (run or run_cli)(
-            ["glab", "mr", "view", branch, "--output", "json"],
+            argv,
             cwd=cwd,
             env=_glab.host_env(self._host),
         )

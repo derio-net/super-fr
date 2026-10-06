@@ -236,7 +236,7 @@ class TestRunGlabError:
 
         monkeypatch.setattr(glab.subprocess, "run", fake_run)
         with pytest.raises(glab.GlabError) as exc_info:
-            glab._run_glab(["api", "user"])
+            glab._run_glab(["api", "projects/g%2Fp"])
         assert exc_info.value.stderr == "HTTP 403 Forbidden\n"
         assert exc_info.value.returncode == 1
 
@@ -316,6 +316,7 @@ def test_the_table_covers_every_public_glab_helper() -> None:
         "GlabHostRefusedError",
         "known_hosts",
         "host_env",
+        "check_argv",
     }
     assert public == set(_HOST_FORWARDING_CALLS)
 
@@ -351,7 +352,7 @@ class TestRunGlabHost:
 
         monkeypatch.setattr(subprocess, "run", _fake_run)
         monkeypatch.delenv("GITLAB_HOST", raising=False)
-        assert glab._run_glab(["api", "user"], host="gl.corp.com") == "ok"
+        assert glab._run_glab(["api", "projects/g%2Fp"], host="gl.corp.com") == "ok"
         env = seen["env"]
         assert isinstance(env, dict)
         assert env["GITLAB_HOST"] == "gl.corp.com"
@@ -371,7 +372,7 @@ class TestRunGlabHost:
 
         monkeypatch.setattr(subprocess, "run", _fake_run)
         monkeypatch.setenv("FR_SENTINEL_FOR_TEST", "kept")
-        glab._run_glab(["api", "user"], host="gl.corp.com")
+        glab._run_glab(["api", "projects/g%2Fp"], host="gl.corp.com")
         env = seen["env"]
         assert isinstance(env, dict)
         assert env["FR_SENTINEL_FOR_TEST"] == "kept"
@@ -388,7 +389,7 @@ class TestRunGlabHost:
             return SimpleNamespace(stdout="", stderr="", returncode=0)
 
         monkeypatch.setattr(subprocess, "run", _fake_run)
-        glab._run_glab(["api", "user"])
+        glab._run_glab(["api", "projects/g%2Fp"])
         assert seen["env"] is None
 
 

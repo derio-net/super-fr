@@ -370,9 +370,9 @@ def test_a_raw_gh_failure_is_still_classified_by_its_text() -> None:
     ],
 )
 def test_an_argument_naming_its_own_host_is_refused(recorder: _Recorder, args: list[str]) -> None:
-    with pytest.raises(GlabHostRefusedError, match="evil.invalid"):
+    with pytest.raises(GlabHostRefusedError):
         _glab._run_glab(args, host="gitlab.example")
-    with pytest.raises(GlabHostRefusedError, match="evil.invalid"):
+    with pytest.raises(GlabHostRefusedError):
         _glab._run_glab(args)
     assert recorder.calls == []
 
@@ -451,3 +451,52 @@ def test_a_dotted_group_glab_does_not_know_is_still_a_group(recorder: _Recorder)
     """GitLab group paths may hold dots; only a host glab KNOWS is a redirect."""
     _glab._run_glab(["mr", "view", "1", "--repo", "my.group/proj"], host="gitlab.example")
     assert len(recorder.calls) == 1
+
+
+# ------------------------------------- gh#1014: an ALLOW-list, not a deny-list --
+# Each deny-list rule above mirrored one more corner of glab's parser, and the
+# next corner was a bypass (probed live, glab 1.89): bundled shorthand
+# `-wR<url>`, a repo glab TRIMS into a known host (" h/g/p"), a positional
+# that glab parses as a flag (a branch "-R<url>"). So fr's argv is checked
+# against what fr itself writes: its own value-taking flags, a strict GitLab
+# path for `--repo`, a `projects/` endpoint for `api`.
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["mr", "view", "1", "-wRhttps://evil.invalid/g/p"],
+        ["mr", "view", "1", "-cRhttps://evil.invalid/g/p"],
+        ["mr", "view", "-Rhttps://evil.invalid/g/p", "--output", "json"],
+        ["mr", "view", "1", "--repo", " gitlab.example/g/p"],
+        ["mr", "view", "1", "--repo", "g/p\n"],
+        ["mr", "view", "1", "--repo", "-g/p"],
+        ["mr", "view", "1", "--repo", "p"],
+        ["mr", "view", "1", "--hostname", "evil.invalid"],
+        ["api", "/projects/x"],
+        ["api", "user"],
+    ],
+)
+def test_an_argv_fr_does_not_write_is_refused(recorder: _Recorder, args: list[str]) -> None:
+    with pytest.raises(GlabHostRefusedError):
+        _glab._run_glab(args, host="gitlab.example")
+    assert recorder.calls == []
+
+
+def test_a_value_starting_with_a_dash_is_still_just_a_value(recorder: _Recorder) -> None:
+    """A flag's VALUE is consumed as a value by glab whatever it looks like
+    (probed live: `--message -R<url>` stayed on the configured host)."""
+    args = ["issue", "note", "1", "--repo", "g/p", "--message", "-Rhttps://evil.invalid/g/p"]
+    _glab._run_glab(args, host="gitlab.example")
+    assert len(recorder.calls) == 1
+
+
+def test_a_branch_glab_would_parse_as_a_flag_never_reaches_it(
+    recorder: _Recorder, tmp_path: Path
+) -> None:
+    run = _Runner()
+    with pytest.raises(GlabHostRefusedError):
+        RealGlabClient().pr_for_branch("-Rhttps://evil.invalid/g/p", cwd=tmp_path, run=run)
+    with pytest.raises(GlabHostRefusedError):
+        RealGlabClient().pr_for_branch("-wRhttps://evil.invalid/g/p", cwd=tmp_path)
+    assert run.envs == [] and recorder.calls == []

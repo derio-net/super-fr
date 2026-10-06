@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import time
 from collections.abc import Callable
@@ -117,44 +118,67 @@ def host_env(host: str | None) -> dict[str, str] | None:
     return {"GITLAB_HOST": host}
 
 
-def _repo_values(args: list[str]) -> list[str]:
-    """Every value *args* gives glab's repo flag, in each spelling its flag
-    parser (pflag) accepts — `--repo v`, `--repo=v`, `-R v`, `-R=v`, `-Rv` —
-    all of which glab honours (probed live)."""
-    values: list[str] = []
-    for i, arg in enumerate(args):
-        if arg in ("--repo", "-R"):
-            if i + 1 < len(args):
-                values.append(args[i + 1])
-        elif arg.startswith("--repo="):
-            values.append(arg.removeprefix("--repo="))
-        elif arg.startswith("-R") and not arg.startswith("--"):
-            values.append(arg.removeprefix("-R").removeprefix("="))
-    return values
+# The flags fr itself writes, every one of them value-taking. Anything else
+# that starts with `-` is refused: see `check_argv`.
+_FLAGS = frozenset(
+    {"--repo", "--title", "--description", "--label", "--unlabel", "--message",
+     "--name", "--color", "--output", "--jq", "-F"}
+)  # fmt: skip
+
+# A GitLab project path: two or more segments, each starting with a letter,
+# digit or `_` (GitLab's own rule) — no spaces, no `:` or `@`, no leading `-`.
+_REPO_PATH = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_][A-Za-z0-9_.-]*)+")
 
 
-def _argument_host(args: list[str], host: str | None) -> str | None:
-    """The argument in *args* that would make glab pick its OWN host, else
-    None (gh#1014 review). glab honours a host carried by an argument whatever
-    GITLAB_HOST says — probed live against glab 1.89:
+def check_argv(args: list[str], host: str | None) -> None:
+    """Refuse, before any process starts, a glab argv fr itself never writes
+    (gh#1014 review). glab follows a host carried by an ARGUMENT whatever
+    GITLAB_HOST says — probed live against glab 1.89: a URL or `user@host:`
+    remote as the repo, in any flag spelling (`--repo=`, `-R`, `-Rv`, `-wRv`);
+    a repo path led by a host glab is configured for, even one with a space
+    in front (glab trims it); a positional value it parses as a flag (a
+    branch `-R<url>`); a full-URL `api` endpoint.
 
-    - a URL or scp-like remote as the repo (`https://h/g/p`, `git@h:g/p.git`)
-      or as the `api` endpoint (`https://h/api/v4/...`);
-    - a repo PATH whose first segment is a host glab is configured for
-      (`h/g/p`), its own default gitlab.com, or the threaded host itself.
+    A deny-list of those shapes mirrors glab's parser and loses to the next
+    corner of it, which happened twice. So this is an ALLOW-list of what fr
+    writes, and needs no model of glab's parser:
 
-    Any other first segment — a dotted group like `my.group` included — stays
-    a group path on the configured host, and is left alone. Only the repo flag
-    and the `api` endpoint are read: an issue body may carry any URL, and is
-    no host selector."""
-    values = _repo_values(args)
-    endpoint = args[1:2] if args[:1] == ["api"] else []
-    # A GitLab path never holds `:` or `@`; a URL or remote always does.
-    if hit := next((v for v in values + endpoint if ":" in v or "@" in v), None):
-        return hit
-    hosts = known_hosts() | {"gitlab.com"} | ({host.lower()} if host else set())
-    # Lowercased although glab compares case-sensitively: refusing more is safe.
-    return next((v for v in values if v.split("/", 1)[0].lower() in hosts), None)
+    - a token starting with `-` is one of fr's own value-taking `_FLAGS`, or
+      the value right after one (glab consumes a value as a value whatever it
+      looks like — a body may say anything);
+    - a `--repo` value is a strict GitLab path (`_REPO_PATH`) whose first
+      segment is not a host glab knows: its config's, gitlab.com, the
+      threaded host (compared lowercased; glab is case-sensitive, so this
+      refuses more, never less);
+    - an `api` endpoint starts with `projects/`."""
+    if args[:1] == ["api"] and not (len(args) > 1 and args[1].startswith("projects/")):
+        raise GlabHostRefusedError(
+            f"glab api endpoint {args[1:2]!r} is not a `projects/` path fr writes; "
+            "fr points glab at a host only through GITLAB_HOST"
+        )
+    known: frozenset[str] | None = None
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in _FLAGS:
+            value = args[i + 1] if i + 1 < len(args) else ""
+            if arg == "--repo":
+                if known is None:
+                    known = known_hosts() | {"gitlab.com"} | ({host.lower()} if host else set())
+                if not _REPO_PATH.fullmatch(value) or value.split("/", 1)[0].lower() in known:
+                    raise GlabHostRefusedError(
+                        f"glab --repo {value!r} is not a plain GitLab path, or names its own "
+                        "host; fr points glab at a host only through GITLAB_HOST, where the "
+                        "trust gate checks it"
+                    )
+            i += 2
+            continue
+        if arg.startswith("-"):
+            raise GlabHostRefusedError(
+                f"glab argument {arg!r} is not a flag fr writes, and glab would parse it "
+                "as one (a flag can name its own host); refused"
+            )
+        i += 1
 
 
 def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = None) -> str:
@@ -174,12 +198,8 @@ def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = No
     applies. `cwd` picks that git directory for a call that names no
     `--repo` (gh#742); `None` keeps this process's. A host glab is not logged
     into is refused first (`host_env`, gh#1014), and so is an argument that
-    would make glab pick a host of its own (`_argument_host`)."""
-    if (arg := _argument_host(args, host)) is not None:
-        raise GlabHostRefusedError(
-            f"glab argument {arg!r} names its own host; fr points glab at a host "
-            "only through GITLAB_HOST, where the trust gate checks it"
-        )
+    would make glab pick a host of its own (`check_argv`)."""
+    check_argv(args, host)
     overlay = host_env(host)
     env = {**os.environ, **overlay} if overlay else None
     try:
