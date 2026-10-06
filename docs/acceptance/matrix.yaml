@@ -6764,9 +6764,15 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R14
     - super-fr:docs/superpowers/specs/2026-10-06-verification-strategies-design.md#R16
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_walks.py#test_the_walk_that_verifies_the_last_open_row_prints_the_close_commands
+      - super-fr:tests/unit/test_acceptance_walks.py#test_nothing_is_printed_under_tracking_none
+      - super-fr:tests/unit/test_acceptance_walks.py#test_set_status_walk_appends_a_walk
+    status: ci
+    notes: 'unit-tested in CI: set-status --walk appends a walk naming harness, model
+      and strategy; the walk that verifies the last open row prints the forge close/unlabel
+      commands; nothing under tracking none'
   - id: prerelease-on-demand
     capability: verification
     acceptance: fr verification prerelease cuts an rc tag and GitHub pre-release of
