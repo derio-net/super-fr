@@ -351,6 +351,9 @@ def _submit(name: str, brief: str) -> None:
     except HerdrError as exc:
         if exc.code != "agent_prompt_stalled":
             raise
+    # Enter cannot answer a dialog here: `agent start` returned only once the agent
+    # was ready for input, and a dialog since would have read `blocked`, which the
+    # wait above accepts, so a stall means an input box that holds the brief.
     _run_herdr(["agent", "send-keys", name, "enter"])
     try:
         _run_herdr(["agent", "wait", name, *_STARTED, "--timeout", str(ENTER_TIMEOUT_MS)])
