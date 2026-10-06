@@ -34,3 +34,8 @@ gh#921 (1): collect_facts records a failing repo under facts.skipped in org/grou
 ### rc-998 · root-cause · Batch drive-restart-forge: investigation
 
 gh#998: TriageConfig is extra=forbid and the driver reads .fr/triage.yaml from the default branch every pass (collect read_config, check_config_fresh). The driver's own merges land a new key before the release that knows it, so the older running process refused the file and exited.
+
+<!-- fr:journal kind=finding scope=debug id=f-883 created=2026-10-06T13:58:50+00:00 state=fixed -->
+### f-883 · finding [fixed] · Batch drive-restart-forge: investigation
+
+Close-out recorded before runner.dispatch (handle=item.id), rolled back on a dispatch failure, the runner's handle swapped in after. Pinned by test_the_closeout_is_recorded_before_its_tab_starts, test_a_restart_after_the_closeout_tab_ended_starts_no_second_closeout, test_a_closeout_the_runner_fails_to_start_is_not_left_recorded.
