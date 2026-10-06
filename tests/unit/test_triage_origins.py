@@ -677,7 +677,10 @@ def test_a_bad_origins_yaml_fails_every_verb_that_reads_it(
         assert _run(monkeypatch, verb, tmp_path).exit_code == 2
     skill = Path("plugins/super-fr/skills/fr-origins/SKILL.md").read_text(encoding="utf-8")
     assert "fails every verb that reads it" in skill
-    assert "prose-only" in skill
+    # A duplicate's target is checked since schema 2 (triage-pages-goal R10); only its
+    # `reason` stays prose, and the skill must say which is which (review p5-r5).
+    assert "prose-only" not in skill
+    assert "duplicate_of" in skill and "still prose" in skill
 
 
 # ------------------------------------------------ schema 2 (triage-pages-goal R10)

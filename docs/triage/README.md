@@ -3,8 +3,9 @@
 `fr triage` keeps its state outside every repo, in `~/.cache/fr/triage/<scope>/`. That
 is the right default for a consumer repo, but it makes this repo's own triage history
 live on one machine. This folder is the durable copy for `derio-net/super-fr`: what is
-needed to regenerate the backlog board, the defect-origins page and the architecture
-page, and the history that cannot be regenerated.
+needed to regenerate the four triage pages (the backlog page `triage.html`, the
+defect-origins page, the architecture page and the history page), and the history that
+cannot be regenerated.
 
 ## What is here
 
@@ -15,20 +16,23 @@ page, and the history that cannot be regenerated.
 | `judgements.yaml` | the `fr-triage` skill, plus the `batch` verbs | tiers, themes, batches and their events; the board and the subsystem cards read it |
 | `origins.yaml` | the `fr-origins` skill | one classification per issue since 2026-09-22; the 09-24 → 09-29 entries are the 2026-10-02 page's, imported |
 | `subsystems.yaml` | by hand | the architecture page's 15 subsystem cards: globs, `then_ref`, themes |
-| `architecture/manifest.yaml` | by hand | section order, generated sections then authored fragments |
-| `snapshots/` | `fr triage render` | one per render; the board's "Since last report" and the architecture timeline. Not reproducible |
-| `authored-src/` | by hand | the sources of the architecture page's authored fragments (below) |
+| `<page>/manifest.yaml` | by hand | per page (`board/` for `triage.html`, `origins/`, `architecture/`, `history/`): the section order, generated sections and authored fragments interleaved |
+| `<page>/*.html` | `authored-src/build.py`, or by hand | the authored fragments a manifest lists; they travel with the state |
+| `snapshots/` | `fr triage render` | one per render; the backlog page's "Since last report" and the history page's timeline. Not reproducible |
+| `authored-src/` | by hand | the sources of the built fragments (below) |
 
-Left out on purpose, because fr rebuilds them: `facts.json`, `origins-facts.json`, the
-rendered `*.html` pages and the built fragments `architecture/*.html`.
+Left out on purpose, because fr rebuilds them: `facts.json`, `origins-facts.json` and the
+rendered pages (`triage.html`, `origins.html`, `architecture.html`, `history.html`, and
+the batch Kanban `board.html`). `fr triage state export|import` copies exactly the rest.
 
 ### authored-src/
 
-- `pipeline.py` draws the pipeline-and-driver diagram with open issues pinned on steps. The
-  pins are a table in the script; the build stops if a pinned issue has closed.
-- `build.py` runs `pipeline.py` and writes the other three fragments: the 2026-10-02
-  closing order with its outcome (looked up with `gh`), the 2026-10-02 origins analysis,
-  and the history to 2026-10-02.
+- `pipeline.py` draws the pipeline-and-driver diagram with open issues pinned on steps, into
+  `architecture/pipeline.html`. The pins are a table in the script; the build stops if a
+  pinned issue has closed, so refresh the table first.
+- `build.py` runs `pipeline.py` and writes the three dated fragments into `history/`: the
+  2026-10-02 closing order with its outcome (looked up with `gh`), the 2026-10-02 origins
+  analysis, and the history to 2026-10-02.
 - `old/` are the three hand-built pages published on 2026-10-02, the only source of their
   diagrams and analysis. `extracted/` holds their sections with styles inlined, made by
   running `extract.js` in a browser on those pages; `build.py` reads these, not `old/`.
@@ -45,8 +49,11 @@ python3 ~/.cache/fr/triage/derio-net--super-fr/authored-src/build.py
 fr triage render --repo derio-net/super-fr
 fr triage origins render --repo derio-net/super-fr
 fr triage architecture render --repo derio-net/super-fr --now-ref origin/main
+fr triage history render --repo derio-net/super-fr
 uv run fr triage state export --to docs/triage --repo derio-net/super-fr
 ```
 
 The cache stays the working copy because `fr triage batch drive` writes `judgements.yaml`
-on every pass. Export after a triage session or a finished wave, not mid-drive.
+on every pass. `.fr/triage.yaml` sets `export: {path: docs/triage}`, so the driver exports
+the state as a PR once a wave finishes and merges it when green; export by hand after a
+triage session.
