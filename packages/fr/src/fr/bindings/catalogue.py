@@ -27,7 +27,12 @@ def models_cache_dir() -> Path:
     """``$HOME/.cache/fr/models`` — where snapshots and the probe cache live.
 
     HOME-based (not XDG) to match the spec's stated path; `fr.usage` and
-    `fr.triage` keep their caches under ``$HOME/.cache/fr/`` the same way."""
+    `fr.triage` keep their caches under ``$HOME/.cache/fr/`` the same way.
+    ``FR_MODELS_CACHE_DIR`` overrides it, which the test suite sets so no test
+    writes an operator's real cache."""
+    override = os.environ.get("FR_MODELS_CACHE_DIR")
+    if override:
+        return Path(override)
     return Path.home() / ".cache" / "fr" / "models"
 
 

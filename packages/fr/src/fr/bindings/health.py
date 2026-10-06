@@ -64,7 +64,9 @@ def check_bindings(
     if prober is None:
         return [BindingHealth(t, bound[t], layer[t], "unprobed") for t in wanted]
 
-    store = snapshots if snapshots is not None else SnapshotStore(models_cache_dir() / "snapshots.json")
+    store = (
+        snapshots if snapshots is not None else SnapshotStore(models_cache_dir() / "snapshots.json")
+    )
     entries: list[CatalogueEntry] = []
     for provider in sorted({bound[t].split("/", 1)[0] for t in wanted if "/" in bound[t]}):
         entries.extend(prober.catalogue(provider))
@@ -87,7 +89,9 @@ def check_bindings(
         verdict, detail, hint = verdict_of(model, force=fresh)
         health = BindingHealth(tier, model, layer[tier], verdict, detail, hint)
         if verdict == "dead":
-            chosen = choose_replacement(tier, model, bound, entries, store.get(model), hint, is_live)
+            chosen = choose_replacement(
+                tier, model, bound, entries, store.get(model), hint, is_live
+            )
             if isinstance(chosen, Choice):
                 health.proposal = chosen
             else:

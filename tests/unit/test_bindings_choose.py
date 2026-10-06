@@ -209,7 +209,10 @@ def test_offers_a_newer_live_same_family_toolcall_model() -> None:
 
 
 def test_no_offer_for_an_unknown_family_or_a_retired_newer_model() -> None:
-    assert offers({"standard": f"{P}/std"}, [e("std", family=None), e("n", family=None)], Probe()) == []
+    assert (
+        offers({"standard": f"{P}/std"}, [e("std", family=None), e("n", family=None)], Probe())
+        == []
+    )
     assert offers({"standard": f"{P}/missing"}, [e("n")], Probe()) == []
     entries = [e("std"), e("std2", date="2026-06-01")]
     assert offers({"standard": f"{P}/std"}, entries, Probe({f"{P}/std2"})) == []

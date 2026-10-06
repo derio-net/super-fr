@@ -61,9 +61,7 @@ class Prober(Protocol):
     def catalogue(self, provider: str) -> list[CatalogueEntry]: ...
 
 
-def run_opencode(
-    argv: list[str], *, cwd: Path, timeout: float
-) -> subprocess.CompletedProcess[str]:
+def run_opencode(argv: list[str], *, cwd: Path, timeout: float) -> subprocess.CompletedProcess[str]:
     """THE subprocess seam. Stdin is closed: with it left open `opencode run`
     waits on it forever (observed capturing the fixtures)."""
     return subprocess.run(  # noqa: S603
@@ -102,7 +100,10 @@ def classify(stdout: str, stderr: str, returncode: int) -> ProbeResult:
             found = _NOT_FOUND.search(line)
             hint = _HINT.search(line)
             return ProbeResult(
-                "dead", (found.group(0) if found else line.strip()), hint.group(1) if hint else None, 0.0
+                "dead",
+                (found.group(0) if found else line.strip()),
+                hint.group(1) if hint else None,
+                0.0,
             )
     detail = (stderr.strip().splitlines() or stdout.strip().splitlines() or [""])[-1][:200]
     return ProbeResult("unknown", detail or f"no answer (exit {returncode})", None, 0.0)
@@ -136,7 +137,9 @@ class OpenCodeProber:
                 return ProbeResult(
                     "unknown", f"no answer within {PROBE_TIMEOUT_SECONDS}s", None, self._clock()
                 )
-        return replace(classify(done.stdout or "", done.stderr or "", done.returncode), at=self._clock())
+        return replace(
+            classify(done.stdout or "", done.stderr or "", done.returncode), at=self._clock()
+        )
 
     def catalogue(self, provider: str) -> list[CatalogueEntry]:
         """The provider's catalogue, or ``[]`` when it cannot be read."""

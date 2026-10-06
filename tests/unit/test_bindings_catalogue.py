@@ -9,7 +9,9 @@ from pathlib import Path
 
 from fr.bindings.catalogue import CatalogueEntry, SnapshotStore, parse_catalogue
 
-FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "bindings" / "opencode-models-verbose.txt"
+FIXTURE = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "bindings" / "opencode-models-verbose.txt"
+)
 
 
 def test_every_captured_block_parses() -> None:
@@ -42,7 +44,11 @@ def test_a_malformed_block_is_skipped_and_counted_never_raised() -> None:
 
 
 def test_a_block_with_no_cost_has_no_price() -> None:
-    text = 'p/m\n{"id": "m", "family": "f", "release_date": "2026-01-01", "capabilities": {"toolcall": true}}\n'
+    body = (
+        '{"id": "m", "family": "f", "release_date": "2026-01-01",'
+        ' "capabilities": {"toolcall": true}}'
+    )
+    text = f"p/m\n{body}\n"
     (entry,), skipped = parse_catalogue(text)
     assert skipped == 0
     assert entry.price is None

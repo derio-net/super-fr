@@ -90,7 +90,7 @@ def test_the_prober_runs_the_spec_argv_in_a_fresh_cwd() -> None:
     seam = _Seam(stdout=_read("opencode-run-live.stdout"))
     got = OpenCodeProber(run_opencode=seam).probe("github-copilot/claude-haiku-4.5")
     assert got.verdict == "live"
-    (argv, cwd, timeout), = seam.calls
+    ((argv, cwd, timeout),) = seam.calls
     assert argv == [
         "opencode", "run", "--pure", "--print-logs", "--log-level", "ERROR",
         "--format", "json", "-m", "github-copilot/claude-haiku-4.5", "Reply with exactly: OK",
@@ -115,9 +115,11 @@ def test_the_prober_reads_the_catalogue_through_the_same_seam() -> None:
 
 
 def test_prober_for_covers_opencode_only() -> None:
-    assert isinstance(fr.bindings.prober_for("opencode"), OpenCodeProber)
-    assert fr.bindings.prober_for("claude-code") is None
-    assert fr.bindings.prober_for("hermes") is None
+    # `prober_for` is the monkeypatched seam (tests/conftest.py silences it);
+    # the implementation behind it is what is pinned here.
+    assert isinstance(fr.bindings.default_prober_for("opencode"), OpenCodeProber)
+    assert fr.bindings.default_prober_for("claude-code") is None
+    assert fr.bindings.default_prober_for("hermes") is None
 
 
 class _Counting:

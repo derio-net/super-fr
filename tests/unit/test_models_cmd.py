@@ -245,3 +245,256 @@ class TestModelsApply:
             f"apply must report discovered count for idempotent "
             f"materialization, got: {res.output!r}"
         )
+
+
+# --- spec 2026-10-06-model-binding-churn §B: probing `set`, and `check` ---------
+
+
+class _FakeProber:
+    """A prober scripted per model: ``states`` maps a model to ``live``,
+    ``unknown`` or ``dead[:hint]``; anything unlisted is live."""
+
+    def __init__(self, entries, states=None) -> None:
+        self.entries = entries
+        self.states = states or {}
+        self.probed: list[str] = []
+
+    def probe(self, model: str):
+        from fr.bindings.probe import ProbeResult
+
+        self.probed.append(model)
+        state = self.states.get(model, "live")
+        verdict, _, hint = state.partition(":")
+        detail = (
+            f"ProviderModelNotFoundError: Model not found: {model}"
+            if verdict == "dead"
+            else ("server error" if verdict == "unknown" else "")
+        )
+        return ProbeResult(verdict, detail, hint or None, 0.0)  # type: ignore[arg-type]
+
+    def catalogue(self, provider: str):
+        return [e for e in self.entries if e.provider == provider]
+
+
+def _ent(name: str, family: str, date: str, price: float = 10.0):
+    from fr.bindings.catalogue import CatalogueEntry
+
+    return CatalogueEntry(f"prov/{name}", "prov", family, date, price, True)
+
+
+ENTRIES = [
+    _ent("std", "s", "2026-01-01"),
+    _ent("std2", "s", "2026-04-01"),
+    _ent("orch", "o", "2026-01-01"),
+    _ent("orch2", "o", "2026-05-01"),
+]
+
+
+def _patch_prober(monkeypatch: pytest.MonkeyPatch, prober) -> None:
+    import fr.bindings
+
+    monkeypatch.setattr(fr.bindings, "prober_for", lambda h: prober if h == "opencode" else None)
+
+
+def _interactive(monkeypatch: pytest.MonkeyPatch, value: bool) -> None:
+    import fr.artifacts.trigger as trigger
+
+    monkeypatch.setattr(trigger, "is_interactive", lambda **_: value)
+
+
+def _set(model: str, *extra: str, tier: str = "standard", harness: str = "opencode"):
+    return runner.invoke(
+        app,
+        ["models", "set", "--harness", harness, "--tier", tier, "--model", model, *extra],
+        input=None,
+    )
+
+
+def _models_yaml(tmp_path: Path) -> Path:
+    return tmp_path / ".config/fr/models.yaml"
+
+
+class TestSetProbes:
+    def test_a_dead_model_off_a_terminal_is_refused_with_the_error_and_the_proposal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES, {"prov/std": "dead"}))
+        _interactive(monkeypatch, False)
+        res = _set("prov/std")
+        assert res.exit_code == 2, res.output
+        assert "ProviderModelNotFoundError" in res.output
+        assert "prov/std2" in res.output and "family" in res.output
+        assert not _models_yaml(tmp_path).exists()
+
+    def test_a_dead_model_on_a_terminal_asks_and_a_yes_persists_the_proposal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES, {"prov/std": "dead"}))
+        _interactive(monkeypatch, True)
+        res = runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "standard", "--model", "prov/std"],
+            input="y\n",
+        )
+        assert res.exit_code == 0, res.output
+        import yaml
+
+        assert (
+            yaml.safe_load(_models_yaml(tmp_path).read_text())["opencode"]["standard"]
+            == "prov/std2"
+        )
+        assert "prov/std → prov/std2" in res.output
+        for word in ("retired", "operator", "family"):
+            assert word in res.output
+
+    def test_a_no_on_a_terminal_persists_nothing_and_exits_2(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES, {"prov/std": "dead"}))
+        _interactive(monkeypatch, True)
+        res = runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "standard", "--model", "prov/std"],
+            input="n\n",
+        )
+        assert res.exit_code == 2
+        assert not _models_yaml(tmp_path).exists()
+
+    def test_an_unknown_probe_warns_and_persists(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES, {"prov/std": "unknown"}))
+        _interactive(monkeypatch, False)
+        res = _set("prov/std")
+        assert res.exit_code == 0, res.output
+        assert "inconclusive" in res.output
+        assert "prov/std" in _models_yaml(tmp_path).read_text()
+
+    def test_no_probe_persists_and_says_it_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        prober = _FakeProber(ENTRIES, {"prov/std": "dead"})
+        _patch_prober(monkeypatch, prober)
+        res = _set("prov/std", "--no-probe")
+        assert res.exit_code == 0, res.output
+        assert "probe skipped" in res.output
+        assert prober.probed == []
+        assert "prov/std" in _models_yaml(tmp_path).read_text()
+
+    def test_other_harnesses_persist_unprobed(self, tmp_path: Path) -> None:
+        res = _set("claude-sonnet-5", harness="claude-code")
+        assert res.exit_code == 0, res.output
+        assert "not probed (live probing covers opencode only)" in res.output
+
+    def test_a_live_model_persists_quietly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES))
+        res = _set("prov/std")
+        assert res.exit_code == 0, res.output
+        assert "substituted" not in res.output.lower()
+
+
+def _bind(tmp_path: Path, **tiers: str) -> None:
+    import yaml
+
+    path = _models_yaml(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({"opencode": tiers}))
+
+
+class TestCheck:
+    def test_one_line_per_binding_with_verdict_proposal_and_offer(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _bind(tmp_path, standard="prov/std", orchestrator="prov/orch")
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES, {"prov/std": "dead"}))
+        _interactive(monkeypatch, False)
+        res = runner.invoke(app, ["models", "check"])
+        assert res.exit_code == 1, res.output
+        lines = {
+            ln.split(":")[0].strip(): ln
+            for ln in res.output.splitlines()
+            if ln.startswith("opencode/")
+        }
+        assert "dead" in lines["opencode/standard"]
+        assert "prov/std2" in lines["opencode/standard"] and "family" in lines["opencode/standard"]
+        assert "×1.0" in lines["opencode/standard"]
+        assert "live" in lines["opencode/orchestrator"]
+        assert (
+            "offer" in lines["opencode/orchestrator"]
+            and "prov/orch2" in lines["opencode/orchestrator"]
+        )
+        # Off a terminal it only reports.
+        assert "standard: prov/std\n" in _models_yaml(tmp_path).read_text()
+
+    def test_other_harnesses_are_unprobed(self, tmp_path: Path) -> None:
+        import yaml
+
+        path = _models_yaml(tmp_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.safe_dump({"claude-code": {"standard": "claude-sonnet-5"}}))
+        res = runner.invoke(app, ["models", "check"])
+        assert res.exit_code == 0, res.output
+        assert "claude-code/standard" in res.output and "unprobed" in res.output
+
+    def test_an_operator_only_proposal_is_marked(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        entries = [_ent("std", "s", "2026-01-01", 10.0), _ent("std2", "s", "2026-04-01", 25.0)]
+        _bind(tmp_path, standard="prov/std")
+        _patch_prober(monkeypatch, _FakeProber(entries, {"prov/std": "dead"}))
+        _interactive(monkeypatch, False)
+        res = runner.invoke(app, ["models", "check"])
+        assert "operator-only" in res.output and "×2.5" in res.output
+
+    def test_on_a_terminal_a_proposal_defaults_yes_and_an_offer_defaults_no(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _bind(tmp_path, standard="prov/std", orchestrator="prov/orch")
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES, {"prov/std": "dead"}))
+        _interactive(monkeypatch, True)
+        res = runner.invoke(app, ["models", "check"], input="\n\n")
+        assert res.exit_code == 0, res.output
+        import yaml
+
+        cfg = yaml.safe_load(_models_yaml(tmp_path).read_text())["opencode"]
+        assert cfg["standard"] == "prov/std2"  # the proposal, accepted by default
+        assert cfg["orchestrator"] == "prov/orch"  # the offer, declined by default
+        assert "prov/std → prov/std2" in res.output
+
+    def test_an_offer_is_applied_only_on_an_explicit_yes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _bind(tmp_path, orchestrator="prov/orch")
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES))
+        _interactive(monkeypatch, True)
+        res = runner.invoke(app, ["models", "check"], input="y\n")
+        import yaml
+
+        assert (
+            yaml.safe_load(_models_yaml(tmp_path).read_text())["opencode"]["orchestrator"]
+            == "prov/orch2"
+        )
+        assert "upgrade" in res.output
+
+    def test_a_repo_layer_dead_binding_is_not_rewritten(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import yaml
+
+        repo = tmp_path / "repo"
+        (repo / "docs/superpowers").mkdir(parents=True)
+        (repo / "docs/superpowers/models.yaml").write_text(
+            yaml.safe_dump({"opencode": {"standard": "prov/std"}})
+        )
+        monkeypatch.chdir(repo)
+        import subprocess
+
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        _patch_prober(monkeypatch, _FakeProber(ENTRIES, {"prov/std": "dead"}))
+        _interactive(monkeypatch, True)
+        res = runner.invoke(app, ["models", "check"], input="y\n")
+        assert res.exit_code == 1, res.output
+        assert "docs/superpowers/models.yaml" in res.output
+        assert not _models_yaml(tmp_path).exists()

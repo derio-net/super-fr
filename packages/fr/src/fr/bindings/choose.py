@@ -161,13 +161,12 @@ def choose_replacement(
     if known is None and hint:
         model = hint if "/" in hint else f"{provider}/{hint}"
         if model != dead and budget() and live(model):
-            cand = by_id.get(model)
-            return Choice(model, "hint", None if cand is None else _ratio(cand.price, None))
+            return Choice(model, "hint", None)
 
     reason = (
         "no live same-family successor or tier candidate"
         if known is not None
-        else "the model is not in the catalogue, has no snapshot and the provider named no live model"
+        else "no catalogue entry or snapshot, and the provider named no live model"
     )
     return NoChoice(reason, tuple(tried))
 
