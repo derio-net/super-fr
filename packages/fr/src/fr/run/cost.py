@@ -26,8 +26,9 @@ A figure nobody observed stays `None` and prints `—`, never `0`.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -42,7 +43,7 @@ from fr.usage.file import (
 )
 
 if TYPE_CHECKING:
-    from fr.run.model import RunState
+    from fr.run.model import Attempt, RunState
 
 REPLAYED = ("migrated",)
 """Capture kinds that re-state figures rather than read transcripts."""
@@ -58,6 +59,26 @@ class StepRow:
     step: str
     usd: float | None
     turns: int | None
+    main: Figure | None = None
+    """The main thread's figure for the step (`steps_by_role.main`, R8)."""
+    subagent: Figure | None = None
+    """Its subagents' figure (`steps_by_role.subagent`)."""
+
+
+@dataclass(frozen=True)
+class PhaseRow:
+    """One agentic phase (spec 2026-10-06-cost-evidence §E, R8)."""
+
+    phase: int
+    tier: str | None
+    bound: str | None
+    ran: str | None
+    """What ran — shown only for an attempt that recorded `bound`: before run
+    version 9 a subagent attempt's `model` held the binding (gh#637)."""
+    mismatch: bool
+    executor: Figure | None = None
+    reviewer: Figure | None = None
+    orchestrator: Figure | None = None
 
 
 @dataclass(frozen=True)
@@ -155,7 +176,29 @@ def _plus_turns(a: int | None, b: int | None) -> int | None:
     return b if a is None else a + b
 
 
+def _plus_int(a: int | None, b: int | None) -> int | None:
+    return _plus_turns(a, b)
+
+
+def plus_figure(a: Figure | None, b: Figure | None) -> Figure | None:
+    """`a + b`, field by field; a field neither observed stays `None`."""
+    if b is None:
+        return a
+    if a is None:
+        return b
+    return Figure(
+        usd=_plus_usd(a.usd, b.usd),
+        turns=_plus_int(a.turns, b.turns),
+        input=_plus_int(a.input, b.input),
+        cache_write=_plus_int(a.cache_write, b.cache_write),
+        cache_read=_plus_int(a.cache_read, b.cache_read),
+        output=_plus_int(a.output, b.output),
+    )
+
+
 def summarize(entries: Iterable[SessionEntry], step_order: Sequence[str] = ()) -> Summary:
+    from fr.usage.split import MAIN, SUBAGENT
+
     summary = Summary()
     steps: dict[str, StepRow] = {name: StepRow(name, None, None) for name in step_order}
     models: dict[str, _ModelAcc] = {}
@@ -166,9 +209,13 @@ def summarize(entries: Iterable[SessionEntry], step_order: Sequence[str] = ()) -
         summary.read += 1
         for name, figure in entry.steps.items():
             row = steps.get(name, StepRow(name, None, None))
-            steps[name] = StepRow(
-                name, _plus_usd(row.usd, figure.usd), _plus_turns(row.turns, figure.turns)
+            steps[name] = replace(
+                row, usd=_plus_usd(row.usd, figure.usd), turns=_plus_turns(row.turns, figure.turns)
             )
+        for role, attr in ((MAIN, "main"), (SUBAGENT, "subagent")):
+            for name, figure in entry.steps_by_role.get(role, {}).items():
+                row = steps.get(name, StepRow(name, None, None))
+                steps[name] = replace(row, **{attr: plus_figure(getattr(row, attr), figure)})
         for model, m in entry.models.items():
             acc = models.setdefault(model, _ModelAcc())
             acc.input += m.input
@@ -191,6 +238,122 @@ def summarize(entries: Iterable[SessionEntry], step_order: Sequence[str] = ()) -
         for model, acc in models.items()
     ]
     return summary
+
+
+_PHASE_UNIT = re.compile(r"^phase/(\d+)/(implement-phase|review-phase)$")
+
+
+def phase_rows(state: RunState, entries: Iterable[SessionEntry]) -> list[PhaseRow]:
+    """One row per agentic phase, in phase order (spec §E).
+
+    Tier, bound and ran come from the phase's latest non-synthesized
+    `implement-phase` attempt; the mismatch mark compares ran and bound by
+    `fr.models.model_family`, and an unobserved `ran` is never a mismatch.
+    Figures sum `units` across `entries`; the phase's orchestrator is the sum
+    over its implement and review units."""
+    from fr.models import model_family
+
+    phases: set[int] = set()
+    latest: dict[int, Attempt] = {}
+    for record in state.steps.values():
+        for key, unit in (record.units or {}).items():
+            match = _PHASE_UNIT.match(key)
+            if match is None:
+                continue
+            n = int(match.group(1))
+            phases.add(n)
+            if match.group(2) == "implement-phase":
+                real = [a for a in unit.attempts if not a.synthesized]
+                if real:
+                    latest[n] = real[-1]
+    figures: dict[tuple[int, str], Figure | None] = {}
+    for entry in entries:
+        if entry.unavailable is not None:
+            continue
+        for key, roles in entry.units.items():
+            match = _PHASE_UNIT.match(key)
+            if match is None:
+                continue
+            n = int(match.group(1))
+            phases.add(n)
+            for role in ("executor", "reviewer", "orchestrator"):
+                if role in roles:
+                    figures[n, role] = plus_figure(figures.get((n, role)), roles[role])
+    rows: list[PhaseRow] = []
+    for n in sorted(phases):
+        attempt = latest.get(n)
+        tier = attempt.tier if attempt is not None else None
+        bound = attempt.bound if attempt is not None else None
+        ran = attempt.model if attempt is not None and bound is not None else None
+        rows.append(
+            PhaseRow(
+                phase=n,
+                tier=tier,
+                bound=bound,
+                ran=ran,
+                mismatch=(
+                    ran is not None
+                    and bound is not None
+                    and model_family(ran) != model_family(bound)
+                ),
+                executor=figures.get((n, "executor")),
+                reviewer=figures.get((n, "reviewer")),
+                orchestrator=figures.get((n, "orchestrator")),
+            )
+        )
+    return rows
+
+
+# --- shared formatting: `fr run cost` and the PR body's `## Cost` -------------
+
+DASH = "—"
+
+
+def usd_text(value: float | None) -> str:
+    return DASH if value is None else f"${value:,.2f}"
+
+
+def count_text(value: int | None) -> str:
+    return DASH if value is None else f"{value:,}"
+
+
+def _compact(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 10_000:
+        return f"{n / 1_000:.0f}k"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}k"
+    return str(n)
+
+
+def compact_tokens(figure: Figure | None) -> str:
+    """`cache-read / output`, compacted (`1.2M / 34k`); `—` when neither was
+    observed."""
+    if figure is None or (figure.cache_read is None and figure.output is None):
+        return DASH
+    read = DASH if figure.cache_read is None else _compact(figure.cache_read)
+    out = DASH if figure.output is None else _compact(figure.output)
+    return f"{read} / {out}"
+
+
+def figure_cells(figure: Figure | None) -> tuple[str, str, str]:
+    """`(turns, cache-read / output, dollars)` for one figure."""
+    if figure is None:
+        return DASH, DASH, DASH
+    return count_text(figure.turns), compact_tokens(figure), usd_text(figure.usd)
+
+
+def ran_text(row: PhaseRow) -> str:
+    """The model that ran, `≠`-marked when its family differs from `bound`."""
+    if row.ran is None:
+        return DASH
+    return f"{row.ran} ≠" if row.mismatch else row.ran
+
+
+FIGURE_COLUMNS = ("turns", "cache-read / output", "cost")
+STEP_ROLES = ("main", "subagent")
+PHASE_ROLES = ("executor", "reviewer", "orchestrator")
 
 
 def recompute_entries(
@@ -223,6 +386,18 @@ def recompute_entries(
 
 
 __all__ = [
+    "DASH",
+    "FIGURE_COLUMNS",
+    "PHASE_ROLES",
+    "STEP_ROLES",
+    "PhaseRow",
+    "compact_tokens",
+    "count_text",
+    "figure_cells",
+    "phase_rows",
+    "plus_figure",
+    "ran_text",
+    "usd_text",
     "ModelRow",
     "StepRow",
     "Summary",

@@ -4857,14 +4857,30 @@ def cost_cmd(
     """
     from rich.table import Table
 
-    from fr.run.cost import effective_entries, load_run_usage, recompute_entries, summarize
+    from fr.run.cost import (
+        DASH,
+        FIGURE_COLUMNS,
+        PHASE_ROLES,
+        STEP_ROLES,
+        count_text,
+        effective_entries,
+        figure_cells,
+        load_run_usage,
+        phase_rows,
+        ran_text,
+        recompute_entries,
+        summarize,
+        usd_text,
+    )
     from fr.usage.file import UsageFileError
 
     repo_root = resolve_repo_root()
     order: list[str] = []
     note = ""
+    phase_state: RunState | None = None
     if recompute:
         state = _load_or_exit(repo_root, run_id)
+        phase_state = state
         entries = recompute_entries(repo_root, state, os.environ)
         order = list(state.steps)
         note = "recomputed from this host's transcripts (not written)"
@@ -4887,7 +4903,8 @@ def cost_cmd(
             raise typer.Exit(2)
         entries, replayed, ignored = effective_entries(usage)
         try:
-            order = list(load_run_state(repo_root, run_id).steps)
+            phase_state = load_run_state(repo_root, run_id)
+            order = list(phase_state.steps)
         except RunStateError:
             order = []
         captures = ", ".join(f"{'+'.join(c.at)}@{c.host}" for c in usage.captures) or "none"
@@ -4897,22 +4914,45 @@ def cost_cmd(
         if ignored:
             note += f"; {ignored} migrated entries ignored (a live capture covers them)"
     summary = summarize(entries, order)
-
-    def usd(value: float | None) -> str:
-        return "—" if value is None else f"${value:,.2f}"
-
-    def n(value: int | None) -> str:
-        return "—" if value is None else f"{value:,}"
+    usd, n = usd_text, count_text
 
     steps = Table(title=f"Cost — {run_id}")
     steps.add_column("step", overflow="fold", min_width=12)
     steps.add_column("turns", justify="right")
     steps.add_column("cost", justify="right")
+    for role in STEP_ROLES:
+        for column in FIGURE_COLUMNS:
+            steps.add_column(f"{role} {column}", justify="right", overflow="fold")
     for row in summary.steps:
-        steps.add_row(row.step, n(row.turns), usd(row.usd))
+        steps.add_row(
+            row.step,
+            n(row.turns),
+            usd(row.usd),
+            *figure_cells(row.main),
+            *figure_cells(row.subagent),
+        )
     steps.add_section()
     steps.add_row("total", "", usd(summary.total))
     console.print(steps)
+    phases = phase_rows(phase_state, entries) if phase_state is not None else []
+    if phases:
+        by_phase = Table(title="By phase")
+        for column in ("phase", "tier", "bound", "ran"):
+            by_phase.add_column(column, overflow="fold")
+        for role in PHASE_ROLES:
+            for column in FIGURE_COLUMNS:
+                by_phase.add_column(f"{role} {column}", justify="right", overflow="fold")
+        for p in phases:
+            by_phase.add_row(
+                str(p.phase),
+                p.tier or DASH,
+                p.bound or DASH,
+                ran_text(p),
+                *figure_cells(p.executor),
+                *figure_cells(p.reviewer),
+                *figure_cells(p.orchestrator),
+            )
+        console.print(by_phase)
     models = Table(title="By model")
     models.add_column("model", overflow="fold", min_width=12)
     for column in ("input", "cache write", "cache read", "output", "cost", "source"):
