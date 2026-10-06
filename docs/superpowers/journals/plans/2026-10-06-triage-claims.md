@@ -326,3 +326,28 @@ Held batches are counted apart from blocked (Summary.held, Pass.held_by); the en
 ### p2-r6-resolved · finding [out-of-scope] · resolves p2-r6: env.issue/owner_repo scan facts linearly per op, so plan_sync is members times issues per pass (phase 2)
 
 Kept as the reviewer tagged it, since moving an out-of-scope finding to fixed is the operator's call. The improvement was made anyway: ClaimEnv builds its repo and issue indexes lazily, once per instance (5c646acfc).
+
+<!-- fr:journal kind=decision scope=plan id=p3-publish-through-gitseam created=2026-10-06T22:16:47+00:00 phase=3 -->
+### p3-publish-through-gitseam · decision · The publish command starts through gitseam, the one place a process starts (phase 3)
+
+scope_config.publish_board builds the argv (placeholders substituted inside each word, no shell) and hands it to gitseam.run_publish, which reuses _run. The full suite caught the first draft: fr.triage modules other than gitseam may not import subprocess (test_fr_triage_touches_gh_only_in_collect), and the seam pins its process starts to two.
+
+<!-- fr:journal kind=decision scope=plan id=p3-board-claim-view-needs-now created=2026-10-06T22:16:47+00:00 phase=3 -->
+### p3-board-claim-view-needs-now · decision · build_board takes me and now; the claim view is absent without them (phase 3)
+
+The board stays a pure function (no clock): me (scope id) and now are passed in, and without me there is no Held elsewhere group and no card expiry. write_board computes scope_id(facts.scope); a broken host id adds a page note instead of failing the render.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-06T22:16:47+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+The one refactor was done in GREEN: the held-issue map moved out of triage_batch_cmd into claims.held_map, so the batch verbs, the driver and the board read one definition, and the board reuses claims.held_line for its held text.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-06T22:16:47+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+publish_board and the command-level publish helper are each one short function shared by drive, board and --watch; nothing duplicated.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-06T22:16:47+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+A documentation paragraph and regenerated mirrors only; no code to clean.
