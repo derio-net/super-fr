@@ -9,3 +9,8 @@ PR #1038, head f1919d4: `gh pr view --json statusCheckRollup` returns BOTH CI ru
 ### 87c0c9aaea05 · ruled-out · The drive's own gh pr checks path is not a second cause
 
 `GhClient.pr_checks`/`pr_required_checks` shell to `gh pr checks`, which already reports the latest run per check. On a branch with no required checks `checks_verdict` falls through to the collected `PullRequest.checks` counts — the only path that sees stale runs is `collect._checks`. The same counts feed views.py, render.py, kanban.py, so one fix covers them.
+
+<!-- fr:journal kind=root-cause scope=debug id=dea78f795763 created=2026-10-06T20:17:31+00:00 -->
+### dea78f795763 · root-cause · collect._checks counts superseded check runs
+
+statusCheckRollup lists every CheckRun of every workflow run on the head commit (and every StatusContext). `_checks` never collapses entries naming the same check, so a superseded failure is counted beside its newer success. GitHub's UI and `gh pr checks` keep only the most recent run per (workflow, check name) / status context.
