@@ -4890,14 +4890,18 @@ rows:
   - id: drive-post-merge-restart
     capability: Backlog triage
     acceptance: With post_merge_restart idle in the repo's triage config, the wave driver
-      restarts idle sessions once per pass in which that repo's post_merge succeeded, reports
-      the outcome, and never holds a close-out or ends the drive over a restart failure or
-      a runner that cannot restart
+      restarts idle sessions once per pass in which that repo's post_merge succeeded,
+      reports the outcome, and never holds a close-out or ends the drive over a restart
+      failure or a runner that cannot restart
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_restart.py#test_two_closeouts_in_one_pass_restart_once_after_both_started
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_restart_idle_is_a_session_restarter_and_summarises_the_engine_report
+    status: ci
+    notes: 'phase 2: driver restarts idle sessions once per pass via SessionRestarter;
+      fake-runner tests'
     verify: none
   - id: drive-idle-session-report
     capability: Backlog triage
