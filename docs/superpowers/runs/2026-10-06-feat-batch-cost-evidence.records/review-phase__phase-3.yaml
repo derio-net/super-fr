@@ -1,0 +1,27 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-cost-evidence
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - {kind: finding, id: p3-r1, phase: 3, review_scope: in, title: "compare counted phases only from cursor phase/<n>/ keys; pre-v5 cursors list a subset and manual markers were missed", body: "e.g. 2026-09-20-fix-isolation-reap-data-loss lists phase/1, its plan has 01-04.yaml; findings/phase and the #627 before median were wrong."}
+  - {kind: finding, id: p3-r2, phase: 3, review_scope: in, title: "findings/phase ignored the journal `phase` field and divided phaseless findings in", body: "compare.py _journal_counts never read e.phase."}
+  - {kind: finding, id: p3-r3, phase: 3, review_scope: in, title: "audit claimed the #793 window was all Opus 5.5; the unbounded before set includes Opus 5 runs", body: "Audit §2 and Data limit 4."}
+  - {kind: finding, id: p3-r4, phase: 3, review_scope: in, title: "audit omitted that per-run cost includes (outside run) and that a shared session counts under each run", body: "fix-497 and fix-532 usage files share one session id."}
+  - {kind: finding, id: p3-r5, phase: 3, review_scope: in, title: "§3 (#593) figures came from an uncommitted ad hoc script, not fr usage compare as R11 requires", body: "Spec R10/§F amended (246735304) to add --steps."}
+  - {kind: finding, id: p3-r6, phase: 3, review_scope: in, title: "fr-audit skill said 'Both are read-only … write only under the cache' over three rows", body: "SKILL.md:26-28 and mirrors."}
+  - {kind: finding, id: p3-r7, phase: 3, review_scope: in, title: "_journal_counts re-implemented the journal fold via private _record_state", body: "fr.journal.model._fold is the one walk."}
+  - kind: review
+    id: p3-review-r1
+    phase: 3
+    title: Phase 3 review (fr usage compare, cost-evidence audit)
+    body: "Independent review (feature-dev:code-reviewer, Opus) of 081a20a85..8c7e543ac against R10-R11 / §F-§G, checked against real archived cursors, plans, journals and usage files. Re-open counting verified real (not 0 by construction); timestamp selectors accepted. Raised p3-r1..r7, all in scope, all fixed with tests and the audit re-quoted from corrected output. No out-of-scope findings."
+resolves:
+  - {id: p3-r1, state: fixed, body: "compare._plan_phase_count counts plan NN.yaml (live then archived), cursor fallback ^phase/(\\d+)(/|$); test_pre_v5_cursor_reads_items_and_a_v1_usage_file, test_run_missing_its_usage_file_is_dashed_but_counted."}
+  - {id: p3-r2, state: fixed, body: "phased findings divided by phases, phaseless in an `unphased` column; test_v8_row_counts_phases_turns_split_findings_and_reopens."}
+  - {id: p3-r3, state: fixed, body: "Audit §2 and Data limit 4 now say the #793 before median mixes Opus 5 and 5.5 runs; after set is Opus 5.5 only."}
+  - {id: p3-r4, state: fixed, body: "compare.mark_shared: shared column, per-set count and footnote; audit data limit for §1/§2; test_a_session_shared_by_two_runs_of_a_set_is_marked, test_unshared_sets_carry_no_footnote."}
+  - {id: p3-r5, state: fixed, body: "fr usage compare --steps (step_table/render_steps); audit §3 re-quoted from it, script removed; test_steps_* and test_cli_steps_prints_a_table_per_set."}
+  - {id: p3-r6, state: fixed, body: "fr-audit SKILL.md reworded (compare writes nothing, --steps listed); both mirrors resynced."}
+  - {id: p3-r7, state: fixed, body: "public fr.journal.model.finding_states_and_reopens on a shared _fold_full walk; test_the_journal_fold_reports_reopens_without_a_second_walk."}
+evidence: {review: p3-review-r1, reviewer: aafd33d9452ab066f, model: claude-opus-5-5}
