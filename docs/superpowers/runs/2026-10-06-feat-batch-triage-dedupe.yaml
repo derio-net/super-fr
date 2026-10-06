@@ -3,11 +3,14 @@ run: 2026-10-06-feat-batch-triage-dedupe
 workflow: fr-goal@1
 branch: feat/batch-triage-dedupe
 started: '2026-10-06T06:34:30+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-06T06:34:42+00:00'
+    state: done
+    at: '2026-10-06T07:41:43+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-06-triage-dedupe-design.md
   spec-review:
     state: pending
   plan:

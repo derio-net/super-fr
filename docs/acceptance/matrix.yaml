@@ -6446,3 +6446,58 @@ rows:
     status: not-implemented
     notes: ''
     verify: post-merge
+  - id: triage-dedupe-candidates
+    capability: triage-dedupe
+    acceptance: fr triage check lists candidate duplicate groups among open issues,
+      each pair with the reason it was flagged, excluding judged duplicates and pairs
+      judged distinct
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-dedupe-judged
+    capability: triage-dedupe
+    acceptance: A judged duplicate_of is validated at load, never unplaced, and reported
+      by check with its original's state and the gh close --duplicate-of command, which
+      fr never runs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-dedupe-board
+    capability: triage-dedupe
+    acceptance: The triage board nests a judged duplicate under its open original and
+      lists candidate duplicate groups in a Possible duplicates section
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    visual:
+      states:
+      - original-with-one-duplicate
+      - original-with-two-duplicates
+      - duplicate-of-closed-original
+      - duplicate-of-missing-original
+      - possible-duplicates-groups
+      - possible-duplicates-empty
+      - phone-width-long-reason
+      interactions:
+      - expand-original-row-shows-duplicates
+  - id: triage-dedupe-driver
+    capability: triage-dedupe
+    acceptance: The wave driver reports the candidate-group count once, in the pass
+      that finishes a wave, and never acts on duplicates
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-dedupe-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
