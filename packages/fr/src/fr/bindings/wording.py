@@ -8,6 +8,9 @@ the loud line and the decision a run journal keeps cannot drift apart.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Literal
+
 from fr.bindings.choose import Choice, is_autonomous
 
 
@@ -22,3 +25,45 @@ def proposal_text(choice: Choice) -> str:
     if not is_autonomous(choice):
         text += ", operator-only"
     return text + ")"
+
+
+@dataclass(frozen=True)
+class Substitution:
+    """One applied binding change: R7's five fields (old, new, reason,
+    decider, rule) plus the price ratio, for whoever decided it."""
+
+    harness: str
+    tier: str
+    old: str
+    new: str
+    reason: Literal["retired", "upgrade"]
+    decider: Literal["operator", "autonomous"]
+    rule: str
+    price_ratio: float | None = None
+
+
+def substitution_line(s: Substitution) -> str:
+    """R11's one loud line."""
+    return (
+        f"SUBSTITUTED {s.harness}/{s.tier}: {s.old} → {s.new} "
+        f"(reason: {s.reason}, decider: {s.decider}, rule: {s.rule})"
+    )
+
+
+def decision_title(s: Substitution) -> str:
+    return f"model substitution: {s.harness}/{s.tier} {s.old} → {s.new}"
+
+
+def decision_body(s: Substitution) -> str:
+    """The body of the run-journal `decision` that records ``s`` — the same
+    five fields fr-goal's question round writes for an operator's answer (R7)."""
+    return "\n".join(
+        [
+            f"- old: {s.old}",
+            f"- new: {s.new}",
+            f"- reason: {s.reason}",
+            f"- decider: {s.decider}",
+            f"- rule: {s.rule}",
+            f"- price ratio: {ratio_text(s.price_ratio)}",
+        ]
+    )

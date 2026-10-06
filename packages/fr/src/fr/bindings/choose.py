@@ -10,7 +10,7 @@ through `is_autonomous` alone — the one predicate for "may fr apply this unask
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from fr.bindings.catalogue import CatalogueEntry
@@ -31,6 +31,9 @@ class Choice:
     model: str
     rule: Rule
     price_ratio: float | None
+    # Every candidate probed on the way, this one last — what a refusal names
+    # (R8). Not part of a choice's identity.
+    tried: tuple[str, ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)
@@ -136,7 +139,7 @@ def choose_replacement(
             if not budget():
                 break
             if live(cand.id):
-                return Choice(cand.id, "family", _ratio(cand.price, known.price))
+                return Choice(cand.id, "family", _ratio(cand.price, known.price), tuple(tried))
 
     if known is not None and tier != "orchestrator":
         pool = [
@@ -156,13 +159,13 @@ def choose_replacement(
             if not budget():
                 break
             if live(cand.id):
-                return Choice(cand.id, "tier", _ratio(cand.price, dead_price))
+                return Choice(cand.id, "tier", _ratio(cand.price, dead_price), tuple(tried))
 
     if known is None and hint:
         model = hint if "/" in hint else f"{provider}/{hint}"
         # A hint naming another provider is not this binding's to take.
         if _provider(model) == provider and model != dead and budget() and live(model):
-            return Choice(model, "hint", None)
+            return Choice(model, "hint", None, tuple(tried))
 
     reason = (
         "no live same-family successor or tier candidate"

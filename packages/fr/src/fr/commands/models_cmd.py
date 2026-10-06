@@ -26,6 +26,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 import typer
 from rich.console import Console
 
@@ -34,7 +36,7 @@ from fr.artifacts import trigger
 from fr.bindings.choose import Choice
 from fr.bindings.health import BindingHealth, check_bindings, propose_for
 from fr.bindings.probe import default_probe_cache
-from fr.bindings.wording import proposal_text
+from fr.bindings.wording import Substitution, proposal_text, substitution_line
 from fr.commands.common import resolve_repo_root
 from fr.models import (
     REPO_MODELS_REL,
@@ -106,23 +108,13 @@ def _report_changes(result: MaterializeResult) -> None:
             console.print(f"  {change.path}: model: {change.new_model}")
 
 
-def _substitution_line(
-    harness: str, tier: str, old: str, new: str, *, reason: str, decider: str, rule: str
-) -> str:
-    """R11's one loud line, shared by every path that substitutes."""
-    return (
-        f"SUBSTITUTED {harness}/{tier}: {old} → {new} "
-        f"(reason: {reason}, decider: {decider}, rule: {rule})"
-    )
-
-
 def _apply_binding(
     harness: str,
     tier: str,
     model: str,
     *,
     old: str | None = None,
-    reason: str | None = None,
+    reason: Literal["retired", "upgrade"] | None = None,
     rule: str | None = None,
 ) -> None:
     """THE one write path for an accepted binding: `set_binding`, then
@@ -136,9 +128,7 @@ def _apply_binding(
     _report_changes(result)
     if old is not None and reason is not None and rule is not None:
         err_console.print(
-            _substitution_line(
-                harness, tier, old, model, reason=reason, decider="operator", rule=rule
-            ),
+            substitution_line(Substitution(harness, tier, old, model, reason, "operator", rule)),
             style="bold yellow",
         )
 
@@ -253,7 +243,8 @@ def check_cmd(
             console.print(_health_line(name, h))
             if h.verdict not in ("dead", "live"):
                 continue
-            wants: tuple[str, str, str, bool] | None = None  # (new, reason, rule, default)
+            # (new, reason, rule, default answer)
+            wants: tuple[str, Literal["retired", "upgrade"], str, bool] | None = None
             if h.proposal is not None:
                 wants = (h.proposal.model, "retired", h.proposal.rule, True)
             elif h.offers:
