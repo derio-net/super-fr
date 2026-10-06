@@ -54,6 +54,22 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`CAPABILITIES`, the closed set `requires:` validates against) is a
     sibling of `fr/workflow`, not inside it; `fr_dispatch.capabilities` is
     a two-line re-export kept for import back-compat.
+  - **`fr/verification`** (2026-10-06 spec, `verification-strategies`) — how a change
+    is proven: `model.py` (`StrategyManifest`, closed placeholders), `resolve.py`
+    (repo > env > wheel > marketplace, same order as workflows), `check.py`
+    (`fr verification check`), `spec_section.py` (the spec's `## Verification`
+    grammar, a prose-only section counts as none), `effective.py`
+    (`effective_strategy`/`is_post_merge`, the ONE place a row's strategy is
+    decided, in R7's order), `rows.py`, and `walk.py` (`fr verification walk`:
+    install through the repo's `.fr/candidate-install` into a tmp prefix, smoke,
+    each row's scenario, a log bound to the run, strategy, manifest hash and code
+    tree; `fr/run/observed.py`'s allowlist decides which walk command `deliver` will
+    witness). `commands/verification_cmd.py` also owns `prerelease` (the
+    `prerelease.yml` dispatch). The matrix rows carry `verify`, `scenario`,
+    `issues`, `harnesses` and `walks` (`fr/acceptance/walks.py`; matrix kind 4,
+    record kind 8). Author-facing doc: `docs/verification-strategies.md`; this
+    repo's own contract and scenarios are `.fr/candidate-install` and
+    `tests/scenarios/`, run in CI by `tests/integration/test_scenarios.py`.
   - **`fr/run`** — the durable cursor (`docs/superpowers/runs/<run-id>.yaml`,
     git-tracked), driven by `fr run {start,adopt,status,advance,resolve,check,cost}`
     (`model.py`'s `RunState`/`StepRecord`, `commands/run_cmd.py`). `advance`
@@ -351,6 +367,11 @@ tripwire will catch drift anyway:
   `test_install_copies_workflows.py` / `test_install_sh.py::TestInstallWorkflows`
   are its drift guards, and `test_tripwire_shipped_workflows.py` guards
   every shipped manifest passing `fr workflow check`.
+- **Shipped verification strategies are the same NOT-mirrored category.**
+  `plugins/super-fr/verifications/*.yaml` has no OpenCode/Hermes copy (`fr
+  verification` is a CLI surface). The canonical set is the plugin directory; a
+  generated copy rides in the `fr` wheel and `test_tripwire_shipped_verifications.py`
+  guards both the copy and that every manifest passes `fr verification check`.
 
 ## This repo dogfoods fr-isolation on itself
 
