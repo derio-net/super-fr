@@ -117,27 +117,44 @@ def host_env(host: str | None) -> dict[str, str] | None:
     return {"GITLAB_HOST": host}
 
 
-_REPO_FLAGS = ("--repo", "-R")
-
-
-def _argument_host(args: list[str]) -> str | None:
-    """The argument in *args* that would make glab pick its OWN host, else
-    None. glab honours a host carried by an argument whatever GITLAB_HOST
-    says (probed live, glab 1.89): `--repo https://h/g/p`, `--repo
-    git@h:g/p.git` and `glab api https://h/...` all call h, so the trust gate
-    on the threaded host would be bypassed (gh#1014 review). A plain path —
-    `h/g/p`, even `h/g/sub/p` — stays on the configured host as a group path,
-    and is left alone. Only the repo flags and the `api` endpoint are read:
-    an issue body may carry any URL, and is no host selector."""
-    values = [args[1]] if args[:1] == ["api"] and len(args) > 1 else []
+def _repo_values(args: list[str]) -> list[str]:
+    """Every value *args* gives glab's repo flag, in each spelling its flag
+    parser (pflag) accepts — `--repo v`, `--repo=v`, `-R v`, `-R=v`, `-Rv` —
+    all of which glab honours (probed live)."""
+    values: list[str] = []
     for i, arg in enumerate(args):
-        if arg in _REPO_FLAGS and i + 1 < len(args):
-            values.append(args[i + 1])
+        if arg in ("--repo", "-R"):
+            if i + 1 < len(args):
+                values.append(args[i + 1])
         elif arg.startswith("--repo="):
             values.append(arg.removeprefix("--repo="))
-    # A URL (`scheme://`) or an scp-like remote (`user@host:path`): a GitLab
-    # path never holds `:` or `@`.
-    return next((v for v in values if ":" in v or "@" in v), None)
+        elif arg.startswith("-R") and not arg.startswith("--"):
+            values.append(arg.removeprefix("-R").removeprefix("="))
+    return values
+
+
+def _argument_host(args: list[str], host: str | None) -> str | None:
+    """The argument in *args* that would make glab pick its OWN host, else
+    None (gh#1014 review). glab honours a host carried by an argument whatever
+    GITLAB_HOST says — probed live against glab 1.89:
+
+    - a URL or scp-like remote as the repo (`https://h/g/p`, `git@h:g/p.git`)
+      or as the `api` endpoint (`https://h/api/v4/...`);
+    - a repo PATH whose first segment is a host glab is configured for
+      (`h/g/p`), its own default gitlab.com, or the threaded host itself.
+
+    Any other first segment — a dotted group like `my.group` included — stays
+    a group path on the configured host, and is left alone. Only the repo flag
+    and the `api` endpoint are read: an issue body may carry any URL, and is
+    no host selector."""
+    values = _repo_values(args)
+    endpoint = args[1:2] if args[:1] == ["api"] else []
+    # A GitLab path never holds `:` or `@`; a URL or remote always does.
+    if hit := next((v for v in values + endpoint if ":" in v or "@" in v), None):
+        return hit
+    hosts = known_hosts() | {"gitlab.com"} | ({host.lower()} if host else set())
+    # Lowercased although glab compares case-sensitively: refusing more is safe.
+    return next((v for v in values if v.split("/", 1)[0].lower() in hosts), None)
 
 
 def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = None) -> str:
@@ -158,7 +175,7 @@ def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = No
     `--repo` (gh#742); `None` keeps this process's. A host glab is not logged
     into is refused first (`host_env`, gh#1014), and so is an argument that
     would make glab pick a host of its own (`_argument_host`)."""
-    if (arg := _argument_host(args)) is not None:
+    if (arg := _argument_host(args, host)) is not None:
         raise GlabHostRefusedError(
             f"glab argument {arg!r} names its own host; fr points glab at a host "
             "only through GITLAB_HOST, where the trust gate checks it"

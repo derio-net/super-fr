@@ -364,6 +364,9 @@ def test_a_raw_gh_failure_is_still_classified_by_its_text() -> None:
         ["issue", "view", "1", "-R", "git@evil.invalid:g/p.git"],
         ["issue", "view", "1", "--repo", "ssh://git@evil.invalid/g/p.git"],
         ["api", "https://evil.invalid/api/v4/user"],
+        # Every pflag spelling of the repo flag (probed live: both redirect).
+        ["mr", "view", "1", "-R=https://evil.invalid/g/p"],
+        ["mr", "view", "1", "-Rhttps://evil.invalid/g/p"],
     ],
 )
 def test_an_argument_naming_its_own_host_is_refused(recorder: _Recorder, args: list[str]) -> None:
@@ -419,3 +422,32 @@ def test_an_empty_host_is_no_host(recorder: _Recorder, tmp_path: Path) -> None:
     recorder.out = json.dumps({"state": "opened"})
     RealGlabClient(host="").view_issue("g/p", 1)
     assert recorder.calls[-1][1] is None
+
+
+@pytest.mark.parametrize(
+    "repo",
+    ["gitlab.example/g/p", "GitLab.Example/g/sub/p", "gitlab.com/g/p", "trusted.example/g/p"],
+)
+def test_a_repo_path_led_by_a_host_glab_knows_is_refused(recorder: _Recorder, repo: str) -> None:
+    """glab reads `HOST/group/proj` as a host when HOST is one it is configured
+    for (probed live: `--repo other.invalid/g/p` called other.invalid with
+    GITLAB_HOST=gitlab.com) — a ':'/'@'-free redirect. gitlab.com and the
+    threaded host are always known to glab."""
+    with pytest.raises(GlabHostRefusedError, match="names its own host"):
+        _glab._run_glab(["mr", "view", "1", "--repo", repo], host="trusted.example")
+    assert recorder.calls == []
+
+
+def test_an_mr_link_whose_path_leads_with_a_known_host_never_reaches_it(
+    recorder: _Recorder,
+) -> None:
+    url = "https://gitlab.com/gitlab.example/g/p/-/merge_requests/1"
+    with pytest.raises(GlabHostRefusedError):
+        RealGlabClient().pr_status_by_url(url)
+    assert recorder.calls == []
+
+
+def test_a_dotted_group_glab_does_not_know_is_still_a_group(recorder: _Recorder) -> None:
+    """GitLab group paths may hold dots; only a host glab KNOWS is a redirect."""
+    _glab._run_glab(["mr", "view", "1", "--repo", "my.group/proj"], host="gitlab.example")
+    assert len(recorder.calls) == 1
