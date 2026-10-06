@@ -24,3 +24,8 @@ views.cancelled_waves: finished waves whose every batch is cancelled or abandone
 ### fix-1001 · finding [fixed] · Wave table stacks into labelled cards under 480px
 
 wave_table cells carry data-label and the table is 'grid stack'; GRID_CSS adds a <=480px block that turns rows into cards with the column name before each value. Verified live at 390px: wrapper scrollWidth == clientWidth (343), nothing wraps mid-id. test_the_phone_gutter_is_sixteen_pixels now reads every phone media block. Test: test_the_wave_table_stacks_into_labelled_cards_at_phone_width.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-10-06T08:37:35+00:00 -->
+### review-1 · review · Independent review: no blocking findings
+
+An independent read-only reviewer checked the HeadMovedError order, the head the stop is recorded at, clearing, the drive lock, hint precedence, wave-key sorting, the history index and CSS scope: all correct. It made four minor findings. (1) Each pass rewrote the stop with a new time: fixed, record_stop skips the same head+reason (test_the_same_stop_again_keeps_the_first_time). (2) An unknown PR head keeps a stop live while the PR is open: by design and documented, no change. (3) Stops for batches whose PR closed are never pruned: cosmetic, since they are never shown; out of scope, not filed. (4) Test gap: the HeadMovedError guard was already pinned (test_a_moved_head_is_not_recorded_as_a_stop), and the non-open-PR guard is now pinned (test_a_merge_stop_on_a_pr_no_longer_open_no_longer_counts).
