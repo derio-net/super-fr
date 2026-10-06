@@ -124,6 +124,78 @@ def test_a_closeout_the_runner_fails_to_start_is_not_left_recorded(
     assert len(runner.dispatched) == 1
 
 
+# ------------------------------- gh#931: a failed runner dispatch is retried
+
+
+BUSY = (
+    'herdr agent start failed: {"error":{"code":"agent_pane_busy","message":"agent target '
+    'pane w2:p54 is not an available shell"},"id":"cli:agent:start"}'
+)
+
+
+def _failing_first(runner: FakeRunner, n: int) -> list[str]:
+    """The runner's first *n* dispatches raise herdr's `agent_pane_busy`, then it starts."""
+    tries: list[str] = []
+    real = runner.dispatch
+
+    def _dispatch(item: Any) -> str | None:
+        tries.append(item.id)
+        if len(tries) <= n:
+            raise RuntimeError(BUSY)
+        return real(item)
+
+    runner.dispatch = _dispatch  # type: ignore[method-assign]
+    return tries
+
+
+def test_a_closeout_the_runner_fails_to_start_does_not_end_the_loop_and_is_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """gh#931: one failed dispatch used to end loop mode; it is now reported once per
+    cause, as a refused merge is (rg-4), and started on a later pass."""
+    _merged(world, tmp_path)
+    checkout.released = True
+    tries = _failing_first(runner, 2)
+    _naps_until(monkeypatch, 3)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("agent_pane_busy") == 1
+    assert tries == [CLOSEOUT_ITEM] * 3
+    assert [i.id for i in runner.dispatched] == [CLOSEOUT_ITEM]
+    assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
+
+
+def test_a_batch_the_runner_fails_to_dispatch_does_not_end_the_loop_and_is_reported_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _proposed(world, tmp_path, 1)
+    tries = _failing_first(runner, 2)
+    _naps_until(monkeypatch, 3)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("agent_pane_busy") == 1
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1"]
+    assert len(tries) == 3
+    assert _events(tmp_path, "b1") == ["dispatch"]
+
+
+def test_once_exits_1_on_a_failed_batch_dispatch_and_the_pass_goes_on(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """`--once` keeps its exit code; the failure stops only its own batch, so the next
+    batch in the same pass is still dispatched."""
+    _proposed(world, tmp_path, 2)
+    _failing_first(runner, 1)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 1, out
+    first, second = _lines(out, "dispatch")
+    assert first.startswith("dispatch b1: stopped: runner `fake` failed to dispatch")
+    assert second == f"dispatch b2: dispatched to fake as {REPO}/run/batch-b2"
+    assert _events(tmp_path, "b1") == []
+
+
 # ------------------------------------------ gh#921 (1): a repo collect skipped
 
 

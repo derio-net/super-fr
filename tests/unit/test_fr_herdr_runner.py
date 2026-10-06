@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -163,8 +164,139 @@ def test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it(herdr: _Herdr
         "agent", "start", name, "--kind", "claude", "--pane", "w2:p1K",
         "--", "--model", "claude-opus-5-5",
     ]  # fmt: skip
-    assert prompt == ["agent", "prompt", name, "/fr-goal Separate lifecycles"]
+    assert prompt == [
+        "agent", "prompt", name, "/fr-goal Separate lifecycles",
+        "--wait", "--until", "working", "--until", "blocked", "--timeout", "30000",
+    ]  # fmt: skip
     assert handle == "w2:p1K"
+
+
+# ------------------------------------- gh#931 / gh#956: a ready pane, a submitted brief
+
+
+@pytest.fixture
+def sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    naps: list[float] = []
+    monkeypatch.setattr(herdr_runner, "_sleep", naps.append)
+    return naps
+
+
+def _refusal(name: str) -> herdr_runner.HerdrError:
+    """The `HerdrError` `_run_herdr` raises for a herdr error envelope fixture."""
+    envelope = _fixture(name)
+    return herdr_runner.HerdrError(
+        f"herdr {envelope['id']} failed: {json.dumps(envelope)}", code=envelope["error"]["code"]
+    )
+
+
+def _refusing(herdr: _Herdr, refusals: dict[str, list[herdr_runner.HerdrError]]) -> Any:
+    """`herdr` with the first calls of each verb (`"agent start"`) raising its errors."""
+    left = {verb: list(errors) for verb, errors in refusals.items()}
+
+    def fake(args: list[str]) -> dict[str, Any]:
+        errors = left.get(" ".join(args[:2]))
+        if errors:
+            herdr.calls.append(list(args))
+            raise errors.pop(0)
+        return herdr(args)
+
+    return fake
+
+
+def test_run_herdr_carries_herdrs_error_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    stderr = (FIXTURES / "agent-start-pane-busy.json").read_text(encoding="utf-8")
+
+    def run(argv: list[str], **kw: Any) -> Any:
+        raise subprocess.CalledProcessError(1, argv, output="", stderr=stderr)
+
+    monkeypatch.setattr(herdr_runner.subprocess, "run", run)
+    with pytest.raises(herdr_runner.HerdrError, match="not an available shell") as caught:
+        herdr_runner._run_herdr(["agent", "start", "x"])
+    assert caught.value.code == "agent_pane_busy"
+
+
+def test_a_failure_without_an_envelope_has_no_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    def run(argv: list[str], **kw: Any) -> Any:
+        raise subprocess.CalledProcessError(2, argv, output="", stderr="usage: herdr ...")
+
+    monkeypatch.setattr(herdr_runner.subprocess, "run", run)
+    with pytest.raises(herdr_runner.HerdrError) as caught:
+        herdr_runner._run_herdr(["agent", "start", "x"])
+    assert caught.value.code is None
+
+
+def test_a_pane_whose_shell_is_not_up_yet_is_retried(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    """gh#931: `agent start` right after `tab create` can find the shell still starting."""
+    busy = _refusal("agent-start-pane-busy.json")
+    monkeypatch.setattr(
+        herdr_runner, "_run_herdr", _refusing(herdr, {"agent start": [busy, busy]})
+    )
+    assert HerdrRunner.from_env().dispatch(_item()) == "w2:p1K"
+    verbs = [c[:2] for c in herdr.calls]
+    assert verbs == [["tab", "create"], *[["agent", "start"]] * 3, ["agent", "prompt"]]
+    assert len(sleeps) == 2
+
+
+def test_a_pane_still_busy_at_the_bound_fails_and_closes_the_tab(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    busy = [_refusal("agent-start-pane-busy.json")] * 100
+    monkeypatch.setattr(herdr_runner, "_run_herdr", _refusing(herdr, {"agent start": busy}))
+    with pytest.raises(herdr_runner.HerdrError, match="not an available shell"):
+        HerdrRunner.from_env().dispatch(_item())
+    starts = [c for c in herdr.calls if c[:2] == ["agent", "start"]]
+    assert len(starts) == herdr_runner.PANE_BUSY_TRIES
+    assert sum(sleeps) <= 60  # bounded: a pane that never comes up fails the dispatch
+    assert herdr.calls[-1] == ["tab", "close", "w2:t1H"]
+    assert ["agent", "prompt"] not in [c[:2] for c in herdr.calls]
+
+
+def test_another_start_refusal_is_not_retried(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    """`agent_not_ready` is a dialog the operator must answer (herdr --skill), not a race."""
+    blocked = herdr_runner.HerdrError("herdr agent start failed: blocked", code="agent_not_ready")
+    monkeypatch.setattr(herdr_runner, "_run_herdr", _refusing(herdr, {"agent start": [blocked]}))
+    with pytest.raises(herdr_runner.HerdrError, match="blocked"):
+        HerdrRunner.from_env().dispatch(_item())
+    assert sleeps == []
+    assert herdr.calls[-1] == ["tab", "close", "w2:t1H"]
+
+
+def test_a_stalled_brief_is_submitted_with_enter_and_confirmed(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gh#956: the brief sat in the input box, unsubmitted. herdr says not to send it
+    again (it may be there already); one Enter submits what is there."""
+    stalled = _refusal("agent-prompt-stalled.json")
+    monkeypatch.setattr(herdr_runner, "_run_herdr", _refusing(herdr, {"agent prompt": [stalled]}))
+    item = _item()
+    assert HerdrRunner.from_env().dispatch(item) == "w2:p1K"
+    name = agent_name(item.id)
+    prompt, enter, wait = herdr.calls[-3:]
+    assert prompt[:3] == ["agent", "prompt", name]
+    assert enter == ["agent", "send-keys", name, "enter"]
+    assert wait == [
+        "agent", "wait", name, "--until", "working", "--until", "blocked", "--timeout", "10000",
+    ]  # fmt: skip
+    assert sum(1 for c in herdr.calls if c[:2] == ["agent", "prompt"]) == 1  # never re-sent
+
+
+def test_a_brief_still_unsubmitted_after_enter_fails_loudly_and_closes_the_tab(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stalled = _refusal("agent-prompt-stalled.json")
+    timeout = herdr_runner.HerdrError("herdr agent wait failed: timed out", code="timeout")
+    monkeypatch.setattr(
+        herdr_runner,
+        "_run_herdr",
+        _refusing(herdr, {"agent prompt": [stalled], "agent wait": [timeout]}),
+    )
+    with pytest.raises(herdr_runner.HerdrError, match="not submitted"):
+        HerdrRunner.from_env().dispatch(_item())
+    assert herdr.calls[-1] == ["tab", "close", "w2:t1H"]
 
 
 def test_a_failed_tab_create_starts_nothing(herdr: _Herdr, monkeypatch: pytest.MonkeyPatch) -> None:

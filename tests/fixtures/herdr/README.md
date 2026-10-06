@@ -23,3 +23,12 @@
   0.9.1) from `herdr workspace focus <focused workspace_id>` and `herdr tab focus
   <focused tab_id>` (focusing what was already focused, so nothing moved for the
   operator). Redaction: the tab label became `example-tab-1`; shape unchanged.
+- `agent-start-pane-busy.json` — captured live 2026-10-06 (herdr 0.9.1, stderr of
+  a failed `herdr agent start`): run straight after `herdr workspace create` in a
+  scratch workspace, it lost the race to the new shell in 1 of 6 tries (gh#931).
+  Only the pane id was changed, to match `tab-create.json`'s root pane.
+- `agent-prompt-stalled.json` — NOT a live capture: the stall is
+  timing-dependent and did not reproduce in 6 tries (gh#956). The code
+  `agent_prompt_stalled` is herdr's documented one (`herdr agent prompt --help`,
+  `herdr --skill`); the envelope is the shape of the captured `agent-start-pane-busy.json`
+  and the message is invented. `fr_herdr` reads only `.error.code`.

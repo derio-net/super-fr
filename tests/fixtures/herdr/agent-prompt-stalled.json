@@ -1,0 +1,1 @@
+{"error":{"code":"agent_prompt_stalled","message":"agent b-lifecycle-0000 showed no activity after the prompt was submitted"},"id":"cli:agent:prompt"}
