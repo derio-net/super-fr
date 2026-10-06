@@ -562,3 +562,24 @@ def test_once_never_restarts(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert execs == []
+
+
+def test_a_restart_that_cannot_exec_says_why_and_how_to_resume(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, sleeps: list[float],
+) -> None:  # fmt: skip
+    """review: the interpreter can vanish mid-reinstall; a traceback is no answer."""
+    world.config = {"post_merge": ["./scripts/install.sh"]}
+    _merged(world, tmp_path)
+    checkout.released = True
+    monkeypatch.setattr(triage_batch_cmd, "_installed_version", lambda: "99.0.0")
+
+    def _execv(path: str, argv: list[str]) -> None:
+        raise FileNotFoundError(2, "No such file or directory", path)
+
+    monkeypatch.setattr(triage_batch_cmd.os, "execv", _execv)
+    result = _drive_named(tmp_path, "--yes")
+    assert result.exit_code == 1, result.output
+    assert "could not restart" in result.output
+    assert "fr triage batch drive" in result.output
+    assert not (tmp_path / "drive.lock").exists()

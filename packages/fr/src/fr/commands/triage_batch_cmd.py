@@ -2756,4 +2756,11 @@ def batch_drive_command(
         # with the same pid and arguments, takes it as a fresh driver would.
         _say(f"restart: post_merge installed fr {restart} (this driver runs {__version__}); "
              "restarting on it")  # fmt: skip
-        _exec([sys.executable, "-m", "fr", *sys.argv[1:]])
+        try:
+            _exec([sys.executable, "-m", "fr", *sys.argv[1:]])
+        except OSError as exc:  # the interpreter moved under a reinstall: say so, not a trace
+            _fail(
+                f"could not restart on fr {restart} ({exc}); every pass so far is saved, "
+                "so start `fr triage batch drive` again with the same arguments",
+                code=1,
+            )
