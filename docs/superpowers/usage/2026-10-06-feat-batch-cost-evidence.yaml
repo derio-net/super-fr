@@ -1,0 +1,37 @@
+schema_version: 1
+run: 2026-10-06-feat-batch-cost-evidence
+captures:
+- host: h-7cb9e64c
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-06T17:34:29+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 8096ebf8-b0a5-4123-83fe-797c2f6f4890
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 64
+        cache_write: 146852
+        cache_read: 4282640
+        output: 24165
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 10
+      other:
+        usd: null
+        turns: 7
+      paperwork:
+        usd: null
+        turns: 16
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+      brainstorm:
+        usd: null
+        turns: 29
