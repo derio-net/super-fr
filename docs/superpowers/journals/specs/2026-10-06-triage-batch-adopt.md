@@ -47,3 +47,6 @@ Orchestrator call, not asked: renaming a branch under a working agent races its 
 ### d8-event-time · decision · Event time is clamped back to an existing PR's creation
 
 Orchestrator call from code (batch.of_dispatch drops PRs older than event.at): at = min(now, open PR createdAt), strictly after the last event, else refuse.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-06-triage-batch-adopt-p1 created=2026-10-06T17:34:17+00:00 -->
+### tier-2026-10-06-triage-batch-adopt-p1 · decision · tier hard: the phase changes a branch-keyed gate path (isolation marker, record, run cursor) that the edit gate and close-out rely on
