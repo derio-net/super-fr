@@ -21,11 +21,11 @@ The numbers are not yours to compute. `fr usage` reads the harness store, classi
 | `fr usage collect --session <id> [--harness opencode\|hermes]` | one session (default harness: claude-code) |
 | `fr usage report --run <id> [--run <id>…] --format table` | per model, activity, sub-activity and step |
 | `fr usage report --session <id>… --format html -o <file>` | the same as one self-contained page |
-| `fr usage compare --before <date\|timestamp\|run> --after <date\|timestamp\|run>` | two sets of runs from the committed usage files, cursors and plan journals: phases, turns, main and subagent cache-read and output, cost (and how many runs were priced), review findings per phase, re-opened findings; per-run rows plus per-set medians and `n` |
+| `fr usage compare --before <date\|timestamp\|run> --after <date\|timestamp\|run>` | two sets of runs from the committed usage files, cursors and plan journals: phases, turns, main and subagent cache-read and output, cost (and how many runs were priced), review findings per phase, re-opened findings; per-run rows plus per-set medians and `n`; `--steps` adds the main session's per-step turns, tokens, cost and $/turn |
 
-Both are read-only: they read a run cursor and the harness store, and write only
-under the cache, anywhere, even with a stale cursor. `report` reads any uncollected
-session live. Pass `--repo <path>` when the cursor lives in another checkout.
+`collect` and `report` read a run cursor and the harness store and write only under
+the cache; `report` reads any uncollected session live. `compare` reads committed
+files and writes nothing. Pass `--repo <path>` when the cursor lives in another checkout.
 
 ## Choosing what to compare
 

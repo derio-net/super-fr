@@ -190,7 +190,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     CLI: `fr usage collect|report|backfill|compare` (`commands/usage_cmd.py`;
     `compare` — `usage/compare.py`, 2026-10-06 spec `cost-evidence` §F — is the
     before/after tool: two sets of runs, selected by ISO date/timestamp or run id,
-    over committed usage files, cursors of every version and plan journals; pure
+    over committed usage files, cursors of every version and plan journals; phases
+    from the plan folder, `--steps` for the main session's per-step figures; pure
     engine, read-only, `—` for any missing input); the
     cache lives under `$HOME/.cache/fr/usage/`, so `usage` is in
     `READ_ONLY_COMMANDS` (`backfill` only writes archive files: it creates
