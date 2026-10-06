@@ -308,17 +308,16 @@ def dependency_state(dep_id: str, batches: Sequence[Batch], facts: Facts) -> Dep
 CloseoutState = Literal["none", "started", "archived"]
 
 
-def closeout_state(batch: Batch, facts: Facts) -> CloseoutState:
+def closeout_state(batch: Batch) -> CloseoutState:
     """The close-out column of `batch list`: not a stage. `started` once a `closeout`
-    event exists, `archived` once the archive PR for the batch branch is merged (or
-    the driver recorded the archive PR it merged)."""
+    event exists, `archived` once one records the archive PR as merged.
+
+    The events alone: `facts.prs` holds open PRs only, so a merged archive PR is never
+    there (gh#882). The driver records `archived` whoever merged it, the first pass
+    that sees it merged."""
     if not any(e.kind == "closeout" for e in batch.events):
         return "none"
     if any(getattr(e, "archived", None) is not None for e in batch.events):
-        return "archived"
-    last = last_dispatch(batch)
-    head = "chore/closeout-" + (last.branch if last else "").replace("/", "-")
-    if any(p.state == "MERGED" and p.head_ref == head for p in facts.prs):
         return "archived"
     return "started"
 

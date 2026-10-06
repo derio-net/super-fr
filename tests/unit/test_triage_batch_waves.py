@@ -334,10 +334,12 @@ def _closeout_batch(*, schema_events: bool = True) -> Batch:
 def test_closeout_state_none_started_archived() -> None:
     from fr.triage.batch import closeout_state
 
-    assert closeout_state(_closeout_batch(schema_events=False), _facts()) == "none"
-    assert closeout_state(_closeout_batch(), _facts()) == "started"
-    archive = _pr("b", "MERGED", 701).model_copy(update={"head_ref": "chore/closeout-feat-batch-b"})
-    assert closeout_state(_closeout_batch(), _facts(prs=[archive])) == "archived"
+    assert closeout_state(_closeout_batch(schema_events=False)) == "none"
+    assert closeout_state(_closeout_batch()) == "started"
+    started = _closeout_batch()
+    recorded = started.events[-1].model_copy(update={"archived": 701})
+    archived = started.model_copy(update={"events": [*started.events, recorded]})
+    assert closeout_state(archived) == "archived"  # the event, never facts.prs (gh#882)
 
 
 def test_a_closeout_event_needs_schema_3(tmp_path: Path) -> None:

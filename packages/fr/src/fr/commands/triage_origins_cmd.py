@@ -26,14 +26,16 @@ from fr.triage.origins import (
     CLASSIFICATION_FILE,
     FACTS_FILE,
     GENERATED,
+    ISSUE_LIMIT,
     ORIGINS_DIR,
     PAGE_FILE,
+    PR_LIMIT,
     Origins,
     OriginsFacts,
     check_origins,
     collect_origins,
     load_origins,
-    load_origins_facts,
+    load_scope_origins_facts,
     parse_since,
     render_origins,
     write_facts,
@@ -63,7 +65,8 @@ def _load(scope: Scope, dir_override: Path | None) -> tuple[Path, OriginsFacts, 
             f"`fr triage origins collect --{flag} {scope.target} --since YYYY-MM-DD` first"
         )
     try:
-        return target, load_origins_facts(facts_path), load_origins(target / CLASSIFICATION_FILE)
+        facts = load_scope_origins_facts(facts_path, scope)
+        return target, facts, load_origins(target / CLASSIFICATION_FILE)
     except TriageError as exc:
         raise _fail(str(exc)) from exc
 
@@ -76,12 +79,27 @@ def collect_command(
     since: Annotated[
         str, typer.Option("--since", help="Issues created on or after this date (YYYY-MM-DD).")
     ] = "",
+    issue_limit: Annotated[
+        int, typer.Option("--issue-limit", min=1, help="Issues listed per repo, newest first.")
+    ] = ISSUE_LIMIT,
+    pr_limit: Annotated[
+        int, typer.Option("--pr-limit", min=1, help="PRs listed per repo, newest first.")
+    ] = PR_LIMIT,
 ) -> None:
-    """Read the issues created since a date and write origins-facts.json."""
+    """Read the issues created since a date and write origins-facts.json.
+
+    A window one page of issues or PRs does not reach the start of is refused, never
+    collected partially: narrow --since, or raise the limit it names (gh#888).
+    """
     scope = triage_cmd._scope(repo, org)
     try:
         facts = collect_origins(
-            triage_cmd.make_forge(), scope, since=parse_since(since), now=datetime.now(UTC)
+            triage_cmd.make_forge(),
+            scope,
+            since=parse_since(since),
+            now=datetime.now(UTC),
+            issue_limit=issue_limit,
+            pr_limit=pr_limit,
         )
     except TriageError as exc:
         raise _fail(str(exc)) from exc

@@ -35,8 +35,12 @@ from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
-# The version this fr WRITES for facts.json. 4 added the `group` scope kind (wave-driver
-# §H); 3 still loads, and the first collect upgrades it. Independent of JUDGEMENTS_SCHEMA.
+# The version this fr WRITES for facts.json, on EVERY scope. 4 added the `group` scope kind
+# (wave-driver §H), and since then every scope's file carries keys a schema-3 reader
+# (closed-world) rejects: `viewer`, `judged_prs`, per-PR `author`/`cross_repo`, per-config
+# `post_merge`/`pr_authors`, nullable `checks`. Stamping a repo or org file 3 would turn
+# that reader's "unsupported schema; re-run collect" into "invalid facts" (gh#885). 3 still
+# loads, and the first collect upgrades it. Independent of JUDGEMENTS_SCHEMA.
 FACTS_SCHEMA: Literal[4] = 4
 FACTS_READS: tuple[int, ...] = (3, 4)
 # The version this fr WRITES: every engine write stamps 4 (spec
@@ -379,6 +383,11 @@ class Facts(_Strict):
         if self.kind == "group" and self.schema_ < 4:
             raise ValueError("`kind: group` needs schema 4")
         return self
+
+    def matches(self, scope: Scope) -> bool:
+        """Whether these facts were collected for *scope*: same kind, same name. A
+        `--dir` can point any command at any directory, so a reader checks (gh#886)."""
+        return self.kind == scope.kind and self.scope == scope.name
 
     def config_for(self, repo: str) -> TriageConfig:
         """*repo*'s collected config, or the defaults when it declares none."""
@@ -744,6 +753,18 @@ def load_facts(path: Path) -> Facts:
         return Facts.model_validate(_check_schema(path, data, FACTS_READS, "re-run collect"))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid facts: {exc}") from exc
+
+
+def load_scope_facts(path: Path, scope: Scope) -> Facts:
+    """`load_facts`, refusing facts collected for any scope but *scope* (gh#886)."""
+    facts = load_facts(path)
+    if not facts.matches(scope):
+        raise TriageError(
+            f"{path}: these facts are for the {facts.kind} scope {facts.scope}, not the "
+            f"{scope.kind} scope {scope.name}; collect this scope, or point --dir at its "
+            "own state directory"
+        )
+    return facts
 
 
 def load_judgements(path: Path) -> Judgements:

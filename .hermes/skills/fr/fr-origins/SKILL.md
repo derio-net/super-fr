@@ -26,8 +26,8 @@ Never write the facts yourself. The state is outside every repo and is never com
 
 ## The loop (a re-run of it is the sync)
 
-1. **Collect.** `fr triage origins collect --repo OWNER/REPO --since YYYY-MM-DD`. A warning that a list hit its limit means rows may be missing; say so in your report.
-2. **Check.** `fr triage origins check --repo OWNER/REPO` lists **unclassified** issues (your work queue) classifications for issues **not in the facts** (a typo, or a window that moved; never pruned for you; fix the key or leave it), and **duplicate target outside the window** (a `duplicate_of` naming an issue the facts do not hold: widen `--since`, or confirm the key). It always exits 0.
+1. **Collect.** `fr triage origins collect --repo OWNER/REPO --since YYYY-MM-DD`. A window wider than one page of issues or PRs is refused (exit 2), naming a `--since` it does cover and the limit flag (`--issue-limit`, `--pr-limit`) to raise instead: narrow the window and report the narrower one, or raise the limit to keep it. A warning that the repo list hit its limit means repos may be missing; say so in your report.
+2. **Check.** `fr triage origins check --repo OWNER/REPO` lists **unclassified** issues (your work queue), classifications for issues **not in the facts** (a typo, or a window that moved; never pruned for you; fix the key or leave it), and **duplicate target outside the window** (a `duplicate_of` naming an issue the facts do not hold: widen `--since`, or confirm the key). It always exits 0.
 3. **Classify the unclassified**, from the issue body and the code, as below.
 4. **Render.** `fr triage origins render --repo OWNER/REPO` writes `origins.html`. A figure the data cannot support shows as an em dash, never a zero; do not paper over one.
 5. **Conclude.** Fill `causes:` and link each to the batch that addresses it (`fr triage batch list` names them; a batch id that does not exist is shown as unresolved, so fix it rather than leave it).

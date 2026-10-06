@@ -625,14 +625,18 @@ def test_no_readable_repo_is_the_error() -> None:
         _collect_scope(forge, Scope.group(["example-org/alpha"]))
 
 
-def test_a_full_issue_list_and_a_full_pr_list_each_warn() -> None:
+def test_a_full_issue_list_and_a_full_pr_list_inside_the_window_each_refuse() -> None:
+    """gh#888: a full page that does not reach the window's start is refused, never
+    collected with a warning and partial counts."""
+    from fr.triage.errors import TriageError
     from fr.triage.model import Scope
 
     scope = Scope(kind="repo", target="example-org/alpha")
     forge = _ManyForge(["example-org/alpha"])
-    facts = _collect_scope(forge, scope, issue_limit=1, pr_limit=1)
-    assert any("issue list hit its limit (1)" in w for w in facts.warnings)
-    assert any("PR list hit its limit (1)" in w for w in facts.warnings)
+    with pytest.raises(TriageError) as err:
+        _collect_scope(forge, scope, issue_limit=1, pr_limit=1)
+    assert "issue list returned its newest 1" in str(err.value)
+    assert "PR list returned its newest 1" in str(err.value)
     quiet = _collect_scope(forge, scope, issue_limit=2, pr_limit=2)
     assert quiet.warnings == []
 

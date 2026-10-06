@@ -542,8 +542,18 @@ def test_a_merged_archive_pr_finishes_the_batch() -> None:
     b = _closed("x", 1, archive="chore/archive-p", run="r-x")
     merged = _archive(7, "chore/archive-p", state="MERGED", files=(f"{RUNS}/r-x.yaml",))
     got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (merged,)}))
-    assert got.actions == ()
+    # Merged by someone else: recorded once, so `batch list` reads it (gh#882).
+    assert [(a.kind, a.batch, a.pr, a.archived) for a in got.actions] == [("adopt", "x", 7, 7)]
     assert got.summary.closing == 0 and got.summary.done
+
+
+def test_a_recorded_archive_is_not_recorded_again() -> None:
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    recorded = b.events[-1].model_copy(update={"at": NOW, "archived": 7})
+    b = b.model_copy(update={"events": [*b.events, recorded]})
+    merged = _archive(7, "chore/archive-p", state="MERGED", files=(f"{RUNS}/r-x.yaml",))
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (merged,)}))
+    assert got.actions == ()
 
 
 # --------------------------------------------------------------- lines (R13)

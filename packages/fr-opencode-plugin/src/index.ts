@@ -27,15 +27,21 @@
 // session key natively), so it has no marker; parity.yaml's
 // `run-session-identity` row describes it.
 //
+// `shell.env` also carries the fr-binary pin (super-fr#746) — see ./pin.ts:
+// the fr this plugin spawns, exported for `bash` as FR_HARNESS_FR. It is the
+// OpenCode half of Claude Code's SessionStart hook:
+// super-fr-parity: fr-binary-pin.sh
+//
 // EXPORT DISCIPLINE: OpenCode calls every export of a plugin module as a
-// plugin. Helpers live in ./marker, ./idle, ./claim and ./session; this file
-// exports plugins only.
+// plugin. Helpers live in ./marker, ./idle, ./claim, ./session and ./pin; this
+// file exports plugins only.
 import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { createClaimHandler, sharedClaimed } from "./claim";
 import { createIdleHandler, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
-import { createShellEnvHandler } from "./session";
+import { createPinHandler } from "./pin";
+import { createShellEnvHandler, type ShellEnvInput, type ShellEnvOutput } from "./session";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
 // path-carrying tools fail closed. Bash is separately declared as ungated in
@@ -135,13 +141,18 @@ export async function FrIsolationRequired(ctx: {
     directory: ctx.worktree || ctx.directory,
     claimed: sharedClaimed(),
   });
+  const exportSession = createShellEnvHandler();
+  const exportPin = createPinHandler();
   return {
     event: createIdleHandler({
       client: ctx.client,
       directory: ctx.worktree || ctx.directory,
       actedOn: sharedActedOn(),
     }),
-    "shell.env": createShellEnvHandler(),
+    "shell.env": async (input: ShellEnvInput, output: ShellEnvOutput) => {
+      await exportSession(input, output);
+      await exportPin(input, output);
+    },
     "tool.execute.before": async (input: { tool: string; sessionID?: string }, output: unknown) => {
       // Before the gate, and whatever the tool: a child's first call of ANY
       // kind is the earliest moment it can be named. Never throws.
