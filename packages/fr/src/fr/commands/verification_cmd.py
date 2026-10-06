@@ -12,7 +12,8 @@ The group is deliberately NOT in `fr.artifacts.trigger.READ_ONLY_COMMANDS`: a
 later subcommand (`walk`) reads the matrix with the live parser and must not
 run over a stale one, and the gate exempts top-level names only.
 
-Exit codes: 0 clean, 2 any failure or a usage error.
+Exit codes: 0 clean, 2 any failure or a usage error (a git that cannot answer
+included — refused, never a traceback).
 """
 
 from __future__ import annotations
@@ -111,6 +112,7 @@ def walk_cmd(
     """Install the candidate into a throwaway prefix, smoke it, run each row's
     scenario, and write the log `deliver` verifies (spec §C)."""
     from fr.acceptance.model import AcceptanceError
+    from fr.git import GitUnavailableError
     from fr.harness import HarnessError
     from fr.harness.detect import detect_harness
     from fr.requirements import load_spec_matrix
@@ -172,6 +174,7 @@ def walk_cmd(
         StrategyError,
         WalkError,
         HarnessError,
+        GitUnavailableError,
     ) as e:
         raise refuse(str(e)) from e
 

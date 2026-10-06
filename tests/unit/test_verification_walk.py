@@ -386,3 +386,22 @@ def test_a_log_with_no_header_is_not_a_walk_log() -> None:
 
     with pytest.raises(WalkError, match="not a walk log"):
         parse_walk_log("all green, trust me\n")
+
+
+def test_git_that_cannot_answer_is_a_refusal_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p3-r9: `code_tree` / `dirty_code_paths` raise GitUnavailableError."""
+    import fr.run.code_tree as code_tree_mod
+    from fr.git import GitUnavailableError
+
+    def broken(_root: Path) -> list[str]:
+        raise GitUnavailableError("`git status` failed: not a git repository")
+
+    monkeypatch.setattr(code_tree_mod, "dirty_code_paths", broken)
+
+    result = _walk(_repo(tmp_path))
+
+    assert result.exit_code == 2
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "refused" in result.output and "git status" in result.output
