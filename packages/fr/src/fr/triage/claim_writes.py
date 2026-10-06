@@ -48,6 +48,36 @@ def _read(
     return comments, read_claims(comments, trusted).claims
 
 
+def _add_label(client: GhClient, repo: str, number: int) -> None:
+    """Put `fr:claimed` on the issue (idempotent): every write that leaves an un-released
+    marker standing also leaves the label, so a reader filtering on it sees the claim."""
+    client.ensure_labels(repo, [FR_CLAIMED])
+    client.edit_issue_labels(repo, number, add=frozenset({FR_CLAIMED.name}), remove=frozenset())
+
+
+def _remove_label(client: GhClient, repo: str, number: int, trusted: Collection[str]) -> None:
+    """Remove `fr:claimed`, then re-read: a claim that landed after the caller's read
+    gets its label back (p1-r5)."""
+    client.edit_issue_labels(repo, number, add=frozenset(), remove=frozenset({FR_CLAIMED.name}))
+    _, claims = _read(client, repo, number, trusted)
+    if claims:
+        _add_label(client, repo, number)
+
+
+def _drop_orphan_label(client: GhClient, repo: str, number: int, trusted: Collection[str]) -> None:
+    """Best effort after a failed claim: remove the label this call added unless an
+    un-released claim still stands. A failure here is swallowed; the original error is
+    the one to report."""
+    try:
+        _, claims = _read(client, repo, number, trusted)
+        if not claims:
+            client.edit_issue_labels(
+                repo, number, add=frozenset(), remove=frozenset({FR_CLAIMED.name})
+            )
+    except Exception:  # noqa: BLE001 -- cleanup must not mask the original failure
+        pass
+
+
 def _own(claims: list[Claim], me: str) -> Claim | None:
     return next((c for c in claims if c.signer == me), None)
 
@@ -94,17 +124,22 @@ def claim(
             update={"batch": batch, "heartbeat": now, "expires": now + expiry}
         )
         client.edit_issue_comment(repo, own.comment_id, render_marker(marker))
+        _add_label(client, repo, number)
         return Done("rewritten", own.comment_id)
-    client.ensure_labels(repo, [FR_CLAIMED])
-    client.edit_issue_labels(repo, number, add=frozenset({FR_CLAIMED.name}), remove=frozenset())
+    _add_label(client, repo, number)
     marker = Marker(signer=me, batch=batch, claimed=now, heartbeat=now, expires=now + expiry)
     body = render_marker(marker)
-    client.comment_issue(repo, number, body)
+    try:
+        client.comment_issue(repo, number, body)
+    except BaseException:
+        _drop_orphan_label(client, repo, number, trusted)
+        raise
     comments, claims = _read(client, repo, number, trusted)
     posted, author = _posted_id(comments, body)
     if _own(claims, me) is None:
         if posted is not None:
             client.edit_issue_comment(repo, posted, _released(marker, now))
+        _drop_orphan_label(client, repo, number, trusted)
         raise ClaimError(
             f"{repo}#{number}: this scope's marker was posted as `{author or 'unknown'}`, "
             "which is neither the viewer, a `pr_authors` login (.fr/triage.yaml) nor the repo's "
@@ -142,6 +177,7 @@ def refresh(
         return Done("none")
     marker = own.marker.model_copy(update={"heartbeat": now, "expires": now + expiry})
     client.edit_issue_comment(repo, own.comment_id, render_marker(marker))
+    _add_label(client, repo, number)
     return Done("refreshed", own.comment_id)
 
 
@@ -176,7 +212,7 @@ def release(
     by = me if signer != me else None
     client.edit_issue_comment(repo, target.comment_id, _released(target.marker, now, by=by))
     if not [c for c in claims if c.signer != signer]:
-        client.edit_issue_labels(repo, number, add=frozenset(), remove=frozenset({FR_CLAIMED.name}))
+        _remove_label(client, repo, number, trusted)
     return Done("released", target.comment_id)
 
 

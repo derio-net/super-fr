@@ -223,3 +223,73 @@ def test_release_for_the_batch_its_marker_names_releases_it(gh: FakeGhClient) ->
     _claim(gh, batch="new")
     out = cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, batch="new")
     assert out == cw.Done("released", 1001)
+
+
+# ------------------------------------------- label integrity (review p1-r5)
+
+
+def test_release_restores_the_label_when_a_claim_lands_after_its_read(
+    gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _claim(gh)
+    edit = gh.edit_issue_labels
+
+    def racing(repo: str, number: int, *, add: frozenset[str], remove: frozenset[str]) -> None:
+        edit(repo, number, add=add, remove=remove)
+        if remove:  # another scope's claim lands between our read and our label removal
+            _foreign(gh, at=NOW + timedelta(minutes=1), expires=NOW + DAY, cid=2000)
+            gh.issues[(REPO, 1)].labels.discard("fr:claimed")
+
+    monkeypatch.setattr(gh, "edit_issue_labels", racing)
+    out = cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED)
+    assert out == cw.Done("released", 1001)
+    assert "fr:claimed" in gh.issues[(REPO, 1)].labels
+
+
+def test_refresh_puts_back_a_missing_label(gh: FakeGhClient) -> None:
+    _claim(gh)
+    gh.issues[(REPO, 1)].labels.discard("fr:claimed")
+    cw.refresh(gh, REPO, 1, me=ME, expiry=DAY, now=NOW + timedelta(hours=7), trusted=TRUSTED)
+    assert "fr:claimed" in gh.issues[(REPO, 1)].labels
+
+
+def test_an_in_place_rewrite_puts_back_a_missing_label(gh: FakeGhClient) -> None:
+    _claim(gh, batch="old")
+    gh.issues[(REPO, 1)].labels.discard("fr:claimed")
+    assert _claim(gh, batch="new") == cw.Done("rewritten", 1001)
+    assert "fr:claimed" in gh.issues[(REPO, 1)].labels
+
+
+def test_a_refused_own_marker_leaves_no_orphan_label(gh: FakeGhClient) -> None:
+    with pytest.raises(cw.ClaimError):
+        cw.claim(gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=frozenset())
+    assert "fr:claimed" not in gh.issues[(REPO, 1)].labels
+
+
+def test_a_failed_marker_post_leaves_no_orphan_label(
+    gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.fakes import FakeGhError
+
+    def failing(repo: str, number: int, body: str) -> None:
+        raise FakeGhError("HTTP 502")
+
+    monkeypatch.setattr(gh, "comment_issue", failing)
+    with pytest.raises(FakeGhError):
+        _claim(gh)
+    assert "fr:claimed" not in gh.issues[(REPO, 1)].labels
+
+
+def test_a_failed_marker_post_keeps_the_label_another_claim_needs(
+    gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.fakes import FakeGhError
+
+    def failing(repo: str, number: int, body: str) -> None:
+        _foreign(gh, at=NOW, expires=NOW + DAY, cid=2000)
+        raise FakeGhError("HTTP 502")
+
+    monkeypatch.setattr(gh, "comment_issue", failing)
+    with pytest.raises(FakeGhError):
+        _claim(gh)
+    assert "fr:claimed" in gh.issues[(REPO, 1)].labels
