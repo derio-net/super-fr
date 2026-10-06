@@ -359,7 +359,9 @@ rows say so.
 
 ## Implementation Plans
 
-(filled by fr-plan)
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-10-06-triage-dedupe | `derio-net/super-fr` | `2026-10-06-triage-dedupe` | — |
 
 ## 6. Acceptance rows
 

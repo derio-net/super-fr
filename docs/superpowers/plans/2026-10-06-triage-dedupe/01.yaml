@@ -1,0 +1,326 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Triage owns duplicates — candidates, duplicate_of/distinct_from, check, board,
+    driver, skill (R1–R11)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-dedupe-candidates
+  - triage-dedupe-judged
+  - triage-dedupe-board
+  - triage-dedupe-driver
+  - triage-dedupe-skill
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/dedupe.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/fixtures/triage/dedupe-calibration.json
+  - tests/unit/test_triage_dedupe.py
+  - tests/unit/test_triage_model.py
+  - tests/unit/test_triage_check.py
+  - tests/unit/test_triage_collect.py
+  - tests/unit/test_triage_render.py
+  - tests/unit/test_triage_batch_drive.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - tests/unit/test_fr_triage_skill_example.py
+  - docs/acceptance/*
+  - .changes/feat-batch-triage-dedupe.yaml
+  estimate_lines: 1400
+tasks:
+- number: 1
+  title: Model — duplicate_of / distinct_from on Judgement (spec §3.A, R3)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED in tests/unit/test_triage_model.py: a judgement with `duplicate_of: "Super-FR#7"` loads normalised to
+      `super-fr#7` on schemas 1, 2 and 3; `distinct_from: ["a#1", "A#1"]` is refused (listed twice); a bad key
+      (`"7"`) in either field is refused; `duplicate_of` naming the judgement's own key is refused, and so is its
+      own key in `distinct_from`; `duplicate_of: x#2` where `x#2` is judged with its own `duplicate_of` is refused
+      (chain); one key in both fields is refused; `Judgements.duplicate_targets()` returns the set of every
+      `duplicate_of` value. Every refusal raises through `load_judgements` as a `TriageError` naming the file.
+      Run `uv run pytest tests/unit/test_triage_model.py -q --no-cov` — the new tests fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN in packages/fr/src/fr/triage/model.py: add `duplicate_of: str | None = None` and
+      `distinct_from: list[str] = []` to `Judgement` with field validators reusing `_bad_keys` + `normalize_key`
+      (as `Pattern.ids` does); add a `Judgements` model validator for self reference, chains and both-fields;
+      add `duplicate_targets()`. Re-run the test file — green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: if the key-list validator is now repeated three times (`Pattern.ids`, `Feature.ids`,
+      `distinct_from`), extract one `_keys(v, what)` helper; else record the reason in the step record.
+- number: 2
+  title: Candidate engine `fr/triage/dedupe.py` (spec §3.B, R1, R2, R4)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Capture the calibration fixture from the live forge (this repo is public, derio-net's own):
+      `gh issue view N --repo derio-net/super-fr --json number,title,body,state` for 594 607 631 640 647 724 725
+      868 869 454 458, written as one JSON list to tests/fixtures/triage/dedupe-calibration.json with each body cut
+      to 2,000 characters (collect's BODY_LIMIT) and a sibling README line in the test docstring giving the
+      capture date. Never hand-write bodies.
+  - id: P1.T2.S2
+    text: |-
+      RED tests/unit/test_triage_dedupe.py: (a) the calibration fixture loaded as open `Issue`s groups 594/607/631
+      into one `CandidateGroup`, 640/647 into one, 724/725 into one, and 868/869 into one, each pair carrying a
+      non-empty reason; (b) per signal, a minimal pair: titles `deliver gate refuses X` / `deliver gate refuses X
+      again` → `title …`; two bodies sharing two rare backticked identifiers → `identifiers a_b_cd, e_f_gh`, but a
+      shared module/file name (`batch_drive`, `batch_drive.py`, segment of `fr/triage/batch_drive.py`) never
+      counts, and an identifier named by 4 open issues is not rare; `finding r2-2` + a shared `#723` → `finding
+      r2-2 (#723)`, while `finding r2-2` without a shared ref, and `finding from`, flag nothing; same theme
+      (`"Docs "` vs `"docs"`) with title Jaccard 0.27 → `theme docs, title 0.27`; phase titles `x-0-agentic` /
+      `x-1-agentic` are not a title match; (c) R4: an issue judged `duplicate_of` is in no group; a pair where one
+      side lists the other in `distinct_from` is not flagged (either side); (d) closed issues and PRs are never
+      candidates; (e) output is deterministic: groups sorted by smallest key, pairs by (a, b), reasons stable.
+      Run it — fails (module missing).
+  - id: P1.T2.S3
+    text: |-
+      GREEN: write packages/fr/src/fr/triage/dedupe.py per spec §3.B — `Pair`, `CandidateGroup`,
+      `candidates(facts, judgements)`, module constants `TITLE_MATCH = 0.5`, `TITLE_NEAR = 0.25`, `RARE = 3`,
+      `MIN_IDENT = 8`; reuse `fr.triage.batch.theme_key`. The scratch prototype the spec calibrated with is the
+      reference for the token rules (identifier leaf, module names from non-leaf `::`/`/` segments cut at the
+      first `.` plus file-leaf stems, finding id must contain a digit or hyphen). Pure: no forge, clock or model.
+      Re-run — green.
+  - id: P1.T2.S4
+    text: |-
+      REFACTOR: keep each signal a small named function returning its reason or None; run
+      `uv run ruff check packages/fr/src/fr/triage/dedupe.py` and `uv run mypy packages/fr/src` clean.
+- number: 3
+  title: check sets, unplaced, collect view list (spec §3.C, R5, R6, R7)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED tests/unit/test_triage_check.py: `classify` returns `candidates` (from dedupe) and `duplicates`:
+      an open duplicate of an open original → state `open` and command exactly
+      `gh issue close 9 --repo derio-net/super-fr --duplicate-of https://github.com/derio-net/super-fr/issues/3`;
+      a closed original → `closed` with the same command shape; a missing original → `missing`, empty command,
+      reason by spec §3.C order (a key found among `facts.prs`/`judged_prs` → "a pull request, not an issue"; an
+      `unviewed` key → its reason; a skipped repo → its reason; a collected repo → "added since the last collect;
+      run `fr triage collect` again"; else "not in any collected repo"); a closed duplicate is not listed; a group
+      scope builds `--repo` from the duplicate's own repo; a judged duplicate is never in `unplaced` (R7);
+      `to_json` carries `duplicate_candidates` and `duplicates`. Run — fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN in packages/fr/src/fr/triage/check.py: `Duplicate` dataclass, `duplicates(facts, judgements)`,
+      `CheckResult.candidates`/`duplicates` (defaulted fields), `unplaced_issues` treats judged duplicates as
+      placed, `to_json` keys. Re-run — green.
+  - id: P1.T3.S3
+    text: |-
+      RED then GREEN in tests/unit/test_triage_cli.py (or the existing check-command test module): `fr triage check`
+      text prints a `duplicate candidates (N)` section (keys, then one indented line per pair with reasons) and a
+      `duplicates (N)` section (`key → original (state)` then the command or reason) after `unplaced`; exit 0.
+      Implement in commands/triage_cmd.py `check_command`, escaping every forge string.
+  - id: P1.T3.S4
+    text: |-
+      RED then GREEN in tests/unit/test_triage_collect.py: `collect_into` views a `duplicate_of` target that is not
+      open exactly like a judged key (its closed `Issue` lands in facts; a failed view lands in `unviewed`); the
+      stderr unviewed report says "judged or named by `duplicate_of`". Implement: view list
+      `list(loaded.issues) + sorted(loaded.duplicate_targets())` (deduplicated), reword `_report` and the
+      `Unviewed` docstring (spec §3.C, sr-8).
+  - id: P1.T3.S5
+    text: |-
+      REFACTOR: no second key normaliser; every comparison through `normalize_key`/`issue_key` (check.py's own
+      docstring rule). Extend check.py's module docstring with the two new sets.
+- number: 4
+  title: Board — nested duplicates and Possible duplicates (spec §3.D, R8, R9)
+  steps:
+  - id: P1.T4.S1
+    text: "RED tests/unit/test_triage_render.py: (a) a judged open duplicate of an\
+      \ open original is absent from its\nown tier and appears inside the original's\
+      \ row in a `Duplicates` paragraph with a link and the `gh … \n--duplicate-of\
+      \ …` command in `<code>`; the original's summary has `+1 duplicate` (and `+2\
+      \ duplicates` for\ntwo); (b) a closed duplicate of an open original is nested\
+      \ with a `closed` tag and no command; (c) a\nduplicate whose original is closed\
+      \ or missing stays in its tier with tag `duplicate of <key> (closed)` /\n`(missing)`;\
+      \ (d) a `Possible duplicates` section (`id=\"possible-duplicates\"`) sits directly\
+      \ before\n`Backlog by tier`, lists each group's linked keys and pair reasons,\
+      \ all escaped; with no candidates it reads\n`No candidate duplicates among the\
+      \ open issues.`; (e) same inputs → same bytes. Run — fails."
+  - id: P1.T4.S2
+    text: |-
+      GREEN in packages/fr/src/fr/triage/render.py: compute `classify` once (already done), nest via a
+      `duplicates_by_original` map passed into `_row`, skip nested keys in the tier loop, add the tag and the
+      section (reuse existing CSS classes: `tag`, `tier-desc`, `note`; a long reason wraps — `overflow-wrap:
+      anywhere` on the new block so the phone layout keeps its 16px gutter with no horizontal scroll). Re-run —
+      green.
+  - id: P1.T4.S3
+    text: |-
+      Browser check (visual row triage-dedupe-board): render a board from a test facts/judgements pair covering
+      every named state, open it with the browser tool at desktop width and at 375px, capture each state named in
+      the row's `visual` (original-with-one-duplicate, original-with-two-duplicates, duplicate-of-closed-original,
+      duplicate-of-missing-original, possible-duplicates-groups, possible-duplicates-empty,
+      phone-width-long-reason, and the interaction expand-original-row-shows-duplicates) into a git-ignored scratch
+      dir, open every screenshot, and fill the step record's `visual:` section.
+  - id: P1.T4.S4
+    text: |-
+      REFACTOR: keep `_row`'s signature readable (one new keyword argument); no inline styles beyond what the
+      page's CSS block already does.
+- number: 5
+  title: Driver — report candidates when a wave finishes (spec §3.E, R10)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED tests/unit/test_triage_batch_drive.py: `finished_waves` returns a wave only when every member (stage not
+      cancelled/abandoned, any selection) `is_finished`, never an empty wave; `drive_pass` with
+      `unfinished_waves={2}`, wave 2 now finished and `duplicate_groups=3`, `dedupe_command="fr triage check
+      --repo o/r"` emits exactly one `Action("dedupe", "", "3 duplicate candidate groups after wave 2 finished;
+      run `fr triage check --repo o/r` to judge them")` last; nothing when `unfinished_waves is None` (first
+      pass), when the wave was already finished last pass, or when `duplicate_groups == 0`; two waves finishing
+      together → two actions, ascending. Run — fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN in batch_drive.py: `ActionKind` gains `dedupe`; `Snapshot` gains `unfinished_waves`,
+      `duplicate_groups`, `dedupe_command`; `finished_waves`; the last step of `drive_pass`. Re-run — green.
+  - id: P1.T5.S3
+    text: |-
+      RED then GREEN in tests/unit/test_triage_batch_drive_cmd.py: the drive command fills `duplicate_groups` from
+      `fr.triage.dedupe.candidates(facts, judgements)`, `dedupe_command` from its scope args, carries the previous
+      pass's unfinished waves (None on the first pass); under `--yes`, `_act` returns a `dedupe` action's detail
+      before resolving a batch (no "no batch" exit) and acts on nothing. Implement in triage_batch_cmd.py.
+  - id: P1.T5.S4
+    text: |-
+      REFACTOR: keep `drive_pass`'s docstring step list current (add the dedupe step) and the module's purity
+      statement true (no new imports of dedupe inside batch_drive.py — the count arrives on the Snapshot).
+- number: 6
+  title: Skill, mirrors, fragment, matrix (spec §3.F, §3.G, R11)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-triage/SKILL.md per spec §3.F: the check list gains **duplicate candidates**
+      and **duplicates**; the judge step judges each candidate group into `duplicate_of` (original = fuller
+      evidence, else older) or `distinct_from`; the judgements.yaml example shows both fields; the "Hunt
+      duplicates" rule drops "link duplicates in `note`" for the structured fields; "Forge actions are unrun
+      commands" names `gh issue close N --duplicate-of <url>`; the driver paragraph mentions the dedupe line.
+      Keep the skill's harness-neutral wording (the tool-neutrality tripwire scans it).
+  - id: P1.T6.S2
+    text: |-
+      Run `uv run pytest tests/unit/test_fr_triage_skill_example.py -q --no-cov` (the example still loads), then
+      `uv run --no-project python scripts/sync-opencode.py` AND `uv run --no-project python scripts/sync-hermes.py`
+      and commit the regenerated mirrors; run the three mirror tripwires
+      (test_tripwire_opencode_skills_sync.py, test_tripwire_hermes_skills_sync.py,
+      test_tripwire_skill_tool_neutrality.py) — green.
+  - id: P1.T6.S3
+    text: |-
+      Add `.changes/feat-batch-triage-dedupe.yaml` (`bump: minor`, `summary: fr triage check proposes duplicate
+      open issues; judgements record duplicate_of and distinct_from, the board nests duplicates, the driver reports
+      candidates when a wave finishes`). Flip the five triage-dedupe rows with `uv run fr acceptance set-status
+      --id <row> --status ci --level unit=super-fr:tests/unit/<file>.py#<test> --notes "<why>"` naming the tests
+      written above (board row keeps the browser evidence in its notes); `uv run fr acceptance check` passes.
+  - id: P1.T6.S4
+    text: |-
+      Full gate, after the last code commit: `uv run ruff format packages/ tests/`, `uv run ruff check packages/
+      tests/`, the mypy command from AGENTS.md, then the full suite with `uv run pytest -q --no-cov -n auto >
+      $TMPDIR/p1-suite.log 2>&1` (backgrounded per the brief's long_commands rule), green; that log is the
+      record's `evidence: {tests: …}`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
