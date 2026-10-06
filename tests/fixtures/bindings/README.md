@@ -8,7 +8,7 @@ Never composed by hand, with one labelled exception below.
   GitHub Copilot catalogue.
 - `opencode-run-live.{stdout,stderr}` and `opencode-run-not-found.{stdout,stderr}` —
   the two streams of `opencode run --pure --print-logs --log-level ERROR --format
-  json -m <model> "Reply with exactly: OK"`, captured 2026-10-06 from the real CLI
+  json -m <model> "Reply with exactly: OK"`, captured 2026-10-06 from the real CLI (with `-m <model>`; fr itself now passes the one token `--model=<model>`)
   with stdin closed (`</dev/null`; with stdin left open the CLI waits on it
   forever). `live` is a model the provider serves; `not-found` is a model it no
   longer serves (`ProviderModelNotFoundError` with a `Did you mean` hint on stderr,

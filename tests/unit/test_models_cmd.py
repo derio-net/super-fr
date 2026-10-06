@@ -225,15 +225,15 @@ class TestModelsApply:
         # Ensure all agents are already correct by setting config matching them
         runner.invoke(
             app,
-            ["models", "set", "--harness", "opencode", "--tier", "mechanical", "--model", "m"],
+            ["models", "set", "--harness", "opencode", "--tier", "mechanical", "--model", "p/m"],
         )
         runner.invoke(
             app,
-            ["models", "set", "--harness", "opencode", "--tier", "standard", "--model", "s"],
+            ["models", "set", "--harness", "opencode", "--tier", "standard", "--model", "p/s"],
         )
         runner.invoke(
             app,
-            ["models", "set", "--harness", "opencode", "--tier", "hard", "--model", "h"],
+            ["models", "set", "--harness", "opencode", "--tier", "hard", "--model", "p/h"],
         )
 
         # Now apply again — should be idempotent but report the count
@@ -312,6 +312,29 @@ def _set(model: str, *extra: str, tier: str = "standard", harness: str = "openco
 
 def _models_yaml(tmp_path: Path) -> Path:
     return tmp_path / ".config/fr/models.yaml"
+
+
+class TestSetRefusesInjectableIds:
+    def test_an_option_shaped_model_is_refused_for_every_harness(self, tmp_path: Path) -> None:
+        for harness in ("opencode", "claude-code", "hermes"):
+            for bad in ("--auto", "--dir=/x", "a b"):
+                res = _set(bad, harness=harness)
+                assert res.exit_code == 2, (harness, bad, res.output)
+                assert "not a valid model id" in res.output
+                assert not _models_yaml(tmp_path).exists()
+
+    def test_opencode_needs_provider_slash_model_even_without_the_probe(
+        self, tmp_path: Path
+    ) -> None:
+        for bad in ("plain", "prov/--auto"):
+            res = _set(bad, "--no-probe")
+            assert res.exit_code == 2 and "provider/model" in res.output
+        assert not _models_yaml(tmp_path).exists()
+
+    def test_claude_code_keeps_its_bare_ids(self, tmp_path: Path) -> None:
+        res = _set("claude-opus-5-5", harness="claude-code")
+        assert res.exit_code == 0, res.output
+        assert "claude-opus-5-5" in _models_yaml(tmp_path).read_text()
 
 
 class TestSetProbes:

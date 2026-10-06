@@ -93,10 +93,35 @@ def test_the_prober_runs_the_spec_argv_in_a_fresh_cwd() -> None:
     ((argv, cwd, timeout),) = seam.calls
     assert argv == [
         "opencode", "run", "--pure", "--print-logs", "--log-level", "ERROR",
-        "--format", "json", "-m", "github-copilot/claude-haiku-4.5", "Reply with exactly: OK",
+        "--format", "json", "--model=github-copilot/claude-haiku-4.5", "Reply with exactly: OK",
     ]  # fmt: skip
     assert timeout == 60
     assert not (Path.cwd() == cwd) and not cwd.exists()  # a throwaway dir, gone after
+
+
+def test_a_model_id_must_be_provider_slash_model() -> None:
+    from fr.bindings import valid_model_id, valid_model_name
+
+    for ok in ("prov/m", "github-copilot/claude-haiku-4.5", "p1/a_b:c.d"):
+        assert valid_model_id(ok), ok
+    for bad in (
+        "--auto", "--dir=/x", "-m", "prov/--auto", "prov/-x", "-p/m", "prov", "prov/",
+        "/m", "prov/a b", "prov /m", "prov/a=b", "prov/m\n", "", "a/b/c",
+    ):  # fmt: skip
+        assert not valid_model_id(bad), bad
+    assert valid_model_name("claude-sonnet-5") and valid_model_name("prov/m")
+    assert not valid_model_name("--auto") and not valid_model_name("a b")
+
+
+def test_an_invalid_id_is_unknown_and_never_spawns_anything() -> None:
+    seam = _Seam(stdout=_read("opencode-run-live.stdout"))
+    prober = OpenCodeProber(run_opencode=seam)
+    for bad in ("--auto", "--dir=/x", "prov/-x", "plain"):
+        got = prober.probe(bad)
+        assert got.verdict == "unknown"
+        assert got.detail == f"{bad} is not a provider/model id"
+    assert prober.catalogue("--auto") == [] and prober.catalogue("a b") == []
+    assert seam.calls == []
 
 
 def test_a_missing_cli_or_a_timeout_is_unknown_never_a_crash() -> None:

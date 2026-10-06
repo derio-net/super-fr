@@ -123,9 +123,16 @@ class OpenCodeProber:
         self._clock = clock
 
     def probe(self, model: str) -> ProbeResult:
+        import fr.bindings as _b  # the validators live beside the factory
+
+        if not _b.valid_model_id(model):
+            return ProbeResult(
+                "unknown", f"{model} is not a provider/model id", None, self._clock()
+            )
+        # One token, `--model=<id>`: a validated id still cannot become its own flag.
         argv = [
             "opencode", "run", "--pure", "--print-logs", "--log-level", "ERROR",
-            "--format", "json", "-m", model, PROBE_PROMPT,
+            "--format", "json", f"--model={model}", PROBE_PROMPT,
         ]  # fmt: skip
         # A fresh cwd, so `fr usage` never attributes the probe session to a run.
         with tempfile.TemporaryDirectory(prefix="fr-probe-") as tmp:
@@ -142,7 +149,12 @@ class OpenCodeProber:
         )
 
     def catalogue(self, provider: str) -> list[CatalogueEntry]:
-        """The provider's catalogue, or ``[]`` when it cannot be read."""
+        """The provider's catalogue, or ``[]`` when it cannot be read (or the
+        provider is not a plain name, which is never spawned)."""
+        import fr.bindings as _b
+
+        if not _b.valid_provider(provider):
+            return []
         with tempfile.TemporaryDirectory(prefix="fr-probe-") as tmp:
             try:
                 done = self._run(

@@ -176,6 +176,18 @@ def set_cmd(
     into any on-disk OpenCode agent files it affects. On OpenCode the model
     is probed live first; a dead one is refused (or, on a terminal, offered a
     replacement)."""
+    # A binding value reaches an argv (and can come from a tracked file), so an
+    # option-shaped one is refused before anything is written. OpenCode ids must be
+    # provider/model; other harnesses take bare names (`claude-opus-5-5`) and are
+    # refused only for a leading '-' or whitespace.
+    if harness == "opencode":
+        ok, shape = fr.bindings.valid_model_id(model), "provider/model"
+    else:
+        ok = not model.startswith("-") and not any(c.isspace() for c in model) and bool(model)
+        shape = "a name with no leading '-' and no whitespace"
+    if not ok:
+        err_console.print(f"error: {model!r} is not a valid model id (expected {shape})")
+        raise typer.Exit(code=2)
     prober = None if no_probe else fr.bindings.prober_for(harness)
     if no_probe:
         err_console.print(f"probe skipped (--no-probe): {harness}/{tier} → {model} is unchecked")
