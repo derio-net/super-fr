@@ -19,3 +19,8 @@ Failing test first (2ad95e47f, tests/unit/test_forge_host_trust.py), then: fr.gh
 ### glab-repo-arg-host-bypass · finding [open] (reviewer: in scope) · Review: glab --repo URL / git@ form bypasses the host gate
 
 Adversarial review, confirmed live against glab 1.89 (.invalid hosts, dummy token): `glab mr view 1 --repo https://evil.invalid/g/p` and `--repo git@evil.invalid:g/p.git` call https://evil.invalid/api/v4/... whatever GITLAB_HOST says; `glab api https://evil.invalid/...` likewise. Plain 3/4-part paths stay on the configured host; a positional URL to `mr view` does not switch host. Reachable: _MR_URL_RE's lazy (.+?) captures 'https://evil.invalid/g/p' from 'https://gitlab.com/https://evil.invalid/g/p/-/merge_requests/1' (fr_vk.pr_observe from a card's latest_pr_url), and any repo forwarded to --repo from a card title. Also ruled out (live): my uncommitted pin of gitlab.com as GITLAB_HOST — with no GITLAB_HOST glab REFUSES a remote whose host it does not know, so dropping the SaaS host is safe; the pin was reverted.
+
+<!-- fr:journal kind=finding scope=debug id=glab-repo-arg-host-bypass-resolved created=2026-10-06T14:16:52+00:00 state=fixed resolves=glab-repo-arg-host-bypass answered_by=agent -->
+### glab-repo-arg-host-bypass-resolved · finding [fixed] · resolves glab-repo-arg-host-bypass: Review: glab --repo URL / git@ form bypasses the host gate
+
+af50241a1: _run_glab refuses a --repo/-R URL or user@host: value and a full-URL api endpoint before any process; _MR_URL_RE excludes : and @; pr_status_by_url re-raises a refusal. Pinned by test_forge_host_trust.py (red first, then green); full suite 9231 passed.
