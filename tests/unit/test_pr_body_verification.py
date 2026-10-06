@@ -133,6 +133,35 @@ def test_a_walk_verified_row_no_longer_holds_its_issue() -> None:
     assert premature_closes("Closes #7\n", matrix, IDENTITY, _live) == []
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        # fr's own render is part of the body GitHub reads: a finding title
+        # carrying a keyword closes on merge as surely as the prose does.
+        "Summary.\n<!-- rendered by fr for run r1; edit above this line only -->\n"
+        "- `p1-r1` (plan) — Fixes #7 — **fixed**\n",
+        "Closes GH-7\n",
+        "closes gh-7\n",
+        "Closes O/Proj#7\n",
+        "Closes https://github.com/O/PROJ/issues/7\n",
+    ],
+)
+def test_every_spelling_github_closes_on_is_seen(body: str) -> None:
+    """Review p3-r4: the gate must read the body as GitHub does — the whole
+    of it, `GH-<n>` refs, and owner/repo case-insensitively."""
+    matrix = Matrix(rows=(_row("held", verify="live", issues=("O/proj#7",)),))
+
+    found = premature_closes(body, matrix, IDENTITY, _live)
+
+    assert [(p.ref, p.rows) for p in found] == [("o/proj#7", ("held",))]
+
+
+def test_shared_closing_keywords_still_skips_frs_render() -> None:
+    body = "<!-- rendered by fr for run r1; edit above this line only -->\n- Fixes #1 and #2\n"
+
+    assert shared_closing_keywords(body) == []
+
+
 def test_a_mention_without_a_keyword_is_not_a_close() -> None:
     matrix = Matrix(rows=(_row("held", verify="live", issues=("o/proj#7",)),))
 

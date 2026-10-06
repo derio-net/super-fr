@@ -80,6 +80,9 @@ def missing_sections(body: str, required: Sequence[str] = REQUIRED_SECTIONS) -> 
 _KEYWORD = re.compile(r"\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b", re.IGNORECASE)
 _KEYWORD_BEFORE = re.compile(rf"{_KEYWORD.pattern}\s*:?\s*$", re.IGNORECASE)
 _ISSUE_REF = re.compile(r"https?://\S+?/issues/\d+\b|(?<![\w/])(?:[\w.-]+/[\w.-]+)?#\d+\b")
+_ISSUE_REF_GITHUB = re.compile(rf"{_ISSUE_REF.pattern}|(?<![\w/-])(?i:gh)-\d+\b")
+"""`_ISSUE_REF` plus GitHub's `GH-<n>` (case-insensitive): every spelling a
+merge closes on, which the premature-close gate must see (review p3-r4)."""
 _CODE_SPAN = re.compile(r"(`+).+?\1")
 _LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]*)[^)]*\)")
 # A fence may sit inside a blockquote or a list item (CommonMark).
@@ -93,15 +96,21 @@ def _one_ref_per_link(match: re.Match[str]) -> str:
 
 
 def _closing_lines(
-    body: str,
+    body: str, *, as_github: bool = False
 ) -> Iterator[tuple[str, str, list[re.Match[str]], list[re.Match[str]]]]:
     """`(raw line, cleaned line, keyword matches, reference matches)` for every line of `body`
     that carries both a closing keyword and an issue reference. Code (fenced or
     inline) is skipped, as GitHub skips it, and so is fr's own render below its
     marker: a finding line carries a free-text title, a state word (`fixed`) and
-    `→ #N`, none of which closes."""
+    `→ #N`, none of which closes.
+
+    `as_github` reads the body as a merge does (review p3-r4): the WHOLE of it —
+    a finding title below the marker reading `Fixes #959` closes #959 on merge
+    all the same — and `GH-<n>` references too."""
     fence: str | None = None  # the open fence's run, e.g. "````"
-    for raw in body.split(_RENDER_MARKER, 1)[0].splitlines():
+    scanned = body if as_github else body.split(_RENDER_MARKER, 1)[0]
+    pattern = _ISSUE_REF_GITHUB if as_github else _ISSUE_REF
+    for raw in scanned.splitlines():
         m = _FENCE.match(raw)
         if fence is None and m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
             fence = m.group(1)
@@ -113,18 +122,20 @@ def _closing_lines(
             continue
         line = _LINK.sub(_one_ref_per_link, _CODE_SPAN.sub("", raw)).replace("*", "")
         keywords = list(_KEYWORD.finditer(line))
-        refs = list(_ISSUE_REF.finditer(line))
+        refs = list(pattern.finditer(line))
         if keywords and refs:
             yield raw, line, keywords, refs
 
 
-def closing_refs(body: str) -> list[tuple[str, str, str]]:
+def closing_refs(body: str, *, as_github: bool = False) -> list[tuple[str, str, str]]:
     """`(line, keyword, ref)` for every issue reference on a closing-keyword
     line of `body` — the keyword nearest before it, as written, and the
     reference as written (`#n`, `owner/repo#n` or an issue URL). The same
-    code-fence, inline-code and fr-marker skipping as `shared_closing_keywords`."""
+    code-fence, inline-code and fr-marker skipping as `shared_closing_keywords`
+    — unless `as_github`, which reads the whole body and `GH-<n>` too
+    (`_closing_lines`)."""
     out: list[tuple[str, str, str]] = []
-    for raw, _line, keywords, refs in _closing_lines(body):
+    for raw, _line, keywords, refs in _closing_lines(body, as_github=as_github):
         for r in refs:
             before = [k for k in keywords if k.end() <= r.start()]
             out.append((raw.strip(), (before[-1] if before else keywords[0]).group(1), r.group(0)))
@@ -156,16 +167,25 @@ _URL_REF = re.compile(r"^https?://[^/\s]+/(?P<path>.+?)(?:/-)?/issues/(?P<n>\d+)
 
 
 def normalize_issue_ref(ref: str, identity: tuple[str, str]) -> str | None:
-    """`owner/repo#n` for a reference as a PR body writes it — a bare `#n` takes
-    `identity` (`(org, repo)`, no forge call), an `owner/repo#n` is kept, and a
-    GitHub or GitLab issue URL (`.../issues/n`, `.../-/issues/n`) becomes the
-    same shape. `None` for anything else."""
+    """`owner/repo#n` for a reference as a PR body writes it — a bare `#n` or
+    `GH-n` takes `identity` (`(org, repo)`, no forge call), an `owner/repo#n` is
+    kept, and a GitHub or GitLab issue URL (`.../issues/n`, `.../-/issues/n`)
+    becomes the same shape. Owner and repo are lowercased: GitHub matches them
+    case-insensitively, so `Derio-Net/Super-FR#9` is `derio-net/super-fr#9`
+    (review p3-r4). `None` for anything else."""
+    here = f"{identity[0]}/{identity[1]}".lower()
     if ref.startswith("#"):
-        return f"{identity[0]}/{identity[1]}{ref}"
+        return f"{here}{ref}"
+    gh = re.fullmatch(r"(?i:gh)-(\d+)", ref)
+    if gh:
+        return f"{here}#{gh.group(1)}"
     url = _URL_REF.match(ref)
     if url:
-        return f"{url.group('path')}#{url.group('n')}"
-    return ref if re.fullmatch(r"[\w.-]+/[\w.-]+#\d+", ref) else None
+        return f"{url.group('path').lower()}#{url.group('n')}"
+    if re.fullmatch(r"[\w.-]+/[\w.-]+#\d+", ref):
+        repo, _, n = ref.partition("#")
+        return f"{repo.lower()}#{n}"
+    return None
 
 
 @dataclass(frozen=True)
@@ -196,9 +216,10 @@ def premature_closes(
     for row in matrix.rows:
         for issue in row.issues:
             if holds_open(row):
-                holding.setdefault(issue, []).append(row.id)
+                key = normalize_issue_ref(issue, identity) or issue.lower()
+                holding.setdefault(key, []).append(row.id)
     out: list[PrematureClose] = []
-    for line, _keyword, written in closing_refs(live_body):
+    for line, _keyword, written in closing_refs(live_body, as_github=True):
         ref = normalize_issue_ref(written, identity)
         if ref is not None and ref in holding:
             out.append(PrematureClose(line, ref, tuple(holding[ref])))
