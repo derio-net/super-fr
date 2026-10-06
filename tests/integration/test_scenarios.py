@@ -149,6 +149,9 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "awaiting-live-triage",
         "prerelease-command-shape",
         "herdr-restart-idle",
+        "model-binding-set-probe",
+        "model-binding-replacement",
+        "model-binding-check",
     }
     assert on_disk == here
 
@@ -175,6 +178,18 @@ def test_awaiting_live_triage(installed: Path, tmp_path: Path) -> None:
 
 def test_prerelease_command_shape(installed: Path, tmp_path: Path) -> None:
     _scenario("prerelease-command-shape", installed, tmp_path)
+
+
+def test_model_binding_set_probe(installed: Path, tmp_path: Path) -> None:
+    _scenario("model-binding-set-probe", installed, tmp_path)
+
+
+def test_model_binding_replacement(installed: Path, tmp_path: Path) -> None:
+    _scenario("model-binding-replacement", installed, tmp_path)
+
+
+def test_model_binding_check(installed: Path, tmp_path: Path) -> None:
+    _scenario("model-binding-check", installed, tmp_path)
 
 
 def test_herdr_restart_idle(installed: Path, tmp_path: Path) -> None:

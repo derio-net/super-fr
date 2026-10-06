@@ -13,15 +13,19 @@ permissions:
   contents: read
   pages: write
   id-token: write
+# A newer push queues behind a running deploy rather than cancelling it halfway
+# (only the newest queued run is kept, so the site still converges on main).
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.dep.outputs.page_url }}
+    outputs:
+      report: ${{ steps.report.outcome }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -29,11 +33,53 @@ jobs:
         run: uv tool install ./packages/fr
       - name: Assemble site
         run: mkdir -p _site && cp -R docs/explainers/. _site/
+      # The migration gate refuses this render while any artifact on main is stale,
+      # and that refusal is wanted: a report over unmigrated artifacts would describe
+      # a matrix the shipped fr cannot read. It must not take the explainers with it,
+      # so the render fails alone, /acceptance/ says so, and the run goes red after
+      # the deploy (super-fr#924).
       - name: Render acceptance report
+        id: report
+        continue-on-error: true
         run: fr acceptance report --link-mode github --ref "$GITHUB_SHA" --out _site/acceptance/index.html
+      - name: Publish a placeholder for the unrendered report
+        if: steps.report.outcome == 'failure'
+        run: |
+          mkdir -p _site/acceptance
+          repo="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          cat > _site/acceptance/index.html <<HTML
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light dark">
+          <title>Acceptance report · super-fr</title>
+          </head>
+          <body style="font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5">
+          <h1>Acceptance report not rendered</h1>
+          <p>The acceptance report was not rendered for commit <code>${GITHUB_SHA:0:12}</code>:
+          <code>fr</code> refused to read this commit's artifacts (see the
+          <a href="$repo/actions/runs/$GITHUB_RUN_ID">deploy run</a>).</p>
+          <p>The committed report at that commit is
+          <a href="$repo/blob/$GITHUB_SHA/docs/acceptance/report_linked.md">docs/acceptance/report_linked.md</a>.</p>
+          </body>
+          </html>
+          HTML
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: _site
       - id: dep
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+  # A separate job, so the github-pages deployment record stays green when the
+  # site did go live: a failing step inside `deploy` would mark it failed.
+  report-status:
+    needs: deploy
+    if: needs.deploy.outputs.report == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail the run when the report was not rendered
+        run: |
+          echo "::error::The acceptance report was not rendered (see 'Render acceptance report'); the explainers deployed with a placeholder at /acceptance/."
+          exit 1
