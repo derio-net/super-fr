@@ -1,0 +1,66 @@
+schema_version: 8
+run: 2026-10-06-feat-batch-model-bindings
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T3.S4]
+refactor:
+  P2.T3: "skill prose, generated mirrors, a parity row, an AGENTS.md paragraph and a matrix status: no code to clean"
+journal:
+  - kind: decision
+    id: p2-choice-carries-tried
+    phase: 2
+    title: Choice gains a non-identity `tried` field so a refusal names every candidate probed
+    body: >-
+      R8 says a refusal names the candidates fr tried. NoChoice already carried them; an
+      operator-only Choice (ratio > 2, or the hint rule) did not. `fr.bindings.choose.Choice`
+      now has `tried: tuple[str, ...] = field(default=(), compare=False)`, filled by every
+      rule, so phase 1's equality assertions are unaffected.
+  - kind: decision
+    id: p2-no-run-journal-refuses
+    phase: 2
+    title: An autonomous pick with no run journal yet (no plan, no spec emitted) refuses rather than substitutes
+    body: >-
+      R11 requires recorded iff applied. A run that has emitted neither a spec nor a plan has
+      no run journal to record in, so `_guard_dispatch_binding` exits 2 there (naming the
+      `fr models set` line) instead of applying an unrecorded substitution. Not reachable on
+      the shipped fr-goal shape, whose first tiered step (spec-review) needs the spec.
+  - kind: decision
+    id: p2-wording-module
+    phase: 2
+    title: fr.bindings.wording is the one formatter for both deciders
+    body: >-
+      `Substitution` (harness, tier, old, new, reason, decider, rule, price_ratio) with
+      `substitution_line` (R11), `decision_title`/`decision_body` (the five fields plus the
+      price ratio) and `proposal_text`/`ratio_text`, moved out of models_cmd. `fr models
+      set/check` and the run guard both print through it.
+  - kind: decision
+    id: p2-guard-restore-unnotes
+    phase: 2
+    title: A failed substitution also drops the journal from the pending cursor commit
+    body: >-
+      `_RunWrites.remember` is a no-op outside the step-record engine, so the guard keeps
+      its own pre-write bytes of both files and restores them itself; it also removes the
+      journal from `_RunWrites.paths`, so the advance's always-run commit carries nothing
+      for a substitution that was not applied. The guard is called before anything is
+      marked running, so a refusal leaves the cursor byte-identical.
+  - kind: discovery
+    id: p2-explainer-not-touched
+    phase: 2
+    title: docs/explainers/01-fr-goal.md does not describe the model-per-tier question
+    body: >-
+      It mentions models only as a dispatch-record fact (§ who is holding) and in the
+      configuration table row "Model per phase tier"; the question round's tier/binding
+      questions are not described, so per spec §D no explainer edit or .html regeneration
+      is owed.
+  - kind: discovery
+    id: p2-t1-refactor-landed-at-green
+    phase: 2
+    title: P2.T1.S3's `_binding_health` helper was written at GREEN
+    body: >-
+      Both call sites (start notice, gated brief) and later the guard read
+      `run_cmd._binding_health`, written once at GREEN; the refactor step confirmed nothing
+      duplicated was left and ran ruff + mypy clean.
+resolves: []
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/63cfb522-ee1d-4d86-ab42-2a133eed737e/scratchpad/p2-full-suite.log
