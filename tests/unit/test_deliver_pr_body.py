@@ -196,7 +196,7 @@ def test_the_body_renders_post_merge_rows_and_tests_and_no_input_section(
         root,
         [
             row("docs/spec.md", status="skipped"),
-            row("docs/spec.md", rid="live-run", status="not-implemented", verify="post-merge"),
+            row("docs/spec.md", rid="live-run", status="not-implemented", verify="live"),
         ],
     )
     live["body"] = "never read before the render"

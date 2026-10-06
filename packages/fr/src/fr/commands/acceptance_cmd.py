@@ -316,6 +316,18 @@ def _parse_levels(level: list[str], flag: str = "--level") -> dict[str, list[str
     return levels
 
 
+def _check_verify(root: Path, verify: str | None) -> None:
+    """`--verify` names a strategy that resolves here, or `none` (spec
+    2026-10-06-verification-strategies §B) — refused before anything moves."""
+    if verify is None:
+        return
+    from fr.record.apply import strategy_error
+
+    if (why := strategy_error(verify, root)) is not None:
+        err_console.print(f"[red]error:[/red] --verify: {escape(why)}")
+        raise typer.Exit(2)
+
+
 def _validate_refs(row: Row) -> None:
     """Ref grammar checked BEFORE the file is touched — a shell-mangled ref
     (zsh's `$VAR:t` modifier eating "…:tests/…") must not land and surface
@@ -386,9 +398,9 @@ def set_status_cmd(
     verify: str | None = typer.Option(
         None,
         "--verify",
-        help="post-merge: mark the row as verifiable only after merge (spec 2026-09-28 "
-        "§F). Omit to leave the row's existing `verify` alone — set-status never "
-        "clears it.",
+        help="<strategy|none>: the row's verification strategy (`fr verification list`; "
+        "spec 2026-10-06 §B). Omit to leave the row's existing `verify` alone — "
+        "set-status never clears it.",
     ),
 ) -> None:
     """Move an existing row's status, in place, with a reason (spec §3.G.2).
@@ -407,8 +419,8 @@ def set_status_cmd(
     one call. A drop naming a ref not on the row, an unknown level, or a ref
     also named in `--level` is refused (exit 2) with nothing changed.
 
-    `--verify post-merge` marks a row created before it was known to be
-    live-only, in the same rewrite; omitting the flag preserves whatever the
+    `--verify <strategy|none>` names the row's verification strategy, in the
+    same rewrite; omitting the flag preserves whatever the
     row already carries (`add`'s create-only, and there is no delete verb, so
     this is the only way to set it on an existing row without hand-editing
     matrix.yaml).
@@ -427,9 +439,7 @@ def set_status_cmd(
             f"[red]error:[/red] unknown status {status!r} (valid: {' | '.join(valid)})"
         )
         raise typer.Exit(2)
-    if verify is not None and verify != "post-merge":
-        err_console.print(f"[red]error:[/red] --verify must be 'post-merge', got {verify!r}")
-        raise typer.Exit(2)
+    _check_verify(root, verify)
     target = next((r for r in matrix.rows if r.id == row_id), None)
     if target is None:
         known = ", ".join(r.id for r in matrix.rows) or "none"
@@ -465,7 +475,7 @@ def set_status_cmd(
             levels=merged,
             status=status,  # type: ignore[arg-type]  # pydantic validates the literal
             notes=notes,
-            verify=new_verify,  # type: ignore[arg-type]  # pydantic validates the literal
+            verify=new_verify,
             visual=target.visual,  # set-status never touches `visual` (spec 2026-09-28 §A)
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
@@ -482,7 +492,7 @@ def set_status_cmd(
             status=status,
             notes=notes,
             levels={k: tuple(v) for k, v in additions.items()},
-            verify=verify,  # type: ignore[arg-type]  # None preserves; apply.py falls back to existing
+            verify=verify,  # None preserves; apply.py falls back to existing
         ),
         f"chore(fr): acceptance — {row_id} {describe_move(target, new_row)}",
         {row_id: {k: tuple(v) for k, v in drops.items()}} if drops else None,
@@ -508,8 +518,8 @@ def add_cmd(
     verify: str | None = typer.Option(
         None,
         "--verify",
-        help="post-merge: the row can only be verified after merge — the PR body lists "
-        "it as owed (spec 2026-09-28 §F).",
+        help="<strategy|none>: the row's verification strategy (`fr verification list`); "
+        "a post-merge one is listed as owed in the PR body (spec 2026-10-06 §B).",
     ),
     visual_state: list[str] = typer.Option(
         [],
@@ -533,6 +543,7 @@ def add_cmd(
 
     root = resolve_repo_root()
     matrix = _load(root)
+    _check_verify(root, verify)
 
     levels = _parse_levels(level)
     try:
@@ -549,7 +560,7 @@ def add_cmd(
             levels={k: tuple(v) for k, v in levels.items()},
             status=status,  # type: ignore[arg-type]  # pydantic validates the literal
             notes=notes,
-            verify=verify,  # type: ignore[arg-type]  # pydantic validates the literal
+            verify=verify,
             visual=visual,
         )
     except Exception as e:  # pydantic ValidationError → operator-readable

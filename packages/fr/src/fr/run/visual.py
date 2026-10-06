@@ -26,7 +26,9 @@ from fr.record.model import VisualEvidence
 from fr.run.telemetry import parse_timestamp
 
 if TYPE_CHECKING:
+    from fr.parser import Plan
     from fr.run.observed import ObservedSession
+    from fr.verification.rows import SpecVerification
 
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif"})
 """What a shot may be (§B) — compared case-insensitively."""
@@ -50,11 +52,15 @@ def owed_rows(
     *,
     phase_rows: Sequence[str] | None = None,
     spec_ref: str | None = None,
+    verification: SpecVerification | None = None,
 ) -> list[Row]:
     """The rows a unit owes visual evidence for: a phase unit's header
     `acceptance:` rows (`phase_rows`), or `deliver`'s rows citing the run's
-    spec (`spec_ref`) — only those declaring `visual` and not
-    `verify: post-merge` (only a live run after merge can prove those)."""
+    spec (`spec_ref`) — only those declaring `visual` whose effective
+    strategy is not post-merge (only a live run after merge can prove those;
+    spec 2026-10-06-verification-strategies §B). Without `verification`, only
+    a row's own `verify` counts, resolved against the shipped strategies. A
+    strategy that does not resolve owes the evidence (fail closed)."""
     from fr.requirements import rows_citing
 
     if phase_rows is not None:
@@ -64,7 +70,19 @@ def owed_rows(
         rows = rows_citing(matrix, spec_ref)
     else:
         rows = []
-    return [r for r in rows if r.visual is not None and r.verify != "post-merge"]
+    return [r for r in rows if r.visual is not None and not _post_merge(r, verification)]
+
+
+def _post_merge(row: Row, verification: SpecVerification | None) -> bool:
+    from fr.verification.effective import is_post_merge
+    from fr.verification.model import StrategyError
+
+    try:
+        if verification is None:
+            return is_post_merge(row.verify, None)
+        return verification.is_post_merge(row)
+    except StrategyError:
+        return False
 
 
 @dataclass(frozen=True)
@@ -285,13 +303,48 @@ def owed_for_unit(
             linked = next((p.phase.acceptance for p in plan.phases if p.phase.number == phase), ())
             if not linked or not (repo_root / MATRIX_REL).exists():
                 return []
-            return owed_rows(load_matrix(repo_root / MATRIX_REL), phase_rows=linked)
+            return owed_rows(
+                load_matrix(repo_root / MATRIX_REL),
+                phase_rows=linked,
+                verification=_verification(repo_root, plan.spec_path or plan.meta.spec, plan),
+            )
         if spec_rel is None or not (repo_root / MATRIX_REL).exists():
             return []
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
-        return owed_rows(matrix, spec_ref=spec_ref)
+        flat_plan: Plan | None = None
+        if plan_rel is not None:
+            try:
+                flat_plan = parse(repo_root / plan_rel)
+            except PlanSchemaError:
+                flat_plan = None
+        return owed_rows(
+            matrix, spec_ref=spec_ref, verification=_verification(repo_root, spec_rel, flat_plan)
+        )
     except AcceptanceError as e:
         raise VisualRefusedError([f"{why} — {e}"]) from e
+
+
+def _verification(repo_root: Path, spec_rel: str | None, plan: Plan | None) -> SpecVerification:
+    """The spec's verification inputs, the shape default read from the plan's
+    workflow. A malformed section or an unresolvable shape degrades to "the
+    row's own `verify` only" — self-review refuses the section by name, and
+    owing evidence is the fail-closed side here."""
+    from fr.verification.rows import SpecVerification, spec_section_at
+    from fr.verification.spec_section import SectionError
+    from fr.workflow.model import WorkflowError
+    from fr.workflow.resolve import workflow_for_plan
+
+    try:
+        section = spec_section_at(repo_root, spec_rel)
+    except (SectionError, OSError):
+        section = None
+    shape: str | None = None
+    if plan is not None:
+        try:
+            shape = workflow_for_plan(plan, repo_root).verification
+        except WorkflowError:
+            shape = None
+    return SpecVerification(repo_root, section, shape)
 
 
 def derive_visual(

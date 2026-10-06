@@ -43,7 +43,7 @@ def render_row_block(row: Row, indent: str = "  ") -> str:
     Empty levels are dropped (`levels: {}`) rather than written as four empty
     lists — what `add` has always emitted, kept identical here.
     """
-    data = {
+    data: dict[str, object] = {
         "id": row.id,
         "capability": row.capability,
         "acceptance": row.acceptance,

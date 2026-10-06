@@ -28,7 +28,9 @@ from fr.journal.model import (
 )
 
 if TYPE_CHECKING:
+    from fr.acceptance.model import Matrix
     from fr.run.model import RunState
+    from fr.verification.rows import SpecVerification
 
 __all__ = [
     "PR_BODY_NAME",
@@ -163,24 +165,58 @@ def render_out_of_scope(lines: Sequence[str]) -> str:
     return "\n".join(lines) if lines else "None."
 
 
+def post_merge_owed_lines(
+    matrix: Matrix, spec_ref: str, verification: SpecVerification
+) -> list[str]:
+    """One line per row citing the spec whose EFFECTIVE strategy is post-merge
+    (spec 2026-10-06-verification-strategies §B), with the section's reason or
+    `no reason recorded (legacy)`. A strategy that does not resolve is listed
+    with the error, never silently dropped."""
+    from fr.requirements import rows_citing
+    from fr.verification.model import StrategyError
+
+    lines: list[str] = []
+    for r in rows_citing(matrix, spec_ref):
+        try:
+            owed = verification.is_post_merge(r)
+        except StrategyError as e:
+            lines.append(f"- `{r.id}` — {r.acceptance} — strategy does not resolve: {e}")
+            continue
+        if owed:
+            reason = verification.reason(r) or "no reason recorded (legacy)"
+            lines.append(f"- `{r.id}` — {r.acceptance} — {reason}")
+    return lines
+
+
+def _shape_default(repo_root: Path, state: RunState) -> str | None:
+    """The run's shape's default strategy, or `None` when it does not resolve."""
+    from fr.workflow.model import WorkflowError
+    from fr.workflow.resolve import resolve_workflow
+
+    try:
+        return resolve_workflow(state.workflow.partition("@")[0], repo_root).verification
+    except (WorkflowError, OSError):
+        return None
+
+
 def _post_merge_owed(repo_root: Path, state: RunState) -> str:
-    """Every `verify: post-merge` row citing the run's spec (§F), or `None.`."""
+    """Every row citing the run's spec whose effective strategy is post-merge
+    (spec 2026-09-28 §F, 2026-10-06 §B), or `None.`."""
     from fr.acceptance.model import AcceptanceError
     from fr.commands.acceptance_cmd import MATRIX_REL
-    from fr.requirements import load_spec_matrix, rows_citing, run_spec
+    from fr.requirements import load_spec_matrix, run_spec
+    from fr.verification.rows import spec_verification
+    from fr.verification.spec_section import SectionError
 
     spec_rel = run_spec(state)
     if spec_rel is None or not (repo_root / MATRIX_REL).is_file():
         return "None."
     try:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
-    except AcceptanceError as e:
+        verification = spec_verification(repo_root, spec_rel, _shape_default(repo_root, state))
+    except (AcceptanceError, SectionError) as e:
         return f"Not available: {e}"
-    lines = [
-        f"- `{r.id}` — {r.acceptance}"
-        for r in rows_citing(matrix, spec_ref)
-        if r.verify == "post-merge"
-    ]
+    lines = post_merge_owed_lines(matrix, spec_ref, verification)
     return "\n".join(lines) if lines else "None."
 
 

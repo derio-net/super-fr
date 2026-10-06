@@ -631,7 +631,7 @@ def _union(old: tuple[str, ...], new: tuple[str, ...]) -> tuple[str, ...]:
     return old + tuple(x for x in dict.fromkeys(new) if x not in old)
 
 
-def _strategy_error(name: str, repo_root: Path) -> str | None:
+def strategy_error(name: str, repo_root: Path) -> str | None:
     """Why `verify: name` cannot be written, or None: it must resolve to a
     strategy or be `none` (spec 2026-10-06-verification-strategies §B)."""
     from fr.verification.model import RESERVED, StrategyError
@@ -756,7 +756,7 @@ def _acceptance_writes(
                     harnesses=_union(existing.harnesses, item.harnesses),
                     walks=existing.walks + ((item.walk,) if item.walk is not None else ()),
                 )
-            if item.verify is not None and (why := _strategy_error(item.verify, repo_root)):
+            if item.verify is not None and (why := strategy_error(item.verify, repo_root)):
                 raise RecordRefusedError(f"acceptance {item.id}: {why}")
             for ref in row.refs():
                 split_ref(ref)

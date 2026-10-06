@@ -106,7 +106,10 @@ def render_template(
             "#   - {id: <row>, capability: <c>, acceptance: <statement>, "
             "origin: [<repo>:<path>], status: not-implemented}"
         )
-        lines.append("#     a row only verifiable after merge also takes verify: post-merge")
+        lines.append(
+            "#     a row may name its verification: verify: <strategy|none> "
+            "(`fr verification list`), scenario: <path>"
+        )
     if emitted:
         lines.append("emitted: {}")
         lines.append(f"#   {', '.join(f'{n}: <path or url>' for n in emitted)}")
