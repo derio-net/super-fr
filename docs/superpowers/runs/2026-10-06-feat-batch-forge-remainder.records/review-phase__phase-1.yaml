@@ -1,0 +1,61 @@
+schema_version: 7
+run: 2026-10-06-feat-batch-forge-remainder
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-r1
+    phase: 1
+    review_scope: in
+    title: Soft-fail methods swallowed the trust-gate refusal into []/None/False
+    body: list_linked_prs, pr_status_by_url, file_exists, list_dir and issues_enabled catch GhError, so a refused host read as "no PR" / "no file", and a test enshrined it.
+  - kind: finding
+    id: p1-r2
+    phase: 1
+    review_scope: in
+    title: A declared github.com host was threaded, demanding a hosts.yml login in token-only CI
+    body: client_for passed the declared host straight through. github.com is gh's own default and must never become GH_HOST.
+  - kind: finding
+    id: p1-r3
+    phase: 1
+    review_scope: in
+    title: "Test gaps: nested host_scope, pr_state routing, weak hosted-method scan"
+    body: The reviewer asked for a nested-scope test, a pr_state call-site test and a stricter test_every_gh_method_is_hosted heuristic.
+  - kind: finding
+    id: p1-r4
+    phase: 1
+    review_scope: out
+    title: _classify_error classifies by stderr text; the refusal reads as unknown
+    body: Pre-existing text classification. The refusal message matches no pattern today, so nothing changes. It is fragile only if someone later adds a pattern that catches it.
+  - kind: finding
+    id: p1-x1
+    phase: 1
+    review_scope: out
+    title: GitLab host threading (gh#490) passes URL/config hosts to glab without a trust gate
+    body: Raised by the orchestrator while handling the background security review. glab is handed hosts derived from MR URLs and from fr-profiles.yaml, and a GITLAB_TOKEN in the environment may be sent to whichever host glab targets. It predates this change (gh#490/#865), so it is not caused here. It is the same class as the GitHub gate this phase added.
+  - kind: review
+    id: p1-review-r1
+    phase: 1
+    title: "Independent review of phase 1: 4 findings (p1-r1..p1-r4)"
+    body: A dispatched reviewer checked the ContextVar/host_scope/_env mechanics, subprocess coverage in fr.gh, the hosts.yml trust gate, client_for/client_for_backend/client_for_url and the tests. Raised p1-r1, p1-r2, p1-r3 (in scope) and p1-r4 (out of scope). The orchestrator added p1-x1 (out of scope).
+resolves:
+  - id: p1-r1
+    state: fixed
+    body: GhHostRefusedError(GhError) is raised by _env(), and RealGhClient's @_hosted wrapper runs the gate before any method body, so no soft-fail except block sees it. Parametrised test over all five methods asserts the raise and that no subprocess started (04efa619c).
+  - id: p1-r2
+    state: fixed
+    body: client_for_backend normalises the GitHub host through _hosts.self_hosted_hostname, so github.com is never threaded. test_a_declared_saas_github_host_is_not_threaded. The refusal text now says a GH_ENTERPRISE_TOKEN alone does not count as a login.
+  - id: p1-r3
+    state: fixed
+    body: Added test_a_nested_host_scope_restores_the_outer_host. The hosted-method scan now also matches `from fr.gh import` / `from fr import gh`. pr_state routing was already pinned by test_the_default_close_targets_the_self_hosted_host and test_..._passes_no_host_for_a_saas_url, which patch hostclient.client_for_backend under client_for_url, so no new test was needed there.
+  - id: p1-r4
+    state: out-of-scope
+    body: Pre-existing stderr-text classification, unchanged by this phase. The refusal is its own subclass now, so a caller can match on type rather than text.
+  - id: p1-x1
+    state: out-of-scope
+    body: It predates this change (gh#490). File it as a follow-up to give glab the same hosts trust gate.
+evidence:
+  review: p1-review-r1
+  reviewer: af69d91b526d044c1
+  model: claude-opus-5-5
