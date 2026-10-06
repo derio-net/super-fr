@@ -4656,7 +4656,10 @@ rows:
     notes: 'Phase 3: batch dispatch lands with its brief/WorkItem, gates in spec order
       (can_dispatch before preflight), --repair and the second fr_dispatch soft point;
       unit-tested with the runner, adapter and checkout faked. fr-herdr''s run-unit
-      contract was covered in phase 2.'
+      contract was covered in phase 2. gh#931/gh#956: the herdr runner retries agent_pane_busy
+      (bounded) and returns only once the agent left idle (agent prompt --wait; one
+      Enter on agent_prompt_stalled, then a loud failure); live-walked 2026-10-06 on
+      herdr 0.9.1, 3 dispatches, one of which hit agent_pane_busy and recovered.'
   - id: triage-batch-forge-visible
     capability: Backlog triage
     acceptance: After a batch is dispatched, every member issue shows as taken on the
