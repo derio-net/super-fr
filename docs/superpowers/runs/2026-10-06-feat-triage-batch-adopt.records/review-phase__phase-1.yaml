@@ -114,6 +114,12 @@ resolves:
   state: fixed
   body: 'Fixed in the spec: §A now states adopt takes dispatch''s single-path --checkout, because a batch is always
     one repo.'
+- id: p1-wall-clock-tests-flake-under-host-load
+  state: out-of-scope
+  body: 'Not caused by this change: test_run_idle_guard::test_fails_open_when_fr_hangs_and_does_not_hang_with_it
+    and test_records_commit::...stuck_index_lock_quickly assert wall-clock limits and failed only at host load 130-226;
+    both pass alone (logs adopt-fail6.log, adopt-idle-guard-rerun.log). Neither touches adopt code. Worth an issue:
+    wall-clock tests flake under host load.'
 evidence:
   review: p1-review-1
   reviewer: aa98c794d63b75440
