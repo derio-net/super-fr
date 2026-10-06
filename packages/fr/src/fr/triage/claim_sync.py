@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from functools import cached_property
 from datetime import datetime, timedelta
 from typing import Literal
 
@@ -56,13 +57,28 @@ class ClaimEnv:
     def trusted(self, owner_repo: str) -> frozenset[str]:
         return claim_authors(owner_repo, self.facts)
 
+    @cached_property
+    def _repo_index(self) -> dict[str, str]:
+        """Repo name (lower-cased) -> OWNER/REPO, the first of a name winning."""
+        index: dict[str, str] = {}
+        for r in self.facts.repos:
+            index.setdefault(r.split("/", 1)[1].lower(), r)
+        return index
+
+    @cached_property
+    def _issue_index(self) -> dict[str, Issue]:
+        """Judgement key -> issue, the first of a key winning."""
+        index: dict[str, Issue] = {}
+        for i in self.facts.issues:
+            index.setdefault(i.key, i)
+        return index
+
     def owner_repo(self, key: str) -> str | None:
         """The OWNER/REPO of judgement key *key* in this scope, from the facts."""
-        name = key.rpartition("#")[0]
-        return next((r for r in self.facts.repos if r.split("/", 1)[1].lower() == name), None)
+        return self._repo_index.get(key.rpartition("#")[0])
 
     def issue(self, key: str) -> Issue | None:
-        return next((i for i in self.facts.issues if i.key == key), None)
+        return self._issue_index.get(key)
 
 
 @dataclass(frozen=True)
