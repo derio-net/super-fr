@@ -12,6 +12,9 @@ locates the run by it at close-out). `rename_branch` moves all of them.
 - **Resumable.** Each key is moved only while it still names *old*: a second
   call, or one after a crash between two moves, finishes what remains and a
   fully applied rename returns no changes (R10).
+- **Atomic, and crash-safe.** The marker and the isolation record are replaced
+  whole (`write_text_atomic`); a cursor rewritten but not yet committed (a
+  refusing hook, a crash) is committed by the next call.
 - **The worktree path keeps its old slug.** Nothing re-derives a path from a
   branch: gc and containers key on the path.
 """
@@ -23,6 +26,8 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from fr.artifacts.atomic import write_text_atomic
 
 from .sessions import _write_index, read_session_index
 from .types import IsolationError, delete_state, load_state, save_state
@@ -46,6 +51,8 @@ class RenamePlan:
     marker: bool = False
     sessions: tuple[str, ...] = ()
     cursors: tuple[Path, ...] = field(default_factory=tuple)
+    # Cursors already naming *new* whose commit never landed (p1-r4).
+    uncommitted: tuple[Path, ...] = field(default_factory=tuple)
 
     @property
     def done(self) -> bool:
@@ -62,6 +69,7 @@ class RenamePlan:
             out.append(f"{MARKER} marker branch -> {self.new}")
         out += [f"session index {sid} branch -> {self.new}" for sid in self.sessions]
         out += [f"run cursor {c} branch -> {self.new} (committed)" for c in self.cursors]
+        out += [f"run cursor {c}: commit its branch -> {self.new}" for c in self.uncommitted]
         return out
 
 
@@ -87,11 +95,19 @@ def _git_path(wt: Path, name: str) -> Path:
 
 
 def _marker(wt: Path) -> dict[str, object] | None:
+    """The worktree's `.fr-isolation` marker, or None unless it is a valid one: a
+    JSON object whose `toplevel` is this worktree (p1-r5)."""
     try:
         data = json.loads((wt / MARKER).read_text())
     except (OSError, ValueError):
         return None
-    return data if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    try:
+        same = Path(str(data.get("toplevel") or "")).resolve() == wt.resolve()
+    except OSError:
+        return None
+    return data if data.get("toplevel") and same else None
 
 
 def _cursor_branch_line(name: str) -> re.Pattern[str]:
@@ -106,6 +122,8 @@ def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePl
     if _git_path(wt, "MERGE_HEAD").exists():
         raise IsolationError(f"{wt} is mid-merge: finish or abort it before renaming {old}")
     has_old, has_new = _has_branch(wt, old), _has_branch(wt, new)
+    if old == new:  # nothing to move; the refusals above and below still hold (p1-r9)
+        has_old = False
     if has_old and has_new:
         raise IsolationError(f"branch {new} already exists and is not {old} renamed: refusing")
     if not has_old and not has_new:
@@ -116,13 +134,21 @@ def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePl
 
     runs = wt / RUNS_REL
     cursors: list[Path] = []
+    uncommitted: list[Path] = []
     for f in sorted(runs.glob("*.yaml")) if runs.is_dir() else ():
-        if not _cursor_branch_line(old).search(f.read_text()):
-            continue
+        text = f.read_text()
         rel = f.relative_to(wt)
-        if _git(wt, "status", "--porcelain", "--", str(rel)).stdout.strip():
-            raise IsolationError(f"run cursor {rel} is modified: commit or restore it first")
-        cursors.append(rel)
+        if _cursor_branch_line(old).search(text):
+            if _git(wt, "status", "--porcelain", "--", str(rel)).stdout.strip():
+                raise IsolationError(f"run cursor {rel} is modified: commit or restore it first")
+            if old != new:
+                cursors.append(rel)
+        elif old != new and _cursor_branch_line(new).search(text):
+            committed = _git(wt, "show", f"HEAD:{rel.as_posix()}", check=False).stdout
+            if _cursor_branch_line(old).search(committed):
+                uncommitted.append(rel)  # rewritten, its commit never landed (p1-r4)
+    if old == new:
+        return RenamePlan(repo_root=Path(repo_root), worktree=wt, old=old, new=new)
 
     record = load_state(repo_root, old)
     held = record or load_state(repo_root, new)
@@ -142,6 +168,7 @@ def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePl
         marker=marker is not None and marker.get("branch") == old,
         sessions=sessions,
         cursors=tuple(cursors),
+        uncommitted=tuple(uncommitted),
     )
 
 
@@ -167,7 +194,7 @@ def rename_branch(
     if plan.marker:
         data = _marker(wt) or {}
         data["branch"] = new
-        (wt / MARKER).write_text(json.dumps(data, indent=2) + "\n")
+        write_text_atomic(wt / MARKER, json.dumps(data, indent=2) + "\n")
     if state is not None:
         for b in state.sessions:
             if b.session_id in plan.sessions:
@@ -175,14 +202,21 @@ def rename_branch(
     for rel in plan.cursors:
         f = wt / rel
         f.write_text(_cursor_branch_line(old).sub(f"branch: {new}", f.read_text(), count=1))
-        run_id = rel.stem
-        _git(
-            wt,
-            "commit",
-            "-q",
-            "-m",
-            f"chore(fr): run {run_id} — branch renamed to {new} by batch adopt",
-            "--",
-            str(rel),
-        )
+        _commit_cursor(wt, rel, new)
+    for rel in plan.uncommitted:
+        _commit_cursor(wt, rel, new)
     return plan.steps()
+
+
+def _commit_cursor(wt: Path, rel: Path, new: str) -> None:
+    """Commit the cursor *rel* alone: staged work elsewhere stays staged."""
+    run_id = rel.stem
+    _git(
+        wt,
+        "commit",
+        "-q",
+        "-m",
+        f"chore(fr): run {run_id} — branch renamed to {new} by batch adopt",
+        "--",
+        str(rel),
+    )

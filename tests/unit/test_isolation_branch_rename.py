@@ -224,3 +224,109 @@ def test_a_dry_run_refuses_as_the_real_call_does(ws: tuple[Path, Path]) -> None:
     _git(repo, "branch", NEW, "main")
     with pytest.raises(IsolationError, match="already exists"):
         rename_branch(repo, wt, OLD, NEW, dry_run=True)
+
+
+# ------------------------------------------------- review findings p1-r4/r5/r9/r10
+
+
+def test_a_plain_branch_with_no_record_marker_or_cursor_is_renamed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1-r10: a hand-started worktree fr never isolated holds only git's ref."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "home" / "sessions"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for k in ("GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"):
+        monkeypatch.setenv(k, "t")
+    for k in ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"):
+        monkeypatch.setenv(k, "t@example.com")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "README.md").write_text("x\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "init")
+    wt = tmp_path / "wt"
+    _git(repo, "worktree", "add", "-q", str(wt), "-b", OLD)
+    head = _git(wt, "rev-parse", "HEAD")
+
+    assert rename_branch(repo, wt, OLD, NEW) == [f"git branch -m {OLD} {NEW}"]
+    assert _git(wt, "rev-parse", "--abbrev-ref", "HEAD") == NEW
+    assert _git(wt, "rev-parse", "HEAD") == head
+    assert not (wt / ".fr-isolation").exists()
+    assert load_state(repo, NEW) is None
+    assert rename_branch(repo, wt, OLD, NEW) == []
+
+
+def test_a_cursor_commit_that_fails_is_finished_by_the_next_call(ws: tuple[Path, Path]) -> None:
+    """p1-r4: the cursor was rewritten but its commit failed (a refusing hook)."""
+    repo, wt = ws
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+    with pytest.raises(IsolationError, match="commit"):
+        rename_branch(repo, wt, OLD, NEW)
+    hook.unlink()
+
+    assert not plan_rename(repo, wt, OLD, NEW).done
+    rename_branch(repo, wt, OLD, NEW)
+    assert _git(wt, "status", "--porcelain", "--", CURSOR) == ""
+    assert f"branch: {NEW}" in _git(wt, "show", f"HEAD:{CURSOR}")
+    assert plan_rename(repo, wt, OLD, NEW).done
+
+
+def test_a_write_that_dies_midway_never_leaves_a_truncated_marker_or_record(
+    ws: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1-r5: the marker and the isolation record are replaced atomically."""
+    repo, wt = ws
+    guarded = {(wt / ".fr-isolation").resolve(), state_path(repo, NEW).resolve()}
+    real = Path.write_text
+
+    def dying(self: Path, *a: object, **kw: object) -> int:
+        if self.resolve() in guarded:
+            self.open("w").close()  # truncated, then the disk fills
+            raise OSError("No space left on device")
+        return real(self, *a, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "write_text", dying)
+    try:
+        rename_branch(repo, wt, OLD, NEW)
+    except OSError:
+        pass
+    json.loads((wt / ".fr-isolation").read_text())
+    held = load_state(repo, NEW) or load_state(repo, OLD)
+    assert held is not None
+
+
+def test_a_marker_for_another_toplevel_is_not_rewritten(ws: tuple[Path, Path]) -> None:
+    """p1-r5: a marker whose toplevel is not this worktree is not a valid marker."""
+    repo, wt = ws
+    stray = json.dumps({"toplevel": "/elsewhere", "branch": OLD, "mode": "worktree"})
+    (wt / ".fr-isolation").write_text(stray)
+    steps = rename_branch(repo, wt, OLD, NEW)
+    assert not any("marker" in s for s in steps)
+    assert (wt / ".fr-isolation").read_text() == stray
+
+
+def test_the_same_branch_still_refuses_a_worktree_mid_rebase(ws: tuple[Path, Path]) -> None:
+    """p1-r9: --branch already the batch branch still gets R9's worktree refusals."""
+    repo, wt = ws
+    Path(_git(wt, "rev-parse", "--git-path", "rebase-merge")).mkdir(parents=True)
+    with pytest.raises(IsolationError, match="rebase"):
+        rename_branch(repo, wt, OLD, OLD, dry_run=True)
+
+
+def test_the_same_branch_still_refuses_a_modified_cursor(ws: tuple[Path, Path]) -> None:
+    repo, wt = ws
+    with (wt / CURSOR).open("a") as f:
+        f.write("cursor: implement\n")
+    with pytest.raises(IsolationError, match="modified"):
+        rename_branch(repo, wt, OLD, OLD, dry_run=True)
+
+
+def test_the_same_branch_on_a_clean_worktree_has_nothing_to_move(ws: tuple[Path, Path]) -> None:
+    repo, wt = ws
+    assert rename_branch(repo, wt, OLD, OLD, dry_run=True) == []
+    assert plan_rename(repo, wt, OLD, OLD).done
