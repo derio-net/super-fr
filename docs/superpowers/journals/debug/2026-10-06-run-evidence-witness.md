@@ -24,3 +24,8 @@ telemetry._program picks the first word not starting with - after uv run; --with
 ### h-1002-notice · hypothesis · Subagent transcripts lack the background notice, so the #693 fix never reaches implement-phase
 
 Ruled out: 182 of 184 subagent transcripts with a background ack carry a task-notification; the phase-2 one does too.
+
+<!-- fr:journal kind=ruled-out scope=debug id=ro-1002-notice created=2026-10-06T08:49:55+00:00 -->
+### ro-1002-notice · ruled-out · Missing notice in subagent transcripts
+
+The notice was present, queued at 22:03:23.996 with status completed. The window closed early because the command itself detached with &, not because the notice was missing.
