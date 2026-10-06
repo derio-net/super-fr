@@ -665,3 +665,68 @@ prose (steps 3 and 8).
 ### no-refactor-p7-t1 · discovery · no-refactor-because P7.T1 (phase 7)
 
 new files only (an install script, six scenarios, one integration test file); nothing existing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1 created=2026-10-06T15:43:50+00:00 phase=7 state=open review_scope=in -->
+### p7-r1 · finding [open] (reviewer: in scope) · phase 7's own row super-fr-candidate-contract left not-implemented (phase 7)
+
+Raised by the independent phase-7 reviewer with file:line evidence (see p7-review).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2 created=2026-10-06T15:43:50+00:00 phase=7 state=open review_scope=in -->
+### p7-r2 · finding [open] (reviewer: in scope) · shipped-verification-strategies.sh accepted any non-zero walk exit (run-not-found) (phase 7)
+
+Raised by the independent phase-7 reviewer with file:line evidence (see p7-review).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3 created=2026-10-06T15:43:50+00:00 phase=7 state=open review_scope=in -->
+### p7-r3 · finding [open] (reviewer: in scope) · spec-verification-section.sh passing case had no exit check (phase 7)
+
+Raised by the independent phase-7 reviewer with file:line evidence (see p7-review).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4 created=2026-10-06T15:43:50+00:00 phase=7 state=open review_scope=in -->
+### p7-r4 · finding [open] (reviewer: in scope) · ci rows cited evidence missing clauses (phase 7)
+
+Raised by the independent phase-7 reviewer with file:line evidence (see p7-review).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5 created=2026-10-06T15:43:50+00:00 phase=7 state=open review_scope=in -->
+### p7-r5 · finding [open] (reviewer: in scope) · docs still prescribed verify: post-merge, which the code refuses (phase 7)
+
+Raised by the independent phase-7 reviewer with file:line evidence (see p7-review).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6 created=2026-10-06T15:43:50+00:00 phase=7 state=open review_scope=in -->
+### p7-r6 · finding [open] (reviewer: in scope) · docs/verification-strategies.md misdescribed prerelease and the staging example (phase 7)
+
+Raised by the independent phase-7 reviewer with file:line evidence (see p7-review).
+
+<!-- fr:journal kind=review scope=plan id=p7-review created=2026-10-06T15:43:50+00:00 phase=7 -->
+### p7-review · review · Phase 7 independent code review — 6 findings, all in scope, all fixed (phase 7)
+
+Reviewer confirmed: candidate-install mirrors install.sh's --with set for path and git sources and is quote-safe; prerelease scenario never calls gh; scenarios run in the CI test job (ci is honest); mirrors, reports, explainer and fragment are current; skill statements match the shipped walk allowlist, Refs rule, sections, none-with-reason, held batches and conflict hand-back. It judged p7-red-order as having hidden exactly p7-r2/p7-r3. All fixed by a separate fixer, with r2/r3 shown failing against a stub fr. Residual (not a finding): the git+ install path is proven by argv only, not a real network install. Suite: 9366 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1-resolved created=2026-10-06T15:43:50+00:00 phase=7 state=fixed resolves=p7-r1 -->
+### p7-r1-resolved · finding [fixed] · resolves p7-r1: phase 7's own row super-fr-candidate-contract left not-implemented (phase 7)
+
+Moved to ci via set-status with five integration refs and the walk's contract-refusal unit test. ccad61b9d.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2-resolved created=2026-10-06T15:43:50+00:00 phase=7 state=fixed resolves=p7-r2 -->
+### p7-r2-resolved · finding [fixed] · resolves p7-r2: shipped-verification-strategies.sh accepted any non-zero walk exit (run-not-found) (phase 7)
+
+Scenario builds a run+spec+row fixture so the walk reaches the R8 contract refusal; require_exit 2 + expect_grep candidate-install; fails against a broken fr. f766f6e78.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3-resolved created=2026-10-06T15:43:50+00:00 phase=7 state=fixed resolves=p7-r3 -->
+### p7-r3-resolved · finding [fixed] · resolves p7-r3: spec-verification-section.sh passing case had no exit check (phase 7)
+
+require_exit 0 added; fails against a broken fr. ff3c331fa.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4-resolved created=2026-10-06T15:43:50+00:00 phase=7 state=fixed resolves=p7-r4 -->
+### p7-r4-resolved · finding [fixed] · resolves p7-r4: ci rows cited evidence missing clauses (phase 7)
+
+Unit refs added by name for awaiting-live-triage, spec-verification-section, verification-strategy-resolution. 1d03bfe9f, b958f2b80, 850de2b0a.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5-resolved created=2026-10-06T15:43:50+00:00 phase=7 state=fixed resolves=p7-r5 -->
+### p7-r5-resolved · finding [fixed] · resolves p7-r5: docs still prescribed verify: post-merge, which the code refuses (phase 7)
+
+verify: live in fr-goal, fr-plan, fr-spec-reviewer, explainer (re-rendered, byte-identical baseline), plan_ops lint, and both fr-goal.yaml comments; mirrors regenerated; pinned tests updated. 4576e3a35, 149b472a7.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6-resolved created=2026-10-06T15:43:50+00:00 phase=7 state=fixed resolves=p7-r6 -->
+### p7-r6-resolved · finding [fixed] · resolves p7-r6: docs/verification-strategies.md misdescribed prerelease and the staging example (phase 7)
+
+States the walk refuses source: prerelease and the PR body's manual route; the staging example says worktree build + scenarios run. eedc79536.

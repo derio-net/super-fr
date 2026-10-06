@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-verification-kinds
 workflow: fr-goal@1
 branch: feat/batch-verification-kinds
 started: '2026-10-06T09:20:12+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -50,8 +50,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-06T15:20:25+00:00'
+    state: done
+    at: '2026-10-06T15:43:51+00:00'
     members:
     - implement-phase
     - review-phase
@@ -244,13 +244,20 @@ steps:
           tests: p7-suite.log@baa3d06b05bb;tree=caf78e2e60235c81570467eaa24a4159350b2447c06db3b7628e7706f6589e87
           visual: none
       phase/7/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T15:20:25+00:00'
           agent: a87a682d8072029a0
           harness: claude-code
           model: claude-opus-5-5
           session: a4557f5a-3a30-4673-856d-3f9329d47f77
+          returned: '2026-10-06T15:43:51+00:00'
+          outcome: done
+        evidence:
+          review: p7-review
+          reviewer: a87a682d8072029a0
+          visual: none
+          findings: p7-r1,p7-r2,p7-r3,p7-r4,p7-r5,p7-r6
   journal-check:
     state: pending
   deliver:
