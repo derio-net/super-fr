@@ -7083,3 +7083,91 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: triage-claims-identity
+    capability: triage-claims
+    acceptance: Each triage scope on a host has a stable scope id that carries no hostname,
+      path or scope name, and its host id and scope config never leave the host.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-claims-hands-off
+    capability: triage-claims
+    acceptance: An issue claimed by another scope is listed as held elsewhere and is
+      never batched, dispatched, merged, closed out or archived by this scope.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/triage-claims-held.sh
+  - id: triage-claims-expiry
+    capability: triage-claims
+    acceptance: A claim whose holder stopped refreshing it is reported as expired and
+      can be released or taken over only by an explicit operator command.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/triage-claims-expired.sh
+  - id: triage-claims-writes
+    capability: triage-claims
+    acceptance: Claims are written at wave assignment (or dispatch), refreshed in place,
+      released at close-out, and a race between two claimers leaves exactly one holder.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-claims-driver
+    capability: triage-claims
+    acceptance: Each drive pass writes owed claims, refreshes and releases before acting,
+      and leaves a batch with a member held elsewhere alone.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-claims-board-publish
+    capability: triage-claims
+    acceptance: Each scope's board shows what other scopes hold and is published under
+      its own name after every drive pass through the scope's configured command.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R14
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - held-elsewhere-group
+      - held-elsewhere-empty
+      - expired-claim-marked
+      - card-claim-expiry
+      - phone-width
+      - dark-theme
+      interactions:
+      - open-held-issue-link
