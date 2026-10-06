@@ -4941,9 +4941,13 @@ rows:
       again, with no step done twice
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_failure_at_each_step_exits_1_and_the_same_command_finishes_it
+      - super-fr:tests/unit/test_isolation_branch_rename.py#test_a_partial_rename_is_finished
+    status: ci
+    notes: A failure injected at each step of spec A.7 exits 1 naming what remains;
+      the same command re-run finishes it with no step done twice.
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
