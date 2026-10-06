@@ -113,7 +113,10 @@ def _launched(*, sidechain: bool = True) -> list[dict]:
 def _poll(
     issued: str, done: str, tail: str, *, n: int, sidechain: bool = True, log: str = LOG
 ) -> list[dict]:
-    command = f"for i in $(seq 1 11); do tail -1 {log} | grep -q '^exit=' && break; sleep 10; done; tail -3 {log}"
+    command = (
+        f"for i in $(seq 1 11); do tail -1 {log} | grep -q '^exit=' && break; sleep 10; done;"
+        f" tail -3 {log}"
+    )
     return [
         _use(issued, f"toolu_poll{n}", command, sidechain=sidechain),
         _result(done, f"toolu_poll{n}", tail, sidechain=sidechain),

@@ -1075,6 +1075,24 @@ _INTERPRETERS = frozenset({"node", "python", "python3", "bash", "sh", "npx", "de
 """Words whose first non-flag argument is the program they execute."""
 _SUBCOMMAND_RUNNERS = frozenset({"deno", "bun", "uv"})
 """Interpreters that may put a `run` subcommand before the program."""
+_UV_VALUE_FLAGS = frozenset(
+    {
+        *("-w", "--with", "--with-editable", "--with-requirements"),
+        *("-p", "--python", "--project", "--directory", "--package", "--env-file"),
+        *("--extra", "--no-extra", "--group", "--no-group", "--only-group"),
+        *("--index", "--default-index", "-i", "--index-url", "--extra-index-url"),
+        *("-f", "--find-links", "--index-strategy", "--keyring-provider"),
+        *("-P", "--upgrade-package", "--reinstall-package", "--refresh-package"),
+        *("--resolution", "--prerelease", "--fork-strategy", "--python-platform"),
+        *("--exclude-newer", "--exclude-newer-package", "--no-sources-package"),
+        *("--link-mode", "-C", "--config-setting", "--config-settings-package"),
+        *("--no-build-isolation-package", "--no-build-package", "--no-binary-package"),
+        *("--cache-dir", "--color", "--allow-insecure-host", "--config-file"),
+    }
+)
+"""`uv run` flags whose value is the NEXT word (`uv run --help`), so that word
+is the flag's, never the program (gh#999: `uv run --with pyyaml python x`).
+The `--flag=value` and `-wvalue` spellings are one word and need no entry."""
 _SEPARATORS = frozenset({"&&", "||", ";", "|", "|&", "&", "(", ")"})
 _LEADING_ASSIGNMENT = re.compile(r"^[A-Za-z_]\w*=")
 
@@ -1138,15 +1156,38 @@ def _program(words: list[str], depth: int = 0) -> list[str]:
                 *(p for sub in _simple_commands(after[0]) for p in _program(sub, depth + 1)),
             ]
         return found
+    if name == "uv":
+        return [*found, *_uv_run_program(args, depth)]
     operands = [a for a in args if not a.startswith("-")]
     if name in _SUBCOMMAND_RUNNERS and operands[:1] == ["run"]:
         operands = operands[1:]
-    elif name == "uv":
-        return found
     if not operands:
         return found
     index = args.index(operands[0])
     return [*found, *_program(args[index:], depth + 1)]
+
+
+def _uv_run_program(args: list[str], depth: int) -> list[str]:
+    """The program(s) `uv <args>` executes when its subcommand is `run`: the
+    first word after `run` that is neither a flag nor a flag's value
+    (`_UV_VALUE_FLAGS`), read recursively as `_program` reads any command.
+    Any other subcommand executes nothing this matcher recognises."""
+    seen_run = False
+    i = 0
+    while i < len(args):
+        word = args[i]
+        if word in _UV_VALUE_FLAGS:
+            i += 2
+        elif word.startswith("-"):
+            i += 1
+        elif not seen_run:
+            if word != "run":
+                return []
+            seen_run = True
+            i += 1
+        else:
+            return _program(args[i:], depth + 1)
+    return []
 
 
 def _executes(command: str, script: Path) -> bool:
@@ -1178,7 +1219,8 @@ def shell_named_since(
     An indirection names no script — `npm run shots`, `make shots`, a
     wrapper script, a shell function — and is NOT recognised: name the script
     directly (`node shots.cjs`). An interpreter flag that takes a value
-    (`node --require x shots.cjs`) is read as the program being `x`. And the
+    (`node --require x shots.cjs`) is read as the program being `x` — except
+    `uv run`'s, which are listed (`_UV_VALUE_FLAGS`, gh#999). And the
     transcript records that the command was issued, not that it succeeded."""
     script = Path(name)
 
@@ -1269,6 +1311,7 @@ def wrote_since(
     if records is None:
         return None
     issued: dict[str, _dt.datetime] = {}
+    commands: dict[str, tuple[_dt.datetime, str]] = {}
     for record in records:
         if record.get("type") != "assistant" or (main_thread and record.get("isSidechain") is True):
             continue
@@ -1287,10 +1330,13 @@ def wrote_since(
                 and block.get("name") == "Bash"
                 and isinstance(command, str)
                 and isinstance(block.get("id"), str)
-                and _writes(command, log)
             ):
-                issued[block["id"]] = stamp
+                commands[block["id"]] = (stamp, command)
+                if _writes(command, log):
+                    issued[block["id"]] = stamp
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    closed: dict[str, tuple[_dt.datetime, _dt.datetime]] = {}
+    calls: list[_BashCall] = []
     backgrounded: set[str] = set()
     for record in records:
         if record.get("type") != "user" or (main_thread and record.get("isSidechain") is True):
@@ -1299,6 +1345,18 @@ def wrote_since(
         message = record.get("message")
         content = message.get("content") if isinstance(message, Mapping) else None
         for block in content if isinstance(content, list) else ():
+            if (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_result"
+                and block.get("tool_use_id") in commands
+                and block.get("is_error") is not True
+                and done is not None
+                and not _is_launch_ack(record)
+            ):
+                # Every completed foreground command, the writer's or not: a
+                # later one may show a self-detached suite's `exit=` line.
+                began, command = commands[block["tool_use_id"]]
+                calls.append(_BashCall(began, done, command, 0, _result_text(block)))
             if (
                 isinstance(block, Mapping)
                 and block.get("type") == "tool_result"
@@ -1313,6 +1371,7 @@ def wrote_since(
                     backgrounded.add(block["tool_use_id"])
                 else:
                     windows.append((issued[block["tool_use_id"]], done))
+                    closed[block["tool_use_id"]] = windows[-1]
     # When the harness QUEUED a notice (the command's end), which can precede
     # its delivery by a whole turn. Used only to NARROW a window, never to open
     # one, so a queued prompt that merely looks like a notice can only refuse.
@@ -1346,7 +1405,33 @@ def wrote_since(
             start = issued[tool_use_id]
             end = min(done, queued.get(tool_use_id, done))
             windows.append((start, end if end >= start else done))
+            closed[tool_use_id] = windows[-1]
+    # A writer that detached ITSELF with `&` (gh#1002) ends its tool call —
+    # foreground result or background notice — before the suite it started
+    # does. As OpenCode's reader does (gh#719), close its window at the first
+    # later command that named the log and showed its `exit=0`.
+    calls.sort(key=lambda c: (c.began, c.ended))
+    for tool_use_id, (began, ended) in closed.items():
+        command = commands[tool_use_id][1]
+        if _detaches(command):
+            seen = _seen_exit(_BashCall(began, ended, command, 0, ""), calls, log)
+            if seen is not None:
+                windows.append((began, seen))
     return windows
+
+
+def _result_text(block: Mapping[str, Any]) -> str:
+    """The text a `tool_result` block carries: a string, or its text blocks
+    joined."""
+    content = block.get("content")
+    if isinstance(content, str):
+        return content
+    parts = content if isinstance(content, list) else []
+    return "\n".join(
+        part["text"]
+        for part in parts
+        if isinstance(part, Mapping) and isinstance(part.get("text"), str)
+    )
 
 
 def _notice_carrier(record: Mapping[str, Any]) -> object:
