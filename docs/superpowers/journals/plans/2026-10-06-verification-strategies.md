@@ -515,3 +515,38 @@ a one-method protocol and a one-call herdr method; nothing to clean
 ### no-refactor-p5-t4 · discovery · no-refactor-because P5.T4 (phase 5)
 
 the refactor was done in GREEN: the stop-line reporting moved out of _merge_batch into _stopped_line so the conflict path reuses it, and _fresh_conflict takes the launch and branch _hand_back already resolved instead of re-resolving them
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-10-06T14:28:18+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · fresh conflict session starts in the driver's clone with no way onto the batch branch (phase 5)
+
+Raised by the independent phase-5 reviewer with file:line evidence (see p5-review).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-10-06T14:28:18+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · mirrors changes facts.json without a facts schema bump (phase 5)
+
+Raised by the independent phase-5 reviewer with file:line evidence (see p5-review).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-10-06T14:28:18+00:00 phase=5 state=open review_scope=in -->
+### p5-r3 · finding [open] (reviewer: in scope) · missing tests: committed schema-4 judgements load; wait-behind batch retried after its blocker merges (phase 5)
+
+Raised by the independent phase-5 reviewer with file:line evidence (see p5-review).
+
+<!-- fr:journal kind=review scope=plan id=p5-review created=2026-10-06T14:28:18+00:00 phase=5 -->
+### p5-review · review · Phase 5 independent code review — 3 findings, all in scope, all fixed (phase 5)
+
+Reviewer verified §G rule by rule: MergeConflictError, ConflictEvent and the schema gate, the pure conflict_decision order, idle-only delivery, SessionMessenger outside CAPABILITIES, needs-you merge-conflict and its clearing, restart safety through persisted events, and a stable unique conflict-<id>-<n>. On the implementer's decisions: (a) the clone checkout was wrong as shipped (p5-r1); (b) unknown waits like working is defensible, a follow-up could surface a long-lasting unknown; (c) --once exit 1 on a conflict is consistent; (d) needed a facts bump (p5-r2). Fixes were made test-first by a separate fixer. Suite: 9326 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-10-06T14:28:18+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: fresh conflict session starts in the driver's clone with no way onto the batch branch (phase 5)
+
+The brief's first step is `fr isolation up --branch <branch>` (resumes the batch workspace; harmless for a live session); no git checkout/switch in the brief; spec R20/§G updated to six steps. 33cd0243e.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-10-06T14:28:18+00:00 phase=5 state=fixed resolves=p5-r2 -->
+### p5-r2-resolved · finding [fixed] · resolves p5-r2: mirrors changes facts.json without a facts schema bump (phase 5)
+
+FACTS_SCHEMA 5, FACTS_READS (3,4,5); gh#885 comment names mirrors and notes export; schema pins updated. 7e26e4eec.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-10-06T14:28:18+00:00 phase=5 state=fixed resolves=p5-r3 -->
+### p5-r3-resolved · finding [fixed] · resolves p5-r3: missing tests: committed schema-4 judgements load; wait-behind batch retried after its blocker merges (phase 5)
+
+Both tests added (behaviour already correct, so green on first run). 9d82b6ac7.
