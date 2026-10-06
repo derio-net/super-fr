@@ -308,7 +308,9 @@ def test_write_board_judges_idleness_by_the_wall_clock(
     _use(monkeypatch, _Inspector({f"{REPO}/run/batch-b1": "idle"}))
     path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
     card = _column(path.read_text(encoding="utf-8"), "running")
-    assert re.search(r"idle \d+ min, no PR as of ", card)
+    assert re.search(
+        r"idle, dispatched \d+ min ago, no PR as of \d{4}-\d\d-\d\d \d\d:\d\d UTC", card
+    )
     assert 'class="card needs-you"' in card
 
 

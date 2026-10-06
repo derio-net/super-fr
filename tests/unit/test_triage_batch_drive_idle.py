@@ -77,8 +77,8 @@ def test_an_idle_batch_session_with_no_pr_is_reported_with_its_focus_command(
     inspector.status[BATCH_ITEM] = "idle"
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code in (0, 3), out
-    (warn,) = [ln for ln in _lines(out, "warn") if "idle for" in ln]
-    assert f"{BATCH_ITEM} has sat idle for" in warn and "min with no PR" in warn
+    (warn,) = [ln for ln in _lines(out, "warn") if "focus it" in ln]
+    assert f"{BATCH_ITEM} is idle, dispatched " in warn and "min ago, with no PR" in warn
     assert "fr triage batch focus b1" in warn
 
 
@@ -92,10 +92,10 @@ def test_it_is_reported_once_across_passes_and_never_ends_the_drive(
     driver.run_pass()
     driver.run_pass()
     seen = capsys.readouterr()
-    assert (seen.out + seen.err).count("has sat idle for") == 1
+    assert (seen.out + seen.err).count("is idle, dispatched") == 1
 
 
-@pytest.mark.parametrize("status", ["working", "blocked", "absent", "done-not"])
+@pytest.mark.parametrize("status", ["working", "blocked", "absent", "unknown"])
 def test_a_session_that_is_not_idle_is_not_reported(
     tmp_path: Path, world: World, checkout: DriveCheckout, inspector: InspectingRunner,
     status: str,
@@ -104,7 +104,7 @@ def test_a_session_that_is_not_idle_is_not_reported(
     inspector.status[BATCH_ITEM] = status
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code in (0, 3), out
-    assert "has sat" not in out
+    assert "focus it" not in out
 
 
 def test_only_candidates_are_probed(
@@ -115,7 +115,7 @@ def test_only_candidates_are_probed(
     inspector.status[BATCH_ITEM] = "idle"
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code in (0, 3), out
-    assert "has sat" not in out and inspector.asked == []
+    assert "focus it" not in out and inspector.asked == []
 
 
 def test_a_young_dispatch_is_not_a_candidate(
@@ -126,7 +126,7 @@ def test_a_young_dispatch_is_not_a_candidate(
     world.config = {"idle_session_minutes": 60 * 24 * 365}
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code in (0, 3), out
-    assert "has sat" not in out and inspector.asked == []
+    assert "focus it" not in out and inspector.asked == []
 
 
 def test_without_yes_no_runner_is_read(
@@ -145,10 +145,10 @@ def test_a_runner_that_cannot_inspect_is_skipped(
     _dispatched(world, tmp_path)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code in (0, 3), out
-    assert "has sat" not in out
+    assert "focus it" not in out
 
 
-def test_a_refusing_or_raising_runner_is_soft(
+def test_a_refusing_runner_is_soft_and_reported_once(
     tmp_path: Path, world: World, checkout: DriveCheckout, inspector: InspectingRunner
 ) -> None:
     _dispatched(world, tmp_path)
@@ -156,16 +156,105 @@ def test_a_refusing_or_raising_runner_is_soft(
     inspector.preflight = lambda items: "no herdr"  # type: ignore[method-assign]
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code in (0, 3), out
-    assert "has sat" not in out and inspector.asked == []
+    assert "focus it" not in out and inspector.asked == []
+    assert out.count("cannot report session status: no herdr") == 1
 
-    inspector.preflight = lambda items: None  # type: ignore[method-assign]
+
+def test_a_raising_runner_reports_nothing_idle_and_the_failure_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, inspector: InspectingRunner,
+    capsys: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    _dispatched(world, tmp_path)
+    inspector.status[BATCH_ITEM] = "idle"
 
     def boom(items: Any) -> Any:
         raise RuntimeError("tab list failed")
 
     inspector.session_statuses = boom  # type: ignore[method-assign]
+    driver = _driver(tmp_path)
+    driver.run_pass()
+    driver.run_pass()
+    seen = capsys.readouterr()
+    text = seen.out + seen.err
+    assert "focus it" not in text and "is idle" not in text
+    assert text.count("cannot report session status: tab list failed") == 1
+
+
+def test_a_runner_that_will_not_load_says_the_idle_probe_is_lost_not_closing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import typer
+
+    def refuse(name: str) -> Any:
+        raise typer.Exit(code=2)
+
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", refuse)
+    _dispatched(world, tmp_path)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code in (0, 3), out
+    assert "idle sessions are not reported" in out
+    assert "sessions are not closed" not in out
+
+
+@pytest.mark.parametrize("status", ["idle", "done"])
+def test_an_idle_or_done_session_is_reported(
+    tmp_path: Path, world: World, checkout: DriveCheckout, inspector: InspectingRunner,
+    status: str,
+) -> None:  # fmt: skip
+    _dispatched(world, tmp_path)
+    inspector.status[BATCH_ITEM] = status
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code in (0, 3), out
+    (warn,) = [ln for ln in _lines(out, "warn") if "focus it" in ln]
+    assert f"{BATCH_ITEM} is {status}, dispatched " in warn
+
+
+def test_a_cancelled_batch_with_a_leftover_idle_session_is_not_probed_or_reported(
+    tmp_path: Path, world: World, checkout: DriveCheckout, inspector: InspectingRunner
+) -> None:
+    world.issues[1] = "open"
+    cancel = "      - {kind: cancel, at: 2026-10-01T11:00:00Z}\n"
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + cancel))
+    inspector.status[BATCH_ITEM] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code in (0, 3), out
+    assert "focus it" not in out and inspector.asked == []
+
+
+def test_one_session_statuses_call_per_runner_per_pass_with_two_candidates(
+    tmp_path: Path, world: World, checkout: DriveCheckout, inspector: InspectingRunner
+) -> None:
+    world.issues[1] = world.issues[2] = "open"
+    _state(
+        tmp_path, world,
+        _batch("b1", 1, events=_dispatch_event("b1")),
+        _batch("b2", 2, events=_dispatch_event("b2")),
+    )  # fmt: skip
+    inspector.status[BATCH_ITEM] = inspector.status[f"{REPO}/run/batch-b2"] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code in (0, 3), out
+    assert inspector.calls.count("session_statuses") == 1
+    assert len(inspector.asked) == 1 and sorted(inspector.asked[0]) == [
+        BATCH_ITEM, f"{REPO}/run/batch-b2",
+    ]  # fmt: skip
+    assert len([ln for ln in _lines(out, "warn") if "focus it" in ln]) == 2
+
+
+def test_a_finished_closeout_is_not_probed_or_reported(
+    tmp_path: Path, world: World, checkout: DriveCheckout, inspector: InspectingRunner
+) -> None:
+    world.issues[1] = "closed"
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(hours=3)).isoformat())  # fmt: skip
+    closeout = (
+        f"      - {{kind: closeout, at: {(NOW - timedelta(hours=2)).isoformat()}, "
+        "runner: fake, handle: h, archived: 5}\n"
+    )
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    inspector.status[CLOSEOUT_ITEM] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code in (0, 3), out
+    assert "focus it" not in out
 
 
 def test_an_idle_closeout_with_no_archive_pr_is_reported(
@@ -182,6 +271,7 @@ def test_an_idle_closeout_with_no_archive_pr_is_reported(
     inspector.status[CLOSEOUT_ITEM] = "idle"
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code in (0, 3), out
-    (warn,) = [ln for ln in _lines(out, "warn") if "idle for" in ln]
-    assert f"{CLOSEOUT_ITEM} has sat idle for " in warn and "min with no archive PR" in warn
+    (warn,) = [ln for ln in _lines(out, "warn") if "focus it" in ln]
+    assert f"{CLOSEOUT_ITEM} is idle, close-out started " in warn
+    assert "min ago, with no archive PR" in warn
     assert "fr triage batch focus b1 --closeout" in warn

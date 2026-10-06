@@ -279,8 +279,8 @@ class IdleSession:
     item: str
     batch: str
     closeout: bool
-    since: datetime  # the dispatch, or the close-out event, it has sat since
-    minutes: int
+    since: datetime  # the dispatch, or the close-out event, it was started at
+    minutes_since: int  # whole minutes from `since` to now: NOT how long it has been idle
     status: str = "idle"
 
 
@@ -290,31 +290,39 @@ def idle_session(
     repo: str,
     closeout: bool,
     status: str | None,
-    has_pr: bool,
-    archive_attributed: bool,
+    stage: BatchStage,
+    archives: Sequence[LivePr],
     now: datetime,
     threshold: int,
 ) -> IdleSession | None:
     """The one definition of an idle session (driver-sessions R7): the runner reports the
-    item `idle` or `done`, its last dispatch (the close-out: its event) is older than
-    *threshold* minutes, and it has no PR (the close-out: no attributed archive PR).
+    item `idle` or `done`, it is owed work, and its last dispatch (the close-out: its
+    event) is at least *threshold* minutes old.
+
+    Owed work is a function of *stage* (`derive_batch_stage`): a batch session is owed a PR
+    only while the batch is `dispatched` (no PR yet; a cancelled, proposed or PR-carrying
+    batch owes it nothing), and a close-out session only once the batch has landed and the
+    close-out is not finished (`is_finished`: its archive PR merged, or recorded). An
+    archive PR in *archives*, open or merged, attributed to the close-out is its product.
     Pure and stateless, so the driver and the board read the same rule."""
     if status not in ("idle", "done"):
         return None
     if closeout:
         event = closeout_event(batch)
-        since = event.at if event is not None else None
-        produced = archive_attributed or (event is not None and event.archived is not None)
+        if event is None or stage not in LANDED or is_finished(batch, stage, archives):
+            return None
+        if event.archived is not None or any(attributed(p, batch, event) for p in archives):
+            return None
+        since = event.at
         item = closeout_item_id(repo, batch.id)
     else:
         dispatch = last_dispatch(batch)
-        since = dispatch.at if dispatch is not None else None
-        produced = has_pr
+        if dispatch is None or stage != "dispatched":
+            return None
+        since = dispatch.at
         item = batch_item_id(repo, batch.id)
-    if since is None or produced:
-        return None
     age = now - since
-    if age < timedelta(minutes=threshold):
+    if age < timedelta(minutes=threshold):  # "at least the threshold" is idle
         return None
     return IdleSession(item, batch.id, closeout, since, int(age.total_seconds() // 60), status)
 
@@ -334,8 +342,9 @@ def _idle_actions(snap: Snapshot, chosen: Sequence[Batch]) -> list[Action]:
         )  # fmt: skip
         out.append(
             Action("warn", idle.batch,
-                   f"{idle.item} has sat {idle.status} for {idle.minutes} min with no {what}; "
-                   f"focus it: {cmd}", head=key)
+                   f"{idle.item} is {idle.status}, "
+                   f"{'close-out started' if idle.closeout else 'dispatched'} "
+                   f"{idle.minutes_since} min ago, with no {what}; focus it: {cmd}", head=key)
         )  # fmt: skip
     return out
 

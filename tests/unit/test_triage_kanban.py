@@ -27,7 +27,6 @@ from fr.triage.merge_stops import MergeStop
 from fr.triage.model import Facts, Judgements
 
 from tests.unit.triage_board_fixtures import (
-    COLLECTED,
     REPO,
     batch,
     busy,
@@ -596,7 +595,7 @@ def test_a_batch_card_idle_with_no_pr_needs_you_and_says_why() -> None:
         [batch("a", [1], events=[dispatch("a")])], [issue(1)], {batch_item_id(REPO, "a"): "idle"}
     )
     assert card.needs_you
-    assert card.hint == f"idle 125 min, no PR as of {COLLECTED}"
+    assert card.hint == "idle, dispatched 125 min ago, no PR as of 2026-10-02 12:00 UTC"
 
 
 def test_a_closeout_card_idle_with_no_archive_pr_needs_you_and_says_why() -> None:
@@ -607,7 +606,9 @@ def test_a_closeout_card_idle_with_no_archive_pr_needs_you_and_says_why() -> Non
         bid="m",
     )
     assert card.needs_you
-    assert card.hint == f"idle 125 min, no archive PR as of {COLLECTED}"
+    assert (
+        card.hint == "idle, close-out started 125 min ago, no archive PR as of 2026-10-02 12:00 UTC"
+    )
 
 
 def test_a_card_with_a_pr_is_not_flagged() -> None:
@@ -653,9 +654,41 @@ def test_without_a_clock_the_board_judges_no_idleness() -> None:
     assert not build_board(f, jd, {batch_item_id(REPO, "a"): "idle"}).card("a").needs_you
 
 
+def test_a_cancelled_batch_with_a_leftover_idle_session_is_not_flagged() -> None:
+    cancel = {"kind": "cancel", "at": "2026-10-01T11:00:00Z", "reason": "no longer wanted"}
+    card = _idle_card(
+        [batch("a", [1], events=[dispatch("a"), cancel])],
+        [issue(1)],
+        {batch_item_id(REPO, "a"): "idle"},
+    )
+    assert not card.needs_you and "idle" not in card.hint
+
+
+def test_a_finished_closeout_is_never_flagged() -> None:
+    # The archive PR merged by hand, not yet recorded: the facts carry it merged.
+    archive = pr(20, "chore/closeout-feat-batch-m", state="MERGED")
+    card = _idle_card(
+        [batch("m", [1], events=[dispatch("m"), ARCHIVE])],
+        [issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")])],
+        {closeout_item_id(REPO, "m"): "idle"},
+        bid="m",
+        prs=[archive],
+    )
+    assert not card.needs_you and "idle" not in card.hint
+
+
 def test_an_idle_session_is_never_a_failing_ci_need() -> None:
+    from fr.triage.batch_drive import idle_session
     from fr.triage.views import drive_snapshot, needs_you
 
     f, jd = _world([batch("a", [1], events=[dispatch("a")])], [issue(1)])
+    # The inputs that WOULD make the driver report: an idle, aged, PR-less dispatch.
+    assert (
+        idle_session(
+            jd.batches[0], repo=REPO, closeout=False, status="idle", stage="dispatched",
+            archives=(), now=IDLE_NOW, threshold=60,
+        )
+        is not None
+    )  # fmt: skip
     assert drive_snapshot(f, jd).idle == ()
     assert [n for n in needs_you(f, jd) if n.kind == "failing-ci"] == []

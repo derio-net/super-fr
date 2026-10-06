@@ -41,7 +41,7 @@ R3. A restart happens in place. It sends `/exit`, then waits at most 30 s for `c
 R4. One failed pane never stops the run. The command exits 0 when no pane failed, 1 when any pane failed, and 2 on a refusal.
 R5. `fr-herdr restart-idle` runs only inside a herdr session (`HERDR_ENV=1`, `herdr` on PATH), the same rule as the runner's preflight. Outside, it refuses with exit 2. After `scripts/install.sh`, `fr-herdr` is on PATH beside `fr`, through the same managed, atomically swapped link. After `.fr/candidate-install`, it is in `<prefix>/bin`.
 R6. A repo opts in through `.fr/triage.yaml`'s `post_merge_restart: idle`. The default is `none`. In a drive pass where that repo's `post_merge` succeeded at least once, the wave driver asks the runner of the close-out it started to restart idle sessions, once, at the end of the pass. It prints one summary line, plus one line per failed pane. Neither a restart failure nor a runner that cannot restart holds a close-out or ends the drive. A runner that cannot restart is reported once per driver process. The driver's own pane is never restarted. super-fr's own `.fr/triage.yaml` turns the option on.
-R7. A batch session is reported when all of these hold: the runner reports it `idle` or `done`, its last dispatch is older than the repo's `idle_session_minutes`, and the batch has no PR. A close-out session is reported on the same terms when its close-out was recorded longer ago than that threshold and no archive PR is attributed to it. `idle_session_minutes` is set in `.fr/triage.yaml`; the default is 60. The driver reports each such session once per driver process. The report names the item and how long it has sat, and gives a paste-ready command that focuses it (`fr triage batch focus <batch> [--closeout]` plus the drive's own scope options). Reporting never ends the drive.
+R7. A batch session is reported when all of these hold: the runner reports it `idle` or `done`, its last dispatch is at least the repo's `idle_session_minutes` old, and the batch has no PR and is not cancelled. A close-out session is reported on the same terms when its batch has landed, its close-out was recorded at least that long ago, and the close-out is not finished (no archive PR is attributed to it, open or merged, and none is recorded). `idle_session_minutes` is set in `.fr/triage.yaml`; the default is 60. The driver reports each such session once per driver process. The report names the item, its status and how long ago it was dispatched (the runner does not say how long it has been idle), and gives a paste-ready command that focuses it (`fr triage batch focus <batch> [--closeout]` plus the drive's own scope options). Reporting never ends the drive.
 R8. The board (`fr triage board`) marks a card *needs you* for the session R7 would report, judged at render time, and the card says why. The board's "Needs you now" list never shows an idle session as failing CI.
 R9. Outside herdr, the herdr runner still refuses. Its refusal says to run `fr triage batch drive` (and `dispatch`) from a herdr pane. The fr-triage skill states that constraint, and also the `post_merge_restart` and `idle_session_minutes` settings and `fr-herdr restart-idle`.
 
@@ -219,13 +219,16 @@ is a cache, not a registered artifact, so no artifact migration is owed. super-f
 ### D. Idle sessions — one pure rule, two readers (R7, R8)
 
 `batch_drive.idle_session(...) -> IdleSession | None` is pure, and the only definition.
-Its inputs are the batch, `status`, `has_pr`, the close-out event, `archive_attributed`,
-`now` and `threshold`. `IdleSession` holds the item id, the batch id, whether it is the
-close-out, `since` and `minutes`.
-- For the batch item: status `idle`/`done`, last dispatch older than the threshold, no
-  batch PR.
-- For the close-out item: status `idle`/`done`, close-out event older than the threshold,
-  no attributed archive PR.
+Its inputs are the batch, `status`, the batch's derived `stage`, the archive PRs
+(`archives`, open or merged), `now` and `threshold`. `IdleSession` holds the item id, the
+batch id, whether it is the close-out, `since` and `minutes_since` (minutes from `since` to
+now, not how long the session has been idle). The age test is `>=`: a session whose age
+equals the threshold is reported.
+- For the batch item: status `idle`/`done`, stage `dispatched` (so no batch PR, and never a
+  cancelled or proposed batch), last dispatch at least the threshold old.
+- For the close-out item: status `idle`/`done`, stage `merged` or `partial`, the close-out
+  not finished (`is_finished`) and no attributed archive PR in `archives` or recorded,
+  close-out event at least the threshold old.
 
 It is stateless, so it survives the driver's exec-restart (gh#998), and the board computes
 it from the same inputs.
@@ -238,12 +241,13 @@ definition of the same thing, the defect #1029 meant to avoid.
 
 **Driver.** `Snapshot` gains `idle: tuple[IdleSession, ...] = ()`. Each pass,
 `_Driver.snapshot` probes session statuses only for candidates:
-- a selected batch whose last dispatch is older than the threshold and that has no PR;
-- a recorded, unfinished close-out older than the threshold.
+candidates, which are exactly the sessions `idle_session` would report if the runner said
+`idle`; the prefilter calls the rule, it holds no test of its own.
 
 The probe is one `session_statuses` per runner, and soft: a runner that cannot load or
 refuses is skipped, as `_sessions` does. `drive_pass` emits `Action("warn", batch,
-"<item> has sat <status> for <N> min with no PR|archive PR; focus it: <command>")` with
+"<item> is <status>, dispatched|close-out started <N> min ago, with no PR|archive PR;
+focus it: <command>")` with
 `head=f"idle-session\0{item}\0{event.at}"`. The command is `shlex.join(["fr", "triage",
 "batch", "focus", batch, *(["--closeout"] if closeout else []), *self.scope_args])` (sr-11),
 carried in from the driver the way `dedupe_command` is. The `warned` set keeps the warn to
@@ -259,8 +263,11 @@ test pins that `drive_snapshot(...).idle == ()` (sr-10).
 **wall clock**: session status is read live at render time, and the minutes must be real.
 "No PR" comes from the collected facts. So a PR opened after the last collect reads as
 "no PR" until the next collect, which the board's `--watch` loop already runs (`recollect`).
-The card shows that window instead of hiding it: its line says `idle <N> min, no PR as of
-<collected_at>` (sr-9). A card is `needs_you` when `idle_session` returns a value for its
+The card shows that window instead of hiding it: its line says `idle, dispatched <N> min ago, no PR as of
+<collected_at>` (a close-out: `idle, close-out started <N> min ago, no archive PR as of
+<collected_at>`; `collected_at` in the page header's `YYYY-MM-DD HH:MM UTC`) (sr-9). The board
+passes the facts' archive PRs, merged ones included, so a hand-merged archive PR not yet
+recorded is a finished close-out and is never flagged. A card is `needs_you` when `idle_session` returns a value for its
 batch or close-out item, and its detail line says why (`no PR` or `no archive PR`).
 
 ### E. Outside herdr (R9)

@@ -33,13 +33,13 @@ from fr.triage.batch_drive import (
     Action,
     IdleSession,
     LivePr,
-    attributed,
     closeout_event,
     closeout_item_id,
     default_selection,
     drive_pass,
     idle_session,
 )
+from fr.triage.components import stamp_text
 from fr.triage.merge_stops import MergeStop, live_stop
 from fr.triage.model import (
     Batch,
@@ -116,11 +116,14 @@ HINT_FINISHED = "finished"
 
 
 def _idle_hint(idle: IdleSession, collected_at: str) -> str:
-    """The card's line for an idle session (driver-sessions R8): how long, and what is
-    missing. "No PR" is as of the last collect, so a PR opened since reads missing until
-    the next one (sr-9): the line says when."""
-    what = "no archive PR" if idle.closeout else "no PR"
-    return f"idle {idle.minutes} min, {what} as of {collected_at}"
+    """The card's line for an idle session (driver-sessions R8): since when it was started
+    (the runner does not say how long it has been idle), and what is missing. "No PR" is as
+    of the last collect, so a PR opened since reads missing until the next one (sr-9): the
+    line says when."""
+    when_ = stamp_text(collected_at)
+    if idle.closeout:
+        return f"idle, close-out started {idle.minutes_since} min ago, no archive PR as of {when_}"
+    return f"idle, dispatched {idle.minutes_since} min ago, no PR as of {when_}"
 
 
 def _archive_prs(batch_repo_: str, facts: Facts) -> list[LivePr]:
@@ -353,17 +356,14 @@ def _idle_of(
     if now is None or repo is None:
         return None
     threshold = facts.config_for(repo).idle_session_minutes
-    has_pr = batch_pr(batch, facts) is not None
-    event = closeout_event(batch)
-    archive = event is not None and any(
-        attributed(p, batch, event) for p in _archive_prs(repo, facts)
-    )
+    stage = derive_batch_stage(batch, facts)
+    archives = _archive_prs(repo, facts)
     return idle_session(
-        batch, repo=repo, closeout=False, status=status, has_pr=has_pr,
-        archive_attributed=archive, now=now, threshold=threshold,
+        batch, repo=repo, closeout=False, status=status, stage=stage,
+        archives=archives, now=now, threshold=threshold,
     ) or idle_session(
-        batch, repo=repo, closeout=True, status=closeout_status, has_pr=has_pr,
-        archive_attributed=archive, now=now, threshold=threshold,
+        batch, repo=repo, closeout=True, status=closeout_status, stage=stage,
+        archives=archives, now=now, threshold=threshold,
     )  # fmt: skip
 
 

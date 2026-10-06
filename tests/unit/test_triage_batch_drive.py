@@ -1510,10 +1510,11 @@ def test_an_archive_pr_retargeted_off_the_default_branch_is_never_merged() -> No
 
 def _idle(batch: Batch, **kw: Any) -> IdleSession | None:
     kw.setdefault("status", "idle")
-    kw.setdefault("has_pr", False)
-    kw.setdefault("archive_attributed", False)
+    kw.setdefault("stage", "merged" if kw.get("closeout") else "dispatched")
+    kw.setdefault("archives", ())
     kw.setdefault("closeout", False)
-    return idle_session(batch, repo=REPO, now=NOW, threshold=60, **kw)
+    kw.setdefault("threshold", 60)
+    return idle_session(batch, repo=REPO, now=NOW, **kw)
 
 
 def test_a_batch_session_idle_past_the_threshold_with_no_pr_is_reported() -> None:
@@ -1521,7 +1522,7 @@ def test_a_batch_session_idle_past_the_threshold_with_no_pr_is_reported() -> Non
     assert got is not None
     assert (got.item, got.batch, got.closeout) == (batch_item_id(REPO, "x"), "x", False)
     assert got.since == datetime(2026, 10, 1, 10, 0, tzinfo=UTC)
-    assert got.minutes == 26 * 60
+    assert got.minutes_since == 26 * 60
     assert _idle(_dispatched("x", 1), status="done") is not None
 
 
@@ -1530,22 +1531,46 @@ def test_a_session_that_is_not_idle_or_done_is_never_reported(status: str | None
     assert _idle(_dispatched("x", 1), status=status) is None
 
 
+def test_the_threshold_is_at_least_not_older_than() -> None:
+    # dispatched 2026-10-01 10:00; NOW is 26 h later, so 1560 min is exactly "at least".
+    assert _idle(_dispatched("x", 1), threshold=26 * 60) is not None
+    assert _idle(_dispatched("x", 1), threshold=26 * 60 + 1) is None
+
+
 def test_a_young_dispatch_or_one_with_a_pr_is_not_reported() -> None:
-    assert _idle(_dispatched("x", 1)) is not None
     young = idle_session(
-        _dispatched("x", 1), repo=REPO, closeout=False, status="idle", has_pr=False,
-        archive_attributed=False, now=datetime(2026, 10, 1, 10, 59, tzinfo=UTC), threshold=60,
+        _dispatched("x", 1), repo=REPO, closeout=False, status="idle", stage="dispatched",
+        archives=(), now=datetime(2026, 10, 1, 10, 59, tzinfo=UTC), threshold=60,
     )  # fmt: skip
     assert young is None
-    assert _idle(_dispatched("x", 1), has_pr=True) is None
+    for stage in ("pr-open", "merged", "partial", "abandoned"):
+        assert _idle(_dispatched("x", 1), stage=stage) is None
+
+
+@pytest.mark.parametrize("stage", ["proposed", "cancelled"])
+def test_a_batch_that_is_not_dispatched_is_owed_no_work(stage: str) -> None:
+    assert _idle(_dispatched("x", 1), stage=stage) is None
+    assert _idle(_closed("x", 1), closeout=True, stage=stage) is None
+
+
+@pytest.mark.parametrize("stage", ["dispatched", "pr-open", "abandoned"])
+def test_a_closeout_is_owed_only_once_the_batch_has_landed(stage: str) -> None:
+    assert _idle(_closed("x", 1), closeout=True, stage=stage) is None
+    assert _idle(_closed("x", 1), closeout=True, stage="partial") is not None
 
 
 def test_a_closeout_idle_past_the_threshold_with_no_archive_pr_is_reported() -> None:
     got = _idle(_closed("x", 1), closeout=True)
     assert got is not None and got.closeout
     assert got.item == closeout_item_id(REPO, "x")
-    assert got.since == datetime(2026, 10, 2, 11, 0, tzinfo=UTC) and got.minutes == 60
-    assert _idle(_closed("x", 1), closeout=True, archive_attributed=True) is None
+    assert got.since == datetime(2026, 10, 2, 11, 0, tzinfo=UTC) and got.minutes_since == 60
+    open_pr = _archive(7, "chore/closeout-feat-batch-x", state="OPEN")
+    assert _idle(_closed("x", 1), closeout=True, archives=(open_pr,)) is None
+
+
+def test_a_finished_closeout_is_never_reported() -> None:
+    merged = _archive(7, "chore/closeout-feat-batch-x", state="MERGED")
+    assert _idle(_closed("x", 1), closeout=True, archives=(merged,)) is None
 
 
 def test_a_closeout_with_no_event_or_a_recorded_archive_is_not_reported() -> None:
@@ -1572,9 +1597,10 @@ def test_the_driver_warns_once_per_idle_session_with_a_paste_ready_focus_command
     (action,) = drive_pass(snap).actions
     assert action.kind == "warn" and action.batch == "x"
     assert action.head == f"idle-session\0{batch_item_id(REPO, 'x')}\0{idle.since.isoformat()}"
-    assert f"{batch_item_id(REPO, 'x')} has sat idle for {idle.minutes} min with no PR" in (
-        action.detail
-    )
+    assert (
+        f"{batch_item_id(REPO, 'x')} is idle, dispatched {idle.minutes_since} min ago, "
+        "with no PR; focus it: "
+    ) in action.detail
     assert action.detail.endswith(
         f"focus it: fr triage batch focus x --repo {REPO} --dir '/some dir'"
     )
@@ -1587,7 +1613,7 @@ def test_the_driver_warns_once_per_idle_session_with_a_paste_ready_focus_command
 def test_a_closeout_warn_says_archive_pr_and_focuses_the_closeout() -> None:
     idle = _one_idle(closeout=True)
     (action,) = drive_pass(_with_idle(idle, scope_args=("--repo", REPO))).actions
-    assert "with no archive PR" in action.detail
+    assert "close-out started" in action.detail and "with no archive PR" in action.detail
     assert f"fr triage batch focus x --closeout --repo {REPO}" in action.detail
 
 

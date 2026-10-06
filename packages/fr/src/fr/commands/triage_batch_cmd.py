@@ -43,7 +43,7 @@ import uuid
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 from urllib.parse import urlparse
@@ -116,7 +116,6 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     DEFAULT_WORKSPACE_PREFIX,
     EXPORT_KINDS,
-    LANDED,
     RUNS_DIR,
     STALE_CLOSEOUT,
     Action,
@@ -1610,9 +1609,12 @@ class _Driver:
             self._runners[name] = load_runner(name)
         return self._runners[name]
 
-    def _try_runner(self, name: str) -> Runner | None:
-        """Runner *name*, or None (reported once) when it cannot be loaded: closing is
-        best effort, so a load failure never ends the drive (R10)."""
+    def _try_runner(
+        self, name: str, consequence: str = "its sessions are not closed"
+    ) -> Runner | None:
+        """Runner *name*, or None (reported once) when it cannot be loaded: closing and
+        the idle probe are best effort, so a load failure never ends the drive (R10).
+        *consequence* names what the caller loses, so the warning says the right thing."""
         if name in self._unloadable:
             return None
         runner, reason = try_load(name, self.runner)
@@ -1621,7 +1623,7 @@ class _Driver:
         self._unloadable.add(name)
         err_console.print(
             f"[yellow]warning:[/yellow] runner `{escape(name)}` could not be loaded "
-            f"({escape(reason or 'no reason given')}); its sessions are not closed",
+            f"({escape(reason or 'no reason given')}); {escape(consequence)}",
             soft_wrap=True,
         )
         return None
@@ -2173,28 +2175,28 @@ class _Driver:
 
         candidates: list[tuple[Batch, bool, str]] = []  # (batch, is_closeout, runner name)
         for b in chosen:
-            repo = repos.get(b.id)
-            if repo is None:
+            repo, stage = repos.get(b.id), stages.get(b.id)
+            if repo is None or stage is None:
                 continue
-            limit = timedelta(minutes=facts.config_for(repo).idle_session_minutes)
+            threshold = facts.config_for(repo).idle_session_minutes
             dispatch, event = last_dispatch(b), closeout_event(b)
-            if dispatch is not None and now - dispatch.at >= limit and batch_pr(b, facts) is None:
-                candidates.append((b, False, str(dispatch.runner)))
-            if (
-                event is not None
-                and event.runner != "hand"
-                and stages.get(b.id) in LANDED
-                and now - event.at >= limit
-                and not is_finished(b, stages[b.id], archives.get(repo, ()))
-            ):
-                candidates.append((b, True, str(event.runner)))
+            for is_closeout, owner in ((False, dispatch), (True, event)):
+                if owner is None or (is_closeout and owner.runner == "hand"):
+                    continue
+                # A candidate is a session `idle_session` would report were it idle: the
+                # rule alone decides what is owed work, so no second test lives here.
+                if idle_session(
+                    b, repo=repo, closeout=is_closeout, status="idle", stage=stage,
+                    archives=archives.get(repo, ()), now=now, threshold=threshold,
+                ) is not None:  # fmt: skip
+                    candidates.append((b, is_closeout, str(owner.runner)))
         by_runner: dict[str, list[tuple[Batch, bool, WorkItem]]] = {}
         for b, is_closeout, name in candidates:
             probe = probe_item(repos[b.id], b, closeout=is_closeout, prefix=self.workspace_prefix)
             by_runner.setdefault(name, []).append((b, is_closeout, probe))
         found: list[IdleSession] = []
         for name, entries in by_runner.items():
-            runner = self._try_runner(name)
+            runner = self._try_runner(name, "idle sessions are not reported")
             if runner is None or not isinstance(runner, SessionInspector):
                 continue
             probes = [probe for _, _, probe in entries]
@@ -2211,13 +2213,9 @@ class _Driver:
                 continue
             for b, is_closeout, probe in entries:
                 repo = repos[b.id]
-                event = closeout_event(b)
-                attributed_pr = event is not None and any(
-                    attributed(p, b, event) for p in archives.get(repo, ())
-                )
                 idle = idle_session(
                     b, repo=repo, closeout=is_closeout, status=statuses.get(probe.id),
-                    has_pr=False, archive_attributed=attributed_pr, now=now,
+                    stage=stages[b.id], archives=archives.get(repo, ()), now=now,
                     threshold=facts.config_for(repo).idle_session_minutes,
                 )  # fmt: skip
                 if idle is not None:
