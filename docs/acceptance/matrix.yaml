@@ -7167,6 +7167,10 @@ rows:
       <b> --issues <ids> command instead of per-finding manual journal lines
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-archive-followups-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_closeout.py#test_closeout_brief_archive_line_names_every_qid_and_the_way_to_file_none
+      - super-fr:tests/unit/test_run_closeout.py#test_closeout_brief_archive_line_parses_against_the_real_cli
+    status: ci
+    notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
+      is still owed'
