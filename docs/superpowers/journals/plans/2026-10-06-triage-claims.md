@@ -256,3 +256,73 @@ pass after the close-out is recorded (the release is derived from the archived c
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 The command layer is thin glue over claim_sync (plan_sync, execute, record_releases) and claim_env; the one extraction worth making, _claim_plan, was made in the GREEN step, so nothing was left to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-06T21:40:27+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · A dispatch/merge dropped because a claim write found the batch held is not corrected in settle(), so the pass summary overstates in_flight/merged/closing (phase 2)
+
+A dispatch/merge dropped because a claim write found the batch held is not corrected in settle(), so the pass summary overstates in_flight/merged/closing.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-06T21:40:27+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Claim actions for other members of a batch a claim just found held still execute (phase 2)
+
+Claim actions for other members of a batch a claim just found held still execute.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-06T21:40:27+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · _held_detail/held_members in batch_drive.py duplicate the command's _held_line/held_members; driver text lacks the expired-claim hint (phase 2)
+
+_held_detail/held_members in batch_drive.py duplicate the command's _held_line/held_members; driver text lacks the expired-claim hint.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-06T21:40:27+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · No command test covers a claim write failing mid-pass, a failed claims_released save, or a held cancelled batch (phase 2)
+
+No command test covers a claim write failing mid-pass, a failed claims_released save, or a held cancelled batch.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-06T21:40:27+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · A held proposed batch counts as blocked, so a loop drive stops with exit 3 as though the operator were needed (phase 2)
+
+A held proposed batch counts as blocked, so a loop drive stops with exit 3 as though the operator were needed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-06T21:40:27+00:00 phase=2 state=open review_scope=out -->
+### p2-r6 · finding [open] (reviewer: out of scope) · env.issue/owner_repo scan facts linearly per op, so plan_sync is members times issues per pass (phase 2)
+
+Reviewer tagged it out (phase 1 code). The orchestrator considers it caused by this change (phase 1 is part of it) and had the fix made: lazy per-ClaimEnv indexes (5c646acfc).
+
+<!-- fr:journal kind=decision scope=plan id=p2-held-not-blocked created=2026-10-06T21:40:27+00:00 phase=2 -->
+### p2-held-not-blocked · decision · A batch held by another scope is 'held', not 'blocked' (decides p2-r5, which the spec left open) (phase 2)
+
+Held waits on another scope, not the operator. The loop keeps running while it has own claims to refresh, so they never expire unattended; when only held/blocked batches remain the drive exits 3 as before, naming held batches with their holders apart from those that need the operator.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-10-06T21:40:27+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 independent review: 5 in-scope findings fixed, 1 out of scope (fixed anyway) (phase 2)
+
+An independent reviewer (separate context, standard tier) read spec §3.F, plan 02.yaml, the journal and the diff 5b454c408..HEAD, and ran the drive test files (338 passed). It confirmed pure drive_pass, claim actions ordered first, one held action per held batch, cap slots, release only at archive, a single claims_released write through the judgements writer, backfill, and exit codes. It raised p2-r1..p2-r5 (in) and p2-r6 (out). The orchestrator verified r2 (the claim branch precedes the _held_now guard) and r6 (linear scans) in code. Fixed test-first in 00b9b2340, 8d9cccde9, 49e584d78 and 5c646acfc. Full suite: 9892 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-06T21:40:27+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: A dispatch/merge dropped because a claim write found the batch held is not corrected in settle(), so the pass summary overstates in_flight/merged/closing (phase 2)
+
+settle() now counts a dropped dispatch as held and a dropped merge as unlanded; summary tested (00b9b2340).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-06T21:40:27+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Claim actions for other members of a batch a claim just found held still execute (phase 2)
+
+After a Held result the pass skips the batch's remaining claim actions; refresh/release still run (00b9b2340).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-06T21:40:27+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: _held_detail/held_members in batch_drive.py duplicate the command's _held_line/held_members; driver text lacks the expired-claim hint (phase 2)
+
+One pure formatter with the expired-claim hint and one held_members, used by both (8d9cccde9).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-06T21:40:27+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: No command test covers a claim write failing mid-pass, a failed claims_released save, or a held cancelled batch (phase 2)
+
+Tests added for all four cases; behaviour was already correct (49e584d78).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-06T21:40:27+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: A held proposed batch counts as blocked, so a loop drive stops with exit 3 as though the operator were needed (phase 2)
+
+Held batches are counted apart from blocked (Summary.held, Pass.held_by); the end line names 'held by another scope' separately from 'need the operator'; spec §3.F updated (49e584d78).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-06T21:40:27+00:00 phase=2 state=open resolves=p2-r6 out_of_scope=true -->
+### p2-r6-resolved · finding [out-of-scope] · resolves p2-r6: env.issue/owner_repo scan facts linearly per op, so plan_sync is members times issues per pass (phase 2)
+
+Kept as the reviewer tagged it, since moving an out-of-scope finding to fixed is the operator's call. The improvement was made anyway: ClaimEnv builds its repo and issue indexes lazily, once per instance (5c646acfc).
