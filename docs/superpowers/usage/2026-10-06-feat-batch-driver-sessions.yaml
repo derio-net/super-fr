@@ -1,0 +1,37 @@
+schema_version: 1
+run: 2026-10-06-feat-batch-driver-sessions
+captures:
+- host: h-d733172b
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-06T18:40:39+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 1f7d5832-5559-42d4-abe3-aa58f6893ee0
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 80
+        cache_write: 171427
+        cache_read: 5921552
+        output: 31981
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 14
+      other:
+        usd: null
+        turns: 12
+      paperwork:
+        usd: null
+        turns: 14
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+      brainstorm:
+        usd: null
+        turns: 37

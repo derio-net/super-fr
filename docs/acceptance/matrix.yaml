@@ -4887,6 +4887,45 @@ rows:
     status: ci
     notes: Skills edited to document pages, fragments, fields and verbs; test added;
       mirrors regenerated
+  - id: drive-post-merge-restart
+    capability: Backlog triage
+    acceptance: With post_merge_restart idle in the repo's triage config, the wave driver
+      restarts idle sessions after a successful post_merge and before the close-out,
+      reports the outcome, and never holds the close-out or ends the drive over a restart
+      failure or a runner that cannot restart
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: drive-idle-session-report
+    capability: Backlog triage
+    acceptance: The wave driver reports once a batch session idle with no PR, or a close-out
+      session idle with no archive PR, past the repo's idle_session_minutes (default
+      60), naming the focus command, without ending the drive
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: board-idle-session
+    capability: Backlog triage
+    acceptance: The triage board marks a card needs-you, saying why, when its batch
+      or close-out session has sat idle past the threshold with nothing to show for
+      it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - idle-batch-card-needs-you
+      - idle-closeout-card-needs-you
+      - idle-card-with-pr-not-flagged
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
@@ -7083,3 +7122,40 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: herdr-restart-idle
+    capability: herdr runner
+    acceptance: Inside herdr, fr-herdr restart-idle lists every Claude pane with ok
+      / skip <reason> / fail <reason> and a summary, is a dry run unless --yes, never
+      sends a key to a pane it skips (busy, draft, background work, no transcript, own
+      or excluded pane), goes on past a failed pane, and refuses outside herdr
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: herdr-restart-idle-live
+    capability: herdr runner
+    acceptance: A restarted pane resumes the same Claude session id in the same pane
+      and tab, with the same label, herdr agent name and --model, and a pane at the
+      exit dialog is reported, never answered
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: herdr-outside-refusal
+    capability: herdr runner
+    acceptance: Outside a herdr session the herdr runner refuses and tells the operator
+      to run drive or dispatch from a herdr pane, and the fr-triage skill documents
+      that constraint and the session-upkeep settings
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
