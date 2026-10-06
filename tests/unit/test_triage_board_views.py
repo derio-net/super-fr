@@ -649,3 +649,38 @@ def test_the_wave_tables_scroll_sideways_instead_of_wrapping_by_the_letter() -> 
     page = render(*busy())
     assert GRID_CSS in page
     assert 'class="tablewrap"' in _section(page, "waves")
+
+
+# ------------------------------------------------- cancelled waves (gh#1000)
+
+
+def test_a_wave_that_left_the_board_because_it_was_cancelled_is_named() -> None:
+    """gh#1000: a wave of cancelled batches counts as finished and leaves the tabs; the
+    board says so, rather than letting it vanish."""
+    cancel = {"kind": "cancel", "at": "2026-10-01T12:00:00Z"}
+    f = facts([issue(1), issue(2)])
+    jd = judgements(
+        {"widgets#1": j(), "widgets#2": j()},
+        [
+            batch("a", [1], wave=1, events=[dispatch("a"), cancel]),
+            batch("b", [2], wave=2, events=[dispatch("b")]),
+        ],
+    )
+    sect = _section(render(f, jd), "waves")
+    assert "wave-tab-1" not in sect
+    assert "Wave 1 was cancelled" in sect and 'href="history.html"' in sect
+
+
+# ------------------------------------------------- phone width (gh#1001)
+
+
+def test_the_wave_table_stacks_into_labelled_cards_at_phone_width() -> None:
+    """gh#1001: eight columns in a 720px scroller still wrap ids at every hyphen at
+    390px; under the phone breakpoint each row is a card and each cell names its column."""
+    f, jd = busy()
+    table = wave_table(jd.batches, f, jd)
+    assert 'class="grid stack"' in table
+    cells = re.findall(r'<td[^>]*data-label="([^"]+)"', table)
+    assert cells[:8] == ["Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage"]
+    page = render(f, jd)
+    assert re.search(r"@media \(max-width: 480px\) \{[^}]*table\.grid\.stack", page)

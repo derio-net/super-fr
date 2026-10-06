@@ -23,6 +23,7 @@ from fr.commands import triage_batch_cmd, triage_cmd, triage_kanban_cmd
 from fr.gh import GhError
 from fr.triage import drive_lock
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
+from fr.triage.merge_stops import load_stops
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
 from fr.triage.gitseam import Checkout
@@ -2187,6 +2188,33 @@ def test_a_refused_head_is_reported_and_stepped_over(
     assert train.calls == [101, 102, 103]
     assert _lines(out, "merge")[0].startswith("merge b1: stopped: PR #101")
     assert code == 1
+
+
+def test_a_stopped_merge_is_recorded_for_the_board_and_cleared_when_it_lands(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    """gh#987: the board read "merge ready" for a merge the driver had stopped on, because
+    the stop lived only in the driver's memory. It is written down, at the head it stopped
+    at, and the board says the driver needs you; a later pass that merges it clears it."""
+    _three_ready(world, tmp_path)
+    train.script[101] = MergeStopError("PR #101: conflicts with origin/main: a.py")
+    _drive(tmp_path, "--once", "--yes")
+    stop = load_stops(tmp_path)["b1"]
+    assert (stop.head, stop.reason) == ("sha-101", "PR #101: conflicts with origin/main: a.py")
+    assert "needs you: merge stopped: PR #101" in (tmp_path / "board.html").read_text("utf-8")
+    del train.script[101]
+    _drive(tmp_path, "--once", "--yes")
+    assert "b1" not in load_stops(tmp_path)
+
+
+def test_a_moved_head_is_not_recorded_as_a_stop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge
+) -> None:
+    """A moved head is a hold the next pass re-judges, not something the operator owes."""
+    _three_ready(world, tmp_path)
+    train.script[101] = HeadMovedError("PR #101: head moved since the plan was printed")
+    _drive(tmp_path, "--once", "--yes")
+    assert load_stops(tmp_path) == {}
 
 
 @pytest.mark.parametrize(
