@@ -19,3 +19,8 @@ state_sync._sync lstat-checked source and destination by name, then shutil.copy2
 ### 3e962b0c8e68 · finding [fixed] · copy from O_NOFOLLOW descriptors
 
 state_sync._copy walks each component from its parent descriptor (dir_fd, O_DIRECTORY|O_NOFOLLOW), opens the file O_NOFOLLOW (source also O_NONBLOCK, fstat must be regular), copies fd to fd and restores mode and times with fchmod/utime on the descriptor. A symlink met at open time maps to SYMLINK / SYMLINK_DEST. Pinned by tests/unit/test_triage_state_sync.py: three race tests (destination file, destination directory, source) that swap the path right after the check, plus mode/mtime preservation. Green on Linux and macOS.
+
+<!-- fr:journal kind=review scope=debug id=597c6759a996 created=2026-10-06T16:51:48+00:00 -->
+### 597c6759a996 · review · independent adversarial review: no defects
+
+An independent reviewer read state_sync.py and the gh#1003 tests: no defects at >=80% confidence. Checked the file-where-a-directory-goes error path, Linux/macOS errno differences (_open lstats after any failure, so ENOTDIR vs ELOOP does not matter), metadata parity with copy2 (xattrs/flags no longer copied: harmless), fd leaks, and that the swap tests exercise the real window. Gaps raised: no source-directory swap test (added: test_a_source_directory_swapped_for_a_symlink_is_not_followed); no fifo-swap test and no import-direction race test (minor, shared _copy, not added). Noted, out of scope by design: the trusted roots (state dir, contained() output) are still opened by name, as the module docstring states.
