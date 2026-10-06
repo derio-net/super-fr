@@ -735,3 +735,8 @@ States the walk refuses source: prerelease and the PR body's manual route; the s
 ### p2-tea-remove-labels-resolved-2 · finding [fixed] · resolves p2-tea-remove-labels: the spec says tea has no unlabel command, but the installed tea's `issues edit` has --remove-labels
 
 Duplicate of p2-r1, whose fix shipped in PR #1012 (hostclient.py ISSUE_COMMANDS["gitea"]["issue-unlabel"] uses --remove-labels; spec §E corrected). No issue filed: nothing is left to track.
+
+<!-- fr:journal kind=finding scope=plan id=p2-tea-remove-labels-resolved-3 created=2026-10-06T16:49:15+00:00 state=fixed resolves=p2-tea-remove-labels answered_by=operator -->
+### p2-tea-remove-labels-resolved-3 · finding [fixed] · resolves p2-tea-remove-labels: the spec says tea has no unlabel command, but the installed tea's `issues edit` has --remove-labels
+
+Operator confirmed at closeout: a duplicate of p2-r1, whose fix shipped in PR #1012. No issue filed.
