@@ -7217,3 +7217,23 @@ rows:
       - dark-theme
       interactions:
       - open-held-issue-link
+  - id: triage-claims-trusted-authors
+    capability: triage-claims
+    acceptance: A claim marker posted by an account the repo does not trust (a stranger
+      commenting on a public repo) never blocks a scope; markers by the viewer, its
+      pr_authors and repo owners, members and collaborators count.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R17
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claims.py#test_a_marker_by_a_repo_owner_member_or_collaborator_counts
+      - super-fr:tests/unit/test_triage_claims.py#test_a_strangers_marker_on_a_public_repo_is_ignored_and_counted
+      - super-fr:tests/unit/test_triage_claims.py#test_claim_trust_is_the_viewer_and_pr_authors_together
+      - super-fr:tests/unit/test_triage_claims.py#test_an_untrusted_authors_older_marker_is_ignored_and_counted
+      - super-fr:tests/unit/test_triage_collect.py#test_collect_counts_a_peer_hosts_marker_by_a_repo_member
+      - super-fr:tests/unit/test_triage_collect.py#test_collect_ignores_an_untrusted_authors_marker
+      - super-fr:tests/unit/test_triage_collect.py#test_collect_warns_once_per_issue_with_its_ignored_marker_counts
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_an_untrusted_older_marker_never_wins
+      - super-fr:tests/unit/test_forge_adapter_batch_ops.py#test_list_issue_comments_returns_body_author_and_created_at
+    status: ci
+    notes: 'Phase 1 review p1-r1/p1-r2: trust by author association.'
