@@ -1,2 +1,0 @@
-bump: minor
-summary: fr triage check proposes duplicate open issues; judgements record duplicate_of and distinct_from, the board nests duplicates, the driver reports candidates when a wave finishes

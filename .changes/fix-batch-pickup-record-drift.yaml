@@ -1,2 +1,0 @@
-bump: patch
-summary: "`fr pickup` on a drifted run cursor keeps the phase brief's Step record section and prints one warning naming `fr run reshape`, instead of silently dropping it."
