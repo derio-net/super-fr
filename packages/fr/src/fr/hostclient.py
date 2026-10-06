@@ -91,13 +91,14 @@ def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) 
     PROVENANCE-BLIND: it never reads config and cannot tell a declared
     `host:` from one derived from a remote or a PR URL, which is exactly
     why `client_for` — not this — owns the warning about a host fr cannot
-    honour (gh-486; spec §4.D). Only the GitLab adapter threads it; `gh`
-    and `tea` resolve their own hosts (§1 non-goals)."""
+    honour (gh-486; spec §4.D). The GitLab adapter threads it to `glab`,
+    the GitHub one as `GH_HOST` (spec 2026-10-06-forge-remainder §4.E);
+    `tea` still resolves its own host."""
     if backend == "gitlab":
         return RealGlabClient(host=host)
     if backend == "gitea":
         return RealTeaClient()
-    return RealGhClient()
+    return RealGhClient(host=host)
 
 
 def client_for(repo_root: Path) -> GhClient:
@@ -120,10 +121,16 @@ def client_for(repo_root: Path) -> GhClient:
     remote (`_hosts.declared_host` vs `_hosts.host_for`). That distinction
     is what spec §4.D's warning rests on, so it must stay here rather than
     move down into `client_for_backend`.
+
+    GitHub is given only the DECLARED host (spec 2026-10-06-forge-remainder
+    §4.E): inside a checkout `gh` infers the host from the remote itself, and
+    a derived origin host may be an SSH alias, which must never become
+    `GH_HOST`. GitLab keeps the derived host too. Only Gitea, which threads
+    no host at all, still warns about a declared one.
     """
     backend = _hosts.detect_backend(repo_root)
     declared = _hosts.declared_host(repo_root)
-    if declared and backend != "gitlab" and (declared, backend) not in _WARNED_DECLARED_HOSTS:
+    if declared and backend == "gitea" and (declared, backend) not in _WARNED_DECLARED_HOSTS:
         _WARNED_DECLARED_HOSTS.add((declared, backend))
         print(
             f"warning: host {declared!r} is declared in "
@@ -132,4 +139,6 @@ def client_for(repo_root: Path) -> GhClient:
             "applies instead. See gh-486.",
             file=sys.stderr,
         )
+    if backend == "github":
+        return client_for_backend(backend, host=declared)
     return client_for_backend(backend, host=_hosts.host_for(repo_root))

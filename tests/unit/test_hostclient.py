@@ -96,6 +96,11 @@ class TestClientForHost:
         assert isinstance(client, RealGlabClient)
         assert client._host == "gl.corp.com"
 
+    def test_client_for_backend_threads_a_github_host(self) -> None:
+        client = hostclient.client_for_backend("github", host="ghe.example")
+        assert isinstance(client, RealGhClient)
+        assert client._host == "ghe.example"
+
     def test_client_for_backend_defaults_to_no_host(self) -> None:
         client = hostclient.client_for_backend("gitlab")
         assert isinstance(client, RealGlabClient)
@@ -121,7 +126,8 @@ def _repo_with_profiles(root: Path, keys: dict[str, str]) -> Path:
 
 class TestClientForWarnsOnAnUnthreadedDeclaredHost:
     """gh-486: an explicitly declared `host:` for a backend fr does not
-    thread (github, gitea) must say so, on stderr, once — spec §4.D."""
+    thread (gitea, since github threads it as GH_HOST) must say so, on
+    stderr, once — spec §4.D."""
 
     def test_a_declared_host_for_an_unthreaded_backend_warns(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -136,11 +142,23 @@ class TestClientForWarnsOnAnUnthreadedDeclaredHost:
     ) -> None:
         """The provenance survives the move to `forge: {type, host}` (spec
         2026-09-28-fr-profiles-services §3.B): a host declared in the nested
-        block is still an operator expectation fr cannot honour for github."""
-        repo = _repo_with_profiles(tmp_path, {"forge": "{type: github, host: x.example.com}"})
+        block is still an operator expectation fr cannot honour for gitea
+        (github threads it since spec 2026-10-06-forge-remainder §4.E)."""
+        repo = _repo_with_profiles(tmp_path, {"forge": "{type: gitea, host: x.example.com}"})
         hostclient.client_for(repo)
         err = capsys.readouterr().err
-        assert "x.example.com" in err and "github" in err
+        assert "x.example.com" in err and "gitea" in err
+
+    def test_a_declared_github_host_is_threaded_without_a_warning(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Spec 2026-10-06-forge-remainder §4.E: a declared GitHub Enterprise
+        host now reaches `gh` as `GH_HOST`, so there is nothing to warn about."""
+        repo = _repo_with_profiles(tmp_path, {"forge": "{type: github, host: ghe.example}"})
+        client = hostclient.client_for(repo)
+        assert isinstance(client, RealGhClient)
+        assert client._host == "ghe.example"
+        assert capsys.readouterr().err == ""
 
     def test_a_derived_host_for_an_unthreaded_backend_is_silent(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -164,5 +182,9 @@ class TestClientForWarnsOnAnUnthreadedDeclaredHost:
             ["git", "-C", str(repo), "remote", "add", "origin", "git@github.corp.com:o/r.git"],
             check=True,
         )
-        hostclient.client_for(repo)
+        client = hostclient.client_for(repo)
         assert capsys.readouterr().err == ""
+        # A derived origin host is never threaded: inside a checkout `gh`
+        # infers it, and an SSH alias must never become GH_HOST (§4.E).
+        assert isinstance(client, RealGhClient)
+        assert client._host is None
