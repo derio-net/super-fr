@@ -7191,9 +7191,16 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R10
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_claim_refresh_and_release_actions_come_before_every_other_action
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_held_batch_gets_one_held_action_and_nothing_else
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_yes_pass_claims_before_dispatch_backfills_and_owes_nothing_after
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_cancelled_batchs_claims_are_released_and_recorded_once
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_claim_that_turns_out_held_stops_the_pass_acting_on_that_batch
+    status: ci
+    notes: 'phase 2: drive_pass emits claim/refresh/release/held actions; the driver
+      writes them through claim_sync'
     verify: none
   - id: triage-claims-board-publish
     capability: triage-claims
