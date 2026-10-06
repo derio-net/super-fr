@@ -1,0 +1,77 @@
+schema_version: 7
+run: 2026-10-05-feat-batch-triage-pages-goal
+step: review-phase
+item: phase/5
+outcome: done
+journal:
+- kind: finding
+  id: p5-r1
+  review_scope: in
+  title: authored-src/build.py wrote history fragments into architecture/, so history/manifest.yaml entries stayed
+    missing
+  body: Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+- kind: finding
+  id: p5-r2
+  review_scope: in
+  title: pipeline.py aborts on closed pinned issues, so built fragments cannot be regenerated from imported state
+  body: Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+- kind: finding
+  id: p5-r3
+  review_scope: in
+  title: fr-triage skill described export as a PR per wave and omitted the R13 specifics
+  body: Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+- kind: finding
+  id: p5-r4
+  review_scope: in
+  title: skills omitted the new check sets and the Parked/placed behaviour of duplicate_of
+  body: Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+- kind: finding
+  id: p5-r5
+  review_scope: in
+  title: fr-origins still said duplicate discipline was prose-only though duplicate_of is now validated
+  body: Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+- kind: finding
+  id: p5-r6
+  review_scope: in
+  title: '"board" named three things and the skill did not disambiguate; the file table omitted board.html'
+  body: Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+- kind: finding
+  id: p5-r7
+  review_scope: in
+  title: docs/triage/README.md was stale on manifests, timeline attribution, fragments and the recipe
+  body: Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+- kind: review
+  id: p5-review-1
+  title: 'phase 5 review: 7 findings (all tagged in; p5-r2 reclassified out)'
+  body: 'Dispatched reviewer read the phase 5 range and the merge resolution of b8a528795 (#969, #980) against R14,
+    R15 and R1-R13, ran both mirror checks and the triage/skill tests, imported the repo state and rendered it.
+    Merge resolution judged clean. Findings fixed in 591cc7a96 and re-verified (2057 passed); p5-r2 reclassified
+    out of scope with reasoning.'
+resolves:
+- id: p5-r1
+  state: fixed
+  body: build.py writes the dated fragments to history/ (591cc7a96); docstring and README match.
+- id: p5-r2
+  state: out-of-scope
+  body: 'Reclassified: the abort is #969''s deliberate guard (the build stops if a pinned issue has closed), stale
+    because those issues closed since; choosing which open issues pin to which pipeline step is operator curation,
+    not caused by this change. The README now says to refresh the pin table first.'
+- id: p5-r3
+  state: fixed
+  body: The driver paragraph states R13 in full (591cc7a96).
+- id: p5-r4
+  state: fixed
+  body: fr-triage and fr-origins name every new check set; duplicate_of's Parked/placed behaviour documented (591cc7a96).
+- id: p5-r5
+  state: fixed
+  body: Wording corrected; the test pinning the old claim now asserts the new one (591cc7a96).
+- id: p5-r6
+  state: fixed
+  body: Backlog page vs Kanban disambiguated, board.html in the file table (591cc7a96).
+- id: p5-r7
+  state: fixed
+  body: README rewritten for the four page manifests, R12, the history render and the export opt-in (591cc7a96).
+evidence:
+  review: p5-review-1
+  reviewer: a15942b3efd8b517b
+  model: claude-opus-5-5
