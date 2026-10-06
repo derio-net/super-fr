@@ -37,7 +37,7 @@ class GhError(Exception):
         self.stdout = stdout
 
 
-class GhHostRefused(GhError):
+class GhHostRefusedError(GhError):
     """The host trust gate refused a host gh is not logged into (spec
     2026-10-06-forge-remainder §4.E). A subclass so a soft-fail method can
     never mistake it for an ordinary forge miss: `RealGhClient` checks the
@@ -96,7 +96,7 @@ def _env() -> dict[str, str] | None:
     if host is None:
         return None
     if host.lower() not in known_hosts():
-        raise GhHostRefused(
+        raise GhHostRefusedError(
             f"GitHub host {host!r} is not one gh is logged into; run "
             f"`gh auth login --hostname {host}` (fr will not point gh, or its "
             "tokens, at an unknown host; a GH_ENTERPRISE_TOKEN alone does not "

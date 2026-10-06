@@ -166,7 +166,7 @@ def test_a_soft_fail_method_never_swallows_the_refusal(
     """Review p1-r1: these methods turn a `GhError` into "no PR" / "no file" /
     "unknown". A refused host must not read as a forge answer, and must start
     no subprocess (no silent github.com target, #892's wrong-target write)."""
-    with pytest.raises(_gh.GhHostRefused) as exc:
+    with pytest.raises(_gh.GhHostRefusedError) as exc:
         getattr(RealGhClient(host="evil.example"), method)(*args)
     assert str(exc.value) == _REFUSAL
     assert recorder.envs == []

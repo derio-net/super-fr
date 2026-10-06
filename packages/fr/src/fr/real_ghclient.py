@@ -46,7 +46,7 @@ def _hosted(
         with _gh.host_scope(self._host):
             # The trust gate runs BEFORE the body: a soft-fail method catches
             # `GhError` and would turn a refused host into "no PR" / "no
-            # file" (review p1-r1). `GhHostRefused` propagates instead.
+            # file" (review p1-r1). `GhHostRefusedError` propagates instead.
             _gh._env()
             return method(self, *args, **kwargs)
 
