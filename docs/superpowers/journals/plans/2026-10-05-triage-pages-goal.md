@@ -648,3 +648,8 @@ Filed at closeout as #1000.
 ### p1-r6-resolved-2 · finding [deferred → #1001] · resolves p1-r6: board wave table is cramped at 390px (columns wrap letter by letter); predates this phase, board relayout is R2-R5
 
 Filed at closeout as #1001.
+
+<!-- fr:journal kind=finding scope=plan id=p2-suite-log-background-unwitnessed-resolved-2 created=2026-10-06T08:02:07+00:00 state=open resolves=p2-suite-log-background-unwitnessed tracked_by=#1002 -->
+### p2-suite-log-background-unwitnessed-resolved-2 · finding [deferred → #1002] · resolves p2-suite-log-background-unwitnessed: fr cannot witness a suite log written by a run_in_background command, which the brief's own long_commands rule prescribes
+
+Filed at closeout as #1002.
