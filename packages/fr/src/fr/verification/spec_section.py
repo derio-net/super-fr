@@ -15,6 +15,11 @@ strategy's manifest (post-merge or `none`), which is `plan self-review`'s check,
 not the grammar's. Any other line — prose, blank lines — is ignored, so the
 section can explain itself; a line that LOOKS like the grammar (a bullet or a
 `strategy:` line) but breaks it is an error naming the line.
+
+A section with NO grammar line at all — no `strategy:` line, no bullet the row
+grammar accepts — is not this section (review p3-r6): specs older than the
+grammar used `## Verification` for prose bullets, and an in-flight run whose
+spec is one of them must deliver unchanged, not fail closed.
 """
 
 from __future__ import annotations
@@ -73,10 +78,17 @@ def _section_lines(text: str) -> list[tuple[int, str]] | None:
     return body
 
 
+def _is_grammar(line: str) -> bool:
+    """Does `line` belong to the grammar: any `strategy:` line, or a bullet the
+    row grammar accepts?"""
+    return line.startswith("strategy:") or _ROW_LINE.match(line) is not None
+
+
 def parse_section(text: str) -> Section | None:
-    """The spec's `## Verification` section, or `None` when it has none."""
+    """The spec's `## Verification` section, or `None` when it has none (or
+    only a pre-grammar prose one)."""
     lines = _section_lines(text)
-    if lines is None:
+    if lines is None or not any(_is_grammar(raw.strip()) for _, raw in lines):
         return None
 
     strategy: str | None = None

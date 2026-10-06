@@ -72,7 +72,37 @@ def test_a_heading_inside_a_code_fence_is_not_the_section() -> None:
 )
 def test_a_malformed_line_is_a_section_error_naming_it(line: str) -> None:
     with pytest.raises(SectionError, match="line"):
-        parse_section(f"## Verification\n{line}\n")
+        parse_section(f"## Verification\n- ok: live — x\n{line}\n")
+
+
+OLD_PROSE = """\
+## Verification
+
+This is skill-content/docs, not application code: there is no runtime
+behavior to unit-test. The verifiable surface is:
+
+- `tests/unit/test_skill_validation.py` — structural checks on every
+  `SKILL.md` (frontmatter present, ≤120 lines).
+- `scripts/sync-opencode.py --check` — verifies the mirror.
+- Unit tests: cover the parser.
+
+## Next
+"""
+
+
+def test_a_prose_only_section_from_before_the_grammar_is_no_section() -> None:
+    """Review p3-r6: specs older than the grammar used `## Verification` for
+    prose bullets (e.g. 2026-07-14-lifecycle-preflight-skill-design.md). With
+    no grammar line at all it is not this section — an in-flight run delivers
+    unchanged instead of failing closed."""
+    assert parse_section(OLD_PROSE) is None
+
+
+def test_a_section_with_one_grammar_line_still_refuses_a_malformed_bullet() -> None:
+    mixed = OLD_PROSE.replace("## Next", "strategy: candidate\n\n## Next")
+
+    with pytest.raises(SectionError, match="line"):
+        parse_section(mixed)
 
 
 def test_a_repeated_row_or_strategy_line_is_refused() -> None:
