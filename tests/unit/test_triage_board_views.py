@@ -492,9 +492,9 @@ def test_the_page_has_a_real_title_and_the_three_theme_variants() -> None:
 
 def test_the_phone_gutter_is_sixteen_pixels() -> None:
     css = re.search(r"<style>(.*?)</style>", render(*busy()), flags=re.S).group(1)  # type: ignore[union-attr]
-    phone = re.search(r"@media \(max-width: 4\d\dpx\) \{(.*?)\n\}", css, flags=re.S)
-    assert phone is not None
-    assert re.search(r"main \{[^}]*padding-left: 16px; padding-right: 16px", phone.group(1))
+    phone = re.findall(r"@media \(max-width: 4\d\dpx\) \{(.*?)\n\}", css, flags=re.S)
+    assert phone
+    assert any(re.search(r"main \{[^}]*padding-left: 16px; padding-right: 16px", p) for p in phone)
     assert "padding: 0 10px" not in css
 
 

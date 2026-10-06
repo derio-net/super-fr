@@ -803,23 +803,30 @@ def wave_table(
 ) -> str:
     """One wave's table; *href_prefix* is put before each batch link's `#batch-<id>`, so the
     history page (another file) links to the board's cards."""
+    cols = ("Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
     rows = []
     for b in batches:
         stage = derive_batch_stage(b, facts)
         tier = batch_tier(b.ids, judgements.issues)
-        rows.append(
-            f'<tr data-batch="{esc(b.id)}"><td>'
-            f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a></td>'
-            f'<td class="n">{DASH if tier is None else tier}</td><td>{esc(b.skill)}</td>'
-            f'<td class="mono">{esc(", ".join(b.ids))}</td>'
-            f"<td>{inline(b.rationale)}</td><td>{esc(size_of(b.ids, judgements.issues))}</td>"
-            f"<td>{esc(', '.join(b.after) or '-')}</td>"
-            f'<td><span class="pill bstage-{stage}">{stage}</span></td></tr>'
+        cells = (
+            ("", f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a>'),
+            (' class="n"', f"{DASH if tier is None else tier}"),
+            ("", esc(b.skill)),
+            (' class="mono"', esc(", ".join(b.ids))),
+            ("", inline(b.rationale)),
+            ("", esc(size_of(b.ids, judgements.issues))),
+            ("", esc(", ".join(b.after) or "-")),
+            ("", f'<span class="pill bstage-{stage}">{stage}</span>'),
         )
-    cols = ("Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
+        # data-label names the column on each cell, for the stacked phone layout (gh#1001)
+        tds = "".join(
+            f'<td{attrs} data-label="{label}">{body}</td>'
+            for label, (attrs, body) in zip(cols, cells, strict=True)
+        )
+        rows.append(f'<tr data-batch="{esc(b.id)}">{tds}</tr>')
     head = "".join(f"<th>{c}</th>" for c in cols)
     return (
-        f'<div class="tablewrap"><table class="grid"><thead><tr>{head}</tr></thead>'
+        f'<div class="tablewrap"><table class="grid stack"><thead><tr>{head}</tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
 
