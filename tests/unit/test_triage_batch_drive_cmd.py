@@ -3733,3 +3733,62 @@ def test_a_claim_that_turns_out_held_stops_the_pass_acting_on_that_batch(
     assert "super-fr#1 is claimed by triage scope s-22222222" in out
     assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
     assert _events(tmp_path, "b1") == []
+
+
+def _stale_claims(world: World) -> None:
+    """Facts (read first) know nothing of a rival marker the forge shows at write time."""
+    original = world.facts
+
+    def _stale() -> Facts:
+        f = original()
+        return f.model_copy(
+            update={"issues": [i.model_copy(update={"claims": []}) for i in f.issues]}
+        )
+
+    world.facts = _stale  # type: ignore[method-assign]
+
+
+def test_a_dispatch_dropped_for_a_lost_claim_is_not_counted_in_flight(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r1: the summary says what the pass did, not what it planned."""
+    _proposed(world, tmp_path, 2)
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _stale_claims(world)
+    _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+    assert out.rstrip().splitlines()[-1] == "in flight 1, merged 0, pending 1, closing 0", out
+    assert code == 0
+
+
+def test_a_merge_dropped_for_a_lost_claim_is_not_counted_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r1: a merge left alone because the batch turned out held did not land."""
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1])
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _stale_claims(world)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [], out
+    assert "merged 0" in out.rstrip().splitlines()[-1], out
+    assert "in flight 1" in out.rstrip().splitlines()[-1], out
+
+
+def test_after_a_lost_claim_the_batchs_other_members_are_not_claimed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r2: one lost claim stops the rest of that batch's claims in the pass."""
+    world.issues.update({1: "open", 2: "open"})
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _stale_claims(world)
+    two = (
+        '  - id: b1\n    title: b1\n    ids: ["super-fr#1", "super-fr#2"]\n    wave: 1\n'
+        f"    launch: {LAUNCH}\n"
+    )
+    _state(tmp_path, world, two)
+    _drive(tmp_path, "--once", "--yes")
+    assert _markers(world, 2) == []
+    assert [m.signer for m in _markers(world, 1)] == ["s-22222222"]

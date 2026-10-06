@@ -2587,9 +2587,15 @@ class _Driver:
         if action.kind in ("blocked", "held"):
             return action.detail, False, in_flight
         if action.kind in ("claim", "refresh", "release"):
+            if action.kind == "claim" and action.batch in self._held_now:
+                return "", False, in_flight  # one claim was lost: the batch's rest wait (R6)
             line, did = self._claim_write(action)
             return line, did, in_flight
         if action.batch in self._held_now:  # a claim write found it held: leave it alone (R6)
+            if action.kind == "dispatch":
+                self._held += 1  # planned in flight, did not start: still pending
+            elif action.kind == "merge":
+                self._unlanded.add(action.batch)  # planned merged, did not land
             return f"held: {self._held_now[action.batch]}", False, in_flight
         judgements = load_judgements(self.target / "judgements.yaml")
         batch = _find(judgements.batches, action.batch)
