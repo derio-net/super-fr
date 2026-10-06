@@ -89,3 +89,48 @@ the step is one short function reusing phase 1's _edited_in_worktree; nothing to
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 a one-string reword of an existing warning; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-06T18:32:30+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · _verify adds origin to rows that omit it, so any such row makes every retarget raise (phase 2)
+
+retarget.py:126; model.py:186 allows rows without origin.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-06T18:32:30+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · The retarget refusal prints note: with the exception type instead of a warning: line (phase 2)
+
+archive_cmd.py:399/471 vs spec §B/R6.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-06T18:32:30+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · No test exercises _verify's equality-mismatch branch with real input (phase 2)
+
+test_acceptance_retarget.py:93 covers only the YAML-error branch; the archive test mocks retarget_text.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-06T18:32:30+00:00 phase=2 state=open review_scope=out -->
+### p2-r4 · finding [open] (reviewer: out of scope) · Main archived verification-strategies (#1035), so the branch's 31 live refs to it become twin warnings after a rebase (phase 2)
+
+matrix.yaml:6884-7072; e407f87bd on main.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-r1 created=2026-10-06T18:32:30+00:00 phase=2 -->
+### p2-review-r1 · review · phase 2 code review: 4 findings (phase 2)
+
+Independent reviewer (feature-dev:code-reviewer, opus) over spec §0/§B, 02.yaml and the phase-2 code. Raised p2-r1..p2-r3 (in scope, all fixed with tests: 3ff279232, f8ee87e7c) and p2-r4 (out of scope). Suite after fixes: 9719 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-06T18:32:30+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: _verify adds origin to rows that omit it, so any such row makes every retarget raise (phase 2)
+
+Fixed in 3ff279232: only present keys are mapped; a test with a row lacking origin (red before the fix).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-06T18:32:30+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: The retarget refusal prints note: with the exception type instead of a warning: line (phase 2)
+
+Fixed in f8ee87e7c: _retarget_matrix prints `warning: matrix retarget skipped — <reason>`; tests pin the prefix and the absence of the type name.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-06T18:32:30+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: No test exercises _verify's equality-mismatch branch with real input (phase 2)
+
+Fixed in 3ff279232: a walker-skipped `# keep` item next to a rewritten one raises RetargetError.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-06T18:32:30+00:00 phase=2 state=open resolves=p2-r4 out_of_scope=true -->
+### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: Main archived verification-strategies (#1035), so the branch's 31 live refs to it become twin warnings after a rebase (phase 2)
+
+Not caused by this change: concurrent main work archived that spec after this branch was cut. The orchestrator rebases onto main at deliver and re-runs the retarget so the baseline stays zero.
