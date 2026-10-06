@@ -72,7 +72,7 @@ the plan:
 - **One agentic phase, TDD-shaped.** Exactly one phase is not `[manual]`, and
   its tasks run red → green → refactor (or carry a reason for no refactor).
 - **Rows linked.** Every acceptance row the spec creates is in the phase's
-  `acceptance` list, or is a `verify: post-merge` row.
+  `acceptance` list, or is a `verify: live` row.
 
 Every finding carries `target: spec|plan` in its body, beside `check:`. All of
 them go in the one return below — the spec journal holds both documents'

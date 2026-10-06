@@ -2192,7 +2192,7 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
                 message=(
                     f"phase {ph.phase.number} is a single operator step — if it "
                     "verifies (screenshot, live check, post-merge run), make it a "
-                    "Test Plan line or a `verify: post-merge` acceptance row; keep a "
+                    "Test Plan line or a `verify: live` acceptance row; keep a "
                     "[manual] phase only for a prerequisite or a real dispatch/deploy."
                 ),
             )

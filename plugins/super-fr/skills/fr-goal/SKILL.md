@@ -75,7 +75,7 @@ decision (`fr journal add --scope spec --slug <spec-journal-slug>`: the spec fil
 agentic phases the skeleton is the first ask's phase, marked, its first task the smoke — CI green on
 a trivial test (`fr services` says `ci none` → the local suite on a trivial test), minimum runtime exercised, external fixtures captured never constructed. `fr plan self-review`
 must pass and phases must read back against the spec. An operator verification step is a Test Plan
-line or a `verify: post-merge` row, never a phase. fr-plan's agentic-purity gate collects the rest of
+line or a `verify: live` row, never a phase. fr-plan's agentic-purity gate collects the rest of
 the manual work — a prerequisite agentic work depends on, or a real dispatch/deploy — into
 `[manual]` phases; **back-load by default** (last phase, no dependent agentic phase —
 PR ships it unimplemented, operator pushes to the same PR); **front-load only when agentic work

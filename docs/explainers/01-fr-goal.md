@@ -766,7 +766,7 @@ Not everything a human does deserves a phase, though. A manual phase is for a
 prerequisite the agentic work depends on, or for a real dispatch or deploy. An
 operator *verification* step — take a screenshot, check the live page, watch the
 next real run — is a line in the spec's Test Plan, or an acceptance row marked
-`verify: post-merge`, not a phase: it proves the work rather than being part of
+`verify: live`, not a phase: it proves the work rather than being part of
 it, and a phase built around it only adds the round trip described in step 4.
 `fr plan self-review` warns when the plan ends in a manual phase of a single
 step, because that is almost always a verification step in a phase's clothing.
