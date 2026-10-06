@@ -12,7 +12,7 @@ HEADING = "Runner constraints and session upkeep"
 def _paragraph() -> str:
     text = SKILL.read_text(encoding="utf-8")
     assert HEADING in text, f"the skill has no {HEADING!r} paragraph"
-    return text.split(HEADING, 1)[1].split("\n## ", 1)[0]
+    return text.split(HEADING, 1)[1].split("\n\n", 1)[0]
 
 
 def test_the_skill_states_the_herdr_only_rule() -> None:
