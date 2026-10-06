@@ -19,6 +19,7 @@ included — refused, never a traceback).
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import typer
@@ -194,6 +195,18 @@ def rc_tag(branch: str, sha: str) -> str:
     return f"rc/{branch.replace('/', '-')}/{sha[:12]}"
 
 
+_SCP_URL = re.compile(r"^(?:(?P<user>[^@/:]+)@)?(?P<host>[^/:@]+):(?P<path>[^/].*)$")
+
+
+def pip_source(url: str) -> str:
+    """The `git+<url>` pip and uv accept: an scp-like remote
+    (`git@host:o/r.git`) becomes `git+ssh://git@host/o/r.git`."""
+    if "://" not in url and (m := _SCP_URL.match(url)):
+        user = f"{m['user']}@" if m["user"] else ""
+        return f"git+ssh://{user}{m['host']}/{m['path']}"
+    return f"git+{url}"
+
+
 @verification_app.command("prerelease")
 def prerelease_cmd(
     branch: str = typer.Option(..., "--branch", help="The PR branch to cut a pre-release of."),
@@ -207,7 +220,7 @@ def prerelease_cmd(
     from fr import hostclient
     from fr._hosts import slug_from_url
     from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
-    from fr.git import GitUnavailableError, git_answer, remote_name
+    from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_name
     from fr.real_ghclient import workflow_run_args
 
     repo_root = resolve_repo_root()
@@ -218,8 +231,10 @@ def prerelease_cmd(
 
     try:
         remote = remote_name(repo_root)
-        if remote is None or not isinstance(remote, str):
-            raise refuse("no single git remote to cut a pre-release from")
+        if isinstance(remote, GitRefusal):
+            raise refuse(remote.reason)
+        if remote is None:
+            raise refuse("no git remote to cut a pre-release from")
         found = git_answer(repo_root, "ls-remote", remote, f"refs/heads/{branch}")
         if found.returncode != 0:
             raise refuse(f"git ls-remote {remote} failed: {found.stderr.strip()}")
@@ -248,9 +263,7 @@ def prerelease_cmd(
                       soft_wrap=True)  # fmt: skip
     else:
         try:
-            client.dispatch_workflow(
-                slug, PRERELEASE_WORKFLOW, inputs=inputs
-            )
+            client.dispatch_workflow(slug, PRERELEASE_WORKFLOW, inputs=inputs)
         except UnsupportedForgeOperation as e:
             raise refuse(str(e)) from e
         except hostclient.FORGE_ERRORS as e:
@@ -258,4 +271,4 @@ def prerelease_cmd(
         console.print(f"dispatched {PRERELEASE_WORKFLOW} for {branch}", soft_wrap=True)
     console.print(f"rc tag (once the workflow has run): {tag}", soft_wrap=True)
     console.print("install source for `{source}`:", soft_wrap=True)
-    console.print(f"git+{url}@{tag}", soft_wrap=True, markup=False)
+    console.print(f"{pip_source(url)}@{tag}", soft_wrap=True, markup=False)

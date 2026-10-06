@@ -148,6 +148,69 @@ def test_the_sha_is_the_remote_head_not_a_stale_local_one(repo, monkeypatch) -> 
     assert f"rc/feat-x/{sha[:12]}" in result.output
 
 
+def _second_remote(root: Path, tmp_path: Path, name: str, url: str) -> None:
+    bare = tmp_path / f"{name}.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    _git(root, "remote", "add", name, url)
+    _git(root, "config", f"url.{bare}.insteadOf", url)
+    _git(root, "push", "-q", name, "feat/x")
+
+
+def test_the_sha_the_url_and_the_dispatch_target_all_come_from_one_remote(
+    repo, monkeypatch, tmp_path
+) -> None:
+    root, sha = repo
+    _second_remote(root, tmp_path, "upstream", "https://github.com/up-org/up-repo")
+    _git(root, "config", "checkout.defaultRemote", "upstream")
+    rec = _Recorder()
+
+    result = _invoke(root, ["verification", "prerelease", "--branch", "feat/x"], rec, monkeypatch)
+
+    assert result.exit_code == 0, result.output
+    assert rec.calls[0][0] == "up-org/up-repo"
+    assert f"git+https://github.com/up-org/up-repo@rc/feat-x/{sha[:12]}" in result.output
+
+
+def test_a_git_refusal_keeps_its_own_reason(repo, monkeypatch, tmp_path) -> None:
+    root, _ = repo
+    _second_remote(root, tmp_path, "a", "https://github.com/a/a")
+    _git(root, "remote", "rename", "origin", "b")
+
+    result = _invoke(
+        root, ["verification", "prerelease", "--branch", "feat/x", "--dry-run"], _Recorder(),
+        monkeypatch,
+    )  # fmt: skip
+
+    assert result.exit_code == 2
+    assert "2 remotes" in result.output and "checkout.defaultRemote" in result.output
+
+
+@pytest.mark.parametrize(
+    ("configured", "source"),
+    [
+        ("git@github.com:o/r.git", "git+ssh://git@github.com/o/r.git"),
+        ("ssh://git@github.com/o/r.git", "git+ssh://git@github.com/o/r.git"),
+        ("github.com:o/r", "git+ssh://github.com/o/r"),
+        ("https://github.com/o/r.git", "git+https://github.com/o/r.git"),
+    ],
+)
+def test_the_printed_source_is_a_pip_and_uv_acceptable_url(
+    repo, monkeypatch, configured, source
+) -> None:
+    root, sha = repo
+    _git(root, "config", "--unset-all", f"url.{root.parent / 'bare.git'}.insteadOf")
+    _git(root, "remote", "set-url", "origin", configured)
+    _git(root, "config", f"url.{root.parent / 'bare.git'}.insteadOf", configured)
+
+    result = _invoke(
+        root, ["verification", "prerelease", "--branch", "feat/x", "--dry-run"], _Recorder(),
+        monkeypatch,
+    )  # fmt: skip
+
+    assert result.exit_code == 0, result.output
+    assert f"{source}@rc/feat-x/{sha[:12]}" in [ln.strip() for ln in result.output.splitlines()]
+
+
 def test_the_pr_body_route_and_the_command_name_the_same_source_form(repo, monkeypatch) -> None:
     """The PR body's route says the command 'prints the rc's `<source>`' and
     feeds it to `.fr/candidate-install {prefix} {source}`: the printed source
@@ -211,7 +274,7 @@ def test_the_workflow_takes_a_required_sha_and_refuses_a_head_that_is_not_it() -
     guards = [s for s in _steps() if s.get("env", {}).get("SHA") == "${{ inputs.sha }}"]
     assert guards, "no step receives inputs.sha through env:"
     script = guards[0]["run"]
-    assert 'git rev-parse HEAD' in script and '"$SHA"' in script and "exit 1" in script
+    assert "git rev-parse HEAD" in script and '"$SHA"' in script and "exit 1" in script
 
 
 def test_the_workflow_accepts_a_branch_head_and_nothing_else_ref() -> None:
