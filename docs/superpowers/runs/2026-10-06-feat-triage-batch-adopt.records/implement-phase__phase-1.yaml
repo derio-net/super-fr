@@ -3,8 +3,14 @@ run: 2026-10-06-feat-triage-batch-adopt
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T1.S4]
-refactor: {}
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T1.S4, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1,
+  P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1,
+  P1.T6.S2, P1.T6.S3]
+refactor:
+  P1.T2: "rename_branch was written plan-then-apply from the start (plan_rename reads and refuses, rename_branch writes only what the plan holds); nothing duplicated to clean beyond naming"
+  P1.T3: "the one duplication, parsing `gh pr create`'s URL, was removed in GREEN itself: pr_create now delegates to create_pr(draft=False)"
+  P1.T4: "recorded_branch is the whole change; the three readers each call it once"
+  P1.T6: "no refactor step: skill prose, matrix rows, change fragment and the gate"
 journal:
   - kind: discovery
     id: p1-herdr-renames-hand-started-agent
@@ -17,7 +23,94 @@ journal:
       `herdr agent rename <pane-id> <name>` exits 0 and `herdr agent get <name>` then
       resolves it. So `HerdrRunner` addresses an agent by `name` when it has one, else
       by `pane_id`. herdr also auto-relabels a tab running claude
-      (`1 · adopt › claude › model haiku`). The scratch workspace was closed; no other
-      tab or agent was touched. Fixtures and provenance: tests/fixtures/herdr/README.md.
+      (`1 · adopt › claude › model haiku`). Two scratch workspaces were created and
+      closed (the second for one coherent capture of all three lists); no other tab or
+      agent was renamed, messaged or closed. Fixtures and provenance:
+      tests/fixtures/herdr/README.md.
+  - kind: discovery
+    id: p1-gh-pr-create-captured-live
+    phase: 1
+    title: No captured `gh pr create` existed; one was captured against a scratch branch and cleaned up
+    body: |
+      tests/fixtures held no `gh pr create` capture (the existing pr_create test used a
+      hand-written URL). Per the brief, an empty commit on origin/main was pushed to
+      `scratch/fr-adopt-capture` on derio-net/super-fr, `gh pr create --draft` opened
+      PR #1044, `gh pr view --json …` and `gh pr close` were captured, and the branch was
+      deleted with `gh api -X DELETE …/git/refs/heads/scratch/fr-adopt-capture` (prints
+      nothing). PR #1044 is closed, the branch is gone (`git ls-remote` empty).
+      Fixtures: tests/fixtures/gh/ (README records it).
+  - kind: decision
+    id: p1-delete-old-branch-through-the-forge
+    phase: 1
+    title: The old remote branch is deleted through GhClient.delete_branch; gitseam gained no delete
+    body: |
+      Spec §A named two new gitseam operations (publish, delete remote branch) while §C
+      put "delete branch" on the GhClient adapter; implementing both would leave one
+      dead. Adopt deletes through `GhClient.delete_branch` (glab/tea refuse it via
+      UnsupportedBatchOps), and gitseam gained `publish_branch` plus the two reads the
+      verb needs (`worktree_of`, `has_branch`). The batch tripwire now forbids
+      `fr.isolation` in batch modules except `from fr.isolation.rename import
+      rename_branch, IsolationError`; `rename_branch(dry_run=True)` gives the verb its
+      refusals before any write without a second isolation import.
+  - kind: decision
+    id: p1-pr-view-and-create-pr
+    phase: 1
+    title: pr_view now also returns title and body; create_pr added beside pr_create
+    body: |
+      `GhClient.pr_create` already existed (never draft, returns the number) for the
+      driver's export PR. Adopt needs the draft state and the URL, so `create_pr(…,
+      draft)` returns `{number, url}` and `pr_create` delegates to it. The superseded
+      PR's title and body are read by adding `title,body` to `pr_view`'s `--json`.
+  - kind: decision
+    id: p1-adopt-idempotence-boundaries
+    phase: 1
+    title: How adopt decides a step is done on a re-run
+    body: |
+      Rename: rename_branch's own plan (local old gone, marker/record/cursor on new).
+      Publish: the batch branch on origin. New PR: an OPEN PR on the batch branch; then
+      the event is stamped no later than its creation (never before the batch's last
+      event), so of_dispatch keeps it. Supersede comment: a comment on the old PR
+      starting `Superseded by #<new>`. Close/delete: the old PR open / old branch on
+      origin. Tab: `runner.adopt` is always called — the protocol makes it a no-op when
+      already adopted. Event: the batch's last event is a dispatch with this tab as
+      handle and the batch branch. Forge writes: `_forge_writes`, already idempotent.
+      The message is the last step and is not tracked: a re-run after a FULL success
+      sends it again (harmless; nothing else changes).
+  - kind: discovery
+    id: p1-drive-already-matched-recorded-branch
+    phase: 1
+    title: R13's drive behaviour already held; its test pins it, and the three branch readers were the gap
+    body: |
+      `batch._branch_prs` and `of_dispatch` already match by `event.branch` and event
+      time, so the new drive_pass/derive_batch_stage test for an adopted batch passed
+      before any change. The RED part of P1.T4 was the three readers (closeout_brief,
+      attributed, dispatch_comment), which now use `recorded_branch`. Note: the T4 RED
+      tests were swept into the T3 commit by a backgrounded `git add -A`; the history
+      is otherwise one commit per task.
+  - kind: discovery
+    id: p1-no-explainer-owed
+    phase: 1
+    title: No explainer describes triage, so the minor bump owes no explainer update
+    body: |
+      docs/explainers holds only 01-fr-goal and fr-isolation (plus index); neither
+      describes `fr triage batch`, so explainers-currency asks for nothing here.
+  - kind: finding
+    id: p1-wall-clock-tests-flake-under-host-load
+    phase: 1
+    review_scope: out
+    title: Two wall-clock-budget tests fail in the full suite under heavy host load and pass alone
+    body: |
+      The final full suite (`uv run pytest -q --no-cov -n auto`, log in evidence) ended
+      `2 failed, 9756 passed, 115 skipped` with the host's 15-minute load average at
+      ~130 (the operator's other sessions and ~20 devcontainers):
+      `tests/integration/test_run_idle_guard.py::test_fails_open_when_fr_hangs_and_does_not_hang_with_it`
+      ("the stub was never reached") and
+      `tests/unit/test_records_commit.py::test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly`
+      (5.96s against a 5.0s budget). An earlier full run at load ~60 also failed four
+      `tests/unit/test_run_evidence_visual.py` tests on file-mtime-vs-transcript timing.
+      None of these touch code this phase changed; all six pass when re-run alone
+      (`6 passed in 49.17s`, $TMPDIR/adopt-fail6.log). Wall-clock-tight under load,
+      per AGENTS.md's xdist note; not fixed here.
 resolves: []
-evidence: {}
+evidence:
+  tests: /var/folders/28/d4n60x_92gbgh3rtf4vstb0h0000gn/T/adopt-suite.log
