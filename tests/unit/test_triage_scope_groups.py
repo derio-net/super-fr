@@ -143,7 +143,7 @@ def test_facts_4_round_trips_and_schema_3_still_loads_then_is_upgraded_by_collec
     result = CliRunner().invoke(app, ["triage", "collect", "--repo", GROUP, "--dir", str(tmp_path)])
     assert result.exit_code == 0, result.output
     written = json.loads(path.read_text(encoding="utf-8"))
-    assert (written["schema"], written["kind"], written["repos"]) == (5, "group", [ALPHA, BETA])
+    assert (written["schema"], written["kind"], written["repos"]) == (6, "group", [ALPHA, BETA])
     assert load_facts(path).kind == "group"
 
 
