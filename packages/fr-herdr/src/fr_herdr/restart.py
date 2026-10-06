@@ -19,12 +19,25 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+import shlex
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
+
+from fr_herdr._herdr import HerdrError, _run_herdr
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Callable, Collection
+
+EXIT_TIMEOUT = 30.0
+"""Seconds `claude` gets to leave the pane's foreground after `/exit` (R3)."""
+RESUME_TIMEOUT = 90.0
+"""Seconds the relaunched `claude` gets to report the same session id (R3)."""
+POLL_INTERVAL = 1.0
+
+_sleep = time.sleep
+_clock = time.monotonic
 
 IDLE_STATUSES = frozenset({"idle", "done"})
 
@@ -226,3 +239,204 @@ def classify(
     if pane in excluded:
         return Skip(pane, "excluded")
     return Plan(pane, agent.get("name") or None, str(session_id), cwd, tuple(kept))
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """How one pane's restart ended. *resume* is the command that resumes the pane by
+    hand, set on every failure after `/exit` was sent."""
+
+    pane_id: str
+    ok: bool
+    reason: str
+    resume: str | None = None
+
+
+@dataclass(frozen=True)
+class PaneLine:
+    """One report line: `ok|skip|fail`, the detail, the pane id and its tab label."""
+
+    pane_id: str
+    tab: str
+    verdict: str
+    detail: str
+    resume: str | None = None
+
+    def render(self) -> str:
+        reason = f" {self.detail}" if self.detail and self.verdict != "ok" else ""
+        return f"{self.verdict}{reason}  {self.pane_id}  {self.tab}".rstrip()
+
+
+@dataclass
+class RestartReport:
+    lines: list[PaneLine] = field(default_factory=list)
+    dry_run: bool = True
+
+    @property
+    def failed(self) -> bool:
+        return any(line.verdict == "fail" for line in self.lines)
+
+    def summary(self) -> str:
+        done = sum(1 for line in self.lines if line.verdict == "ok")
+        skipped = sum(1 for line in self.lines if line.verdict == "skip")
+        failed = sum(1 for line in self.lines if line.verdict == "fail")
+        verb = "would restart" if self.dry_run else "restarted"
+        return f"{done} {verb}, {skipped} skipped, {failed} failed"
+
+
+_T = TypeVar("_T")
+
+
+def _poll(check: Callable[[], _T | None], *, timeout: float) -> _T | None:
+    """Call *check* until it answers something other than None, or *timeout* runs out.
+    The one wait both the exit and the resume use."""
+    deadline = _clock() + timeout
+    while True:
+        answer = check()
+        if answer is not None:
+            return answer
+        if _clock() >= deadline:
+            return None
+        _sleep(POLL_INTERVAL)
+
+
+def _claude_process(info: dict[str, Any]) -> dict[str, Any] | None:
+    procs = info.get("result", {}).get("process_info", {}).get("foreground_processes", [])
+    for proc in procs:
+        argv = proc.get("argv") or []
+        if argv and Path(str(argv[0])).name == "claude":
+            found: dict[str, Any] = proc
+            return found
+    return None
+
+
+_EXIT_DIALOG = re.compile(r"unsent feedback draft|Enter to review & send")
+
+
+def _exit_state(pane: str) -> str | None:
+    """`gone` once no claude runs in the foreground, `dialog` if Claude's exit dialog is
+    up (an unsent feedback draft), else None."""
+    if _claude_process(_run_herdr(["pane", "process-info", "--pane", pane])) is None:
+        return "gone"
+    text = str(_run_herdr(["pane", "read", pane, "--source", "visible"]).get("raw", ""))
+    return "dialog" if _EXIT_DIALOG.search(text) else None
+
+
+def _same_session(pane: str, session_id: str) -> bool | None:
+    agents = _run_herdr(["agent", "list"]).get("result", {}).get("agents", [])
+    for agent in agents:
+        if agent.get("pane_id") == pane and agent.get("agent") == "claude":
+            if (agent.get("agent_session") or {}).get("value") == session_id:
+                return True
+    return None
+
+
+def _start_named(plan: Plan) -> bool:
+    """`agent start` on the pane under its own name: that keeps `HerdrRunner.message`
+    working, which addresses agents by name. False when herdr refuses the name
+    (`agent_name_taken`: another pane holds it), so the caller types the command."""
+    argv = ["agent", "start", str(plan.name), "--kind", "claude", "--pane", plan.pane_id]
+    try:
+        _run_herdr([*argv, "--", *plan.kept, "--resume", plan.session_id])
+    except HerdrError as exc:
+        if exc.code == "agent_name_taken":
+            return False
+        raise
+    return True
+
+
+def restart(plan: Plan) -> Outcome:
+    """Restart one pane in place (R3): `/exit`, wait for claude to leave, relaunch on
+    `--resume`, wait for the same session id. Never raises: a failure is an Outcome."""
+    pane = plan.pane_id
+    command = shlex.join(["claude", *plan.kept, "--resume", plan.session_id])
+    step = "send /exit"
+    sent = False
+
+    def fail(reason: str) -> Outcome:
+        return Outcome(pane, False, reason, command if sent else None)
+
+    try:
+        _run_herdr(["pane", "send-text", pane, "/exit"])
+        sent = True
+        _run_herdr(["pane", "send-keys", pane, "enter"])
+        step = "wait for exit"
+        state = _poll(lambda: _exit_state(pane), timeout=EXIT_TIMEOUT)
+        if state == "dialog":
+            return fail("exit-dialog")
+        if state is None:
+            return fail("exit-timeout")
+        step = "agent start"
+        if not plan.name or not _start_named(plan):
+            step = "send claude command"
+            _run_herdr(["pane", "send-text", pane, command])
+            _run_herdr(["pane", "send-keys", pane, "enter"])
+        step = "wait for resume"
+        if not _poll(lambda: _same_session(pane, plan.session_id), timeout=RESUME_TIMEOUT):
+            return fail("resume-timeout")
+    except HerdrError as exc:
+        return fail(f"{step}: {exc}")
+    return Outcome(pane, True, "restarted")
+
+
+def restart_idle(*, yes: bool, exclude: Collection[str] = ()) -> RestartReport:
+    """List every claude pane, classify each, and restart the eligible ones serially
+    (R1-R4). A dry run (`yes=False`) sends no key. One pane's failure never stops the next;
+    the caller's own pane is `HERDR_PANE_ID`."""
+    agents = _run_herdr(["agent", "list"]).get("result", {}).get("agents", [])
+    tabs = {
+        t.get("tab_id"): str(t.get("label", ""))
+        for t in _run_herdr(["tab", "list"]).get("result", {}).get("tabs", [])
+    }
+    self_pane = os.environ.get("HERDR_PANE_ID") or None
+    report = RestartReport(dry_run=not yes)
+    for agent in agents:
+        if agent.get("agent") != "claude":
+            continue
+        pane = str(agent["pane_id"])
+        tab = tabs.get(agent.get("tab_id"), "")
+        try:
+            verdict = classify(**_inputs(agent, self_pane, exclude))
+        except HerdrError as exc:
+            report.lines.append(PaneLine(pane, tab, "skip", f"unreadable: {exc}"))
+            continue
+        if isinstance(verdict, Skip):
+            report.lines.append(PaneLine(pane, tab, "skip", verdict.reason))
+        elif not yes:
+            report.lines.append(PaneLine(pane, tab, "ok", "would restart"))
+        else:
+            outcome = restart(verdict)
+            if outcome.ok:
+                report.lines.append(PaneLine(pane, tab, "ok", ""))
+            else:
+                report.lines.append(PaneLine(pane, tab, "fail", outcome.reason, outcome.resume))
+    return report
+
+
+def _inputs(
+    agent: dict[str, Any], self_pane: str | None, exclude: Collection[str]
+) -> dict[str, Any]:
+    """What `classify` needs, read from herdr. A pane that is not idle is not read at all."""
+    pane = str(agent["pane_id"])
+    inputs: dict[str, Any] = {
+        "agent": agent,
+        "screen": "",
+        "argv": None,
+        "cwd": str(agent.get("foreground_cwd") or agent.get("cwd") or ""),
+        "transcript_exists": False,
+        "self_pane": self_pane,
+        "excluded": frozenset(exclude),
+    }
+    session_id = (agent.get("agent_session") or {}).get("value")
+    if agent.get("agent_status") not in IDLE_STATUSES or not session_id:
+        return inputs
+    proc = _claude_process(_run_herdr(["pane", "process-info", "--pane", pane]))
+    if proc is None:
+        return inputs
+    inputs["argv"] = [str(a) for a in proc["argv"]]
+    inputs["cwd"] = str(proc.get("cwd") or inputs["cwd"])
+    inputs["transcript_exists"] = transcript_path(inputs["cwd"], str(session_id)).is_file()
+    inputs["screen"] = str(
+        _run_herdr(["pane", "read", pane, "--source", "visible", "--ansi"]).get("raw", "")
+    )
+    return inputs

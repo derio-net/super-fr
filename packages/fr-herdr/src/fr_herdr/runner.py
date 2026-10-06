@@ -45,7 +45,6 @@ agent has taken the prompt up (it left `idle`), not merely once it was typed.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import shutil
@@ -55,7 +54,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from fr_herdr import restart  # noqa: F401  (imported at module top level, never lazily: spec sr-13)
-from fr_herdr._herdr import HerdrError, _error_code, _run_herdr
+from fr_herdr._herdr import HerdrError, _run_herdr
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
