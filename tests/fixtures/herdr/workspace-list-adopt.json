@@ -1,0 +1,38 @@
+{
+  "id": "cli:workspace:list",
+  "result": {
+    "type": "workspace_list",
+    "workspaces": [
+      {
+        "active_tab_id": "w7:tB",
+        "agent_status": "done",
+        "focused": false,
+        "label": "frank",
+        "number": 1,
+        "pane_count": 8,
+        "tab_count": 8,
+        "workspace_id": "w7"
+      },
+      {
+        "active_tab_id": "w9:tA",
+        "agent_status": "working",
+        "focused": true,
+        "label": "super-fr",
+        "number": 2,
+        "pane_count": 5,
+        "tab_count": 5,
+        "workspace_id": "w9"
+      },
+      {
+        "active_tab_id": "wT:t1",
+        "agent_status": "blocked",
+        "focused": false,
+        "label": "fr-adopt-scratch",
+        "number": 15,
+        "pane_count": 1,
+        "tab_count": 1,
+        "workspace_id": "wT"
+      }
+    ]
+  }
+}
