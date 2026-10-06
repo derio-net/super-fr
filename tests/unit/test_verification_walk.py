@@ -13,6 +13,7 @@ import stat
 import subprocess
 from pathlib import Path
 
+import click
 import pytest
 import yaml
 from fr.cli import app
@@ -146,7 +147,8 @@ def test_the_walk_requires_a_model(tmp_path: Path) -> None:
     result = _walk(_repo(tmp_path), model=None)
 
     assert result.exit_code == 2
-    assert "--model" in result.output
+    # CI forces colour, and rich styles the option name inside its usage panel.
+    assert "--model" in click.unstyle(result.output)
 
 
 def test_a_passing_walk_installs_into_a_prefix_and_writes_the_log(
