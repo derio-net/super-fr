@@ -1,0 +1,52 @@
+schema_version: 7
+run: 2026-10-06-feat-batch-forge-remainder
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: finding
+    id: p2-r1
+    phase: 2
+    review_scope: in
+    title: A refused GitHub host crashed isolation status/down/verify-merge/up and aborted the gc sweep
+    body: The lookups now raise GhHostRefusedError (fail closed, spec §4.E). It was unhandled at local.py's _pr/_pr_from/_resolve_default_branch call sites and at isolation_cmd's verify-merge default-branch resolution, so it surfaced as a traceback, and one workspace aborted the host-wide gc sweep.
+  - kind: finding
+    id: p2-r2
+    phase: 2
+    review_scope: in
+    title: No test pinned forge_error_kind(GhHostRefusedError) as unknown, or the bridge guard re-raising it
+    body: The code was correct but nothing pinned the §4.C answer for the new refusal type.
+  - kind: finding
+    id: p2-r3
+    phase: 2
+    review_scope: in
+    title: The planted-import tripwire test only called offences() on a string
+    body: It duplicated test_the_scan_sees_every_form and never exercised the real directory scan.
+  - kind: finding
+    id: p2-r4
+    phase: 2
+    review_scope: out
+    title: The isolation lifecycle's injected runner drops GH_HOST (gate runs, host not applied)
+    body: Isolation lookups never set GH_HOST before this change either; inside a checkout gh infers the host from the remote. The trust gate still runs through @_hosted.
+  - kind: review
+    id: p2-review-r1
+    phase: 2
+    title: "Independent review of phase 2: 4 findings (p2-r1..p2-r4)"
+    body: A dispatched reviewer checked the verbatim lookup move (argv, normalisation, None-on-failure, network env/timeout), the isolation callers of the new refusal, collect's adapter reads and ClientForge, forge_error_kind and the bridge guard, the tripwire, the skill prose and mirrors, and test quality. It ran 268 targeted tests green. It raised p2-r1, p2-r2 and p2-r3 (in scope) and p2-r4 (out of scope).
+resolves:
+  - id: p2-r1
+    state: fixed
+    body: cd304e03b. local.py turns the adapter's refusal into IsolationError (`_forge_refused`), so down and verify-merge refuse cleanly; isolation_cmd's verify-merge wraps the default-branch resolution in _fail (exit 2). status shows no PR and warns on stderr (`_status_pr`). gc runs each workspace through `_gc_one_guarded`, which records an escaped IsolationError as unverifiable/skipped, never reaped, and finishes the sweep. tests/unit/test_isolation_forge_refusal.py pins each call site.
+  - id: p2-r2
+    state: fixed
+    body: test_forge_error_kind.py now classifies GhHostRefusedError as unknown, and test_the_bridge_guard_reraises_the_host_refusal pins that it is re-raised with no back-off metric.
+  - id: p2-r3
+    state: fixed
+    body: The tripwire's scan is now `_bypasses(root)`. The planted test runs it over a tmp packages tree with a non-backend module, which is reported, and a backend-named gh.py, which is not.
+  - id: p2-r4
+    state: out-of-scope
+    body: Pre-existing. Isolation lookups never threaded GH_HOST, and inside a checkout gh infers the host from the remote. The gate is still enforced.
+evidence:
+  review: p2-review-r1
+  reviewer: a2b4e326ecded23e8
+  model: claude-opus-5-5
