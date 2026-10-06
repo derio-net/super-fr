@@ -166,3 +166,5 @@ journal:
     row triage-claims-writes from this phase; the orchestrator adds it.
 
     '
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/cbb16f1b-fd32-46c2-b21b-5d302376757e/scratchpad/p1-full-suite.log
