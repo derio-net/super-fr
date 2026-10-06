@@ -84,6 +84,7 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "adopt": "close-out found; the drive records it",
     "foreign": "foreign PR on its branch",
     "close": "finished; session to close",
+    "dedupe": "duplicate candidates to judge",  # names no batch; never a card hint
 }
 NEEDS_YOU = "needs you: session blocked"
 # R6's per-column fallbacks.
