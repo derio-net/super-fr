@@ -5567,6 +5567,28 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py#test_readme_has_acceptance_badge
     status: ci
     notes: Index link and README badge pinned by unit tests.
+  - id: pages-deploy-survives-report-refusal
+    capability: acceptance-matrix
+    acceptance: 'A Pages deploy still publishes the explainers when the acceptance report
+      cannot be rendered (the migration gate refuses over stale artifacts): /acceptance/
+      shows a placeholder naming the commit, the run still goes red, and a newer push
+      queues behind a running deploy instead of cancelling it'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-10-06-pages-deploy.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py#test_concurrency_never_cancels_a_running_deploy
+      - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_cannot_skip_the_deploy
+      - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_publishes_a_placeholder_before_upload
+      - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_still_fails_the_run_after_deploying
+      - super-fr:tests/unit/test_pages_workflow.py#test_the_placeholder_says_the_report_was_not_rendered
+    status: skipped
+    notes: Workflow shape unit-pinned and the placeholder script executed in the unit
+      suite; a live deploy over a gate refusal has not been observed (it needs stale
+      artifacts on main).
+    verify: live
+    issues:
+    - derio-net/super-fr#924
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
