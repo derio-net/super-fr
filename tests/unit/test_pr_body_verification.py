@@ -221,6 +221,41 @@ def test_the_body_lists_each_operator_row_with_its_exact_walk_command(tmp_path: 
     assert "`after`" in post and "no reason recorded (legacy)" in post
 
 
+def test_a_prerelease_row_prints_the_manual_route_and_it_runs_as_written(
+    tmp_path: Path,
+) -> None:
+    """Review p3-r5: `walk` refuses a `source: prerelease` strategy, so the body
+    must not print a walk command for one. It prints the route instead — cut
+    the rc, install it into a throwaway prefix through the repo's contract, run
+    the scenario in the client repo — and that text runs as written once its
+    two `<…>` placeholders are filled."""
+    import subprocess
+
+    root = _repo(
+        tmp_path, rows={"pr-row": 'echo "scenario ran in $(pwd) with $(fakefr --version)"'}
+    )
+    _matrix(root, [{"id": "pr-row", "verify": "prerelease", "scenario": "scenarios/pr-row.sh"}])
+
+    pre = _body(root).split("## Pre-merge verification owed")[1].split("## Post-merge")[0]
+
+    assert "fr verification walk" not in pre
+    assert "`fr verification prerelease --branch b`" in pre
+    [route] = [
+        part.strip("`")
+        for line in pre.splitlines()
+        if "pr-row" in line
+        for part in line.split(" then ")
+        if "candidate-install" in part
+    ]
+    client = tmp_path / "client"
+    client.mkdir()
+    command = route.replace("<source>", str(root)).replace("<client-repo>", str(client))
+    out = subprocess.run(
+        ["sh", "-c", command], cwd=root, capture_output=True, text=True, check=True
+    ).stdout
+    assert f"scenario ran in {client.resolve()} with fakefr 1.2.3" in out
+
+
 def test_a_run_with_no_operator_row_renders_none(tmp_path: Path) -> None:
     root = _repo(tmp_path)
 

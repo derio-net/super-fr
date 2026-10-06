@@ -31,6 +31,7 @@ from fr.journal.model import (
 if TYPE_CHECKING:
     from fr.acceptance.model import Matrix, Row
     from fr.run.model import RunState
+    from fr.verification.model import StrategyManifest
     from fr.verification.rows import SpecVerification
 
 __all__ = [
@@ -43,6 +44,7 @@ __all__ = [
     "normalize_issue_ref",
     "pre_merge_owed_lines",
     "premature_closes",
+    "prerelease_route",
     "render_out_of_scope",
     "render_pr_body",
     "shared_closing_keywords",
@@ -303,12 +305,53 @@ def walk_command(run: str, strategy: str, row_id: str) -> str:
     )
 
 
+def prerelease_route(manifest: StrategyManifest, branch: str, scenario: str | None) -> str:
+    """What an operator runs, from the repo root, for one row on a `source:
+    prerelease` strategy — which `fr verification walk` refuses (review p3-r5).
+    Cut the rc (`fr verification prerelease` prints its `<source>`), then ONE
+    shell line: install it into a throwaway prefix through the repo's install
+    contract (`UV_TOOL_*` inside the prefix, as the walk does, so the
+    operator's own `fr` is untouched) and run the scenario in the client repo
+    with the prefix first on PATH. Runs as written once `<source>` and
+    `<client-repo>` are filled."""
+    from fr.verification.walk import render_argv
+
+    values = {
+        "prefix": "$prefix",
+        "bin": "$prefix/bin",
+        "source": "<source>",
+        "repo": "$repo",
+        "worktree": "$repo",
+        "client": "<client-repo>",
+        "fixture": "<client-repo>",
+        "scenario": f"$repo/{scenario or '<scenario>'}",
+    }
+
+    def shell(argv: list[str]) -> str:
+        return " ".join(f'"{a}"' if "$" in a else a for a in argv)
+
+    install = shell(render_argv(manifest.install or (), values))
+    run = shell(["sh", *render_argv(manifest.scenario or ("{scenario}",), values)])
+    return (
+        f"`fr verification prerelease --branch {branch}` prints the rc's `<source>`; then "
+        f'`repo=$(pwd) prefix=$(mktemp -d) && UV_TOOL_DIR="$prefix/uv-tools" '
+        f'UV_TOOL_BIN_DIR="$prefix/bin" {install} && cd <client-repo> && '
+        f'PATH="$prefix/bin:$PATH" {run}`'
+    )
+
+
 def pre_merge_owed_lines(
-    matrix: Matrix, spec_ref: str, verification: SpecVerification, run: str
+    matrix: Matrix,
+    spec_ref: str,
+    verification: SpecVerification,
+    run: str,
+    branch: str = "<branch>",
 ) -> list[str]:
     """One line per row citing the spec whose effective strategy is
-    operator-driven and pre-merge (spec §D, R12), each with its walk command; a
-    strategy that does not resolve is listed with the error, never dropped."""
+    operator-driven and pre-merge (spec §D, R12), each with its walk command —
+    or, for a `source: prerelease` strategy the walk refuses, its manual route
+    (`prerelease_route`); a strategy that does not resolve is listed with the
+    error, never dropped."""
     from fr.requirements import rows_citing
     from fr.verification.model import StrategyError
     from fr.verification.resolve import resolve_strategy
@@ -323,7 +366,12 @@ def pre_merge_owed_lines(
         except StrategyError as e:
             lines.append(f"- `{r.id}` — {r.acceptance} — strategy does not resolve: {e}")
             continue
-        if manifest.when == "pre-merge" and manifest.driver == "operator":
+        if manifest.when != "pre-merge" or manifest.driver != "operator":
+            continue
+        if manifest.source == "prerelease":
+            route = prerelease_route(manifest, branch, r.scenario)
+            lines.append(f"- `{r.id}` — {r.acceptance} — {route}")
+        else:
             lines.append(f"- `{r.id}` — {r.acceptance} — `{walk_command(run, name, r.id)}`")
     return lines
 
@@ -346,7 +394,7 @@ def _pre_merge_owed(repo_root: Path, state: RunState) -> str:
         verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
     except (AcceptanceError, SectionError) as e:
         return f"Not available: {e}"
-    lines = pre_merge_owed_lines(matrix, spec_ref, verification, state.run)
+    lines = pre_merge_owed_lines(matrix, spec_ref, verification, state.run, state.branch)
     if not lines:
         return "None."
     lines.append(

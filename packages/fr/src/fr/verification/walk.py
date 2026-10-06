@@ -401,7 +401,8 @@ def run_walk(
     if manifest.source == "prerelease":
         raise WalkError(
             f"strategy {manifest.verification!r} installs from a pre-release, which `walk` "
-            "does not build: install the rc yourself and run the scenarios with --client"
+            "does not run: cut the rc with `fr verification prerelease --branch <b>` and "
+            "run the route the PR body's `## Pre-merge verification owed` prints for the row"
         )
     scenarios: dict[str, Path] = {}
     for row in rows:
