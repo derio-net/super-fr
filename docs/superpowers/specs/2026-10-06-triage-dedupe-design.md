@@ -377,8 +377,9 @@ No deployment step. The release ships it. Post-merge, operator-driven:
 2. Judge one group `duplicate_of`, then re-run `check`. The duplicate leaves the
    candidates and appears under `duplicates` with a `gh issue close …
    --duplicate-of …` line. Nothing was written to the forge.
-3. `fr triage render --repo derio-net/super-fr --open`: the duplicate is nested
-   under its original, and "Possible duplicates" lists the rest.
+3. `fr triage render --repo derio-net/super-fr --open`: the duplicate is listed
+   under Parked and on its original's row (with its close command), and
+   "Possible duplicates" lists the rest.
 4. Judge a duplicate of an issue that is already closed, then
    `fr triage collect` and `check`: the original reads `closed`, not `missing`
    (R6).
