@@ -32,10 +32,9 @@ session live. Pass `--repo <path>` when the cursor lives in another checkout.
 - **One run:** `--run <id>`. The step table shows which pipeline step spent what.
 - **Before and after a process change:** `fr usage compare --before <cutoff> --after
   <cutoff>` (ISO date or timestamp, split on each run's `started`; or a run id). It
-  reads the committed files, needs no collect, prints `—` for what a run never
-  recorded. Quote its command and output with `n` and the priced count; say
-  "inconclusive" when the sets are thin or confounded (model change, unpriced
-  captures, runs before the main/subagent split). Else collect one run per side (an anecdote).
+  reads the committed files, prints `—` for what a run never recorded. Quote command
+  and output with `n` and the priced count; say "inconclusive" when the sets are thin
+  or confounded (model change, unpriced, pre-split runs).
 - **A sample:** name the sessions and report them together; pooled shares weight each
   session by its dollars.
 
