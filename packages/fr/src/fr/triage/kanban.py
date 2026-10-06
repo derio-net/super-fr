@@ -51,7 +51,7 @@ from fr.triage.views import drive_snapshot
 BoardStatus = Literal["working", "blocked", "idle", "done", "unknown", "absent"]
 """One session's live state as the board shows it; `absent` when the runner holds none."""
 
-Column = Literal["proposed", "waiting", "running", "pr-open", "closing-out", "done"]
+Column = Literal["proposed", "waiting", "running", "pr-open", "closing-out", "partial", "done"]
 
 COLUMN_TITLES: Mapping[Column, str] = {
     "proposed": "Proposed",
@@ -59,6 +59,9 @@ COLUMN_TITLES: Mapping[Column, str] = {
     "running": "Running",
     "pr-open": "PR open",
     "closing-out": "Closing out",
+    # A merged batch with a member still open, owed its close-out (gh#985): the driver
+    # still acts on it, so it is not Done until that close-out is archived.
+    "partial": "Partial",
     "done": "Done",
 }
 """The columns, left to right (R2): the one ordered table every other read derives from."""
@@ -70,7 +73,6 @@ _COLUMN_OF_STAGE: Mapping[BatchStage, Column] = {
     "pr-open": "pr-open",
     "cancelled": "done",
     "abandoned": "done",
-    "partial": "done",
 }
 PILL_STAGES: frozenset[BatchStage] = frozenset({"cancelled", "abandoned", "partial"})
 _DEAD: frozenset[DependencyState] = frozenset({"unsatisfiable", "unknown"})
@@ -214,8 +216,9 @@ def column_of(batch: Batch, facts: Facts, batches: Sequence[Batch]) -> Column:
     stage = derive_batch_stage(batch, facts)
     if stage in _COLUMN_OF_STAGE:
         return _COLUMN_OF_STAGE[stage]
-    archived = closeout_state(batch) == "archived"
-    return "done" if archived else "closing-out"
+    if closeout_state(batch) == "archived":
+        return "done"
+    return "partial" if stage == "partial" else "closing-out"
 
 
 def pill_of(batch: Batch, facts: Facts) -> str | None:
@@ -265,7 +268,7 @@ def fallback_hint(
         if pr is not None and (pr.checks or {}).get("pending", 0) > 0:
             return HINT_CI_PENDING
         return HINT_REVIEW
-    if column == "closing-out":
+    if column in ("closing-out", "partial"):
         return HINT_ARCHIVE_PENDING if closeout_event(batch) else HINT_CLOSEOUT_NOT_RECORDED
     return pill_of(batch, facts) or HINT_FINISHED
 
@@ -394,7 +397,7 @@ def build_board(
     *,
     stops: Mapping[str, MergeStop] | None = None,
 ) -> Board:
-    """One card per batch in six columns, sorted by wave (none last) then id (R2).
+    """One card per batch in seven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
     batch's PR is open at the head it was recorded at."""
     batches = judgements.batches

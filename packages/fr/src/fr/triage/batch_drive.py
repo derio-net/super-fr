@@ -28,6 +28,7 @@ from fr.triage.batch import (
     QueueEntry,
     batch_branch,
     batch_item_id,
+    last_dispatch,
 )
 from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
 
@@ -35,6 +36,10 @@ DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
 """How long after a merge the close-out starts when no release commit followed it
 (a PR with no change fragment releases nothing)."""
+STALE_CLOSEOUT = timedelta(minutes=15)
+"""How long a recorded close-out may go with no live tab and no archive PR before the
+driver says so (gh#1025): long enough to cover the record-then-start window of gh#883
+and a runner's own lag in reporting a tab it just opened."""
 
 DEFAULT_MAX_INFLIGHT = 4
 
@@ -163,11 +168,20 @@ class Snapshot:
     # recording (p4-r3), or a reopened PR recorded closed. Cross-repo PRs never appear
     # here (p4-r7). The export reuses one; it never adopts its content (p4-r12).
     export_orphans: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)
-    # repo -> its default branch: the only base an export PR may have (p4-r15)
-    export_default: Mapping[str, str] = field(default_factory=dict)
+    # repo -> its default branch: the only base an export PR (p4-r15) or an archive PR
+    # (gh#1004) may have; "" or absent when the clone could not say, which matches none
+    default_branch: Mapping[str, str] = field(default_factory=dict)
+    # Landed batches with no close-out event whose evidence (archived? released?) the
+    # clone could not give: plan mode only, where a failed read is reported rather
+    # than fatal. Unknown is not "not archived", so no close-out is planned (gh#991).
+    unverified: frozenset[str] = frozenset()
     # The batches whose open members all await their live walk (`batch_awaits_live`):
     # a planned one is held, never dispatched (spec §F, R18).
     awaiting: frozenset[str] = frozenset()
+    # The batches with a recorded close-out whose item `existing` was read for (gh#1025):
+    # only for these is "not in `existing`" evidence that no tab holds it. Plan mode
+    # reads no runner, so it probes none and never calls a close-out stale.
+    closeout_probed: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -282,6 +296,34 @@ def checks_verdict(
     if not all_checks.get("pass", 0):
         return "pending", ("no check reported yet",)
     return "green", ()
+
+
+def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Action | None:
+    """A close-out recorded but, it seems, never started (gh#1025): the event is older
+    than `STALE_CLOSEOUT`, the runner holds no tab for it and no archive PR names it.
+    A driver killed between the record (gh#883) and the tab leaves exactly this, and
+    the batch would read `closing` forever. Said once; the operator decides."""
+    if snap.now - event.at < STALE_CLOSEOUT:
+        return None
+    item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
+    if item in snap.existing:
+        return None
+    key = f"stale-closeout\0{batch.id}\0{event.at.isoformat()}"
+    if key in snap.warned:
+        return None
+    since = event.at.strftime("%Y-%m-%dT%H:%M")
+    last = last_dispatch(batch)
+    pickup = (
+        f"--run {event.run}"
+        if event.run
+        else f"--branch {last.branch if last else batch_branch(batch)}"
+    )
+    return Action(
+        "warn", batch.id,
+        f"close-out {item} was recorded at {since}Z but no runner holds it and no archive "
+        f"PR names it; run it by hand: `fr pickup {pickup}`",
+        head=key,
+    )  # fmt: skip
 
 
 def closeout_due(*, released: bool, merged_at: datetime | None, now: datetime) -> bool:
@@ -656,7 +698,7 @@ def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
         )
         action, count = _export_row(
             repo, target.wave, target.recorded, live, snap.export_path[repo],
-            snap.export_default.get(repo, ""),
+            snap.default_branch.get(repo, ""),
         )  # fmt: skip
         if action is not None:
             if action.kind == "export":
@@ -799,12 +841,18 @@ def drive_pass(snap: Snapshot) -> Pass:
         if train is not None:
             trains.append(train)
 
-    # 2. Close out.
+    # 2. Close out. Recording a close-out that has already finished starts nothing and
+    # writes nothing to the forge, so it reads every landed batch, selected or not
+    # (gh#990); starting one, or recording one under way, follows the selection.
     closing = 0
-    for batch in chosen:
+    for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in merging:
             continue
         if closeout_event(batch) is not None:
+            continue
+        driven_now = snap.selected is None or batch.id in snap.selected
+        if batch.id in snap.unverified:
+            closing += driven_now
             continue
         # A close-out the driver did not start is recorded once, as an event: every
         # later pass, the board and `batch list` read it (gh#899, gh#900, gh#912).
@@ -816,6 +864,8 @@ def drive_pass(snap: Snapshot) -> Pass:
         if hand is not None and hand.state == "MERGED":
             actions.append(Action("adopt", batch.id, f"close-out PR #{hand.number} merged",
                                   pr=hand.number, archived=hand.number))  # fmt: skip
+            continue
+        if not driven_now:
             continue
         closing += 1
         if hand is not None:
@@ -838,6 +888,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             actions.append(Action("closeout", batch.id, f"start {item}", post_merge=owed))
 
     # 3. Archive.
+    archives_blocked = 0
     for batch in chosen:
         event = closeout_event(batch)
         if event is None or stages.get(batch.id) not in LANDED:
@@ -852,14 +903,29 @@ def drive_pass(snap: Snapshot) -> Pass:
                 actions.append(Action("adopt", batch.id, f"archive PR #{landed.number} merged",
                                       pr=landed.number, archived=landed.number))  # fmt: skip
             continue
-        closing += 1
-        ready = next(
-            (p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"), None
-        )
-        if ready is not None:
+        if not mine and batch.id in snap.closeout_probed:
+            stale = _stale_closeout(batch, event, snap)
+            if stale is not None:
+                actions.append(stale)
+        ready = [p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"]
+        default = snap.default_branch.get(snap.repos.get(batch.id, ""), "")
+        good = next((p for p in ready if default and not _wrong_base(p, default)), None)
+        if good is None and ready and default:
+            # Merged only into the default branch, as the export (gh#1004, p4-r15): only
+            # the operator can retarget it, so the batch is blocked, and named every pass
+            # as a blocked dispatch is. An unknown default proves nothing: it waits.
+            archives_blocked += 1
+            wrong = ready[0]
             actions.append(
-                Action("archive", batch.id, f"PR #{ready.number} ({ready.head_ref})",
-                       pr=ready.number, head=ready.head)
+                Action("blocked", batch.id, f"archive PR #{wrong.number} ({wrong.head_ref}) "
+                       f"{_wrong_base(wrong, default)}; it is never merged", pr=wrong.number)
+            )  # fmt: skip
+            continue
+        closing += 1
+        if good is not None:
+            actions.append(
+                Action("archive", batch.id, f"PR #{good.number} ({good.head_ref})",
+                       pr=good.number, head=good.head)
             )  # fmt: skip
 
     # 3b. Export each finished wave's state (pages-goal R13).
@@ -878,7 +944,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
-    pending, blocked = 0, exports_blocked
+    pending, blocked = 0, exports_blocked + archives_blocked
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed":
             continue
