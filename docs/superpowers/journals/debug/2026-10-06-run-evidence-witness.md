@@ -39,3 +39,8 @@ telemetry.wrote_since now records every completed foreground Bash call and, for 
 ### fix-999 · finding [fixed] · uv run walks its flags and skips the values of value-taking ones
 
 _program delegates uv to _uv_run_program, which skips _UV_VALUE_FLAGS values (taken from uv run --help). Pinned by test_a_uv_run_flag_value_is_not_the_program and test_a_uv_run_flag_value_naming_the_script_is_not_a_run_of_it (failing first).
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-10-06T09:28:26+00:00 -->
+### review-1 · review · Independent adversarial review: no significant findings; low ones fixed
+
+Separate-context reviewer (read-only). Verified: main_thread filter, poll-before-window, launch acks, first-exit-final, superset-only extension, notice-before-ack ordering, uv run regressions. Fixed: vacuous sidechain test replaced by a mixed main-thread/sidechain case; added foreground & writer, early poll, launch-ack and is_error poll cases; dead uv entry in _SUBCOMMAND_RUNNERS removed. Refuted: missing value flags (uv 0.10.11 uv run --help lists none beyond _UV_VALUE_FLAGS; hidden --python-preference added). Informational kept: the extension needs the suite to print its own exit=N line (noted in the code). Full suite on the final tree: 9015 passed, 105 skipped (host run; the 2 GB devcontainer OOM-killed xdist workers).
