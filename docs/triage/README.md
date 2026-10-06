@@ -36,7 +36,7 @@ rendered `*.html` pages and the built fragments `architecture/*.html`.
 ## Regenerating the pages
 
 ```bash
-docs/triage/sync.sh import                    # repo -> ~/.cache (skips newer cache files)
+uv run fr triage state import --from docs/triage --repo derio-net/super-fr
 fr triage collect --repo derio-net/super-fr --pr-limit 1000
 fr triage origins collect --repo derio-net/super-fr --since 2026-09-22
 fr triage check --repo derio-net/super-fr          # unranked: judge with the fr-triage skill
@@ -45,7 +45,7 @@ python3 ~/.cache/fr/triage/derio-net--super-fr/authored-src/build.py
 fr triage render --repo derio-net/super-fr
 fr triage origins render --repo derio-net/super-fr
 fr triage architecture render --repo derio-net/super-fr --now-ref origin/main
-docs/triage/sync.sh export                    # ~/.cache -> repo; commit through a PR
+uv run fr triage state export --to docs/triage --repo derio-net/super-fr
 ```
 
 The cache stays the working copy because `fr triage batch drive` writes `judgements.yaml`

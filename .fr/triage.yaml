@@ -14,3 +14,6 @@ post_merge: ["./scripts/install.sh"]
 # No `version:` block, deliberately (spec 2026-09-26-version-bump-churn §3.F):
 # super-fr PRs never edit a version, so a batch reserves no number. The worker
 # adds a `.changes/` fragment per AGENTS.md and release.yml assigns the number.
+# Triage state export to docs/triage on every finished wave (spec R13).
+export:
+  path: docs/triage

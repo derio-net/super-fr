@@ -7,18 +7,18 @@ ticks:
   - P5.T1.S1
   - P5.T1.S2
   - P5.T1.S3
+  - P5.T2.S1
+  - P5.T2.S2
 refactor:
   P5.T1: "Prose skills have no refactor step; documentation additions are concise and targeted"
-  P5.T2: "Task 2 blocked on PR #969 merging; orchestrator handles after rebase"
 journal:
   - kind: discovery
     id: p5-blocked-on-969
-    title: "Task 2 (P5.T2.S1–S2) blocked: PR #969 not merged"
+    title: "Task 2 unblocked: PR #969 merged"
     body: |
-      PR #969 (chore/triage-state, adds `docs/triage/`) has not merged to origin/main yet.
-      Verified with `git fetch origin && git cat-file -e origin/main:docs/triage/sync.sh`.
-      File not found on main; P5.T2.* unticked. The orchestrator will rebase this branch
-      after #969 merges and handle task 2 then. Outcome: done (task 1 complete).
+      PR #969 (chore/triage-state) merged to origin/main. Coordinator merged main into
+      feat branch (commit b8a528795). No rebase needed. Task 2 proceeded with fresh
+      import/render verification.
   - kind: discovery
     id: p5-t1-skills-documented
     title: "Task 1 complete: Skills document pages, fragments, and fields"
@@ -30,6 +30,17 @@ journal:
       - Schema versions and export config
       - History verb and state export/import verbs
       Tests pass: 13 new tests validate the documentation, tripwires enforce skill length and tool neutrality.
+  - kind: discovery
+    id: p5-t2-state-configured
+    title: "Task 2 complete: Triage state configured for export"
+    body: |
+      P5.T2.S1 completed: deleted docs/triage/sync.sh; rewrote README.md sync commands to use
+      `uv run fr triage state import --from docs/triage --repo derio-net/super-fr` and export;
+      created history/manifest.yaml with timeline, finished-waves, and three dated fragments
+      (closing order, origins analysis, history to 2026-10-02); dropped moved sections from
+      architecture manifest; added `export: {path: docs/triage}` to .fr/triage.yaml (spec R13).
+      P5.T2.S2 verified: import succeeded, architecture and history renders show no missing-fragment
+      or moved-name warnings.
 resolves: []
 evidence:
   tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a95011be-df46-40a9-a07a-e24ccd3c8a59/scratchpad/p5-suite.log
