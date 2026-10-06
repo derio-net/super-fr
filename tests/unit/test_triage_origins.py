@@ -269,8 +269,7 @@ def test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch(
 ) -> None:
     page = _page(monkeypatch, tmp_path)
     sections = re.findall(r'<section[^>]*id="([a-z-]+)"', page)
-    assert sections[-1] == "conclusion"
-    assert page.rindex('id="conclusion"') > page.rindex('id="issue-table"')
+    assert sections[1] == "conclusion"  # R7: right after where the issues came from
     concl = _section(page, "conclusion")
     assert "Feature work lands half-done" in concl
     assert "Require a follow-up checklist before merge" in concl
@@ -279,6 +278,68 @@ def test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch(
     assert re.search(r'class="unresolved"[^>]*>[^<]*ghost-batch', concl)
     # a cause with no batch says so
     assert "no batch yet" in _text(concl)
+
+
+def test_sections_follow_r7_and_the_issue_table_is_a_closed_fold(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _page(monkeypatch, tmp_path)
+    ids = re.findall(r'<section[^>]*id="([a-z-]+)"', page)
+    assert ids == [
+        "origin-counts",
+        "conclusion",
+        "filings-per-day",
+        "time-to-fix",
+        "pr-leaderboards",
+        "issue-table",
+    ]
+    table = _section(page, "issue-table")
+    m = re.search(r'<details id="issue-table-fold" class="fold">', table)
+    assert m and "<table" in table[m.end() :]
+    assert "open" not in table[: table.index(">", m.start())].split()
+    assert re.search(r'<summary>Every issue <span class="count">15</span></summary>', table)
+
+
+def test_the_origins_page_carries_its_nav_and_goal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _page(monkeypatch, tmp_path)
+    assert re.search(r'<a [^>]*href="origins.html"[^>]*aria-current="page"', page)
+    assert "Where do defects come from, and what process change stops them?" in page
+    assert page.index("</header>") < page.index('class="pages"') < page.index('id="origin-counts"')
+
+
+def test_a_manifest_fragment_survives_render_at_its_position(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    (tmp_path / "origins.yaml").write_text(classification_yaml(causes=CAUSES), encoding="utf-8")
+    d = tmp_path / "origins"
+    d.mkdir()
+    (d / "manifest.yaml").write_text(
+        "sections:\n  - origin-counts\n  - analysis.html\n  - conclusion\n", encoding="utf-8"
+    )
+    (d / "analysis.html").write_text("<p>HAND WRITTEN</p>", encoding="utf-8")
+    for _ in range(2):  # a second render loses nothing
+        assert _run(monkeypatch, "render", tmp_path).exit_code == 0
+        page = (tmp_path / "origins.html").read_text(encoding="utf-8")
+        at = [page.index(x) for x in ('id="origin-counts"', "HAND WRITTEN", 'id="conclusion"')]
+        assert at == sorted(at)
+        assert 'id="issue-table"' in page  # omitted generated names are appended
+
+
+def test_a_malformed_origins_fragment_is_refused_and_nothing_is_written(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    (tmp_path / "origins.yaml").write_text(classification_yaml(), encoding="utf-8")
+    d = tmp_path / "origins"
+    d.mkdir()
+    (d / "manifest.yaml").write_text("sections:\n  - bad.html\n", encoding="utf-8")
+    (d / "bad.html").write_text("<div>open", encoding="utf-8")
+    r = _run(monkeypatch, "render", tmp_path)
+    assert r.exit_code == 2 and "bad.html" in r.output
+    assert not (tmp_path / "origins.html").exists()
 
 
 def test_every_batch_is_unresolved_when_there_is_no_judgements_file(
@@ -620,4 +681,186 @@ def test_a_bad_origins_yaml_fails_every_verb_that_reads_it(
         assert _run(monkeypatch, verb, tmp_path).exit_code == 2
     skill = Path("plugins/super-fr/skills/fr-origins/SKILL.md").read_text(encoding="utf-8")
     assert "fails every verb that reads it" in skill
-    assert "prose-only" in skill
+    # A duplicate's target is checked since schema 2 (triage-pages-goal R10); only its
+    # `reason` stays prose, and the skill must say which is which (review p5-r5).
+    assert "prose-only" not in skill
+    assert "duplicate_of" in skill and "still prose" in skill
+
+
+# ------------------------------------------------ schema 2 (triage-pages-goal R10)
+
+
+def _write_classification(d: Path, body: str, *, schema: int = 2) -> None:
+    (d / "origins.yaml").write_text(f"schema: {schema}\n" + body, encoding="utf-8")
+
+
+def test_facts_stay_schema_1_and_origins_yaml_loads_1_and_2(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.origins import (
+        CLASSIFICATION_SCHEMA,
+        FACTS_SCHEMA,
+        load_origins,
+        load_origins_facts,
+    )
+
+    facts = _collect(monkeypatch, tmp_path)
+    assert facts["schema"] == FACTS_SCHEMA == 1
+    assert CLASSIFICATION_SCHEMA == 2
+    assert load_origins_facts(tmp_path / "origins-facts.json").scope
+    for schema in (1, 2):
+        (tmp_path / "origins.yaml").write_text(
+            classification_yaml().replace("schema: 1", f"schema: {schema}"), encoding="utf-8"
+        )
+        assert len(load_origins(tmp_path / "origins.yaml").issues) == 15
+    (tmp_path / "origins.yaml").write_text(
+        classification_yaml().replace("schema: 1", "schema: 3"), encoding="utf-8"
+    )
+    with pytest.raises(Exception, match="schema"):
+        load_origins(tmp_path / "origins.yaml")
+
+
+def test_duplicate_of_needs_the_duplicate_category(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    _write_classification(
+        tmp_path,
+        "issues:\n  widgets#3: {category: gap, source: hand, severity: low, reason: x,"
+        " duplicate_of: 'widgets#4'}\n",
+    )
+    r = _run(monkeypatch, "check", tmp_path)
+    assert r.exit_code == 2 and "duplicate" in r.output.replace("\n", " ")
+
+
+def test_introduced_in_on_a_regression_is_refused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    _write_classification(
+        tmp_path,
+        "issues:\n  widgets#2: {category: regression, source: hand, severity: low, reason: x,"
+        " pr: 'example-org/widgets#101', introduced_in: 'example-org/widgets#100'}\n",
+    )
+    r = _run(monkeypatch, "check", tmp_path)
+    assert r.exit_code == 2 and "introduced_in" in r.output.replace("\n", " ")
+
+
+def test_duplicate_of_is_normalised() -> None:
+    from fr.triage.origins import Origin
+
+    o = Origin(
+        category="duplicate", source="hand", severity="low", reason="x", duplicate_of="Widgets#4"
+    )
+    assert o.duplicate_of == "widgets#4"
+
+
+def test_check_reports_a_duplicate_target_outside_the_window(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    (tmp_path / "origins.yaml").write_text(
+        classification_yaml()
+        .replace("schema: 1", "schema: 2")
+        .replace(
+            "  widgets#6:\n    category: duplicate\n",
+            "  widgets#6:\n    duplicate_of: widgets#99\n    category: duplicate\n",
+        ),
+        encoding="utf-8",
+    )
+    r = _run(monkeypatch, "check", tmp_path)
+    assert r.exit_code == 0
+    out = r.output.replace("\n", " ")
+    assert "duplicate target outside the window (1)" in out and "widgets#6" in out
+
+
+def _dup_page(monkeypatch: pytest.MonkeyPatch, d: Path, extra_6: str, extra_14: str = "") -> str:
+    _collect(monkeypatch, d)
+    text = classification_yaml().replace("schema: 1", "schema: 2")
+    text = text.replace(
+        "  widgets#6:\n    category: duplicate\n",
+        f"  widgets#6:\n    category: duplicate\n{extra_6}",
+    )
+    text = text.replace(
+        "  widgets#14:\n    category: duplicate\n",
+        f"  widgets#14:\n    category: duplicate\n{extra_14}",
+    )
+    (d / "origins.yaml").write_text(text, encoding="utf-8")
+    r = _run(monkeypatch, "render", d)
+    assert r.exit_code == 0, r.output
+    return (d / "origins.html").read_text(encoding="utf-8")
+
+
+def _row(page: str, key: str) -> str:
+    m = re.search(rf'<tr[^>]*id="origin-{re.escape(key)}".*?</tr>', page, flags=re.S)
+    assert m, f"no row {key}"
+    return m.group(0)
+
+
+def test_every_issue_row_has_an_anchor_and_a_duplicate_links_its_original(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _dup_page(
+        monkeypatch,
+        tmp_path,
+        "    duplicate_of: widgets#5\n",
+        "    duplicate_of: widgets#99\n",
+    )
+    assert 'id="origin-widgets#1"' in page
+    # original inside the window: anchor link to its row
+    assert 'href="#origin-widgets%235"' in _row(page, "widgets#6")
+    # outside the window, same repo: the duplicate's own url with the number replaced
+    assert f"https://github.com/{REPO}/issues/99" in _row(page, "widgets#14")
+
+
+def test_a_duplicate_of_another_repo_outside_the_window_is_plain_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _dup_page(monkeypatch, tmp_path, "    duplicate_of: gadgets#7\n")
+    row = _row(page, "widgets#6")
+    assert "gadgets#7" in row and "<a" not in row.split("duplicate")[-1].split("</td>")[0]
+
+
+def test_related_pr_cell_shows_introduced_in_and_fixed_by(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _dup_page(monkeypatch, tmp_path, "")
+    _collect(monkeypatch, tmp_path)
+    text = (
+        classification_yaml()
+        .replace("schema: 1", "schema: 2")
+        .replace(
+            "  widgets#3:\n    category: new-feature\n",
+            "  widgets#3:\n    category: new-feature\n    introduced_in: example-org/widgets#90\n"
+            "    fixed_by: example-org/widgets#91\n",
+        )
+    )
+    (tmp_path / "origins.yaml").write_text(text, encoding="utf-8")
+    assert _run(monkeypatch, "render", tmp_path).exit_code == 0
+    row = _row((tmp_path / "origins.html").read_text(encoding="utf-8"), "widgets#3")
+    assert "introduced in" in row and "widgets/pull/90" in row
+    assert "fixed by" in row and "widgets/pull/91" in row
+    assert "introduced in" not in _row(page, "widgets#3")
+
+
+@pytest.mark.parametrize("target", ["foo", "widgets#", "#4", "widgets 4"])
+def test_an_origins_duplicate_of_off_the_key_grammar_is_refused(target: str) -> None:
+    """Review p3-r1: `Origin.duplicate_of` is held to the key grammar, as the judgement
+    field is."""
+    from fr.triage.origins import Origin
+
+    with pytest.raises(ValueError, match="duplicate_of"):
+        Origin(category="duplicate", source="hand", severity="low", reason="x", duplicate_of=target)
+
+
+def test_an_origins_entry_that_duplicates_itself_is_refused(tmp_path: Path) -> None:
+    """Review p3-r1: a self-reference is refused at load, naming the key."""
+    from fr.triage.origins import load_origins
+
+    (tmp_path / "origins.yaml").write_text(
+        "schema: 2\nissues:\n  widgets#6: {category: duplicate, source: hand, severity: low,"
+        " reason: x, duplicate_of: 'Widgets#6'}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(Exception, match="widgets#6"):
+        load_origins(tmp_path / "origins.yaml")

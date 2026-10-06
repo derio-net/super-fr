@@ -252,16 +252,20 @@ def test_a_full_page_of_rows_from_today_names_no_future_since() -> None:
     assert "--since" not in str(err.value) and "raise --issue-limit" in str(err.value)
 
 
-def test_architecture_render_refuses_origins_facts_of_another_scope(tmp_path: Path) -> None:
+def test_architecture_render_never_shows_origins_facts_of_another_scope(tmp_path: Path) -> None:
+    """gh#979's guarantee, as it holds once the architecture page reads no origins data
+    (spec 2026-10-05-triage-pages-goal R6: filings and origin counts live on the origins
+    page, whose verbs refuse a foreign scope, pinned above). A foreign origins-facts.json
+    beside the state cannot reach this page, so the render succeeds without it."""
     _write_facts(tmp_path, Scope(kind="repo", target=ALPHA))
     write_facts(
         tmp_path / "origins-facts.json",
         OriginsFacts(scope=BETA, since="2026-09-01", collected_at="x", issues=[]),
     )
     result = _invoke("architecture", "render", "--repo", ALPHA, "--dir", str(tmp_path))
-    assert result.exit_code == 2, result.output
-    assert BETA in result.output
-    assert not (tmp_path / "architecture.html").exists()
+    assert result.exit_code == 0, result.output
+    page = (tmp_path / "architecture.html").read_text(encoding="utf-8")
+    assert BETA not in page
 
 
 # ------------------------------------------------ gh#889: what show() returns

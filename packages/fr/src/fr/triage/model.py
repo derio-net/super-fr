@@ -43,11 +43,12 @@ from fr.triage.stage import Stage, derive_stage
 # loads, and the first collect upgrades it. Independent of JUDGEMENTS_SCHEMA.
 FACTS_SCHEMA: Literal[4] = 4
 FACTS_READS: tuple[int, ...] = (3, 4)
-# The version this fr WRITES: every engine write of `batches:` stamps 3 (spec
-# 2026-10-02-wave-driver §A: `wave`, `after`; 2 was 2026-09-25-triage-batches §3.A);
-# the loader reads every version in JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[3] = 3
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3)
+# The version this fr WRITES: every engine write stamps 4 (spec
+# 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
+# `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
+# JUDGEMENTS_READS.
+JUDGEMENTS_SCHEMA: Literal[4] = 4
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -58,6 +59,7 @@ TruncatedList = Literal["repos", "issues", "prs"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
 Kind = Literal["defect", "feature", "parked"]
+Severity = Literal["low", "med", "high"]
 
 # The hidden first line of the comment a batch dispatch posts on each member
 # (spec 2026-09-25-triage-batches §3.E). `collect` dates a dispatch by it, so the
@@ -305,6 +307,32 @@ class ConfigDefaults(_Strict):
     launch: Launch = Launch()
 
 
+class ExportConfig(_Strict):
+    """`.fr/triage.yaml`'s `export:` (spec 2026-10-05-triage-pages-goal §I): the
+    repo-relative directory the driver exports the triage state under."""
+
+    path: str
+
+    @field_validator("path")
+    @classmethod
+    def _inside_the_repo(cls, v: str) -> str:
+        """Normalised once, here (p4-r2): one trailing `/` is stripped, and a path
+        `contained()` would refuse later (absolute, or with a `..`, `.` or empty part)
+        is refused now, so every reader uses the one value and none fails per pass."""
+        norm = v.removesuffix("/")
+        parts = norm.replace("\\", "/").split("/")
+        if (
+            norm.startswith(("/", "\\"))
+            or (parts[0][1:2] == ":")
+            or any(p in ("", ".", "..") for p in parts)
+        ):
+            raise ValueError(
+                "export path must be a repo-relative directory with no `..`, `.` or empty "
+                f"part, got {v!r}"
+            )
+        return norm
+
+
 class TriageConfig(_Strict):
     """`.fr/triage.yaml` of one repo, read at its default branch (spec §3.I).
 
@@ -322,6 +350,9 @@ class TriageConfig(_Strict):
     # The logins whose PRs on a batch branch are the batch's (gh#936). Empty means
     # the user `collect` ran as (`Facts.viewer`); a list REPLACES that default.
     pr_authors: list[str] = []
+    # Where the wave driver exports this repo's triage state once a wave is finished
+    # (spec 2026-10-05-triage-pages-goal R13); None: the driver never exports.
+    export: ExportConfig | None = None
 
 
 class Facts(_Strict):
@@ -403,9 +434,11 @@ class Judgement(_Strict):
     # What the issue is, for the board's closing order (wave-driver R9). Optional on
     # every schema: a file that never says loads exactly as before.
     kind: Kind | None = None
-    # Triage-dedupe R3: this issue duplicates *duplicate_of* (an original), or was
-    # judged different from each of *distinct_from*. Optional on every schema, like
-    # `kind`; the cross-key rules live on `Judgements`, which knows every key.
+    # How bad it is, and what it duplicates (triage-pages-goal R11), and which issues it
+    # was judged different from (triage-dedupe R3). Optional on every schema, the `kind`
+    # precedent: a file that never says loads exactly as before. The cross-key rules live
+    # on `Judgements`, which knows every key.
+    severity: Severity | None = None
     duplicate_of: str | None = None
     distinct_from: list[str] = []
 
@@ -580,16 +613,43 @@ class Batch(_Strict):
         return self.ids[0].rpartition("#")[0]
 
 
+class Export(_Strict):
+    """One wave's state export by the driver (spec 2026-10-05-triage-pages-goal §G).
+    Needs judgements schema 4. Written by the engine only.
+
+    `pr` is None when the export changed nothing, so no PR was opened; `merged` is set
+    once the driver merged the PR."""
+
+    wave: str  # the wave key, `str(batch.wave)`
+    repo: str  # OWNER/REPO
+    at: AwareDatetime  # when the export was recorded
+    pr: int | None = None
+    # The SHA the merge is pinned to: the commit the driver pushed, or the head of the
+    # PR it adopted. A commit anyone else pushes to the branch never merges (R13).
+    head: str | None = None
+    merged: bool = False
+    # The PR was closed without a merge (p4-r6): the entry no longer covers its wave,
+    # which is owed again and re-exported on a fresh PR.
+    closed: bool = False
+
+    @field_validator("wave", mode="before")
+    @classmethod
+    def _wave_key(cls, v: object) -> object:
+        """A wave written as a number is the same key as its string."""
+        return str(v) if isinstance(v, int) and not isinstance(v, bool) else v
+
+
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
     patterns: list[Pattern] = []
     batches: list[Batch] = []
     features: list[Feature] = []  # ranked groups (wave-driver R9); any schema
+    exports: list[Export] = []  # the driver's per-wave state exports; schema 4
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -619,21 +679,23 @@ class Judgements(_Strict):
 
     @model_validator(mode="after")
     def _duplicate_fields_are_coherent(self) -> Judgements:
-        """No self reference, no chain (an original that is itself a duplicate has no
-        single row to nest under), and no key in both fields (spec triage-dedupe §3.A)."""
+        """`distinct_from` never names the issue itself, and no key is in both fields (spec
+        triage-dedupe §3.A). A `duplicate_of` self reference is the next validator's; a
+        chain loads and `check` reports it as `duplicate_chained` (triage-pages-goal)."""
         for key, j in self.issues.items():
-            if j.duplicate_of == key or key in j.distinct_from:
-                raise ValueError(f"{key}: duplicate_of / distinct_from name the issue itself")
+            if key in j.distinct_from:
+                raise ValueError(f"{key}: distinct_from names the issue itself")
             if j.duplicate_of and j.duplicate_of in j.distinct_from:
                 raise ValueError(
                     f"{key}: {j.duplicate_of} is in both duplicate_of and distinct_from"
                 )
-            original = self.issues.get(j.duplicate_of) if j.duplicate_of else None
-            if original is not None and original.duplicate_of:
-                raise ValueError(
-                    f"{key}: duplicate_of {j.duplicate_of}, which is itself a duplicate of "
-                    f"{original.duplicate_of}; name the final original (no chains)"
-                )
+        return self
+
+    @model_validator(mode="after")
+    def _no_judgement_duplicates_itself(self) -> Judgements:
+        own = sorted(k for k, j in self.issues.items() if j.duplicate_of == k)
+        if own:
+            raise ValueError(f"{own} name their own key as duplicate_of")
         return self
 
     @model_validator(mode="after")
@@ -679,6 +741,10 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`{'`, `'.join(late)}` events need schema 3, but this file is stamped "
                 f"schema {self.schema_}"
+            )
+        if self.exports and self.schema_ < 4:
+            raise ValueError(
+                f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
         return self
 

@@ -84,6 +84,12 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "adopt": "close-out found; the drive records it",
     "foreign": "foreign PR on its branch",
     "close": "finished; session to close",
+    # The wave driver's state export (triage-pages-goal R13) acts per repo, not per batch,
+    # so these never reach a card; every kind still needs a phrase.
+    "export": "triage state export due",
+    "export-merge": "state export PR ready to merge",
+    "export-reconcile": "state export merged; the drive records it",
+    "export-closed": "state export PR closed; the drive re-exports",
     "dedupe": "duplicate candidates to judge",  # names no batch; never a card hint
 }
 NEEDS_YOU = "needs you: session blocked"

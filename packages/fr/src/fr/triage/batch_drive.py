@@ -29,7 +29,7 @@ from fr.triage.batch import (
     batch_branch,
     batch_item_id,
 )
-from fr.triage.model import Batch, CloseoutEvent
+from fr.triage.model import Batch, CloseoutEvent, Export
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
@@ -41,6 +41,9 @@ DEFAULT_MAX_INFLIGHT = 4
 IN_FLIGHT: frozenset[BatchStage] = frozenset({"dispatched", "pr-open"})
 LANDED: frozenset[BatchStage] = frozenset({"merged", "partial"})
 ARCHIVE_PREFIXES = ("chore/archive-", "chore/closeout-")
+EXPORT_PREFIX = "chore/triage-state-wave-"
+"""The head of a wave's state-export PR (pages-goal R13). Not in `ARCHIVE_PREFIXES`, so
+archive attribution can never claim an export PR."""
 RUNS_DIR = "docs/superpowers/runs"
 JOURNAL_DIRS = ("docs/superpowers/journals/", "docs/superpowers/implemented/journals/")
 RUN_ARTIFACT_DIRS = tuple(
@@ -62,7 +65,14 @@ ActionKind = Literal[
     "foreign",
     "close",
     "dedupe",
+    "export",
+    "export-merge",
+    "export-reconcile",
+    "export-closed",
 ]
+EXPORT_KINDS: frozenset[str] = frozenset(
+    {"export", "export-merge", "export-reconcile", "export-closed"}
+)
 
 ARCHIVED_BY_UNKNOWN_PR = 0
 """`CloseoutEvent.archived` for a close-out found archived on the default branch with
@@ -86,6 +96,9 @@ class LivePr:
     # From the repo itself, by an allowed author (`fr.triage.batch.distrust`). False
     # unless the command checked it: an archive PR is attributed only when True (gh#936).
     trusted: bool = False
+    # The branch the PR merges into, as the forge says now; "" when not read. An export
+    # PR is reused or merged only into the default branch (p4-r15).
+    base: str = ""
 
 
 @dataclass(frozen=True)
@@ -127,9 +140,27 @@ class Snapshot:
     # Triage-dedupe R10. The waves that were unfinished on this process's previous pass
     # (None on its first), the candidate-group count, and the scope-qualified check
     # command: the count and the command arrive here so this module imports no dedupe.
-    unfinished_waves: frozenset[int] | None = None
+    unfinished_waves: frozenset[str] | None = None  # wave keys, as `finished`
     duplicate_groups: int = 0
     dedupe_command: str = ""
+    # Per-wave state export (pages-goal R13, §I). `export_path`: repo -> the export
+    # directory `<path>/<scope>` in the repo, for a single-repo scope only; `exports`:
+    # what the state file records; `export_prs`: (repo, wave) -> the live PR of a recorded, unmerged
+    # export, or the open PR on the wave's export head when none is recorded;
+    # `finished`: `finished_waves(batches, stages)`, computed once; `export_refused`:
+    # the repos of a group or org scope that opt in, which never export.
+    export_path: Mapping[str, str] = field(default_factory=dict)
+    exports: tuple[Export, ...] = ()
+    export_prs: Mapping[tuple[str, str], LivePr] = field(default_factory=dict)
+    finished: frozenset[str] = frozenset()
+    export_refused: frozenset[str] = frozenset()
+    # repo -> the open PRs from the repo itself on any `chore/triage-state-wave-<N>`
+    # head that no live export entry records: a pass that died between opening and
+    # recording (p4-r3), or a reopened PR recorded closed. Cross-repo PRs never appear
+    # here (p4-r7). The export reuses one; it never adopts its content (p4-r12).
+    export_orphans: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)
+    # repo -> its default branch: the only base an export PR may have (p4-r15)
+    export_default: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -144,6 +175,10 @@ class Action:
     train: str = ""  # merge: the repo whose train this candidate belongs to
     archived: int | None = None  # adopt: the close-out event's `archived`
     items: tuple[str, ...] = ()  # close: the item ids whose sessions to close
+    # export*, and a warn about one: the wave key (`batch` is then the repo); the
+    # highest wave the export PR covers, which names its branch
+    wave: str | None = None
+    covers: tuple[str, ...] = ()  # export: every wave the PR records
 
 
 @dataclass(frozen=True)
@@ -359,6 +394,214 @@ def closeout_event(batch: Batch) -> CloseoutEvent | None:
     return None
 
 
+def finished_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> frozenset[str]:
+    """The wave keys (`str(batch.wave)`) whose every batch is terminal: derived stage
+    `cancelled` or `abandoned`, or a close-out event whose `archived` is set. *stages* maps
+    batch id to its derived stage. A batch with no wave never makes one, and a wave with a
+    batch that is not terminal (a merged one still owed its archive, say) is not finished.
+    The board, the history page and the driver all read this one predicate."""
+    wave_ok: dict[str, bool] = {}
+    for b in batches:
+        if b.wave is None:
+            continue
+        event = closeout_event(b)
+        terminal = stages.get(b.id) in {"cancelled", "abandoned"} or (
+            event is not None and event.archived is not None
+        )
+        key = str(b.wave)
+        wave_ok[key] = wave_ok.get(key, True) and terminal
+    return frozenset(k for k, ok in wave_ok.items() if ok)
+
+
+def export_branch(wave: str) -> str:
+    """The head a wave's state-export PR is pushed to; the driver owns it."""
+    return f"{EXPORT_PREFIX}{wave}"
+
+
+def _wave_order(wave: str) -> tuple[int, int | str]:
+    return (0, int(wave)) if wave.lstrip("-").isdigit() else (1, wave)
+
+
+ExportCount = Literal["closing", "blocked"] | None
+
+
+def _outside(root: str, files: Sequence[str]) -> str:
+    """Why *files* do not all lie under the export directory *root*, or "". An unknown
+    file list is never "all inside": an export PR always changes something."""
+    if not files:
+        return "its changed files are unknown"
+    prefix = root.rstrip("/") + "/"
+    stray = [f for f in files if not f.startswith(prefix)]
+    return f"it changes {', '.join(stray[:3])}, outside {prefix}" if stray else ""
+
+
+@dataclass(frozen=True)
+class ExportTarget:
+    """What step 3b decides about for one repo (§I, R13): the repo's newest unmerged
+    export PR and the waves recorded with it, or, with none, every finished wave of the
+    repo that has no export entry at all. `wave`, the highest, names the branch."""
+
+    repo: str
+    wave: str
+    covers: tuple[str, ...]
+    recorded: Export | None  # the newest unmerged entry with a PR; None: not exported
+    orphan: LivePr | None = None  # unrecorded: the open PR to reuse, on wave `wave`'s head
+
+
+def export_wave_of(head_ref: str) -> str | None:
+    """The wave key a `chore/triage-state-wave-<N>` head names, or None."""
+    wave = head_ref.removeprefix(EXPORT_PREFIX) if head_ref.startswith(EXPORT_PREFIX) else ""
+    return wave if wave.isdigit() else None
+
+
+def export_target(
+    repo: str,
+    batches: Iterable[Batch],
+    repos: Mapping[str, str],
+    finished: frozenset[str],
+    exports: Iterable[Export],
+    orphans: Sequence[LivePr] = (),
+) -> ExportTarget | None:
+    """One export PR per repo covers every unexported finished wave. While one is
+    unmerged, it is the target and a wave that finished since waits for a later pass,
+    so no second PR is opened. With none recorded, an unrecorded open PR on any wave's
+    export head (*orphans*, highest wave first) is reused: the export pushes onto its
+    branch and covers every owed wave (p4-r3, p4-r13). None: nothing is owed."""
+    mine = [e for e in exports if e.repo == repo and not e.closed]  # closed: owed again
+    unmerged = [e for e in mine if e.pr is not None and not e.merged]
+    if unmerged:
+        newest = unmerged[-1]
+        covers = sorted({e.wave for e in unmerged if e.pr == newest.pr}, key=_wave_order)
+        return ExportTarget(repo, covers[-1], tuple(covers), newest)
+    entered = {e.wave for e in mine}
+    waves = {str(b.wave) for b in batches if b.wave is not None and repos.get(b.id) == repo}
+    owed = sorted((waves & finished) - entered, key=_wave_order)
+    if not owed:
+        return None
+    named = [(w, o) for o in orphans if (w := export_wave_of(o.head_ref)) is not None]
+    if named:
+        wave, orphan = max(named, key=lambda pair: _wave_order(pair[0]))
+        return ExportTarget(repo, wave, tuple(owed), None, orphan)
+    return ExportTarget(repo, owed[-1], tuple(owed), None)
+
+
+def _wrong_base(live: LivePr, default: str) -> str:
+    """Why *live* is not based on the default branch, or "" (p4-r15). An unknown base
+    is never the default."""
+    if default and live.base == default:
+        return ""
+    return f"is based on {live.base or 'an unknown branch'}, not {default or 'the default branch'}"
+
+
+def _export_row(
+    repo: str, wave: str, done: Export | None, live: LivePr | None, root: str, default: str = ""
+) -> tuple[Action | None, ExportCount]:
+    """One row of §I's table: the action for *repo*'s finished *wave*, given its
+    recorded export (*done*), the live PR and the export directory *root*
+    (`<path>/<scope>`), and how the summary counts it. The driver auto-merges this
+    PR unreviewed, so it adopts or merges one only when every file it changes is under
+    *root*, and merges only at the head it recorded (p4-sec-unpinned-merge)."""
+    head = export_branch(wave)
+    if done is not None and (done.merged or done.pr is None):
+        return None, None  # merged, or the export changed nothing
+    if done is None:
+        if live is None or live.state != "OPEN":
+            return Action("export", repo, f"to {root} on {head}", wave=wave), "closing"
+        why = "" if live.trusted else "is not trusted (not from this repo by an allowed author)"
+        why = why or _wrong_base(live, default)
+        if why:
+            return Action("warn", repo, f"PR #{live.number} on {head} {why}; it is never "
+                          "reused or merged", pr=live.number, wave=wave), "blocked"  # fmt: skip
+        # Reused, never adopted (p4-r12): the export pushes the driver's own commit onto
+        # this PR's branch, and the merge pins to that commit. Nothing of the PR's is kept.
+        reuse = f"to {root} on {head}, reusing open PR #{live.number}"
+        return Action("export", repo, reuse, pr=live.number, wave=wave), "closing"
+    if live is None:
+        return None, "closing"  # not read this pass: still owed
+    if live.state == "MERGED":  # merged by hand, or a pass died before recording (p4-r1)
+        merged = f"export PR #{live.number} was merged outside the driver; recording it"
+        return Action("export-reconcile", repo, merged, pr=live.number, wave=wave), "closing"
+    if live.state != "OPEN":  # closed unmerged: recorded once, its waves owed again (p4-r6)
+        return Action("export-closed", repo, f"export PR #{live.number} was closed without "
+                      "a merge; its waves are owed again and re-exported next pass",
+                      pr=live.number, wave=wave), "closing"  # fmt: skip
+    why = ""
+    if not live.trusted:
+        why = "is not trusted (not from this repo by an allowed author)"
+    elif live.head != done.head or not done.head:
+        why = (f"head is {live.head[:12] or 'unknown'}, not the recorded "
+               f"{(done.head or 'none')[:12]}: a commit the driver did not push")  # fmt: skip
+    elif outside := _outside(root, live.files):
+        why = outside
+    elif wrong := _wrong_base(live, default):
+        why = wrong
+    elif live.draft:
+        why = "is a draft"
+    elif live.checks == "failing":
+        why = f"has failing checks: {', '.join(live.failing) or 'unknown'}"
+    if why:
+        return Action("warn", repo, f"export PR #{live.number} {why}; the operator must act",
+                      pr=live.number, wave=wave), "blocked"  # fmt: skip
+    if live.checks != "green":
+        return None, "closing"  # checks pending: wait
+    pinned = done.head or ""  # set: a head that differs was refused above
+    # Pinned to the RECORDED head, never the live one (they are equal here).
+    return Action("export-merge", repo, f"PR #{live.number} at {pinned[:12]}",
+                  pr=live.number, head=pinned, wave=wave), "closing"  # fmt: skip
+
+
+def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
+    """§I step 3b: a group or org scope that opts in is warned once; then, for each
+    opted-in repo, `_export_row` on its `export_target`: one PR per repo, never one per
+    wave. Returns the actions and how many owed export PRs are closing (acting or
+    waiting) and blocked (warned)."""
+    actions = [
+        Action("warn", repo, f"export is per repo scope; run drive with --repo {repo}")
+        for repo in sorted(snap.export_refused)
+    ]
+    counts = {"closing": 0, "blocked": 0}
+    for repo in sorted(snap.export_path):
+        target = export_target(
+            repo, snap.batches, snap.repos, snap.finished, snap.exports,
+            snap.export_orphans.get(repo, ()),
+        )  # fmt: skip
+        if target is None:
+            continue
+        live = (
+            target.orphan if target.recorded is None else snap.export_prs.get((repo, target.wave))
+        )
+        action, count = _export_row(
+            repo, target.wave, target.recorded, live, snap.export_path[repo],
+            snap.export_default.get(repo, ""),
+        )  # fmt: skip
+        if action is not None:
+            if action.kind == "export":
+                action = replace(action, covers=target.covers)
+                if len(target.covers) > 1:
+                    action = replace(action, detail=f"{action.detail} (covers waves "
+                                     f"{', '.join(target.covers)})")  # fmt: skip
+            actions.append(action)
+        if count is not None:
+            counts[count] += 1
+        if action is not None and action.kind == "export" and target.orphan is not None:
+            actions.extend(_stale_orphans(repo, snap, target.orphan))
+    return actions, counts["closing"], counts["blocked"]
+
+
+def _stale_orphans(repo: str, snap: Snapshot, reused: LivePr) -> list[Action]:
+    """p4-r16: every other unrecorded export PR, named once per drive as stale. They
+    block nothing: the reused PR carries the state."""
+    out = []
+    for o in sorted(snap.export_orphans.get(repo, ()), key=lambda o: o.number):
+        key = f"stale-export\0{repo}\0{o.number}"
+        if o.number == reused.number or key in snap.warned:
+            continue
+        out.append(Action("warn", repo, f"export PR #{o.number} on {o.head_ref} is stale: "
+                          f"PR #{reused.number} carries the export; it is safe to close",
+                          pr=o.number, head=key))  # fmt: skip
+    return out
+
+
 def is_finished(batch: Batch, stage: BatchStage, archives: Sequence[LivePr]) -> bool:
     """Whether *batch* is finished: landed, with a close-out event whose `archived`
     is set (the driver merged its archive PR), or an attributed archive PR in
@@ -371,33 +614,11 @@ def is_finished(batch: Batch, stage: BatchStage, archives: Sequence[LivePr]) -> 
     return any(p.state == "MERGED" and attributed(p, batch, event) for p in archives)
 
 
-def _wave_members(snap: Snapshot) -> dict[int, list[Batch]]:
-    """Every wave's members: every batch of the state file with that wave whose stage is
-    not cancelled or abandoned. The selection is ignored: a wave is finished globally."""
-    waves: dict[int, list[Batch]] = {}
-    for b in snap.batches:
-        if b.wave is not None and snap.stages.get(b.id) not in ("cancelled", "abandoned"):
-            waves.setdefault(b.wave, []).append(b)
-    return waves
-
-
-def _wave_done(snap: Snapshot, members: Sequence[Batch]) -> bool:
-    return all(
-        is_finished(
-            b, snap.stages.get(b.id, "proposed"), snap.archives.get(snap.repos.get(b.id, ""), ())
-        )
-        for b in members
-    )
-
-
-def finished_waves(snap: Snapshot) -> frozenset[int]:
-    """The waves whose members are all `is_finished`; a wave with no member never is."""
-    return frozenset(w for w, ms in _wave_members(snap).items() if _wave_done(snap, ms))
-
-
-def unfinished_waves(snap: Snapshot) -> frozenset[int]:
-    """The waves with members that are not all finished: what the next pass compares to."""
-    return frozenset(w for w, ms in _wave_members(snap).items() if not _wave_done(snap, ms))
+def unfinished_waves(snap: Snapshot) -> frozenset[str]:
+    """The wave keys (`str(batch.wave)`) of the state file that `snap.finished` does not
+    hold: what the next pass compares against (triage-dedupe R10). `finished` is
+    `finished_waves`, the one predicate the board, the history page and the driver read."""
+    return frozenset(str(b.wave) for b in snap.batches if b.wave is not None) - snap.finished
 
 
 # ------------------------------------------------------------------ the pass
@@ -557,6 +778,11 @@ def drive_pass(snap: Snapshot) -> Pass:
                        pr=ready.number, head=ready.head)
             )  # fmt: skip
 
+    # 3b. Export each finished wave's state (pages-goal R13).
+    exporting, exports_closing, exports_blocked = _export_actions(snap)
+    actions.extend(exporting)
+    closing += exports_closing
+
     # 4. Dispatch.
     # The cap counts every batch in flight, selected or not (review rg-3); the
     # summary's own figure is the selection's, which is what this drive waits on.
@@ -568,7 +794,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
-    pending = blocked = 0
+    pending, blocked = 0, exports_blocked
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed":
             continue
@@ -618,7 +844,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     if snap.duplicate_groups > 0:
         n = snap.duplicate_groups
         groups = f"{n} duplicate candidate {'group' if n == 1 else 'groups'}"
-        for wave in sorted(finished_waves(snap) & (snap.unfinished_waves or frozenset())):
+        for wave in sorted(snap.finished & (snap.unfinished_waves or frozenset()), key=int):
             actions.append(
                 Action("dedupe", "", f"{groups} after wave {wave} finished; run "
                        f"`{snap.dedupe_command}` to judge them")
@@ -648,6 +874,8 @@ def action_line(action: Action, outcome: str | None = None) -> str:
     the same words in `--once` and loop mode."""
     if action.kind == "dedupe":  # names no batch
         return f"dedupe: {outcome or action.detail}"
+    if action.wave is not None:
+        return f"{action.kind} wave {action.wave} {action.batch}: {outcome or action.detail}"
     return f"{action.kind} {action.batch}: {outcome or action.detail}"
 
 

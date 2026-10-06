@@ -34,6 +34,7 @@ from fr.triage.batch import last_dispatch
 from fr.triage.check import classify
 from fr.triage.collect import PR_LIMIT, CollectStats, Forge, GhForge, collect_facts_counted
 from fr.triage.errors import TriageError
+from fr.triage.fragments import resolve_manifest
 from fr.triage.model import (
     Facts,
     Judgements,
@@ -44,7 +45,7 @@ from fr.triage.model import (
     load_scope_facts,
     state_dir,
 )
-from fr.triage.render import plural, render
+from fr.triage.render import GENERATED, plural, render
 from fr.triage.snapshot import (
     acceptance_rows,
     diff_snapshots,
@@ -57,6 +58,8 @@ from fr.triage.snapshot import (
 
 console = Console()
 err_console = Console(stderr=True)
+
+BOARD_DIR = "board"  # `<state>/board/manifest.yaml`: the board's authored fragments
 
 triage_app = typer.Typer(
     name="triage",
@@ -332,6 +335,23 @@ def check_command(
     for i in result.unplaced:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
     console.print(
+        f"[bold]no severity[/bold] ({len(result.no_severity)}) — open, judged, no severity"
+    )
+    for i in result.no_severity:
+        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+    console.print(
+        f"[bold]duplicate unknown[/bold] ({len(result.duplicate_unknown)}) — `duplicate_of` "
+        "names an issue the facts do not hold"
+    )
+    for key in result.duplicate_unknown:
+        console.print(f"  {escape(key)}", soft_wrap=True)
+    console.print(
+        f"[bold]duplicate chained[/bold] ({len(result.duplicate_chained)}) — `duplicate_of` "
+        "names an issue that is itself a duplicate (a chain or a cycle)"
+    )
+    for key in result.duplicate_chained:
+        console.print(f"  {escape(key)}", soft_wrap=True)
+    console.print(
         f"[bold]duplicate candidates[/bold] ({len(result.candidates)}) — open issues that "
         "may duplicate each other; judge each group"
     )
@@ -382,8 +402,18 @@ def render_command(
         matrix_path = matrix_for_scope(scope.target if scope.kind == "repo" else None, Path.cwd())
     snap = take_snapshot(facts, judgements, acceptance=acceptance_rows(matrix_path))
     since = diff_snapshots(previous_snapshot(target_dir, snap), snap)
+    try:
+        resolved = resolve_manifest(target_dir / BOARD_DIR, GENERATED)
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
+    for name in resolved.missing:
+        err_console.print(
+            f"[yellow]warning:[/yellow] manifest entry {escape(name)} has no file in {BOARD_DIR}/",
+            soft_wrap=True,
+        )
     out = target_dir / "triage.html"
-    page = render(facts, judgements, since, board=(target_dir / "board.html").is_file())
+    page = render(facts, judgements, since, resolved, board=(target_dir / "board.html").is_file())
     out.write_text(page, encoding="utf-8")
     # Stored only once the page exists, and only when the board differs from the latest
     # snapshot: a re-render with nothing new must not erase "Since last report".
@@ -408,5 +438,7 @@ def render_command(
 # already exists.
 import fr.commands.triage_architecture_cmd  # noqa: E402, F401
 import fr.commands.triage_batch_cmd  # noqa: E402, F401
+import fr.commands.triage_history_cmd  # noqa: E402, F401
 import fr.commands.triage_kanban_cmd  # noqa: E402, F401
 import fr.commands.triage_origins_cmd  # noqa: E402, F401
+import fr.commands.triage_state_cmd  # noqa: E402, F401

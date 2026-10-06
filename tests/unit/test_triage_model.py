@@ -112,9 +112,9 @@ def test_an_unknown_cx_is_refused(tmp_path: Path) -> None:
         load_judgements(path)
 
 
-def test_schema_4_in_judgements_is_refused_naming_the_file(tmp_path: Path) -> None:
-    """Schemas 2 and 3 (batches; waves) load; the next unknown one is refused."""
-    path = _write(tmp_path / "judgements.yaml", JUDGEMENTS_YAML.replace("schema: 1", "schema: 4"))
+def test_schema_5_in_judgements_is_refused_naming_the_file(tmp_path: Path) -> None:
+    """Schemas 2 to 4 (batches; waves; exports) load; the next unknown one is refused."""
+    path = _write(tmp_path / "judgements.yaml", JUDGEMENTS_YAML.replace("schema: 1", "schema: 5"))
 
     with pytest.raises(TriageError, match=str(path)) as exc:
         load_judgements(path)
@@ -342,10 +342,11 @@ def test_a_judgement_may_not_be_distinct_from_itself(tmp_path: Path) -> None:
     assert "x#1" in msg
 
 
-def test_a_duplicate_chain_is_refused(tmp_path: Path) -> None:
+def test_a_duplicate_chain_loads_so_check_can_report_it(tmp_path: Path) -> None:
+    """A chain is `check`'s `duplicate_chained` set (triage-pages-goal), never a load refusal."""
     text = _dupe_doc(**{"x#1": 'duplicate_of: "x#2"', "x#2": 'duplicate_of: "x#3"'})
-    msg = _refused(tmp_path, text)
-    assert "x#2" in msg
+    loaded = load_judgements(_write(tmp_path / "j.yaml", text))
+    assert loaded.issues["x#1"].duplicate_of == "x#2"
 
 
 def test_an_original_that_is_not_itself_judged_is_not_a_chain(tmp_path: Path) -> None:

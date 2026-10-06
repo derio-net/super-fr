@@ -37,7 +37,7 @@ from fr.triage.batch_drive import (
     unfinished_waves,
     wave_group,
 )
-from fr.triage.model import Batch, PullRequest
+from fr.triage.model import Batch, Export, PullRequest
 
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
@@ -922,6 +922,395 @@ def test_summary_line_adds_queued_between_closing_and_blocked() -> None:
     assert "queued" not in summary_line(Summary(1, 0, 0, 0))
 
 
+# ------------------------------- per-wave state export (pages-goal R13, §I step 3b)
+
+_EXPORTED_AT = datetime(2026, 10, 2, 11, 0, tzinfo=UTC)
+
+
+def _export(wave: str = "1", **kw: Any) -> Export:
+    kw.setdefault("head", "export-head-40")  # the SHA the driver pushed or adopted
+    return Export(wave=wave, repo=REPO, at=_EXPORTED_AT, **kw)
+
+
+def _export_snap(
+    *,
+    exports: Sequence[Export] = (),
+    prs: dict[tuple[str, str], LivePr] | None = None,
+    export_path: dict[str, str] | None = None,
+    finished: frozenset[str] = frozenset({"1"}),
+    orphans: tuple[LivePr, ...] = (),
+    **kw: Any,
+) -> Snapshot:
+    """Wave 1 finished (one batch closed out and archived), wave 2 still live."""
+    batches = [_finished("a", 1), _merged("b", 2, wave=2)]
+    stages = {"a": "merged", "b": "merged"}
+    return _snap(
+        batches,
+        stages,
+        export_path={REPO: "docs/triage"} if export_path is None else export_path,
+        export_default={REPO: "main"},
+        exports=tuple(exports),
+        export_prs=prs or {},
+        finished=finished,
+        export_orphans={REPO: orphans} if orphans else {},
+        **kw,
+    )
+
+
+def _exports(got: Any) -> list[tuple[str, str, str | None, int | None]]:
+    return [(a.kind, a.batch, a.wave, a.pr) for a in got.actions if a.wave is not None]
+
+
+def _trusted(n: int = 40, **kw: Any) -> LivePr:
+    """An export PR from this repo by an allowed author: one commit on the default
+    branch, changing only the export directory, on the head of wave *wave*."""
+    kw.setdefault("files", ("docs/triage/judgements.yaml",))
+    kw.setdefault("base", "main")
+    wave = kw.pop("wave", "1")
+    return _live(n, kw.pop("head", f"export-head-{n}"), head_ref=f"chore/triage-state-wave-{wave}",
+                 trusted=kw.pop("trusted", True), **kw)  # fmt: skip
+
+
+def test_a_finished_wave_with_no_export_and_no_pr_is_exported() -> None:
+    got = drive_pass(_export_snap())
+    assert _exports(got) == [("export", REPO, "1", None)]
+    assert got.summary.closing >= 1 and not got.summary.done
+
+
+def test_an_open_trusted_pr_with_no_record_is_reused_by_an_export() -> None:
+    """p4-r12: its content is never adopted; the export pushes the driver's own commit
+    onto that PR's branch and records the PR."""
+    got = drive_pass(_export_snap(orphans=(_trusted(40, checks="pending"),)))
+    assert _exports(got) == [("export", REPO, "1", 40)]
+    (export,) = [a for a in got.actions if a.wave is not None]
+    assert export.head == ""  # nothing of the PR's is pinned
+    assert "reusing open PR #40" in export.detail
+
+
+def test_an_open_untrusted_pr_with_no_record_warns_and_blocks() -> None:
+    got = drive_pass(_export_snap(orphans=(_trusted(40, trusted=False),)))
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert "not trusted" in got.actions[-1].detail
+    assert got.summary.blocked == 1
+
+
+def test_a_merged_export_needs_nothing() -> None:
+    got = drive_pass(_export_snap(exports=[_export(pr=40, merged=True)]))
+    assert _exports(got) == []
+
+
+def test_an_export_that_changed_nothing_needs_nothing() -> None:
+    got = drive_pass(_export_snap(exports=[_export(pr=None)]))
+    assert _exports(got) == []
+
+
+def test_a_recorded_open_green_ready_trusted_pr_is_merged_at_its_head() -> None:
+    got = drive_pass(_export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40)}))
+    assert _exports(got) == [("export-merge", REPO, "1", 40)]
+    (merge,) = [a for a in got.actions if a.kind == "export-merge"]
+    assert merge.head == "export-head-40"
+    assert not got.summary.done
+
+
+def test_a_recorded_pr_with_pending_checks_waits_and_counts_closing() -> None:
+    snap = _export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40, checks="pending")})
+    base = drive_pass(_export_snap(exports=[_export(pr=40, merged=True)])).summary
+    got = drive_pass(snap)
+    assert _exports(got) == []
+    assert got.summary.closing == base.closing + 1
+    assert not got.summary.done and got.summary.blocked == 0
+
+
+@pytest.mark.parametrize(
+    ("live", "why"),
+    [
+        ({"checks": "failing", "failing": ("lint",)}, "failing"),
+        ({"trusted": False}, "not trusted"),
+        ({"draft": True}, "draft"),
+    ],
+    ids=["failing", "untrusted", "draft"],
+)
+def test_a_recorded_pr_that_cannot_merge_warns_every_pass_and_blocks(
+    live: dict[str, Any], why: str
+) -> None:
+    snap = _export_snap(
+        exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40, **live)}, warned=frozenset({""})
+    )
+    got = drive_pass(snap)
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert why in [a for a in got.actions if a.wave][0].detail
+    assert got.summary.blocked == 1 and not got.summary.done
+
+
+def test_an_unfinished_wave_is_never_exported() -> None:
+    got = drive_pass(_export_snap(finished=frozenset()))
+    assert _exports(got) == []
+
+
+def test_without_export_config_no_export_action_exists() -> None:
+    got = drive_pass(_export_snap(export_path={}))
+    assert _exports(got) == []
+    assert all(not a.kind.startswith("export") for a in got.actions)
+
+
+def test_a_multi_repo_scope_that_opts_in_gets_one_warn_naming_repo() -> None:
+    got = drive_pass(_export_snap(export_path={}, export_refused=frozenset({REPO})))
+    warns = [a for a in got.actions if a.kind == "warn"]
+    assert len(warns) == 1
+    assert warns[0].batch == REPO and "--repo" in warns[0].detail
+    assert not any(a.kind.startswith("export") for a in got.actions)
+
+
+def _three_waves(**kw: Any) -> Snapshot:
+    """Waves 1, 2 and 10 finished; 11 still live."""
+    done = [{**_CLOSEOUT, "archived": 8}]
+    batches = [
+        _finished("a", 1),
+        _merged("b", 2, wave=2, events=done),
+        _merged("c", 3, wave=10, events=done),
+        _merged("d", 4, wave=11),
+    ]
+    stages = {b.id: "merged" for b in batches}
+    kw.setdefault("finished", frozenset({"1", "2", "10"}))
+    kw.setdefault("export_default", {REPO: "main"})
+    return _snap(batches, stages, export_path={REPO: "docs/triage"}, **kw)
+
+
+def test_one_export_covers_every_unexported_finished_wave_named_for_the_highest() -> None:
+    got = drive_pass(_three_waves())
+    (export,) = [a for a in got.actions if a.wave is not None]
+    assert (export.kind, export.wave, export.covers) == ("export", "10", ("1", "2", "10"))
+    assert "chore/triage-state-wave-10" in export.detail
+    base = drive_pass(_three_waves(finished=frozenset())).summary
+    assert got.summary.closing == base.closing + 1  # one owed export per PR, not per wave
+
+
+def _covering(
+    pr: int | None, *, merged: bool = False, waves: tuple[str, ...] = ("1", "2", "10")
+) -> list[Export]:
+    return [_export(w, pr=pr, merged=merged) for w in waves]
+
+
+def test_an_open_covering_pr_is_merged_once_for_all_its_waves() -> None:
+    got = drive_pass(_three_waves(exports=_covering(40), export_prs={(REPO, "10"): _trusted(40)}))
+    exports = [a for a in got.actions if a.wave is not None]
+    assert [(a.kind, a.wave, a.pr) for a in exports] == [("export-merge", "10", 40)]
+
+
+def test_a_wave_finishing_while_an_export_pr_is_open_waits_for_its_merge() -> None:
+    finished = frozenset({"1", "2", "10", "11"})
+    snap = _three_waves(
+        finished=finished,
+        exports=_covering(40),
+        export_prs={(REPO, "10"): _trusted(40, checks="pending")},
+    )
+    got = drive_pass(snap)
+    assert [a for a in got.actions if a.wave is not None] == []  # no second PR
+    base = drive_pass(_three_waves(finished=frozenset())).summary
+    assert got.summary.closing == base.closing + 1  # the one PR, still owed
+
+    after = drive_pass(_three_waves(finished=finished, exports=_covering(40, merged=True)))
+    (export,) = [a for a in after.actions if a.wave is not None]
+    assert (export.kind, export.wave, export.covers) == ("export", "11", ("11",))
+
+
+def test_waves_recorded_with_no_pr_are_covered_and_never_exported_again() -> None:
+    got = drive_pass(_three_waves(exports=_covering(None)))
+    assert [a for a in got.actions if a.wave is not None] == []
+
+
+def test_a_reused_pr_covers_every_owed_wave_on_its_own_branch() -> None:
+    got = drive_pass(_three_waves(export_orphans={REPO: (_trusted(40, wave="2"),)}))
+    (export,) = [a for a in got.actions if a.wave is not None]
+    assert (export.kind, export.wave, export.covers, export.pr) == (
+        "export",
+        "2",
+        ("1", "2", "10"),
+        40,
+    )
+
+
+def test_export_target_names_the_newest_unmerged_pr_and_its_waves() -> None:
+    from fr.triage.batch_drive import export_target
+
+    snap = _three_waves(
+        exports=[*_covering(39, merged=True, waves=("1",)), *_covering(40, waves=("2", "10"))]
+    )
+    target = export_target(REPO, snap.batches, snap.repos, snap.finished, snap.exports)
+    assert target is not None
+    assert (target.wave, target.covers, target.recorded and target.recorded.pr) == (
+        "10",
+        ("2", "10"),
+        40,
+    )
+
+
+def test_an_export_action_line_names_the_wave_and_the_repo() -> None:
+    action = Action("export", REPO, "to docs/triage", wave="3")
+    assert action_line(action) == f"export wave 3 {REPO}: to docs/triage"
+    assert action_line(action, "opened PR #9") == f"export wave 3 {REPO}: opened PR #9"
+
+
+def test_the_export_branch_is_never_attributed_as_an_archive() -> None:
+    from fr.triage.batch_drive import ARCHIVE_PREFIXES, export_branch
+
+    assert export_branch("3") == "chore/triage-state-wave-3"
+    assert not export_branch("3").startswith(ARCHIVE_PREFIXES)
+
+
+# ------------------------------------------------ pinned merges (p4-sec-unpinned-merge)
+
+
+def test_the_merge_is_pinned_to_the_recorded_head() -> None:
+    got = drive_pass(
+        _export_snap(
+            exports=[_export(pr=40, head="pushed")], prs={(REPO, "1"): _trusted(40, head="pushed")}
+        )
+    )
+    (merge,) = [a for a in got.actions if a.kind == "export-merge"]
+    assert merge.head == "pushed"
+
+
+def test_a_foreign_commit_on_the_export_branch_blocks_the_merge() -> None:
+    got = drive_pass(
+        _export_snap(
+            exports=[_export(pr=40, head="pushed")], prs={(REPO, "1"): _trusted(40, head="foreign")}
+        )
+    )
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert "pushed" in got.actions[-1].detail and "foreign" in got.actions[-1].detail
+    assert got.summary.blocked == 1 and not got.summary.done
+
+
+def test_a_recorded_export_with_no_head_is_never_merged() -> None:
+    got = drive_pass(
+        _export_snap(exports=[_export(pr=40, head=None)], prs={(REPO, "1"): _trusted(40)})
+    )
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+
+
+@pytest.mark.parametrize(
+    "files",
+    [("docs/triage/j.yaml", ".github/workflows/x.yml"), ("docs/triage-evil/j.yaml",), ()],
+    ids=["outside", "sibling-prefix", "unknown"],
+)
+def test_a_file_outside_the_export_dir_blocks_the_merge(files: tuple[str, ...]) -> None:
+    merge = drive_pass(
+        _export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40, files=files)})
+    )
+    assert _exports(merge) == [("warn", REPO, "1", 40)]
+    assert merge.summary.blocked == 1
+
+
+# ------------------------------------- out-of-band merges and closes (p4-r1, p4-r6)
+
+
+def test_a_recorded_pr_merged_outside_the_driver_is_reconciled() -> None:
+    """p4-r1: merged by hand, or a pass died between the merge and its record."""
+    got = drive_pass(
+        _three_waves(exports=_covering(40), export_prs={(REPO, "10"): _trusted(40, state="MERGED")})
+    )
+    exports = [a for a in got.actions if a.wave is not None]
+    assert [(a.kind, a.wave, a.pr) for a in exports] == [("export-reconcile", "10", 40)]
+    assert "merged outside the driver" in exports[0].detail
+    assert not got.summary.done  # recorded this pass; the next one exports what is owed
+
+
+def test_after_a_reconciled_merge_the_next_wave_exports() -> None:
+    finished = frozenset({"1", "2", "10", "11"})
+    after = drive_pass(_three_waves(finished=finished, exports=_covering(40, merged=True)))
+    (export,) = [a for a in after.actions if a.wave is not None]
+    assert (export.kind, export.covers) == ("export", ("11",))
+
+
+def test_a_recorded_pr_closed_unmerged_is_recorded_closed_once() -> None:
+    """p4-r6: never a block forever; its waves are owed again."""
+    got = drive_pass(
+        _three_waves(exports=_covering(40), export_prs={(REPO, "10"): _trusted(40, state="CLOSED")})
+    )
+    exports = [a for a in got.actions if a.wave is not None]
+    assert [(a.kind, a.wave, a.pr) for a in exports] == [("export-closed", "10", 40)]
+    assert "closed without a merge" in exports[0].detail
+    assert got.summary.blocked == 0 and not got.summary.done
+
+
+def test_waves_of_a_closed_export_are_owed_again() -> None:
+    closed = [e.model_copy(update={"closed": True}) for e in _covering(40)]
+    got = drive_pass(_three_waves(exports=closed))
+    (export,) = [a for a in got.actions if a.wave is not None]
+    assert (export.kind, export.wave, export.covers) == ("export", "10", ("1", "2", "10"))
+
+
+# ------------------------------ adoption on any wave's branch, narrowly (p4-r3, r7, r8)
+
+
+def test_a_crash_then_a_new_wave_reuses_the_orphan_and_opens_no_second_pr() -> None:
+    """p4-r3, p4-r13: PR #40 on wave 1's branch was opened but never recorded; wave 2
+    has finished since. One export reuses #40 for both waves."""
+    batches = [_finished("a", 1), _merged("b", 2, wave=2, events=[{**_CLOSEOUT, "archived": 8}])]
+    snap = _snap(
+        batches, {"a": "merged", "b": "merged"}, export_path={REPO: "docs/triage"},
+        export_default={REPO: "main"},
+        finished=frozenset({"1", "2"}), export_orphans={REPO: (_trusted(40, wave="1"),)},
+    )  # fmt: skip
+    got = drive_pass(snap)
+    exports = [a for a in got.actions if a.wave is not None]
+    assert [(a.kind, a.wave, a.covers, a.pr) for a in exports] == [("export", "1", ("1", "2"), 40)]
+
+
+def test_an_untrusted_orphan_is_warned_and_no_export_runs() -> None:
+    got = drive_pass(_export_snap(orphans=(_trusted(40, trusted=False),)))
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert not any(a.kind == "export" for a in got.actions)
+
+
+# ------------------------------------------------ the PR's base (p4-r15), extra orphans (p4-r16)
+
+
+@pytest.mark.parametrize("base", ["release/1.x", ""], ids=["retargeted", "unknown"])
+def test_a_recorded_export_pr_not_based_on_the_default_branch_is_never_merged(base: str) -> None:
+    """p4-r15: a retargeted base would take the driver's commit, and every default-branch
+    commit that branch lacks, somewhere nobody asked."""
+    got = drive_pass(
+        _export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40, base=base)})
+    )
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert "base" in got.actions[-1].detail
+    assert got.summary.blocked == 1
+    assert not any(a.kind == "export-merge" for a in got.actions)
+
+
+@pytest.mark.parametrize("base", ["release/1.x", ""], ids=["retargeted", "unknown"])
+def test_an_orphan_not_based_on_the_default_branch_is_never_reused(base: str) -> None:
+    got = drive_pass(_export_snap(orphans=(_trusted(40, base=base),)))
+    assert _exports(got) == [("warn", REPO, "1", 40)]
+    assert "base" in got.actions[-1].detail
+    assert got.summary.blocked == 1
+    assert not any(a.kind == "export" for a in got.actions)
+
+
+def test_the_happy_path_is_based_on_the_default_branch() -> None:
+    got = drive_pass(_export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40)}))
+    assert [a.kind for a in got.actions if a.wave is not None] == ["export-merge"]
+
+
+def test_every_orphan_besides_the_reused_one_is_warned_stale_once() -> None:
+    """p4-r16: extra unrecorded export PRs are named, not left silent."""
+    orphans = (_trusted(40, wave="1"), _trusted(41, wave="3"), _trusted(42, wave="2"))
+    got = drive_pass(_three_waves(export_orphans={REPO: orphans}))
+    export = [a for a in got.actions if a.kind == "export"]
+    assert [(a.pr, a.wave) for a in export] == [(41, "3")]
+    stale = [a for a in got.actions if a.kind == "warn" and "stale" in a.detail]
+    assert sorted(a.pr for a in stale if a.pr is not None) == [40, 42]
+    assert all("safe to close" in a.detail and a.head for a in stale)
+    assert got.summary.blocked == 0  # stale PRs block nothing
+
+    again = drive_pass(
+        _three_waves(export_orphans={REPO: orphans}, warned=frozenset(a.head for a in stale))
+    )
+    assert not [a for a in again.actions if a.kind == "warn" and "stale" in a.detail]
+
+
 def test_default_selection_is_the_waved_batches() -> None:
     waved, unwaved = _batch("a", 1, wave=1), _batch("b", 2, wave=None)
     assert default_selection([waved, unwaved]) == frozenset({"a"})
@@ -945,43 +1334,24 @@ def _wave(bid: str, n: int, wave: int, *, done: bool) -> Batch:
     return _merged(bid, n, wave=wave, events=[_CLOSEOUT_DONE] if done else [])
 
 
-def test_a_wave_is_finished_only_when_every_member_is() -> None:
-    done, open_ = _wave("a", 1, 2, done=True), _wave("b", 2, 2, done=False)
-    stages = {"a": "merged", "b": "merged"}
+def test_unfinished_waves_are_the_wave_keys_finished_does_not_hold() -> None:
+    """The dedupe step reads `snap.finished` (main's one `finished_waves` predicate);
+    `unfinished_waves` is only its complement over the state file's wave keys."""
+    done, open_, loose = _wave("a", 1, 2, done=True), _wave("b", 2, 3, done=False), _batch("c", 3, wave=None)
+    stages = {"a": "merged", "b": "merged", "c": "proposed"}
+    snap = _snap([done, open_, loose], stages, finished=frozenset({"2"}))
 
-    assert finished_waves(_snap([done], stages)) == {2}
-    assert finished_waves(_snap([done, open_], stages)) == frozenset()
-    assert unfinished_waves(_snap([done, open_], stages)) == {2}
-
-
-def test_cancelled_and_abandoned_members_do_not_hold_a_wave_open() -> None:
-    done, gone, dead = _wave("a", 1, 2, done=True), _batch("b", 2, wave=2), _batch("c", 3, wave=2)
-    snap = _snap([done, gone, dead], {"a": "merged", "b": "cancelled", "c": "abandoned"})
-
-    assert finished_waves(snap) == {2}
-
-
-def test_a_wave_with_no_live_member_is_never_finished() -> None:
-    snap = _snap([_batch("b", 2, wave=2)], {"b": "cancelled"})
-
-    assert finished_waves(snap) == frozenset()
-    assert unfinished_waves(snap) == frozenset()
-
-
-def test_a_member_outside_the_selection_still_counts() -> None:
-    done, other = _wave("a", 1, 2, done=True), _wave("b", 2, 2, done=False)
-    snap = _snap([done, other], {"a": "merged", "b": "merged"}, selected=frozenset({"a"}))
-
-    assert finished_waves(snap) == frozenset()
+    assert unfinished_waves(snap) == {"3"}  # a batch with no wave makes no wave
 
 
 def _dedupe_snap(**kw: Any) -> Snapshot:
     done = _wave("a", 1, 2, done=True)
+    kw.setdefault("finished", frozenset({"2"}))
     return _snap([done], {"a": "merged"}, dedupe_command=CHECK, **kw)
 
 
 def test_a_wave_going_from_unfinished_to_finished_reports_the_candidates_last() -> None:
-    got = drive_pass(_dedupe_snap(unfinished_waves=frozenset({2}), duplicate_groups=3))
+    got = drive_pass(_dedupe_snap(unfinished_waves=frozenset({"2"}), duplicate_groups=3))
 
     assert got.actions[-1] == Action(
         "dedupe", "",
@@ -993,7 +1363,7 @@ def test_a_wave_going_from_unfinished_to_finished_reports_the_candidates_last() 
 
 
 def test_one_group_reads_singular() -> None:
-    got = drive_pass(_dedupe_snap(unfinished_waves=frozenset({2}), duplicate_groups=1))
+    got = drive_pass(_dedupe_snap(unfinished_waves=frozenset({"2"}), duplicate_groups=1))
     assert "1 duplicate candidate group after" in got.actions[-1].detail
 
 
@@ -1002,17 +1372,18 @@ def test_one_group_reads_singular() -> None:
     [
         dict(unfinished_waves=None, duplicate_groups=3),  # the first pass
         dict(unfinished_waves=frozenset(), duplicate_groups=3),  # finished last pass too
-        dict(unfinished_waves=frozenset({2}), duplicate_groups=0),  # nothing to report
+        dict(unfinished_waves=frozenset({"2"}), duplicate_groups=0),  # nothing to report
     ],
 )
 def test_no_dedupe_line_unless_a_wave_just_finished_with_candidates(kw: dict[str, Any]) -> None:
     assert all(a.kind != "dedupe" for a in drive_pass(_dedupe_snap(**kw)).actions)
 
 
-def test_two_waves_finishing_together_report_in_ascending_order() -> None:
-    batches = [_wave("b", 2, 3, done=True), _wave("a", 1, 2, done=True)]
+def test_two_waves_finishing_together_report_in_numeric_order() -> None:
+    batches = [_wave("b", 2, 10, done=True), _wave("a", 1, 9, done=True)]
     snap = _snap(batches, {"a": "merged", "b": "merged"}, dedupe_command=CHECK,
-                 unfinished_waves=frozenset({2, 3}), duplicate_groups=2)  # fmt: skip
+                 finished=frozenset({"9", "10"}), unfinished_waves=frozenset({"9", "10"}),
+                 duplicate_groups=2)  # fmt: skip
     lines = [a.detail for a in drive_pass(snap).actions if a.kind == "dedupe"]
 
-    assert [("wave 2" in d, "wave 3" in d) for d in lines] == [(True, False), (False, True)]
+    assert [("wave 9 " in d, "wave 10 " in d) for d in lines] == [(True, False), (False, True)]

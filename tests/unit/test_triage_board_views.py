@@ -13,7 +13,7 @@ import re
 
 from fr.triage.batch_drive import drive_pass
 from fr.triage.model import Facts, Judgements
-from fr.triage.render import render
+from fr.triage.render import render, wave_table
 from fr.triage.snapshot import diff_snapshots, take_snapshot
 from fr.triage.views import (
     drive_snapshot,
@@ -35,8 +35,6 @@ from tests.unit.triage_board_fixtures import (
     pr,
 )
 
-SECTION_IDS = ["since-last-report", "needs-you-now", "next-up", "waves", "backlog-by-tier"]
-
 
 def _section(page: str, sid: str) -> str:
     m = re.search(rf'<section[^>]*id="{sid}".*?</section>', page, flags=re.S)
@@ -51,10 +49,56 @@ def _needs(page: str) -> list[tuple[str, str]]:
 # -------------------------------------------------------------- the order (R20)
 
 
-def test_the_board_is_ordered_since_needs_next_waves_backlog() -> None:
+def _order(page: str, *needles: str) -> list[int]:
+    return [page.index(n) for n in needles]
+
+
+def _with_pattern() -> tuple[Facts, Judgements]:
+    f, jd = busy()
+    pattern = {"title": "Shared cause", "ids": ["widgets#3"], "body": "one `root` cause"}
+    return f, Judgements.model_validate(
+        {**jd.model_dump(mode="json", by_alias=True), "patterns": [pattern]}
+    )
+
+
+def test_the_board_is_ordered_since_needs_next_waves_then_the_folds() -> None:
+    page = render(*_with_pattern())
+    at = _order(
+        page,
+        'class="mast"',
+        'id="since-last-report"',
+        'id="needs-you-now"',
+        'id="next-up"',
+        'id="waves"',
+        'id="backlog-by-tier"',
+        'id="ranked-features"',
+        'id="parked"',
+        'id="patterns"',
+        'id="prs"',
+        'id="batches"',
+    )
+    assert at == sorted(at) and len(set(at)) == len(at)
+
+
+def test_below_the_waves_every_section_is_a_closed_fold_with_its_count() -> None:
+    page = render(*_with_pattern())
+    for sid in ("backlog-by-tier", "ranked-features", "parked", "patterns", "prs", "batches"):
+        m = re.search(rf'<details id="{sid}" class="fold"([^>]*)>(.*?)</summary>', page, re.S)
+        assert m, sid
+        assert "open" not in m.group(1), sid
+        assert re.search(r'<span class="count">\d+</span>', m.group(2)), sid
+
+
+def test_the_backlog_has_one_nested_fold_per_tier_and_unranked_with_the_filter_bar_inside() -> None:
     page = render(*busy())
-    at = [page.index(f'id="{sid}"') for sid in SECTION_IDS]
-    assert at == sorted(at), "Since last report, Needs you now, Next up, Waves, Backlog by tier"
+    start = page.index('<details id="backlog-by-tier"')
+    end = page.index('id="ranked-features"')
+    backlog = page[start:end]
+    assert backlog.index('id="q"') < backlog.index('data-tier="unranked"')
+    assert 'id="q"' not in page[:start] and 'id="q"' not in page[end:]
+    ids = re.findall(r'<details id="(backlog-tier-[^"]+)" class="fold"', backlog)
+    assert ids == ["backlog-tier-unranked", "backlog-tier-1", "backlog-tier-2"]
+    assert '<details id="backlog-tier-1" class="fold" open' not in backlog
 
 
 def test_everything_the_board_showed_before_is_still_there() -> None:
@@ -63,8 +107,8 @@ def test_everything_the_board_showed_before_is_still_there() -> None:
     for needle in (
         'class="mast"',  # masthead and its counts
         'id="q"',  # the filter bar
-        'class="prs"',  # PRs
-        'class="batches"',  # Batches and the planned merge order
+        'id="prs"',  # PRs
+        'id="batches"',  # Batches and the planned merge order
         'data-tier="unranked"',  # unranked
         'data-tier="1"',
         'data-tier="2"',
@@ -75,7 +119,7 @@ def test_everything_the_board_showed_before_is_still_there() -> None:
     for key in ("widgets#3", "widgets#9", "widgets#13"):
         assert f'data-key="{key}"' in page, key
     # the pre-existing sections sit BELOW the new decision sections
-    assert page.index('id="waves"') < page.index('class="prs"') < page.index('data-tier="unranked"')
+    assert page.index('id="waves"') < page.index('data-tier="unranked"') < page.index('id="prs"')
 
 
 # ------------------------------------------------------- since last report (R17)
@@ -86,7 +130,7 @@ def test_the_first_render_says_there_is_no_earlier_snapshot() -> None:
     assert "No earlier snapshot" in _section(page, "since-last-report")
 
 
-def test_since_last_report_lists_the_diff_in_its_groups() -> None:
+def _changed() -> tuple[Facts, Judgements, str]:
     f, jd = busy()
     before = take_snapshot(f, jd, acceptance={"row-a": "skipped"})
     merged = pr(11, "feat/batch-b-draft", state="MERGED")
@@ -97,28 +141,38 @@ def test_since_last_report_lists_the_diff_in_its_groups() -> None:
     issues.append(issue(14))
     f2 = facts(issues)
     after = take_snapshot(f2, jd, acceptance={"row-a": "ci"})
-    page = render(f2, jd, diff_snapshots(before, after))
+    return f2, jd, render(f2, jd, diff_snapshots(before, after))
+
+
+def _rows(sect: str) -> list[list[str]]:
+    out = []
+    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", sect, flags=re.S)[1:]:
+        out.append(
+            [re.sub(r"<[^>]+>", "", c) for c in re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S)]
+        )
+    return out
+
+
+def test_since_last_report_is_a_table_of_transitions() -> None:
+    _, _, page = _changed()
     sect = _section(page, "since-last-report")
-    for group in (
-        "Merged or closed",
-        "Filed",
-        "Batch stage changes",
-        "Acceptance rows moved",
-        "Figures changed",
-    ):
-        assert group in sect, group
-    assert "widgets#3 closed" in sect and "PR example-org/widgets#11 merged" in sect
-    assert "widgets#14" in sect
-    assert "b-draft: pr-open -&gt; merged" in sect
-    assert "row-a: skipped -&gt; ci" in sect
-    assert "No earlier snapshot" not in sect
+    heads = re.findall(r"<th(?:\s[^>]*)?>(.*?)</th>", sect)
+    assert heads == ["Change", "Item", "Before", "After"]
+    rows = _rows(sect)
+    assert ["Merged or closed", "widgets#3", "open", "closed"] in rows
+    assert ["Merged or closed", "PR example-org/widgets#11", "open", "merged"] in rows
+    assert ["Filed", "widgets#14", "", "open"] in rows
+    assert ["Batch stage", "b-draft", "pr-open", "merged"] in rows
+    assert ["Acceptance row", "row-a", "skipped", "ci"] in rows
+    assert any(r[0] == "Figure" and r[1] == "open" for r in rows)
+    assert "No earlier snapshot" not in sect and "<ul>" not in sect
 
 
-def test_an_unchanged_board_says_nothing_changed() -> None:
-    f, jd = busy()
-    snap = take_snapshot(f, jd, acceptance=None)
-    sect = _section(render(f, jd, diff_snapshots(snap, snap)), "since-last-report")
-    assert "Nothing changed" in sect and "Merged or closed" not in sect
+def test_a_batch_row_links_to_its_card() -> None:
+    _, _, page = _changed()
+    sect = _section(page, "since-last-report")
+    assert '<a href="#batch-b-draft">b-draft</a>' in sect
+    assert sect.count('href="#batch-') == 1
 
 
 # ---------------------------------------------------------- needs you now (R18)
@@ -284,8 +338,14 @@ def test_the_closing_order_counts_kinds_and_draws_waves_features_and_parked() ->
     for header in ("Batch", "Skill", "Issues", "Why", "Size", "Depends on", "Stage"):
         assert f"<th>{header}</th>" in sect, header
     assert "needs z" in sect and "z-cancelled" in sect
-    assert sect.index("First feature") < sect.index("Second feature")
-    assert "Parked" in sect and "widgets#10" in sect
+    # the ranked features and the parked list are their own folds now, below the waves
+    features = re.search(r'<details id="ranked-features".*?</details>', page, re.S)
+    assert features and features.group(0).index("First feature") < features.group(0).index(
+        "Second feature"
+    )
+    assert "First feature" not in sect
+    parked = re.search(r'<details id="parked".*?</details>', page, re.S)
+    assert parked and "widgets#10" in parked.group(0)
 
 
 def test_a_file_without_kind_renders_the_old_page_plus_empty_closing_order() -> None:
@@ -454,3 +514,138 @@ def test_no_waves_means_no_tabs() -> None:
     page = render(f, judgements({"widgets#1": j()}))
     assert '<div role="tablist"' not in page
     assert "No waves" in _section(page, "waves")
+
+
+# ------------------------------------------------- finished waves (triage-pages-goal R8)
+
+CANCEL = {"kind": "cancel", "at": "2026-10-02T10:00:00Z", "reason": "no longer wanted"}
+CLOSEOUT = {
+    "kind": "closeout",
+    "at": "2026-10-03T10:00:00Z",
+    "runner": "fake",
+    "handle": "h",
+    "archived": 12,
+}
+
+
+def _stages(f: Facts, jd: Judgements) -> dict[str, str]:
+    from fr.triage.batch import derive_batch_stage
+
+    return {b.id: derive_batch_stage(b, f) for b in jd.batches}
+
+
+def test_finished_waves_needs_every_batch_terminal() -> None:
+    from fr.triage.views import finished_waves
+
+    merged = pr(10, "feat/batch-c", state="MERGED")
+    closed = pr(11, "feat/batch-d", state="CLOSED")
+    f = facts(
+        [
+            issue(1),
+            issue(2, state="closed", prs=[merged]),
+            issue(3, prs=[closed]),
+            issue(4, state="closed", prs=[merged]),
+            issue(5),
+        ]
+    )
+    jd = judgements(
+        {f"widgets#{n}": j() for n in range(1, 6)},
+        [
+            # wave 1: cancelled + archived-by-closeout
+            batch("a", [1], wave=1, events=[dispatch("a"), CANCEL]),
+            batch("c", [2], wave=1, events=[dispatch("c"), CLOSEOUT]),
+            # wave 2: abandoned (PR closed unmerged) + archived
+            batch("d", [3], wave=2, events=[dispatch("d")]),
+            batch("e", [4], wave=2, events=[dispatch("e"), CLOSEOUT]),
+            # wave 3: a merged-but-unarchived batch holds the wave open
+            batch("g", [2], wave=3, events=[dispatch("c")]),
+            # no wave: never yields a key
+            batch("z", [5], events=[dispatch("z"), CANCEL]),
+        ],
+    )
+    done = finished_waves(jd.batches, _stages(f, jd))
+    assert done == frozenset({"1", "2"})
+
+
+def test_finished_waves_is_the_driver_predicate_re_exported() -> None:
+    from fr.triage import batch_drive, views
+
+    assert views.finished_waves is batch_drive.finished_waves
+
+
+def test_preselected_wave_is_restricted_to_among() -> None:
+    f = facts([issue(1), issue(2), issue(3)])
+    jd = judgements(
+        {f"widgets#{n}": j() for n in (1, 2, 3)},
+        [
+            batch("a", [1], wave=1, events=[dispatch("a")]),
+            batch("b", [2], wave=2, events=[dispatch("b")]),
+            batch("c", [3], wave=3, events=[dispatch("c")]),
+        ],
+    )
+    assert preselected_wave(f, jd) == 3
+    assert preselected_wave(f, jd, among={"1", "2"}) == 2
+    assert preselected_wave(f, jd, among={"1"}) == 1
+    assert preselected_wave(f, jd, among=set()) is None
+
+
+def test_among_finished_keys_picks_the_highest_finished() -> None:
+    f = facts([issue(1), issue(2)])
+    jd = judgements(
+        {f"widgets#{n}": j() for n in (1, 2)},
+        [
+            batch("a", [1], wave=1, events=[dispatch("a"), CANCEL]),
+            batch("b", [2], wave=2, events=[dispatch("b"), CANCEL]),
+        ],
+    )
+    from fr.triage.views import finished_waves
+
+    done = finished_waves(jd.batches, _stages(f, jd))
+    assert preselected_wave(f, jd, among=done) == 2
+
+
+def test_batch_stages_derives_every_batch() -> None:
+    from fr.triage.views import batch_stages
+
+    f = facts([issue(1)])
+    jd = judgements({"widgets#1": j()}, [batch("a", [1], wave=1, events=[dispatch("a")])])
+    assert batch_stages(f, jd) == {"a": "dispatched"}
+
+
+# ------------------------------------------------------------- the Tier column (R4)
+
+
+def test_the_wave_table_has_a_tier_column_after_batch() -> None:
+    page = render(*busy())
+    heads = re.findall(r"<th(?:\s[^>]*)?>(.*?)</th>", _section(page, "waves"))
+    assert heads[:8] == [
+        "Batch",
+        "Tier",
+        "Skill",
+        "Issues",
+        "Why",
+        "Size",
+        "Depends on",
+        "Stage",
+    ]
+
+
+def test_the_tier_is_the_lowest_member_tier_or_a_dash() -> None:
+    from fr.triage.views import batch_tier
+
+    f = facts([issue(1), issue(2), issue(3)])
+    jd = judgements({"widgets#1": j(2), "widgets#2": j(1)}, [batch("lo", [1, 2], wave=1)])
+    assert batch_tier(jd.batches[0].ids, jd.issues) == 1
+    assert batch_tier(["widgets#3"], jd.issues) is None
+    unjudged = jd.batches[0].model_copy(update={"id": "none", "ids": ["widgets#3"]})
+    rows = {r[0]: r[1] for r in _rows(wave_table([*jd.batches, unjudged], f, jd))}
+    assert rows == {"lo": "1", "none": "—"}
+
+
+def test_the_wave_tables_scroll_sideways_instead_of_wrapping_by_the_letter() -> None:
+    from fr.triage.components import GRID_CSS
+
+    assert "min-width" in GRID_CSS and "white-space: nowrap" in GRID_CSS
+    page = render(*busy())
+    assert GRID_CSS in page
+    assert 'class="tablewrap"' in _section(page, "waves")
