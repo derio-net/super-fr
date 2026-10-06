@@ -174,3 +174,38 @@ new pure module with no duplication to remove
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 the closeout change replaced one line shape with another; the shared services_invalid_text helper was extracted in T3
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-06T19:20:01+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Marker dedup adopts any open issue carrying the marker, regardless of author (tracked_by hijack) (phase 3)
+
+archive_followups.py:179-193/217-219.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-06T19:20:01+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Issue Context lists every moved spec/plan on every issue, and none for explicit qids with nothing moved (phase 3)
+
+archive_cmd.py:544-548.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-06T19:20:01+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · No test compares archive's deferred record with what fr journal resolve --state deferred writes (phase 3)
+
+tests/unit/test_archive_open_ends.py:33-52.
+
+<!-- fr:journal kind=review scope=plan id=p3-review-r1 created=2026-10-06T19:20:01+00:00 phase=3 -->
+### p3-review-r1 · review · phase 3 code review: 3 findings (phase 3)
+
+Independent reviewer (feature-dev:code-reviewer, opus) over spec §0/§C, 03.yaml and the phase-3 code, briefed on the forge-trust question. Raised p3-r1 (security), p3-r2 and p3-r3, all in scope and fixed with tests in a88cc2386; also applied the below-threshold resolution_entry scope note (the journal scope is passed explicitly). Suite after fixes: 9751 passed, 106 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-06T19:20:01+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Marker dedup adopts any open issue carrying the marker, regardless of author (tracked_by hijack) (phase 3)
+
+Fixed in a88cc2386: reuse only when author == viewer_login() and the marker is the final body line; viewer/listing error → no dedup; parametrized tests. Spec R11 narrowed in 3bf8ef7f9.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-06T19:20:01+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Issue Context lists every moved spec/plan on every issue, and none for explicit qids with nothing moved (phase 3)
+
+Fixed in a88cc2386: context_for(repo_root, end) derives it per finding (plan dir / spec file, live or archived; none for debug); tests for --all with two plans and empty-log qids. Spec §C wording updated in 3bf8ef7f9.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-06T19:20:01+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: No test compares archive's deferred record with what fr journal resolve --state deferred writes (phase 3)
+
+Fixed in a88cc2386: a parity test defers through the real CLI and through write_back; serialized entries match with created stripped.

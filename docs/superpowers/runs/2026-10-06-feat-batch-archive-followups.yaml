@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-archive-followups
 workflow: fr-goal@1
 branch: feat/batch-archive-followups
 started: '2026-10-06T16:34:43+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -50,8 +50,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-06T18:57:13+00:00'
+    state: done
+    at: '2026-10-06T19:20:03+00:00'
     members:
     - implement-phase
     - review-phase
@@ -129,13 +129,20 @@ steps:
           tests: p3-suite.log@3bf9e023cf3a;tree=776e2ae5e2247e7eec70a8413e99f029c0230bff28b797b013adef9bc7acbde8
           visual: none
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-06T18:57:13+00:00'
           agent: a2b1473730e0ce36a
           harness: claude-code
           model: claude-opus-5-5
           session: 1ee7f0e3-bfd3-449b-a323-8c290d481fc5
+          returned: '2026-10-06T19:20:03+00:00'
+          outcome: done
+        evidence:
+          review: p3-review-r1
+          reviewer: a2b1473730e0ce36a
+          visual: none
+          findings: p3-r1,p3-r2,p3-r3
   journal-check:
     state: pending
   deliver:
