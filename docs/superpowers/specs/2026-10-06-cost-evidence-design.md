@@ -44,47 +44,61 @@ already shipped as `plugins/super-fr/agents/fr-spec-reviewer`, which the
 
 R1. Every usage `Message` carries the id of the agent that produced it, as well
     as its type: the subagent's transcript id on Claude Code (the
-    `agent-<id>.jsonl` stream name), the child session id on OpenCode, and none
-    on Hermes. A message from the session's own thread has no agent id.
+    `agent-<id>.jsonl` stream name), and the child session id on OpenCode and
+    Hermes. A message from the session's own thread has no agent id.
 R2. A usage `SessionEntry` records, per step, the main thread's figures apart
     from its subagents' figures (`steps_by_role`, keys `main` and `subagent`).
-R3. A usage `SessionEntry` records, per cursor unit, the executor's, the
-    reviewer's and the orchestrator's figures (`units`). The attribution rules
-    are in Design §B.
+R3. A usage `SessionEntry` records, per cursor unit, the figures of each role
+    that worked on it (`units`): `executor` and `orchestrator` on an
+    `implement-phase` unit, `reviewer` and `orchestrator` on a `review-phase`
+    unit, and `agent` on a flat `step/<id>` unit whose subagent (for example
+    `fr-spec-reviewer` at `spec-review`) the cursor identifies. Subagent
+    messages that match no unit are figured under `(unattributed)`. The
+    attribution rules are in Design §B.
 R4. Every figure in R2 and R3 carries turns, input, cache-write, cache-read and
     output tokens, plus dollars where the harness priced the session. Missing
     dollars are `None` (rendered `—`), never `0`, and fr never invents a price.
 R5. The `usage` kind moves from version 1 to 2: a stamp bump, a registered
     migration and the structure validator. A version-1 file migrates by stamp
-    only, and its absent R2/R3 figures read as "not observed".
+    only, and its absent R2/R3 figures read as "not observed". Every writer of
+    a new usage file stamps the current version explicitly, so a fresh capture
+    is never stale.
 R6. The split is computed at capture, by the code that already writes the
     usage file (`session_entry`). It adds no step, no dispatch and no LLM turn
-    to a run.
-R7. A dispatched attempt records the tier it was dispatched at (`tier`) and
-    the model that tier resolved to at dispatch (`bound`). `resolve` never
-    overwrites either; the model that ran stays in `model`. The `run` kind
-    moves from version 8 to 9 with a stamp-only migration; older attempts have
-    neither field, and read as "not recorded".
-R8. `fr run cost` prints a per-step table with main and subagent columns, and
-    a per-phase table with, for each agentic phase: tier, bound model, model
-    that ran, and the executor, reviewer and orchestrator figures. A phase
-    whose `ran` model differs (by family) from `bound` is marked.
-R9. The rendered PR body's `## Cost` section carries the same per-phase table
-    and the step table's main/subagent split, in Markdown.
+    to a run. `fr usage backfill`, which writes archived files, does not add
+    the split.
+R7. An attempt dispatched to a subagent (`agent_type` set) records the tier
+    it was dispatched at (`tier`) and the model that tier resolved to at
+    dispatch (`bound`). `resolve` never overwrites either; the model that ran
+    stays in `model`. An orchestrator-run attempt records neither and keeps
+    today's observed orchestrator model. The `run` kind moves from version 8
+    to 9 with a stamp-only migration; older attempts have neither field, and
+    read as "not recorded".
+R8. `fr run cost` prints a per-step table (main and subagent columns, each
+    with turns, cache-read and output tokens, and dollars) and a per-phase
+    table with, for each agentic phase: tier, bound model, model that ran, and
+    the executor, reviewer and orchestrator figures in the same columns. "Ran"
+    is shown only for an attempt that recorded `bound` (written by a v9 `fr`),
+    because before gh#637 `model` held the binding, not what ran. A phase
+    whose observed `ran` model differs (by family) from `bound` is marked. An
+    unobserved model renders `—` and is never marked as a mismatch.
+R9. The rendered PR body's `## Cost` section carries the same two tables in
+    Markdown.
 R10. `fr usage compare --before <date|run-id> --after <date|run-id>` compares
-     two sets of runs over the live and archived usage files, cursors and plan
-     journals. Per run it shows: phases, turns, main and subagent tokens,
-     dollars (with how many runs were priced), review findings per phase and
-     re-opened findings. Per set it shows medians and the sample size. It is
-     read-only and deterministic.
+     two sets of runs over the live and archived usage files, cursors of every
+     version and plan journals. Per run it shows: phases, turns, main and
+     subagent cache-read and output tokens, dollars (with how many runs were
+     priced), review findings per phase and re-opened findings. Per set it
+     shows medians and the sample size. It is read-only and deterministic.
 R11. An audit document, `docs/superpowers/audits/2026-10-06-cost-evidence-audit.md`,
      answers from `fr usage compare` output (quoted, with the command):
      (a) #627, with the cutoff at #514's merge; (b) #793 item 5, with the
      cutoff at #792's merge; (c) #593's decision rules (main-session share of
      cost or tokens, and cache-read per main-session turn by step) and a
      recommendation between options 1 and 4. It states every data limit it
-     hit: sample sizes, unpriced captures, and confounds such as the model
-     change.
+     hit: sample sizes, unpriced captures, confounds such as the model
+     change, attempt `model`s written before gh#637 that hold the binding
+     rather than what ran, and Hermes delegates that do not attribute.
 
 ## Design
 
@@ -99,38 +113,59 @@ an in-memory model, not an artifact, so this needs no migration.
   `2026-10-06-feat-batch-forge-remainder` cursor and usage file show both).
 - OpenCode: the message's owning session id when it differs from the parent
   session (`readers/opencode.py`, the `owner` already computed there).
-- Hermes: `None`. Delegates are not attributable, so their messages count as
-  `subagent` in R2 and as `(unattributed)` in R3.
+- Hermes: the delegate's child session id (`readers/hermes.py`'s `owner`,
+  already selected by `parent_session_id`). A Hermes cursor records the
+  `delegate_task` handle as `Attempt.agent`, not that id, so these messages
+  count as `subagent` in R2 and fall to `(unattributed)` in R3 unless the
+  ids happen to match. The audit states this limit.
 
 ### B. Unit attribution (R3)
 
-At capture, `session_entry` already receives `units_by_agent(cursor)`. It is
-widened to `unit_index(cursor)`, which returns for every unit of every step:
+At capture, `session_entry` receives `units_by_agent(cursor)` today. It is
+replaced by `unit_index(cursor)` in `fr/usage/file.py`, which returns for every
+unit of every step:
 
-- `agents`: the `agent` of each of the unit's attempts, plus the unit's
-  `evidence.reviewer` when present;
-- `window`: from the first attempt's `dispatched` to the last attempt's
-  `returned`, or open-ended when the unit is still held.
+- `agents`: the `agent` of each of the unit's non-synthesized attempts, plus
+  the unit's `evidence.reviewer` when present;
+- `intervals`: one half-open `(dispatched, returned]` interval per
+  non-synthesized attempt, in seconds, the same convention as
+  `rollup._step_of`. An attempt with no `returned` is open-ended only when
+  `fr.run.units.open_attempt` says the unit is held; a synthesized attempt
+  contributes no interval and no agent.
 
-Each message is then attributed to:
+`unit_index` also yields the `units_by_agent` mapping, so brief re-keying keeps
+working.
 
-- **executor** of unit U: a subagent message whose `agent_id` is among U's
-  attempt agents and U's step is `implement-phase`;
-- **reviewer** of unit U: a subagent message whose `agent_id` is U's
-  `evidence.reviewer`, or among U's attempt agents, where U's step is
-  `review-phase`;
-- **orchestrator** of unit U: a main-thread message whose timestamp falls in
-  U's window. Windows of a phase's implement and review units do not overlap;
-  if two windows ever overlap, the message goes to the earlier-dispatched unit
-  only, so nothing is counted twice;
-- otherwise nothing: `(unattributed)` is reported for subagent messages that
-  matched no unit, and main-thread messages outside every unit window stay in
-  their step figure only.
+Each message is then attributed to at most one unit and one role:
+
+- **subagent message** (`agent_id` set): the unit whose `agents` contain that
+  id. The role follows the unit's step: `executor` for `implement-phase`,
+  `reviewer` for `review-phase`, `agent` for a flat `step/<id>` unit. No
+  match: `(unattributed)`, role `subagent`.
+- **main-thread message**: role `orchestrator` of the unit whose interval
+  contains its timestamp. When intervals overlap (a unit re-dispatched after a
+  later unit opened), the interval with the latest `dispatched` that is at or
+  before the timestamp wins, so a retry's messages go to the retry and nothing
+  is counted twice. A main-thread message outside every interval stays in its
+  step figure only.
 
 The figure shape is `Figure` extended with `input`, `cache_write`,
-`cache_read`, `output`, all `int | None = None` (R4). Dollars are split exactly
-as `rollup` already splits them: by the harness's per-model figure over
-price-weighted tokens, so units plus the rest still sum to the session.
+`cache_read`, `output`, all `int | None = None` (R4).
+
+**Dollars.** `rollup` gains a public `message_dollars(record, weights)`
+returning each message's price-weighted share and the session's remainder:
+billed models with no message, plus a per-model total that does not add up.
+`rollup` itself and the R2/R3 split both use it, so the two splits cannot
+drift. The remainder belongs to no role and no unit; it stays where `rollup`
+puts it today, in `steps["(outside run)"]`. The invariants the tests assert,
+for every figure field (usd where priced, turns, each token count):
+
+- for every step `s` other than `(outside run)`:
+  `steps_by_role.main[s] + steps_by_role.subagent[s] == steps[s]`;
+- for `(outside run)`: the same, plus the remainder for usd;
+- summed over every unit and role, plus `(unattributed)`, the result is at
+  most the session's per-message total (main-thread messages outside every
+  interval are the difference).
 
 Stored as:
 
@@ -139,6 +174,7 @@ steps_by_role:
   main:     {brainstorm: {usd: …, turns: …, input: …, cache_write: …, cache_read: …, output: …}, …}
   subagent: {implement: {…}, …}
 units:
+  step/spec-review:        {agent: {…}, orchestrator: {…}}
   phase/1/implement-phase: {executor: {…}, orchestrator: {…}}
   phase/1/review-phase:    {reviewer: {…}, orchestrator: {…}}
   (unattributed):          {subagent: {…}}
@@ -147,41 +183,73 @@ units:
 `dump_usage` writes these field by field (the allowlist rule in `file.py`'s
 docstring). Only unit keys, step names and numbers are added.
 
+**Callers of `session_entry`.** It takes `index: UnitIndex | None`:
+
+- `capture.build_capture` (deliver, closeout, `resolve:<step>`) passes
+  `unit_index(cursor)`, so live captures carry the split;
+- `fr run cost --recompute` (`cost.recompute_entries`) passes it too, since
+  it prints and never writes;
+- `backfill` (new archived files) and `refreshed_file` (re-pricing an
+  archived file's entry) pass `None`, so they write no `steps_by_role` and no
+  `units`. That keeps the non-goal: archived files are not re-shaped.
+
 ### C. The usage kind at version 2 (R5)
 
-`fr/artifacts/registry.py`: `usage` `current_version` 1 → 2. `UsageFile`
-already carries `schema_version: int = 1`. A new `fr/artifacts/usage_split.py`
-registers a stamp-only `SchemaMigration` 1 → 2 (no field removed, so no frozen
-legacy model is needed) and is imported by `fr/artifacts/__init__.py`. The
-structure validator checks that `units` keys are unit keys or
-`(unattributed)`, that role keys are in the closed sets above, and that no
-figure is negative. The PR runs `fr migrate artifacts --yes` and commits the
-result.
+`fr/artifacts/registry.py`: `usage` `current_version` 1 → 2. Every `UsageFile`
+constructor that writes a new file passes `schema_version` explicitly, from a
+`current_usage_schema_version()` helper read from the registry, mirroring
+`RunState`'s creators (`fr/run/model.py`). The sites are `capture.py` (two),
+`backfill.py` and `artifacts/run_usage_split.py`. The model's default stays 1,
+so a file without a stamp still reads as version 1. A new
+`fr/artifacts/usage_split_v2.py` registers the 1 → 2 `SchemaMigration`,
+imported by `fr/artifacts/__init__.py`. Its `fn` parses the file with the live
+`parse_usage` (still a superset, because nothing is removed) and refuses one
+that does not parse, rather than certifying it. The body is not rewritten, and
+nothing is frozen. `SessionEntry._unavailable_carries_no_figures` also covers
+`steps_by_role` and `units`. The structure validator (`structure.validate_usage`)
+checks that `units` keys are unit keys or `(unattributed)`, that role keys
+are in the closed sets above, and that no figure is negative. The PR runs
+`fr migrate artifacts --yes` and commits the result.
 
 ### D. Tier and binding on the attempt (R7)
 
 `fr.run.model.Attempt` gains `tier: str | None = None` and
-`bound: str | None = None`. `_open_dispatch` (where `advance` resolves
-`_dispatch_tier` and `_resolved_model`) writes both, and stops writing the
-binding into `model`. `model` is then set by a claim (`--model`) or by
-`_observed_model` at resolve, which now compares against `bound`. The
+`bound: str | None = None`. In `_open_dispatch`, for an attempt with
+`agent_type` set, `advance` writes `tier` (from `_dispatch_tier`) and
+`bound` (from `_resolved_model`), and stops writing the binding into `model`.
+For an orchestrator-run attempt (`agent_type` None), nothing changes:
+`model` keeps `orchestrator_model`'s observation, and `tier`/`bound` stay
+None. This is the rule the comment at that site already records after
+"seven false claude-opus-5 reviews". On a subagent attempt, `model` is then
+set by a claim (`--model`) or by `_observed_model` at resolve, which compares
+against `bound` (falling back to `model` for an attempt opened before this
+change). Unobservable leaves `model` None, rendered `—`. The
 synthesized-attempt validator adds `tier` and `bound` to the fields such an
-attempt may not claim. `run` `current_version` 8 → 9, stamp-only migration in
-a new `fr/artifacts/run_bound_model.py`. The existing `run` migrations already
-read through `cursor_guard`'s frozen model; this hop adds a field and removes
-nothing, so it reuses that guard and freezes nothing new. The chain test is
-extended to `[…, 9]`.
+attempt may not claim.
+
+`run` `current_version` 8 → 9, in a new `fr/artifacts/run_bound_model.py`
+imported by `fr/artifacts/__init__.py`. It follows the 7 → 8 precedent
+(`artifacts/run_driver.py`), not `cursor_guard`: `cursor_guard` parses with
+the frozen v1–v4 reader and would refuse every v8 cursor. The `fn` refuses
+unless the body already reads as v8 under the live model (`_already_v8`),
+which stays a superset while the change only adds fields. The body is not
+rewritten, and nothing is frozen. The chain test
+(`test_migration_runner.py`) asserts every hop up to `[…, 8, 9]`.
 
 ### E. Rendering (R8, R9)
 
-`fr/run/cost.py` gains `PhaseRow` (phase n, tier, bound, ran, executor,
-reviewer, orchestrator figures) built by `phase_rows(state, entries)`.
-Tier/bound/ran come from the phase's latest `implement-phase` attempt; figures
-come from summing `units` across the effective entries. `summarize` also sums
-`steps_by_role`. The command (`commands/run_cmd.py`'s `cost`) prints both
-tables. `pr_body._cost` renders them as Markdown under the existing table. A
-per-phase column with nothing observed prints `—`. Token columns are shown as
-`cache-read / output`, compacted (`1.2M / 34k`), beside turns and dollars.
+`fr/run/cost.py` gains `PhaseRow` (phase n, tier, bound, ran, mismatch flag,
+and executor, reviewer, orchestrator figures) built by
+`phase_rows(state, entries)`. Tier, bound and ran come from the phase's latest
+non-synthesized `implement-phase` attempt. Ran is shown only when that attempt
+recorded `bound`, and the mismatch flag uses `_model_family`, moved to
+`fr/models.py` so both callers share it. Figures sum `units` across the
+effective entries; the phase's `orchestrator` is the sum over its implement
+and review units. `summarize` also sums `steps_by_role` into the step rows.
+The command (`commands/run_cmd.py`'s `cost`) prints both tables, and
+`pr_body._cost` renders them as Markdown, replacing today's step table. Every
+dollar column has turns and `cache-read / output` tokens beside it, compacted
+(`1.2M / 34k`); a figure nothing observed prints `—`.
 
 ### F. `fr usage compare` (R10)
 
@@ -191,10 +259,16 @@ whose `started` is before it, or on or after it) or a run id (that one run).
 Inputs per run:
 
 - the usage file (live, then archived), read through `effective_entries`;
-- the cursor (`docs/superpowers/runs/`, then `implemented/runs/`), for phases
-  and `started`;
-- the plan journal (`journals/plans/`, then the archived one), for `finding`
-  entries per phase and for findings that a resolution re-opened.
+- the cursor (`docs/superpowers/runs/`, then `implemented/runs/`), read raw
+  and tolerantly, because archived cursors are never migrated and runs before
+  2026-09-20 are v1–v4. Phases are counted from v5+ `units` or v1–v4 `items`
+  through `fr.run.legacy`'s reader, as `usage/backfill.py` already does, and
+  `started` from the top level;
+- the plan, found through the cursor's `steps.plan.emitted.plan` (run ids are
+  not plan slugs), and its journal (`journals/plans/`, then the archived one).
+  Findings per phase are journal `finding` entries grouped by their `phase`
+  field. Re-opened findings are those whose resolution fold
+  (`fr.journal.model`) shows a re-open record.
 
 The output is a per-run table plus a per-set median row and `n`. A run missing
 an input shows `—` in that column and is still counted. `usage` is already in
@@ -220,18 +294,25 @@ runs, and no foreign host appears in usage files (`file.py`'s allowlist).
 ## Test Plan
 
 - Unit: reader tests carry `agent_id` (Claude Code fixture with a subagent
-  stream; OpenCode with a child session; Hermes `None`).
+  stream; OpenCode and Hermes with a child session).
 - Unit: `session_entry` attribution covers executor, reviewer via evidence,
-  orchestrator by window, overlapping windows counted once, and an unmatched
-  subagent going to `(unattributed)`. Unit plus remainder sums to the session
-  total.
-- Unit: usage v1 → v2 and run 8 → 9 migrations; the chain asserts every hop;
-  the validators refuse a bad role key or a negative figure.
-- Unit: `advance` writes `tier`/`bound`; `resolve` keeps them and sets
-  `model` to the observed one; a mismatch is marked in the phase table.
-- Unit: `fr run cost` and `render_pr_body` show the per-phase table, with
-  `—` for unobserved figures.
-- Unit: `fr usage compare` over fixture runs: medians, `n`, a missing input
-  shown as `—`, determinism.
+  a flat-step `agent` (spec-reviewer), orchestrator by interval, a retried
+  unit whose interval overlaps a later unit (counted once, to the retry), a
+  synthesized attempt (no interval), shared endpoints (half-open), and an
+  unmatched subagent going to `(unattributed)`. The three §B invariants hold.
+- Unit: `backfill` and `refreshed_file` write no split; a fresh capture is
+  stamped `schema_version: 2`.
+- Unit: usage v1 → v2 and run 8 → 9 migrations, including the refusal of an
+  unparseable body; the chain asserts every hop; the validators refuse a bad
+  role key or a negative figure.
+- Unit: `advance` writes `tier`/`bound` on a subagent attempt only;
+  `resolve` keeps them and sets `model` to the observed one; an orchestrator
+  attempt keeps its observed model; a mismatch is marked, and an unobserved
+  model is `—` and not marked.
+- Unit: `fr run cost` and `render_pr_body` show both tables, priced and
+  unpriced (tokens and turns present, dollars `—`), and "ran" is `—` for an
+  attempt with no `bound`.
+- Unit: `fr usage compare` over fixture runs, including a pre-v5 cursor:
+  medians, `n`, a missing input shown as `—`, determinism.
 - Post-merge — operator-driven: the next real `/fr-goal` run's PR body shows
   the per-phase table with tier, bound and ran filled.
