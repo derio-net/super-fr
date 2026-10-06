@@ -7105,6 +7105,109 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: model-binding-set-probe
+    capability: model-bindings
+    acceptance: '`fr models set --harness opencode` refuses a model the provider will
+      not serve, naming the provider''s error and a proposed replacement, even when
+      the catalogue marks it active; an inconclusive probe warns and persists; `--no-probe`
+      skips and says so'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R2
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_model_binding_set_probe
+    status: ci
+    notes: scenario walks live, retired-but-listed (refused), server error (warns, persists)
+      and --no-probe against a stub opencode; unit tests pin the classifier and the
+      injection refusal
+    verify: candidate
+    scenario: tests/scenarios/model-binding-set-probe.sh
+  - id: model-binding-replacement
+    capability: model-bindings
+    acceptance: A dead binding is replaced by its live same-family successor, else by
+      a live tool-calling same-provider model distinct from the orchestrator and other
+      tiers that keeps tier price ordering within 2x the dead model's price, else no
+      replacement is proposed
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R4
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_model_binding_replacement
+    status: ci
+    notes: scenario covers family successor, tier order and distinctness, >2x operator-only,
+      provider hint and no replacement against a stub opencode
+    verify: candidate
+    scenario: tests/scenarios/model-binding-replacement.sh
+  - id: model-binding-check-report
+    capability: model-bindings
+    acceptance: '`fr models check` reports every binding live/dead/unknown/unprobed
+      with proposals and upgrade offers, exits 1 off a terminal when any binding is
+      dead, and never applies an offer unasked'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R12
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_model_binding_check
+    status: ci
+    notes: scenario covers all four verdicts, an unapplied offer and exit 1 off a terminal
+    verify: candidate
+    scenario: tests/scenarios/model-binding-check.sh
+  - id: model-binding-run-integration
+    capability: model-bindings
+    acceptance: A run surfaces dead bindings and offers at start and in its operator-gated
+      brief, and before dispatching a phase on OpenCode substitutes a dead tier binding
+      autonomously (recorded in the plan journal, loudly) or refuses with no brief
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_dead_user_binding_is_substituted_before_a_grouped_dispatch
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_flat_tiered_step_gets_the_same_guard
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_dead_binding_with_no_autonomous_pick_refuses_and_writes_nothing
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_dead_repo_layer_binding_refuses_naming_the_file
+      - super-fr:tests/unit/test_run_binding_guard.py#test_a_failed_apply_restores_both_files_and_exits_2
+      - super-fr:tests/unit/test_run_cli.py#test_a_gated_brief_lists_dead_bindings_and_offers
+      - super-fr:tests/unit/test_run_cli.py#test_run_start_names_each_dead_binding_and_offer_and_never_blocks
+    status: ci
+    notes: Unit tests over the start notice, the gated brief keys and _guard_dispatch_binding
+      on both dispatch paths with a scripted prober (phase 2 of 2026-10-06-model-binding-churn)
+      run in CI; the live OpenCode proof stays with model-binding-live-opencode
+    verify: none
+  - id: model-binding-live-opencode
+    capability: model-bindings
+    acceptance: On a real OpenCode install a retired tier binding is proposed interactively,
+      asked at the fr-goal gate, and substituted unattended at advance, with the dispatched
+      executor running on the replacement (opencode.db)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: model-binding-probe-cache
+    capability: model-bindings
+    acceptance: Probe verdicts are cached per harness and model for 6 hours, set and
+      check always probe fresh, and a bound model's last-known catalogue entry keeps
+      its lineage after it leaves the catalogue
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bindings_probe.py#test_the_probe_cache_honours_ttl_and_fresh
+      - super-fr:tests/unit/test_bindings_catalogue.py#test_snapshots_round_trip_and_keep_the_last_known_entry
+    status: ci
+    notes: TTL, fresh bypass and snapshot fallback pinned by unit tests with an injected
+      clock and cache dir
+    verify: none
   - id: archive-prices-earlier-closeouts
     capability: archive
     acceptance: An fr archive that moves anything prices the sessions earlier closeouts

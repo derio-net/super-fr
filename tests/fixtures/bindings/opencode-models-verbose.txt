@@ -1,0 +1,343 @@
+github-copilot/claude-haiku-4.5
+{
+  "id": "claude-haiku-4.5",
+  "providerID": "github-copilot",
+  "api": {
+    "id": "claude-haiku-4.5",
+    "url": "https://api.githubcopilot.com/v1",
+    "npm": "@ai-sdk/anthropic",
+    "endpoint": "messages"
+  },
+  "status": "active",
+  "limit": {
+    "context": 200000,
+    "input": 136000,
+    "output": 64000
+  },
+  "capabilities": {
+    "temperature": true,
+    "reasoning": true,
+    "attachment": true,
+    "toolcall": true,
+    "input": {
+      "text": true,
+      "audio": false,
+      "image": true,
+      "video": false,
+      "pdf": true
+    },
+    "output": {
+      "text": true,
+      "audio": false,
+      "image": false,
+      "video": false,
+      "pdf": false
+    },
+    "interleaved": false
+  },
+  "family": "claude-haiku",
+  "name": "Claude Haiku 4.5 (latest)",
+  "cost": {
+    "input": 1,
+    "output": 5,
+    "cache": {
+      "read": 0.1,
+      "write": 0
+    }
+  },
+  "options": {},
+  "headers": {},
+  "release_date": "2025-10-15",
+  "variants": {
+    "max": {
+      "thinking": {
+        "type": "enabled",
+        "budgetTokens": 31999
+      }
+    },
+    "high": {
+      "thinking": {
+        "type": "enabled",
+        "budgetTokens": 16000
+      }
+    }
+  }
+}
+github-copilot/claude-sonnet-5.5
+{
+  "id": "claude-sonnet-5.5",
+  "providerID": "github-copilot",
+  "api": {
+    "id": "claude-sonnet-5.5",
+    "url": "https://api.githubcopilot.com/v1",
+    "npm": "@ai-sdk/anthropic",
+    "endpoint": "messages"
+  },
+  "status": "active",
+  "limit": {
+    "context": 1000000,
+    "input": 936000,
+    "output": 128000
+  },
+  "capabilities": {
+    "temperature": false,
+    "reasoning": true,
+    "attachment": true,
+    "toolcall": true,
+    "input": {
+      "text": true,
+      "audio": false,
+      "image": true,
+      "video": false,
+      "pdf": true
+    },
+    "output": {
+      "text": true,
+      "audio": false,
+      "image": false,
+      "video": false,
+      "pdf": false
+    },
+    "interleaved": false
+  },
+  "family": "claude-sonnet",
+  "name": "Claude Sonnet 5.5",
+  "cost": {
+    "input": 2,
+    "output": 10,
+    "cache": {
+      "read": 0.2,
+      "write": 0
+    }
+  },
+  "options": {},
+  "headers": {},
+  "release_date": "2026-09-28",
+  "variants": {
+    "low": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "summarized"
+      },
+      "effort": "low"
+    },
+    "medium": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "summarized"
+      },
+      "effort": "medium"
+    },
+    "high": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "summarized"
+      },
+      "effort": "high"
+    },
+    "xhigh": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "summarized"
+      },
+      "effort": "xhigh"
+    },
+    "max": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "summarized"
+      },
+      "effort": "max"
+    }
+  }
+}
+github-copilot/gpt-6-luna
+{
+  "id": "gpt-6-luna",
+  "providerID": "github-copilot",
+  "api": {
+    "id": "gpt-6-luna",
+    "url": "https://api.githubcopilot.com",
+    "npm": "@ai-sdk/github-copilot",
+    "endpoint": "responses"
+  },
+  "status": "active",
+  "limit": {
+    "context": 1000000,
+    "input": 872000,
+    "output": 128000
+  },
+  "capabilities": {
+    "temperature": false,
+    "reasoning": true,
+    "attachment": true,
+    "toolcall": true,
+    "input": {
+      "text": true,
+      "audio": false,
+      "image": true,
+      "video": false,
+      "pdf": true
+    },
+    "output": {
+      "text": true,
+      "audio": false,
+      "image": false,
+      "video": false,
+      "pdf": false
+    },
+    "interleaved": false
+  },
+  "family": "gpt-luna",
+  "name": "GPT-6 Luna",
+  "cost": {
+    "input": 0.1,
+    "output": 0.5,
+    "cache": {
+      "read": 0.01,
+      "write": 0
+    }
+  },
+  "options": {},
+  "headers": {},
+  "release_date": "2026-09-22",
+  "variants": {
+    "none": {
+      "reasoningEffort": "none",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "low": {
+      "reasoningEffort": "low",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "medium": {
+      "reasoningEffort": "medium",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "high": {
+      "reasoningEffort": "high",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "xhigh": {
+      "reasoningEffort": "xhigh",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "max": {
+      "reasoningEffort": "max",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    }
+  }
+}
+github-copilot/gpt-6.1-sol
+{
+  "id": "gpt-6.1-sol",
+  "providerID": "github-copilot",
+  "api": {
+    "id": "gpt-6.1-sol",
+    "url": "https://api.githubcopilot.com",
+    "npm": "@ai-sdk/github-copilot",
+    "endpoint": "responses"
+  },
+  "status": "active",
+  "limit": {
+    "context": 1050000,
+    "input": 922000,
+    "output": 128000
+  },
+  "capabilities": {
+    "temperature": false,
+    "reasoning": true,
+    "attachment": true,
+    "toolcall": true,
+    "input": {
+      "text": true,
+      "audio": false,
+      "image": true,
+      "video": false,
+      "pdf": true
+    },
+    "output": {
+      "text": true,
+      "audio": false,
+      "image": false,
+      "video": false,
+      "pdf": false
+    },
+    "interleaved": false
+  },
+  "family": "gpt-sol",
+  "name": "GPT-6.1 Sol",
+  "cost": {
+    "input": 2,
+    "output": 10,
+    "cache": {
+      "read": 0.1,
+      "write": 0
+    }
+  },
+  "options": {},
+  "headers": {},
+  "release_date": "2026-09-29",
+  "variants": {
+    "none": {
+      "reasoningEffort": "none",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "low": {
+      "reasoningEffort": "low",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "medium": {
+      "reasoningEffort": "medium",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "high": {
+      "reasoningEffort": "high",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "xhigh": {
+      "reasoningEffort": "xhigh",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "max": {
+      "reasoningEffort": "max",
+      "reasoningSummary": "auto",
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    }
+  }
+}
