@@ -31,8 +31,8 @@ Pure: facts and judgements in, sets out. The command only formats them.
 - **awaiting live** — an open issue labelled `fr:awaiting-live`: its fix has merged
   and a post-merge acceptance row still waits for its walk (spec
   2026-10-06-verification-strategies §F, R18). It is not ranked or proposed as work,
-  so it is in neither unranked nor unplaced, and the board shows it in a group of its
-  own.
+  so it is in neither unranked, unplaced nor stale dispatch, and the board shows it
+  in a group of its own.
 
 Every key comparison goes through `fr.triage.model.normalize_key` (or
 `issue_key`, which is built on it). There is no second normaliser here.
@@ -172,6 +172,9 @@ def stale_dispatches(facts: Facts) -> list[Stale]:
             i.state != "open"
             or any(p.state in {"OPEN", "MERGED"} for p in i.prs)
             or FR_IN_PROGRESS.name not in i.labels
+            # Its fix merged through a Refs PR, which links no closing PR: it awaits
+            # its live walk, which is not a stale dispatch (spec §F, R18).
+            or is_awaiting_live(i)
         ):
             continue
         marker = _aware(i.dispatch_marker_at)

@@ -123,3 +123,22 @@ def test_the_board_shows_them_in_one_collapsed_group_and_nowhere_else() -> None:
     assert 'data-key="widgets#1"' not in outside and 'data-key="widgets#2"' not in outside
     assert 'data-key="widgets#4"' in outside  # an ordinary issue still renders
     assert "open" not in re.match(r"<details[^>]*>", group.group(0)).group(0).split()
+
+
+def test_an_awaiting_live_issue_still_in_progress_is_not_a_stale_dispatch() -> None:
+    """p4-r1: its fix merged through a Refs PR, so no closing PR links it and the
+    `fr:in-progress` label may outlive the merge; it is awaiting live, not stale."""
+    from fr.triage.check import stale_dispatches
+
+    old = "2026-09-01T09:00:00Z"
+    f = facts(
+        [
+            issue(1, labels=[LIVE, "fr:in-progress"], dispatch_marker_at=old),
+            issue(2, labels=["fr:in-progress"], dispatch_marker_at=old),
+        ]
+    )
+    jd = judgements({"widgets#1": j(), "widgets#2": j()})
+
+    assert [s.key for s in stale_dispatches(f)] == ["widgets#2"]
+    assert [s.key for s in classify(f, jd).stale] == ["widgets#2"]
+    assert [n.ref for n in needs_you(f, jd) if n.kind == "stale-dispatch"] == ["widgets#2"]
