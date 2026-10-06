@@ -7159,7 +7159,11 @@ rows:
       its lineage after it leaves the catalogue
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-model-binding-churn-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bindings_probe.py#test_the_probe_cache_honours_ttl_and_fresh
+      - super-fr:tests/unit/test_bindings_catalogue.py#test_snapshots_round_trip_and_keep_the_last_known_entry
+    status: ci
+    notes: TTL, fresh bypass and snapshot fallback pinned by unit tests with an injected
+      clock and cache dir
     verify: none
