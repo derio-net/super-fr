@@ -14,3 +14,8 @@ Every variant is the same defect: the check and the write resolve the name indep
 ### 895a7c5680d0 · root-cause · check and copy resolved the paths independently
 
 state_sync._sync lstat-checked source and destination by name, then shutil.copy2 opened both by name again. copy2(follow_symlinks=False) governs only the source and, for a source that became a symlink, recreates the link in the destination, so a swap after the check either wrote through a destination symlink or planted a symlink in the export.
+
+<!-- fr:journal kind=finding scope=debug id=3e962b0c8e68 created=2026-10-06T16:48:30+00:00 state=fixed -->
+### 3e962b0c8e68 · finding [fixed] · copy from O_NOFOLLOW descriptors
+
+state_sync._copy walks each component from its parent descriptor (dir_fd, O_DIRECTORY|O_NOFOLLOW), opens the file O_NOFOLLOW (source also O_NONBLOCK, fstat must be regular), copies fd to fd and restores mode and times with fchmod/utime on the descriptor. A symlink met at open time maps to SYMLINK / SYMLINK_DEST. Pinned by tests/unit/test_triage_state_sync.py: three race tests (destination file, destination directory, source) that swap the path right after the check, plus mode/mtime preservation. Green on Linux and macOS.
