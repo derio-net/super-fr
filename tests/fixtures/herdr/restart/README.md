@@ -20,8 +20,18 @@ every terminal title in `agent-list.json` became `<title redacted>`. Shapes are 
 | `screen-empty.json` | same | an idle pane with a truly empty prompt (`❯\xa0`); trimmed to the prompt and the status lines under it (the conversation above was an operator's) |
 | `screen-draft.json` | same | a real unsent draft: `❯\xa0half typed draft`, NOT faint |
 | `screen-background.json` | same | status line `2 shells, 1 monitor` and an agent panel (`⏺ main` / `◯ general-purpose ...`) under it, while herdr reports `done` |
+| `screen-subagent.json` | same | captured in a scratch tab while ONE background subagent ran (after its brief turn settled): `← 1 agent` on the status line and a `◯ general-purpose` panel row under it. herdr reported `working` for the whole time the subagent ran, then `done` |
+| `screen-draft-multiline.json` | same | a draft whose first line is empty (`❯\xa0`) and whose text sits on the next line, typed with shift+enter in a scratch tab |
+| `tab-list.json` | `herdr tab list` | `tabs[]` of `{agent_status, focused, label, number, pane_count, tab_id, workspace_id}`; labels outside the `derio-net` org became `<label redacted>`, the `\|` ones are as captured |
 | `agent-start-reuse.json` | `herdr agent start fr-probe --kind claude --pane <p> -- --resume <id>` | run in the pane right after `/exit`, the name `fr-probe` having been held by that same pane's previous claude |
 | `agent-start-name-taken.json` | `herdr agent start fr-probe --kind claude --pane <other pane>` | error envelope (`error.code: agent_name_taken`), exit 1, while another pane held the name |
+
+## Environment
+
+`HERDR_PANE_ID` is set in the environment of every herdr pane (`HERDR_ENV=1` too) and
+holds the pane's own id in the shape `agent list` reports (`w<workspace>:p<pane>`):
+`restart-idle` reads it as "the pane running the command" and never restarts it. Read
+live from a pane's shell, 2026-10-06.
 
 ## Probe outcome (decides spec §A step 3)
 

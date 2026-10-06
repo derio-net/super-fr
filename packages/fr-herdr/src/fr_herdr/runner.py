@@ -54,7 +54,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from fr_herdr import restart  # noqa: F401  (imported at module top level, never lazily: spec sr-13)
-from fr_herdr._herdr import HerdrError, _run_herdr
+from fr_herdr._herdr import (
+    PANE_BUSY_TRIES,
+    PANE_BUSY_WAIT,
+    HerdrError,
+    _run_herdr,
+    start_agent,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -63,10 +69,6 @@ if TYPE_CHECKING:
     from fr_dispatch.work_item import WorkItem
 
 
-PANE_BUSY_TRIES = 15
-"""`agent start` attempts against a pane whose shell is not up yet (`agent_pane_busy`)."""
-PANE_BUSY_WAIT = 2.0
-"""Seconds between them: 28s in all, for rc files and a slow prompt."""
 PROMPT_TIMEOUT_MS = 30000
 """How long `agent prompt --wait` may take to see the agent leave `idle`."""
 ENTER_TIMEOUT_MS = 10000
@@ -287,20 +289,8 @@ class HerdrRunner:
 
 
 def _start_agent(argv: list[str]) -> None:
-    """`agent start`, retried while the new tab's shell is not up yet (gh#931).
-
-    herdr needs the pane at its interactive shell prompt and refuses at once with
-    `agent_pane_busy` otherwise; any other refusal (`agent_not_ready` is a dialog
-    the operator must answer) is raised as it is.
-    """
-    for attempt in range(1, PANE_BUSY_TRIES + 1):
-        try:
-            _run_herdr(argv)
-            return
-        except HerdrError as exc:
-            if exc.code != "agent_pane_busy" or attempt == PANE_BUSY_TRIES:
-                raise
-        _sleep(PANE_BUSY_WAIT)
+    """`agent start`, retried while the new tab's shell is not up yet (gh#931)."""
+    start_agent(argv, run=_run_herdr, sleep=_sleep, tries=PANE_BUSY_TRIES, wait=PANE_BUSY_WAIT)
 
 
 def _submit(name: str, brief: str) -> None:

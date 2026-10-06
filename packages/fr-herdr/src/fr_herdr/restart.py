@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from fr_herdr._herdr import HerdrError, _run_herdr
+from fr_herdr._herdr import HerdrError, _run_herdr, start_agent
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection
@@ -131,34 +131,56 @@ def transcript_path(cwd: str, session_id: str) -> Path:
 
 _SGR = re.compile(r"\x1b\[([0-9;:]*)m")
 _ANSI = re.compile(r"\x1b\[[0-9;:?]*[A-Za-z]")
+_PROMPT = re.compile(r"^(?:\x1b\[[0-9;:]*m|\s)*❯")
+_LINES = re.compile(r"\r?\n")
+
+
+def _is_rule(line: str) -> bool:
+    return _ANSI.sub("", line).strip().startswith("─")
 
 
 def _live_prompt_index(lines: list[str]) -> int | None:
-    for idx in range(len(lines) - 1, -1, -1):
-        if lines[idx].startswith("❯"):
+    """The input box's `❯` line: the last one that sits right under a horizontal rule.
+    An earlier `❯` is the echo of a past message in the conversation, and a screen with
+    no box at all (an overlay, a dialog) has no live prompt: None."""
+    for idx in range(len(lines) - 1, 0, -1):
+        if _PROMPT.match(lines[idx]) and _is_rule(lines[idx - 1]):
             return idx
     return None
 
 
+def has_prompt(screen: str) -> bool:
+    """True when the screen shows Claude's input box (so a draft can be judged at all)."""
+    return _live_prompt_index(_LINES.split(screen)) is not None
+
+
 def has_draft(screen: str) -> bool:
-    """True when the live prompt line holds text that is not rendered faint (SGR 2).
+    """True when the input box holds text that is not rendered faint (SGR 2): on the
+    prompt line, or on any continuation line down to the rule that closes the box.
 
     Claude draws its prompt suggestion faint right after the prompt
     (`❯\\xa0ESC[0mESC[2m<text>`), which a plain-text read cannot tell from typed input.
+    A screen with no input box reports False; `classify` skips it as `no-prompt` first.
     """
-    lines = screen.split("\n")
+    lines = _LINES.split(screen)
     idx = _live_prompt_index(lines)
     if idx is None:
         return False
-    rest = lines[idx][1:]
     faint = False
-    pos = 0
-    for match in _SGR.finditer(rest):
-        if _visible(rest[pos : match.start()]) and not faint:
+    for n in range(idx, len(lines)):
+        line = lines[n]
+        if n > idx and _is_rule(line):
+            break
+        rest = line[_PROMPT.match(line).end() :] if n == idx else line  # type: ignore[union-attr]
+        pos = 0
+        for match in _SGR.finditer(rest):
+            if _visible(rest[pos : match.start()]) and not faint:
+                return True
+            faint = _next_faint(faint, match.group(1))
+            pos = match.end()
+        if _visible(rest[pos:]) and not faint:
             return True
-        faint = _next_faint(faint, match.group(1))
-        pos = match.end()
-    return bool(_visible(rest[pos:])) and not faint
+    return False
 
 
 def _visible(text: str) -> str:
@@ -192,9 +214,11 @@ def has_background_work(screen: str) -> bool:
     """The status line under the prompt names running shells or monitors, or the agent
     panel lists a subagent. `← 1 agent` alone is on every idle Claude, so only a count
     above one counts."""
-    lines = screen.split("\n")
+    lines = _LINES.split(screen)
     idx = _live_prompt_index(lines)
-    below = [_ANSI.sub("", line) for line in lines[(idx or 0) :]]
+    if idx is None:
+        return False
+    below = [_ANSI.sub("", line) for line in lines[idx:]]
     for line in below:
         if _SHELLS.search(line) or _PANEL_ROW.match(line):
             return True
@@ -230,6 +254,8 @@ def classify(
     kept = kept_args(argv)
     if isinstance(kept, UnknownFlag):
         return Skip(pane, f"unknown-flag {kept.flag}")
+    if not has_prompt(screen):
+        return Skip(pane, "no-prompt")
     if has_draft(screen):
         return Skip(pane, "draft")
     if has_background_work(screen):
@@ -310,19 +336,36 @@ def _claude_process(info: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _shell_cwd(info: dict[str, Any]) -> str | None:
+    """The pane shell's cwd: the foreground process that is the shell itself (its pid is
+    `shell_pid`), else the first foreground process that reports a cwd."""
+    pinfo = info.get("result", {}).get("process_info", {})
+    procs = [p for p in pinfo.get("foreground_processes", []) if p.get("cwd")]
+    for proc in procs:
+        if proc.get("pid") is not None and proc.get("pid") == pinfo.get("shell_pid"):
+            return str(proc["cwd"])
+    return str(procs[0]["cwd"]) if procs else None
+
+
 _EXIT_DIALOG = re.compile(r"unsent feedback draft|Enter to review & send")
 
 
-def _exit_state(pane: str) -> str | None:
-    """`gone` once no claude runs in the foreground, `dialog` if Claude's exit dialog is
-    up (an unsent feedback draft), else None."""
-    if _claude_process(_run_herdr(["pane", "process-info", "--pane", pane])) is None:
-        return "gone"
+def _exit_state(pane: str) -> tuple[str, str | None] | None:
+    """`("gone", shell cwd)` once no claude runs in the foreground, `("dialog", None)` if
+    Claude's exit dialog is up (an unsent feedback draft), else None."""
+    info = _run_herdr(["pane", "process-info", "--pane", pane])
+    if _claude_process(info) is None:
+        return "gone", _shell_cwd(info)
     text = str(_run_herdr(["pane", "read", pane, "--source", "visible"]).get("raw", ""))
-    return "dialog" if _EXIT_DIALOG.search(text) else None
+    return ("dialog", None) if _EXIT_DIALOG.search(text) else None
 
 
 def _same_session(pane: str, session_id: str) -> bool | None:
+    """True once the pane runs a claude in the foreground AND `agent list` reports it on
+    *session_id*. The process check matters: `agent list` can still show the pre-exit
+    registration for a moment, which says nothing about the relaunch."""
+    if _claude_process(_run_herdr(["pane", "process-info", "--pane", pane])) is None:
+        return None
     agents = _run_herdr(["agent", "list"]).get("result", {}).get("agents", [])
     for agent in agents:
         if agent.get("pane_id") == pane and agent.get("agent") == "claude":
@@ -334,10 +377,15 @@ def _same_session(pane: str, session_id: str) -> bool | None:
 def _start_named(plan: Plan) -> bool:
     """`agent start` on the pane under its own name: that keeps `HerdrRunner.message`
     working, which addresses agents by name. False when herdr refuses the name
-    (`agent_name_taken`: another pane holds it), so the caller types the command."""
+    (`agent_name_taken`: another pane holds it), so the caller types the command.
+    A pane whose shell is not up yet is retried, as the runner's own starts are."""
     argv = ["agent", "start", str(plan.name), "--kind", "claude", "--pane", plan.pane_id]
     try:
-        _run_herdr([*argv, "--", *plan.kept, "--resume", plan.session_id])
+        start_agent(
+            [*argv, "--", *plan.kept, "--resume", plan.session_id],
+            run=_run_herdr,
+            sleep=_sleep,
+        )
     except HerdrError as exc:
         if exc.code == "agent_name_taken":
             return False
@@ -347,25 +395,41 @@ def _start_named(plan: Plan) -> bool:
 
 def restart(plan: Plan) -> Outcome:
     """Restart one pane in place (R3): `/exit`, wait for claude to leave, relaunch on
-    `--resume`, wait for the same session id. Never raises: a failure is an Outcome."""
+    `--resume` from the cwd claude had, wait for the same session id. Never raises: any
+    failure is an Outcome."""
     pane = plan.pane_id
     command = shlex.join(["claude", *plan.kept, "--resume", plan.session_id])
+    cd = f"cd {shlex.quote(plan.cwd)}" if plan.cwd else ""
+    # The by-hand line is correct from wherever the pane's shell is, so it carries the cd
+    # unless the shell is known to be in claude's cwd already.
+    hand = [command]
     step = "send /exit"
     sent = False
 
     def fail(reason: str) -> Outcome:
-        return Outcome(pane, False, reason, command if sent else None)
+        return Outcome(pane, False, reason, hand[0] if sent else None)
 
     try:
+        if cd:
+            hand[0] = f"{cd} && {command}"
         _run_herdr(["pane", "send-text", pane, "/exit"])
         sent = True
         _run_herdr(["pane", "send-keys", pane, "enter"])
         step = "wait for exit"
         state = _poll(lambda: _exit_state(pane), timeout=EXIT_TIMEOUT)
-        if state == "dialog":
-            return fail("exit-dialog")
         if state is None:
             return fail("exit-timeout")
+        if state[0] == "dialog":
+            return fail("exit-dialog")
+        shell_cwd = state[1]
+        if cd and shell_cwd and shell_cwd != plan.cwd:
+            # claude ran in a directory the shell is no longer in (it `cd`ed, or was
+            # started from elsewhere): `--resume` only finds the transcript from claude's.
+            step = "cd to the session's directory"
+            _run_herdr(["pane", "send-text", pane, cd])
+            _run_herdr(["pane", "send-keys", pane, "enter"])
+        elif shell_cwd == plan.cwd:
+            hand[0] = command
         step = "agent start"
         if not plan.name or not _start_named(plan):
             step = "send claude command"
@@ -374,7 +438,7 @@ def restart(plan: Plan) -> Outcome:
         step = "wait for resume"
         if not _poll(lambda: _same_session(pane, plan.session_id), timeout=RESUME_TIMEOUT):
             return fail("resume-timeout")
-    except HerdrError as exc:
+    except Exception as exc:  # noqa: BLE001  one pane's failure never stops the run (R4)
         return fail(f"{step}: {exc}")
     return Outcome(pane, True, "restarted")
 
@@ -390,14 +454,20 @@ def restart_idle(*, yes: bool, exclude: Collection[str] = ()) -> RestartReport:
     }
     self_pane = os.environ.get("HERDR_PANE_ID") or None
     report = RestartReport(dry_run=not yes)
-    for agent in agents:
-        if agent.get("agent") != "claude":
+    for listed in agents:
+        if listed.get("agent") != "claude":
             continue
-        pane = str(agent["pane_id"])
-        tab = tabs.get(agent.get("tab_id"), "")
+        pane = str(listed["pane_id"])
+        tab = tabs.get(listed.get("tab_id"), "")
         try:
+            # The listing above is only the roster: a pane that turned `working` while
+            # an earlier pane was being restarted is judged on its status now.
+            agent = _fresh(pane)
+            if agent is None:
+                report.lines.append(PaneLine(pane, tab, "skip", "gone"))
+                continue
             verdict = classify(**_inputs(agent, self_pane, exclude))
-        except HerdrError as exc:
+        except Exception as exc:  # noqa: BLE001  an unreadable pane is skipped, never fatal
             report.lines.append(PaneLine(pane, tab, "skip", f"unreadable: {exc}"))
             continue
         if isinstance(verdict, Skip):
@@ -411,6 +481,16 @@ def restart_idle(*, yes: bool, exclude: Collection[str] = ()) -> RestartReport:
             else:
                 report.lines.append(PaneLine(pane, tab, "fail", outcome.reason, outcome.resume))
     return report
+
+
+def _fresh(pane: str) -> dict[str, Any] | None:
+    """The pane's `agent list` entry as it is now, or None when it is gone."""
+    agents = _run_herdr(["agent", "list"]).get("result", {}).get("agents", [])
+    for agent in agents:
+        if agent.get("pane_id") == pane and agent.get("agent") == "claude":
+            found: dict[str, Any] = agent
+            return found
+    return None
 
 
 def _inputs(

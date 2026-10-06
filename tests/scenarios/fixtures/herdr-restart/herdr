@@ -6,7 +6,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "$*" >> "$HERDR_FAKE_LOG"
 case "$1 $2" in
   "agent list") cat "$here/agent-list.json" ;;
-  "tab list") echo '{"id":"cli:tab:list","result":{"tabs":[]}}' ;;
+  "tab list") cat "$here/tab-list.json" ;;
   "pane process-info") cat "$here/process-info.json" ;;
   "pane read")
     case "$3" in

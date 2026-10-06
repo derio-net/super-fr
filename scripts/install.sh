@@ -101,7 +101,14 @@ done
 # console script a workspace package ships for the operator (`fr-herdr
 # restart-idle`, spec 2026-10-06-driver-sessions §A) is asked for by name. It
 # rides the same `--with` set above, so it resolves to the workspace package.
-FR_EXECUTABLES_FROM=(--with-executables-from fr-herdr)
+# An older uv has no such flag and refuses the whole install over it, so it is only
+# passed when `uv tool install --help` lists it. Without it the `--with` package's
+# script still lands in the tool env's bin, and `relink_herdr` links it from there.
+FR_EXECUTABLES_FROM=()
+fr_uv_install_help="$(uv tool install --help 2>&1 || true)"
+case "$fr_uv_install_help" in
+  *--with-executables-from*) FR_EXECUTABLES_FROM=(--with-executables-from fr-herdr) ;;
+esac
 CLAUDE_DIR="$HOME/.claude"
 RULES_DIR="$CLAUDE_DIR/rules"
 SETTINGS="$CLAUDE_DIR/settings.json"
@@ -201,7 +208,7 @@ if [[ "${1:-}" == "--install-bridge" ]]; then
   # adapter — verify before writing (review finding, 2026-06-06).
   if ! "$vk_python" -c "import fr_vk.bridge" >/dev/null 2>&1; then
     echo "  ERROR: $vk_python cannot import fr_vk.bridge — bridge wrapper not installed" >&2
-    echo "  (re-run after: uv tool install --force ${FR_RUNNER_WITH[*]} ${FR_EXECUTABLES_FROM[*]} $PLUGIN_ROOT/packages/fr)" >&2
+    echo "  (re-run after: uv tool install --force ${FR_RUNNER_WITH[*]} ${FR_EXECUTABLES_FROM[*]-} $PLUGIN_ROOT/packages/fr)" >&2
     exit 1
   fi
   cat > "$wrapper_path" <<EOF
@@ -802,7 +809,7 @@ if command -v uv &>/dev/null; then
     rm -rf "$fr_stage"
     mkdir -p "$fr_stage"
     if UV_TOOL_DIR="$fr_stage/tools" UV_TOOL_BIN_DIR="$fr_stage/bin" \
-         uv tool install --force "${FR_RUNNER_WITH[@]}" "${FR_EXECUTABLES_FROM[@]}" \
+         uv tool install --force "${FR_RUNNER_WITH[@]}" ${FR_EXECUTABLES_FROM[@]+"${FR_EXECUTABLES_FROM[@]}"} \
          "$PLUGIN_ROOT/packages/fr" >/dev/null 2>&1 \
        && { "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1 \
             || { sleep "$fr_install_retry_sleep"; "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1; }; }; then
@@ -825,7 +832,7 @@ if command -v uv &>/dev/null; then
     # Pipeline lives in the `if` condition so a `uv` failure (propagated by
     # `pipefail` through `sed`) is caught here instead of tripping `set -e`.
     if UV_TOOL_BIN_DIR="$fr_install_bin" uv tool install --force \
-      "${FR_RUNNER_WITH[@]}" "${FR_EXECUTABLES_FROM[@]}" \
+      "${FR_RUNNER_WITH[@]}" ${FR_EXECUTABLES_FROM[@]+"${FR_EXECUTABLES_FROM[@]}"} \
       "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'; then
       fr_installed=1
       break

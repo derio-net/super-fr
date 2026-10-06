@@ -30,6 +30,7 @@ expect_grep '^ok +w2:p5Z' "$out" "the idle pane with a faint suggestion would re
 expect_grep '^skip background-work +w2:p2W' "$out" "background shells skip the pane"
 expect_grep '^skip no-transcript +w6:p1' "$out" "a pane with no transcript is skipped"
 expect_grep '^skip status working +w36:p1' "$out" "a working pane is skipped"
+expect_grep '^skip status working +w36:p1 +derio-net/super-fr/run/batch-archive-followups$' "$out" "each pane line ends with its tab label (captured tab list)"
 expect_grep '^1 would restart, 7 skipped, 0 failed$' "$out" "the summary line"
 expect_grep 'dry run' "$out" "a dry run says so"
 if grep -Eq 'send-text|send-keys|agent start|agent prompt' "$HERDR_FAKE_LOG"; then

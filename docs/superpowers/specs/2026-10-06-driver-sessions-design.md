@@ -30,12 +30,13 @@ R1. `fr-herdr restart-idle` is a console script shipped by the `fr-herdr` packag
 R2. A pane is restarted only when all of these hold:
   - its status is `idle` or `done`;
   - it has a recorded session id, and that session's transcript exists under the project directory of the pane's own working directory;
-  - its input box holds no unsent draft (Claude's faint prompt suggestion is not a draft);
-  - its status line shows no background shells or agents;
+  - the screen shows Claude's input box (a pane with no box, such as an overlay, is `no-prompt`), and the box holds no unsent draft on any of its lines (Claude's faint prompt suggestion is not a draft);
+  - it shows no background work: running shells or monitors on the status line, or a subagent in the agent panel (`← 1 agent` is on every idle status line and is not evidence; only a count above one is);
+  - a foreground `claude` process is found in the pane (else `no-process`);
   - its launch argv carries no flag outside the kept set;
   - it is not the pane running the command, and it is not excluded.
 
-  Any other pane is skipped with the reason, and no key is ever sent to it.
+  Any other pane is skipped with the reason, and no key is ever sent to it. Each pane is judged at its own turn on a fresh read of its status, because a pane can turn `working` while earlier panes are being restarted; a pane that has left `agent list` by then is skipped `gone`. A pane whose own state cannot be read (a herdr error, an unreadable transcript path) is skipped `unreadable: <why>`; no failure of one pane, of whatever kind, stops the run (R4).
 R3. A restart happens in place. It sends `/exit`, then waits at most 30 s for `claude` to leave the pane's foreground. If Claude's exit dialog appears (an unsent feedback draft), the pane is reported `fail exit-dialog`, and the restart neither answers the dialog nor waits out the timeout. Otherwise it relaunches `claude <kept flags> --resume <session-id>` in the same pane and waits at most 90 s for the pane to run `claude` again on the same session id. The tab, its label, the pane, the herdr agent name and every kept launch flag are unchanged. A pane that fails after `/exit` was sent is reported with the exact command that resumes it by hand.
 R4. One failed pane never stops the run. The command exits 0 when no pane failed, 1 when any pane failed, and 2 on a refusal.
 R5. `fr-herdr restart-idle` runs only inside a herdr session (`HERDR_ENV=1`, `herdr` on PATH), the same rule as the runner's preflight. Outside, it refuses with exit 2. After `scripts/install.sh`, `fr-herdr` is on PATH beside `fr`, through the same managed, atomically swapped link. After `.fr/candidate-install`, it is in `<prefix>/bin`.
@@ -57,9 +58,12 @@ The herdr surfaces it parses are recorded from live herdr 0.9.1, never composed.
 go under `tests/fixtures/herdr/restart/`, each with a README saying when and how it was
 captured, with home paths redacted. They cover:
 - `agent list`, which carries per pane `agent`, `agent_status`, `agent_session.value`,
-  `name` (null for an unnamed pane) and `pane_id`;
+  `name` (the key is absent for an unnamed pane, never null), `pane_id` and `tab_id`;
+- `tab list`, whose `tabs[]` carry `tab_id` and `label` (the pane line's tab label);
 - `pane process-info`, where `foreground_processes[].argv` is the `claude` launch argv;
-- `pane read --source visible --ansi`;
+- `pane read --source visible --ansi`, which prints raw terminal text (not a JSON
+  envelope, so `_run_herdr` returns it as `{"raw": <text>}`; a non-object JSON answer is
+  wrapped the same way, so every answer is a dict);
 - the `HERDR_PANE_ID` environment variable, which is set in every herdr pane.
 
 These were seen live while this spec was written. The exit dialog's text ("You have 1
@@ -70,17 +74,27 @@ Pure decisions are kept apart from the calls:
 
 - `classify(agent, screen, argv, cwd, transcript_exists, self_pane, excluded) -> Skip |
   Plan` is pure. It checks R2 in a fixed order, and the first failing check names the
-  reason: `status <s>`, `no-session`, `no-transcript`, `unknown-flag <flag>`, `draft`,
-  `background-work`, `self`, `excluded`. (Non-Claude panes are filtered out before
+  reason: `status <s>`, `no-session`, `no-process`, `no-transcript`, `unknown-flag <flag>`,
+  `no-prompt`, `draft`, `background-work`, `self`, `excluded`. (Non-Claude panes are filtered out before
   classification and not listed.)
-  - **Draft.** On the last line of the ANSI screen that begins with `❯`, there is text
-    after the prompt that is not rendered faint (SGR 2). Claude Code draws its prompt
-    suggestion faint, right after the prompt: captured live, it is `❯\xa0\x1b[0m\x1b[2m<text>`.
-    A plain-text read cannot tell a suggestion from typed input, which would wrongly skip
-    nearly every pane (sr-2). The fixtures hold a suggestion, a real draft and an empty
-    prompt.
-  - **Background work.** The status line under the prompt names running shells (`N
-    shell(s)`) or agents (`← N agent(s)`), as captured live.
+  - **Input box.** The live prompt is the last line that begins with `❯` (after any SGR
+    codes) and sits directly under a horizontal rule: an earlier `❯` is the echo of a past
+    message. The box runs from that line down to the next rule. No live prompt is `skip
+    no-prompt`: with nothing to judge the draft by, the pane is never restarted.
+  - **Draft.** Any text in the box that is not rendered faint (SGR 2): on the prompt line
+    after the prompt, or on any continuation line (a draft can begin on a later line while
+    the first is empty). Claude Code draws its prompt suggestion faint, right after the
+    prompt: captured live, it is `❯\xa0\x1b[0m\x1b[2m<text>`. A plain-text read cannot tell a
+    suggestion from typed input, which would wrongly skip nearly every pane (sr-2). The
+    fixtures hold a suggestion, a real draft, a multi-line draft and an empty prompt.
+  - **Background work.** Below the prompt: the status line names running shells or monitors
+    (`N shell(s)`, `N monitor(s)`), the agent panel lists a subagent (a `◯` row), or the
+    status line says `← N agents` with N above one. `← 1 agent` is on the status line of
+    every idle Claude, fresh sessions included, so it is NOT evidence. A lone background
+    subagent was captured live: herdr reports it `working` (so the status check already
+    skips it) and the screen shows the `◯` panel row and `← 1 agent`. herdr reports
+    `done`, not `idle`, for a settled pane with background shells, hence both statuses
+    qualify.
 - `kept_args(argv) -> list[str] | UnknownFlag`. It keeps these flags with their values:
   `--model`, `--permission-mode`, `--dangerously-skip-permissions`, `--add-dir`,
   `--settings`, `--mcp-config`, `--plugin-dir`, `--agent`. It drops `--resume`/`-r`,
@@ -90,29 +104,41 @@ Pure decisions are kept apart from the calls:
 - **Transcript.** The file is `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/<slug>/<id>.jsonl`,
   where `<slug>` is the pane's foreground `claude` process cwd with every character outside
   `[A-Za-z0-9]` replaced by `-`. That is the directory `claude --resume` searches when it
-  is relaunched in that pane, whose shell keeps the same cwd. It is never a glob across
-  every project (sr-6).
+  is relaunched from. It is never a glob across every project (sr-6). The pane's shell
+  can be in another directory than the `claude` process was (claude `cd`s, or was started
+  from elsewhere), so the restart reads the shell's cwd from `pane process-info` once
+  claude has left; when it differs, the relaunch is preceded by `cd <claude cwd>`, and the
+  by-hand `resume:` line carries the same `cd <cwd> && ` prefix (unless the shell is
+  known to be there already).
 - `restart(pane, plan) -> Outcome` runs the sequence:
   1. `pane send-text /exit` and `enter`.
   2. Poll `pane process-info` and `pane read` until no `claude` runs in the foreground
-     (30 s). If the exit dialog shows, stop at once with `fail exit-dialog`. If the 30 s
+     (30 s). That `process-info` also gives the shell's cwd (the foreground process whose
+     pid is `shell_pid`). If the exit dialog shows, stop at once with `fail exit-dialog`. If the 30 s
      run out, stop with `fail exit-timeout`. No further key is sent in either case.
   3. Relaunch in the same pane:
      - `agent start <name> --kind claude --pane <p> -- <kept> --resume <id>` when the pane
        had a herdr agent name. This keeps `HerdrRunner.message` working, because it
        addresses agents by name.
      - `pane send-text "claude <kept> --resume <id>"` and `enter` when it had none.
-     - If herdr refuses the named start because the name is still registered to the pane,
-       the send-text path is used instead. Whether that refusal happens is probed live in
-       a scratch tab during implementation and pinned by a captured fixture.
-  4. Poll `agent list` until the pane reports `agent: claude` with the same
-     `agent_session` value (90 s).
+     - herdr accepted the pane's own name again right after `/exit` when probed live
+       (the registration is released with the agent), and refuses only when ANOTHER pane
+       holds the name (`agent_name_taken`); that refusal is the trigger for the send-text
+       path. Both are pinned by captured fixtures.
+     - The named start is retried while herdr answers `agent_pane_busy` (the pane's shell
+       is not at its prompt yet), exactly as the runner's own starts are: one retry
+       helper in `fr_herdr._herdr`, used by both.
+  4. Poll until the pane runs a `claude` in the foreground (`pane process-info`) AND
+     `agent list` reports it with the same `agent_session` value (90 s). The process check
+     is what keeps a stale pre-exit `agent list` entry from passing as the relaunch.
 
-  Each step's `HerdrError` becomes `fail <step>: <herdr's words>`. Every failure after step 1
+  Each step's failure, of whatever type (a `HerdrError`, or an `OSError` from the
+  filesystem), becomes `fail <step>: <the message>`; the `resume:` line survives it. Every failure after step 1
   adds `resume: claude <kept> --resume <id>`, the command the operator runs to resume the pane.
 - `restart_idle(*, yes, exclude) -> RestartReport` lists, classifies and restarts serially,
   so one pane at a time leaves the foreground. It catches each pane's failure and goes on.
-  The caller's pane is `HERDR_PANE_ID`.
+  The caller's pane is `HERDR_PANE_ID`, which herdr sets in every pane's environment
+  (captured: `w36:p4`-shaped, the pane id as `agent list` reports it).
 
 The console script is `fr_herdr.cli:main` (`[project.scripts] fr-herdr`). It is argparse
 with one subcommand, `restart-idle`, and no Typer dependency: fr-herdr depends only on `fr`
@@ -120,7 +146,7 @@ and `fr-dispatch`. It prints the lines and exits per R4. Its refusal uses the sa
 as the runner's preflight (R5).
 
 **Install (R5, sr-1).** `uv tool install --with` exposes only the main package's scripts, so
-both installers add `--with-executables-from fr-herdr`.
+both installers add `--with-executables-from fr-herdr` when `uv tool install --help` lists the flag (an older uv refuses the whole install over an unknown one); without it, the script the `--with` package leaves in the tool env's bin is linked all the same.
 - `scripts/install.sh` installs into the private `$HOME/.local/share/fr/uv-bin` and links
   only `fr` onto PATH, so `--with-executables-from` alone would leave `fr-herdr` off PATH.
   It therefore manages a second link, `fr-herdr`, beside `fr`'s. That link is created

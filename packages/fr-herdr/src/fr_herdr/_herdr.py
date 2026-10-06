@@ -9,7 +9,16 @@ from __future__ import annotations
 
 import json
 import subprocess
-from typing import Any
+import time
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+PANE_BUSY_TRIES = 15
+"""How often `agent start` is tried while the pane's shell is not up yet (gh#931)."""
+PANE_BUSY_WAIT = 2.0
+"""Seconds between those tries."""
 
 
 class HerdrError(Exception):
@@ -36,10 +45,37 @@ def _run_herdr(args: list[str]) -> dict[str, Any]:
     if not out:
         return {}
     try:
-        parsed: dict[str, Any] = json.loads(out)
+        parsed = json.loads(out)
     except ValueError:
         return {"raw": out}
-    return parsed
+    # A JSON scalar or array (`pane read` of a pane that shows `123`) is text, not an
+    # envelope: callers `.get` on the answer, so it is always a dict.
+    return parsed if isinstance(parsed, dict) else {"raw": out}
+
+
+def start_agent(
+    argv: list[str],
+    *,
+    run: Callable[[list[str]], dict[str, Any]] = _run_herdr,
+    sleep: Callable[[float], None] = time.sleep,
+    tries: int = PANE_BUSY_TRIES,
+    wait: float = PANE_BUSY_WAIT,
+) -> None:
+    """`agent start`, retried while the pane's shell is not up yet (gh#931).
+
+    herdr needs the pane at its interactive shell prompt and refuses at once with
+    `agent_pane_busy` otherwise; any other refusal (`agent_not_ready` is a dialog
+    the operator must answer) is raised as it is. *run* and *sleep* are the caller's own
+    seams, so each module's tests replace them where they already do.
+    """
+    for attempt in range(1, tries + 1):
+        try:
+            run(argv)
+            return
+        except HerdrError as exc:
+            if exc.code != "agent_pane_busy" or attempt == tries:
+                raise
+        sleep(wait)
 
 
 def _error_code(detail: str) -> str | None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -216,8 +217,9 @@ def test_transcript_path_slugs_the_cwd(monkeypatch: pytest.MonkeyPatch, tmp_path
 
 
 def test_a_truecolour_operand_of_two_is_not_faint() -> None:
-    typed = "❯\xa0\x1b[0m\x1b[38;2;177;185;249mhello\x1b[0m\r"  # operator text, coloured
-    faint = "❯\xa0\x1b[0m\x1b[2m\x1b[38;2;1;2;3mhint\x1b[0m\r"  # faint, then a colour
+    rule = "─────\r\n"
+    typed = rule + "❯\xa0\x1b[0m\x1b[38;2;177;185;249mhello\x1b[0m\r"  # operator text, coloured
+    faint = rule + "❯\xa0\x1b[0m\x1b[2m\x1b[38;2;1;2;3mhint\x1b[0m\r"  # faint, then a colour
     assert restart.has_draft(typed)
     assert not restart.has_draft(faint)
 
@@ -278,6 +280,7 @@ def _procs(*argvs: list[str]) -> dict[str, Any]:
 
 CLAUDE_UP = _procs(["node", "mcp"], ["claude", "--resume", "sess-1"])
 SHELL_ONLY = _procs(["-zsh"])
+CD = "cd /home/user/proj && "  # the by-hand line before the shell's cwd is known
 EMPTY_SCREEN = {"raw": _screen("screen-empty.json")}
 
 
@@ -301,7 +304,8 @@ PLAN = restart.Plan("w2:p9", "b-demo-1234", "sess-1", "/home/user/proj", ("--mod
 OK_SCRIPT: dict[str, list[Any]] = {
     "pane send-text": [{}],
     "pane send-keys": [{}],
-    "pane process-info": [CLAUDE_UP, SHELL_ONLY],
+    # claude up, gone after /exit, then the relaunched one
+    "pane process-info": [CLAUDE_UP, SHELL_ONLY, CLAUDE_UP],
     "pane read": [EMPTY_SCREEN],
     "agent start": [{}],
     "agent list": [_back()],
@@ -342,7 +346,7 @@ def test_an_exit_dialog_fails_at_once_and_sends_nothing_further(
     )
     outcome = restart.restart(PLAN)
     assert (outcome.ok, outcome.reason) == (False, "exit-dialog")
-    assert outcome.resume == "claude --model m --resume sess-1"
+    assert outcome.resume == CD + "claude --model m --resume sess-1"
     assert len(fake.keys_sent()) == 2 and fake.now == 0.0
     assert "agent start" not in fake.verbs()
 
@@ -353,7 +357,7 @@ def test_the_exit_wait_gives_up_after_thirty_seconds(monkeypatch: pytest.MonkeyP
     assert (outcome.ok, outcome.reason) == (False, "exit-timeout")
     assert 30 <= fake.now < 32
     assert len(fake.keys_sent()) == 2 and "agent start" not in fake.verbs()
-    assert outcome.resume == "claude --model m --resume sess-1"
+    assert outcome.resume == CD + "claude --model m --resume sess-1"
 
 
 def test_a_taken_name_falls_back_to_send_text(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -425,11 +429,11 @@ def _world(
             )
         )
     agents.append({"agent": "opencode", "agent_status": "idle", "pane_id": "w9:p1"})
-    state = {"left": set()}  # panes whose claude has exited
+    state: dict[str, set[str]] = {"left": set(), "back": set()}  # claude exited / relaunched
 
     def process_info(args: list[str]) -> dict[str, Any]:
         pane = args[3]
-        if pane in state["left"]:
+        if pane in state["left"] and pane not in state["back"]:
             return SHELL_ONLY
         return _procs(["claude", "--resume", f"s-{pane}"])
 
@@ -439,6 +443,12 @@ def _world(
     def keys(args: list[str]) -> dict[str, Any]:
         if args[1] == "send-text" and args[3] == "/exit":
             state["left"].add(args[2])
+        elif args[1] == "send-text" and args[3].startswith("claude "):
+            state["back"].add(args[2])
+        return {}
+
+    def start(args: list[str]) -> dict[str, Any]:
+        state["back"].add(args[args.index("--pane") + 1])
         return {}
 
     def listing(args: list[str]) -> dict[str, Any]:
@@ -455,7 +465,7 @@ def _world(
             "pane read": [read],
             "pane send-text": [keys],
             "pane send-keys": [{}],
-            "agent start": [{}],
+            "agent start": [start],
             **script,
         },
     )
@@ -509,7 +519,7 @@ def test_one_failed_pane_does_not_stop_the_next_and_panes_go_serially(
     assert [(ln.pane_id, ln.verdict) for ln in report.lines] == [("a", "fail"), ("b", "ok")]
     assert report.failed
     assert report.lines[0].detail == "exit-dialog"
-    assert report.lines[0].resume == "claude --resume s-a"
+    assert report.lines[0].resume == CD + "claude --resume s-a"
     sent = [c[2] for c in fake.keys_sent()]
     assert sent == ["a", "a", "b", "b", "b", "b"]  # /exit+enter for a, then all of b
 
@@ -529,3 +539,227 @@ def test_the_callers_pane_non_claude_panes_and_excluded_panes(
         ("b", "ok", "would restart"),
         ("c", "skip", "excluded"),
     ]
+
+
+# --- review round (p1-r1 .. p1-r11) -------------------------------------------------
+
+
+def test_r1_a_pane_that_turned_working_during_earlier_restarts_is_not_sent_exit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake = _world(monkeypatch, tmp_path, {"a": "screen-empty.json", "b": "screen-empty.json"})
+    base = fake.script["agent list"][0]
+
+    def listing(args: list[str]) -> dict[str, Any]:
+        agents = copy.deepcopy(base(args))  # each answer is its own snapshot
+        if any(c[:3] == ["pane", "send-text", "a"] for c in fake.calls):  # a is restarting
+            for agent in agents["result"]["agents"]:
+                if agent["pane_id"] == "b":
+                    agent["agent_status"] = "working"
+        return agents
+
+    fake.script["agent list"] = [listing]
+    report = restart.restart_idle(yes=True, exclude=())
+    assert [(ln.pane_id, ln.verdict, ln.detail) for ln in report.lines] == [
+        ("a", "ok", ""),
+        ("b", "skip", "status working"),
+    ]
+    assert all(c[2] != "b" for c in fake.keys_sent())
+
+
+def test_r1_a_pane_gone_by_its_turn_is_skipped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake = _world(monkeypatch, tmp_path, {"a": "screen-empty.json"})
+    base = fake.script["agent list"][0]
+    calls = {"n": 0}
+
+    def listing(args: list[str]) -> dict[str, Any]:
+        calls["n"] += 1
+        agents = base(args)
+        return agents if calls["n"] == 1 else _agents()
+
+    fake.script["agent list"] = [listing]
+    report = restart.restart_idle(yes=True, exclude=())
+    assert [(ln.verdict, ln.detail) for ln in report.lines] == [("skip", "gone")]
+    assert fake.keys_sent() == []
+
+
+def _boxed(*input_lines: str) -> str:
+    rule = "\x1b[0m\x1b[38;2;136;136;136m" + "─" * 20 + "\x1b[0m\r\n"
+    return "conversation\r\n" + rule + "\r\n".join(input_lines) + "\r\n" + rule + "  status\r\n"
+
+
+def test_r2_an_sgr_prefixed_prompt_is_found_and_a_screen_with_no_prompt_is_skipped() -> None:
+    styled = _boxed("\x1b[0m\x1b[1m❯\xa0\x1b[0mtyped words")
+    assert restart.has_prompt(styled) and restart.has_draft(styled)
+    assert _reason(_classify(screen=styled)) == "draft"
+    # an overlay: no input box at all, only a history echo of an earlier message
+    overlay = "\x1b[0m\x1b[1m❯\xa0\x1b[0mold message\r\n  ◯ pick one\r\n"
+    assert not restart.has_prompt(overlay)
+    assert _reason(_classify(screen=overlay)) == "no-prompt"
+    assert _reason(_classify(screen="")) == "no-prompt"
+    # the live fixtures all have a box, and the history echo in screen-background is no prompt
+    for name in ("screen-empty.json", "screen-suggestion.json", "screen-background.json"):
+        assert restart.has_prompt(_screen(name)), name
+
+
+def test_r3_a_multiline_draft_is_found_wherever_the_text_sits() -> None:
+    live = _screen("screen-draft-multiline.json")  # captured: empty first line, text below
+    assert restart.has_draft(live)
+    assert _reason(_classify(screen=live)) == "draft"
+    assert restart.has_draft(_boxed("❯\xa0", "  second line"))
+    # faint continuation (a wrapped suggestion) is still not a draft
+    assert not restart.has_draft(_boxed("❯\xa0\x1b[0m\x1b[2mfirst half", "  second half\x1b[0m"))
+
+
+def test_r7_a_lone_background_subagent_is_caught_by_its_panel_row() -> None:
+    live = _screen("screen-subagent.json")  # captured while one subagent ran: `← 1 agent`
+    assert "← 1 agent" in live and "◯" in live
+    assert restart.has_background_work(live)
+    assert _reason(_classify(screen=live)) == "background-work"
+    # herdr reported `working` for that pane for the whole run, so the status guard holds too
+    assert _reason(_classify(agent=_agent(agent_status="working"), screen=live)) == (
+        "status working"
+    )
+
+
+def test_r5_a_failure_that_is_not_a_herdr_error_is_a_pane_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake = _world(monkeypatch, tmp_path, {"a": "screen-empty.json", "b": "screen-empty.json"})
+    real = Path.is_file
+
+    def is_file(self: Path) -> bool:
+        if self.name == "s-a.jsonl":
+            raise PermissionError("denied")
+        return real(self)
+
+    monkeypatch.setattr(Path, "is_file", is_file)
+    report = restart.restart_idle(yes=True, exclude=())
+    assert [(ln.pane_id, ln.verdict) for ln in report.lines] == [("a", "skip"), ("b", "ok")]
+    assert "unreadable" in report.lines[0].detail and "denied" in report.lines[0].detail
+    assert fake.keys_sent()[0][2] == "b"
+
+
+def test_r5_a_non_herdr_error_after_exit_keeps_the_resume_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install(monkeypatch, {**OK_SCRIPT, "agent start": [OSError("boom")]})
+    outcome = restart.restart(PLAN)
+    assert (outcome.ok, outcome.reason) == (False, "agent start: boom")
+    assert outcome.resume == "claude --model m --resume sess-1"
+
+
+def test_r5_run_herdr_always_returns_a_dict(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    from fr_herdr import _herdr
+
+    def answer(text: str) -> None:
+        def run(*_a: Any, **_k: Any) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess([], 0, stdout=text, stderr="")
+
+        monkeypatch.setattr(_herdr.subprocess, "run", run)
+
+    for text in ("123", "[1, 2]", '"x"', "null", "plain text"):
+        answer(text)
+        assert _herdr._run_herdr(["pane", "read", "p"]) == {"raw": text}
+    answer('{"result": {}}')
+    assert _herdr._run_herdr(["x"]) == {"result": {}}
+
+
+def test_r4_the_named_start_is_retried_while_the_pane_shell_is_not_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    busy = HerdrError("pane busy", code="agent_pane_busy")
+    fake = _install(monkeypatch, {**OK_SCRIPT, "agent start": [busy, busy, {}]})
+    assert restart.restart(PLAN).ok
+    assert fake.verbs().count("agent start") == 3
+    assert fake.sleeps.count(2.0) == 2
+
+
+def test_r4_a_pane_that_stays_busy_fails_after_the_tries_and_other_refusals_do_not_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr_herdr import _herdr
+
+    busy = HerdrError("pane busy", code="agent_pane_busy")
+    fake = _install(monkeypatch, {**OK_SCRIPT, "agent start": [busy]})
+    outcome = restart.restart(PLAN)
+    assert fake.verbs().count("agent start") == _herdr.PANE_BUSY_TRIES
+    assert outcome.reason.startswith("agent start: ") and outcome.resume
+    other = HerdrError("blocked", code="agent_not_ready")
+    fake = _install(monkeypatch, {**OK_SCRIPT, "agent start": [other]})
+    assert not restart.restart(PLAN).ok and fake.verbs().count("agent start") == 1
+
+
+def test_r8_a_stale_agent_list_entry_is_not_a_resume(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `agent list` still shows the pre-exit registration, but nothing runs claude
+    _install(monkeypatch, {**OK_SCRIPT, "pane process-info": [CLAUDE_UP, SHELL_ONLY]})
+    outcome = restart.restart(PLAN)
+    assert (outcome.ok, outcome.reason) == (False, "resume-timeout")
+
+
+def _procs_at(cwd: str, *argvs: list[str]) -> dict[str, Any]:
+    info = _procs(*argvs)
+    for proc in info["result"]["process_info"]["foreground_processes"]:
+        proc["cwd"] = cwd
+    return info
+
+
+def test_r9_a_shell_in_another_directory_is_sent_back_before_the_relaunch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    elsewhere = _procs_at("/home/user/elsewhere", ["-zsh"])
+    fake = _install(
+        monkeypatch, {**OK_SCRIPT, "pane process-info": [CLAUDE_UP, elsewhere, CLAUDE_UP]}
+    )
+    assert restart.restart(PLAN).ok
+    assert fake.keys_sent()[2:] == [
+        ["pane", "send-text", "w2:p9", "cd /home/user/proj"],
+        ["pane", "send-keys", "w2:p9", "enter"],
+    ]
+    assert fake.verbs().index("agent start") > 3  # the named start follows the cd
+
+
+def test_r9_the_resume_line_carries_the_cd_unless_the_shell_is_known_to_be_there(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    other = HerdrError("agent_not_ready", code="x")
+    elsewhere = _procs_at("/home/user/elsewhere", ["-zsh"])
+    _install(
+        monkeypatch,
+        {**OK_SCRIPT, "pane process-info": [CLAUDE_UP, elsewhere], "agent start": [other]},
+    )
+    assert restart.restart(PLAN).resume == "cd /home/user/proj && claude --model m --resume sess-1"
+    _install(monkeypatch, {**OK_SCRIPT, "agent start": [other]})
+    assert restart.restart(PLAN).resume == "claude --model m --resume sess-1"
+    plan = restart.Plan("w2:p9", None, "sess-1", "/home/user/my proj", ())
+    _install(monkeypatch, {**OK_SCRIPT, "pane process-info": [CLAUDE_UP]})
+    assert restart.restart(plan).resume == "cd '/home/user/my proj' && claude --resume sess-1"
+
+
+def test_r10_tab_list_shape_is_a_live_capture() -> None:
+    tabs = _load("tab-list.json")["result"]["tabs"]
+    assert tabs and all({"tab_id", "label", "workspace_id"} <= set(t) for t in tabs)
+    assert not any("/Users/" in str(t["label"]) for t in tabs)
+
+
+def test_r10_restart_idle_labels_each_pane_from_the_captured_tab_list(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake = _world(monkeypatch, tmp_path, {"a": "screen-empty.json"})
+    tabs = _load("tab-list.json")["result"]["tabs"]
+    chosen = next(t for t in tabs if t["label"].startswith("derio-net/"))
+    fake.script["tab list"] = [_load("tab-list.json")]
+    base = fake.script["agent list"][0]
+
+    def listing(args: list[str]) -> dict[str, Any]:
+        agents = base(args)
+        agents["result"]["agents"][0]["tab_id"] = chosen["tab_id"]
+        return agents
+
+    fake.script["agent list"] = [listing]
+    report = restart.restart_idle(yes=False, exclude=())
+    assert report.lines[0].tab == chosen["label"]
