@@ -647,11 +647,11 @@ def test_one_failure_is_reported_once_not_twice(tmp_path: Path) -> None:
 # migrated), and the migration is stamp-only.
 
 
-def test_the_run_kind_moved_to_version_eight() -> None:
-    assert ARTIFACT_KINDS["run"].current_version == 8
+def test_the_run_kind_moved_to_version_nine() -> None:
+    assert ARTIFACT_KINDS["run"].current_version == 9
 
 
-def test_the_run_kind_is_reachable_all_the_way_from_version_one_to_eight() -> None:
+def test_the_run_kind_is_reachable_all_the_way_from_version_one_to_nine() -> None:
     """Every registered migration is on ONE chain, in order — EVERY hop named.
 
     The numbering here has history worth keeping: gh#506's telemetry migration
@@ -666,14 +666,14 @@ def test_the_run_kind_is_reachable_all_the_way_from_version_one_to_eight() -> No
     """
     chain = MIGRATIONS.chain("run", 1)
     assert chain, "no registered migration chain carries a v1 run cursor forward"
-    assert chain[-1].to_version == ARTIFACT_KINDS["run"].current_version == 8
-    assert [m.to_version for m in chain] == [2, 3, 4, 5, 6, 7, 8], (
+    assert chain[-1].to_version == ARTIFACT_KINDS["run"].current_version == 9
+    assert [m.to_version for m in chain] == [2, 3, 4, 5, 6, 7, 8, 9], (
         "the chain must pass through 2 (gate provenance), 3 (telemetry), 4 (dispatch "
-        "holder), 5 (one record per unit), 6 (main-session usage) and 7 (usage moved "
-        "out of the cursor) on its way to 8 (who drives the run) — every "
-        "migration is registered, not just the new one"
+        "holder), 5 (one record per unit), 6 (main-session usage), 7 (usage moved "
+        "out of the cursor) and 8 (who drives the run) on its way to 9 (tier and "
+        "bound model on the attempt) — every migration is registered, not just the new one"
     )
-    assert [m.from_version for m in chain] == [1, 2, 3, 4, 5, 6, 7]
+    assert [m.from_version for m in chain] == [1, 2, 3, 4, 5, 6, 7, 8]
 
 
 def test_migrating_a_v2_run_cursor_stamps_it_current_and_rewrites_no_body(
@@ -783,12 +783,12 @@ def test_every_captured_cursor_migrates_all_the_way_to_current(tmp_path: Path, n
 
     assert report.ok, [(f.path.name, f.error) for f in report.failed]
     kind = ARTIFACT_KINDS["run"]
-    assert kind.read_version(path) == kind.current_version == 8
+    assert kind.read_version(path) == kind.current_version == 9
     hops = [(a.from_version, a.to_version) for a in report.applied if a.path == path]
-    assert hops == [(v, v + 1) for v in range(started_at, 8)], "every hop, in order, once"
+    assert hops == [(v, v + 1) for v in range(started_at, 9)], "every hop, in order, once"
 
     state = parse_run_state(path.read_text())
-    assert state.schema_version == 8
+    assert state.schema_version == 9
     raw = yaml.safe_load(path.read_text())
     assert "accounting" not in raw
     assert all("items" not in r and "dispatch" not in r for r in raw["steps"].values())

@@ -400,7 +400,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # frozen as `fr.run.legacy.RunStateV6`.
             # 8: `RunState.driver` — who drives the run (gh#761), migration
             # `fr.artifacts.run_driver`. Additive, so stamp-only.
-            current_version=8,
+            # 9: `Attempt.tier` and `Attempt.bound` — the tier a subagent was
+            # dispatched at and the model it resolved to (spec
+            # `2026-10-06-cost-evidence-design` §D), migration
+            # `fr.artifacts.run_bound_model`. Additive, so stamp-only.
+            current_version=9,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,

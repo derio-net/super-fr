@@ -78,6 +78,17 @@ def _already_v7(text: str, data: object) -> bool:
     return True
 
 
+def _already_v8(text: str, data: object) -> bool:
+    """Does `text` read as a v8 cursor? Asked by the 8 -> 9 migration
+    (`fr.artifacts.run_bound_model`).
+
+    The same live-model question as `_already_v7`, kept in this one module
+    allowed to consult the live model for a migration, and correct for v8
+    only while 8 -> 9 stays additive (it adds `Attempt.tier`/`bound` and
+    removes nothing, so the live model is still a superset of v8)."""
+    return _already_v7(text, data)
+
+
 def split_usage(data: dict[str, Any]) -> tuple[dict[str, Any], list[Any]]:
     """`(v7 body, usage session entries)` — pure: no I/O, no clock.
 

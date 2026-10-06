@@ -38,8 +38,9 @@ def test_a_v7_cursor_is_stamped_eight_and_its_body_is_untouched(tmp_path: Path) 
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.failed == (), report.failed
-    assert read_version("run", cursor) == 8
-    assert cursor.read_text() == V7.replace("schema_version: 7", "schema_version: 8")
+    # The chain carries on through 8 -> 9 (`run_bound_model`), stamp-only too.
+    assert read_version("run", cursor) == 9
+    assert cursor.read_text() == V7.replace("schema_version: 7", "schema_version: 9")
     assert parse_run_state(cursor.read_text()).driver is None
 
 
