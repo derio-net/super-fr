@@ -31,7 +31,7 @@ from typing import Any, Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
 from fr.triage.batch import BatchStage
-from fr.triage.model import BATCH_ID_RE, Batch, IssueClaim
+from fr.triage.model import BATCH_ID_RE, Batch, Facts, IssueClaim
 
 CLAIM_PREFIX = "<!-- fr-claim:"
 RELEASED_PREFIX = "<!-- fr-claim-released:"
@@ -355,3 +355,15 @@ def held_line(key: str, h: Claim, now: datetime) -> str:
             "--batch <id> --yes`)"
         )
     return line
+
+
+def held_map(facts: Facts, me: str) -> dict[str, Claim]:
+    """Each open issue another scope's un-released claim holds, from facts (R5, R6).
+    Only open issues: collect reads no closed issue's comments."""
+    out: dict[str, Claim] = {}
+    for issue in facts.issues:
+        if issue.state == "open":
+            h = holder([from_issue_claim(c) for c in issue.claims], me)
+            if h is not None:
+                out[issue.key] = h
+    return out

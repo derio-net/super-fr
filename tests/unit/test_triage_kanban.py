@@ -6,6 +6,7 @@ clock, a forge or a runner.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, get_args
 
@@ -569,3 +570,87 @@ def test_the_board_pins_its_status_vocabulary() -> None:
 def test_the_board_module_imports_no_fr_dispatch() -> None:
     path = Path(kanban.__file__)
     assert forbidden_imports(path, "fr.triage", ("fr_dispatch",)) == []
+
+
+# ------------------------------------------- claims: held elsewhere, card expiry (R13)
+
+ME = "s-aaaaaaaa"
+OTHER = "s-bbbbbbbb"
+NOW = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
+
+
+def _claim(signer: str, batch_id: str, expires: str, cid: int = 1) -> dict[str, Any]:
+    return {
+        "signer": signer,
+        "batch": batch_id,
+        "claimed": "2026-10-05T12:00:00Z",
+        "heartbeat": "2026-10-05T12:00:00Z",
+        "expires": expires,
+        "comment_id": cid,
+        "created_at": "2026-10-05T12:00:00Z",
+    }
+
+
+def test_held_elsewhere_lists_issues_another_scope_claims_with_holder_batch_and_expiry() -> None:
+    f, jd = _world(
+        [batch("a", [1])],
+        [issue(1), issue(2, claims=[_claim(OTHER, "theirs", "2026-10-07T12:00:00Z")]), issue(3)],
+    )
+    board = build_board(f, jd, {}, me=ME, now=NOW)
+    (held,) = board.held
+    assert (held.key, held.title, held.holder, held.batch) == (
+        "widgets#2", "issue 2", OTHER, "theirs"
+    )  # fmt: skip
+    assert held.expires == datetime(2026, 10, 7, 12, 0, tzinfo=UTC) and held.expired is False
+    assert held.url and held.line.startswith("widgets#2 is claimed by triage scope")
+
+
+def test_an_expired_claim_is_marked_and_still_listed() -> None:
+    f, jd = _world([], [issue(2, claims=[_claim(OTHER, "theirs", "2026-10-06T08:00:00Z")])])
+    (held,) = build_board(f, jd, {}, me=ME, now=NOW).held
+    assert held.expired is True and "expired" in held.line
+
+
+def test_own_claims_and_closed_issues_are_not_held_elsewhere() -> None:
+    f, jd = _world(
+        [],
+        [
+            issue(1, claims=[_claim(ME, "mine", "2026-10-07T12:00:00Z")]),
+            issue(2, state="closed", claims=[_claim(OTHER, "t", "2026-10-07T12:00:00Z")]),
+        ],
+    )
+    assert build_board(f, jd, {}, me=ME, now=NOW).held == ()
+
+
+def test_without_a_scope_id_there_is_no_held_group_and_no_card_expiry() -> None:
+    f, jd = _world(
+        [batch("a", [1])], [issue(1, claims=[_claim(OTHER, "t", "2026-10-07T12:00:00Z")])]
+    )
+    board = build_board(f, jd, {})
+    assert board.held == () and board.card("a").claim_expiry is None
+
+
+def test_an_own_batch_card_carries_the_earliest_expiry_of_its_claims() -> None:
+    f, jd = _world(
+        [batch("a", [1, 2], wave=1)],
+        [
+            issue(1, claims=[_claim(ME, "a", "2026-10-07T12:00:00Z")]),
+            issue(2, claims=[_claim(ME, "a", "2026-10-06T18:00:00Z")]),
+        ],
+    )
+    expiry = build_board(f, jd, {}, me=ME, now=NOW).card("a").claim_expiry
+    assert expiry is not None
+    assert expiry.at == datetime(2026, 10, 6, 18, 0, tzinfo=UTC) and expiry.expired is False
+
+
+def test_an_own_expired_claim_marks_the_card_expiry_expired() -> None:
+    f, jd = _world([batch("a", [1])], [issue(1, claims=[_claim(ME, "a", "2026-10-06T09:00:00Z")])])
+    expiry = build_board(f, jd, {}, me=ME, now=NOW).card("a").claim_expiry
+    assert expiry is not None and expiry.expired is True
+
+
+def test_a_batch_with_no_own_claims_has_no_card_expiry() -> None:
+    f, jd = _world(
+        [batch("a", [1])], [issue(1, claims=[_claim(ME, "other-batch", "2026-10-07T12:00:00Z")])]
+    )
+    assert build_board(f, jd, {}, me=ME, now=NOW).card("a").claim_expiry is None

@@ -35,6 +35,7 @@ from fr.triage.batch_drive import (
     default_selection,
     drive_pass,
 )
+from fr.triage.claims import expired, from_issue_claim, held_line, held_map
 from fr.triage.merge_stops import MergeStop, live_stop
 from fr.triage.model import (
     Batch,
@@ -158,6 +159,28 @@ class EventRow:
 
 
 @dataclass(frozen=True)
+class ClaimExpiry:
+    """When this scope's earliest claim for a batch expires (R13), and whether it has."""
+
+    at: datetime
+    expired: bool
+
+
+@dataclass(frozen=True)
+class HeldIssue:
+    """An open issue of the scope that another scope's claim holds (R13)."""
+
+    key: str
+    title: str
+    url: str | None
+    holder: str
+    batch: str
+    expires: datetime
+    expired: bool
+    line: str  # `claims.held_line`: the same words the drive and the batch verbs use
+
+
+@dataclass(frozen=True)
 class Card:
     batch: Batch
     column: Column
@@ -183,6 +206,7 @@ class Card:
     harness: Setting
     model: Setting
     events: tuple[EventRow, ...]
+    claim_expiry: ClaimExpiry | None = None
 
 
 @dataclass(frozen=True)
@@ -197,6 +221,7 @@ class Board:
     scope: str
     collected_at: str
     columns: tuple[ColumnView, ...]
+    held: tuple[HeldIssue, ...] = ()
 
     def column(self, key: Column) -> ColumnView:
         return next(c for c in self.columns if c.key == key)
@@ -322,6 +347,7 @@ def _card(
     actions: Mapping[str, Action],
     selected: frozenset[str],
     stops: Mapping[str, MergeStop],
+    claim_expiry: ClaimExpiry | None = None,
 ) -> Card:
     column = column_of(batch, facts, batches)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
@@ -378,7 +404,36 @@ def _card(
         harness=_setting(launch.harness, default.harness),
         model=_setting(launch.model, default.model),
         events=tuple(sorted((_event_row(e) for e in batch.events), key=lambda e: e.at)),
+        claim_expiry=claim_expiry,
     )
+
+
+def _held_issues(facts: Facts, me: str, now: datetime) -> tuple[HeldIssue, ...]:
+    titles = {i.key: i for i in facts.issues}
+    return tuple(
+        HeldIssue(
+            key=key,
+            title=titles[key].title,
+            url=titles[key].url,
+            holder=h.signer,
+            batch=h.batch,
+            expires=h.expires,
+            expired=expired(h, now),
+            line=held_line(key, h, now),
+        )
+        for key, h in sorted(held_map(facts, me).items())
+    )
+
+
+def _own_expiries(facts: Facts, me: str, now: datetime) -> dict[str, ClaimExpiry]:
+    """The earliest expiry of this scope's claims per batch id."""
+    earliest: dict[str, datetime] = {}
+    for issue in facts.issues:
+        for raw in issue.claims:
+            c = from_issue_claim(raw)
+            if c.signer == me and (c.batch not in earliest or c.expires < earliest[c.batch]):
+                earliest[c.batch] = c.expires
+    return {b: ClaimExpiry(at, expired=at <= now) for b, at in earliest.items()}
 
 
 def live_stops(
@@ -400,18 +455,29 @@ def build_board(
     statuses: Mapping[str, BoardStatus],
     *,
     stops: Mapping[str, MergeStop] | None = None,
+    me: str | None = None,
+    now: datetime | None = None,
 ) -> Board:
     """One card per batch in seven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
-    batch's PR is open at the head it was recorded at."""
+    batch's PR is open at the head it was recorded at. *me* is this scope's id: with it
+    the board lists the issues other scopes hold and each card's claim expiry (R13); *now*
+    (the clock, passed in) marks expired ones."""
+    if me and now is None:
+        raise ValueError("build_board needs `now` (the clock is passed in) when given `me`")
+    expiries = _own_expiries(facts, me, now) if me and now else {}
     batches = judgements.batches
     actions = first_actions(facts, judgements)
     selected = default_selection(batches)
     live = live_stops(batches, facts, stops or {})
-    cards = [_card(b, facts, batches, statuses, actions, selected, live) for b in batches]
+    cards = [
+        _card(b, facts, batches, statuses, actions, selected, live, expiries.get(b.id))
+        for b in batches
+    ]
     cards.sort(key=lambda c: (c.batch.wave is None, c.batch.wave or 0, c.batch.id))
     columns = tuple(
         ColumnView(key, COLUMN_TITLES[key], tuple(c for c in cards if c.column == key))
         for key in COLUMNS
     )
-    return Board(scope=facts.scope, collected_at=facts.collected_at, columns=columns)
+    held = _held_issues(facts, me, now) if me and now else ()
+    return Board(scope=facts.scope, collected_at=facts.collected_at, columns=columns, held=held)

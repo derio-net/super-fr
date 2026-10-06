@@ -170,7 +170,7 @@ from fr.triage.claim_sync import (
     plan_sync,
     record_releases,
 )
-from fr.triage.claims import Claim, from_issue_claim, held_line, held_members, holder
+from fr.triage.claims import Claim, held_line, held_map, held_members
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
@@ -248,21 +248,9 @@ def _stalled_line(blocked: Sequence[str], held_by: Sequence[tuple[str, Sequence[
     return "stopped: only held or blocked batches remain; " + "; ".join(parts)
 
 
-def _held_map(facts: Facts, me: str) -> dict[str, Claim]:
-    """Each open issue another scope's un-released claim holds, from facts (R5, R6).
-    Only open issues: collect reads no closed issue's comments."""
-    out: dict[str, Claim] = {}
-    for issue in facts.issues:
-        if issue.state == "open":
-            h = holder([from_issue_claim(c) for c in issue.claims], me)
-            if h is not None:
-                out[issue.key] = h
-    return out
-
-
 def _refuse_held(env: ClaimEnv, keys: Iterable[str], what: str) -> None:
     """Exit 2, nothing written, when another scope holds any of *keys* (R5, R6)."""
-    found = held_members(keys, _held_map(env.facts, env.me))
+    found = held_members(keys, held_map(env.facts, env.me))
     if found:
         now = _now()
         _fail(
@@ -685,7 +673,7 @@ def batch_cancel_command(
     env = claim_env(target, facts)
     # R6: a member another scope holds keeps its fr:in-progress label and comments;
     # they are its holder's. This scope's own claims are released (R10).
-    held = {k for k, _ in held_members(batch.ids, _held_map(facts, env.me))}
+    held = {k for k, _ in held_members(batch.ids, held_map(facts, env.me))}
     owes = batch.wave is not None or any(e.kind == "dispatch" for e in batch.events)
     claimed = any(_own_claim_batch(facts, k, env.me) for k in batch.ids)
     releases = owes or claimed
@@ -2082,7 +2070,7 @@ class _Driver:
         keys = {k for b in judgements.batches for k in b.ids}
         return {
             "me": env.me,
-            "held": dict(held_members(sorted(keys), _held_map(facts, env.me))),
+            "held": dict(held_members(sorted(keys), held_map(facts, env.me))),
             "claims_owed": owed("claim"),
             "refresh_owed": owed("refresh"),
             "releases_owed": owed("release"),

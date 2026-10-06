@@ -489,3 +489,23 @@ def test_a_count_of_batches_is_spelled_batches(tmp_path: Path) -> None:
 
     assert plural(2, "batch") == "2 batches" and plural(1, "batch") == "1 batch"
     assert plural(2, "repo") == "2 repos"
+
+
+def test_write_board_shows_what_another_scope_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    monkeypatch.setenv("FR_HOST_ID", "host-x")
+    _use(monkeypatch, _Inspector())
+    facts_path = tmp_path / "facts.json"
+    data = json.loads(facts_path.read_text(encoding="utf-8"))
+    data["issues"][0]["claims"] = [
+        {
+            "signer": "s-bbbbbbbb", "batch": "theirs", "claimed": "2026-10-05T12:00:00Z",
+            "heartbeat": "2026-10-05T12:00:00Z", "expires": "2999-01-01T00:00:00Z",
+            "comment_id": 1, "created_at": "2026-10-05T12:00:00Z",
+        }
+    ]  # fmt: skip
+    facts_path.write_text(json.dumps(data), encoding="utf-8")
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    assert "Held elsewhere" in path.read_text(encoding="utf-8")

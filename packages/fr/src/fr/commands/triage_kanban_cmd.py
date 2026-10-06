@@ -46,11 +46,13 @@ from fr.triage.batch_drive import (
     wave_group,
 )
 from fr.triage.drive_lock import live_driver
+from fr.triage.errors import TriageError
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Judgements, Scope, state_dir
 from fr.triage.render import plural
+from fr.triage.scope_config import scope_id
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
@@ -286,11 +288,17 @@ def write_board(
     on disk now, with live session statuses. Returns the path written and its card count."""
     _, facts, judgements = _load_state(scope, target)
     statuses, notes = session_statuses(judgements, facts, prefix=prefix)
-    board = build_board(facts, judgements, statuses, stops=load_stops(target))
+    now = datetime.now(UTC)
+    try:
+        me: str | None = scope_id(facts.scope)
+    except TriageError as exc:  # the board is a view: say what it cannot show, never refuse
+        me = None
+        notes.append(f"claims are not shown: {one_line(exc)}")
+    board = build_board(facts, judgements, statuses, stops=load_stops(target), me=me, now=now)
     page = render_board(
         board,
         scope_args=scope_args,
-        rendered_at=datetime.now(UTC),
+        rendered_at=now,
         refresh=refresh,
         notes=notes,
     )
