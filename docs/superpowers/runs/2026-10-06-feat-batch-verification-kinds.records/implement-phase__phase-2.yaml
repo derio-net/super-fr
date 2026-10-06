@@ -18,7 +18,7 @@ journal:
   - kind: decision
     id: p2-live-row-refuses-v3-spelling
     phase: 2
-    title: the live Row/AcceptanceItem refuse `verify: post-merge`; resolution is checked where the repo is known
+    title: "the live Row/AcceptanceItem refuse `verify: post-merge`; resolution is checked where the repo is known"
     body: |
       `verify` is a StrictStr, but the live models refuse the v3 spelling by name (pointing at
       `fr migrate artifacts --yes`), so a body still carrying it is visibly not v4 — which is
@@ -28,7 +28,7 @@ journal:
   - kind: decision
     id: p2-record-migration-rewrites-post-merge
     phase: 2
-    title: record 7 -> 8 rewrites a v7 acceptance entry's `verify: post-merge` to `live` instead of refusing it
+    title: "record 7 -> 8 rewrites a v7 acceptance entry's `verify: post-merge` to `live` instead of refusing it"
     body: |
       The spec calls the record hop stamp-only because "every v7 record is a valid v8 record".
       That is false for exactly one shape: an acceptance entry saying `verify: post-merge`,
@@ -40,7 +40,7 @@ journal:
   - kind: decision
     id: p2-one-forge-command-table
     phase: 2
-    title: hostclient.FORGE_COMMANDS holds PR and issue ops; PR_COMMANDS / ISSUE_COMMANDS are views
+    title: "hostclient.FORGE_COMMANDS holds PR and issue ops; PR_COMMANDS / ISSUE_COMMANDS are views"
     body: |
       One per-backend table, so a backend cannot gain a PR verb and lack an issue verb.
       issue_command(repo_root, op, ref=owner/repo#n, comment=, label=) adds `--repo owner/repo`
@@ -50,7 +50,7 @@ journal:
   - kind: decision
     id: p2-spec-verification-seam
     phase: 2
-    title: fr.verification.rows.SpecVerification binds a spec's section + shape default for every consumer
+    title: "fr.verification.rows.SpecVerification binds a spec's section + shape default for every consumer"
     body: |
       pr_body, run/visual, plan self-review and acceptance/walks all get a row's effective
       strategy through SpecVerification (which calls effective_strategy / is_post_merge);
@@ -62,7 +62,7 @@ journal:
   - kind: discovery
     id: p2-set-status-scenario
     phase: 2
-    title: set-status also takes --scenario (phase 7 P7.T1 sets scenarios through `fr acceptance`)
+    title: "set-status also takes --scenario (phase 7 P7.T1 sets scenarios through `fr acceptance`)"
     body: |
       §E lists only --issue and --walk for set-status, but phase 7 says "use the scenario
       field through `fr acceptance` once P2 added it" and self-review now tells the operator
@@ -70,7 +70,7 @@ journal:
   - kind: discovery
     id: p2-self-review-scenarios-owed
     phase: 2
-    title: self-review of this plan now errors on six candidate rows with no scenario — owed by phase 7
+    title: "self-review of this plan now errors on six candidate rows with no scenario — owed by phase 7"
     body: |
       With the Verification checks live, `fr plan self-review` on this plan reports
       verification-strategy-resolution, shipped-verification-strategies,
@@ -81,7 +81,7 @@ journal:
   - kind: discovery
     id: p2-stray-r1-records-dir
     phase: 2
-    title: an empty untracked docs/superpowers/runs/r1.records/ sits in the worktree, created before this phase
+    title: "an empty untracked docs/superpowers/runs/r1.records/ sits in the worktree, created before this phase"
     body: |
       Timestamped 13:25, before phase 2 began; empty and untracked, so git does not see it.
       Some test appears to create it against the repo rather than tmp_path; not traced.
@@ -89,7 +89,7 @@ journal:
     id: p2-tea-remove-labels
     phase: 2
     review_scope: out
-    title: the spec says tea has no unlabel command, but the installed tea's `issues edit` has --remove-labels
+    title: "the spec says tea has no unlabel command, but the installed tea's `issues edit` has --remove-labels"
     body: |
       `tea issues edit --help` (homebrew tea on the operator host) lists `--add-labels` and
       `--remove-labels`. The implementation follows the spec (a manual line for tea's
