@@ -14,3 +14,8 @@ Against origin/main 37724ada, `shared_closing_keywords`: 'fix colour #123' -> re
 ### e1 · finding [open] · Live: GitHub never links a keyword across a line break, but a wrapped ref list leaves its tail open
 
 Probed 2026-10-06 on draft PR #1032 by editing its body and reading closingIssuesReferences (only the batch's own issues referenced): 'Closes #869 and #868' -> [869]; 'fix colour #868' -> []; 'Closes\n#868' -> []; 'Closes:\n#868' -> []; 'Closes #869,\n#868' -> [869]; 'Closes\n\n#868' -> []; 'Closes#868' -> []. So a keyword split from its FIRST ref closes nothing (line-scoped reading is right there, the same as #868's prose), while a ref LIST wrapped onto the next line closes its first ref only and the gate never sees the rest: that is #869's real hole. Same cause as h1.
+
+<!-- fr:journal kind=ruled-out scope=debug id=h0 created=2026-10-06T16:40:00+00:00 -->
+### h0 · ruled-out · Ruled out: scanning whole paragraphs instead of lines
+
+A soft break renders as a space, so reading a paragraph as one line looks faithful, but under the strict rule it would refuse 'Closes #1\nRefs #2', the shape this repo's own PR bodies use (#860's did). The continuation must be narrower: a closing line whose tail after its last ref is only list separators, followed by a line that begins with a ref.
