@@ -178,7 +178,7 @@ def test_take_refuses_when_no_other_scope_holds_the_issue(gh: FakeGhClient) -> N
 
 
 def test_an_own_marker_the_trusted_set_does_not_cover_is_refused(gh: FakeGhClient) -> None:
-    with pytest.raises(cw.ClaimError, match="not an allowed author"):
+    with pytest.raises(cw.ClaimError, match="neither the viewer"):
         cw.claim(gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=frozenset())
 
 

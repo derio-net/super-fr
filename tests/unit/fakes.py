@@ -59,6 +59,7 @@ class FakeGhClient:
         self.next_comment_id: int = 1000
         self.comment_created_at: str = "2026-09-26T00:00:00Z"
         self.comment_author: str = "operator"  # the login triage facts name as viewer
+        self.comment_association: str = "NONE"  # GitHub's authorAssociation (R17)
 
     # ---- preload helpers (test setup) ----
 
@@ -173,6 +174,7 @@ class FakeGhClient:
         self.next_comment_id += 1
         self.issue_comments.setdefault((repo, number), []).append(
             {
+                "association": self.comment_association,
                 "author": self.comment_author,
                 "body": body,
                 "created_at": self.comment_created_at,

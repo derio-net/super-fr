@@ -689,3 +689,19 @@ def test_collect_ignores_an_untrusted_authors_marker() -> None:
 def test_collected_facts_are_schema_6() -> None:
     facts = collect_facts(_claim_forge({}), SUPER_FR, now=NOW)
     assert facts.to_json()["schema"] == 6
+
+
+def test_collect_counts_a_peer_hosts_marker_by_a_repo_member() -> None:
+    """p1-r1: two hosts on different accounts see each other's claims."""
+    peer = {
+        "author": "other-host-account",
+        "association": "MEMBER",
+        "body": _CLAIM,
+        "created_at": "2026-10-01T00:00:00Z",
+        "id": 3,
+    }
+    forge = _claim_forge({("derio-net/super-fr", 1): [peer]})
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    assert [c.signer for c in next(i for i in facts.issues if i.number == 1).claims] == [
+        "s-22222222"
+    ]

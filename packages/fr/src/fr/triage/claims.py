@@ -11,8 +11,10 @@ JSON does not parse or match the model is ignored and counted, never read as a c
 
 Only markers whose comment author is trusted count (R17): anyone who can comment could
 post one, and under R4 a stranger's back-dated marker would otherwise hold the issue
-against every scope. *trusted* is the repo's allowed authors
-(`fr.triage.batch.allowed_authors`), compared case-insensitively.
+against every scope. A marker counts when its author is in *trusted* (the viewer and the
+repo's `pr_authors`, `fr.triage.batch.claim_authors`, compared case-insensitively), or
+when the forge reports the comment's author association as OWNER, MEMBER or COLLABORATOR:
+a host on another account of the same org or repo is a peer, a stranger is not.
 
 Everything here is pure: comments in, decisions out, the clock passed in. The writes are
 `fr.triage.claim_writes`'s.
@@ -37,6 +39,9 @@ _SUFFIX = " -->"
 SCOPE_ID_PATTERN = r"^s-[0-9a-f]{8}$"
 # The stages from which a wave-less batch owes claims (R3): dispatched on.
 _DISPATCHED_ON: frozenset[str] = frozenset({"dispatched", "pr-open", "merged", "partial"})
+# The author associations (GitHub's `authorAssociation`) whose markers count whoever the
+# author is (R17): the repo's owner, its org's members and its collaborators.
+TRUSTED_ASSOCIATIONS: frozenset[str] = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 
 
 class MarkerError(ValueError):
@@ -168,6 +173,14 @@ def _created(comment: Mapping[str, object]) -> datetime | None:
     return at if at.tzinfo else at.replace(tzinfo=UTC)
 
 
+def trusted_author(comment: Mapping[str, object], allowed: Collection[str]) -> bool:
+    """R17: *comment*'s author is in *allowed* (lowercased logins), or its association
+    with the repo is OWNER, MEMBER or COLLABORATOR."""
+    if str(comment.get("author") or "").lower() in allowed:
+        return True
+    return str(comment.get("association") or "").upper() in TRUSTED_ASSOCIATIONS
+
+
 def read_claims(comments: Iterable[Mapping[str, object]], trusted: Collection[str]) -> ClaimRead:
     """Every signer's latest marker; the un-released ones are the claims (live or expired).
 
@@ -182,7 +195,7 @@ def read_claims(comments: Iterable[Mapping[str, object]], trusted: Collection[st
         except MarkerError:
             malformed += 1
             continue
-        if marker is not None and str(comment.get("author") or "").lower() not in allowed:
+        if marker is not None and not trusted_author(comment, allowed):
             untrusted += 1
             continue
         cid, created = comment.get("id"), _created(comment)

@@ -218,6 +218,7 @@ class TestIssueComments:
         got = RealGhClient().list_issue_comments("o/r", 7)
         assert [c["id"] for c in got] == [123, None, None]
         assert got[0] == {
+            "association": "",
             "author": "a",
             "body": "x",
             "created_at": "2026-10-06T10:00:00Z",

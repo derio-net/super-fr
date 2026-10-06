@@ -387,8 +387,19 @@ class TriageConfig(_Strict):
 def trusted_logins(config: TriageConfig, viewer: str | None) -> frozenset[str]:
     """The logins a repo trusts, lowercased (gh#936, triage-claims R17): its
     `pr_authors` when it lists any, else *viewer* (the user `collect` ran as). Empty
-    when neither is known, so nothing is trusted. Guards both batch PRs and claims."""
+    when neither is known, so nothing is trusted. Guards batch PRs; claims use
+    `claim_trusted`."""
     logins = config.pr_authors or ([viewer] if viewer else [])
+    return frozenset(login.lower() for login in logins)
+
+
+def claim_trusted(config: TriageConfig, viewer: str | None) -> frozenset[str]:
+    """The logins whose claim markers count on a repo, lowercased (triage-claims R17):
+    *viewer* (the user `collect` ran as) AND the repo's `pr_authors`. Unlike
+    `trusted_logins`, a `pr_authors` list never drops the viewer, or this host's own
+    claims would not count. Author association (OWNER/MEMBER/COLLABORATOR) is the other
+    half of R17, read per comment by `fr.triage.claims.read_claims`."""
+    logins = [*config.pr_authors, *([viewer] if viewer else [])]
     return frozenset(login.lower() for login in logins)
 
 

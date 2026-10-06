@@ -107,8 +107,8 @@ def claim(
             client.edit_issue_comment(repo, posted, _released(marker, now))
         raise ClaimError(
             f"{repo}#{number}: this scope's marker was posted as `{author or 'unknown'}`, "
-            "which is not an allowed author (`pr_authors` in .fr/triage.yaml), so no reader "
-            "would count it; it was withdrawn"
+            "which is neither the viewer, a `pr_authors` login (.fr/triage.yaml) nor the repo's "
+            "owner, a member or a collaborator, so no reader would count it; it was withdrawn"
         )
     rival = holder(claims, me)
     own = _own(claims, me)

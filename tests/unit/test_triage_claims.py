@@ -268,3 +268,36 @@ def test_author_comparison_is_case_insensitive() -> None:
     c = _comment(render_marker(_marker(OTHER)), 1, author="Derio-Bot")
     assert [x.signer for x in claims_from_comments([c], frozenset({"derio-bot"}))] == [OTHER]
     assert [x.signer for x in claims_from_comments([c], frozenset({"DERIO-BOT"}))] == [OTHER]
+
+
+# ------------------------------------------- R17 by author association (review p1-r1/p1-r2)
+
+
+@pytest.mark.parametrize("association", ["OWNER", "MEMBER", "COLLABORATOR", "member"])
+def test_a_marker_by_a_repo_owner_member_or_collaborator_counts(association: str) -> None:
+    c = _comment(render_marker(_marker(OTHER)), 1, author="peer-host-account")
+    c["association"] = association
+    read = read_claims([c], TRUSTED)
+    assert [x.signer for x in read.claims] == [OTHER]
+    assert read.untrusted == 0
+
+
+@pytest.mark.parametrize(
+    "association", ["NONE", "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "MANNEQUIN", ""]
+)
+def test_a_strangers_marker_on_a_public_repo_is_ignored_and_counted(association: str) -> None:
+    forged = _comment(render_marker(_marker(OTHER, at=T0 - DAY)), 1, T0 - DAY, author="stranger")
+    forged["association"] = association
+    read = read_claims([forged], TRUSTED)
+    assert read.claims == [] and read.untrusted == 1
+
+
+def test_claim_trust_is_the_viewer_and_pr_authors_together() -> None:
+    """p1-r2: listing pr_authors never drops the viewer's own claims; the merge guard
+    (`trusted_logins`) keeps its replace semantics."""
+    from fr.triage.model import TriageConfig, claim_trusted, trusted_logins
+
+    config = TriageConfig(pr_authors=["Release-Bot"])
+    assert claim_trusted(config, "Operator") == frozenset({"release-bot", "operator"})
+    assert claim_trusted(TriageConfig(), None) == frozenset()
+    assert trusted_logins(config, "Operator") == frozenset({"release-bot"})

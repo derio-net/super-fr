@@ -40,10 +40,10 @@ from fr.triage.model import (
     TriageConfig,
     Truncation,
     Unviewed,
+    claim_trusted,
     issue_key,
     normalize_key,
     parse_triage_config,
-    trusted_logins,
 )
 from fr.triage.stage import pr_rank
 
@@ -465,7 +465,7 @@ def collect_facts_counted(
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
             repo_config, dropped = _read_config(forge, repo, lenient=lenient)
-            trusted = trusted_logins(repo_config or TriageConfig(), viewer)
+            trusted = claim_trusted(repo_config or TriageConfig(), viewer)
             for raw in issues:
                 at, found = _comment_facts(forge, repo, raw, trusted)
                 if at:

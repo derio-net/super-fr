@@ -17,7 +17,7 @@ from typing import Literal
 from fr.ghclient import GhClient
 from fr.hostclient import FORGE_ERRORS
 from fr.triage import claim_writes as cw
-from fr.triage.batch import BatchStage, allowed_authors, closeout_state, derive_batch_stage
+from fr.triage.batch import BatchStage, claim_authors, closeout_state, derive_batch_stage
 from fr.triage.claims import (
     Claim,
     from_issue_claim,
@@ -54,7 +54,7 @@ class ClaimEnv:
         return self._clients[owner_repo]
 
     def trusted(self, owner_repo: str) -> frozenset[str]:
-        return allowed_authors(owner_repo, self.facts)
+        return claim_authors(owner_repo, self.facts)
 
     def owner_repo(self, key: str) -> str | None:
         """The OWNER/REPO of judgement key *key* in this scope, from the facts."""

@@ -26,10 +26,14 @@ board after each pass, through a command the operator configures for that scope.
 ### Non-goals
 
 - Security. Anyone who can comment on an issue could post a marker, so only the
-  markers of allowed authors count (R17). The allowlist still makes a claim a
-  coordination mark between trusted actors, not a security boundary against
-  them: any allowed author can forge or delete one. "Signed" means "names its
-  signer". The PR-author allowlist (`pr_authors`) still guards merging.
+  markers of trusted authors count (R17): the viewer, the repo's `pr_authors`,
+  and the repo's owner, members and collaborators (by the comment's author
+  association). A stranger's marker on a public repo (association NONE,
+  CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR, ...) is ignored and counted. Trust still
+  makes a claim a coordination mark between trusted actors, not a security
+  boundary against them: any trusted author can forge or delete one. "Signed"
+  means "names its signer". The PR-author allowlist (`pr_authors`, default the
+  viewer) still guards merging, unchanged.
 - Exclusive judging. Two scopes may rank the same issue differently; only acting
   on it is exclusive.
 - Automatic take-over of an expired claim (operator decision, §2.2).
@@ -58,7 +62,7 @@ R13. `board.html` shows a "Held elsewhere" group listing the scope's issues clai
 R14. A scope may carry a scope config, `<state dir>/scope.yaml`, with `claim_expiry_hours`, `board_name` and `publish`. `publish` is an argument list with `{board}`, `{name}` and `{scope_id}` placeholders. fr runs it after every `drive --yes` pass that rendered the board, and for each render of `fr triage board --publish` (each `--watch` iteration included), with a 120-second timeout. A failure or timeout warns once per cause and never changes an exit code. The default board name is `<repo> batches` for a repo scope, `<owner> batches` for an org scope, and `<scope name> batches` for a group scope.
 R15. The host id and the scope config never leave the host: they are not durable triage state, `fr triage state export` never copies them, and no target repo carries them.
 R16. The fr-triage skill documents claims, the scope config and publishing, in its canonical source and both generated mirrors.
-R17. A claim marker counts only when its comment's author is one of the issue repo's allowed authors — `pr_authors` in its `.fr/triage.yaml`, default the user `collect` ran as (`Facts.viewer`), the allowlist that already guards merging. A marker by anyone else is ignored and counted, never treated as a claim, and never wins R4.
+R17. A claim marker counts only when its comment's author is trusted on the issue's repo: the user `collect` ran as (`Facts.viewer`), OR a login in the repo's `pr_authors` (`.fr/triage.yaml`; for claims the list ADDS to the viewer, it never replaces it), OR an author the forge reports as the repo's OWNER, a MEMBER of its org or a COLLABORATOR (`authorAssociation`), logins compared case-insensitively. Hosts on different accounts of one org therefore see each other's claims. A marker by anyone else — a stranger commenting on a public repo — is ignored and counted (collect warns with the count), never treated as a claim, and never wins R4. The merge guard's `pr_authors` semantics (a list replaces the viewer) are unchanged.
 
 ## 2. Background (verified at 5c4edd18e)
 
@@ -158,8 +162,10 @@ counted (a `warn` once per issue), never treated as a claim.
 - `claims_from_comments(comments, trusted: frozenset[str]) -> list[Claim]`: every
   signer's latest un-released marker, live or expired, dropping a signer whose
   latest marker is a released one. Only comments whose `author` is in *trusted*
-  (the repo's allowed authors, compared case-insensitively) are read; any other
-  author's marker is ignored and counted, like a malformed one (R17).
+  (the viewer plus the repo's `pr_authors`, `claim_trusted`, compared
+  case-insensitively) or whose `association` is OWNER, MEMBER or COLLABORATOR are
+  read; any other author's marker is ignored and counted, like a malformed one
+  (R17).
 - `expired(claim, now)`, `holder(claims, me)` (the winning claim when it is
   another scope's, else None: expiry never changes who holds, R4),
   `winner(claims)` (oldest `created_at`, then lowest comment id), and
@@ -183,7 +189,8 @@ counted (a `warn` once per issue), never treated as a claim.
 - `list_issue_comments` adds `id`: the numeric id parsed from each comment's
   `url` (`#issuecomment-<n>`); gh's `--json comments` already returns `url`. A
   comment whose url does not carry one gets `id: None`, and a claim cannot be
-  read from it.
+  read from it. It also adds `association`, gh's `authorAssociation` (`""` when
+  absent), which R17 reads.
 - `edit_issue_comment(repo, comment_id, body)`: `gh api -X PATCH
   repos/<repo>/issues/comments/<id> -f body=<body>`. glab and tea raise
   `UnsupportedForgeOperation`, like the other batch methods.

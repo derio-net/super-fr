@@ -339,6 +339,8 @@ class RealGhClient:
         raw: dict[str, Any] = json.loads(out) if out else {}
         return [
             {
+                # R17 (triage-claims): OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR, NONE, ...
+                "association": c.get("authorAssociation") or "",
                 "author": (c.get("author") or {}).get("login", ""),
                 "body": c.get("body", ""),
                 "created_at": c.get("createdAt", ""),

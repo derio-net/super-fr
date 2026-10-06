@@ -54,7 +54,12 @@ def test_list_issue_comments_returns_body_author_and_created_at(
 ) -> None:
     raw = {
         "comments": [
-            {"author": {"login": "a"}, "body": "first", "createdAt": "2026-09-25T10:00:00Z"},
+            {
+                "author": {"login": "a"},
+                "authorAssociation": "MEMBER",
+                "body": "first",
+                "createdAt": "2026-09-25T10:00:00Z",
+            },
             {"author": {"login": "b"}, "body": "second", "createdAt": "2026-09-26T10:00:00Z"},
         ]
     }
@@ -63,8 +68,20 @@ def test_list_issue_comments_returns_body_author_and_created_at(
     comments = RealGhClient().list_issue_comments(REPO, 577)
 
     assert comments == [
-        {"author": "a", "body": "first", "created_at": "2026-09-25T10:00:00Z", "id": None},
-        {"author": "b", "body": "second", "created_at": "2026-09-26T10:00:00Z", "id": None},
+        {
+            "association": "MEMBER",
+            "author": "a",
+            "body": "first",
+            "created_at": "2026-09-25T10:00:00Z",
+            "id": None,
+        },
+        {
+            "association": "",
+            "author": "b",
+            "body": "second",
+            "created_at": "2026-09-26T10:00:00Z",
+            "id": None,
+        },
     ]
     assert fake.calls == [["issue", "view", "577", "--repo", REPO, "--json", "comments"]]
 
