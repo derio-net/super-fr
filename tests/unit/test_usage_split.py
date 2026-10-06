@@ -353,6 +353,14 @@ def test_a_refresh_reprices_an_existing_split_and_never_adds_one(
     bare = session_entry(unpriced, windows)  # an old entry that never had a split
     again = _refresh(monkeypatch, bare)
     assert again.steps_by_role == {} and again.units == {}
+    # a v1 archived file is re-priced, never re-shaped: steps keep the v1 figure shape
+    assert again.steps and all(
+        (f.input, f.cache_write, f.cache_read, f.output) == (None,) * 4
+        for f in again.steps.values()
+    )
+    assert all(f.usd is not None for f in again.steps.values())
+    # while the split-keeping case keeps its tokens
+    assert all(f.output is not None for f in after.steps.values())
     assert all(m.usd is not None for m in again.models.values())
 
 
@@ -414,3 +422,39 @@ def test_each_unit_role_dollars_are_the_sum_of_its_messages_dollars() -> None:
     assert actual.keys() == expected.keys()
     for key, usd in expected.items():
         assert actual[key] == pytest.approx(usd), key
+
+
+def test_a_refreshed_v1_file_validates_and_writes_no_token_fields_on_steps(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    import fr.usage.backfill as backfill
+    from fr.artifacts.structure import validate_usage
+    from fr.usage.capture import this_host
+    from fr.usage.file import Capture, UsageFile, dump_usage, upsert_capture
+
+    env = {"FR_HOSTNAME": "somewhere"}
+    monkeypatch.setattr(backfill, "read_session", lambda *a, **k: _record(MESSAGES, usd=3.0))
+    bare = session_entry(_record(MESSAGES, usd=None), windows_from_cursor(CURSOR))
+    capture = Capture(
+        host=this_host("r", env),
+        harness="claude-code",
+        mode="host-worktree",
+        captured_at="2026-10-06T12:00:00+00:00",
+        at=("closeout",),
+        sessions=(bare,),
+    )
+    usage = upsert_capture(UsageFile(schema_version=1, run="r"), capture)
+    refreshed = backfill.refreshed_file(
+        usage, {**UNIT_CURSOR, "steps": {**UNIT_CURSOR["steps"], **CURSOR["steps"]}}, env
+    )
+    assert refreshed is not None
+    text = dump_usage(refreshed)
+    assert text.startswith("schema_version: 1")
+    import yaml
+
+    steps = yaml.safe_load(text)["captures"][0]["sessions"][0]["steps"]
+    assert steps and all(set(f) == {"usd", "turns"} for f in steps.values())
+    path = tmp_path / "docs" / "superpowers" / "usage" / "r.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(text)
+    assert validate_usage(path) == []

@@ -35,6 +35,7 @@ import yaml
 from fr.usage.file import (
     NO_SESSION_FOUND,
     Capture,
+    Figure,
     SessionEntry,
     UsageFile,
     archived_usage_path,
@@ -103,6 +104,13 @@ def _now() -> str:
     return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
 
 
+def _v1_steps(entry: SessionEntry) -> SessionEntry:
+    """`entry` with `steps` figures reduced to usd and turns: an archived file
+    still stamped version 1 is re-priced, never re-shaped."""
+    steps = {name: Figure(usd=f.usd, turns=f.turns) for name, f in entry.steps.items()}
+    return entry.model_copy(update={"steps": steps})
+
+
 def refreshed_file(
     usage: UsageFile, raw: dict[str, Any], env: Mapping[str, str]
 ) -> UsageFile | None:
@@ -129,6 +137,8 @@ def refreshed_file(
                 # the split is re-priced, never lost; an entry without one stays so
                 keep = index if (entry.steps_by_role or entry.units) else None
                 entry = session_entry(record, windows, keep, rekey=units)
+                if keep is None:
+                    entry = _v1_steps(entry)
         sessions.append(entry)
     if tuple(sessions) == mine.sessions:
         return None
