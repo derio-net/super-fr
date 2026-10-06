@@ -105,7 +105,11 @@ def test_scope_config_reads_its_keys(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     cfg = load_scope_config(tmp_path)
-    assert (cfg.claim_expiry_hours, cfg.board_name, cfg.publish) == (6, "My board", ["echo", "{board}"])
+    assert (cfg.claim_expiry_hours, cfg.board_name, cfg.publish) == (
+        6,
+        "My board",
+        ["echo", "{board}"],
+    )
 
 
 @pytest.mark.parametrize(

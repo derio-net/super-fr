@@ -577,6 +577,21 @@ class ConflictEvent(_Strict):
     handle: str | None = None
 
 
+class ClaimsReleasedEvent(_Strict):
+    """This scope released its claims on *keys*, members of this batch (spec
+    2026-10-06-triage-claims §3.H, R10), so a later pass owes them nothing. Needs
+    judgements schema 6. Written by the engine only."""
+
+    kind: Literal["claims_released"]
+    at: AwareDatetime
+    keys: list[str] = Field(min_length=1)
+
+    @field_validator("keys")
+    @classmethod
+    def _keys_are_keys(cls, v: list[str]) -> list[str]:
+        return _keys(v, "claims_released keys")
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -584,7 +599,12 @@ SCHEMA_5_EVENTS = frozenset({"conflict"})
 
 
 BatchEvent = Annotated[
-    DispatchEvent | CancelEvent | CloseoutEvent | PostMergeEvent | ConflictEvent,
+    DispatchEvent
+    | CancelEvent
+    | CloseoutEvent
+    | PostMergeEvent
+    | ConflictEvent
+    | ClaimsReleasedEvent,
     Field(discriminator="kind"),
 ]
 
