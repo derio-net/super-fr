@@ -4915,9 +4915,17 @@ rows:
       existing target branch, missing version reservation) before writing anything
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_without_yes_the_full_plan_prints_and_nothing_changes
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_working_agent_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_worktree_rename_refuses_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_an_unrelated_remote_batch_branch_is_refused
+      - super-fr:tests/unit/test_isolation_branch_rename.py#test_a_worktree_mid_rebase_is_refused
+    status: ci
+    notes: Every R9 refusal is a unit test over fakes asserting nothing written (judgements
+      bytes, forge, git, runner); the dry run prints the full plan. A missing version
+      source refuses through the dispatch path's reservation.
   - id: triage-batch-adopt-list
     capability: Backlog triage
     acceptance: An operator can list every running herdr session with the issue refs
