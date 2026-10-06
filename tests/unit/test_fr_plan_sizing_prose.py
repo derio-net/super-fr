@@ -51,7 +51,7 @@ def test_fr_plan_tells_the_planner_to_record_an_ask_split_for_each_later_phase()
 def test_fr_plan_makes_a_verification_step_a_test_plan_line() -> None:
     text = _flat(FR_PLAN)
     assert "Test Plan line" in text
-    assert "verify: post-merge" in text
+    assert "verify: live" in text
 
 
 def test_fr_plan_folds_the_skeleton_into_the_first_asks_phase() -> None:
