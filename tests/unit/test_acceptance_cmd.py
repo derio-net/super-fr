@@ -228,8 +228,8 @@ def test_archived_ref_downgrades_to_warning(
     spec.rename(dest)
     result = run_check(root, monkeypatch)
     assert result.exit_code == 0, result.output
-    assert "moved to" in result.output
-    assert "update the matrix ref when convenient" in result.output
+    assert "names an archived path" in " ".join(result.output.split())
+    assert "retarget it" in " ".join(result.output.split())
 
 
 def test_staleness_uncited_test_plan_spec_errors(

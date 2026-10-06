@@ -85,4 +85,32 @@ def test_check_survives_debug_journal_archive(
 
     result = run_check(root, monkeypatch)
     assert result.exit_code == 0, result.output
-    assert "moved to" in result.output
+    assert "names an archived path" in " ".join(result.output.split())
+
+
+# ── R7: the reworded warning, and plan-dir refs stay errors ─────────────────
+
+
+def test_twin_warning_says_the_ref_survived_an_archive_fr_did_not_perform(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(origin='"own:docs/superpowers/specs/s.md"'))
+    (root / "docs/superpowers/specs/s.md").rename(root / "docs/superpowers/implemented/specs/s.md")
+    result = run_check(root, monkeypatch)
+    assert result.exit_code == 0, result.output
+    flat = " ".join(result.output.split())
+    assert "names an archived path" in flat
+    assert "docs/superpowers/implemented/specs/s.md" in flat
+    assert "survived an archive fr did not perform; retarget it" in flat
+
+
+def test_a_stale_plan_dir_ref_is_still_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(origin='"own:docs/superpowers/plans/p1/_meta.yaml"'))
+    done = root / "docs/superpowers/implemented/plans/p1"
+    done.mkdir(parents=True)
+    (done / "_meta.yaml").write_text("x: 1\n")
+    result = run_check(root, monkeypatch)
+    assert result.exit_code == 1, result.output
+    assert "ref does not resolve" in result.output
