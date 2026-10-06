@@ -3,7 +3,7 @@ run: 2026-10-06-feat-batch-triage-dedupe
 workflow: fr-goal@1
 branch: feat/batch-triage-dedupe
 started: '2026-10-06T06:34:30+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -85,6 +85,10 @@ steps:
           visual: triage-dedupe-board:4:23d282c3c6f9
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8,p1-r9,p1-r10,p1-o1
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-06T09:00:02+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-o1
   deliver:
     state: pending
