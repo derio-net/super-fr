@@ -38,6 +38,7 @@ from fr.usage.file import (
     SessionEntry,
     UsageFile,
     archived_usage_path,
+    current_usage_schema_version,
     dump_usage,
     load_usage,
     session_entry,
@@ -177,7 +178,11 @@ def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
                 at=("backfill",),
                 sessions=tuple(_entries(raw, env)),
             )
-            text = dump_usage(UsageFile(run=run_id, captures=(capture,)))
+            text = dump_usage(
+                UsageFile(
+                    schema_version=current_usage_schema_version(), run=run_id, captures=(capture,)
+                )
+            )
         except Exception as e:  # noqa: BLE001 — one unreadable run is that run's failure
             report.failed.append((run_id, f"{type(e).__name__}: {e}"))
             continue

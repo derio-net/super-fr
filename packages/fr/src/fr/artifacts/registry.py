@@ -438,8 +438,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
         ArtifactKind(
             name="usage",
             # What a run cost, persisted beside its cursor (spec
-            # `2026-09-25-lean-cost-aware-process-design` §5.B). Born at 1.
-            current_version=1,
+            # `2026-09-25-lean-cost-aware-process-design` §5.B). Born at 1;
+            # 1 -> 2 for `steps_by_role` and `units` (spec
+            # `2026-10-06-cost-evidence-design` §C), stamp only.
+            current_version=2,
             locator="docs/superpowers/usage/*.yaml",
             stamp="`schema_version` in the usage yaml",
             read_stamp=_read_yaml_stamp,

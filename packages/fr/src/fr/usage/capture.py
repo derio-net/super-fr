@@ -33,6 +33,7 @@ from fr.usage.file import (
     SessionEntry,
     UsageFile,
     UsageFileError,
+    current_usage_schema_version,
     dump_usage,
     host_label,
     load_usage,
@@ -249,7 +250,7 @@ def live_usage(
     last capture on this host saw. `at` is the capture event this reading
     stands in for (the closed `Capture.at` vocabulary). Never raises; a failed
     reading leaves `file` as it was."""
-    base = file or UsageFile(run=state.run)
+    base = file or UsageFile(schema_version=current_usage_schema_version(), run=state.run)
     try:
         live = build_capture(
             repo_root, state, at, env, base, ambient=ambient, require_sessions=True
@@ -276,7 +277,9 @@ def capture(
     Never raises."""
     target = path or usage_path(repo_root, state.run)
     try:
-        existing = load_usage(target) or UsageFile(run=state.run)
+        existing = load_usage(target) or UsageFile(
+            schema_version=current_usage_schema_version(), run=state.run
+        )
         new = build_capture(
             repo_root, state, at, env, existing, ambient=ambient, require_sessions=require_sessions
         )

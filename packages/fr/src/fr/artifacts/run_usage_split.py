@@ -191,6 +191,7 @@ def split_run_usage(path: Path) -> list[Path] | None:
         Capture,
         UsageFile,
         UsageFileError,
+        current_usage_schema_version,
         dump_usage,
         host_label,
         load_usage,
@@ -236,7 +237,9 @@ def split_run_usage(path: Path) -> list[Path] | None:
         )
     if entries:
         try:
-            existing = load_usage(target) or UsageFile(run=str(data["run"]))
+            existing = load_usage(target) or UsageFile(
+                schema_version=current_usage_schema_version(), run=str(data["run"])
+            )
         except (OSError, UsageFileError) as e:
             raise UnconvertibleRunCursorError(
                 f"{path}: its usage file {target.name} cannot be read ({e}), so fr will "

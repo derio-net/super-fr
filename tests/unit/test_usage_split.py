@@ -79,7 +79,6 @@ def test_steps_by_role_sum_back_to_each_step_priced() -> None:
         assert _add(m, s, "turns") == whole.turns
         expected = whole.usd - (remainder if step == OUTSIDE else 0.0)
         assert _add(m, s, "usd") == pytest.approx(expected)
-    # tokens: brainstorm main = msg 0 (+ nothing else); subagent = msgs 1-2? msg 2 is 10:30 -> brainstorm? no
     assert main["brainstorm"].output == 10
     assert sub["brainstorm"].output == 20  # 10:06 only; 10:30 is past brainstorm's end
     assert sub["implement"].output == 40 and main["implement"].output == 80

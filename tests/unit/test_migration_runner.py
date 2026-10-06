@@ -477,12 +477,19 @@ def test_the_shipped_registry_registers_nothing_for_the_version_one_kinds() -> N
     for name in (
         "journal",
         "spec",
-        "usage",
     ):  # matrix moved off 1 (spec 2026-09-28-requirements-traceability-design.md §H)
         assert MIGRATIONS.schema_migrations(name) == (), (
             f"{name} is at current_version=1; a schema migration for it would make the "
             f"runner stamp a live file whose model is extra='forbid'"
         )
+
+
+def test_the_usage_kind_is_reachable_from_version_one() -> None:
+    """usage moved 1 -> 2 (cost-evidence spec §C): the chain names every hop."""
+    chain = MIGRATIONS.chain("usage", 1)
+    assert chain[-1].to_version == ARTIFACT_KINDS["usage"].current_version == 2
+    assert [m.to_version for m in chain] == [2]
+    assert [m.from_version for m in chain] == [1]
 
 
 def test_the_run_kind_is_reachable_from_version_one() -> None:

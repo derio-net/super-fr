@@ -52,6 +52,7 @@ def test_a_v6_cursor_migrates_with_its_figures_moved_into_usage(tmp_path: Path) 
 
     usage = load_usage(usage_path(tmp_path, RUN))
     assert usage is not None
+    assert usage.schema_version == 2  # born at the current version, never stale
     (capture,) = usage.captures
     assert capture.at == ("migrated",)
     assert capture.host == host_label(RUN, MIGRATED_HOST)

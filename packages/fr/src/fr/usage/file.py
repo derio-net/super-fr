@@ -29,9 +29,9 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
+from fr.run.telemetry import parse_timestamp
 from fr.usage.model import UsageRecord
 from fr.usage.readers.hermes import ACP_ZERO_TOKENS
-from fr.run.telemetry import parse_timestamp
 from fr.usage.rollup import Window, rollup
 from fr.usage.split import (
     Acc,
@@ -174,6 +174,15 @@ class UsageFile(BaseModel):
 
     def host(self, label: str) -> Capture | None:
         return next((c for c in self.captures if c.host == label), None)
+
+
+def current_usage_schema_version() -> int:
+    """The `usage` artifact version this `fr` writes, read from the registry —
+    the ONE place a kind's `current_version` is declared — so a file fr creates
+    is born stamped with it, never stale (mirrors `current_run_schema_version`)."""
+    from fr.artifacts.registry import artifact_kind
+
+    return artifact_kind("usage").current_version
 
 
 def host_label(run_id: str, hostname: str) -> str:
@@ -493,6 +502,7 @@ def load_usage(path: Path) -> UsageFile | None:
 __all__ = [
     "NO_SESSION_FOUND",
     "committed_reason",
+    "current_usage_schema_version",
     "unit_index",
     "units_by_agent",
     "IMPLEMENTED_USAGE_REL",
