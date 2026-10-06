@@ -134,3 +134,43 @@ Fixed in 3ff279232: a walker-skipped `# keep` item next to a rewritten one raise
 ### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: Main archived verification-strategies (#1035), so the branch's 31 live refs to it become twin warnings after a rebase (phase 2)
 
 Not caused by this change: concurrent main work archived that spec after this branch was cut. The orchestrator rebases onto main at deliver and re-runs the retarget so the baseline stays zero.
+
+<!-- fr:journal kind=decision scope=plan id=p3-validate-in-wrapper created=2026-10-06T18:57:12+00:00 phase=3 -->
+### p3-validate-in-wrapper · decision · --issues with --no-issues is refused in the _with_followups wrapper (phase 3)
+
+The usage error fires in the decorator before recording_moves opens, so nothing moves and no follow-up runs (the finally would otherwise honour the explicit qids). Exit 2.
+
+<!-- fr:journal kind=decision scope=plan id=p3-services-text-shared created=2026-10-06T18:57:12+00:00 phase=3 -->
+### p3-services-text-shared · decision · closeout.services_invalid_text is the one invalid-services wording (phase 3)
+
+The brief and archive's open-ends step both print it; the brief appends its own suffix about the --issues line.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-skill-resolve-example-gone created=2026-10-06T18:57:12+00:00 phase=3 -->
+### p3-skill-resolve-example-gone · discovery · fr-goal keeps no fr journal resolve example any more (phase 3)
+
+The close-out line was the only one, so test_the_scan_finds_the_fr_goal_examples became a pin that fr-goal routes through fr archive --issues and carries no resolve example.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-explainer-regenerated created=2026-10-06T18:57:12+00:00 phase=3 -->
+### p3-explainer-regenerated · discovery · 01-fr-goal.html regenerated (phase 3)
+
+The unmodified render was byte-identical to the committed html first (from /, --isolated); the edited render then differs only in the close-out paragraph. Nothing owed.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-explicit-qid-no-moves created=2026-10-06T18:57:12+00:00 phase=3 -->
+### p3-explicit-qid-no-moves · discovery · explicit --issues <qids> runs the open-ends step on an empty move log (phase 3)
+
+_after_moves now builds its step list: usage/matrix only on a non-empty log, open ends when the log is non-empty or --issues is given.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-06T18:57:12+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the extraction itself was the refactor; apply.py lost its inline builder and the duplicate _CARRIED_OPEN
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-06T18:57:12+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+new pure module with no duplication to remove
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-10-06T18:57:12+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+the closeout change replaced one line shape with another; the shared services_invalid_text helper was extracted in T3
