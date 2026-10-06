@@ -1115,8 +1115,9 @@ def batch_merge_command(
 ) -> None:
     """Merge pr-open batch PRs in the computed order, re-slotting versions (§3.F).
 
-    Blocks in the foreground while required checks run; Ctrl-C and re-run
-    resumes at the first unmerged batch.
+    Blocks in the foreground while the checks run (R4: the required ones, else
+    every check; a head with none yet waits, unless the repo declares `ci none`);
+    Ctrl-C and re-run resumes at the first unmerged batch.
     """
     if method is not None and method not in MERGE_METHODS:
         _fail(f"--method must be one of {', '.join(sorted(MERGE_METHODS))}, got {method!r}")
@@ -1145,6 +1146,7 @@ def batch_merge_command(
         # freshness rule as dispatch (review r3-f3), before anything is read.
         _fresh_config(checkout, facts, owner_repo)
         chosen = choose_method(method, client.repo_merge_methods(owner_repo))
+        ci_none = ci_none_at(checkout)  # fetched by `_fresh_config`
     except UnsupportedForgeOperation as exc:
         _fail(str(exc))
     except TriageError as exc:
@@ -1157,6 +1159,7 @@ def batch_merge_command(
         scratch_root=target / "merge",
         method=chosen,
         say=lambda line: console.print(line, markup=False, soft_wrap=True),
+        ci_none=ci_none,
     )
     try:
         slots, merged = plan_queue(ctx, queue)
@@ -1221,6 +1224,14 @@ def recollect(scope: Scope, target: Path) -> None:
     except TriageError as exc:
         _fail(str(exc))
     _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
+
+
+def ci_none_at(checkout: Checkout) -> bool:
+    """Whether the clone's `origin/<default>`, as last fetched, declares `ci none` (R4)."""
+    ref = f"origin/{checkout.default_branch()}"
+    with tempfile.TemporaryDirectory(prefix="fr-ci-") as tmp:
+        checkout.snapshot_paths(ref, SERVICE_PATHS, Path(tmp))
+        return ci_is_none(Path(tmp))
 
 
 def ci_is_none(path: Path) -> bool:
@@ -1525,6 +1536,8 @@ class _Driver:
                 method=method,
                 say=lambda line: None,  # the driver prints one line per action itself
             )
+        # Read each pass, as the pass's own verdict is: the context outlives a pass.
+        self._merge[repo].ci_none = self._ci_none(repo)
         return self._merge[repo]
 
     # ------------------------------------------------------------------ snapshot
@@ -1805,10 +1818,7 @@ class _Driver:
             try:
                 checkout = self._reader(repo)
                 checkout.fetch()
-                ref = f"origin/{checkout.default_branch()}"
-                with tempfile.TemporaryDirectory(prefix="fr-ci-") as tmp:
-                    checkout.snapshot_paths(ref, SERVICE_PATHS, Path(tmp))
-                    self._ci[repo] = ci_is_none(Path(tmp))
+                self._ci[repo] = ci_none_at(checkout)
             except TriageError:
                 self._ci[repo] = False
         return self._ci[repo]

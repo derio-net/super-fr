@@ -1,2 +1,0 @@
-bump: patch
-summary: "triage board: a merge the driver stopped on reads needs you (recorded in merge-stops.json), a wave of cancelled batches is named instead of vanishing, and the wave table stacks into cards at phone width"

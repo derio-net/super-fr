@@ -15,6 +15,7 @@ from fr.triage.batch_merge import (
     MergeAttempt,
     MergeContext,
     MergeStopError,
+    merge_one,
     merge_ready,
     plan_queue,
     routine_commit,
@@ -23,6 +24,10 @@ from fr.triage.batch_version import only_versions_bumped
 from fr.triage.model import load_facts, load_judgements
 
 from tests.unit.test_triage_batch_merge import REPO, FakeCheckout, MergeForge, _setup
+
+
+def _never(seconds: float) -> None:
+    raise AssertionError("merge_ready never waits")
 
 
 def _ctx(tmp_path: Path, forge: MergeForge, checkout: FakeCheckout) -> tuple[MergeContext, list]:
@@ -36,6 +41,7 @@ def _ctx(tmp_path: Path, forge: MergeForge, checkout: FakeCheckout) -> tuple[Mer
         scratch_root=tmp_path / "merge",
         method="squash",
         say=lambda line: None,
+        sleep=_never,
     )
     queue = pr_open_queue(judgements.batches, facts, judgements.issues)
     slots, _ = plan_queue(ctx, queue)
@@ -51,7 +57,6 @@ def test_a_ready_pr_merges_without_waiting(tmp_path: Path, monkeypatch: pytest.M
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
     assert merge_ready(ctx, slot, None) == MergeAttempt("merged", head="head-solo")
     assert forge.merged == [(1001, "head-solo", "squash")]
-    assert forge.waits == []
 
 
 def test_a_draft_is_reported_and_never_merged(
@@ -72,7 +77,7 @@ def test_pending_checks_are_reported_without_waiting(
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
     got = merge_ready(ctx, slot, None)
     assert (got.outcome, got.checks) == ("pending", ("test",))
-    assert forge.merged == [] and forge.waits == []
+    assert forge.merged == []
 
 
 def test_failing_checks_are_named(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,7 +124,7 @@ def test_a_pr_behind_its_base_is_updated_and_left_for_a_later_pass(
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
     got = merge_ready(ctx, slot, None)
     assert got.outcome == "updated"
-    assert forge.merged == [] and forge.waits == []
+    assert forge.merged == []
 
 
 def test_a_merge_emits_exactly_one_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -267,3 +272,110 @@ def test_routine_commit_classifies_by_files(changes: tuple, expected: bool) -> N
 )
 def test_only_versions_bumped(before: str, after: str, expected: bool) -> None:
     assert only_versions_bumped([(before, after)]) is expected
+
+
+# ------------------------------------------- R4 in merge_ready itself (gh#880)
+#
+# The required checks when the branch has any, else every check; nothing
+# reported is pending, and only a `ci none` repo merges without a check. The
+# rule is `batch_drive.checks_verdict`'s, applied by every caller of merge_ready,
+# not only by the driver pass in front of it.
+
+
+def _no_required(forge: MergeForge, every: list[dict[str, str]]) -> None:
+    forge.checks[1001] = []
+    forge.all_checks[1001] = every
+
+
+@pytest.mark.parametrize(
+    ("every", "outcome", "named"),
+    [
+        ([{"name": "lint", "bucket": "fail"}], "failing", ("1 failing check(s)",)),
+        ([{"name": "lint", "bucket": "pending"}], "pending", ("1 pending check(s)",)),
+        ([], "pending", ("no check reported yet",)),
+    ],
+    ids=["failing", "pending", "nothing-reported"],
+)
+def test_with_no_required_checks_every_check_gates_the_merge(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    every: list[dict[str, str]],
+    outcome: str,
+    named: tuple[str, ...],
+) -> None:
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    _no_required(forge, every)
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    got = merge_ready(ctx, slot, None)
+    assert (got.outcome, got.checks) == (outcome, named)
+    assert forge.merged == []
+
+
+def test_with_no_required_checks_green_checks_merge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    _no_required(forge, [{"name": "lint", "bucket": "pass"}])
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    assert merge_ready(ctx, slot, None).outcome == "merged"
+
+
+def test_a_ci_none_repo_merges_with_no_check_at_all(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    _no_required(forge, [])
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    ctx = dataclasses.replace(ctx, ci_none=True)
+    assert merge_ready(ctx, slot, None).outcome == "merged"
+
+
+# ------------------------------- batch merge's wait after an update push (gh#947)
+
+
+def _after_push(forge: MergeForge, answers: list[list[dict[str, str]]]) -> None:
+    """Pass before the push; after it (the head is `new-1`), each read of every
+    check takes the next answer, the last one repeating. No check is required."""
+    left = list(answers)
+
+    def every(repo: str, number: int) -> list[dict[str, str]]:
+        if forge.prs[number]["head_oid"] != "new-1":
+            return [{"name": "test", "bucket": "pass"}]
+        return list(left.pop(0) if len(left) > 1 else left[0])
+
+    forge.pr_required_checks = lambda repo, number: []  # type: ignore[method-assign]
+    forge.pr_checks = every  # type: ignore[method-assign]
+
+
+def test_after_an_update_push_no_check_yet_is_waited_for_not_a_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    checkout.up_to_date.discard("head-solo")
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    _after_push(forge, [[], [], [{"name": "test", "bucket": "pass"}]])
+    slept: list[float] = []
+    ctx = dataclasses.replace(ctx, interval=5.0, timeout=60.0, sleep=slept.append)
+
+    merge_one(ctx, slot, None)
+
+    assert forge.merged == [(1001, "new-1", "squash")]
+    assert slept == [5.0, 5.0]
+
+
+def test_a_head_whose_checks_never_appear_is_not_merged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing reported is pending, however long it lasts: only `ci none` merges a
+    head with no check (R4), never a grace period running out."""
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    checkout.up_to_date.discard("head-solo")
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    _after_push(forge, [[]])
+    slept: list[float] = []
+    ctx = dataclasses.replace(ctx, interval=10.0, timeout=25.0, sleep=slept.append)
+
+    with pytest.raises(MergeStopError, match="pending: no check reported yet"):
+        merge_one(ctx, slot, None)
+    assert forge.merged == []
+    assert slept == [10.0, 10.0]
