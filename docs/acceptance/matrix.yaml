@@ -7090,9 +7090,17 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R15
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_scope_config.py#test_scope_ids_are_stable_host_qualified_and_anonymous
+      - super-fr:tests/unit/test_triage_scope_config.py#test_the_loser_of_a_concurrent_first_use_returns_the_winners_id
+      - super-fr:tests/unit/test_triage_scope_config.py#test_first_use_creates_a_private_sixteen_hex_id_and_keeps_it
+      - super-fr:tests/unit/test_triage_scope_config.py#test_scope_yaml_is_not_durable_state
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_scope_show_prints_name_id_state_dir_and_config
+    status: ci
+    notes: 'phase 1: scope ids stable, host-qualified, anonymous; concurrent first use
+      yields one host id; scope show; scope.yaml never exported (test_triage_scope_config,
+      test_triage_claim_cmd)'
     verify: none
   - id: triage-claims-hands-off
     capability: triage-claims
