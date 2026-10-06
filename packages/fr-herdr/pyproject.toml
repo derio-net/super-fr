@@ -5,6 +5,9 @@ description = "super-fr herdr adapter: the first runner that accepts run-unit wo
 requires-python = ">=3.11"
 dependencies = ["fr", "fr-dispatch"]
 
+[project.scripts]
+fr-herdr = "fr_herdr.cli:main"
+
 [project.entry-points."fr.runners"]
 herdr = "fr_herdr.runner:HerdrRunner"
 
