@@ -40,11 +40,14 @@ def _flatten(steps: tuple[Step, ...]) -> list[tuple[Step, Step | None]]:
     return flat
 
 
-def check_workflow(manifest: WorkflowManifest, repo_root: Path | None = None) -> list[str]:
+def check_workflow(manifest: WorkflowManifest, repo_root: Path | None) -> list[str]:
     """Every problem with `manifest`, as human-readable strings. Empty = clean.
 
-    `repo_root` is where a repo-authored verification strategy would live; with
-    none, only the shipped strategies can satisfy `verification:`.
+    `repo_root` is where a repo-authored verification strategy would live, and
+    it is required so no caller can forget it: a caller that omitted it once
+    refused a repo-authored strategy that `fr workflow check` accepted. Pass
+    `None` only where no repo exists; then only shipped strategies satisfy
+    `verification:`.
     """
     flat = _flatten(manifest.steps)
     errors: list[str] = []

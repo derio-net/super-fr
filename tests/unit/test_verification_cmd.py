@@ -157,3 +157,21 @@ def test_workflow_check_cli_refuses_an_unresolvable_verification(tmp_path: Path)
 
     assert result.exit_code == 1
     assert "ghost" in result.output
+
+
+def test_every_shape_check_sees_a_repo_authored_strategy(tmp_path: Path) -> None:
+    """p1-r1: `fr validate artifacts` (and every other caller) passes the repo
+    root, so a shape naming a strategy only the repo defines is accepted there
+    as it is by `fr workflow check` — not refused as unknown."""
+    from fr.artifacts.validate import _workflow_issues
+
+    repo = _repo(tmp_path)
+    (repo / "docs/superpowers/verifications/staging.yaml").write_text(
+        "verification: staging\nschema: 1\nwhen: pre-merge\ndriver: operator\n"
+    )
+    shapes = repo / "docs" / "superpowers" / "workflows"
+    shapes.mkdir(parents=True)
+    (shapes / "x.yaml").write_text(_shape("verification: staging\n"))
+
+    assert [i for i in _workflow_issues(repo) if "staging" in str(i)] == []
+    assert check_workflow(parse_manifest(_shape("verification: staging\n")), None) != []

@@ -1635,7 +1635,7 @@ def _workflow_issues(plan: Plan) -> list[ReviewIssue]:
             severity="error",
             message=f"workflow shape {plan.meta.workflow!r}: {err}",
         )
-        for err in check_workflow(manifest)
+        for err in check_workflow(manifest, plan.repo_root)
     ]
 
 

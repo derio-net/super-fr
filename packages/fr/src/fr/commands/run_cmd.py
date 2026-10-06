@@ -914,7 +914,7 @@ def _rebind_shape(
             f"shape: {target!r} refused — it begins with {begins!r}, not {step_id!r}; "
             "a run rebinds only onto a shape that begins with the step being resolved."
         )
-    errors = check_workflow(rebound)
+    errors = check_workflow(rebound, repo_root)
     if errors:
         raise RunStateError(f"shape: {target!r} refused — not a valid workflow: {errors[0]}")
     return rebound
@@ -4135,7 +4135,7 @@ def start_cmd(
     # started a run — and a `cli` step with no command exits 0, i.e. a green
     # step that did nothing. Cheap, and it runs before isolation is ensured,
     # so a bad shape costs no worktree and no container.
-    shape_errors = check_workflow(manifest)
+    shape_errors = check_workflow(manifest, repo_root)
     if shape_errors:
         err_console.print(f"[red]workflow {workflow!r} is not valid:[/red]")
         for err in shape_errors:
@@ -4167,7 +4167,7 @@ def start_cmd(
         except WorkflowError as e:
             err_console.print(f"[red]{escape(str(e))}[/red]")
             raise typer.Exit(2) from e
-        shape_errors = check_workflow(manifest)
+        shape_errors = check_workflow(manifest, workspace)
         if shape_errors:
             err_console.print(f"[red]workflow {workflow!r} is not valid in {workspace}:[/red]")
             for err in shape_errors:

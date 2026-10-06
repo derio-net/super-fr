@@ -37,7 +37,7 @@ def test_every_shipped_workflow_manifest_passes_check_workflow() -> None:
             manifest = parse_manifest(path.read_text())
         except WorkflowError as e:
             raise AssertionError(f"{path}: failed to parse: {e}") from e
-        errors = check_workflow(manifest)
+        errors = check_workflow(manifest, None)
         assert not errors, f"{path}: {errors}"
 
 
@@ -103,7 +103,7 @@ def _shipped_fr_goal():
 def test_shipped_fr_goal_reviews_inside_the_phase_iteration() -> None:
     manifest = _shipped_fr_goal()
 
-    assert check_workflow(manifest) == []
+    assert check_workflow(manifest, None) == []
     group = next(s for s in manifest.steps if s.id == "implement")
     assert group.for_each == "phase"
     assert [m.id for m in group.steps] == ["implement-phase", "review-phase"]
@@ -124,7 +124,7 @@ def test_shipped_fr_goal_reviews_inside_the_phase_iteration() -> None:
 def test_shipped_fr_goal_runs_journal_check_between_implement_and_deliver() -> None:
     manifest = _shipped_fr_goal()
 
-    assert check_workflow(manifest) == []
+    assert check_workflow(manifest, None) == []
     step_ids = [s.id for s in manifest.steps]
     assert "journal-check" in step_ids, "the review gate must be a step in the shape"
 
@@ -166,7 +166,7 @@ def _both_copies(name: str):
 
 def test_shipped_fr_goal_evidence_is_the_4_28_lists_plus_visual() -> None:
     for manifest in _both_copies("fr-goal"):
-        assert check_workflow(manifest) == []
+        assert check_workflow(manifest, None) == []
         assert _step(manifest, "brainstorm").evidence == ()
         assert _step(manifest, "spec-review").evidence == ("review", "reviewer", "findings")
         assert _step(manifest, "deliver").evidence == ("tests", "proportionality", "visual")
@@ -176,7 +176,7 @@ def test_shipped_fr_goal_evidence_is_the_4_28_lists_plus_visual() -> None:
 
 def test_shipped_fr_goal_light_evidence_carries_no_input_gate() -> None:
     for manifest in _both_copies("fr-goal-light"):
-        assert check_workflow(manifest) == []
+        assert check_workflow(manifest, None) == []
         assert _step(manifest, "brainstorm").evidence == ()
         assert _step(manifest, "plan").evidence == ("single-phase",)
         assert _step(manifest, "spec-plan-review").evidence == ("review", "reviewer", "findings")
@@ -245,7 +245,7 @@ def test_shipped_fr_goal_declares_visual_on_the_three_ui_stages() -> None:
     implement = _step(manifest, "implement")
     members = {m.id: m for m in implement.steps}
 
-    assert check_workflow(manifest) == []
+    assert check_workflow(manifest, None) == []
     assert members["implement-phase"].evidence == ("visual",)
     assert members["review-phase"].evidence == ("review", "reviewer", "findings", "visual")
     assert _step(manifest, "deliver").evidence[-1] == "visual"

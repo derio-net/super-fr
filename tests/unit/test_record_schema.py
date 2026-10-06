@@ -124,7 +124,7 @@ def test_workflow_check_accepts_the_new_tokens() -> None:
     from fr.workflow.model import parse_manifest
 
     assert {"plan:ticks", "acceptance"} <= RECORD_EMIT_TOKENS
-    assert check_workflow(parse_manifest(SHIPPED.read_text())) == []
+    assert check_workflow(parse_manifest(SHIPPED.read_text()), None) == []
 
 
 def test_questions_parses_into_a_frozen_question_rounds() -> None:
