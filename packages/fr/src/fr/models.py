@@ -102,6 +102,26 @@ def resolve(
     return resolved_config(repo_cfg=repo_cfg, user_cfg=user_cfg).get(harness, {}).get(tier)
 
 
+def binding_layer(
+    harness: str,
+    tier: str,
+    *,
+    repo_cfg: ModelsConfig,
+    user_cfg: ModelsConfig,
+) -> str | None:
+    """Which layer a binding comes from — ``"repo"``, ``"user"`` or ``None``.
+
+    Beside `resolved_config` and under the same falsy-is-unbound rule: a falsy
+    repo value is not a binding, so it reports ``"user"``. `fr.bindings` needs it
+    because a repo-layer binding is a tracked contract that fr refuses to rewrite
+    (spec 2026-10-06-model-binding-churn R9)."""
+    if repo_cfg.get(harness, {}).get(tier):
+        return "repo"
+    if user_cfg.get(harness, {}).get(tier):
+        return "user"
+    return None
+
+
 def set_binding(path: Path, harness: str, tier: str, model: str) -> None:
     """Persist one ``harness/tier → model`` binding, preserving other entries."""
     cfg = load_models(path)
