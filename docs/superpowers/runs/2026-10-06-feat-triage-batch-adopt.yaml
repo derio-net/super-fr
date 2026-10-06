@@ -3,7 +3,7 @@ run: 2026-10-06-feat-triage-batch-adopt
 workflow: fr-goal-light@1
 branch: feat/triage-batch-adopt
 started: '2026-10-06T16:53:55+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -88,6 +88,10 @@ steps:
           visual: none
           findings: p1-wall-clock-tests-flake-under-host-load,p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8,p1-r9,p1-r10,p1-r11
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-06T21:05:55+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-wall-clock-tests-flake-under-host-load
   deliver:
     state: pending
