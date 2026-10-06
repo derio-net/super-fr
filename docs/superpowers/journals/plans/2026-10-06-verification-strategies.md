@@ -58,3 +58,105 @@ a regression test fails without the validate.py fix and passes with it.
 ### p1-r1-resolved · finding [fixed] · resolves p1-r1: check_workflow callers omit repo_root, so a repo-authored strategy is refused outside `fr workflow check` (phase 1)
 
 check_workflow(manifest, repo_root) now requires the root; all five callers pass theirs; regression test test_every_shape_check_sees_a_repo_authored_strategy.
+
+<!-- fr:journal kind=decision scope=plan id=p2-live-row-refuses-v3-spelling created=2026-10-06T12:16:40+00:00 phase=2 -->
+### p2-live-row-refuses-v3-spelling · decision · the live Row/AcceptanceItem refuse `verify: post-merge`; resolution is checked where the repo is known (phase 2)
+
+`verify` is a StrictStr, but the live models refuse the v3 spelling by name (pointing at
+`fr migrate artifacts --yes`), so a body still carrying it is visibly not v4 — which is
+what makes the 3 -> 4 crash-window check sound. Whether a name RESOLVES needs a repo
+root, so it is checked in `fr validate artifacts` (structure.validate_matrix), in
+apply_record (record.apply.strategy_error) and up front in `--verify`/`--strategy`.
+
+<!-- fr:journal kind=decision scope=plan id=p2-record-migration-rewrites-post-merge created=2026-10-06T12:16:40+00:00 phase=2 -->
+### p2-record-migration-rewrites-post-merge · decision · record 7 -> 8 rewrites a v7 acceptance entry's `verify: post-merge` to `live` instead of refusing it (phase 2)
+
+The spec calls the record hop stamp-only because "every v7 record is a valid v8 record".
+That is false for exactly one shape: an acceptance entry saying `verify: post-merge`,
+which the v8 model refuses. Rather than strand such an in-flight record, the hop gives
+it what the matrix row gets (R7): read through the frozen RecordV7, build in memory,
+validate as v8, write once atomically; a body already v8 is left for the runner to
+stamp. Every other v7 record is stamp-only, as specified. The 6 -> 7 hop's
+"already v7?" check now asks RecordV7 rather than the live (now v8) model.
+
+<!-- fr:journal kind=decision scope=plan id=p2-one-forge-command-table created=2026-10-06T12:16:40+00:00 phase=2 -->
+### p2-one-forge-command-table · decision · hostclient.FORGE_COMMANDS holds PR and issue ops; PR_COMMANDS / ISSUE_COMMANDS are views (phase 2)
+
+One per-backend table, so a backend cannot gain a PR verb and lack an issue verb.
+issue_command(repo_root, op, ref=owner/repo#n, comment=, label=) adds `--repo owner/repo`
+(gh -R/--repo, glab -R/--repo, tea --repo) because a row's issue may live in another
+repo than the checkout; comment/label are shell-quoted. tea's unlabel is the spec's
+one-line manual instruction, written as a `#` line so pasting it runs nothing.
+
+<!-- fr:journal kind=decision scope=plan id=p2-spec-verification-seam created=2026-10-06T12:16:40+00:00 phase=2 -->
+### p2-spec-verification-seam · decision · fr.verification.rows.SpecVerification binds a spec's section + shape default for every consumer (phase 2)
+
+pr_body, run/visual, plan self-review and acceptance/walks all get a row's effective
+strategy through SpecVerification (which calls effective_strategy / is_post_merge);
+none compares a string. Shape default: the run's workflow (pr_body) or the plan's
+(visual, self-review). Outside a run (walks.holds_open) no shape is known, so the
+default does not apply, and an unreadable section/strategy holds the issue open
+(a premature close is the worse error). visual treats an unresolvable strategy as
+owing evidence (fail closed).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-set-status-scenario created=2026-10-06T12:16:40+00:00 phase=2 -->
+### p2-set-status-scenario · discovery · set-status also takes --scenario (phase 7 P7.T1 sets scenarios through `fr acceptance`) (phase 2)
+
+§E lists only --issue and --walk for set-status, but phase 7 says "use the scenario
+field through `fr acceptance` once P2 added it" and self-review now tells the operator
+to set one; `add` alone could not reach existing rows. Omitting it keeps the row's value.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-self-review-scenarios-owed created=2026-10-06T12:16:40+00:00 phase=2 -->
+### p2-self-review-scenarios-owed · discovery · self-review of this plan now errors on six candidate rows with no scenario — owed by phase 7 (phase 2)
+
+With the Verification checks live, `fr plan self-review` on this plan reports
+verification-strategy-resolution, shipped-verification-strategies,
+spec-verification-section, walk-recording-prints-close, prerelease-command-shape and
+awaiting-live-triage (strategy candidate, agent pre-merge) as naming no `scenario`.
+Phase 7 P7.T1 adds the scenario scripts and sets the field. No gate re-runs self-review
+before then (only the plan-review step, already passed), so nothing is blocked.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-stray-r1-records-dir created=2026-10-06T12:16:40+00:00 phase=2 -->
+### p2-stray-r1-records-dir · discovery · an empty untracked docs/superpowers/runs/r1.records/ sits in the worktree, created before this phase (phase 2)
+
+Timestamped 13:25, before phase 2 began; empty and untracked, so git does not see it.
+Some test appears to create it against the repo rather than tmp_path; not traced.
+
+<!-- fr:journal kind=finding scope=plan id=p2-tea-remove-labels created=2026-10-06T12:16:40+00:00 phase=2 state=open review_scope=out -->
+### p2-tea-remove-labels · finding [open] (reviewer: out of scope) · the spec says tea has no unlabel command, but the installed tea's `issues edit` has --remove-labels (phase 2)
+
+`tea issues edit --help` (homebrew tea on the operator host) lists `--add-labels` and
+`--remove-labels`. The implementation follows the spec (a manual line for tea's
+unlabel; `--add-labels` for issue-label) and its test pins that; if the spec is
+corrected, ISSUE_COMMANDS["gitea"]["issue-unlabel"] becomes
+`tea issues edit {number} --repo {repo} --remove-labels {label}`.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-06T12:16:40+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+a new frozen module plus a one-import re-point of guard_matrix; nothing duplicated to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-06T12:16:40+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the migration is one function written against its tests; the two row checks were shared (check_verify, check_issue_refs) as they were written, so AcceptanceItem reuses them
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-06T12:16:40+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+RecordV7 reuses the frozen v6 classes that did not change instead of copying them; the apply-path union helper was extracted while writing it
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-10-06T12:16:40+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+the four consumers were routed through one new seam (fr.verification.rows.SpecVerification) as they were changed; no leftover string compares remain
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-10-06T12:16:40+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+the forge table was widened in place with PR/issue views derived from it rather than a second table; the flag plumbing mirrors the existing set-status/add idiom
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t6 created=2026-10-06T12:16:40+00:00 phase=2 -->
+### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
+
+one self-contained check function beside the acceptance-link check, using the same seam; nothing to clean
