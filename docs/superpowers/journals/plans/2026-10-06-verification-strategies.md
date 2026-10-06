@@ -570,3 +570,48 @@ Same load-sensitive flake as p4-install-atomic-flaky-under-load; the final suite
 ### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
 
 one new GhClient method and one thin subcommand; the argv builder (workflow_run_args) was written once and shared by the real client and --dry-run, nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1 created=2026-10-06T15:05:20+00:00 phase=6 state=open review_scope=in -->
+### p6-r1 · finding [open] (reviewer: in scope) · prerelease SHA could come from a local-only or stale ref (phase 6)
+
+Raised by the independent phase-6 reviewer with file:line evidence (see p6-review).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2 created=2026-10-06T15:05:20+00:00 phase=6 state=open review_scope=in -->
+### p6-r2 · finding [open] (reviewer: in scope) · workflow checked out any ref as 'branch' (phase 6)
+
+Raised by the independent phase-6 reviewer with file:line evidence (see p6-review).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3 created=2026-10-06T15:05:20+00:00 phase=6 state=open review_scope=in -->
+### p6-r3 · finding [open] (reviewer: in scope) · workflow tests did not assert the security properties (phase 6)
+
+Raised by the independent phase-6 reviewer with file:line evidence (see p6-review).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4 created=2026-10-06T15:05:20+00:00 phase=6 state=open review_scope=in -->
+### p6-r4 · finding [open] (reviewer: in scope) · --dry-run succeeded on glab/tea (phase 6)
+
+Raised by the independent phase-6 reviewer with file:line evidence (see p6-review).
+
+<!-- fr:journal kind=review scope=plan id=p6-review created=2026-10-06T15:05:20+00:00 phase=6 -->
+### p6-review · review · Phase 6 independent code review — 4 findings, all in scope, all fixed (phase 6)
+
+Reviewer confirmed no script injection (branch only via env, always quoted), tags stay under rc/, no overwrite, only the tag pushed, minimal permissions (pull-requests: read needed for the PR link), SHA-pinned checkout, ci-budget watch list, and that the Python slug, bash slug and PR-body route agree. Raised p6-r1..r4 plus three sub-bar nits; all were fixed test-first by a separate fixer, the nits too (SSH remote → git+ssh:// source, one remote for SHA/URL/dispatch, GitRefusal keeps its reason; 2c9f37f03). Suite: 9355 passed, 105 skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1-resolved created=2026-10-06T15:05:20+00:00 phase=6 state=fixed resolves=p6-r1 -->
+### p6-r1-resolved · finding [fixed] · resolves p6-r1: prerelease SHA could come from a local-only or stale ref (phase 6)
+
+SHA from `git ls-remote <remote> refs/heads/<branch>`; absent on remote → exit 2; workflow takes a required `sha` input and refuses a moved head. ad246f2d2.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2-resolved created=2026-10-06T15:05:20+00:00 phase=6 state=fixed resolves=p6-r2 -->
+### p6-r2-resolved · finding [fixed] · resolves p6-r2: workflow checked out any ref as 'branch' (phase 6)
+
+Checkout refs/heads/<branch>; ls-remote --exit-code --heads check; BRANCH and SHA via env only. f376a5c96.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3-resolved created=2026-10-06T15:05:20+00:00 phase=6 state=fixed resolves=p6-r3 -->
+### p6-r3-resolved · finding [fixed] · resolves p6-r3: workflow tests did not assert the security properties (phase 6)
+
+Assert no ${{ in run:, inputs via env, every uses: SHA-pinned, bash slug line equals rc_tag (proven to fail when changed). bb450c0cc.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4-resolved created=2026-10-06T15:05:20+00:00 phase=6 state=fixed resolves=p6-r4 -->
+### p6-r4-resolved · finding [fixed] · resolves p6-r4: --dry-run succeeded on glab/tea (phase 6)
+
+Backend decided before dry-run; non-GitHub exits 2 UnsupportedForgeOperation; dry-run cases tested. d0079c899.
