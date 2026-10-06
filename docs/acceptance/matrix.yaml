@@ -4901,10 +4901,7 @@ rows:
     verify: live
   - id: triage-batch-adopt-branch-rename
     capability: Backlog triage
-    acceptance: Adopting a session renames its branch to the batch branch everywhere
-      fr keys on it (local, upstream, remote with its PR, isolation record, marker,
-      run cursor) and tells the session's agent, so the session keeps working on the
-      renamed branch
+    acceptance: 'Adopting a session renames its branch to the batch branch everywhere fr keys on it (local, upstream, isolation record, marker, session indexes, run cursor), publishes it, supersedes an open PR with a new one on the batch branch, and tells the session''s agent, so the session keeps working on the renamed branch'
     origin:
     - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R4
     levels: {}
@@ -4926,7 +4923,7 @@ rows:
     acceptance: An operator can list every running herdr session with the issue refs
       in its label, read-only, as the start of a sweep
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R12
     levels: {}
     status: not-implemented
     notes: ''

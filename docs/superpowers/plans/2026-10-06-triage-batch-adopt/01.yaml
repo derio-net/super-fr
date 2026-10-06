@@ -1,8 +1,8 @@
 schema_version: 2
 phase:
   number: 1
-  title: batch adopt — runner protocol, branch rename, recorded branch, the verb,
-    --list, skill (R1–R13)
+  title: batch adopt — runner protocol, branch rename, PR supersede, recorded branch, the verb, --list,
+    skill (R1–R15)
   tag: agentic
   depends_on: []
   tracking_issue: null
@@ -10,19 +10,18 @@ phase:
   - triage-batch-adopt
   - triage-batch-adopt-branch-rename
   - triage-batch-adopt-refusals
+  - triage-batch-adopt-resumable
   - triage-batch-adopt-list
   tier: hard
   files:
   - packages/fr-dispatch/src/fr_dispatch/protocols.py
   - packages/fr-dispatch/src/fr_dispatch/testing.py
   - packages/fr-herdr/src/fr_herdr/runner.py
-  - packages/fr/src/fr/isolation/*
+  - packages/fr/src/fr/isolation/rename.py
+  - packages/fr/src/fr/isolation/sessions.py
+  - packages/fr/src/fr/isolation/__init__.py
   - packages/fr/src/fr/ghclient.py
   - packages/fr/src/fr/real_ghclient.py
-  - packages/fr/src/fr/real_glabclient.py
-  - packages/fr/src/fr/real_teaclient.py
-  - packages/fr/src/fr/test_support.py
-  - packages/fr/src/fr/triage/model.py
   - packages/fr/src/fr/triage/batch.py
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/triage/batch_dispatch.py
@@ -32,83 +31,145 @@ phase:
   - .opencode/skills/fr-triage/SKILL.md
   - .hermes/skills/fr/fr-triage/SKILL.md
   - tests/fixtures/herdr/*
+  - tests/unit/fakes.py
   - tests/unit/test_fr_herdr_runner.py
   - tests/unit/test_isolation_branch_rename.py
+  - tests/unit/test_real_ghclient.py
+  - tests/unit/test_forge_adapter_batch_ops.py
   - tests/unit/test_triage_batch_adopt.py
-  - tests/unit/test_triage_batch_model.py
   - tests/unit/test_triage_batch_drive.py
   - tests/unit/test_triage_batch_dispatch.py
-  - tests/unit/test_ghclient*.py
   - docs/acceptance/*
   - .changes/feat-triage-batch-adopt.yaml
-  estimate_lines: 1600
+  estimate_lines: 1700
 tasks:
 - number: 1
-  title: SessionAdopter protocol + herdr implementation (spec §E, R3, R10)
+  title: SessionAdopter protocol + herdr implementation (spec §E, R3, R12)
   steps:
   - id: P1.T1.S1
-    text: |-
-      RED in tests/unit/test_fr_herdr_runner.py, using the existing `_Herdr` fake: `describe(tab)` returns the tab's label, workspace label, agent name and status (None for an unknown tab); `list_sessions()` returns one entry per tab; `adopt(item, tab)` issues `tab rename <tab> <item.id>` then `agent rename <agent> <agent_name(item.id)>` and returns a handle. First capture a live `herdr agent list` output into tests/fixtures/herdr/ (captured, never constructed; replace any tab label naming a repo outside derio-net with an RFC 2606 name and record provenance in the fixtures README). Also RED: `fr_dispatch.testing.check_adopt_contract(runner, item, tab)` passes for herdr. Run `uv run pytest tests/unit/test_fr_herdr_runner.py -q --no-cov` — the new tests fail.
+    text: 'Capture live, never construct: in a scratch herdr tab started by hand (`herdr tab create` +
+      `herdr agent start` is NOT hand-started — start `claude` by typing it into the pane), capture `herdr
+      agent list` and `herdr agent rename <that agent> <new-name>` output into tests/fixtures/herdr/ (labels
+      naming any repo outside derio-net replaced with RFC 2606 names; provenance in the fixtures README),
+      then close the scratch tab. If herdr cannot rename a hand-started agent, STOP the phase and report
+      blocked: spec R3/R6 must be re-planned.'
   - id: P1.T1.S2
-    text: |-
-      GREEN: add `AdoptTarget` (frozen dataclass: tab, label, group, agent, status, refs) and `@runtime_checkable class SessionAdopter(Protocol)` with `describe`, `list_sessions`, `adopt` beside `SessionCloser` in packages/fr-dispatch/src/fr_dispatch/protocols.py; `check_adopt_contract` in testing.py; implement in packages/fr-herdr/src/fr_herdr/runner.py through `_run_herdr` only, mapping a tab to its agent via `agent list` (zero or several agents leave `agent` None so the caller refuses); add the mypy conformance line at the end of runner.py. Re-run — green.
+    text: 'RED in tests/unit/test_fr_herdr_runner.py, using the existing `_Herdr` fake answering from
+      those fixtures: `describe(tab)` returns label, workspace label, agent and status (None for an unknown
+      tab; agent None for zero or several agents in the tab); `list_sessions()` returns one AdoptTarget
+      per tab with its raw label; `adopt(item, tab)` issues `tab rename <tab> <item.id>` then `agent rename
+      <agent> <agent_name(item.id)>`, returns the tab as handle, and is a no-op returning the handle when
+      the tab already carries the label and the agent the name; `fr_dispatch.testing.check_adopt_contract`
+      passes for herdr. Run `uv run pytest tests/unit/test_fr_herdr_runner.py -q --no-cov` — the new tests
+      fail.'
   - id: P1.T1.S3
-    text: |-
-      REFACTOR: share tab lookup between `close`, `describe` and `adopt` if duplicated; else record the reason in the step record.
+    text: 'GREEN: add `AdoptTarget` and `@runtime_checkable SessionAdopter` (spec §E, no `refs` field)
+      beside `SessionCloser` in packages/fr-dispatch/src/fr_dispatch/protocols.py; `check_adopt_contract`
+      in testing.py; implement in packages/fr-herdr/src/fr_herdr/runner.py through `_run_herdr` only;
+      add the mypy conformance line at the end of runner.py. Re-run — green.'
+  - id: P1.T1.S4
+    text: 'REFACTOR: share the tab lookup between `close`, `describe` and `adopt` if duplicated; else
+      record the reason in the step record.'
 - number: 2
-  title: Branch rename across git, upstream, isolation record, marker, run cursor,
-    remote (spec §B, R4)
+  title: Local branch rename across git, isolation record, marker, session indexes, run cursor (spec §B,
+    R4, R10)
   steps:
   - id: P1.T2.S1
-    text: |-
-      RED in new tests/unit/test_isolation_branch_rename.py over a real tmp git repo with a linked worktree: renaming `old` to `feat/batch-x` moves the local branch (the worktree's HEAD follows), moves `<common-dir>/fr/isolation/<old>.json` to the new `state_path` with `branch` updated and sessions kept, rewrites the `.fr-isolation` marker's `branch`, rewrites a `docs/superpowers/runs/*.yaml` cursor whose `branch:` is `old` and commits only that path, and leaves other staged changes untouched; a worktree mid-rebase, or with the cursor file modified, is refused with nothing changed; an existing target branch is refused. Run the file — it fails.
+    text: 'RED in new tests/unit/test_isolation_branch_rename.py over a real tmp git repo with a linked
+      worktree and HOME pointed at tmp: renaming `old` to `feat/batch-x` moves the local branch (worktree
+      HEAD follows); moves `<common-dir>/fr/isolation/<old>.json` to the new `state_path` with `branch`
+      updated and `sessions` kept; rewrites the `.fr-isolation` marker''s `branch`; rewrites `branch`
+      in `~/.cache/fr/sessions/<sid>.json` for each session the record lists; rewrites a `docs/superpowers/runs/*.yaml`
+      cursor whose `branch:` is `old` and commits only that path, leaving other staged changes staged
+      and uncommitted; a second call after success returns done with nothing changed; a worktree mid-rebase,
+      one mid-merge, and one with the cursor file modified are each refused with nothing changed; an unrelated
+      existing target branch is refused. Run the file — it fails.'
   - id: P1.T2.S2
-    text: |-
-      GREEN: add `rename_branch(repo_root, worktree, old, new, *, upstream)` in a new packages/fr/src/fr/isolation/rename.py, reusing `state_path`, `load_state`, `save_state`, `delete_state` from types.py; every refusal fires before the first write. Re-run — green.
+    text: 'GREEN: add `rename_branch(repo_root, worktree, old, new)` in a new packages/fr/src/fr/isolation/rename.py,
+      reusing `state_path`, `load_state`, `save_state`, `delete_state` from types.py and the index writer
+      in sessions.py; every refusal before the first write. Re-run — green.'
   - id: P1.T2.S3
-    text: |-
-      RED then GREEN for the remote: a forge-adapter operation `rename_branch(repo, old, new)` on the GhClient protocol; the GitHub implementation calls `gh api -X POST repos/{repo}/branches/{old}/rename -f new_name={new}`; glab/tea raise `UnsupportedForgeOperation`; the fake in test_support.py records it. Tests go in the existing ghclient test file. After the rename the local upstream is pointed at `origin/<new>`.
-  - id: P1.T2.S4
-    text: |-
-      REFACTOR: none expected beyond naming; record the reason in the step record if skipped.
+    text: 'REFACTOR: none expected beyond naming; record the reason in the step record if skipped.'
 - number: 3
-  title: 'Event: DispatchEvent.adopted, schema bump, event time, recorded branch at
-    every reader (spec §C, §D, §F, R7, R11, R12)'
+  title: 'Forge and seam operations: publish branch, supersede PR, delete old branch (spec §C)'
   steps:
   - id: P1.T3.S1
-    text: |-
-      RED in tests/unit/test_triage_batch_model.py: `DispatchEvent(adopted=True)` round-trips; a file with no adoption dumps byte-identically (exclude_defaults); `adopted` under an older judgements schema is refused the way `conflict` is. RED in tests/unit/test_triage_batch_drive.py: `closeout_brief`, `attributed` and `dispatch_comment` use `last_dispatch(batch).branch` when it differs from `batch_branch(batch)`; `drive_pass` over a batch whose adopted dispatch event's `at` precedes its PR's creation counts it in flight, matches that PR, and plans close actions for its item id once finished. Run — fails.
+    text: 'RED: in tests/unit/test_real_ghclient.py, the GitHub client''s new `create_pr(repo, head, base,
+      title, body, draft)`, `close_pr(repo, number)` and `delete_branch(repo, branch)` issue the expected
+      `gh` argv and parse the created PR''s number and url (reuse an existing captured `gh pr create`
+      output if one exists under tests/fixtures, else capture one live against a scratch branch of derio-net/super-fr
+      and close it); in tests/unit/test_forge_adapter_batch_ops.py, glab and tea refuse all three via
+      `UnsupportedBatchOps`, and the seam tripwire allows the two new gitseam operations and the one `fr.isolation.rename_branch`
+      call by name; the fake in tests/unit/fakes.py records them. In gitseam tests (beside existing ones)
+      `publish_branch(new)` runs `git push -u origin new`. Run — fails.'
   - id: P1.T3.S2
-    text: |-
-      GREEN: add the field and its schema gate in packages/fr/src/fr/triage/model.py (write schema up by one, older ones still read), switch the three readers in batch_drive.py and batch_dispatch.py, and add a pure `adopt_event_time(now, pr_created, last_event_at)` in batch.py returning the time, or None to refuse, per spec §C. Re-run — green.
+    text: 'GREEN: add the three methods to the GhClient protocol (packages/fr/src/fr/ghclient.py) and
+      `UnsupportedBatchOps`, implement them in real_ghclient.py, add `publish_branch` and `delete_remote_branch`
+      to packages/fr/src/fr/triage/gitseam.py, extend the fake and the tripwire allowance. Re-run — green.'
   - id: P1.T3.S3
-    text: |-
-      REFACTOR: fold the recompute fallback into one `recorded_branch(batch)` helper in batch.py if three call sites now repeat it.
+    text: 'REFACTOR: none expected; record the reason in the step record if skipped.'
 - number: 4
-  title: The verb `fr triage batch adopt` and `--list` (spec §A, R1, R2, R5, R6, R8,
-    R9, R10)
+  title: Recorded branch at every reader (spec §F, R13, R14)
   steps:
   - id: P1.T4.S1
-    text: |-
-      RED in new tests/unit/test_triage_batch_adopt.py, reusing FakeRunner, FakeGhClient and FakeCheckout from tests/unit/test_triage_batch_dispatch.py plus a fake SessionAdopter runner: without --yes the full plan prints and nothing changes (judgements bytes, forge calls, git, runner calls); each R9 refusal exits 2 with nothing written (unknown batch, merged stage, unknown tab, tab labelled with another batch's item id, no agent, working agent, unknown branch, mid-rebase worktree, existing target branch locally and on the remote, version-reserving config without --reserved-version); a runner without SessionAdopter is refused; with --yes the happy path renames the branch (through a fake of the §B function), adopts the tab, messages the agent once naming old and new branch, appends exactly one dispatch event with `adopted: true`, the batch branch and the §C time, and labels and marker-comments every member; a write failure after the first write exits 1 and prints the finishing command; `--list` prints every session with the `<repo>#<n>` refs parsed from its label and writes nothing. Run — fails.
+    text: 'RED in tests/unit/test_triage_batch_drive.py: with a batch whose last dispatch branch differs
+      from `batch_branch(batch)`, `closeout_brief`, `attributed` and `dispatch_comment` use the recorded
+      branch; `recorded_branch` falls back to `batch_branch` with no dispatch; `drive_pass` over a batch
+      whose dispatch event (runner herdr, handle a tab id) precedes its PR counts it in flight, matches
+      that PR, and plans close actions for its item id once finished. Run — fails.'
   - id: P1.T4.S2
-    text: |-
-      GREEN: implement `adopt` in packages/fr/src/fr/commands/triage_batch_cmd.py in spec §A's order, reusing `resolve_launch`, `_tracking_gate`, `_open_checkout`, the `--repair` version handling, `_write(dry_run=True)` then `_write`, and `_forge_writes`; git reads go through packages/fr/src/fr/triage/gitseam.py only (worktree list, rebase/merge state, branch existence); the message goes through `SessionMessenger` when the runner has it. The help text says it is distinct from the driver's close-out adopt. Re-run — green.
+    text: 'GREEN: add `recorded_branch(batch)` in packages/fr/src/fr/triage/batch.py and switch the three
+      readers in batch_drive.py and batch_dispatch.py. Re-run — green.'
   - id: P1.T4.S3
-    text: |-
-      REFACTOR: extract what `_record_missing` (--repair) and `adopt` share into one helper; --repair's behaviour stays identical and its existing tests stay green.
+    text: 'REFACTOR: none beyond the helper itself; record the reason if skipped.'
 - number: 5
-  title: Skill, matrix, fragment, full gate (R13)
+  title: The verb `fr triage batch adopt` and `--list` (spec §A, §D, R1, R2, R5–R12)
   steps:
   - id: P1.T5.S1
-    text: |-
-      Document `batch adopt` in plugins/super-fr/skills/fr-triage/SKILL.md (one sentence in the Schema-3 paragraph: the sweep is `batch adopt --list`, `batch create`, `batch adopt <id> --tab T --branch B`, which renames the branch to the batch branch) and add `adopt` to the `--yes`-gated verb list, staying within 120 lines; run `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`.
+    text: 'RED in new tests/unit/test_triage_batch_adopt.py, reusing `FakeRunner` and `FakeCheckout` from
+      tests/unit/test_triage_batch_dispatch.py, `FakeGhClient` from tests/unit/fakes.py, and a fake runner
+      implementing SessionAdopter and SessionMessenger: without --yes the full plan prints and nothing
+      changes (judgements bytes, forge calls, git, runner calls); each R9 refusal exits 2 with nothing
+      written — unknown batch, merged stage, runner without SessionAdopter, unknown tab, tab labelled
+      with another batch''s item id, no agent, several agents, working agent, unknown branch, mid-rebase
+      worktree, mid-merge worktree, modified cursor file, unrelated existing batch branch locally and
+      on the remote; with --yes the happy path with an open PR renames the branch (through a fake of `rename_branch`),
+      publishes the batch branch, opens a new PR with the old title, body and draft state, comments `Superseded
+      by #<n>` and closes the old PR, deletes the old remote branch, adopts the tab, appends exactly one
+      dispatch event with the batch branch whose `at` is not after the new PR''s creation, labels and
+      marker-comments every member, reserves a version when the config reserves versions, and sends one
+      message naming old branch, new branch, new PR and version; the happy path with no remote branch
+      skips §C; a failure injected at each §A.7 step exits 1 naming what remains, and the same command
+      re-run finishes it with no step done twice; `--list` prints every session with the `<repo>#<n>`
+      refs fr parses from its label and writes nothing. Run — fails.'
   - id: P1.T5.S2
-    text: |-
-      Move the four rows with `fr acceptance set-status`: triage-batch-adopt-refusals and triage-batch-adopt-list to `ci` with their unit test refs anchored on test names; triage-batch-adopt and triage-batch-adopt-branch-rename gain their unit refs and stay `not-implemented` until the post-merge live sweep, their notes saying so. Add `.changes/feat-triage-batch-adopt.yaml` with `bump: minor`.
+    text: 'GREEN: implement `adopt` in packages/fr/src/fr/commands/triage_batch_cmd.py in spec §A''s order,
+      reusing `resolve_launch`, `_tracking_gate`, `_open_checkout`, `_reservation`, `_now_after`, `_write(dry_run=True)`
+      then `_write`, and `_forge_writes`; git through gitseam and `fr.isolation.rename_branch` only; the
+      label parser for `--list` as a pure helper in packages/fr/src/fr/triage/batch.py. The help text
+      says it is distinct from the driver''s close-out adopt. Re-run — green.'
   - id: P1.T5.S3
-    text: |-
-      Run the gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src`, `uv run fr acceptance check`, then the full suite last, after the final code commit: `uv run pytest -q --no-cov -n auto > $TMPDIR/adopt-suite.log 2>&1` — all green.
+    text: 'REFACTOR: extract what `_record_missing` (--repair) and `adopt` share into one helper; --repair''s
+      behaviour stays identical and its existing tests stay green.'
+- number: 6
+  title: Skill, matrix, fragment, full gate (R15)
+  steps:
+  - id: P1.T6.S1
+    text: Document `batch adopt` in plugins/super-fr/skills/fr-triage/SKILL.md inside the existing Schema-3
+      paragraph (the sweep is `batch adopt --list`, `batch create`, `batch adopt <id> --tab T --branch
+      B`; it renames the branch to the batch branch and supersedes an open PR) and add `adopt` to the
+      `--yes`-gated verb list, staying within 120 lines; run `uv run --no-project python scripts/sync-opencode.py`
+      and `uv run --no-project python scripts/sync-hermes.py`.
+  - id: P1.T6.S2
+    text: 'Move the rows with `fr acceptance set-status`: triage-batch-adopt-refusals, triage-batch-adopt-resumable
+      and triage-batch-adopt-list to `ci` with their unit test refs anchored on test names; triage-batch-adopt
+      and triage-batch-adopt-branch-rename gain their unit refs and stay `not-implemented` until the post-merge
+      live sweep, notes saying so. Add `.changes/feat-triage-batch-adopt.yaml` with `bump: minor`.'
+  - id: P1.T6.S3
+    text: 'Run the gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src`,
+      `uv run fr acceptance check`, then the full suite last, after the final code commit: `uv run pytest
+      -q --no-cov -n auto > $TMPDIR/adopt-suite.log 2>&1` — all green.'
 state:
   steps:
     P1.T1.S1:
@@ -123,6 +184,10 @@ state:
       state: ' '
       ticked_at: null
       note: null
+    P1.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
     P1.T2.S1:
       state: ' '
       ticked_at: null
@@ -132,10 +197,6 @@ state:
       ticked_at: null
       note: null
     P1.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
-    P1.T2.S4:
       state: ' '
       ticked_at: null
       note: null
@@ -172,6 +233,18 @@ state:
       ticked_at: null
       note: null
     P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S3:
       state: ' '
       ticked_at: null
       note: null

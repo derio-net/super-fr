@@ -1,0 +1,155 @@
+schema_version: 8
+run: 2026-10-06-feat-triage-batch-adopt
+step: spec-plan-review
+outcome: done
+journal:
+- kind: review
+  id: spr-r1
+  title: 'independent spec+plan review: 12 findings (spr-f1..spr-f12)'
+  body: 'Findings raised: spr-f1..spr-f12, all review_scope in, all fixed in the spec and plan in this step. Reviewer
+    verified ~30 file:line references (branch matching, of_dispatch, the three branch recomputes, _record_missing,
+    _forge_writes, isolation state, herdr agent_name/tab rename, protocols, gitseam, matrix rows).'
+- kind: finding
+  id: spr-f1
+  title: Branch rename misses the session index files under ~/.cache/fr/sessions
+  body: 'target: spec
+
+    Branch rename misses the session index files under ~/.cache/fr/sessions'
+  review_scope: in
+- kind: finding
+  id: spr-f2
+  title: GitHub branch-rename behaviour unverified before irreversible writes
+  body: 'target: spec
+
+    GitHub branch-rename behaviour unverified before irreversible writes'
+  review_scope: in
+- kind: finding
+  id: spr-f3
+  title: '`adopted` field forces a judgements schema bump for nothing'
+  body: 'target: spec
+
+    `adopted` field forces a judgements schema bump for nothing'
+  review_scope: in
+- kind: finding
+  id: spr-f4
+  title: No command can finish a failed adopt
+  body: 'target: spec
+
+    No command can finish a failed adopt'
+  review_scope: in
+- kind: finding
+  id: spr-f5
+  title: Reserved version not reserved, not told to the session
+  body: 'target: spec
+
+    Reserved version not reserved, not told to the session'
+  review_scope: in
+- kind: finding
+  id: spr-f6
+  title: git outside gitseam contradicts §A
+  body: 'target: spec
+
+    git outside gitseam contradicts §A'
+  review_scope: in
+- kind: finding
+  id: spr-f7
+  title: '`herdr agent rename` on a hand-started agent never observed'
+  body: 'target: plan
+
+    `herdr agent rename` on a hand-started agent never observed'
+  review_scope: in
+- kind: finding
+  id: spr-f8
+  title: Strict clamp can drop the PR without refusing
+  body: 'target: spec
+
+    Strict clamp can drop the PR without refusing'
+  review_scope: in
+- kind: finding
+  id: spr-f9
+  title: adopt_event_time has no RED test; R7 refusal untested
+  body: 'target: plan
+
+    adopt_event_time has no RED test; R7 refusal untested'
+  review_scope: in
+- kind: finding
+  id: spr-f10
+  title: Several R9 refusals untested
+  body: 'target: plan
+
+    Several R9 refusals untested'
+  review_scope: in
+- kind: finding
+  id: spr-f11
+  title: Plan names wrong file paths for fakes and tests
+  body: 'target: plan
+
+    Plan names wrong file paths for fakes and tests'
+  review_scope: in
+- kind: finding
+  id: spr-f12
+  title: '`refs` on the runner-neutral AdoptTarget'
+  body: 'target: plan
+
+    `refs` on the runner-neutral AdoptTarget'
+  review_scope: in
+- kind: decision
+  id: d9-pr-supersede
+  title: Always rename; supersede an open PR with a new one
+  body: 'GitHub closes a PR whose head branch is renamed. Operator chose, asked after the review: rename and reopen
+    a PR (old title, body, draft state; old PR commented and closed) over keeping the branch or refusing.'
+resolves:
+- id: spr-f1
+  state: fixed
+  body: 'Fixed: R4 and §B now rewrite `branch` in every bound session''s index; P1.T2.S1 asserts it.'
+- id: spr-f2
+  state: fixed
+  body: 'Fixed: GitHub docs confirm renaming a PR''s head closes the PR. Operator decision d9: always rename, and
+    reopen. §C no longer uses the rename API: it publishes the batch branch, opens a new PR (title, body, draft),
+    comments and closes the old one, deletes the old branch. The upstream is set by `git push -u`, so there is no
+    async rename or stale origin/<new>.'
+- id: spr-f3
+  state: fixed
+  body: 'Fixed: the field is dropped (§F). A plain DispatchEvent, no schema change.'
+- id: spr-f4
+  state: fixed
+  body: 'Fixed: new R10, adopt is resumable; each §A.7 step is skipped when already done; P1.T5.S1 injects a failure
+    at each step and re-runs.'
+- id: spr-f5
+  state: fixed
+  body: 'Fixed: R11 reserves through `_reservation` as dispatch does; R6''s message names the version.'
+- id: spr-f6
+  state: fixed
+  body: 'Fixed: §A states the one exception (isolation.rename_branch) and adds two declared gitseam operations;
+    the tripwire allowance is planned in P1.T3.S1.'
+- id: spr-f7
+  state: fixed
+  body: 'Fixed: P1.T1.S1 captures it live first and stops the phase if herdr cannot do it; §E says so.'
+- id: spr-f8
+  state: fixed
+  body: 'Fixed: obsolete. §D stamps the event before adopt opens the new PR; the old PR is closed and never the
+    batch''s, so no backdating or clamp exists.'
+- id: spr-f9
+  state: fixed
+  body: 'Fixed: adopt_event_time is gone (§D); P1.T5.S1 asserts the event''s `at` is not after the new PR''s creation.'
+- id: spr-f10
+  state: fixed
+  body: 'Fixed: P1.T5.S1 lists several agents, mid-merge and modified cursor; R9 now names the SessionAdopter refusal.'
+- id: spr-f11
+  state: fixed
+  body: 'Fixed: files list uses tests/unit/fakes.py, test_real_ghclient.py, test_forge_adapter_batch_ops.py; glab/tea
+    files dropped (UnsupportedBatchOps covers both).'
+- id: spr-f12
+  state: fixed
+  body: 'Fixed: AdoptTarget carries raw labels only (§E); the ref parser is a pure helper in fr.triage.batch (P1.T5.S2).'
+acceptance:
+- id: triage-batch-adopt-resumable
+  capability: Backlog triage
+  acceptance: A batch adopt that fails part-way is finished by running the same command again, with no step done
+    twice
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R10
+  status: not-implemented
+evidence:
+  review: spr-r1
+  reviewer: a7b94262f3cd81541
