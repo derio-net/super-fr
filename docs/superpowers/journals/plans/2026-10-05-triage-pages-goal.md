@@ -638,3 +638,8 @@ README rewritten for the four page manifests, R12, the history render and the ex
 ### p1-visual-matcher-uv-with-resolved-2 · finding [deferred → #999] · resolves p1-visual-matcher-uv-with: capture-script witness misreads uv run --with
 
 Filed at closeout as #999.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved-2 created=2026-10-06T08:02:02+00:00 state=open resolves=p1-r4 tracked_by=#1000 -->
+### p1-r4-resolved-2 · finding [deferred → #1000] · resolves p1-r4: cancelled-only waves count as finished and silently vanish from the board (spec'd predicate, undocumented consequence)
+
+Filed at closeout as #1000.
