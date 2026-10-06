@@ -19,3 +19,8 @@ tests/unit/test_triage_batch_drive_disruption.py: 18 fail + 3 error on main 2bee
 ### rc-883 · root-cause · Batch drive-restart-forge: investigation
 
 gh#883: _Driver._close_out appended the CloseoutEvent only after runner.dispatch returned. In the gap, the only dedupe was runner liveness (_existing -> existing_dispatches), which cannot see a tab that already ended, so a driver killed after dispatch and restarted later started a second close-out.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-921-boundary created=2026-10-06T13:58:44+00:00 -->
+### rc-921-boundary · root-cause · Batch drive-restart-forge: investigation
+
+gh#921 (2, 3, push comment) and the gh#998 exit: the drive loop has exactly one per-pass retry boundary, ForgeReadError. Git failures (_archived/_released/merge_ctx fetch), the archive pr_merge refusal, a rejected update push (GitError in _merge_batch) and a config refusal (recollect, _fresh_config) all routed to _fail and ended the process; gitseam._run started git with no timeout, so a stalled fetch blocked the loop.
