@@ -9,6 +9,11 @@ Releasing edits the same comment to `<!-- fr-claim-released:` with `released` (a
 take-over, `released_by`) added. The two prefixes never match each other. A marker whose
 JSON does not parse or match the model is ignored and counted, never read as a claim.
 
+Only markers whose comment author is trusted count (R17): anyone who can comment could
+post one, and under R4 a stranger's back-dated marker would otherwise hold the issue
+against every scope. *trusted* is the repo's allowed authors
+(`fr.triage.batch.allowed_authors`), compared case-insensitively.
+
 Everything here is pure: comments in, decisions out, the clock passed in. The writes are
 `fr.triage.claim_writes`'s.
 """
@@ -144,10 +149,12 @@ def parse_marker(body: str) -> Marker | None:
 
 @dataclass(frozen=True)
 class ClaimRead:
-    """The un-released claims on one issue, and how many claim markers were malformed."""
+    """The un-released claims on one issue, and how many claim markers were ignored:
+    malformed, or posted by an author not trusted (R17)."""
 
     claims: list[Claim] = field(default_factory=list)
     malformed: int = 0
+    untrusted: int = 0
 
 
 def _created(comment: Mapping[str, object]) -> datetime | None:
@@ -161,18 +168,22 @@ def _created(comment: Mapping[str, object]) -> datetime | None:
     return at if at.tzinfo else at.replace(tzinfo=UTC)
 
 
-def read_claims(comments: Iterable[Mapping[str, object]]) -> ClaimRead:
+def read_claims(comments: Iterable[Mapping[str, object]], trusted: Collection[str]) -> ClaimRead:
     """Every signer's latest marker; the un-released ones are the claims (live or expired).
 
     A signer whose latest marker is released holds nothing. A comment without a numeric
     id or a creation time cannot carry a claim: it could never be edited or ordered."""
+    allowed = {t.lower() for t in trusted}
     latest: dict[str, tuple[Marker, int, datetime]] = {}
-    malformed = 0
+    malformed = untrusted = 0
     for comment in comments:
         try:
             marker = parse_marker(str(comment.get("body") or ""))
         except MarkerError:
             malformed += 1
+            continue
+        if marker is not None and str(comment.get("author") or "").lower() not in allowed:
+            untrusted += 1
             continue
         cid, created = comment.get("id"), _created(comment)
         if marker is None or not isinstance(cid, int) or created is None:
@@ -193,11 +204,13 @@ def read_claims(comments: Iterable[Mapping[str, object]]) -> ClaimRead:
         for m, cid, created in latest.values()
         if m.released is None
     ]
-    return ClaimRead(sorted(claims, key=_order), malformed)
+    return ClaimRead(sorted(claims, key=_order), malformed, untrusted)
 
 
-def claims_from_comments(comments: Iterable[Mapping[str, object]]) -> list[Claim]:
-    return read_claims(comments).claims
+def claims_from_comments(
+    comments: Iterable[Mapping[str, object]], trusted: Collection[str]
+) -> list[Claim]:
+    return read_claims(comments, trusted).claims
 
 
 def _order(c: Claim) -> tuple[datetime, int]:

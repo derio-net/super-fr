@@ -25,9 +25,11 @@ board after each pass, through a command the operator configures for that scope.
 
 ### Non-goals
 
-- Security. A claim is a coordination mark: anyone with write access can forge
-  or delete one. "Signed" means "names its signer". The PR-author allowlist
-  (`pr_authors`) still guards merging.
+- Security. Anyone who can comment on an issue could post a marker, so only the
+  markers of allowed authors count (R17). The allowlist still makes a claim a
+  coordination mark between trusted actors, not a security boundary against
+  them: any allowed author can forge or delete one. "Signed" means "names its
+  signer". The PR-author allowlist (`pr_authors`) still guards merging.
 - Exclusive judging. Two scopes may rank the same issue differently; only acting
   on it is exclusive.
 - Automatic take-over of an expired claim (operator decision, §2.2).
@@ -56,6 +58,7 @@ R13. `board.html` shows a "Held elsewhere" group listing the scope's issues clai
 R14. A scope may carry a scope config, `<state dir>/scope.yaml`, with `claim_expiry_hours`, `board_name` and `publish`. `publish` is an argument list with `{board}`, `{name}` and `{scope_id}` placeholders. fr runs it after every `drive --yes` pass that rendered the board, and for each render of `fr triage board --publish` (each `--watch` iteration included), with a 120-second timeout. A failure or timeout warns once per cause and never changes an exit code. The default board name is `<repo> batches` for a repo scope, `<owner> batches` for an org scope, and `<scope name> batches` for a group scope.
 R15. The host id and the scope config never leave the host: they are not durable triage state, `fr triage state export` never copies them, and no target repo carries them.
 R16. The fr-triage skill documents claims, the scope config and publishing, in its canonical source and both generated mirrors.
+R17. A claim marker counts only when its comment's author is one of the issue repo's allowed authors — `pr_authors` in its `.fr/triage.yaml`, default the user `collect` ran as (`Facts.viewer`), the allowlist that already guards merging. A marker by anyone else is ignored and counted, never treated as a claim, and never wins R4.
 
 ## 2. Background (verified at 5c4edd18e)
 
@@ -152,9 +155,11 @@ counted (a `warn` once per issue), never treated as a claim.
 
 - `Claim` model: `signer`, `batch`, `claimed`, `heartbeat`, `expires`,
   `comment_id: int`, `created_at` (the comment's, used for R4's ordering).
-- `claims_from_comments(comments) -> list[Claim]`: every signer's latest
-  un-released marker, live or expired, dropping a signer whose latest marker is a
-  released one.
+- `claims_from_comments(comments, trusted: frozenset[str]) -> list[Claim]`: every
+  signer's latest un-released marker, live or expired, dropping a signer whose
+  latest marker is a released one. Only comments whose `author` is in *trusted*
+  (the repo's allowed authors, compared case-insensitively) are read; any other
+  author's marker is ignored and counted, like a malformed one (R17).
 - `expired(claim, now)`, `holder(claims, me)` (the winning claim when it is
   another scope's, else None: expiry never changes who holds, R4),
   `winner(claims)` (oldest `created_at`, then lowest comment id), and
@@ -209,7 +214,8 @@ One module owns every claim write so the batch commands, the driver and the
   marker to its released form (adding `"released_by": <me>`), then `claim`.
 
 Every write first reads the issue's comments, so a decision never rests on facts
-older than the call. Writes go only through `GhClient`; git is not involved.
+older than the call. Every call takes the repo's `trusted` authors and every
+re-read applies R17's filter, so an untrusted marker never wins R4 here either. Writes go only through `GhClient`; git is not involved.
 
 ### E. Commands (`commands/triage_batch_cmd.py`, `commands/triage_claim_cmd.py` new)
 

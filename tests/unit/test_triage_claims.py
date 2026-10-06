@@ -33,14 +33,17 @@ T0 = datetime(2026, 10, 6, 20, 0, tzinfo=UTC)
 DAY = timedelta(hours=24)
 ME = "s-11111111"
 OTHER = "s-22222222"
+TRUSTED = frozenset({"bot"})
 
 
 def _marker(signer: str = ME, batch: str = "b1", at: datetime = T0, **kw: Any) -> Marker:
     return Marker(signer=signer, batch=batch, claimed=at, heartbeat=at, expires=at + DAY, **kw)
 
 
-def _comment(body: str, cid: int | None, at: datetime = T0) -> dict[str, object]:
-    return {"author": "bot", "body": body, "created_at": at.isoformat(), "id": cid}
+def _comment(
+    body: str, cid: int | None, at: datetime = T0, author: str = "bot"
+) -> dict[str, object]:
+    return {"author": author, "body": body, "created_at": at.isoformat(), "id": cid}
 
 
 def _claim(signer: str, cid: int, at: datetime = T0, expires: datetime | None = None) -> Claim:
@@ -99,17 +102,17 @@ _GOOD = (
     ],
 )
 def test_a_malformed_marker_is_ignored_and_counted(body: str) -> None:
-    read = read_claims([_comment(body, 5)])
+    read = read_claims([_comment(body, 5)], TRUSTED)
     assert read.claims == [] and read.malformed == 1
 
 
 def test_a_plain_comment_is_neither_a_claim_nor_malformed() -> None:
     assert parse_marker("hello") is None
-    assert read_claims([_comment("hello", 1)]).malformed == 0
+    assert read_claims([_comment("hello", 1)], TRUSTED).malformed == 0
 
 
 def test_a_comment_without_an_id_carries_no_claim() -> None:
-    assert claims_from_comments([_comment(render_marker(_marker()), None)]) == []
+    assert claims_from_comments([_comment(render_marker(_marker()), None)], TRUSTED) == []
 
 
 def test_each_signer_keeps_its_latest_unreleased_marker() -> None:
@@ -119,7 +122,7 @@ def test_each_signer_keeps_its_latest_unreleased_marker() -> None:
         _comment(render_marker(_marker(OTHER, at=T0 - 2 * DAY)), 2, T0 + timedelta(hours=1)),
         _comment(render_marker(_marker(ME, "new", at=later)), 3, later),
     ]
-    got = {c.signer: c for c in claims_from_comments(comments)}
+    got = {c.signer: c for c in claims_from_comments(comments, TRUSTED)}
     assert got[ME].batch == "new" and got[ME].comment_id == 3
     # an expired claim is still a claim
     assert got[OTHER].comment_id == 2
@@ -135,7 +138,7 @@ def test_a_signer_whose_latest_marker_is_released_has_no_claim() -> None:
             T0 + timedelta(minutes=2),
         ),
     ]
-    assert [c.signer for c in claims_from_comments(comments)] == [OTHER]
+    assert [c.signer for c in claims_from_comments(comments, TRUSTED)] == [OTHER]
 
 
 def test_winner_is_the_oldest_comment_then_the_lowest_id() -> None:
@@ -244,3 +247,24 @@ def test_no_rendered_marker_names_a_host_or_a_path() -> None:
     body = render_marker(_marker(released=T0, released_by=OTHER))
     assert socket.gethostname().lower() not in body.lower()
     assert "/" not in body.replace("-->", "")
+
+
+def test_an_untrusted_authors_older_marker_is_ignored_and_counted() -> None:
+    forged = _comment(render_marker(_marker(OTHER, at=T0 - DAY)), 1, T0 - DAY, author="stranger")
+    mine = _comment(render_marker(_marker(ME)), 2)
+    read = read_claims([forged, mine], TRUSTED)
+    assert [c.signer for c in read.claims] == [ME]
+    assert read.untrusted == 1 and read.malformed == 0
+    assert holder(read.claims, ME) is None
+
+
+def test_untrusted_only_markers_produce_no_claim() -> None:
+    forged = _comment(render_marker(_marker(OTHER)), 1, author="stranger")
+    assert claims_from_comments([forged], TRUSTED) == []
+    assert claims_from_comments([forged], frozenset()) == []
+
+
+def test_author_comparison_is_case_insensitive() -> None:
+    c = _comment(render_marker(_marker(OTHER)), 1, author="Derio-Bot")
+    assert [x.signer for x in claims_from_comments([c], frozenset({"derio-bot"}))] == [OTHER]
+    assert [x.signer for x in claims_from_comments([c], frozenset({"DERIO-BOT"}))] == [OTHER]
