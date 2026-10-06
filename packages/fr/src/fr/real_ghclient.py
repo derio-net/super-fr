@@ -15,6 +15,7 @@ need bulk reads, GraphQL batching belongs in this module (not in
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -27,6 +28,7 @@ from fr.labels import LabelDef
 # `gh pr checks` exits 8 when any check is still pending; its JSON is on stdout.
 _CHECKS_PENDING_EXIT = 8
 _NO_REQUIRED_CHECKS = "no required checks"
+_PR_URL = re.compile(r"/pull/(\d+)\s*$", re.MULTILINE)
 
 
 class RealGhClient:
@@ -282,7 +284,8 @@ class RealGhClient:
                 "--repo",
                 repo,
                 "--json",
-                "state,isDraft,headRefOid,headRefName,mergeable,mergeStateStatus,mergeCommit",
+                "state,isDraft,headRefOid,headRefName,baseRefName,mergeable,mergeStateStatus,"
+                "mergeCommit",
             ]
         )
         raw: dict[str, Any] = json.loads(out)
@@ -291,6 +294,7 @@ class RealGhClient:
             "draft": bool(raw.get("isDraft", False)),
             "head_oid": raw.get("headRefOid", ""),
             "head_ref": raw.get("headRefName", ""),
+            "base_ref": raw.get("baseRefName", ""),
             "mergeable": raw.get("mergeable") or "UNKNOWN",
             "merge_state": raw.get("mergeStateStatus") or "UNKNOWN",
             "merge_commit": (raw.get("mergeCommit") or {}).get("oid", ""),
@@ -352,6 +356,18 @@ class RealGhClient:
                 head_sha,
             ]
         )
+
+    def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
+        # Never `--draft`: the driver merges it once green (pages-goal R13).
+        out = _gh._run_gh(
+            ["pr", "create", "--repo", repo, "--head", head, "--base", base,
+             "--title", title, "--body", body]
+        )  # fmt: skip
+        found = _PR_URL.search(out)
+        if found is None:
+            # a forge write failure (p4-r4): every caller catches FORGE_ERRORS
+            raise _gh.GhError(f"`gh pr create` printed no PR URL: {out.strip()!r}", stdout=out)
+        return int(found.group(1))
 
     def closing_ref(self, repo: str, number: int) -> str:
         return f"Closes {repo}#{number}"

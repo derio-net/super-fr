@@ -25,18 +25,19 @@ import re
 import statistics
 import urllib.parse
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from fr.triage.collect import ORIGINS_ISSUE_LIST_FIELDS, REPO_LIMIT, Forge, parse_prs, scope_repos
-from fr.triage.components import GUTTER_CSS, TOKENS_CSS
+from fr.triage.components import CHROME_CSS, GUTTER_CSS, TOKENS_CSS, collapsed, page_header
 from fr.triage.errors import ForgeError, TriageError
-from fr.triage.model import Judgements, Scope, issue_key, normalize_key
+from fr.triage.fragments import Entry, Resolved, splice
+from fr.triage.model import KEY_RE, Judgements, Scope, issue_key, normalize_key
 from fr.triage.render import FONTS, esc, plural
 
 CATEGORIES = ("latent", "regression", "new-feature", "leftover", "gap", "duplicate")
@@ -50,7 +51,19 @@ LEADERBOARDS: tuple[Category, ...] = ("new-feature", "leftover")
 FACTS_FILE = "origins-facts.json"
 CLASSIFICATION_FILE = "origins.yaml"
 PAGE_FILE = "origins.html"
-SCHEMA = 1
+ORIGINS_DIR = "origins"
+# The generated sections, in the order R7 gives; fragments interleave where the manifest says.
+GENERATED = (
+    "origin-counts",
+    "conclusion",
+    "filings-per-day",
+    "time-to-fix",
+    "leaderboards",
+    "issues",
+)
+FACTS_SCHEMA = 1  # origins-facts.json: unchanged by schema 2 of the classification
+CLASSIFICATION_SCHEMA = 2  # origins.yaml: what fr writes; 1 still loads
+CLASSIFICATION_READS = (1, 2)
 ISSUE_LIMIT = 1000
 PR_LIMIT = 1000
 DASH = "—"
@@ -246,7 +259,7 @@ def _origin_issue(repo: str, raw: dict[str, Any], closing: list[ClosingPr]) -> O
 
 
 def write_facts(path: Path, facts: OriginsFacts) -> None:
-    body = {"schema": SCHEMA, **facts.model_dump(mode="json")}
+    body = {"schema": FACTS_SCHEMA, **facts.model_dump(mode="json")}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(body, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -254,8 +267,8 @@ def write_facts(path: Path, facts: OriginsFacts) -> None:
 def load_origins_facts(path: Path) -> OriginsFacts:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or data.pop("schema", None) != SCHEMA:
-            raise TriageError(f"{path}: not origins facts of schema {SCHEMA}")
+        if not isinstance(data, dict) or data.pop("schema", None) != FACTS_SCHEMA:
+            raise TriageError(f"{path}: not origins facts of schema {FACTS_SCHEMA}")
         return OriginsFacts.model_validate(data)
     except (OSError, ValueError) as exc:
         raise TriageError(f"{path}: cannot read origins facts: {exc}") from exc
@@ -286,12 +299,34 @@ class Origin(_Strict):
     severity: Severity
     reason: str = Field(min_length=1)
     evidence: str | None = None
+    # Schema 2 (triage-pages-goal R10): optional on both schemas, like `kind` on judgements.
+    duplicate_of: str | None = None
+    fixed_by: str | None = None
+    introduced_in: str | None = None
 
     @model_validator(mode="after")
     def _regression_names_its_pr(self) -> Origin:
         if self.category == "regression" and not self.pr:
             raise ValueError("a regression must name the PR that broke it (`pr:`)")
         return self
+
+    @model_validator(mode="after")
+    def _duplicate_and_introduced_fit_the_category(self) -> Origin:
+        if self.duplicate_of and self.category != "duplicate":
+            raise ValueError("`duplicate_of` needs `category: duplicate`")
+        if self.introduced_in and self.category == "regression":
+            raise ValueError(
+                "`introduced_in` is refused on a regression: its `pr:` already names the PR"
+            )
+        return self
+
+    @field_validator("duplicate_of")
+    @classmethod
+    def _normalise_duplicate_of(cls, v: str | None) -> str | None:
+        # Held to the key grammar like `Judgement.duplicate_of` (review p3-r1).
+        if v and not KEY_RE.match(v):
+            raise ValueError(f"`duplicate_of` {v!r} is not an issue key (`<repo>#<number>`)")
+        return normalize_key(v) if v else v
 
 
 class Cause(_Strict):
@@ -305,6 +340,13 @@ class Origins(_Strict):
     issues: dict[str, Origin] = {}
     causes: list[Cause] = []
 
+    @model_validator(mode="after")
+    def _no_entry_duplicates_itself(self) -> Origins:
+        selves = sorted(k for k, o in self.issues.items() if o.duplicate_of == normalize_key(k))
+        if selves:
+            raise ValueError(f"`duplicate_of` names the issue itself: {', '.join(selves)}")
+        return self
+
 
 def load_origins(path: Path) -> Origins:
     """`origins.yaml`; absent is an empty classification, a bad one is refused with *path*."""
@@ -314,8 +356,8 @@ def load_origins(path: Path) -> Origins:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError) as exc:
         raise TriageError(f"{path}: cannot read origins: {exc}") from exc
-    if not isinstance(data, dict) or data.pop("schema", None) != SCHEMA:
-        raise TriageError(f"{path}: origins.yaml needs `schema: {SCHEMA}`")
+    if not isinstance(data, dict) or data.pop("schema", None) not in CLASSIFICATION_READS:
+        raise TriageError(f"{path}: origins.yaml needs `schema: 1` or `schema: 2`")
     try:
         origins = Origins.model_validate(data)
     except ValidationError as exc:
@@ -328,6 +370,8 @@ def load_origins(path: Path) -> Origins:
 class OriginsCheck(_Strict):
     unclassified: list[OriginIssue]
     unknown: list[str]
+    # Issues whose `duplicate_of` names an issue the facts do not hold (outside the window).
+    duplicate_outside: list[str] = []
 
 
 def check_origins(facts: OriginsFacts, origins: Origins) -> OriginsCheck:
@@ -336,6 +380,11 @@ def check_origins(facts: OriginsFacts, origins: Origins) -> OriginsCheck:
     return OriginsCheck(
         unclassified=[i for i in facts.issues if i.key not in origins.issues],
         unknown=sorted(k for k in origins.issues if k not in held),
+        duplicate_outside=sorted(
+            k
+            for k, o in origins.issues.items()
+            if k in held and o.duplicate_of and o.duplicate_of not in held
+        ),
     )
 
 
@@ -449,6 +498,7 @@ svg.chart text { font-family: var(--mono); font-size: 10px; }
 .sev-high { color: var(--sev-1); } .sev-med { color: var(--sev-2); }
 .sev-low { color: var(--muted); }
 """
+    + CHROME_CSS
     + GUTTER_CSS
 )
 
@@ -601,15 +651,47 @@ def _leaderboards(facts: OriginsFacts, origins: Origins) -> str:
     )
 
 
+def _original_link(issue: OriginIssue, target: str, held: Mapping[str, OriginIssue]) -> str:
+    """The duplicate's original: its table row when in the window, else (same repo) the
+    duplicate's own url with the number replaced, else the key as plain text."""
+    if target in held:
+        frag = urllib.parse.quote(f"origin-{target}", safe="-_.")
+        return f'<a href="#{frag}">{esc(target)}</a>'
+    name, _, number = target.rpartition("#")
+    if (
+        number.isdigit()
+        and name == issue.repo.split("/", 1)[1].lower()
+        and issue.url.startswith("https://")
+    ):
+        base = issue.url.rsplit("/", 1)[0]
+        return f'<a href="{esc(base)}/{number}">{esc(target)}</a>'
+    return esc(target)
+
+
+def _related_pr(o: Origin | None) -> str:
+    if o is None:
+        return DASH
+    lines = [_pr_link(o.pr)] if o.pr or not (o.introduced_in or o.fixed_by) else []
+    if o.introduced_in:
+        lines.append(f"introduced in {_pr_link(o.introduced_in)}")
+    if o.fixed_by:
+        lines.append(f"fixed by {_pr_link(o.fixed_by)}")
+    return "<br>".join(lines)
+
+
 def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
     buttons = "".join(
         f'<button type="button" class="btn" data-filter="{v}" aria-pressed="false">{v}</button>'
         for v in ("all", *CATEGORIES, "unclassified")
     ).replace('data-filter="all" aria-pressed="false"', 'data-filter="all" aria-pressed="true"')
     rows = []
+    held = {i.key: i for i in facts.issues}
     for i in facts.issues:
         o = origins.issues.get(i.key)
         cat = o.category if o else "unclassified"
+        cat_cell: str = cat
+        if o and o.duplicate_of:
+            cat_cell = f"{cat} of {_original_link(i, o.duplicate_of, held)}"
         closed = (
             f"closed {i.reason or DASH} in {_hours(i.hours_to_close)}"
             if i.state == "closed"
@@ -622,21 +704,24 @@ def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
             else DASH
         )
         rows.append(
-            f'<tr data-category="{cat}" data-key="{esc(i.key)}">'
+            f'<tr data-category="{cat}" data-key="{esc(i.key)}" id="origin-{esc(i.key)}">'
             f'<td><a href="{esc(i.url) if i.url.startswith("https://") else "#"}">'
-            f'{esc(i.key)}</a></td><td class="wrap">{esc(i.title)}</td><td>{cat}</td>'
+            f'{esc(i.key)}</a></td><td class="wrap">{esc(i.title)}</td><td>{cat_cell}</td>'
             f"<td>{o.source if o else DASH}</td>"
             f'<td class="sev-{o.severity if o else "low"}">{o.severity if o else DASH}</td>'
-            f"<td>{_pr_link(o.pr if o else None)}</td>"
+            f"<td>{_related_pr(o)}</td>"
             f'<td>{closed}{f" by {esc(by)}" if by else ""}</td><td class="wrap">{detail}</td></tr>'
         )
-    return (
-        '<section id="issue-table"><h2>Every issue</h2>'
+    body = (
         f'<div class="bar" data-filter-bar hidden>{buttons}</div>'
         '<div class="scroll"><table><thead><tr><th>Issue</th>'
         '<th class="wrap">Title</th><th>Category</th><th>Source</th><th>Severity</th>'
         '<th>Related PR</th><th>Ended</th><th class="wrap">Why</th></tr>'
-        f"</thead><tbody>{''.join(rows)}</tbody></table></div></section>"
+        f"</thead><tbody>{''.join(rows)}</tbody></table></div>"
+    )
+    return (
+        f'<section id="issue-table">'
+        f"{collapsed('issue-table-fold', 'Every issue', len(rows), body)}</section>"
     )
 
 
@@ -689,12 +774,28 @@ def _conclusion(facts: OriginsFacts, origins: Origins, titles: Mapping[str, str]
 
 
 def render_origins(
-    facts: OriginsFacts, origins: Origins, judgements: Judgements | None = None
+    facts: OriginsFacts,
+    origins: Origins,
+    judgements: Judgements | None = None,
+    resolved: Resolved | None = None,
+    notes: Sequence[str] = (),
 ) -> str:
-    """The defect-origins page: same inputs, same bytes."""
+    """The defect-origins page: same inputs, same bytes. The generated sections (R7) and the
+    authored fragments in the order *resolved* (the manifest) gives; with none, the default
+    order and no fragments."""
     titles = {b.id: b.title for b in judgements.batches} if judgements else {}
     missing = check_origins(facts, origins)
-    notes = "".join(f"<li>{esc(w)}</li>" for w in facts.warnings)
+    resolved = resolved or Resolved(order=[Entry(g) for g in GENERATED])
+    generated = {
+        "origin-counts": lambda: _counts(facts, origins),
+        "conclusion": lambda: _conclusion(facts, origins, titles),
+        "filings-per-day": lambda: _chart(facts),
+        "time-to-fix": lambda: _time_to_fix(facts, origins),
+        "leaderboards": lambda: _leaderboards(facts, origins),
+        "issues": lambda: _issue_table(facts, origins),
+    }
+    body = splice(resolved, generated)
+    note_items = "".join(f"<li>{esc(w)}</li>" for w in [*facts.warnings, *notes])
     title = f"Defect origins · {facts.scope} · since {facts.since}"
     return (
         '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
@@ -705,14 +806,7 @@ def render_origins(
         f"<span>{len(missing.unclassified)} unclassified</span>"
         f"<span>collected {esc(facts.collected_at)}</span>"
         "<span>rendered by <code>fr triage origins render</code></span></div>"
-        f'<ul class="notes">{notes}</ul></header>\n'
-        f"{_counts(facts, origins)}\n{_chart(facts)}\n{_time_to_fix(facts, origins)}\n"
-        f"{_leaderboards(facts, origins)}\n{_issue_table(facts, origins)}\n"
-        f"{_conclusion(facts, origins, titles)}\n"
+        f'<ul class="notes">{note_items}</ul></header>\n'
+        f"{page_header('origins')}\n" + "\n".join(body) + "\n"
         f"</main>\n<script>{FILTER_SCRIPT}</script>\n</body>\n</html>\n"
     )
-
-
-# Public names for the pieces the architecture page reuses (wave-driver R11).
-origin_counts = _counts
-filings_chart = _chart

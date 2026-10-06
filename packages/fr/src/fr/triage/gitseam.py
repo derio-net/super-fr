@@ -432,5 +432,36 @@ class Worktree:
         git(["commit", "--no-verify", "-m", message], self.path)
         return git(["rev-parse", "HEAD"], self.path).strip()
 
-    def push(self, branch: str) -> None:
-        git(["push", "origin", f"HEAD:refs/heads/{branch}"], self.path)
+    def commit_paths(self, paths: list[str], message: str) -> str | None:
+        """Stage exactly *paths* (directories included, untracked files under them too)
+        and commit only them; the new head, or None when nothing under them changed.
+
+        The driver's state export (pages-goal §I): unlike `commit_all`, untracked files
+        are what it commits, and nothing outside *paths* rides along. Never `--force`:
+        a repo's `.gitignore` says what must never be committed (p4-r9); `ignored`
+        names what it kept out."""
+        if not paths:
+            raise GitError("commit_paths needs at least one path")
+        git(["add", "--all", "--", *paths], self.path)
+        if git_ok(["diff", "--cached", "--quiet", "--", *paths], self.path):
+            return None
+        git(["commit", "--no-verify", "-m", message, "--", *paths], self.path)
+        return git(["rev-parse", "HEAD"], self.path).strip()
+
+    def ignored(self, paths: list[str]) -> tuple[str, ...]:
+        """The *paths* this repo's ignore rules exclude (`git check-ignore`), sorted;
+        a tracked path is never ignored."""
+        out: set[str] = set()
+        for i in range(0, len(paths), 200):  # bounded argv
+            chunk = paths[i : i + 200]
+            raw = git_bytes(
+                ["-c", "core.quotePath=false", "check-ignore", "--", *chunk], self.path, ok=(0, 1)
+            )
+            out.update(line for line in os.fsdecode(raw).splitlines() if line)
+        return tuple(sorted(out))
+
+    def push(self, branch: str, *, force: bool = False) -> None:
+        """Push HEAD to *branch*; *force* overwrites it, for a branch fr owns (the
+        driver's export branch, which a pass that died may have left behind)."""
+        argv = ["push", *(["--force"] if force else []), "origin", f"HEAD:refs/heads/{branch}"]
+        git(argv, self.path)

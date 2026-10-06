@@ -287,3 +287,92 @@ def test_check_with_no_facts_names_collect(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "fr triage collect" in result.output
+
+
+# ------------------------------------- severity and duplicate_of (triage-pages-goal R11)
+
+
+def _sev_judgements(schema: int = 3, **issues: dict[str, Any]) -> Judgements:
+    return Judgements.model_validate(
+        {
+            "schema": schema,
+            "tiers": [{"n": 1, "title": "Data loss"}],
+            "issues": {k.replace("_", "#"): {"tier": 1, **v} for k, v in issues.items()},
+        }
+    )
+
+
+@pytest.mark.parametrize("schema", [1, 2, 3])
+def test_severity_and_duplicate_of_load_on_every_schema(schema: int) -> None:
+    j = _sev_judgements(
+        schema, **{"super-fr_1": {"severity": "high"}, "super-fr_2": {"duplicate_of": "Super-fr#1"}}
+    )
+    assert j.issues["super-fr#1"].severity == "high"
+    assert j.issues["super-fr#2"].duplicate_of == "super-fr#1"
+
+
+def test_a_judgement_naming_itself_as_its_duplicate_is_refused() -> None:
+    with pytest.raises(ValueError, match="own key|itself"):
+        _sev_judgements(**{"super-fr_2": {"duplicate_of": "super-fr#2"}})
+
+
+def test_an_unknown_severity_is_refused() -> None:
+    with pytest.raises(ValueError):
+        _sev_judgements(**{"super-fr_2": {"severity": "urgent"}})
+
+
+def test_open_judged_issue_without_severity_is_no_severity() -> None:
+    facts = _facts([_issue(1), _issue(2), _issue(3, state="closed")])
+    j = _sev_judgements(**{"super-fr_1": {"severity": "low"}, "super-fr_2": {}, "super-fr_3": {}})
+    assert [i.key for i in classify(facts, j).no_severity] == ["super-fr#2"]
+
+
+def test_duplicate_of_a_key_not_in_the_facts_is_duplicate_unknown() -> None:
+    facts = _facts([_issue(1), _issue(2)])
+    j = _sev_judgements(
+        **{
+            "super-fr_1": {"severity": "low", "duplicate_of": "super-fr#2"},
+            "super-fr_2": {"severity": "low", "duplicate_of": "super-fr#9"},
+        }
+    )
+    assert classify(facts, j).duplicate_unknown == ["super-fr#2"]
+
+
+def test_an_issue_with_duplicate_of_is_not_unplaced() -> None:
+    facts = _facts([_issue(1), _issue(2)])
+    j = _sev_judgements(**{"super-fr_1": {}, "super-fr_2": {"duplicate_of": "super-fr#1"}})
+    assert [i.key for i in classify(facts, j).unplaced] == ["super-fr#1"]
+
+
+def test_check_prints_and_emits_the_two_new_sets(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        _facts([_issue(1), _issue(2)]),
+        "schema: 3\ntiers: [{n: 1, title: T}]\nissues:\n"
+        '  "super-fr#1": {tier: 1}\n'
+        '  "super-fr#2": {tier: 1, severity: low, duplicate_of: "super-fr#9"}\n',
+    )
+    r = _check(tmp_path)
+    assert r.exit_code == 0
+    assert "no severity (1)" in r.output and "duplicate unknown (1)" in r.output
+    data = json.loads(_check(tmp_path, "--json").output)
+    assert data["no_severity"][0]["key"] == "super-fr#1"
+    assert data["duplicate_unknown"] == ["super-fr#2"]
+
+
+def test_a_duplicate_of_a_duplicate_is_duplicate_chained() -> None:
+    """Review p3-r2: a chain (1 -> 2 -> 3) or a cycle (4 <-> 5) leaves no original on the
+    board for its members; `check` names every judgement whose target is itself a duplicate."""
+    facts = _facts([_issue(n) for n in range(1, 6)])
+    j = _sev_judgements(
+        **{
+            "super-fr_1": {"duplicate_of": "super-fr#2"},
+            "super-fr_2": {"duplicate_of": "super-fr#3"},
+            "super-fr_3": {},
+            "super-fr_4": {"duplicate_of": "super-fr#5"},
+            "super-fr_5": {"duplicate_of": "super-fr#4"},
+        }
+    )
+    result = classify(facts, j)
+    assert result.duplicate_chained == ["super-fr#1", "super-fr#4", "super-fr#5"]
+    assert result.to_json()["duplicate_chained"] == ["super-fr#1", "super-fr#4", "super-fr#5"]

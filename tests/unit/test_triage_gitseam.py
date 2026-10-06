@@ -301,3 +301,87 @@ def test_an_unknown_merge_commit_added_nothing(tmp_path: Path) -> None:
     checkout = _repo(tmp_path)
     assert checkout.added_paths("") == ()
     assert checkout.added_paths("0" * 40) == ()
+
+
+# ------------------------------------- the driver's state export (pages-goal §I)
+
+
+def test_commit_paths_stages_untracked_files_under_the_path_only(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    wt = checkout.add_worktree(tmp_path / "export", "origin/main")
+    (wt.path / "docs" / "triage" / "scope" / "board").mkdir(parents=True)
+    (wt.path / "docs" / "triage" / "scope" / "judgements.yaml").write_text("schema: 4\n")
+    (wt.path / "docs" / "triage" / "scope" / "board" / "manifest.yaml").write_text("x\n")
+    (wt.path / "docs" / "triage" / "other.txt").write_text("not mine\n")
+    (wt.path / "a.txt").write_text("changed, not mine\n")
+
+    head = wt.commit_paths(["docs/triage/scope"], "chore(triage): export")
+
+    assert head is not None
+    committed = _git(wt.path, "show", "--name-only", "--format=", "HEAD").split()
+    assert sorted(committed) == [
+        "docs/triage/scope/board/manifest.yaml",
+        "docs/triage/scope/judgements.yaml",
+    ]
+    status = _git(wt.path, "status", "--porcelain", "--untracked-files=all")
+    assert "a.txt" in status and "docs/triage/other.txt" in status
+
+
+def test_commit_paths_returns_none_when_nothing_changed(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    wt = checkout.add_worktree(tmp_path / "export", "origin/main")
+    (wt.path / "docs").mkdir()
+    (wt.path / "a.txt").write_text("changed, not mine\n")
+
+    assert wt.commit_paths(["docs"], "chore(triage): export") is None
+    assert _git(wt.path, "rev-parse", "HEAD") == _git(checkout.path, "rev-parse", "origin/main")
+
+
+def test_push_force_overwrites_a_diverged_remote_branch(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    first = checkout.add_worktree(tmp_path / "one", "origin/main")
+    (first.path / "x.txt").write_text("first\n")
+    first.commit_paths(["x.txt"], "first")
+    first.push("chore/triage-state-wave-1")
+    second = checkout.add_worktree(tmp_path / "two", "origin/main")
+    (second.path / "x.txt").write_text("second\n")
+    head = second.commit_paths(["x.txt"], "second")
+
+    with pytest.raises(GitError):
+        second.push("chore/triage-state-wave-1")
+    second.push("chore/triage-state-wave-1", force=True)
+
+    remote = _git(checkout.path, "ls-remote", "origin", "refs/heads/chore/triage-state-wave-1")
+    assert remote.split()[0] == head
+
+
+def test_commit_paths_never_forces_past_gitignore_and_ignored_names_what_it_left(
+    tmp_path: Path,
+) -> None:
+    """p4-r9: a target repo's .gitignore says what must never be committed; the export
+    respects it and reports what it left out instead."""
+    checkout = _repo(tmp_path)
+    (checkout.path / ".gitignore").write_text("snapshots/\n*.env\n")
+    _git(checkout.path, "add", ".gitignore")
+    _git(checkout.path, "commit", "--quiet", "-m", "ignore")
+    _git(checkout.path, "push", "--quiet", "origin", "main")
+    _git(checkout.path, "fetch", "--quiet", "origin")
+    wt = checkout.add_worktree(tmp_path / "export", "origin/main")
+    root = wt.path / "docs" / "triage" / "scope"
+    (root / "snapshots").mkdir(parents=True)
+    (root / "snapshots" / "s.json").write_text("{}\n")
+    (root / "secret.env").write_text("TOKEN=x\n")
+    (root / "judgements.yaml").write_text("schema: 4\n")
+
+    head = wt.commit_paths(["docs/triage/scope"], "export")
+
+    assert head is not None
+    committed = _git(wt.path, "show", "--name-only", "--format=", "HEAD").split()
+    assert committed == ["docs/triage/scope/judgements.yaml"]
+    asked = ["docs/triage/scope/snapshots/s.json", "docs/triage/scope/secret.env",
+             "docs/triage/scope/judgements.yaml"]  # fmt: skip
+    assert wt.ignored(asked) == (
+        "docs/triage/scope/secret.env",
+        "docs/triage/scope/snapshots/s.json",
+    )
+    assert wt.ignored([]) == ()
