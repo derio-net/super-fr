@@ -189,9 +189,18 @@ docstring). Only unit keys, step names and numbers are added.
   `unit_index(cursor)`, so live captures carry the split;
 - `fr run cost --recompute` (`cost.recompute_entries`) passes it too, since
   it prints and never writes;
-- `backfill` (new archived files) and `refreshed_file` (re-pricing an
-  archived file's entry) pass `None`, so they write no `steps_by_role` and no
-  `units`. That keeps the non-goal: archived files are not re-shaped.
+- `backfill` (new archived files) passes `None`, so it writes no
+  `steps_by_role` and no `units`;
+- `refreshed_file` (re-pricing an archived file's entry) passes
+  `unit_index(cursor)` exactly when the entry it replaces already had a split,
+  and `None` otherwise. A split a live capture wrote is then re-priced rather
+  than lost, and an entry without one stays without one.
+
+That keeps the non-goal: archived files are not re-shaped. Brief re-keying
+(the agent → unit map) applies on every path, with or without the split.
+
+`steps` figures also carry the four token counts, so the step invariant is
+checkable for every field.
 
 ### C. The usage kind at version 2 (R5)
 
