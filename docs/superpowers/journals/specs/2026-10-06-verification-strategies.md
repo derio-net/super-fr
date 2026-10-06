@@ -299,3 +299,6 @@ R7 matches §B (verify, override, strategy, shape); a spec line may give a reaso
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-verification-strategies-p6 created=2026-10-06T11:17:08+00:00 -->
 ### phase-split-2026-10-06-verification-strategies-p6 · decision · ask: on-demand pre-release (R24)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-06-verification-strategies-p7 created=2026-10-06T11:17:09+00:00 -->
+### phase-split-2026-10-06-verification-strategies-p7 · decision · ask: dogfood install contract and scenarios (R25) plus skills and docs
