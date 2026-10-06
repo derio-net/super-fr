@@ -12,6 +12,7 @@ on an earlier run drops out and a re-run resumes at the first unmerged batch.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +21,7 @@ from typing import Any, Literal, Protocol
 from fr.ghclient import MERGE_METHODS, GhClient
 from fr.hostclient import FORGE_ERRORS
 from fr.triage.batch import MergeStep, QueueEntry, merge_order, with_forecast
+from fr.triage.batch_drive import ChecksVerdict, checks_verdict
 from fr.triage.batch_version import (
     all_version_files,
     is_above,
@@ -99,11 +101,12 @@ class MergeContext:
     scratch_root: Path
     method: str
     say: Callable[[str], None]
-    # `wait_required_checks` bounds, in seconds: poll interval, give-up, and the
-    # grace period in which "no checks yet" is not "none required".
+    # The check wait's bounds, in seconds: poll interval and give-up.
     interval: float = 30.0
     timeout: float = 3600.0
-    grace: float = 120.0
+    sleep: Callable[[float], None] = time.sleep
+    # The repo declares `ci none` on its default branch (R4): green on non-draft alone.
+    ci_none: bool = False
     scratch: set[Path] = field(default_factory=set)  # worktrees this run created
 
     @property
@@ -197,23 +200,40 @@ def run_queue(ctx: MergeContext, queue: Sequence[Slot]) -> None:
         previous = slot.step.batch.id
 
 
-def _checks(ctx: MergeContext, number: int, *, after_push: bool) -> None:
-    """Stop unless every required check passes, waiting in the foreground (d5).
+def live_checks(ctx: MergeContext, number: int) -> tuple[ChecksVerdict, tuple[str, ...]]:
+    """R4 on the PR's head as the forge reports it now: the required checks when
+    the branch has any, else every check; nothing reported is pending (gh#880).
+    The one rule the driver pass and `batch merge` both merge by."""
+    if ctx.ci_none:
+        return checks_verdict([], {}, ci_none=True)
+    required = ctx.client.pr_required_checks(ctx.repo, number)
+    every = {} if required else _counts(ctx.client.pr_checks(ctx.repo, number))
+    return checks_verdict(required, every, ci_none=False)
 
-    Right after a push the wait always runs: the answer read before it would
-    describe the old head (review r2p-f10).
-    """
-    checks = [] if after_push else ctx.client.pr_required_checks(ctx.repo, number)
-    if after_push or any(c.get("bucket") == "pending" for c in checks):
-        checks = ctx.client.wait_required_checks(
-            ctx.repo, number, interval=ctx.interval, timeout=ctx.timeout, grace=ctx.grace
-        )
-    failing = sorted(str(c.get("name")) for c in checks if c.get("bucket") in FAILING_BUCKETS)
-    if failing:
-        raise MergeStopError(f"PR #{number}: required checks failing: {', '.join(failing)}")
-    pending = sorted(str(c.get("name")) for c in checks if c.get("bucket") == "pending")
-    if pending:
-        raise MergeStopError(f"PR #{number}: required checks still pending: {', '.join(pending)}")
+
+def _counts(checks: Sequence[dict[str, Any]]) -> dict[str, int]:
+    """`pr_checks` buckets as the `pass`/`fail`/`pending` counts R4 reads; a
+    skipped check passes, as in the collected counts."""
+    counts = {"pass": 0, "fail": 0, "pending": 0}
+    for c in checks:
+        bucket = c.get("bucket")
+        counts[
+            "fail" if bucket in FAILING_BUCKETS else "pending" if bucket == "pending" else "pass"
+        ] += 1
+    return counts
+
+
+def _checks(ctx: MergeContext, number: int) -> None:
+    """Stop unless the checks are green by R4, waiting in the foreground (d5) while
+    they are pending, a head with no check yet included (gh#947)."""
+    waited = 0.0
+    verdict, names = live_checks(ctx, number)
+    while verdict == "pending" and waited + ctx.interval <= ctx.timeout:
+        ctx.sleep(ctx.interval)
+        waited += ctx.interval
+        verdict, names = live_checks(ctx, number)
+    if verdict != "green":
+        raise MergeStopError(f"PR #{number}: checks {verdict}: {', '.join(names)}")
 
 
 def merge_one(ctx: MergeContext, slot: Slot, previous: str | None) -> None:
@@ -226,12 +246,12 @@ def merge_one(ctx: MergeContext, slot: Slot, previous: str | None) -> None:
             ctx.say(f"{batch.id}: already merged (PR #{pr.number})")
             return
         head = _open_head(ctx, slot, view, expected)
-        _checks(ctx, pr.number, after_push=False)
+        _checks(ctx, pr.number)
         new = _land(ctx, slot, head, previous)
         if new is None:
             return
         expected = new
-        _checks(ctx, pr.number, after_push=True)
+        _checks(ctx, pr.number)
     raise MergeStopError(
         f"PR #{pr.number} (batch {batch.id}): still behind or off its slot after "
         f"{MAX_UPDATES} updates; main keeps moving — re-run later"
@@ -332,7 +352,7 @@ class MergeAttempt:
 
 def merge_ready(ctx: MergeContext, slot: Slot, previous: str | None) -> MergeAttempt:
     """`merge_one` without the wait (wave-driver §B): merge the PR only if it is not a
-    draft and every required check has already passed, else say why not.
+    draft and its checks are already green by R4 (`live_checks`), else say why not.
 
     A PR behind its base or off its version slot gets the same update `merge_one`
     gives it and is left for a later call: it never waits for the new head's checks.
@@ -345,13 +365,9 @@ def merge_ready(ctx: MergeContext, slot: Slot, previous: str | None) -> MergeAtt
     if view.get("state") == "OPEN" and view.get("draft"):
         return MergeAttempt("draft", head=str(view.get("head_oid")))
     head = _open_head(ctx, slot, view, slot.head)
-    checks = ctx.client.pr_required_checks(ctx.repo, pr.number)
-    failing = sorted(str(c.get("name")) for c in checks if c.get("bucket") in FAILING_BUCKETS)
-    if failing:
-        return MergeAttempt("failing", head=head, checks=tuple(failing))
-    pending = sorted(str(c.get("name")) for c in checks if c.get("bucket") == "pending")
-    if pending:
-        return MergeAttempt("pending", head=head, checks=tuple(pending))
+    verdict, names = live_checks(ctx, pr.number)
+    if verdict != "green":
+        return MergeAttempt(verdict, head=head, checks=names)
     new = _land(ctx, slot, head, previous)
     if new is not None:
         ctx.say(f"{batch.id}: updated; checks run again")
@@ -467,5 +483,5 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
     if new is None:
         raise MergeStopError(f"PR #{pr.number}: the update produced no change to push")
     wt.push(pr.head_ref)
-    ctx.say(f"PR #{pr.number}: pushed {new[:12]} ({message}); waiting for required checks")
+    ctx.say(f"PR #{pr.number}: pushed {new[:12]} ({message}); waiting for its checks")
     return new
