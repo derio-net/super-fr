@@ -34,3 +34,8 @@ Operator decision 2026-10-06: fix both causes in the one PR. _Driver._close_out 
 ### runner-handoffs · finding [fixed] · Runner confirms the pane and the submit
 
 fr_herdr/runner.py: _start_agent retries agent_pane_busy (PANE_BUSY_TRIES=15, 2s apart), any other refusal raised as is; _submit uses agent prompt --wait --until working --until blocked --timeout 30000, and on agent_prompt_stalled sends one Enter and waits again (10s) before raising 'was not submitted'. HerdrError.code parsed from herdr's envelope. Pinned first by test_fr_herdr_runner.py (pane busy retried / bounded / other refusals not retried; stalled brief Enter-recovered / still stalled fails and closes the tab; error code parsed). Live-walked 2026-10-06: 3 real dispatches, one hit agent_pane_busy and recovered; every agent was working when dispatch returned; 'enter' accepted by send-keys (a bogus key is invalid_key).
+
+<!-- fr:journal kind=finding scope=debug id=drive-survives-dispatch created=2026-10-06T15:54:43+00:00 state=fixed -->
+### drive-survives-dispatch · finding [fixed] · A failed dispatch no longer ends the drive
+
+triage_batch_cmd.py: RunnerDispatchError raised by dispatch_batch (batch dispatch maps it to exit 1); _Driver._dispatch_failed reports once per batch and cause, keyed on the runner error's code when present (a retry names a new pane, so the words change), sets failed_write so --once exits 1, and the pass goes on to the next action. Pinned first by test_triage_batch_drive_disruption.py (close-out and batch survive the loop and report once; one cause on a different pane each pass reported once; --once exits 1 and the next batch still dispatches).
