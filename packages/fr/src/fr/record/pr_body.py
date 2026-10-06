@@ -145,18 +145,20 @@ def closing_refs(body: str, *, as_github: bool = False) -> list[tuple[str, str, 
     return out
 
 
-_REFS_KEYWORD = re.compile(r"\brefs?\b", re.IGNORECASE)
+_REFS_KEYWORD = re.compile(r"\brefs\b", re.IGNORECASE)
+"""`Refs`, case-insensitive and plural only: the bare prose word "ref" is not it."""
 
 
 def referenced_refs(body: str) -> list[str]:
     """Every issue reference written on a `Refs` line of `body`, as written —
-    the mention that does NOT close (spec 2026-10-06-verification-strategies §D),
-    read with `closing_refs`' skipping of code and fr's own render, and its
-    GitHub spellings (`GH-<n>`)."""
+    the mention that does NOT close (spec 2026-10-06-verification-strategies §D).
+    Read as `closing_refs` reads by default: code (fenced or inline) is skipped,
+    and so is fr's own render below its marker, so a finding title there cannot
+    fake a `Refs`. Only `#n`, `owner/repo#n` and issue URLs count, not `GH-<n>`."""
     return [
         r.group(0)
         for _raw, _line, _keywords, refs in _closing_lines(
-            body, as_github=True, keyword=_REFS_KEYWORD
+            body, as_github=False, keyword=_REFS_KEYWORD
         )
         for r in refs
     ]

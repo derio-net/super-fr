@@ -187,3 +187,30 @@ def test_the_brief_creates_the_label_once_per_repo_before_its_add_lines(
         "gh issue edit 5 --repo o/proj --add-label fr:awaiting-live",
         "gh issue edit 6 --repo o/proj --add-label fr:awaiting-live",
     ]
+
+
+def test_referenced_refs_reads_only_a_refs_keyword_above_frs_render() -> None:
+    """p4-r7: fr's rendered section (finding titles) cannot fake a `Refs`, and the
+    bare prose word "ref" is not the keyword."""
+    from fr.record.pr_body import referenced_refs
+
+    body = (
+        "Summary\n\n"
+        "REFS o/proj#5\n"
+        "The ref o/proj#6 explains it.\n"
+        "Ref o/proj#7\n"
+        "<!-- rendered by fr for run r -->\n"
+        "- finding: Refs o/proj#8 is wrong → fixed\n"
+    )
+
+    assert referenced_refs(body) == ["o/proj#5"]
+
+
+def test_a_finding_title_below_frs_render_gets_no_label_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path)
+    _rows(root)
+
+    body = "Summary\n<!-- rendered by fr for run r -->\n- Refs o/proj#5 in a title\n"
+    assert "fr:awaiting-live" not in _brief(root, monkeypatch, body)
