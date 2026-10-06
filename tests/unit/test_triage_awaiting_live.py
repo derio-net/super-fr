@@ -244,3 +244,14 @@ def test_a_parked_or_duplicate_awaiting_live_issue_is_not_listed_under_parked() 
     group = re.search(r'<details id="awaiting-live".*?</section></details>', page, re.S)
     assert group is not None
     assert re.findall(r'data-key="(widgets#\d+)"', group.group(0)) == ["widgets#1", "widgets#2"]
+
+
+def test_an_awaiting_live_issue_is_never_reported_with_no_severity() -> None:
+    """p4-r6: judged with no severity, it is still in the awaiting-live set only."""
+    f = facts([issue(1, labels=[LIVE]), issue(2)])
+    jd = judgements({"widgets#1": j(), "widgets#2": j()})
+
+    result = classify(f, jd)
+
+    assert [i.key for i in result.no_severity] == ["widgets#2"]
+    assert [i.key for i in result.awaiting_live] == ["widgets#1"]

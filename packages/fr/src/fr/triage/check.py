@@ -31,8 +31,8 @@ Pure: facts and judgements in, sets out. The command only formats them.
 - **awaiting live** — an open issue labelled `fr:awaiting-live`: its fix has merged
   and a post-merge acceptance row still waits for its walk (spec
   2026-10-06-verification-strategies §F, R18). It is not ranked or proposed as work,
-  so it is in neither unranked, unplaced nor stale dispatch, and the board shows it
-  in a group of its own.
+  so it is in neither unranked, unplaced, no severity nor stale dispatch, and the
+  board shows it in a group of its own.
 
 Every key comparison goes through `fr.triage.model.normalize_key` (or
 `issue_key`, which is built on it). There is no second normaliser here.
@@ -284,7 +284,10 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
         no_severity=[
             i
             for i in facts.issues
-            if i.state == "open" and i.key in judged and judgements.issues[i.key].severity is None
+            if i.state == "open"
+            and i.key in judged
+            and judgements.issues[i.key].severity is None
+            and not is_awaiting_live(i)
         ],
         duplicate_unknown=sorted(
             k
