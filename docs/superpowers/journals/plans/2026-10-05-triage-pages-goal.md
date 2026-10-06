@@ -558,3 +558,78 @@ Prose skills have no refactor step; documentation additions are concise and targ
 ### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
 
 file moves, a deleted script and one config key: no code to clean
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-10-06T06:31:44+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · authored-src/build.py wrote history fragments into architecture/, so history/manifest.yaml entries stayed missing (phase 5)
+
+Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-10-06T06:31:44+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · pipeline.py aborts on closed pinned issues, so built fragments cannot be regenerated from imported state (phase 5)
+
+Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-10-06T06:31:44+00:00 phase=5 state=open review_scope=in -->
+### p5-r3 · finding [open] (reviewer: in scope) · fr-triage skill described export as a PR per wave and omitted the R13 specifics (phase 5)
+
+Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4 created=2026-10-06T06:31:44+00:00 phase=5 state=open review_scope=in -->
+### p5-r4 · finding [open] (reviewer: in scope) · skills omitted the new check sets and the Parked/placed behaviour of duplicate_of (phase 5)
+
+Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5 created=2026-10-06T06:31:44+00:00 phase=5 state=open review_scope=in -->
+### p5-r5 · finding [open] (reviewer: in scope) · fr-origins still said duplicate discipline was prose-only though duplicate_of is now validated (phase 5)
+
+Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6 created=2026-10-06T06:31:44+00:00 phase=5 state=open review_scope=in -->
+### p5-r6 · finding [open] (reviewer: in scope) · "board" named three things and the skill did not disambiguate; the file table omitted board.html (phase 5)
+
+Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7 created=2026-10-06T06:31:44+00:00 phase=5 state=open review_scope=in -->
+### p5-r7 · finding [open] (reviewer: in scope) · docs/triage/README.md was stale on manifests, timeline attribution, fragments and the recipe (phase 5)
+
+Raised by the phase 5 reviewer (separate dispatched context), which also reviewed the merge of main (b8a528795).
+
+<!-- fr:journal kind=review scope=plan id=p5-review-1 created=2026-10-06T06:31:44+00:00 phase=5 -->
+### p5-review-1 · review · phase 5 review: 7 findings (all tagged in; p5-r2 reclassified out) (phase 5)
+
+Dispatched reviewer read the phase 5 range and the merge resolution of b8a528795 (#969, #980) against R14, R15 and R1-R13, ran both mirror checks and the triage/skill tests, imported the repo state and rendered it. Merge resolution judged clean. Findings fixed in 591cc7a96 and re-verified (2057 passed); p5-r2 reclassified out of scope with reasoning.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-10-06T06:31:44+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: authored-src/build.py wrote history fragments into architecture/, so history/manifest.yaml entries stayed missing (phase 5)
+
+build.py writes the dated fragments to history/ (591cc7a96); docstring and README match.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-10-06T06:31:44+00:00 phase=5 state=open resolves=p5-r2 out_of_scope=true -->
+### p5-r2-resolved · finding [out-of-scope] · resolves p5-r2: pipeline.py aborts on closed pinned issues, so built fragments cannot be regenerated from imported state (phase 5)
+
+Reclassified: the abort is #969's deliberate guard (the build stops if a pinned issue has closed), stale because those issues closed since; choosing which open issues pin to which pipeline step is operator curation, not caused by this change. The README now says to refresh the pin table first.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-10-06T06:31:44+00:00 phase=5 state=fixed resolves=p5-r3 -->
+### p5-r3-resolved · finding [fixed] · resolves p5-r3: fr-triage skill described export as a PR per wave and omitted the R13 specifics (phase 5)
+
+The driver paragraph states R13 in full (591cc7a96).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4-resolved created=2026-10-06T06:31:44+00:00 phase=5 state=fixed resolves=p5-r4 -->
+### p5-r4-resolved · finding [fixed] · resolves p5-r4: skills omitted the new check sets and the Parked/placed behaviour of duplicate_of (phase 5)
+
+fr-triage and fr-origins name every new check set; duplicate_of's Parked/placed behaviour documented (591cc7a96).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5-resolved created=2026-10-06T06:31:44+00:00 phase=5 state=fixed resolves=p5-r5 -->
+### p5-r5-resolved · finding [fixed] · resolves p5-r5: fr-origins still said duplicate discipline was prose-only though duplicate_of is now validated (phase 5)
+
+Wording corrected; the test pinning the old claim now asserts the new one (591cc7a96).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6-resolved created=2026-10-06T06:31:44+00:00 phase=5 state=fixed resolves=p5-r6 -->
+### p5-r6-resolved · finding [fixed] · resolves p5-r6: "board" named three things and the skill did not disambiguate; the file table omitted board.html (phase 5)
+
+Backlog page vs Kanban disambiguated, board.html in the file table (591cc7a96).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7-resolved created=2026-10-06T06:31:44+00:00 phase=5 state=fixed resolves=p5-r7 -->
+### p5-r7-resolved · finding [fixed] · resolves p5-r7: docs/triage/README.md was stale on manifests, timeline attribution, fragments and the recipe (phase 5)
+
+README rewritten for the four page manifests, R12, the history render and the export opt-in (591cc7a96).
