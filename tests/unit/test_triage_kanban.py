@@ -62,8 +62,10 @@ def _merged_issues() -> list[dict[str, Any]]:
 # ------------------------------------------------------------------ columns (R2)
 
 
-def test_the_columns_are_six_in_r2_order() -> None:
-    assert COLUMNS == ("proposed", "waiting", "running", "pr-open", "closing-out", "done")
+def test_the_columns_are_seven_in_r2_order() -> None:
+    assert COLUMNS == (
+        "proposed", "waiting", "running", "pr-open", "closing-out", "partial", "done"
+    )  # fmt: skip
     assert set(get_args(kanban.Column)) == set(COLUMNS)
 
 
@@ -134,8 +136,8 @@ def test_done_reads_the_closeout_event_never_a_merged_pr_in_the_facts() -> None:
     assert _col("m", f, jd) == "closing-out"
 
 
-@pytest.mark.parametrize("word", ["cancelled", "abandoned", "partial"])
-def test_cancelled_abandoned_and_partial_are_done_with_the_pill_word(word: str) -> None:
+@pytest.mark.parametrize("word", ["cancelled", "abandoned"])
+def test_cancelled_and_abandoned_are_done_with_the_pill_word(word: str) -> None:
     events: list[dict[str, Any]] = [dispatch("a")]
     issues = [issue(1)]
     if word == "cancelled":
@@ -147,11 +149,34 @@ def test_cancelled_abandoned_and_partial_are_done_with_the_pill_word(word: str) 
         jd = judgements({"widgets#1": j(1)}, [batch("a", [1], events=events)])
         assert (_col("a", f, jd), pill_of(jd.batches[0], f)) == ("done", "abandoned")
         return
-    else:  # merged PR, member still open
-        issues = [issue(1, prs=[pr(11, "feat/batch-a", state="MERGED")])]
     f, jd = _world([batch("a", [1], events=events)], issues)
     assert _col("a", f, jd) == "done"
     assert pill_of(jd.batches[0], f) == word
+
+
+def _partial(*closeout: dict[str, Any]) -> tuple[Facts, Judgements]:
+    """Batch `a`'s PR merged while its member stayed open: stage `partial`."""
+    issues = [issue(1, prs=[pr(11, "feat/batch-a", state="MERGED")])]
+    return _world([batch("a", [1], events=[dispatch("a"), *closeout])], issues)
+
+
+@pytest.mark.parametrize("closeout", [(), (SESSION,)], ids=["not-recorded", "started"])
+def test_a_partial_batch_owed_its_closeout_is_in_partial_not_done(closeout: tuple) -> None:
+    """gh#985: the driver still owes a partial batch its close-out, so it is not Done."""
+    f, jd = _partial(*closeout)
+    assert _col("a", f, jd) == "partial"
+    assert pill_of(jd.batches[0], f) == "partial"
+
+
+def test_a_partial_batch_moves_to_done_once_its_closeout_is_archived() -> None:
+    f, jd = _partial({**HAND, "archived": 42})
+    assert (_col("a", f, jd), pill_of(jd.batches[0], f)) == ("done", "partial")
+    assert _hint("a", f, jd) == "partial"
+
+
+def test_a_partial_batch_with_a_started_closeout_reads_archive_pr_pending() -> None:
+    f, jd = _partial(SESSION)
+    assert _hint("a", f, jd) == "archive PR pending"
 
 
 def test_a_plain_merged_or_running_batch_has_no_pill() -> None:
@@ -379,7 +404,7 @@ def test_first_actions_keeps_the_first_action_per_batch() -> None:
 # ------------------------------------------------------------------ cards and board
 
 
-def test_the_board_has_six_columns_with_counts_in_order() -> None:
+def test_the_board_has_seven_columns_with_counts_in_order() -> None:
     f, jd = busy()
     board = build_board(f, jd, {})
     assert [c.key for c in board.columns] == list(COLUMNS)
@@ -390,6 +415,7 @@ def test_the_board_has_six_columns_with_counts_in_order() -> None:
         "running": 0,
         "pr-open": 2,
         "closing-out": 1,
+        "partial": 0,
         "done": 1,
     }
     assert isinstance(board, Board)

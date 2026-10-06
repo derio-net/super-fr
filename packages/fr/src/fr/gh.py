@@ -50,6 +50,10 @@ GH_TIMEOUT_SECONDS = 120.0
 """How long one `gh` call may take before it is killed and fails as a transient
 error. A stalled GraphQL call otherwise blocks its caller indefinitely: the wave
 driver's loop once sat 16 minutes on a single `gh issue list` (gh#909)."""
+GH_PAGE_SECONDS = 30.0
+"""Added to a bulk list's bound per 100-record page past the first (gh#1025)."""
+GH_LIST_TIMEOUT_CAP_SECONDS = 600.0
+"""The most any one bulk list may take, however large its `--limit`."""
 
 
 _HOST: contextvars.ContextVar[str | None] = contextvars.ContextVar("fr_gh_host", default=None)
@@ -127,22 +131,40 @@ def host_scope(host: str | None) -> Iterator[None]:
         _HOST.reset(token)
 
 
+def list_timeout(limit: int) -> float:
+    """The bound for one bulk list of up to *limit* records (gh#1025): gh pages by
+    100, so each page past the first gets `GH_PAGE_SECONDS` more, never past
+    `GH_LIST_TIMEOUT_CAP_SECONDS` — still a bound, so a stalled list still fails."""
+    pages = max(1, -(-limit // 100))
+    return min(GH_TIMEOUT_SECONDS + (pages - 1) * GH_PAGE_SECONDS, GH_LIST_TIMEOUT_CAP_SECONDS)
+
+
+def _bound(args: list[str]) -> float:
+    """`GH_TIMEOUT_SECONDS`, or `list_timeout` for a call that pages (`--limit N`)."""
+    if "--limit" in args:
+        at = args.index("--limit") + 1
+        if at < len(args) and args[at].isdigit():
+            return list_timeout(int(args[at]))
+    return GH_TIMEOUT_SECONDS
+
+
 def _run_gh(args: list[str]) -> str:
     """Run a gh command and return stdout.  Raises GhError on failure, and on a
-    call that outlives `GH_TIMEOUT_SECONDS` (transient: `is_transient` is true)."""
+    call that outlives its bound (`_bound`; transient: `is_transient` is true)."""
+    bound = _bound(args)
     try:
         result = subprocess.run(
             ["gh", *args],
             capture_output=True,
             text=True,
             check=True,
-            timeout=GH_TIMEOUT_SECONDS,
+            timeout=bound,
             env=_env(),
         )
     except subprocess.TimeoutExpired as exc:
         raise GhError(
-            f"`{shlex.join(['gh', *args])}` timed out after {GH_TIMEOUT_SECONDS:g}s",
-            stderr=f"timeout after {GH_TIMEOUT_SECONDS:g}s",
+            f"`{shlex.join(['gh', *args])}` timed out after {bound:g}s",
+            stderr=f"timeout after {bound:g}s",
         ) from exc
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
