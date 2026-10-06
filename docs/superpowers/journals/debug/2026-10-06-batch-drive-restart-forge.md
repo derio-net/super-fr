@@ -44,3 +44,8 @@ Close-out recorded before runner.dispatch (handle=item.id), rolled back on a dis
 ### f-921 · finding [fixed] · Batch drive-restart-forge: investigation
 
 Fetch/config failures raise ForgeReadError (skip pass); an archive merge refusal and an update-push GitError are reported once and retried, --once exits 1; GIT_TIMEOUT_SECONDS bounds git (never post_merge); skipped repos are left out of the selection, warned once, counted pending. Pinned by the gh#921 tests in tests/unit/test_triage_batch_drive_disruption.py.
+
+<!-- fr:journal kind=finding scope=debug id=f-998 created=2026-10-06T13:58:56+00:00 state=fixed -->
+### f-998 · finding [fixed] · Batch drive-restart-forge: investigation
+
+parse_triage_config(lenient=True) drops unknown top-level keys inside the drive only (collect_into, check_config_fresh, dispatch_batch), warned once; hand-run collect stays strict; after a post_merge that installs a newer fr the loop finishes its pass, releases drive.lock and re-execs on it. Pinned by the gh#998 tests in the same file.
