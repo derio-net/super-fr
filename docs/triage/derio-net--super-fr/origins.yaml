@@ -1540,6 +1540,18 @@ issues:
     severity: med
     reason: '#1023''s review found more degraded-forge exits of #921''s class, out of its scope'
     evidence: issue body; not checked against the code
+  super-fr#1043:
+    category: gap
+    source: hand
+    severity: med
+    reason: no coordination exists between triage scopes or hosts; raised by the operator while discussing multi-host driving
+    evidence: drive.lock and judgements.yaml are per state dir (triage_batch_cmd.drive_lock); the only cross-host guard is the branch-on-origin check in dispatch
+  super-fr#1051:
+    category: latent
+    source: recording
+    severity: med
+    reason: 'the collector has never deduplicated check runs by name; exposed when #1038''s CI was re-run green on the same commit'
+    evidence: 'collect.py _checks read; #1038 rollup FAILURE 3 / SUCCESS 30 while gh pr checks shows all passing'
 causes:
 - title: Wave-driver review findings filed out of scope at close-out
   categories:
