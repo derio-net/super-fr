@@ -7297,8 +7297,15 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: skipped
+    notes: 'Verified live 2026-10-06 on fr 5.11.2/5.12.0 (wave 9 of a real drive): batch
+      model-bindings'' PR #1042 conflicted with main in docs/acceptance/matrix.yaml;
+      the driver logged ''handed back to its session derio-net/super-fr/run/batch-model-bindings'',
+      the idle herdr session received the hand-back brief (merge origin/main, no rebase
+      or force-push, resolve the named path), resolved and pushed, and the train merged
+      #1042 (340553c4). A re-run driver did not re-send for the same head. Earlier the
+      same day #1031''s session was working when its conflict arrived; the driver waited
+      (''nothing sent, retried next pass'') rather than interrupt it.'
     verify: live
   - id: triage-claims-identity
     capability: triage-claims
