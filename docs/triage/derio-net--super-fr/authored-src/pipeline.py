@@ -14,19 +14,16 @@ open_issues = {i["number"]: i["title"] for i in facts["issues"] if i["state"] ==
 # kind: d = defect (behaves wrong today), g = gap (missing capability / unproven claim)
 DRIVER = [
     ("judge + board", "fr triage collect · render", [
-        (971, "g", "no dedupe sweep"), (987, "d", "stopped = ready"),
-        (1000, "d", "cancelled wave hides"), (1001, "d", "390px wave table"),
         (985, "d", "partial in Done")]),
     ("batches + waves", "create · wave · after", [
         (884, "g", "weak cap tests"), (990, "d", "wave-less unadopted")]),
     ("dispatch", "herdr runner", [
         (878, "d", "only in herdr"), (931, "d", "busy-pane race"),
-        (956, "d", "brief not sent"), (892, "d", "self-hosted host")]),
+        (956, "d", "brief not sent"), ]),
     ("session", "fr-goal / fr-debugging", [
         (959, "g", "manual conflicts")]),
     ("merge train", "update · CI · merge", [
-        (880, "g", "verify R4 rule"), (947, "d", "no checks: crash"),
-        (952, "d", "no checks: skip"), (962, "d", "moved head"),
+        (962, "d", "moved head"),
         (937, "d", "archive vs refs"), (921, "d", "degraded forge")]),
     ("post_merge", "install.sh", [
         (964, "g", "stale sessions"), (998, "d", "new config key")]),
@@ -40,23 +37,23 @@ PIPE = [
     ("spec-review", []),
     ("plan", [(552, "g", "no add-phase")]),
     ("plan-review", []),
-    ("implement-phase", [(1002, "d", "bg suite unseen")]),
+    ("implement-phase", []),
     ("review-phase", []),
     ("journal-check", []),
     ("deliver", [(868, "d", "false keyword"), (869, "d", "split keyword"),
-                 (822, "g", "live-walk close"), (742, "d", "gh bypass"),
-                 (838, "g", "tiers in PR body")]),
+                 (822, "g", "live-walk close"), (838, "g", "tiers in PR body")]),
 ]
 STRIPS = [
     ("RUN CURSOR · RECORDS · TELEMETRY", [
-        (988, "d", "pickup drops record"), (999, "d", "uv --with witness")]),
+        ]),
     ("COST + TELEMETRY (measurement owed)", [
         (593, "g", "main-session cost"), (597, "g", "perf measures"),
         (627, "g", "handoff quality"), (793, "g", "per-phase overhead"),
         (509, "g", "OpenCode/Hermes readers"), (511, "g", "no-usage record"),
         (623, "g", "live Hermes db")]),
     ("HOST · INSTALL · ISOLATION", [
-        (924, "d", "Pages deploy"), (580, "g", "gc --stop-idle"),
+        (924, "d", "Pages deploy"), (1014, "d", "glab token: no gate"),
+        (1015, "d", "GH_HOST not applied"), (1013, "d", "refusal by text"), (580, "g", "gc --stop-idle"),
         (1003, "d", "sync symlink race")]),
 ]
 
