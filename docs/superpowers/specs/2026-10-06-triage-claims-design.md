@@ -57,7 +57,7 @@ R8. Each `batch drive --yes` pass and `claim sync --yes` refresh this scope's ow
 R9. An expired claim is never taken automatically. `fr triage claim take <key> --batch <id> --yes` replaces another scope's expired claim with this scope's claim for one of this scope's batches containing the issue; it is refused while the claim is live. `fr triage claim release <key> --yes` withdraws this scope's own claim at any time, and another scope's only once expired. Without `--yes` both print what they would write.
 R10. This scope's claims on a batch's members are released (marker edited to its released form; `fr:claimed` removed once no un-released claim, live or expired, remains) when the batch is cancelled, abandoned, or finished (its run archived), when `batch edit --remove-issue --yes` drops a member, and when `batch edit --no-wave --yes` clears the wave of a proposed batch. A merged batch keeps its claims, refreshed, until its close-out is archived. Releases are derived from the batch, read and written per member at release time whether the issue is open or closed, and recorded as a `claims_released` event on the batch so they are not repeated (judgements schema 6; schemas 1–5 still load).
 R11. A live batch of this scope with no claims yet (dispatched before this change) is claimed by the first `drive --yes` pass or `claim sync --yes`. When another scope already holds a member, R6 applies.
-R12. The GitHub client's `list_issue_comments` returns each comment's numeric id and its client gains `edit_issue_comment(repo, comment_id, body)`. `collect` reads the comments of every open issue labelled `fr:claimed` and records each signer's latest un-released claim on the issue in facts (facts schema 6; schemas 3–5 still load).
+R12. The GitHub client's `list_issue_comments` returns each comment's numeric id and its client gains `edit_issue_comment(repo, comment_id, body)`. `collect` reads the comments of every open issue labelled `fr:claimed` and records each signer's latest un-released claim on the issue in facts (facts schema 7, after main's driver-sessions schema 6; schemas 3–6 still load).
 R13. `board.html` shows a "Held elsewhere" group listing the scope's issues claimed by other scopes, with holder, batch and expiry, marking expired claims. Each of this scope's batch cards shows when its claims expire.
 R14. A scope may carry a scope config, `<state dir>/scope.yaml`, with `claim_expiry_hours`, `board_name` and `publish`. `publish` is an argument list with `{board}`, `{name}` and `{scope_id}` placeholders. fr runs it after every `drive --yes` pass that rendered the board, and for each render of `fr triage board --publish` (each `--watch` iteration included), with a 120-second timeout. A failure or timeout warns once per cause and never changes an exit code. The default board name is `<repo> batches` for a repo scope, `<owner> batches` for an org scope, and `<scope name> batches` for a group scope.
 R15. The host id and the scope config never leave the host: they are not durable triage state, `fr triage state export` never copies them, and no target repo carries them.
@@ -295,8 +295,9 @@ re-read applies R17's filter, so an untrusted marker never wins R4 here either. 
 ### H. Facts (`fr/triage/model.py`, `fr/triage/collect.py`)
 
 - `Issue.claims: list[IssueClaim] = []` (signer, batch, claimed, heartbeat,
-  expires, comment_id, created_at). `FACTS_SCHEMA` = 6, `FACTS_READS` =
-  `(3, 4, 5, 6)`, and the comment above them records why.
+  expires, comment_id, created_at). `FACTS_SCHEMA` = 7, `FACTS_READS` =
+  `(3, 4, 5, 6, 7)` (main released 6 for the driver-sessions config keys while this
+  change was in flight), and the comment above them records why.
 - `_marker_at`'s single comment read is shared: an issue labelled
   `fr:in-progress` or `fr:claimed` is read once, giving both
   `dispatch_marker_at` and `claims`.

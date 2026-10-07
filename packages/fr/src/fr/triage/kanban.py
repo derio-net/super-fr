@@ -535,8 +535,15 @@ def build_board(
     live = live_stops(batches, facts, stops or {})
     cards = [
         _card(
-            b, facts, batches, statuses, actions, selected, live,
-            claim_expiry=expiries.get(b.id), now=now,
+            b,
+            facts,
+            batches,
+            statuses,
+            actions,
+            selected,
+            live,
+            claim_expiry=expiries.get(b.id),
+            now=now,
         )
         for b in batches
     ]
