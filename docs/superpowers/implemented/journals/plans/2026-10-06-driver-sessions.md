@@ -354,3 +354,13 @@ Out of scope: the card's single status pill (kanban_render.py) predates this cha
 ### p3-r9-resolved · finding [out-of-scope] · resolves p3-r9: the fr-triage skill says 'six lifecycle columns'; the board has seven (phase 3)
 
 Out of scope: that sentence predates this change; this PR did not alter the board's columns.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved-2 created=2026-10-07T03:30:37+00:00 state=open resolves=p3-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1065 -->
+### p3-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1065] · resolves p3-r8: the card front shows the batch session's pill, so an idle close-out card reads the wrong session's status
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1065.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved-2 created=2026-10-07T03:30:37+00:00 state=open resolves=p3-r9 tracked_by=https://github.com/derio-net/super-fr/issues/1066 -->
+### p3-r9-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1066] · resolves p3-r9: the fr-triage skill says 'six lifecycle columns'; the board has seven
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1066.
