@@ -19,3 +19,14 @@ Measured 2026-10-07 in a Claude Code cloud session (this repo, branch feat/cloud
 - **Process model.** `drive` is a `while True` loop (interval 120 s) with state under `$HOME/.cache/fr/triage/<scope>/` and a PID-based `drive.lock`; `post_merge` runs `./scripts/install.sh` in a base clone and may re-exec. On an ephemeral container the state, the lock and the loop all die with it.
 - **Sessions.** The container has the `claude` CLI and tmux, no herdr. Creating, messaging and inspecting other cloud sessions, and scheduling Routines that wake a session (delivery survives restarts), are tools of the agent, not APIs fr's Python can call. A cloud runner is therefore agent-mediated: fr decides, the session's agent acts, as for `kind: agent` steps.
 - **No prior art:** no spec mentions a REST fallback, GraphQL avoidance or remote sessions; `2026-07-09-multi-backend-git-host-adapters-design.md:54-61` lists the GraphQL-only fields.
+
+<!-- fr:journal kind=decision scope=spec id=d1-scope-and-adapters created=2026-10-07T13:07:00+00:00 -->
+### d1-scope-and-adapters · decision · Operator decisions, round 1: second scope, forge and driver as adapters, state in the workspace
+
+Operator, 2026-10-07:
+
+- **Second scope.** The cloud driver runs beside the host driver, not instead of it. Many drivers are planned, from many hosts and from the same host, over different repo combinations and orgs; a wave claiming its issues is what keeps them apart.
+- **Forge is an adapter.** Not "gh": a `claude_cloud_gh` implementation of the forge adapter uses REST behind the scenes.
+- **Driver is an adapter.** The driver loop becomes an adapter; a `claude_cloud_driver` implementation runs as a Routine.
+- **State moves out of `~/.cache`** into the workspace, as a git-ignored file.
+- **Plugin reinstalls after a merge (`post_merge`):** open. Wanted: one general solution for every fr-isolation shape, if one exists.
