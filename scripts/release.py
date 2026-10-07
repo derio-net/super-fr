@@ -306,43 +306,55 @@ def _plan_ceiling_widened(removed: list[str], added: list[str], new: str) -> boo
 
 
 LIVE_ARTIFACT_RE = re.compile(
-    r"^(?:docs/superpowers/(?:runs/[^/]+\.yaml|usage/[^/]+\.yaml|journals/.+\.md)"
+    r"^(?!.*(?:^|/)implemented/)"
+    r"(?:docs/superpowers/(?:runs/[^/]+\.yaml|runs/[^/]+\.records/[^/]+\.yaml"
+    r"|usage/[^/]+\.yaml|journals/.+\.md)"
     r"|docs/acceptance/matrix\.yaml)$"
 )
-"""Live artifacts whose stamp a release may move (`fr.artifacts.registry`'s locators,
-minus plans, which have their own ceiling rule). `implemented/` never matches."""
+"""Live artifacts whose stamp a release may move: `fr.artifacts.registry`'s run,
+record, usage, journal and matrix locators. Plans have their own ceiling rule;
+specs (`fr_schema:` front matter) and `.devcontainer/fr-profiles.yaml` carry their
+stamp elsewhere and are left out, so their migrations still refuse. No path under
+an `implemented/` segment matches: archives are frozen."""
 
-_STAMP_LINE_RES = (
-    re.compile(r"^schema_version: (\d+)$"),
-    re.compile(r"^<!--[ \t]*fr:journal-schema=(\d+)[ \t]*-->[ \t]*$"),
-)
-
-
-def _stamp_of(line: str) -> tuple[int, int] | None:
-    """`(carrier, version)` when `line` is an artifact stamp, else None."""
-    for carrier, rx in enumerate(_STAMP_LINE_RES):
-        m = rx.match(line)
-        if m:
-            return carrier, int(m.group(1))
-    return None
+_YAML_STAMP_RE = re.compile(r"^schema_version: (\d+)$")
+_JOURNAL_STAMP_RE = re.compile(r"^<!--[ \t]*fr:journal-schema=(\d+)[ \t]*-->[ \t]*$")
+_YAML_HEADER_RE = re.compile(r"^(?:---\s*|#.*|\s*)$")
 
 
-def _stamp_moved_up(removed: list[str], added: list[str]) -> bool:
-    """The whole change is one stamp line moving up, or one missing stamp inserted.
+def _stamp_moved_up(path: str, removed: list[str], added: list[str], staged: str) -> bool:
+    """The whole change is the artifact's own stamp moving up, or a missing one inserted,
+    where `fr`'s stamp writer puts it.
 
     A PR that merged after another PR moved an artifact's version carries its live
     artifacts at the old stamp; the release's own migration rewrites exactly that
-    line. Anything else (a body line, a stamp moving down) is not mechanical and
-    still refuses."""
+    line. The carrier follows the path (a journal's header comment, else a top-level
+    `schema_version:`), the staged file must hold exactly one stamp, and it must sit
+    in the header: a journal's first non-blank line, or a YAML file's lines before
+    its first key. Anything else (a body line, a stamp moving down, a duplicate)
+    refuses."""
+    rx = _JOURNAL_STAMP_RE if path.endswith(".md") else _YAML_STAMP_RE
     if len(added) != 1 or len(removed) > 1:
         return False
-    new = _stamp_of(added[0])
+    new = rx.match(added[0])
     if new is None:
         return False
-    if not removed:
-        return True
-    old = _stamp_of(removed[0])
-    return old is not None and old[0] == new[0] and new[1] > old[1]
+    if removed:
+        old = rx.match(removed[0])
+        if old is None or int(new.group(1)) <= int(old.group(1)):
+            return False
+    lines = staged.split("\n")
+    if sum(1 for line in lines if rx.match(line.rstrip("\r"))) != 1:
+        return False
+    for line in lines:
+        line = line.rstrip("\r")
+        if rx.match(line):
+            return True
+        if path.endswith(".md") and line.strip():
+            return False
+        if not path.endswith(".md") and not _YAML_HEADER_RE.match(line):
+            return False
+    return False
 
 
 def _major_of(bound: str) -> int | None:
@@ -362,7 +374,11 @@ def verify_staged(repo: Path, old: str, new: str, fragments: list[changes.Fragme
         status, path = line.split("\t", 1)
         if path in consumed and status == "D":
             continue
-        diff = _out(repo, "diff", "--cached", "-U0", "--", path).splitlines()
+        # `split("\n")`, never `splitlines()`: that also breaks on \x85, U+2028 and
+        # friends, leaving the rest of a changed line unprefixed and so unchecked.
+        diff = [
+            d.rstrip("\r") for d in _out(repo, "diff", "--cached", "-U0", "--", path).split("\n")
+        ]
         removed = [d[1:] for d in diff if d.startswith("-") and not d.startswith("---")]
         added = [d[1:] for d in diff if d.startswith("+") and not d.startswith("+++")]
         if path not in per_file and LIVE_PLAN_META_RE.match(path) and status == "M":
@@ -370,7 +386,8 @@ def verify_staged(repo: Path, old: str, new: str, fragments: list[changes.Fragme
                 bad.append(f"{path} (a plan line other than its fr_version ceiling)")
             continue
         if path not in per_file and LIVE_ARTIFACT_RE.match(path) and status == "M":
-            if not _stamp_moved_up(removed, added):
+            staged = _out(repo, "show", f":{path}")
+            if not _stamp_moved_up(path, removed, added, staged):
                 bad.append(f"{path} (a line other than its artifact stamp)")
             continue
         if path not in per_file or status != "M":
