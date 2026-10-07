@@ -78,7 +78,7 @@ def test_collect_writes_facts_json_from_the_forge(
     facts_path = tmp_path / "facts.json"
     assert facts_path.exists()
     facts = json.loads(facts_path.read_text(encoding="utf-8"))
-    assert facts["schema"] == 6
+    assert facts["schema"] == 7
     assert facts["scope"] == "derio-net--super-fr"
     assert facts["kind"] == "repo"
     collected = {(i["repo"], i["number"]) for i in facts["issues"]}
