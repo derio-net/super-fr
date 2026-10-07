@@ -67,3 +67,15 @@ Measured 2026-10-07 17:38Z-18:41Z in this session: six `send_later` self-wakes t
 **What this does not show:** what happens to a session idle for long with no wakes. The ten-minute wakes kept it active the whole time. The heartbeat keeps running until ~19:38Z, its 2 h limit; whether the container is still the same after that idle stretch is the next data point, read at the next operator turn.
 
 **Design consequence:** a driver session waking every few minutes keeps one container, its disk and its processes. Restoring state from the forge ref is still needed on a new container (after a long idle, a restart or a reclaim), but is the exception, not every pass.
+
+<!-- fr:journal kind=discovery scope=spec id=wake-probe-restart created=2026-10-07T18:45:26+00:00 -->
+### wake-probe-restart · discovery · Wake probe, follow-up: a restart three minutes after the last wake kept the disk and killed the process
+
+Observed 2026-10-07 18:45Z, with no wake scheduled and no operator turn: the platform restarted the session's container.
+
+- New boot at 18:44:53Z (boot id `cb0ae1cf`, was `51d0eacb`); worker epoch 5 -> 6; the container id **did not change**.
+- **Disk kept:** every marker survived, as did the worktree and its commits.
+- **Process killed:** the heartbeat stopped at 18:44:47Z (67 lines). The harness reported the background task stopped and told the session to re-create it if needed.
+- **Timing:** about 3 minutes after the last probe turn ended (~18:42Z). During the hour of ten-minute wakes, with the same background process running, no restart happened. The cause is unknown from inside the container: an idle timeout, or a platform-side restart (one MCP server disconnected around the same time).
+
+**Design consequence:** a background process is not a reliable keep-alive or wake source; any process the driver starts must be re-creatable after a restart. The disk, including git-ignored state in the workspace, survived both restarts seen today. The forge ref remains the durable copy for when it does not (reclaim, or a session moved to a new container).
