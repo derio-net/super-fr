@@ -286,11 +286,13 @@ def write_board(
     on disk now, with live session statuses. Returns the path written and its card count."""
     _, facts, judgements = _load_state(scope, target)
     statuses, notes = session_statuses(judgements, facts, prefix=prefix)
-    board = build_board(facts, judgements, statuses, stops=load_stops(target))
+    rendered_at = datetime.now(UTC)
+    # The wall clock: session status is read live above, so idle minutes must be real.
+    board = build_board(facts, judgements, statuses, stops=load_stops(target), now=rendered_at)
     page = render_board(
         board,
         scope_args=scope_args,
-        rendered_at=datetime.now(UTC),
+        rendered_at=rendered_at,
         refresh=refresh,
         notes=notes,
     )

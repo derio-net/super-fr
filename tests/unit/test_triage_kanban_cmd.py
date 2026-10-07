@@ -299,6 +299,21 @@ def test_write_board_is_atomic_and_reloads_judgements_from_disk(
     assert [p.name for p in tmp_path.iterdir() if p.suffix == ".tmp" or ".tmp" in p.name] == []
 
 
+def test_write_board_judges_idleness_by_the_wall_clock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """driver-sessions R8: the dispatch in the fixture is days old by the real clock, and the
+    runner reports the session idle with no PR, so the card is flagged and says why."""
+    _setup(tmp_path, _dispatch_event("b1"))
+    _use(monkeypatch, _Inspector({f"{REPO}/run/batch-b1": "idle"}))
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    card = _column(path.read_text(encoding="utf-8"), "running")
+    assert re.search(
+        r"idle, dispatched \d+ min ago, no PR as of \d{4}-\d\d-\d\d \d\d:\d\d UTC", card
+    )
+    assert 'class="card needs-you"' in card
+
+
 # ---------------------------------------------------------------- --watch (R12)
 
 

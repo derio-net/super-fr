@@ -1,0 +1,125 @@
+{
+ "id": "cli:tab:list",
+ "result": {
+  "tabs": [
+   {
+    "agent_status": "idle",
+    "focused": false,
+    "label": "<label redacted>",
+    "number": 44,
+    "pane_count": 1,
+    "tab_id": "w2:t1C",
+    "workspace_id": "w2"
+   },
+   {
+    "agent_status": "unknown",
+    "focused": false,
+    "label": "|",
+    "number": 35,
+    "pane_count": 1,
+    "tab_id": "w2:t13",
+    "workspace_id": "w2"
+   },
+   {
+    "agent_status": "unknown",
+    "focused": false,
+    "label": "|",
+    "number": 51,
+    "pane_count": 1,
+    "tab_id": "w2:t1K",
+    "workspace_id": "w2"
+   },
+   {
+    "agent_status": "idle",
+    "focused": false,
+    "label": "<label redacted>",
+    "number": 60,
+    "pane_count": 1,
+    "tab_id": "w2:t1W",
+    "workspace_id": "w2"
+   },
+   {
+    "agent_status": "unknown",
+    "focused": false,
+    "label": "|",
+    "number": 127,
+    "pane_count": 1,
+    "tab_id": "w2:t3Z",
+    "workspace_id": "w2"
+   },
+   {
+    "agent_status": "unknown",
+    "focused": true,
+    "label": "<label redacted>",
+    "number": 130,
+    "pane_count": 1,
+    "tab_id": "w2:t42",
+    "workspace_id": "w2"
+   },
+   {
+    "agent_status": "idle",
+    "focused": false,
+    "label": "<label redacted>",
+    "number": 1,
+    "pane_count": 1,
+    "tab_id": "w6:t1",
+    "workspace_id": "w6"
+   },
+   {
+    "agent_status": "unknown",
+    "focused": false,
+    "label": "|",
+    "number": 2,
+    "pane_count": 1,
+    "tab_id": "w6:t2",
+    "workspace_id": "w6"
+   },
+   {
+    "agent_status": "idle",
+    "focused": false,
+    "label": "derio-net/super-fr/run/batch-archive-followups",
+    "number": 1,
+    "pane_count": 1,
+    "tab_id": "w36:t1",
+    "workspace_id": "w36"
+   },
+   {
+    "agent_status": "working",
+    "focused": false,
+    "label": "derio-net/super-fr/run/batch-cost-evidence",
+    "number": 2,
+    "pane_count": 1,
+    "tab_id": "w36:t2",
+    "workspace_id": "w36"
+   },
+   {
+    "agent_status": "done",
+    "focused": false,
+    "label": "derio-net/super-fr/run/batch-model-bindings",
+    "number": 3,
+    "pane_count": 1,
+    "tab_id": "w36:t3",
+    "workspace_id": "w36"
+   },
+   {
+    "agent_status": "working",
+    "focused": false,
+    "label": "derio-net/super-fr/run/batch-driver-sessions",
+    "number": 4,
+    "pane_count": 1,
+    "tab_id": "w36:t4",
+    "workspace_id": "w36"
+   },
+   {
+    "agent_status": "working",
+    "focused": false,
+    "label": "derio-net/super-fr/run/batch-triage-claims",
+    "number": 1,
+    "pane_count": 1,
+    "tab_id": "w37:t1",
+    "workspace_id": "w37"
+   }
+  ],
+  "type": "tab_list"
+ }
+}

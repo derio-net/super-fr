@@ -125,6 +125,7 @@ from fr.triage.batch_drive import (
     RUNS_DIR,
     STALE_CLOSEOUT,
     Action,
+    IdleSession,
     LivePr,
     Snapshot,
     Summary,
@@ -146,6 +147,7 @@ from fr.triage.batch_drive import (
     finished_waves,
     fresh_conflicts,
     housekeeping_branch,
+    idle_session,
     is_archived,
     is_finished,
     settle,
@@ -197,6 +199,8 @@ from fr.triage.state_sync import check_scope_name, export_state
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
     from fr_dispatch.work_item import WorkItem
+
+    from fr.triage.batch import BatchStage
 
 DISPATCH_INSTALL_HINT = (
     "dispatching to a runner requires fr-dispatch — install it "
@@ -1966,6 +1970,9 @@ class _Driver:
         self._runners: dict[str, Runner] = {}
         self._unloadable: set[str] = set()  # runners that failed to load, reported once
         self._probes: dict[str, tuple[Runner, Any]] = {}  # per pass: live item id -> its runner
+        # per pass: runner name -> the close-out probe, for every runner whose close-out
+        # followed a successful `post_merge` in a repo that opted in (driver-sessions sr-7)
+        self._restart: dict[str, Any] = {}
         self._merge: dict[str, MergeContext] = {}
         # The waves this process's previous pass found unfinished; None before its first
         # pass, so a wave already finished at start is never reported (R10).
@@ -2006,9 +2013,12 @@ class _Driver:
             self._runners[name] = load_runner(name)
         return self._runners[name]
 
-    def _try_runner(self, name: str) -> Runner | None:
-        """Runner *name*, or None (reported once) when it cannot be loaded: closing is
-        best effort, so a load failure never ends the drive (R10)."""
+    def _try_runner(
+        self, name: str, consequence: str = "its sessions are not closed"
+    ) -> Runner | None:
+        """Runner *name*, or None (reported once) when it cannot be loaded: closing and
+        the idle probe are best effort, so a load failure never ends the drive (R10).
+        *consequence* names what the caller loses, so the warning says the right thing."""
         if name in self._unloadable:
             return None
         runner, reason = try_load(name, self.runner)
@@ -2017,7 +2027,7 @@ class _Driver:
         self._unloadable.add(name)
         err_console.print(
             f"[yellow]warning:[/yellow] runner `{escape(name)}` could not be loaded "
-            f"({escape(reason or 'no reason given')}); its sessions are not closed",
+            f"({escape(reason or 'no reason given')}); {escape(consequence)}",
             soft_wrap=True,
         )
         return None
@@ -2180,6 +2190,7 @@ class _Driver:
             stale_live, asked = self._existing(facts, stale, repos, soft=True)
             existing |= stale_live
             probed = frozenset(b.id for b in stale if closeout_item_id(repos[b.id], b.id) in asked)
+        idle = self._idle(facts, chosen, repos, stages, archives, now) if self.yes else ()
         return Snapshot(
             batches=tuple(judgements.batches),
             stages=stages,
@@ -2193,6 +2204,8 @@ class _Driver:
             archives=archives,
             existing=existing,
             closeout_probed=probed,
+            idle=idle,
+            scope_args=tuple(self.scope_args),
             warned=frozenset(self.warned),
             close_sessions=closing_sessions,
             sessions=sessions,
@@ -2546,6 +2559,73 @@ class _Driver:
                     self._probes[probe.id] = (runner, probe)
         return frozenset(self._probes)
 
+    def _idle(
+        self,
+        facts: Facts,
+        chosen: list[Batch],
+        repos: dict[str, str],
+        stages: dict[str, BatchStage],
+        archives: dict[str, tuple[LivePr, ...]],
+        now: datetime,
+    ) -> tuple[IdleSession, ...]:
+        """The sessions the runner reports idle with nothing to show for it (R7).
+
+        Only candidates are probed: a batch whose last dispatch is older than the repo's
+        `idle_session_minutes` and that has no PR, and a recorded, unfinished close-out
+        older than that. One `session_statuses` per runner, and soft: a runner that cannot
+        load, refuses or raises is skipped, so no session reads idle from a read that never
+        happened. The verdict itself is `idle_session`, the one definition the board reads."""
+        from fr_dispatch.protocols import SessionInspector
+
+        candidates: list[tuple[Batch, bool, str]] = []  # (batch, is_closeout, runner name)
+        for b in chosen:
+            repo, stage = repos.get(b.id), stages.get(b.id)
+            if repo is None or stage is None:
+                continue
+            threshold = facts.config_for(repo).idle_session_minutes
+            dispatch, event = last_dispatch(b), closeout_event(b)
+            for is_closeout, owner in ((False, dispatch), (True, event)):
+                if owner is None or (is_closeout and owner.runner == "hand"):
+                    continue
+                # A candidate is a session `idle_session` would report were it idle: the
+                # rule alone decides what is owed work, so no second test lives here.
+                if idle_session(
+                    b, repo=repo, closeout=is_closeout, status="idle", stage=stage,
+                    archives=archives.get(repo, ()), now=now, threshold=threshold,
+                ) is not None:  # fmt: skip
+                    candidates.append((b, is_closeout, str(owner.runner)))
+        by_runner: dict[str, list[tuple[Batch, bool, WorkItem]]] = {}
+        for b, is_closeout, name in candidates:
+            probe = probe_item(repos[b.id], b, closeout=is_closeout, prefix=self.workspace_prefix)
+            by_runner.setdefault(name, []).append((b, is_closeout, probe))
+        found: list[IdleSession] = []
+        for name, entries in by_runner.items():
+            runner = self._try_runner(name, "idle sessions are not reported")
+            if runner is None or not isinstance(runner, SessionInspector):
+                continue
+            probes = [probe for _, _, probe in entries]
+            try:
+                refusal = runner.preflight(probes)
+                statuses = {} if refusal else runner.session_statuses(probes)
+            except Exception as exc:  # noqa: BLE001 - reporting is best effort
+                refusal, statuses = str(exc) or type(exc).__name__, {}
+            if refusal:
+                self._report_once(
+                    f"idle-probe\0{name}\0{refusal}",
+                    f"runner `{name}` cannot report session status: {refusal}",
+                )
+                continue
+            for b, is_closeout, probe in entries:
+                repo = repos[b.id]
+                idle = idle_session(
+                    b, repo=repo, closeout=is_closeout, status=statuses.get(probe.id),
+                    stage=stages[b.id], archives=archives.get(repo, ()), now=now,
+                    threshold=facts.config_for(repo).idle_session_minutes,
+                )  # fmt: skip
+                if idle is not None:
+                    found.append(idle)
+        return tuple(found)
+
     def _report_once(self, key: str, message: str) -> bool:
         """Print *message* the first time *key* is seen; whether it was printed."""
         if key in self.warned:
@@ -2629,6 +2709,7 @@ class _Driver:
         _, facts, judgements = _load_state(self.scope, self.target)
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._clone_unread = {}
+        self._restart = {}
         self._stopped, self._queued, self._conflicts = {}, 0, {}
         self._export_refusals = 0
         self._export_failures = 0
@@ -2653,31 +2734,35 @@ class _Driver:
         self._unfinished = unfinished_waves(snap)
         acted = False
         in_flight = sum(1 for b in snap.batches if snap.stages[b.id] in LIVE_STAGES)
-        for train in plan.trains:
-            _say(train_line(train))
-        for action in plan.actions:
-            if not self.yes:
-                _say(action_line(action))
-                continue
-            refused = self._export_refusals
-            outcome, did, in_flight = self._act(action, facts, in_flight)
-            acted = acted or did
-            if self._export_refusals > refused:  # refused before any write: a warning
-                action = replace(action, kind="warn")
-            if outcome or action.kind != "close":  # a close reported already stays quiet
-                _say(action_line(action, outcome))
-        summary = settle(
-            plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
-        )
-        if self._left_out:  # not done, only unread: the drive keeps waiting for them
-            summary = replace(summary, pending=summary.pending + len(self._left_out))
-        if self._export_refusals:  # still owed, but only the operator can move it
-            summary = replace(
-                summary,
-                closing=summary.closing - self._export_refusals,
-                blocked=summary.blocked + self._export_refusals,
+        try:  # a pass that aborts after a post_merge still restarts what it owes (p2-r1)
+            for train in plan.trains:
+                _say(train_line(train))
+            for action in plan.actions:
+                if not self.yes:
+                    _say(action_line(action))
+                    continue
+                refused = self._export_refusals
+                outcome, did, in_flight = self._act(action, facts, in_flight)
+                acted = acted or did
+                if self._export_refusals > refused:  # refused before any write: a warning
+                    action = replace(action, kind="warn")
+                if outcome or action.kind != "close":  # a close reported already stays quiet
+                    _say(action_line(action, outcome))
+            summary = settle(
+                plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
             )
-        _say(summary_line(summary))
+            if self._left_out:  # not done, only unread: the drive keeps waiting for them
+                summary = replace(summary, pending=summary.pending + len(self._left_out))
+            if self._export_refusals:  # still owed, but only the operator can move it
+                summary = replace(
+                    summary,
+                    closing=summary.closing - self._export_refusals,
+                    blocked=summary.blocked + self._export_refusals,
+                )
+            _say(summary_line(summary))
+        finally:
+            if self.yes:
+                self._restart_sessions()  # soft: never raises out of here
         if self.yes:
             self._write_board()
         else:
@@ -2686,6 +2771,40 @@ class _Driver:
         stuck += [f"export wave {a.wave} {a.batch}" for a in plan.actions
                   if a.wave is not None and a.kind == "warn"]  # fmt: skip
         return acted, summary, stuck
+
+    def _restart_sessions(self) -> None:
+        """Restart idle sessions once per recorded runner, after every close-out this pass
+        started (driver-sessions §B, sr-7). Soft like `_sessions`: a runner that cannot
+        load, refuses, or cannot restart is reported once per process, a raise is reported,
+        and none of it holds the drive or changes `--once`'s exit code."""
+        from fr_dispatch.protocols import SessionRestarter
+
+        for name, probe in self._restart.items():
+            runner = self._try_runner(name)
+            if runner is None:
+                continue
+            if not isinstance(runner, SessionRestarter):
+                self._report_once(f"restart\0{name}", f"runner `{name}` cannot restart sessions")
+                continue
+            try:
+                refusal = runner.preflight([probe])
+                if refusal:
+                    self._report_once(
+                        f"restart\0{name}\0{refusal}",
+                        f"runner `{name}` cannot restart sessions: {refusal}",
+                    )
+                    continue
+                result = runner.restart_idle()
+            except Exception as exc:  # noqa: BLE001 - upkeep, never the drive's work
+                err_console.print(
+                    f"[yellow]warning:[/yellow] restarting `{escape(name)}` sessions failed: "
+                    f"{escape(str(exc) or type(exc).__name__)}",
+                    soft_wrap=True,
+                )
+                continue
+            _say(f"restart: {result.ok} ok, {result.skipped} skipped, {len(result.failed)} failed")
+            for pane, reason in result.failed:
+                _say(f"restart failed {pane}: {reason}")
 
     def _write_board(self) -> None:
         """Render `board.html` from what this pass left on disk (R11). A board that cannot
@@ -3045,6 +3164,7 @@ class _Driver:
         except TriageError as exc:
             return f"close-out held: {exc}", False
         command = facts.config_for(repo).post_merge
+        post_merged = False
         if action.post_merge and command:
             try:
                 checkout.run_command(command)
@@ -3054,6 +3174,7 @@ class _Driver:
                 judgements, facts, batch, PostMergeEvent(kind="post_merge", at=_now_after(batch))
             )
             judgements = load_judgements(self.target / "judgements.yaml")
+            post_merged = True
             installed = _installed_version()
             if installed is not None and installed != __version__:
                 self.restart_to = installed  # after this pass: see `batch_drive_command`
@@ -3064,6 +3185,11 @@ class _Driver:
         archive = housekeeping_branch(branch, run, plan_slug)
         item_id = closeout_item_id(repo, batch.id)
         launch = self._launch(facts, batch, repo)
+        if post_merged and facts.config_for(repo).post_merge_restart == "idle":
+            name = str(launch.runner)  # restarted once at the end of the pass, not here
+            self._restart.setdefault(
+                name, probe_item(repo, batch, closeout=True, prefix=self.workspace_prefix)
+            )
         if action.recorded:
             self._append(
                 judgements, facts, batch,

@@ -51,37 +51,32 @@ agent has taken the prompt up (it left `idle`), not merely once it was typed.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # noqa: F401  (tests patch `fr_herdr.runner.subprocess.run`)
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from fr_dispatch.protocols import AdoptTarget
 
+from fr_herdr import restart  # noqa: F401  (imported at module top level, never lazily: spec sr-13)
+from fr_herdr._herdr import (
+    PANE_BUSY_TRIES,
+    PANE_BUSY_WAIT,
+    HerdrError,
+    _run_herdr,
+    start_agent,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from fr_dispatch.protocols import CloseOutcome, SessionStatus
+    from fr_dispatch.protocols import CloseOutcome, RestartSummary, SessionStatus
     from fr_dispatch.work_item import WorkItem
 
 
-class HerdrError(Exception):
-    """A herdr CLI call failed; the message carries herdr's own words, and *code* the
-    `.error.code` of herdr's JSON envelope when it printed one."""
-
-    def __init__(self, message: str, *, code: str | None = None) -> None:
-        super().__init__(message)
-        self.code = code
-
-
-PANE_BUSY_TRIES = 15
-"""`agent start` attempts against a pane whose shell is not up yet (`agent_pane_busy`)."""
-PANE_BUSY_WAIT = 2.0
-"""Seconds between them: 28s in all, for rc files and a slow prompt."""
 PROMPT_TIMEOUT_MS = 30000
 """How long `agent prompt --wait` may take to see the agent leave `idle`."""
 ENTER_TIMEOUT_MS = 10000
@@ -107,38 +102,6 @@ HARNESSES: dict[str, Harness] = {
 }
 
 _NAME_UNSAFE = re.compile(r"[^a-z0-9_-]")
-
-
-def _run_herdr(args: list[str]) -> dict[str, Any]:
-    """Run `herdr <args>` and return its parsed JSON (`{}` for empty output)."""
-    try:
-        done = subprocess.run(["herdr", *args], capture_output=True, text=True, check=True)
-    except FileNotFoundError as exc:
-        raise HerdrError("herdr is not on PATH") from exc
-    except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
-        raise HerdrError(
-            f"herdr {' '.join(args[:2])} failed: {detail}", code=_error_code(detail)
-        ) from exc
-    out = done.stdout.strip()
-    if not out:
-        return {}
-    try:
-        parsed: dict[str, Any] = json.loads(out)
-    except ValueError:
-        return {"raw": out}
-    return parsed
-
-
-def _error_code(detail: str) -> str | None:
-    """`.error.code` of herdr's JSON error envelope, if *detail* is one."""
-    try:
-        envelope = json.loads(detail)
-    except ValueError:
-        return None
-    error = envelope.get("error") if isinstance(envelope, dict) else None
-    code = error.get("code") if isinstance(error, dict) else None
-    return str(code) if code is not None else None
 
 
 def agent_name(item_id: str) -> str:
@@ -170,8 +133,8 @@ class HerdrRunner:
             return "herdr is not on PATH"
         if os.environ.get("HERDR_ENV") != "1":
             return (
-                "not inside a herdr session (HERDR_ENV=1 is unset): herdr is never "
-                "driven from outside it"
+                "not inside a herdr session (HERDR_ENV=1 is unset): run `fr triage batch "
+                "drive` / `dispatch` from a herdr pane — herdr is never driven from outside it"
             )
         if not self.workspace_id and any(not i.payload.get("group") for i in items):
             return "HERDR_WORKSPACE_ID is unset, so there is no workspace to open a tab in"
@@ -237,6 +200,19 @@ class HerdrRunner:
         """Prompt the item's agent with *text* (spec 2026-10-06-verification-strategies
         §G, R23): `herdr agent prompt <agent_name(item.id)> <text>`."""
         _run_herdr(["agent", "prompt", agent_name(item.id), text])
+
+    def restart_idle(self, *, exclude: Sequence[str] = ()) -> RestartSummary:
+        """Restart every idle claude pane via the engine, `yes=True` (spec
+        2026-10-06-driver-sessions §B); its report becomes a `RestartSummary`."""
+        from fr_dispatch.protocols import RestartSummary
+
+        report = restart.restart_idle(yes=True, exclude=exclude)
+        verdicts = [line.verdict for line in report.lines]
+        return RestartSummary(
+            ok=verdicts.count("ok"),
+            skipped=verdicts.count("skip"),
+            failed=tuple((ln.pane_id, ln.detail) for ln in report.lines if ln.verdict == "fail"),
+        )
 
     def describe(self, tab: str) -> AdoptTarget | None:
         """The session in *tab*, or None when no tab has that id (spec §E)."""
@@ -383,20 +359,8 @@ class HerdrRunner:
 
 
 def _start_agent(argv: list[str]) -> None:
-    """`agent start`, retried while the new tab's shell is not up yet (gh#931).
-
-    herdr needs the pane at its interactive shell prompt and refuses at once with
-    `agent_pane_busy` otherwise; any other refusal (`agent_not_ready` is a dialog
-    the operator must answer) is raised as it is.
-    """
-    for attempt in range(1, PANE_BUSY_TRIES + 1):
-        try:
-            _run_herdr(argv)
-            return
-        except HerdrError as exc:
-            if exc.code != "agent_pane_busy" or attempt == PANE_BUSY_TRIES:
-                raise
-        _sleep(PANE_BUSY_WAIT)
+    """`agent start`, retried while the new tab's shell is not up yet (gh#931)."""
+    start_agent(argv, run=_run_herdr, sleep=_sleep, tries=PANE_BUSY_TRIES, wait=PANE_BUSY_WAIT)
 
 
 def _submit(name: str, brief: str) -> None:
@@ -537,6 +501,7 @@ if TYPE_CHECKING:
         SessionFocuser,
         SessionInspector,
         SessionMessenger,
+        SessionRestarter,
     )
 
     # Conformance check: `Runner` is not runtime-checkable, so this assignment is
@@ -546,4 +511,5 @@ if TYPE_CHECKING:
     _inspects: SessionInspector = HerdrRunner()
     _focuses: SessionFocuser = HerdrRunner()
     _messages: SessionMessenger = HerdrRunner()
+    _restarts: SessionRestarter = HerdrRunner()
     _adopts: SessionAdopter = HerdrRunner()

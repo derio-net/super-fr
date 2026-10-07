@@ -109,6 +109,9 @@ def test_preflight_refuses_outside_a_herdr_session(
     monkeypatch.delenv("HERDR_ENV")
     message = HerdrRunner.from_env().preflight([_item()])
     assert message is not None and "HERDR_ENV" in message
+    # driver-sessions R9: the refusal says where to run the driver from
+    assert "fr triage batch drive" in message and "dispatch" in message
+    assert "herdr pane" in message
 
 
 def test_preflight_refuses_without_herdr_on_path(
@@ -649,6 +652,39 @@ def test_message_prompts_the_items_agent_with_the_text(herdr: _Herdr) -> None:
     assert isinstance(runner, SessionMessenger)
     assert runner.message(item, "resolve the conflict") is None
     assert herdr.calls == [["agent", "prompt", agent_name(item.id), "resolve the conflict"]]
+
+
+# ------------------------------------------------- idle-session restart (driver-sessions §B)
+
+
+def test_restart_idle_is_a_session_restarter_and_summarises_the_engine_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R6: `restart_idle(exclude=...)` runs the engine with `yes=True` and maps its lines to
+    a `RestartSummary(ok, skipped, failed)` of (pane, reason) pairs."""
+    from fr_dispatch.protocols import RestartSummary, SessionRestarter
+    from fr_herdr import restart as restart_mod
+
+    seen: list[dict[str, object]] = []
+
+    def _engine(*, yes: bool, exclude: object = ()) -> restart_mod.RestartReport:
+        seen.append({"yes": yes, "exclude": tuple(exclude)})  # type: ignore[call-overload]
+        return restart_mod.RestartReport(
+            lines=[
+                restart_mod.PaneLine("p1", "t", "ok", ""),
+                restart_mod.PaneLine("p2", "t", "ok", ""),
+                restart_mod.PaneLine("p3", "t", "skip", "working"),
+                restart_mod.PaneLine("p4", "t", "fail", "did not exit"),
+            ],
+            dry_run=False,
+        )
+
+    monkeypatch.setattr(restart_mod, "restart_idle", _engine)
+    runner = HerdrRunner.from_env()
+    assert isinstance(runner, SessionRestarter)
+    summary = runner.restart_idle(exclude=("pX",))
+    assert summary == RestartSummary(ok=2, skipped=1, failed=(("p4", "did not exit"),))
+    assert seen == [{"yes": True, "exclude": ("pX",)}]
 
 
 # ------------------------------------------------- session adoption (spec 2026-10-06 §E)

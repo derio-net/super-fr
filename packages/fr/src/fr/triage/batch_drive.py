@@ -15,6 +15,7 @@ testable. `tests/unit/test_triage_batch_drive.py` pins that.
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -27,6 +28,7 @@ from fr.triage.batch import (
     ForeignPr,
     QueueEntry,
     batch_item_id,
+    last_dispatch,
     recorded_branch,
 )
 from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
@@ -181,6 +183,12 @@ class Snapshot:
     # only for these is "not in `existing`" evidence that no tab holds it. Plan mode
     # reads no runner, so it probes none and never calls a close-out stale.
     closeout_probed: frozenset[str] = frozenset()
+    # Sessions the runner reports idle with no PR, past `idle_session_minutes` (driver-sessions
+    # §D, R7): built by the command from live statuses, never by `views.drive_snapshot`
+    # (whose warns all read as a failing CI). `scope_args` are the drive's own, for the
+    # paste-ready focus command.
+    idle: tuple[IdleSession, ...] = ()
+    scope_args: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -259,6 +267,86 @@ class Pass:
     actions: tuple[Action, ...]
     summary: Summary
     trains: tuple[Train, ...] = ()
+
+
+# ------------------------------------------------------- idle sessions (R7, R8)
+
+
+@dataclass(frozen=True)
+class IdleSession:
+    """A session that sat idle (or done) past the threshold with nothing to show for it."""
+
+    item: str
+    batch: str
+    closeout: bool
+    since: datetime  # the dispatch, or the close-out event, it was started at
+    minutes_since: int  # whole minutes from `since` to now: NOT how long it has been idle
+    status: str = "idle"
+
+
+def idle_session(
+    batch: Batch,
+    *,
+    repo: str,
+    closeout: bool,
+    status: str | None,
+    stage: BatchStage,
+    archives: Sequence[LivePr],
+    now: datetime,
+    threshold: int,
+) -> IdleSession | None:
+    """The one definition of an idle session (driver-sessions R7): the runner reports the
+    item `idle` or `done`, it is owed work, and its last dispatch (the close-out: its
+    event) is at least *threshold* minutes old.
+
+    Owed work is a function of *stage* (`derive_batch_stage`): a batch session is owed a PR
+    only while the batch is `dispatched` (no PR yet; a cancelled, proposed or PR-carrying
+    batch owes it nothing), and a close-out session only once the batch has landed and the
+    close-out is not finished (`is_finished`: its archive PR merged, or recorded). An
+    archive PR in *archives*, open or merged, attributed to the close-out is its product.
+    Pure and stateless, so the driver and the board read the same rule."""
+    if status not in ("idle", "done"):
+        return None
+    if closeout:
+        event = closeout_event(batch)
+        if event is None or stage not in LANDED or is_finished(batch, stage, archives):
+            return None
+        if event.archived is not None or any(attributed(p, batch, event) for p in archives):
+            return None
+        since = event.at
+        item = closeout_item_id(repo, batch.id)
+    else:
+        dispatch = last_dispatch(batch)
+        if dispatch is None or stage != "dispatched":
+            return None
+        since = dispatch.at
+        item = batch_item_id(repo, batch.id)
+    age = now - since
+    if age < timedelta(minutes=threshold):  # "at least the threshold" is idle
+        return None
+    return IdleSession(item, batch.id, closeout, since, int(age.total_seconds() // 60), status)
+
+
+def _idle_actions(snap: Snapshot, chosen: Sequence[Batch]) -> list[Action]:
+    """One warn per idle session, once per driver process (its head is in `warned`)."""
+    out: list[Action] = []
+    ids = {b.id for b in chosen}
+    for idle in snap.idle:
+        key = f"idle-session\0{idle.item}\0{idle.since.isoformat()}"
+        if idle.batch not in ids or key in snap.warned:
+            continue
+        what = "archive PR" if idle.closeout else "PR"
+        cmd = shlex.join(
+            ["fr", "triage", "batch", "focus", idle.batch,
+             *(["--closeout"] if idle.closeout else []), *snap.scope_args]
+        )  # fmt: skip
+        out.append(
+            Action("warn", idle.batch,
+                   f"{idle.item} is {idle.status}, "
+                   f"{'close-out started' if idle.closeout else 'dispatched'} "
+                   f"{idle.minutes_since} min ago, with no {what}; focus it: {cmd}", head=key)
+        )  # fmt: skip
+    return out
 
 
 # ------------------------------------------------------------------ checks (R4)
@@ -921,6 +1009,9 @@ def drive_pass(snap: Snapshot) -> Pass:
                 Action("archive", batch.id, f"PR #{good.number} ({good.head_ref})",
                        pr=good.number, head=good.head)
             )  # fmt: skip
+
+    # 3a. Report idle sessions (driver-sessions R7). A warn never moves the summary.
+    actions.extend(_idle_actions(snap, chosen))
 
     # 3b. Export each finished wave's state (pages-goal R13).
     exporting, exports_closing, exports_blocked = _export_actions(snap)

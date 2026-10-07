@@ -1,0 +1,2 @@
+bump: minor
+summary: "`fr-herdr restart-idle` restarts idle Claude panes in place on the freshly installed plugins; the wave driver can do it after each post-merge, and reports batch and close-out sessions that sat idle with nothing to show"

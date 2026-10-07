@@ -706,3 +706,176 @@ class TestInstallWorkflows:
         assert source_names, "expected at least the shipped fr-goal.yaml"
         installed_names = sorted(p.name for p in installed_dir.glob("*.yaml"))
         assert installed_names == source_names
+
+
+# ── fr-herdr rides beside fr: `--with-executables-from` and a second PATH link ──
+
+_UV_PATH_LINK_STUB = r"""#!/bin/sh
+# Records each `uv tool install` and builds the tool env the way uv does: the entry
+# points live under <tool dir>/fr/bin, and `fr-herdr` only when asked for it.
+case "$1 $2 $3" in
+"tool install --help")
+  echo "Usage: uv tool install [OPTIONS] <PACKAGE>"
+  echo "      --with <WITH>"
+  [ -n "${UV_STUB_OLD_UV:-}" ] || echo "      --with-executables-from <WITH_EXECUTABLES_FROM>"
+  ;;
+"tool dir --bin") printf '%s\n' "$UV_STUB_BINDIR" ;;
+"tool dir "*) printf '%s\n' "${UV_TOOL_DIR:-$UV_STUB_TOOLDIR}" ;;
+"tool install "*)
+  td="${UV_TOOL_DIR:-$UV_STUB_TOOLDIR}"
+  echo "INSTALL tooldir=$td" >> "$UV_STUB_LOG"
+  for a in "$@"; do printf '  %s\n' "$a" >> "$UV_STUB_LOG"; done
+  # what the PATH link names while this install is running (staged, or uv's own env)
+  echo "link-fr-herdr=$(readlink "$UV_STUB_BINDIR/fr-herdr" 2>/dev/null)" >> "$UV_STUB_LOG"
+  mkdir -p "$td/fr/bin"
+  printf '#!/bin/sh\necho "fr 9.9.9"\n' > "$td/fr/bin/fr"
+  chmod +x "$td/fr/bin/fr"
+  # `--with fr-herdr` puts its script in the tool env's bin whatever the flag says;
+  # the flag only makes uv link it into the bin dir (this stub never does that part).
+  if [ -z "${UV_STUB_NO_HERDR:-}" ]; then
+    printf '#!/bin/sh\nexit 0\n' > "$td/fr/bin/fr-herdr"
+    chmod +x "$td/fr/bin/fr-herdr"
+  fi
+  ;;
+*) exit 0 ;;
+esac
+"""
+
+
+class TestFrHerdrOnPath:
+    @staticmethod
+    def _run(
+        fake_home: Path,
+        tmp_path: Path,
+        *,
+        preexisting_fr: bool,
+        no_herdr: bool = False,
+        old_uv: bool = False,
+    ) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
+        bin_dir = fake_home / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        (bin_dir / "uv").write_text(_UV_PATH_LINK_STUB)
+        (bin_dir / "uv").chmod(0o755)
+        path_bin = tmp_path / "path-bin"
+        path_bin.mkdir()
+        tooldir = tmp_path / "uv-tools"
+        tooldir.mkdir()
+        log = tmp_path / "uv.log"
+        if preexisting_fr:  # a live fr link makes install.sh stage a copy aside first
+            old = tmp_path / "old-fr"
+            old.write_text("#!/bin/sh\n")
+            (path_bin / "fr").symlink_to(old)
+        env = {
+            "HOME": str(fake_home),
+            "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin",
+            "VK_INSTALL_SKIP_PREFLIGHT": "1",
+            "FR_INSTALL_RETRY_SLEEP": "0",
+            "FR_INSTALL_DRAIN_SECONDS": "0",
+            "UV_STUB_BINDIR": str(path_bin),
+            "UV_STUB_TOOLDIR": str(tooldir),
+            "UV_STUB_LOG": str(log),
+        }
+        if no_herdr:
+            env["UV_STUB_NO_HERDR"] = "1"
+        if old_uv:
+            env["UV_STUB_OLD_UV"] = "1"
+        result = subprocess.run(["bash", str(INSTALL_SH)], capture_output=True, text=True, env=env)
+        assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        return result, path_bin, tooldir, log
+
+    @staticmethod
+    def _installs(log: Path) -> list[list[str]]:
+        blocks: list[list[str]] = []
+        for line in log.read_text().splitlines():
+            if line.startswith("INSTALL"):
+                blocks.append([])
+            elif blocks:
+                blocks[-1].append(line.strip())
+        return blocks
+
+    def test_both_installs_ask_for_fr_herdrs_executables(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        _, _, _, log = self._run(fake_home, tmp_path, preexisting_fr=True)
+        installs = self._installs(log)
+        assert len(installs) == 2, "a staged install, then the final one"
+        for block in installs:
+            i = block.index("--with-executables-from")
+            assert block[i + 1] == "fr-herdr"
+
+    def test_the_fr_herdr_link_is_staged_then_repointed_like_frs(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        _, path_bin, tooldir, log = self._run(fake_home, tmp_path, preexisting_fr=True)
+        link = path_bin / "fr-herdr"
+        assert link.is_symlink()
+        assert os.readlink(link) == str(tooldir / "fr" / "bin" / "fr-herdr")
+        assert os.readlink(path_bin / "fr") == str(tooldir / "fr" / "bin" / "fr")
+        # while the final install ran, the link already named the staged copy
+        final = [ln for ln in log.read_text().splitlines() if ln.startswith("link-fr-herdr=")][-1]
+        assert "/install-stage/" in final
+
+    def test_a_first_install_creates_the_link(self, fake_home: Path, tmp_path: Path) -> None:
+        _, path_bin, tooldir, _ = self._run(fake_home, tmp_path, preexisting_fr=False)
+        assert os.readlink(path_bin / "fr-herdr") == str(tooldir / "fr" / "bin" / "fr-herdr")
+
+    def test_an_older_uv_without_the_flag_still_installs_and_links_fr_herdr(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        """`--with-executables-from` is only passed when `uv tool install --help` lists it
+        (an older uv refuses the whole install over an unknown flag); the link is made from
+        the tool env's bin all the same."""
+        _, path_bin, tooldir, log = self._run(fake_home, tmp_path, preexisting_fr=True, old_uv=True)
+        installs = self._installs(log)
+        assert len(installs) == 2
+        assert all("--with-executables-from" not in block for block in installs)
+        assert os.readlink(path_bin / "fr-herdr") == str(tooldir / "fr" / "bin" / "fr-herdr")
+
+    def test_no_link_when_fr_herdr_was_not_installed(self, fake_home: Path, tmp_path: Path) -> None:
+        _, path_bin, _, _ = self._run(fake_home, tmp_path, preexisting_fr=True, no_herdr=True)
+        assert not (path_bin / "fr-herdr").exists() and not (path_bin / "fr-herdr").is_symlink()
+
+
+def _candidate_install(tmp_path: Path, *, old_uv: bool) -> tuple[Path, list[str]]:
+    bin_dir = tmp_path / "stub"
+    bin_dir.mkdir()
+    log = tmp_path / "argv"
+    uv = bin_dir / "uv"
+    help_flag = "" if old_uv else 'echo "      --with-executables-from <X>"; '
+    uv.write_text(
+        "#!/bin/sh\n"
+        'if [ "$3" = "--help" ]; then '
+        f'echo "Usage: uv tool install"; {help_flag}exit 0; fi\n'
+        'for a in "$@"; do printf "%s\\n" "$a" >> "$UV_STUB_LOG"; done\n'
+        'mkdir -p "$UV_TOOL_DIR/fr/bin" "$UV_TOOL_BIN_DIR"\n'
+        'printf "#!/bin/sh\\necho fr 9\\n" > "$UV_TOOL_BIN_DIR/fr"\n'
+        'printf "#!/bin/sh\\n" > "$UV_TOOL_DIR/fr/bin/fr-herdr"\n'
+        'chmod +x "$UV_TOOL_BIN_DIR/fr" "$UV_TOOL_DIR/fr/bin/fr-herdr"\n'
+    )
+    uv.chmod(0o755)
+    prefix = tmp_path / "prefix"
+    result = subprocess.run(
+        [str(REPO_ROOT / ".fr" / "candidate-install"), str(prefix), str(REPO_ROOT)],
+        capture_output=True,
+        text=True,
+        env={"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "UV_STUB_LOG": str(log)},
+    )
+    assert result.returncode == 0, result.stderr
+    return prefix, log.read_text().splitlines()
+
+
+def test_candidate_install_without_the_flag_links_fr_herdr_from_the_tool_env(
+    tmp_path: Path,
+) -> None:
+    prefix, argv = _candidate_install(tmp_path, old_uv=True)
+    assert "--with-executables-from" not in argv
+    assert os.readlink(prefix / "bin" / "fr-herdr") == str(
+        prefix / "uv-tools" / "fr" / "bin" / "fr-herdr"
+    )
+
+
+def test_candidate_install_asks_for_fr_herdrs_executables(tmp_path: Path) -> None:
+    """`.fr/candidate-install` installs into `<prefix>/bin`, which is on the walk's PATH:
+    the flag alone puts `fr-herdr` there (when this uv has the flag)."""
+    _, argv = _candidate_install(tmp_path, old_uv=False)
+    assert argv[argv.index("--with-executables-from") + 1] == "fr-herdr"

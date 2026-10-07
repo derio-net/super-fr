@@ -52,6 +52,17 @@ case "$source" in
     ;;
 esac
 
-uv tool install --force "${with[@]}" "$from" >&2
+# `--with` exposes only the main package's scripts; fr-herdr's `restart-idle` console
+# script lands in <prefix>/bin beside fr with this (spec 2026-10-06-driver-sessions §A).
+# An older uv has no such flag: ask for it only when `uv tool install --help` lists it,
+# else link the script from the tool env's bin (where the `--with` package put it).
+exe=()
+case "$(uv tool install --help 2>&1 || true)" in
+  *--with-executables-from*) exe=(--with-executables-from fr-herdr) ;;
+esac
+uv tool install --force "${with[@]}" ${exe[@]+"${exe[@]}"} "$from" >&2
+if [ ! -e "$prefix/bin/fr-herdr" ] && [ -x "$UV_TOOL_DIR/fr/bin/fr-herdr" ]; then
+  ln -s "$UV_TOOL_DIR/fr/bin/fr-herdr" "$prefix/bin/fr-herdr"
+fi
 "$prefix/bin/fr" --version >&2
 echo fr

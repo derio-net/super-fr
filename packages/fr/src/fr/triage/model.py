@@ -43,9 +43,12 @@ from fr.triage.stage import Stage, derive_stage
 # schema-4 reader would answer "invalid facts" where "re-run collect" is owed. (`export`, per
 # config, was in the same position at 4; it is left as it is.) Stamping a file lower would
 # turn that reader's "unsupported schema; re-run collect" into "invalid facts" (gh#885).
-# 3 and 4 still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[5] = 5
-FACTS_READS: tuple[int, ...] = (3, 4, 5)
+# 6 is the same story for per-config `post_merge_restart` and `idle_session_minutes`
+# (driver-sessions §C): a schema-5 reader would answer "invalid facts" where "re-run collect"
+# is owed. 3, 4 and 5 still load, and the first collect upgrades them. Independent of
+# JUDGEMENTS_SCHEMA.
+FACTS_SCHEMA: Literal[6] = 6
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6)
 # The version this fr WRITES: every engine write stamps 5 (spec
 # 2026-10-06-verification-strategies §G: the `conflict` event; 4 was
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
@@ -358,6 +361,11 @@ class TriageConfig(_Strict):
     # (spec 2026-10-06-verification-strategies §G): a conflict hand-back's brief names
     # them, so a session regenerates a mirror instead of hand-resolving it.
     mirrors: list[Annotated[list[str], Field(min_length=1)]] = []
+    # After a pass in which `post_merge` succeeded, the wave driver asks the close-out's
+    # runner to restart its idle sessions, once (driver-sessions §B, R6). `none` is off.
+    post_merge_restart: Literal["none", "idle"] = "none"
+    # How long a session may sit idle before the board calls it stale (driver-sessions §D).
+    idle_session_minutes: int = Field(default=60, ge=1)
     # Where the wave driver exports this repo's triage state once a wave is finished
     # (spec 2026-10-05-triage-pages-goal R13); None: the driver never exports.
     export: ExportConfig | None = None
@@ -391,7 +399,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5] = Field(5, alias="schema")
+    schema_: Literal[3, 4, 5, 6] = Field(6, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str

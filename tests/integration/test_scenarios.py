@@ -74,6 +74,16 @@ def test_the_install_prints_fr_and_the_tool_runs(installed: Path) -> None:
     assert done.returncode == 0, done.stderr
 
 
+def test_the_install_exposes_the_fr_herdr_console_script(installed: Path) -> None:
+    """`--with-executables-from fr-herdr`: the script is in `<prefix>/bin` beside fr."""
+    exe = installed / "bin" / "fr-herdr"
+    assert exe.exists()
+    done = subprocess.run(
+        [str(exe), "restart-idle", "--help"], env=_env(installed), capture_output=True, text=True
+    )
+    assert done.returncode == 0 and "--exclude" in done.stdout, done.stderr
+
+
 def test_the_install_carries_every_runner_package(installed: Path) -> None:
     """The `--with` set mirrors install.sh's: every `fr.runners` package imports."""
     py = installed / "uv-tools" / "fr" / "bin" / "python"
@@ -84,6 +94,7 @@ def test_the_install_carries_every_runner_package(installed: Path) -> None:
 
 
 _UV_STUB = """#!/bin/sh
+if [ "$1 $2 $3" = "tool install --help" ]; then echo "      --with-executables-from <X>"; exit 0; fi
 for a in "$@"; do printf '%s\\n' "$a" >> "$UV_STUB_LOG"; done
 mkdir -p "$UV_TOOL_BIN_DIR"
 printf '#!/bin/sh\\necho "fr 9.9.9"\\n' > "$UV_TOOL_BIN_DIR/fr"
@@ -137,6 +148,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "walk-recording-prints-close",
         "awaiting-live-triage",
         "prerelease-command-shape",
+        "herdr-restart-idle",
         "model-binding-set-probe",
         "model-binding-replacement",
         "model-binding-check",
@@ -178,3 +190,7 @@ def test_model_binding_replacement(installed: Path, tmp_path: Path) -> None:
 
 def test_model_binding_check(installed: Path, tmp_path: Path) -> None:
     _scenario("model-binding-check", installed, tmp_path)
+
+
+def test_herdr_restart_idle(installed: Path, tmp_path: Path) -> None:
+    _scenario("herdr-restart-idle", installed, tmp_path)

@@ -36,6 +36,7 @@ INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 # absent for the rebuild. Every default-dir install appends its start/end to
 # $UV_STUB_STATE/installs so a test can see whether two installs overlapped.
 _UV_STUB = r"""#!/bin/sh
+if [ "$1 $2 $3" = "tool install --help" ]; then echo "      --with-executables-from <X>"; exit 0; fi
 tooldir="${UV_TOOL_DIR:-$UV_STUB_TOOLDIR}"
 bindir="${UV_TOOL_BIN_DIR:-$UV_STUB_BINDIR}"
 case "$1 $2" in
