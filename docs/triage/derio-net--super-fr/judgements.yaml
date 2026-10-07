@@ -1,4 +1,4 @@
-schema: 5
+schema: 6
 ranked_at: '2026-10-06'
 tiers:
 - n: 1
@@ -3089,6 +3089,11 @@ batches:
     run: 2026-10-06-feat-batch-forge-remainder
     archive: chore/archive-2026-10-06-forge-remainder
     archived: 1016
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#742
+    - super-fr#892
 - id: fr-binary-identity
   title: A harness's shell and its plugin/hooks report the fr they run, and a disagreement is visible
   ids:
@@ -3958,6 +3963,15 @@ batches:
     run: 2026-10-02-feat-batch-opencode-observe-2
     archive: chore/archive-2026-10-02-opencode-observe-2
     archived: 953
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#823
+    - super-fr#797
+    - super-fr#809
+    - super-fr#816
+    - super-fr#848
+    - super-fr#561
 - id: forge-honesty
   title: 'forge writes honour tracking: none and the self-hosted host, and batch merge survives directory-rename
     detection'
@@ -4018,6 +4032,12 @@ batches:
     handle: w2:p5C
     archive: chore/closeout-fix-batch-verify-merge-false-landed
     archived: 943
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#715
+    - super-fr#757
+    - super-fr#700
 - id: ci-health
   title: 'CI health: four flaky or missing test guards'
   ids:
@@ -4051,6 +4071,13 @@ batches:
     handle: w2:p55
     archive: chore/closeout-fix-batch-ci-health
     archived: 932
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#629
+    - super-fr#630
+    - super-fr#640
+    - super-fr#643
 - id: usage-accuracy
   title: 'usage: the cursor''s model is not the tier binding, and a run''s dollars refresh after its session
     ends'
@@ -4145,6 +4172,16 @@ batches:
     handle: w2:p5D
     archive: chore/closeout-fix-batch-plan-and-records
     archived: 944
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#653
+    - super-fr#525
+    - super-fr#502
+    - super-fr#661
+    - super-fr#675
+    - super-fr#763
+    - super-fr#639
 - id: gate-ordering
   title: 'gate ordering: brainstorm''s gate opens before the questions, spec review waits for the brainstorm
     record, deliver resolves without a fetchable remote'
@@ -4210,6 +4247,18 @@ batches:
     handle: w2:p5N
     archive: chore/closeout-fix-batch-housekeeping
     archived: 957
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#746
+    - super-fr#455
+    - super-fr#456
+    - super-fr#619
+    - super-fr#805
+    - super-fr#806
+    - super-fr#648
+    - super-fr#646
+    - super-fr#691
 - id: arch-card-clip
   title: Architecture cards clip long titles at 400px
   ids:
@@ -4236,6 +4285,10 @@ batches:
     handle: w2:p4V
     archive: chore/closeout-fix-batch-arch-card-clip
     archived: 907
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#901
 - id: unplaced-prs
   title: Open PRs counted as unplaced issues
   ids:
@@ -4262,6 +4315,10 @@ batches:
     handle: w2:p4W
     archive: chore/closeout-fix-batch-unplaced-prs
     archived: 908
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#902
 - id: drive-forge-resilience
   title: 'Drive survives a degraded forge: read timeouts, failed reads retried next pass'
   ids:
@@ -4290,6 +4347,11 @@ batches:
     handle: w2:p59
     archive: chore/closeout-fix-batch-drive-forge-resilience
     archived: 935
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#909
+    - super-fr#910
 - id: drive-cap-held
   title: Drive says when the in-flight cap holds the selected batches
   ids:
@@ -4316,6 +4378,10 @@ batches:
     handle: w2:p52
     archive: chore/closeout-fix-batch-drive-cap-held
     archived: 926
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#913
 - id: drive-closeout-recognition
   title: 'Close-out recognition: hand-opened close-out PRs, archived batches recorded once'
   ids:
@@ -4347,6 +4413,12 @@ batches:
     handle: w2:p5S
     archive: chore/closeout-fix-batch-drive-closeout-recognition
     archived: 961
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#912
+    - super-fr#899
+    - super-fr#900
 - id: drive-scoped-collect
   title: Drive collects only what its selected batches need each pass
   ids:
@@ -4376,6 +4448,10 @@ batches:
     run: 2026-10-04-feat-batch-drive-scoped-collect
     archive: chore/archive-2026-10-04-drive-scoped-collect
     archived: 955
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#911
 - id: arch-stage-dump
   title: Architecture snapshot tabs show stage counts, not a wall of every batch
   ids:
@@ -4402,6 +4478,10 @@ batches:
     handle: w2:p5F
     archive: chore/closeout-fix-batch-arch-stage-dump
     archived: 958
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#917
 - id: drive-close-tabs
   title: 'Drive manages its herdr sessions: one workspace per wave, finished sessions closed'
   ids:
@@ -4434,6 +4514,11 @@ batches:
     run: 2026-10-05-feat-batch-drive-close-tabs
     archive: chore/archive-2026-10-05-drive-herdr-sessions
     archived: 967
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#918
+    - super-fr#919
 - id: drive-release-behind
   title: Drive treats a PR behind only by release commits and archive merges as up to date
   ids:
@@ -4464,6 +4549,10 @@ batches:
     handle: w2:p5H
     archive: chore/closeout-fix-batch-drive-release-behind
     archived: 948
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#927
 - id: driver-pr-trust
   title: triage drive and merge attribute a batch PR only from this repository and an allowed author,
     never a fork or a foreign author
@@ -4496,6 +4585,10 @@ batches:
     handle: w2:p5K
     archive: chore/closeout-fix-batch-driver-pr-trust
     archived: 950
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#936
 - id: post-merge-install-lock
   title: 'the host fr install is serialised and atomic: overlapping post_merge installs cannot break fr
     or the Stop hook'
@@ -4528,6 +4621,10 @@ batches:
     handle: w2:p5Q
     archive: chore/closeout-fix-batch-post-merge-install-lock
     archived: 960
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#938
 - id: ci-python-floor
   title: CI pins the Python 3.11 floor, adds a newest-Python leg, and runs once per PR push
   ids:
@@ -4556,6 +4653,11 @@ batches:
     handle: w2:p5J
     archive: chore/closeout-fix-batch-ci-python-floor
     archived: 949
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#940
+    - super-fr#941
 - id: drive-merge-train
   title: 'Drive merges ready PRs as a merge train: only the head is updated'
   ids:
@@ -4587,6 +4689,10 @@ batches:
     run: 2026-10-04-feat-batch-drive-merge-train
     archive: chore/archive-2026-10-04-drive-merge-train
     archived: 963
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#942
 - id: triage-state-integrity
   title: 'Triage state reads what it should: scope-checked facts, owner-aware keys, schema stamp only
     where the shape moved, origins paging, list close-out column'
@@ -4620,6 +4726,15 @@ batches:
     handle: w2J:p4
     archive: chore/closeout-fix-batch-triage-state-integrity
     archived: 992
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#886
+    - super-fr#954
+    - super-fr#885
+    - super-fr#888
+    - super-fr#882
+    - super-fr#889
 - id: triage-dedupe
   title: 'Triage owns duplicates: a sweep proposes duplicate open issues, judgements record duplicate_of'
   ids:
@@ -4651,6 +4766,10 @@ batches:
     run: 2026-10-06-feat-batch-triage-dedupe
     archive: chore/archive-2026-10-06-triage-dedupe
     archived: 1020
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#971
 - id: triage-pages-goal
   title: 'Triage pages: one goal per page, one home per fact, authored sections everywhere, driver exports
     the state'
@@ -4683,6 +4802,12 @@ batches:
     run: 2026-10-05-feat-batch-triage-pages-goal
     archive: chore/archive-2026-10-05-triage-pages-goal
     archived: 1006
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#970
+    - super-fr#968
+    - super-fr#887
 - id: acceptance-unittest-anchors
   title: 'Acceptance: unittest-style Class.test anchors resolve, and the anchor repair recognises unittest
     classes'
@@ -4712,6 +4837,11 @@ batches:
     handle: w2K:p3
     archive: chore/closeout-fix-batch-acceptance-unittest-anchors
     archived: 981
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#965
+    - super-fr#893
 - id: run-upgrade-midflight
   title: A run started on an older fr can be finished after an upgrade
   ids:
@@ -4741,6 +4871,10 @@ batches:
     run: 2026-10-05-feat-batch-run-upgrade-midflight
     archive: chore/archive-2026-10-05-run-upgrade-midflight
     archived: 989
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#891
 - id: drive-checks-pending
   title: 'No checks reported yet is pending, not an error: batch merge waits, the drive pass carries on,
     merge_ready applies R4'
@@ -4773,6 +4907,12 @@ batches:
     handle: w2P:p4
     archive: chore/closeout-fix-batch-drive-checks-pending
     archived: 1018
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#952
+    - super-fr#947
+    - super-fr#880
 - id: drive-restart-forge
   title: 'Drive survives disruption: no second close-out after a restart, a degraded forge bounded everywhere,
     and a config key added by its own merges'
@@ -4805,6 +4945,12 @@ batches:
     handle: w2Q:p7
     archive: chore/closeout-fix-batch-drive-restart-forge
     archived: 1027
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#883
+    - super-fr#921
+    - super-fr#998
 - id: herdr-dispatch-reliability
   title: 'herdr dispatch: a brief is always submitted, a busy pane is retried, one failed dispatch does
     not end the drive'
@@ -4836,6 +4982,11 @@ batches:
     handle: w2Q:p9
     archive: chore/closeout-fix-batch-herdr-dispatch-reliability
     archived: 1030
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#956
+    - super-fr#931
 - id: debug-journal-push
   title: fr-debugging pushes its review journal entry before the PR merges
   ids:
@@ -4862,6 +5013,10 @@ batches:
     handle: w2N:p5
     archive: chore/closeout-fix-batch-debug-journal-push
     archived: 982
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#871
 - id: release-major-plans
   title: A major release migrates this repo's live plans, so install.sh's models apply is not refused
   ids:
@@ -4889,6 +5044,10 @@ batches:
     handle: w2N:p7
     archive: chore/closeout-fix-batch-release-major-plans
     archived: 984
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#861
 - id: fr-binary-path
   title: A harness's shell and its hooks run the same fr
   ids:
@@ -4915,6 +5074,10 @@ batches:
     handle: w2N:p8
     archive: chore/closeout-fix-batch-fr-binary-path
     archived: 993
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#746
 - id: opencode-tier-question
   title: fr-goal on OpenCode asks the model-per-tier question when every tier is unbound
   ids:
@@ -4941,6 +5104,10 @@ batches:
     handle: w2N:p6
     archive: chore/closeout-fix-batch-opencode-tier-question
     archived: 983
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#538
 - id: board-followups
   title: 'Board tells the truth: a stopped merge is not merge ready, a cancelled wave is shown, the wave
     table works at phone width'
@@ -4971,6 +5138,12 @@ batches:
     handle: w2J:p7
     archive: chore/closeout-fix-batch-board-followups
     archived: 1017
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#987
+    - super-fr#1000
+    - super-fr#1001
 - id: drive-adopt-and-trust
   title: Drive adopts wave-less archived batches, plan mode never invents close-outs, and an archive PR
     merges only into the default branch
@@ -5003,6 +5176,12 @@ batches:
     handle: w2Q:pA
     archive: chore/closeout-fix-batch-drive-adopt-and-trust
     archived: 1036
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#990
+    - super-fr#991
+    - super-fr#1004
 - id: run-evidence-witness
   title: Run evidence witnesses a backgrounded suite and a uv run --with capture
   ids:
@@ -5031,6 +5210,11 @@ batches:
     handle: w2Q:p3
     archive: chore/closeout-fix-batch-run-evidence-witness
     archived: 1011
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#1002
+    - super-fr#999
 - id: pickup-record-drift
   title: fr pickup warns when a drifted cursor drops the Step record section
   ids:
@@ -5057,6 +5241,10 @@ batches:
     handle: w2Q:p5
     archive: chore/closeout-fix-batch-pickup-record-drift
     archived: 1022
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#988
 - id: verification-kinds
   title: 'Verification before merge: candidate walks for software repos, issues closed on live evidence,
     and merge conflicts handed back to the batch session'
@@ -5092,6 +5280,12 @@ batches:
     run: 2026-10-06-feat-batch-verification-kinds
     archive: chore/archive-2026-10-06-verification-strategies
     archived: 1035
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#818
+    - super-fr#822
+    - super-fr#959
 - id: glab-host-trust
   title: 'Forge host trust: glab gets the trust gate gh has, isolation applies GH_HOST, a host refusal
     is classified by type'
@@ -5122,6 +5316,12 @@ batches:
     handle: w2S:p2
     archive: chore/closeout-fix-batch-glab-host-trust
     archived: 1026
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#1014
+    - super-fr#1015
+    - super-fr#1013
 - id: drive-board-lows
   title: 'Driver and board low-severity defects: archive moves vs matrix refs, a moved head, weak cap
     tests, a partial batch in Done'
@@ -5156,6 +5356,14 @@ batches:
     handle: w35:p6
     archive: chore/closeout-fix-batch-drive-board-lows
     archived: 1046
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#937
+    - super-fr#962
+    - super-fr#884
+    - super-fr#985
+    - super-fr#1025
 - id: closing-keyword-gate
   title: 'deliver''s closing-keyword gate: no false hit on keyword-like prose, no miss across a line break'
   ids:
@@ -5183,6 +5391,11 @@ batches:
     handle: w35:p5
     archive: chore/closeout-fix-batch-closing-keyword-gate
     archived: 1045
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#868
+    - super-fr#869
 - id: pages-deploy
   title: Pages deploy survives a stale artifact and is never cancelled mid-run
   ids:
@@ -5209,6 +5422,10 @@ batches:
     handle: w35:p9
     archive: chore/closeout-fix-batch-pages-deploy
     archived: 1047
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#924
 - id: state-sync-race
   title: 'triage state sync opens with O_NOFOLLOW: no check-to-write race'
   ids:
@@ -5235,6 +5452,10 @@ batches:
     handle: w35:pA
     archive: chore/closeout-fix-batch-state-sync-race
     archived: 1049
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#1003
 - id: driver-sessions
   title: 'Driver sessions stay current and portable: idle sessions restart on new plugins, and the driver
     runs outside herdr'
@@ -5279,6 +5500,12 @@ batches:
     run: 2026-10-06-feat-batch-driver-sessions
     archive: chore/archive-2026-10-06-driver-sessions
     archived: 1067
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#964
+    - super-fr#878
+    - super-fr#1029
 - id: model-bindings
   title: 'Model bindings survive provider churn: probe live, fall back by family then tier'
   ids:
@@ -5314,6 +5541,10 @@ batches:
     run: 2026-10-06-feat-batch-model-bindings
     archive: chore/archive-2026-10-06-model-binding-churn
     archived: 1056
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#591
 - id: cost-evidence
   title: 'Cost evidence: per-phase tiers and overhead in the PR body, main-session cost, handoff quality'
   ids:
@@ -5345,6 +5576,13 @@ batches:
     run: 2026-10-06-feat-batch-cost-evidence
     archive: chore/archive-2026-10-06-cost-evidence
     archived: 1061
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#838
+    - super-fr#793
+    - super-fr#593
+    - super-fr#627
 - id: archive-followups
   title: 'Archive does its own follow-ups: price closed sessions, retarget matrix refs, offer issues for
     open ends'
@@ -5376,6 +5614,12 @@ batches:
     run: 2026-10-06-feat-batch-archive-followups
     archive: chore/archive-2026-10-06-archive-followups
     archived: 1053
+  - kind: claims_released
+    at: '2026-10-07T05:08:34.540688Z'
+    keys:
+    - super-fr#930
+    - super-fr#528
+    - super-fr#458
 - id: triage-claims
   title: 'Triage across scopes and hosts: signed per-issue claims, and one named board per claim holder'
   ids:
@@ -5412,6 +5656,25 @@ batches:
     - tests/unit/test_triage_kanban.py
     delivered: session
     handle: derio-net/super-fr/run/batch-triage-claims
+  - kind: post_merge
+    at: '2026-10-07T05:06:47.474061Z'
+  - kind: closeout
+    at: '2026-10-07T05:06:48.148154Z'
+    runner: herdr
+    handle: w37:p3
+    run: 2026-10-06-feat-batch-triage-claims
+    archive: chore/archive-2026-10-06-triage-claims
+  - kind: closeout
+    at: '2026-10-07T05:13:27.958584Z'
+    runner: herdr
+    handle: w37:p3
+    run: 2026-10-06-feat-batch-triage-claims
+    archive: chore/archive-2026-10-06-triage-claims
+    archived: 1078
+  - kind: claims_released
+    at: '2026-10-07T05:15:50.057367Z'
+    keys:
+    - super-fr#1043
 - id: checks-latest-run
   title: The driver reads only the latest run of each check, so a green re-run counts as green
   ids:
@@ -5425,6 +5688,19 @@ batches:
     runner: herdr
     handle: w37:p2
     branch: fix/batch-checks-latest-run
+  - kind: post_merge
+    at: '2026-10-07T10:07:46.011702Z'
+  - kind: closeout
+    at: '2026-10-07T10:07:46.768006Z'
+    runner: herdr
+    handle: w37:p4
+    archive: chore/closeout-fix-batch-checks-latest-run
+  - kind: closeout
+    at: '2026-10-07T10:16:07.025941Z'
+    runner: herdr
+    handle: w37:p4
+    archive: chore/closeout-fix-batch-checks-latest-run
+    archived: 1083
 features:
 - rank: 1
   title: Cost evidence
@@ -5520,4 +5796,10 @@ exports:
   at: '2026-10-07T03:26:33.458850Z'
   pr: 1064
   head: cbb92c6eea5d9730d02ef7ee2d394eb5157911a1
+  merged: true
+- wave: '9'
+  repo: derio-net/super-fr
+  at: '2026-10-07T03:39:49.703587Z'
+  pr: 1068
+  head: 53455d4ec05ef92ebb35d7f01d1bc1e3e17bbd9f
   merged: true
