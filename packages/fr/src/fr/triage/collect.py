@@ -12,6 +12,7 @@ implementing the reads, not an edit to the collector (spec
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -24,13 +25,15 @@ from pydantic import ValidationError
 from fr import real_ghclient
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
-from fr.labels import FR_IN_PROGRESS
+from fr.labels import FR_CLAIMED, FR_IN_PROGRESS
+from fr.triage.claims import read_claims, to_issue_claim
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.model import (
     BATCH_MARKER_PREFIX,
     FACTS_SCHEMA,
     Facts,
     Issue,
+    IssueClaim,
     IssueState,
     PullRequest,
     Scope,
@@ -38,6 +41,7 @@ from fr.triage.model import (
     TriageConfig,
     Truncation,
     Unviewed,
+    claim_trusted,
     issue_key,
     normalize_key,
     parse_triage_config,
@@ -455,15 +459,20 @@ def collect_facts_counted(
     config: dict[str, TriageConfig] = {}
     ignored: dict[str, tuple[str, ...]] = {}
     markers: dict[tuple[str, int], str] = {}
+    claims: dict[tuple[str, int], list[IssueClaim]] = {}
     for repo in repos:
         try:
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
             repo_config, dropped = _read_config(forge, repo, lenient=lenient)
+            trusted = claim_trusted(repo_config or TriageConfig(), viewer)
             for raw in issues:
-                if at := _marker_at(forge, repo, raw):
+                at, found = _comment_facts(forge, repo, raw, trusted)
+                if at:
                     markers[(repo, raw["number"])] = at
+                if found:
+                    claims[(repo, raw["number"])] = found
         except TriageError as exc:
             # A forge failure, or a config the repo's owner broke (review r2p-f4):
             # either way that one repo is skipped in org scope, never the collect.
@@ -507,7 +516,10 @@ def collect_facts_counted(
 
     out = [
         _issue(repo, i, linked(repo, i["number"]), state="open").model_copy(
-            update={"dispatch_marker_at": markers.get((repo, i["number"]))}
+            update={
+                "dispatch_marker_at": markers.get((repo, i["number"])),
+                "claims": claims.get((repo, i["number"]), []),
+            }
         )
         for repo, i in raw_issues
     ]
@@ -523,7 +535,9 @@ def collect_facts_counted(
             continue
         if repo not in truncated and (hit := carry.get((repo.lower(), number))) is not None:
             out.append(
-                hit.model_copy(update={"prs": linked(repo, number), "dispatch_marker_at": None})
+                hit.model_copy(
+                    update={"prs": linked(repo, number), "dispatch_marker_at": None, "claims": []}
+                )
             )
             carried_n += 1
             continue
@@ -640,14 +654,19 @@ def _read_config(
         raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
 
 
-def _marker_at(forge: Forge, repo: str, raw: dict[str, Any]) -> str | None:
-    """The time of an `fr:in-progress` issue's latest fr-batch marker (§3.E).
+def _comment_facts(
+    forge: Forge, repo: str, raw: dict[str, Any], trusted: frozenset[str]
+) -> tuple[str | None, list[IssueClaim]]:
+    """An issue's latest fr-batch marker time (§3.E) and its claims (triage-claims §3.H).
 
-    One comment read per `fr:in-progress` issue, none for the rest. Called
-    inside the per-repo collect, so a failing read skips that repo in org scope.
+    One comment read per issue labelled `fr:in-progress` or `fr:claimed`, none for the
+    rest: both facts come from the same read. Only *trusted* authors' claim markers
+    count (R17). Called inside the per-repo collect, so a failing read skips that repo
+    in org scope.
     """
-    if FR_IN_PROGRESS.name not in {label["name"] for label in raw.get("labels") or []}:
-        return None
+    names = {label["name"] for label in raw.get("labels") or []}
+    if not names & {FR_IN_PROGRESS.name, FR_CLAIMED.name}:
+        return None, []
     comments = forge.list_issue_comments(repo=repo, number=raw["number"])
     stamps = [
         stamp
@@ -655,7 +674,16 @@ def _marker_at(forge: Forge, repo: str, raw: dict[str, Any]) -> str | None:
         if str(c.get("body") or "").lstrip().startswith(BATCH_MARKER_PREFIX)
         and (stamp := str(c.get("created_at") or ""))  # no stamp is no time (r2p-f13)
     ]
-    return max(stamps) if stamps else None
+    read = read_claims(comments, trusted)
+    if read.untrusted or read.malformed:
+        # Once per issue (p1-r7): a peer whose markers are dropped must be visible.
+        print(
+            f"fr triage: {repo}#{raw['number']}: ignored {read.untrusted} untrusted, "
+            f"{read.malformed} malformed claim marker(s)",
+            file=sys.stderr,
+        )
+    claims = [to_issue_claim(c) for c in read.claims]
+    return (max(stamps) if stamps else None), claims
 
 
 def _created_since(pr: PullRequest, at: datetime) -> bool:

@@ -32,7 +32,7 @@ from rich.markup import escape
 
 from fr.hostclient import client_for_backend
 from fr.triage.batch import last_dispatch
-from fr.triage.check import classify
+from fr.triage.check import ClaimSets, classify
 from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
@@ -47,6 +47,7 @@ from fr.triage.model import (
     state_dir,
 )
 from fr.triage.render import GENERATED, plural, render
+from fr.triage.scope_config import scope_id
 from fr.triage.snapshot import (
     acceptance_rows,
     diff_snapshots,
@@ -297,8 +298,14 @@ def check_command(
 
     Always exits 0.
     """
-    _, facts, judgements = _load_state(_scope(repo, org), dir_override)
-    result = classify(facts, judgements)
+    scope = _scope(repo, org)
+    _, facts, judgements = _load_state(scope, dir_override)
+    try:
+        me: str | None = scope_id(scope)
+    except TriageError as exc:  # a broken host id: the claim sets are left out, never fatal
+        err_console.print(f"[yellow]warning:[/yellow] {escape(str(exc))}", soft_wrap=True)
+        me = None
+    result = classify(facts, judgements, me=me, now=datetime.now(UTC))
     if as_json:
         print(json.dumps(result.to_json(), indent=2, ensure_ascii=False))
         return
@@ -386,6 +393,37 @@ def check_command(
     for d in result.duplicates:
         console.print(f"  {escape(d.key)} → {escape(d.original)} ({d.state})", soft_wrap=True)
         console.print(f"    {escape(d.command or d.reason)}", soft_wrap=True)
+    print_claim_sets(result.claims)
+
+
+def print_claim_sets(sets: ClaimSets) -> None:
+    """R7's three sets, shared by `check` and `claim list`."""
+    console.print(
+        f"[bold]held elsewhere[/bold] ({len(sets.held_elsewhere)}) — open, another scope's "
+        "un-released claim holds it; this scope keeps hands off"
+    )
+    for h in sets.held_elsewhere:
+        console.print(
+            f"  {escape(h.key)}  {escape(h.claim.signer)}  batch {escape(h.claim.batch)}  "
+            f"expires {escape(h.claim.expires)}  {escape(h.title)}",
+            soft_wrap=True,
+        )
+    console.print(
+        f"[bold]expired claims[/bold] ({len(sets.expired_claims)}) — un-released, past its "
+        "expiry; still holds until `fr triage claim take` or `release`"
+    )
+    for e in sets.expired_claims:
+        console.print(
+            f"  {escape(e.key)}  {escape(e.claim.signer)}  batch {escape(e.claim.batch)}  "
+            f"expired {escape(e.claim.expires)}",
+            soft_wrap=True,
+        )
+    console.print(
+        f"[bold]claims owed[/bold] ({len(sets.claims_owed)}) — this scope owes a claim the "
+        "facts show unwritten; `fr triage claim sync --yes` writes it"
+    )
+    for o in sets.claims_owed:
+        console.print(f"  {escape(o.key)}  batch {escape(o.batch)}", soft_wrap=True)
 
 
 @triage_app.command("render")
@@ -456,6 +494,7 @@ def render_command(
 # already exists.
 import fr.commands.triage_architecture_cmd  # noqa: E402, F401
 import fr.commands.triage_batch_cmd  # noqa: E402, F401
+import fr.commands.triage_claim_cmd  # noqa: E402, F401
 import fr.commands.triage_history_cmd  # noqa: E402, F401
 import fr.commands.triage_kanban_cmd  # noqa: E402, F401
 import fr.commands.triage_origins_cmd  # noqa: E402, F401

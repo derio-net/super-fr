@@ -112,9 +112,9 @@ def test_an_unknown_cx_is_refused(tmp_path: Path) -> None:
         load_judgements(path)
 
 
-def test_schema_6_in_judgements_is_refused_naming_the_file(tmp_path: Path) -> None:
-    """Schemas 2 to 5 (batches; waves; exports; conflicts) load; the next unknown one is refused."""
-    path = _write(tmp_path / "judgements.yaml", JUDGEMENTS_YAML.replace("schema: 1", "schema: 6"))
+def test_schema_7_in_judgements_is_refused_naming_the_file(tmp_path: Path) -> None:
+    """Schemas 2 to 6 load (batches to claims); the next unknown one is refused."""
+    path = _write(tmp_path / "judgements.yaml", JUDGEMENTS_YAML.replace("schema: 1", "schema: 7"))
 
     with pytest.raises(TriageError, match=str(path)) as exc:
         load_judgements(path)
@@ -358,3 +358,61 @@ def test_one_key_in_both_duplicate_fields_is_refused(tmp_path: Path) -> None:
     text = _dupe_doc(**{"x#1": 'duplicate_of: "x#2", distinct_from: ["x#2"]'})
     msg = _refused(tmp_path, text)
     assert "x#2" in msg
+
+
+# --------------------------------------- triage-claims §3.H (facts 6, judgements 6)
+
+
+@pytest.mark.parametrize("schema", [3, 4, 5, 6, 7])
+def test_facts_schemas_3_to_7_load(tmp_path: Path, schema: int) -> None:
+    from fr.triage.model import FACTS_READS, FACTS_SCHEMA, load_facts
+
+    assert FACTS_SCHEMA == 7 and FACTS_READS == (3, 4, 5, 6, 7)
+    path = tmp_path / "facts.json"
+    doc = {
+        "schema": schema,
+        "scope": "derio-net--super-fr",
+        "kind": "repo",
+        "collected_at": "2026-10-06T00:00:00Z",
+        "repos": ["derio-net/super-fr"],
+        "issues": [],
+    }
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_facts(path).schema_ == schema
+
+
+def _released_batch(schema: int) -> dict[str, object]:
+    return {
+        "schema": schema,
+        "issues": {"super-fr#1": {"tier": 1}},
+        "tiers": [{"n": 1, "title": "now"}],
+        "batches": [
+            {
+                "id": "b",
+                "title": "b",
+                "ids": ["super-fr#1"],
+                "events": [
+                    {
+                        "kind": "claims_released",
+                        "at": "2026-10-06T00:00:00Z",
+                        "keys": ["super-fr#1"],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_a_claims_released_event_loads_in_schema_6() -> None:
+    from fr.triage.model import JUDGEMENTS_READS, JUDGEMENTS_SCHEMA, Judgements
+
+    assert JUDGEMENTS_SCHEMA == 6 and JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6)
+    j = Judgements.model_validate(_released_batch(6))
+    assert j.batches[0].events[0].kind == "claims_released"
+
+
+def test_a_claims_released_event_is_refused_in_schema_5() -> None:
+    from fr.triage.model import Judgements
+
+    with pytest.raises(ValueError, match="claims_released.*schema 6"):
+        Judgements.model_validate(_released_batch(5))

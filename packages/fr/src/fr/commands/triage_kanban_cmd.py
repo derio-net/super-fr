@@ -46,11 +46,13 @@ from fr.triage.batch_drive import (
     wave_group,
 )
 from fr.triage.drive_lock import live_driver
+from fr.triage.errors import TriageError
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Judgements, Scope, state_dir
 from fr.triage.render import plural
+from fr.triage.scope_config import load_scope_config, publish_board, scope_id
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
@@ -288,7 +290,14 @@ def write_board(
     statuses, notes = session_statuses(judgements, facts, prefix=prefix)
     rendered_at = datetime.now(UTC)
     # The wall clock: session status is read live above, so idle minutes must be real.
-    board = build_board(facts, judgements, statuses, stops=load_stops(target), now=rendered_at)
+    try:
+        me: str | None = scope_id(facts.scope)
+    except TriageError as exc:  # the board is a view: say what it cannot show, never refuse
+        me = None
+        notes.append(f"claims are not shown: {one_line(exc)}")
+    board = build_board(
+        facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at
+    )
     page = render_board(
         board,
         scope_args=scope_args,
@@ -299,6 +308,24 @@ def write_board(
     out = target / BOARD_FILE
     write_text_atomic(out, page)
     return out, len(judgements.batches)
+
+
+def publish(scope: Scope, target: Path, board: Path, failures: set[str]) -> None:
+    """Run the scope's configured `publish` command for *board* (R14). A failure is one
+    warning per distinct cause (*failures* remembers them; a success forgets) and never
+    changes an exit code, and a broken scope.yaml is the same kind of warning."""
+    try:
+        cause = publish_board(scope, load_scope_config(target), board)
+    except TriageError as exc:
+        cause = one_line(exc)
+    if cause is None:
+        failures.clear()
+    elif cause not in failures:
+        failures.add(cause)
+        err_console.print(
+            f"[yellow]warning:[/yellow] could not publish the board: {escape(cause)}",
+            soft_wrap=True,
+        )
 
 
 def recollect(scope: Scope, target: Path) -> None:
@@ -312,13 +339,20 @@ def _sleep(seconds: float) -> None:
 
 
 def _watch(
-    scope: Scope, target: Path, args: Sequence[str], refresh: int, interval: int, open_: bool
+    scope: Scope,
+    target: Path,
+    args: Sequence[str],
+    refresh: int,
+    interval: int,
+    open_: bool,
+    publish_: bool = False,
 ) -> None:
     """Re-collect and re-render every *interval* seconds until interrupted (R12). A live
     drive keeps the board fresh itself, so an iteration that finds its lock held skips."""
     if (holder := live_driver(target)) is not None:
         _fail(f"a drive ({holder}) holds {target / 'drive.lock'}; it keeps the board fresh")
     skipping, failures, opened = False, set[str](), False
+    publish_failures: set[str] = set()
 
     def recovered(what: str) -> None:
         failures.difference_update({f for f in failures if f.startswith(f"{what}\0")})
@@ -368,6 +402,8 @@ def _watch(
                 console.print(
                     f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True
                 )
+                if publish_:
+                    publish(scope, target, out, publish_failures)
                 if open_ and not opened:
                     webbrowser.open(out.resolve().as_uri())
                     opened = True
@@ -395,6 +431,13 @@ def board_command(
     interval: Annotated[
         int, typer.Option("--interval", min=1, help="Seconds between --watch iterations.")
     ] = DEFAULT_WATCH_INTERVAL,
+    publish_: Annotated[
+        bool,
+        typer.Option(
+            "--publish",
+            help="After each render, run the scope's `publish` command from scope.yaml.",
+        ),
+    ] = False,
 ) -> None:
     """Write board.html: one card per batch in six lifecycle columns, with live session
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
@@ -402,9 +445,11 @@ def board_command(
     target = state_dir(scope, dir_override)
     args = scope_args(repo, org, dir_override)
     if watch:
-        _watch(scope, target, args, refresh, interval, open_)
+        _watch(scope, target, args, refresh, interval, open_, publish_)
         return
     out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
     console.print(f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True)
+    if publish_:
+        publish(scope, target, out, set())
     if open_:
         webbrowser.open(out.resolve().as_uri())

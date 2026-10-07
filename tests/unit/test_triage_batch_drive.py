@@ -1505,6 +1505,118 @@ def test_an_archive_pr_retargeted_off_the_default_branch_is_never_merged() -> No
     assert [(a.kind, a.pr) for a in on_main.actions] == [("archive", 5)]
 
 
+# ------------------------------------------------- claims (triage-claims R3, R6, R8, R10, R11)
+
+
+def _claim(signer: str = "s-other", batch: str = "theirs") -> Any:
+    from fr.triage.claims import Claim
+
+    return Claim(
+        signer=signer,
+        batch=batch,
+        claimed=NOW,
+        heartbeat=NOW,
+        expires=NOW + timedelta(hours=24),
+        comment_id=7,
+        created_at=NOW,
+    )
+
+
+def test_claim_refresh_and_release_actions_come_before_every_other_action() -> None:
+    batches = [_batch("a", 1), _batch("b", 2)]
+    got = drive_pass(
+        _snap(
+            batches,
+            {"a": "proposed", "b": "proposed"},
+            me="s-me",
+            claims_owed=(("super-fr#1", "a"),),
+            refresh_owed=(("super-fr#2", "b"),),
+            releases_owed=(("super-fr#9", "old"),),
+        )
+    )
+    assert [(a.kind, a.batch, a.key) for a in got.actions[:3]] == [
+        ("claim", "a", "super-fr#1"),
+        ("refresh", "b", "super-fr#2"),
+        ("release", "old", "super-fr#9"),
+    ]
+    assert [a.kind for a in got.actions[3:]] == ["dispatch", "dispatch"]
+
+
+def test_a_held_batch_gets_one_held_action_and_nothing_else() -> None:
+    batches = [_batch("a", 1, ids=["super-fr#1", "super-fr#2"]), _batch("b", 3)]
+    held = {"super-fr#1": _claim(), "super-fr#2": _claim()}
+    got = drive_pass(_snap(batches, {"a": "proposed", "b": "proposed"}, me="s-me", held=held))
+    assert _kinds(got.actions) == [("held", "a"), ("dispatch", "b")]
+    assert "super-fr#1" in got.actions[0].detail and "s-other" in got.actions[0].detail
+    assert "super-fr#2" in got.actions[0].detail
+
+
+def test_a_held_batch_takes_no_merge_closeout_or_archive() -> None:
+    batches = [
+        _dispatched("pr", 1, ids=["super-fr#1"]),
+        _dispatched("done", 2, events=[{"kind": "post_merge", "at": DISPATCHED}]),
+    ]
+    stages = {"pr": "pr-open", "done": "merged"}
+    held = {"super-fr#1": _claim(), "super-fr#2": _claim()}
+    got = drive_pass(_snap(batches, stages, me="s-me", held=held, released=frozenset({"done"})))
+    assert sorted(a.kind for a in got.actions) == ["held", "held"]
+
+
+def test_a_live_held_batch_counts_against_the_cap_and_a_proposed_one_does_not() -> None:
+    batches = [_dispatched("live", 1), _batch("prop", 2), _batch("free", 3)]
+    stages = {"live": "dispatched", "prop": "proposed", "free": "proposed"}
+    held = {"super-fr#1": _claim(), "super-fr#2": _claim()}
+    got = drive_pass(_snap(batches, stages, me="s-me", held=held, max_inflight=2))
+    assert ("dispatch", "free") in _kinds(got.actions)  # the proposed held one took no slot
+    capped = drive_pass(_snap(batches, stages, me="s-me", held=held, max_inflight=1))
+    assert ("dispatch", "free") not in _kinds(capped.actions)  # the live held one holds the slot
+    assert capped.summary.in_flight == 1
+
+
+def test_a_merged_batch_keeps_refreshing_and_is_released_only_once_archived() -> None:
+    batches = [_dispatched("m", 1, events=[{"kind": "post_merge", "at": DISPATCHED}])]
+    got = drive_pass(
+        _snap(
+            batches,
+            {"m": "merged"},
+            me="s-me",
+            refresh_owed=(("super-fr#1", "m"),),
+            released=frozenset({"m"}),
+        )
+    )
+    assert _kinds(got.actions)[0] == ("refresh", "m")
+    assert not [a for a in got.actions if a.kind == "release"]
+    archived = drive_pass(
+        _snap(
+            batches,
+            {"m": "merged"},
+            me="s-me",
+            releases_owed=(("super-fr#1", "m"),),
+            archived=frozenset({"m"}),
+        )  # fmt: skip
+    )
+    assert _kinds(archived.actions)[0] == ("release", "m")
+
+
+def test_a_held_batch_is_counted_held_not_blocked_and_the_drive_stalls_on_it() -> None:
+    """Review p2-r5: waiting on another scope is not waiting on the operator."""
+    batches = [_batch("a", 1, ids=["super-fr#1"])]
+    held = {"super-fr#1": _claim()}
+    got = drive_pass(_snap(batches, {"a": "proposed"}, me="s-me", held=held))
+    assert (got.summary.held, got.summary.blocked) == (1, 0)
+    assert got.held_by == (("a", ("s-other",)),)
+    assert got.summary.stalled and not got.summary.done
+    assert not got.summary.waiting_on_operator
+    assert summary_line(got.summary).endswith(", held 1")
+
+
+def test_held_batches_do_not_stall_a_drive_that_has_other_work() -> None:
+    batches = [_batch("a", 1, ids=["super-fr#1"]), _batch("b", 3)]
+    held = {"super-fr#1": _claim()}
+    got = drive_pass(_snap(batches, {"a": "proposed", "b": "proposed"}, me="s-me", held=held))
+    assert got.summary.held == 1 and not got.summary.stalled
+
+
 # --------------------------------- driver-sessions §D (R7): idle sessions, one pure rule
 
 

@@ -148,6 +148,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "walk-recording-prints-close",
         "awaiting-live-triage",
         "prerelease-command-shape",
+        "triage-claims-held",
+        "triage-claims-expired",
         "herdr-restart-idle",
         "model-binding-set-probe",
         "model-binding-replacement",
@@ -178,6 +180,14 @@ def test_awaiting_live_triage(installed: Path, tmp_path: Path) -> None:
 
 def test_prerelease_command_shape(installed: Path, tmp_path: Path) -> None:
     _scenario("prerelease-command-shape", installed, tmp_path)
+
+
+def test_triage_claims_held(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-claims-held", installed, tmp_path)
+
+
+def test_triage_claims_expired(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-claims-expired", installed, tmp_path)
 
 
 def test_model_binding_set_probe(installed: Path, tmp_path: Path) -> None:

@@ -731,3 +731,24 @@ def test_no_repo_default_among_several_allowed_methods_asks_for_one(
     assert code == 2
     assert "--method" in out
     assert forge.merged == []
+
+
+# ------------------------------------------- triage-claims: merge keeps hands off (R6)
+
+
+def test_merge_refuses_a_batch_held_elsewhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.model import load_facts
+
+    from tests.unit.triage_claim_fixtures import FAR, OTHER, held, marker
+
+    forge, checkout = _setup(tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.2", ["a.py"])])
+    path = tmp_path / "facts.json"
+    facts = load_facts(path)
+    claimed = facts.issues[0].model_copy(update=held(marker(OTHER, "theirs", expires=FAR)))
+    path.write_text(json.dumps(facts.model_copy(update={"issues": [claimed]}).to_json()), "utf-8")
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 2
+    assert OTHER in out and "super-fr#1" in out
+    assert forge.merged == [] and checkout.worktrees == []

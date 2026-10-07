@@ -372,7 +372,7 @@ def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
 
     loaded = load_facts(path)
 
-    assert facts.to_json()["schema"] == 6
+    assert facts.to_json()["schema"] == 7
     assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 
@@ -624,3 +624,109 @@ def test_org_scope_with_no_repos_at_all_is_an_error_not_a_clean_board() -> None:
 
     with pytest.raises(ForgeError, match="example-org"):
         collect_facts(forge, ORG, now=NOW)
+
+
+# ------------------------------------------- triage-claims §3.H (R12, R17)
+
+_CLAIM = (
+    '<!-- fr-claim:{"v":1,"signer":"s-22222222","batch":"theirs",'
+    '"claimed":"2026-10-06T20:00:00Z","heartbeat":"2026-10-06T20:00:00Z",'
+    '"expires":"2026-10-07T20:00:00Z"} -->\nClaimed by triage scope `s-22222222`.'
+)
+
+
+def _labelled(number: int, *names: str) -> dict[str, Any]:
+    issue = _issue(number)
+    issue["labels"] = [{"name": n} for n in names]
+    return issue
+
+
+def _claim_forge(comments: dict[tuple[str, int], list[dict[str, Any]]]) -> FakeForge:
+    return FakeForge(
+        issues={
+            "derio-net/super-fr": [
+                _labelled(1, "fr:claimed"),
+                _labelled(2, "fr:claimed", "fr:in-progress"),
+                _labelled(3),
+            ]
+        },
+        prs={"derio-net/super-fr": []},
+        comments=comments,
+        viewer="operator",
+    )
+
+
+def test_a_claimed_issue_carries_its_claims_and_an_unlabelled_one_is_never_read() -> None:
+    marker = {"author": "operator", "body": _CLAIM, "created_at": "2026-10-06T20:00:01Z", "id": 9}
+    dispatch = {
+        "author": "operator",
+        "body": "<!-- fr-batch:derio-net/super-fr/run/batch-x -->",
+        "created_at": "2026-10-05T00:00:00Z",
+        "id": 8,
+    }
+    forge = _claim_forge(
+        {("derio-net/super-fr", 1): [marker], ("derio-net/super-fr", 2): [dispatch, marker]}
+    )
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    by = {i.number: i for i in facts.issues}
+    (claim,) = by[1].claims
+    assert (claim.signer, claim.batch, claim.comment_id) == ("s-22222222", "theirs", 9)
+    assert claim.created_at == "2026-10-06T20:00:01Z"
+    assert by[2].dispatch_marker_at == "2026-10-05T00:00:00Z"
+    assert [c.signer for c in by[2].claims] == ["s-22222222"]
+    assert by[3].claims == []
+    reads = sorted(kw["number"] for kw in forge.called("list_issue_comments"))
+    assert reads == [1, 2]  # one read each, the issue with both labels included
+
+
+def test_collect_ignores_an_untrusted_authors_marker() -> None:
+    forged = {"author": "stranger", "body": _CLAIM, "created_at": "2026-10-01T00:00:00Z", "id": 3}
+    forge = _claim_forge({("derio-net/super-fr", 1): [forged]})
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    assert next(i for i in facts.issues if i.number == 1).claims == []
+
+
+def test_collected_facts_are_schema_7() -> None:
+    facts = collect_facts(_claim_forge({}), SUPER_FR, now=NOW)
+    assert facts.to_json()["schema"] == 7
+
+
+def test_collect_counts_a_peer_hosts_marker_by_a_repo_member() -> None:
+    """p1-r1: two hosts on different accounts see each other's claims."""
+    peer = {
+        "author": "other-host-account",
+        "association": "MEMBER",
+        "body": _CLAIM,
+        "created_at": "2026-10-01T00:00:00Z",
+        "id": 3,
+    }
+    forge = _claim_forge({("derio-net/super-fr", 1): [peer]})
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    assert [c.signer for c in next(i for i in facts.issues if i.number == 1).claims] == [
+        "s-22222222"
+    ]
+
+
+def test_collect_warns_once_per_issue_with_its_ignored_marker_counts(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """p1-r7: a peer whose markers are dropped is visible, not silent."""
+    forged = {"author": "stranger", "body": _CLAIM, "created_at": "2026-10-01T00:00:00Z", "id": 3}
+    broken = {
+        "author": "operator",
+        "body": "<!-- fr-claim:{not json} -->",
+        "created_at": "2026-10-01T00:00:00Z",
+        "id": 4,
+    }
+    forge = _claim_forge({("derio-net/super-fr", 1): [forged, broken, dict(forged, id=5)]})
+    collect_facts(forge, SUPER_FR, now=NOW)
+    err = capsys.readouterr().err
+    line = "fr triage: derio-net/super-fr#1: ignored 2 untrusted, 1 malformed claim marker(s)"
+    assert err.count(line) == 1
+    assert "super-fr#2" not in err
+
+
+def test_collect_is_quiet_when_every_marker_counts(capsys: pytest.CaptureFixture[str]) -> None:
+    ok = {"author": "operator", "body": _CLAIM, "created_at": "2026-10-01T00:00:00Z", "id": 3}
+    collect_facts(_claim_forge({("derio-net/super-fr", 1): [ok]}), SUPER_FR, now=NOW)
+    assert "claim marker" not in capsys.readouterr().err

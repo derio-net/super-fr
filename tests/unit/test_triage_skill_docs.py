@@ -115,3 +115,26 @@ def test_fr_audit_skill_documents_hand_written_analysis_in_fragments() -> None:
     assert "fragment" in text and ("hand" in text or "author" in text or "you author" in text), (
         "SKILL.md must document that hand-written analysis lives in fragments"
     )
+
+
+def test_fr_triage_skill_documents_claims_scope_config_and_publishing_in_every_copy() -> None:
+    """R16: the canonical skill and both generated mirrors carry the Claims paragraph."""
+    needles = (
+        "**Claims:**",
+        "fr:claimed",
+        "FR_HOST_ID",
+        "fr triage claim take",
+        "claim_expiry_hours",
+        "scope.yaml",
+        "publish",
+        "{scope_id}",
+        "Held elsewhere",
+    )
+    for path in (
+        TRIAGE_SKILL,
+        REPO / ".opencode" / "skills" / "fr-triage" / "SKILL.md",
+        REPO / ".hermes" / "skills" / "fr" / "fr-triage" / "SKILL.md",
+    ):
+        text = path.read_text()
+        missing = [n for n in needles if n not in text]
+        assert not missing, f"{path.relative_to(REPO)} lacks {missing}"

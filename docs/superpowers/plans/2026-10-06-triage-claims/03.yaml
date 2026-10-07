@@ -1,0 +1,93 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Board "Held elsewhere", per-scope publishing, fr-triage skill (R13, R14,
+    R16)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-claims-board-publish
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/scope_config.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/unit/test_triage_kanban.py
+  - tests/unit/test_triage_kanban_render.py
+  - tests/unit/test_triage_kanban_cmd.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - tests/unit/test_triage_skill_docs.py
+  - docs/acceptance/*
+  estimate_lines: 500
+tasks:
+- number: 1
+  title: Board group and card expiry (spec §3.G, R13)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED in tests/unit/test_triage_kanban.py and test_triage_kanban_render.py: `build_board` given a scope id
+      and facts' claims yields a "Held elsewhere" group (key, title, holder, batch, expiry; expired marked),
+      absent when empty; own cards show their claim expiry; the page keeps its tokens and 16px gutter. Run — fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN in kanban.py and kanban_render.py. Re-run — green. Browser-check board.html for the row's visual
+      states (held group, empty, expired marked, card expiry, phone width, dark theme) and the held-issue link;
+      screenshots into a git-ignored directory, every one opened, recorded in the step record's `visual:` section.
+- number: 2
+  title: Publishing (spec §3.G, R14)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED in tests/unit/test_triage_kanban_cmd.py and test_triage_batch_drive_cmd.py: `publish_board`
+      substitutes {board}, {name} and {scope_id}, runs the argv with no shell, times out at 120 s (monkeypatched
+      short) and returns the cause on failure; `_write_board` publishes after a successful render; `fr triage
+      board --publish` (and each --watch iteration) publishes; a failure warns once per cause and leaves the
+      exit code unchanged; the default name applies when `board_name` is unset. Run — fails.
+  - id: P3.T2.S2
+    text: |-
+      GREEN in scope_config.py (publish_board) and the two commands. Re-run — green.
+- number: 3
+  title: Skill (spec §3.I, R16)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Add a **Claims** paragraph to plugins/super-fr/skills/fr-triage/SKILL.md (scope id, owed and written
+      claims, hands-off, 24-hour expiry, operator-only `claim take`/`release`, the `scope.yaml` keys including
+      `publish`, `FR_HOST_ID` for pods; harness-neutral wording). Run
+      `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`,
+      then the three mirror tripwires and tests/unit/test_tripwire_skill_tool_neutrality.py — green. Move
+      triage-claims-board-publish to `ci`. After the last code commit, run the full suite into a log outside
+      the repo.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T22:16:47+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T22:16:47+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T22:16:47+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-06T22:16:47+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-10-06T22:16:47+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T22:16:47+00:00'
+    note: null
+    observed_prs: []

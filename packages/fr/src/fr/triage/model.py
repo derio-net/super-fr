@@ -45,17 +45,20 @@ from fr.triage.stage import Stage, derive_stage
 # turn that reader's "unsupported schema; re-run collect" into "invalid facts" (gh#885).
 # 6 is the same story for per-config `post_merge_restart` and `idle_session_minutes`
 # (driver-sessions §C): a schema-5 reader would answer "invalid facts" where "re-run collect"
-# is owed. 3, 4 and 5 still load, and the first collect upgrades them. Independent of
-# JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[6] = 6
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6)
-# The version this fr WRITES: every engine write stamps 5 (spec
-# 2026-10-06-verification-strategies §G: the `conflict` event; 4 was
+# is owed. 7 adds per-issue `claims` (2026-10-06-triage-claims §3.H, R12): every file carries
+# the key (`to_json` dumps it, `[]` included), which a closed-world schema-6 reader rejects, so
+# the stamp moves for the same reason. 3 to 6 still load, and the first collect upgrades them.
+# Independent of JUDGEMENTS_SCHEMA.
+FACTS_SCHEMA: Literal[7] = 7
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7)
+# The version this fr WRITES: every engine write stamps 6 (spec 2026-10-06-triage-claims
+# §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
+# `conflict` event; 4 was
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[5] = 5
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5)
+JUDGEMENTS_SCHEMA: Literal[6] = 6
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -214,6 +217,20 @@ class PullRequest(_Strict):
     anchor_reason: str | None = None
 
 
+class IssueClaim(_Strict):
+    """One signer's latest un-released claim marker on an issue, live or expired, as
+    collect read it (spec 2026-10-06-triage-claims §3.H). Only a trusted author's marker
+    is recorded (R17). Stamps are ISO-8601 UTC strings, like every facts time."""
+
+    signer: str
+    batch: str
+    claimed: str
+    heartbeat: str
+    expires: str
+    comment_id: int
+    created_at: str  # the comment's; R4 orders by it
+
+
 class Issue(_Strict):
     repo: str  # OWNER/REPO
     number: int
@@ -229,6 +246,9 @@ class Issue(_Strict):
     # createdAt of the latest fr-batch dispatch marker comment; read only for
     # issues labelled fr:in-progress (spec §3.E stale dispatch).
     dispatch_marker_at: str | None = None
+    # The claims on the issue (facts schema 7): read only for issues labelled fr:claimed or
+    # fr:in-progress, from the same comment read as `dispatch_marker_at`.
+    claims: list[IssueClaim] = []
 
     @property
     def key(self) -> str:
@@ -371,6 +391,25 @@ class TriageConfig(_Strict):
     export: ExportConfig | None = None
 
 
+def trusted_logins(config: TriageConfig, viewer: str | None) -> frozenset[str]:
+    """The logins a repo trusts, lowercased (gh#936, triage-claims R17): its
+    `pr_authors` when it lists any, else *viewer* (the user `collect` ran as). Empty
+    when neither is known, so nothing is trusted. Guards batch PRs; claims use
+    `claim_trusted`."""
+    logins = config.pr_authors or ([viewer] if viewer else [])
+    return frozenset(login.lower() for login in logins)
+
+
+def claim_trusted(config: TriageConfig, viewer: str | None) -> frozenset[str]:
+    """The logins whose claim markers count on a repo, lowercased (triage-claims R17):
+    *viewer* (the user `collect` ran as) AND the repo's `pr_authors`. Unlike
+    `trusted_logins`, a `pr_authors` list never drops the viewer, or this host's own
+    claims would not count. Author association (OWNER/MEMBER/COLLABORATOR) is the other
+    half of R17, read per comment by `fr.triage.claims.read_claims`."""
+    logins = [*config.pr_authors, *([viewer] if viewer else [])]
+    return frozenset(login.lower() for login in logins)
+
+
 def parse_triage_config(
     data: object, *, lenient: bool = False
 ) -> tuple[TriageConfig, tuple[str, ...]]:
@@ -399,7 +438,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6] = Field(6, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7] = Field(7, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -585,14 +624,36 @@ class ConflictEvent(_Strict):
     handle: str | None = None
 
 
+class ClaimsReleasedEvent(_Strict):
+    """This scope released its claims on *keys*, members of this batch (spec
+    2026-10-06-triage-claims §3.H, R10), so a later pass owes them nothing. Needs
+    judgements schema 6. Written by the engine only."""
+
+    kind: Literal["claims_released"]
+    at: AwareDatetime
+    keys: list[str] = Field(min_length=1)
+
+    @field_validator("keys")
+    @classmethod
+    def _keys_are_keys(cls, v: list[str]) -> list[str]:
+        return _keys(v, "claims_released keys")
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
 """The event kinds only a schema 5 `judgements.yaml` may carry (verification-strategies §G)."""
+SCHEMA_6_EVENTS = frozenset({"claims_released"})
+"""The event kinds only a schema 6 `judgements.yaml` may carry (triage-claims §3.H)."""
 
 
 BatchEvent = Annotated[
-    DispatchEvent | CancelEvent | CloseoutEvent | PostMergeEvent | ConflictEvent,
+    DispatchEvent
+    | CancelEvent
+    | CloseoutEvent
+    | PostMergeEvent
+    | ConflictEvent
+    | ClaimsReleasedEvent,
     Field(discriminator="kind"),
 ]
 
@@ -702,7 +763,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -812,6 +873,14 @@ class Judgements(_Strict):
         if self.schema_ < 5 and later:
             raise ValueError(
                 f"`{'`, `'.join(later)}` events need schema 5, but this file is stamped "
+                f"schema {self.schema_}"
+            )
+        latest = sorted(
+            {e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_6_EVENTS}
+        )
+        if self.schema_ < 6 and latest:
+            raise ValueError(
+                f"`{'`, `'.join(latest)}` events need schema 6, but this file is stamped "
                 f"schema {self.schema_}"
             )
         return self
