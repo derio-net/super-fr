@@ -9,6 +9,10 @@
   member and appends a `cancel` event — only with `--yes` (decision d1);
   without it, it prints what it would do and writes nothing.
 - `suggest` prints candidate groupings and writes nothing.
+- `adopt` puts a session already running (started by hand) under the wave
+  driver as an existing batch: it renames the session's branch to the batch
+  branch, supersedes an open PR, labels the runner tab, records a dispatch and
+  marks the members (spec 2026-10-06-triage-batch-adopt).
 - `dispatch` hands a batch to a run-capable runner as one `unit="run"` item
   (§3.C), reserving its version (§3.D) and making it visible on the forge
   (§3.E); `--repair` redoes only the forge writes.
@@ -71,6 +75,7 @@ from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
+from fr.isolation.rename import IsolationError, rename_branch
 from fr.labels import FR_IN_PROGRESS
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.services import ServicesError, require_tracker
@@ -90,6 +95,7 @@ from fr.triage.batch import (
     derive_batch_stage,
     distrust,
     foreign_batch_prs,
+    label_refs,
     last_dispatch,
     mixed_themes,
     pr_open_queue,
@@ -236,6 +242,12 @@ def _find(batches: list[Batch], batch_id: str) -> Batch:
 
 def _replace(batches: list[Batch], new: Batch) -> list[Batch]:
     return [new if b.id == new.id else b for b in batches]
+
+
+def _with_event(judgements: Judgements, batch: Batch, event: DispatchEvent) -> list[Batch]:
+    """The batches *judgements* will hold once *event* is appended to *batch*: what
+    `dispatch`, `dispatch --repair` (recording a missing event) and `adopt` write."""
+    return _replace(judgements.batches, batch.model_copy(update={"events": [*batch.events, event]}))
 
 
 IssueOpt = Annotated[
@@ -904,9 +916,9 @@ def _record_missing(
         branch=branch,
         reserved_version=reserved,
     )
-    dispatched = batch.model_copy(update={"events": [*batch.events, event]})
-    _write(target, _replace(judgements.batches, dispatched), facts, read=judgements.batches)
-    _report_forge_writes(_forge_writes(client, owner_repo, dispatched, probe.id), batch)
+    after = _with_event(judgements, batch, event)
+    _write(target, after, facts, read=judgements.batches)
+    _report_forge_writes(_forge_writes(client, owner_repo, _find(after, batch.id), probe.id), batch)
     console.print(f"recorded and repaired batch {batch.id}", markup=False)
 
 
@@ -1112,9 +1124,7 @@ def dispatch_batch(
     )
 
     def _after(ev: DispatchEvent) -> list[Batch]:
-        return _replace(
-            judgements.batches, batch.model_copy(update={"events": [*batch.events, ev]})
-        )
+        return _with_event(judgements, batch, ev)
 
     _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
     if not runner.can_dispatch(item):
@@ -1151,6 +1161,410 @@ def dispatch_batch(
         _forge_writes(client, owner_repo, _find(dispatched, batch.id), item.id), batch
     )
     console.print(f"dispatched batch {batch.id}", markup=False)
+
+
+# --------------------------------------------------------------- adopt (2026-10-06)
+
+ADOPT_LIST_RUNNER = "herdr"
+"""The runner `adopt --list` reads when `--to` names none: the one that adopts today."""
+
+_ADOPTER_METHODS = ("describe", "list_sessions", "adopt")
+
+
+def _adopter(runner: object) -> bool:
+    """Whether *runner* is a `SessionAdopter` (spec 2026-10-06-triage-batch-adopt §E),
+    read off its methods: this module imports `fr_dispatch` only inside functions."""
+    return all(callable(getattr(runner, m, None)) for m in _ADOPTER_METHODS)
+
+
+def supersede_comment(new_pr: int, batch: Batch) -> str:
+    """The comment on a superseded PR (§C step 2)."""
+    return f"Superseded by #{new_pr} — this branch was adopted as batch {batch.id}"
+
+
+def adopt_message(
+    batch: Batch, item_id: str, old: str, new: str, pr: str | None, reserved: str | None
+) -> str:
+    """The one message an adopted session's agent gets (R6)."""
+    lines = [
+        f"fr triage batch adopt: this session is now batch {batch.id} ({item_id}), "
+        "driven by `fr triage batch drive`.",
+        f"Your branch {old} was renamed to {new}; push to it from now on with "
+        f"`git push origin {new}` (its upstream is set). Your push target changed: "
+        f"never push {old} again.",
+    ]
+    if old == new:
+        lines[1] = f"Your branch is {new}; keep pushing to it."
+    if pr:
+        lines.append(f"The PR is now {pr}; the earlier one was closed as superseded.")
+    if reserved:
+        lines.append(f"Reserved version for this batch: {reserved}.")
+    return "\n".join(lines)
+
+
+def _open_prs(client: GhClient, owner_repo: str, head: str) -> list[dict[str, Any]]:
+    return [p for p in client.list_prs_by_head(owner_repo, head) if p.get("state") == "OPEN"]
+
+
+def _untrusted(record: Mapping[str, Any], allowed: frozenset[str]) -> str | None:
+    """`distrust` over a `list_prs_by_head` record: why the PR is not the repo's own
+    by an allowed author, or None when it is (gh#936)."""
+    author = record.get("author")
+    login = author.get("login") if isinstance(author, dict) else None
+    cross = record.get("isCrossRepository")
+    return distrust(
+        str(login) if login else None, cross if isinstance(cross, bool) else None, allowed
+    )
+
+
+def _pr_time(record: Mapping[str, Any] | None) -> datetime | None:
+    stamp = record.get("createdAt") if record else None
+    try:
+        parsed = datetime.fromisoformat(str(stamp)) if stamp else None
+    except ValueError:
+        return None
+    return parsed if parsed is not None and parsed.tzinfo is not None else None
+
+
+def adopt_batch(
+    target: Path,
+    facts: Facts,
+    judgements: Judgements,
+    batch: Batch,
+    *,
+    tab: str,
+    branch: str,
+    to: str | None = None,
+    checkout_path: Path | None = None,
+    yes: bool = False,
+) -> None:
+    """The body of `batch adopt` (spec 2026-10-06-triage-batch-adopt §A): every read
+    and refusal first, then the plan, then — with *yes* — each step not yet done."""
+    # 1. The batch, its stage, and whether this is a re-run of an adoption (R2, R10).
+    owner_repo = batch_repo(batch, facts)
+    if owner_repo is None:
+        _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
+    new = batch_branch(batch)
+    old = branch
+    last = batch.events[-1] if batch.events else None
+    recorded = isinstance(last, DispatchEvent) and last.handle == tab and last.branch == new
+    if not recorded:
+        stage = derive_batch_stage(batch, facts)
+        if stage not in DISPATCHABLE:
+            _fail(
+                f"batch {batch.id!r} is {stage}; adopt takes a batch `batch dispatch` would "
+                f"start ({', '.join(sorted(DISPATCHABLE))})"
+            )
+    _tracking_gate(checkout_path, owner_repo, yes=yes)  # before any forge call
+    client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
+
+    # 2. The runner: it must adopt sessions.
+    try:
+        resolved = resolve_launch(
+            _with_runner(batch, to),
+            facts.config_for(owner_repo),
+            orchestrator=_orchestrator(checkout_path),
+        )
+    except TriageError as exc:
+        _fail(str(exc))
+    runner_name = str(resolved.launch.runner)
+    runner: Any = load_runner(runner_name)
+    if not _adopter(runner):
+        _fail(f"runner `{runner_name}` cannot adopt sessions (it is no SessionAdopter)")
+    probe = _probe(owner_repo, batch, resolved.launch)
+    refusal = runner.preflight([probe])
+    if refusal:
+        _fail(f"runner `{runner_name}` refused: {refusal}")
+
+    # 3. The session (R9's tab and agent refusals).
+    session = runner.describe(tab)
+    if session is None:
+        _fail(f"runner `{runner_name}` has no tab {tab}; `fr triage batch adopt --list` lists them")
+    if session.label != probe.id and "/run/batch-" in session.label:
+        _fail(f"tab {tab} is labelled {session.label}: it is another batch's session")
+    if session.agent is None:
+        _fail(f"tab {tab} does not hold exactly one agent (it holds none, or several)")
+    if session.status == "working":
+        _fail(
+            f"the agent in tab {tab} is working: renaming its branch under it races its next "
+            "push. Wait until it is idle, then adopt"
+        )
+
+    # 4. The git side and the PRs (R9's branch and worktree refusals).
+    checkout = _open_checkout(checkout_path, owner_repo)
+    try:
+        default = checkout.default_branch()
+        if old == default:
+            _fail(f"--branch {old} is {owner_repo}'s default branch: adopt never renames it")
+        if new == default:
+            _fail(f"batch branch {new} is {owner_repo}'s default branch: refusing")
+        worktree = (checkout.worktree_of(old) if old != new else None) or checkout.worktree_of(new)
+        if worktree is None:
+            _fail(f"no worktree of {checkout.path} has {old} (or {new}) checked out")
+        if Path(worktree).resolve() == Path(checkout.main_worktree()).resolve():
+            _fail(
+                f"{old} is checked out in the main worktree {worktree}: adopt renames only a "
+                "linked worktree's branch"
+            )
+        # Planned even when *old* is *new*: R9's worktree refusals hold either way.
+        renames = rename_branch(checkout.path, worktree, old, new, dry_run=True)
+        pending_local = old != new and checkout.has_branch(old)
+        remote_old = old != new and checkout.remote_branch_exists(old)
+        remote_new = checkout.remote_branch_exists(new)
+    except IsolationError as exc:
+        _fail(str(exc))
+    except TriageError as exc:
+        _fail(str(exc))
+    if remote_new and pending_local:
+        _fail(f"branch {new} is already on origin and is not this adoption's: refusing")
+    allowed = allowed_authors(owner_repo, facts)
+    try:
+        old_open = _open_prs(client, owner_repo, old) if old != new else []
+        new_open = _open_prs(client, owner_repo, new)
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    except FORGE_ERRORS as exc:
+        _fail(f"cannot read {owner_repo}'s PRs: {exc}")
+    # A head NAME is chosen by whoever opens the PR, a fork included (gh#936): an
+    # untrusted PR is never copied, commented on or closed, nor taken as ours.
+    for head, open_prs, what in ((old, old_open, "adopt never supersedes it"),
+                                 (new, new_open, "it is not this adoption's")):  # fmt: skip
+        for p in open_prs:
+            if (why := _untrusted(p, allowed)) is not None:
+                _fail(f"open PR #{p['number']} on {head} is not trusted ({why}): {what}; refusing")
+    old_pr = max(old_open, key=lambda p: int(p["number"]), default=None)
+    new_pr = max(new_open, key=lambda p: int(p["number"]), default=None)
+    try:
+        old_view = client.pr_view(owner_repo, int(old_pr["number"])) if old_pr else None
+        commented = bool(
+            old_pr
+            and new_pr
+            and any(
+                str(c.get("author") or "").lower() in allowed
+                and str(c.get("body", "")).startswith(f"Superseded by #{new_pr['number']}")
+                for c in client.list_issue_comments(owner_repo, int(old_pr["number"]))
+            )
+        )
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    except FORGE_ERRORS as exc:
+        _fail(f"cannot read {owner_repo}'s PRs: {exc}")
+    publish = not remote_new and (remote_old or old_pr is not None)
+
+    # 5. The version (R11), the event time (§D) and a dry run of the write.
+    if recorded and isinstance(last, DispatchEvent):
+        reserved = last.reserved_version
+    else:
+        reserved = _reservation(checkout, facts, judgements, batch, owner_repo)
+    # Whole seconds, as the forge's createdAt is: a PR opened in the same second as
+    # the event is still of it (`of_dispatch`, created >= at). Never before the last event.
+    floor = batch.events[-1].at if batch.events else None
+    at = _now_after(batch).replace(microsecond=0)
+    at = max(at, floor) if floor is not None else at
+    opened = _pr_time(new_pr)
+    if opened is not None and opened < at:  # a re-run: that PR was opened by this adoption
+        at = max(opened, floor) if floor is not None else opened
+    event = DispatchEvent(
+        kind="dispatch", at=at, runner=runner_name, handle=tab, branch=new,
+        reserved_version=reserved,
+    )  # fmt: skip
+    after = _with_event(judgements, batch, event)
+    if not recorded:
+        _write(target, after, facts, read=judgements.batches, dry_run=True)
+
+    # 6. The plan (R8).
+    def say(line: str) -> None:
+        console.print(line, markup=False, soft_wrap=True, highlight=False)
+
+    say(f"adopt tab {tab} as batch {batch.id} ({probe.id})")
+    say(f"  session: {session.label!r} in {session.group or '-'}, agent {session.agent} "
+        f"({session.status}); runner {runner_name}")  # fmt: skip
+    say(f"  branch: {old} -> {new} in {worktree}")
+    for step in renames:
+        say(f"    {step}")
+    if old != new and not renames:
+        say("    already renamed")
+    if publish:
+        say(f"  remote: publish {new} (git push -u origin {new})")
+    elif not remote_new:
+        say(f"  remote: {old} was never pushed; nothing to publish")
+    if old_pr is not None and old_view is not None:
+        kind = "draft PR" if old_view.get("draft") else "PR"
+        if new_pr is None:
+            say(f"  forge: supersede PR #{old_pr['number']} with a new {kind} from {new} into "
+                f"{old_view.get('base_ref')} ({old_view.get('title')!r}), then comment and close "
+                f"#{old_pr['number']}")  # fmt: skip
+        else:
+            say(f"  forge: supersede PR #{old_pr['number']} by the open #{new_pr['number']}")
+    if remote_old:
+        say(f"  forge: delete remote branch {old}")
+    say(f"  runner: rename tab {tab} to {probe.id}, and its agent")
+    if recorded:
+        say("  record: the dispatch event is recorded already")
+    else:
+        say(f"  record: dispatch event (runner {runner_name}, handle {tab}, branch {new}, "
+            f"reserved version {reserved or '(none)'})")  # fmt: skip
+    say(f"  forge: add {FR_IN_PROGRESS.name} and the marker comment on every member")
+    if callable(getattr(runner, "message", None)):
+        say("  runner: message the agent its new branch, PR and version")
+    if not yes:
+        say("nothing written; re-run with --yes to act")
+        return
+
+    # 7. Each step not done yet, in §A.7's order (R10).
+    state: dict[str, Any] = {"pr": new_pr, "event": event, "after": after}
+    done: list[str] = []
+
+    def _not_default(*names: str) -> None:  # refused above; held again at each write
+        for name in names:
+            if name == default:
+                raise RuntimeError(f"{name} is the default branch: refusing to touch it")
+
+    def _pr_ref() -> str | None:
+        pr = state["pr"]
+        return f"#{pr['number']} ({pr['url']})" if pr else None
+
+    def _create() -> None:
+        assert old_view is not None
+        made = client.create_pr(
+            owner_repo, head=new, base=str(old_view.get("base_ref") or ""),
+            title=str(old_view.get("title") or ""), body=str(old_view.get("body") or ""),
+            draft=bool(old_view.get("draft")),
+        )  # fmt: skip
+        state["pr"] = made
+        # The forge's clock decides `of_dispatch`: an event later than the PR it
+        # opened would disown it, so the event moves down to its createdAt (p1-r2).
+        created = next((p for p in _open_prs(client, owner_repo, new)
+                        if int(p["number"]) == int(made["number"])), None)  # fmt: skip
+        opened = _pr_time(created)
+        if opened is not None and opened < state["event"].at:
+            moved = state["event"].model_copy(
+                update={"at": max(opened, floor) if floor is not None else opened}
+            )
+            state["event"], state["after"] = moved, _with_event(judgements, batch, moved)
+
+    def _rename() -> None:
+        _not_default(old, new)
+        rename_branch(checkout.path, worktree, old, new)
+
+    def _delete_old() -> None:
+        _not_default(old)
+        client.delete_branch(owner_repo, old)
+
+    steps: list[tuple[str, Callable[[], object]]] = []
+    if renames:
+        steps.append((f"rename {old} to {new}", _rename))
+    if publish:
+        steps.append((f"publish {new}", lambda: checkout.publish_branch(new)))
+    if old_pr is not None:
+        number = int(old_pr["number"])
+        if new_pr is None:
+            steps.append((f"open the PR superseding #{number}", _create))
+
+        def _comment() -> None:
+            body = supersede_comment(int(state["pr"]["number"]), batch)
+            client.comment_issue(owner_repo, number, body)
+
+        if not commented:
+            steps.append((f"comment on #{number}", _comment))
+        steps.append((f"close #{number}", lambda: client.close_pr(owner_repo, number)))
+    if remote_old:
+        steps.append((f"delete remote branch {old}", _delete_old))
+    steps.append((f"adopt tab {tab}", lambda: runner.adopt(probe, tab)))
+    if not recorded:
+        steps.append(("record the dispatch event",
+                      lambda: _save(target, state["after"], facts,
+                                    read=judgements.batches)))  # fmt: skip
+
+    def _marks() -> None:
+        failed = _forge_writes(client, owner_repo, _find(state["after"], batch.id), probe.id)
+        if failed:
+            raise RuntimeError("; ".join(failed))
+
+    steps.append(("mark every member on the forge", _marks))
+    if callable(getattr(runner, "message", None)):
+        steps.append(("message the agent", lambda: runner.message(
+            probe, adopt_message(batch, probe.id, old, new, _pr_ref(), reserved))))  # fmt: skip
+    for i, (what, act) in enumerate(steps):
+        try:
+            act()
+        except Exception as exc:  # each step's own failure: report it, the rest remain
+            if isinstance(exc, typer.Exit) and exc.exit_code == 0:
+                raise
+            # A refusal inside a step (`_fail`) printed its words already; exit 2 is
+            # for refusals before any write, so it too ends in this report (p1-r8).
+            detail = "refused, as printed above" if isinstance(exc, typer.Exit) else exc
+            remaining = [w for w, _ in steps[i:]]
+            _fail(
+                f"adopt stopped at: {what}: {detail}. Done: {'; '.join(done) or 'nothing'}. "
+                f"Still remain: {'; '.join(remaining)}. Re-run the same command to finish: "
+                f"`fr triage batch adopt {batch.id} --tab {tab} --branch {old} --yes`",
+                code=1,
+            )
+        done.append(what)
+    say(f"adopted tab {tab} as batch {batch.id} on {new}")
+
+
+def _list_sessions(to: str | None) -> None:
+    """`adopt --list` (R12): every session, with the issue refs in its label."""
+    name = to or ADOPT_LIST_RUNNER
+    runner: Any = load_runner(name)
+    if not _adopter(runner):
+        _fail(f"runner `{name}` cannot adopt sessions (it is no SessionAdopter)")
+    try:
+        sessions = runner.list_sessions()
+    except Exception as exc:  # the runner's own failure
+        _fail(f"runner `{name}` could not list its sessions: {exc}", code=1)
+    for s in sessions:
+        refs = ", ".join(label_refs(s.label)) or "-"
+        console.print(
+            f"{s.tab}\t{s.group or '-'}\t{s.status}\t{refs}\t{s.label}",
+            markup=False,
+            soft_wrap=True,
+            highlight=False,
+        )
+
+
+@batch_app.command("adopt")
+def batch_adopt_command(
+    batch_id: Annotated[
+        str | None, typer.Argument(help="The batch to adopt the session as.")
+    ] = None,
+    tab: Annotated[
+        str | None, typer.Option("--tab", help="The runner tab holding the session.")
+    ] = None,
+    branch: Annotated[
+        str | None, typer.Option("--branch", help="The branch the session works on now.")
+    ] = None,
+    to: Annotated[
+        str | None, typer.Option("--to", help="Runner; default: the batch's launch.runner.")
+    ] = None,
+    checkout_path: CheckoutOpt = None,
+    list_sessions: Annotated[
+        bool, typer.Option("--list", help="List every session and its issue refs; write nothing.")
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+) -> None:
+    """Put a running session under the wave driver as an existing batch; launches nothing.
+
+    Renames the session's branch to the batch branch (supersede an open PR with one
+    from it), labels its tab and agent as the batch's, and records a dispatch. Not the
+    driver's `adopt` action, which records a close-out started by hand.
+    """
+    if list_sessions:
+        _list_sessions(to)
+        return
+    if batch_id is None or tab is None or branch is None:
+        _fail("give a batch, --tab and --branch (or --list)")
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    batch = _find(judgements.batches, batch_id)
+    adopt_batch(
+        target, facts, judgements, batch, tab=tab, branch=branch, to=to,
+        checkout_path=checkout_path, yes=yes,
+    )  # fmt: skip
 
 
 # ------------------------------------------------------------------- merge
@@ -1477,17 +1891,7 @@ def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[st
     each `trusted` only from *repo* itself by an *allowed* author (gh#936)."""
     out: list[LivePr] = []
     for rec in client.list_prs_by_head(repo, head):
-        author = rec.get("author")
-        login = author.get("login") if isinstance(author, dict) else None
-        cross = rec.get("isCrossRepository")
-        trusted = (
-            distrust(
-                str(login) if login else None,
-                cross if isinstance(cross, bool) else None,
-                allowed,
-            )
-            is None
-        )
+        trusted = _untrusted(rec, allowed) is None
         out.append(
             LivePr(
                 number=int(rec.get("number", 0)),

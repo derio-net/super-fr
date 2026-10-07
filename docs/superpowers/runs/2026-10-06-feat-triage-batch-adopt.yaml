@@ -1,0 +1,113 @@
+schema_version: 8
+run: 2026-10-06-feat-triage-batch-adopt
+workflow: fr-goal-light@1
+branch: feat/triage-batch-adopt
+started: '2026-10-06T16:53:55+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-10-06T17:32:32+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md
+  plan:
+    state: done
+    at: '2026-10-06T17:34:51+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-10-06-triage-batch-adopt
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-10-06T17:32:34+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 36d26c83-85ad-42c7-81bc-305a59e44c4c
+          returned: '2026-10-06T17:34:51+00:00'
+          outcome: done
+        evidence:
+          single-phase: phase 1
+  spec-plan-review:
+    state: done
+    at: '2026-10-06T18:02:33+00:00'
+    units:
+      step/spec-plan-review:
+        attempts:
+        - dispatched: '2026-10-06T17:34:53+00:00'
+          agent: a7b94262f3cd81541
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 36d26c83-85ad-42c7-81bc-305a59e44c4c
+          returned: '2026-10-06T18:02:33+00:00'
+          outcome: done
+        evidence:
+          review: spr-r1
+          reviewer: a7b94262f3cd81541
+          findings: spr-f1,spr-f2,spr-f3,spr-f4,spr-f5,spr-f6,spr-f7,spr-f8,spr-f9,spr-f10,spr-f11,spr-f12
+  plan-review:
+    state: done
+    at: '2026-10-06T18:03:15+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-10-06T21:05:52+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-06T18:03:16+00:00'
+          agent: aa04c934d47072e37
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 36d26c83-85ad-42c7-81bc-305a59e44c4c
+          returned: '2026-10-06T20:09:00+00:00'
+          outcome: done
+        evidence:
+          tests: adopt-suite.log@33fcf04768bf;tree=7b837a8b3fa532fbec7eb38ba8dbfd23e1d7ed4a21a0404beddf5049e62776ae
+          visual: none
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-06T20:09:01+00:00'
+          agent: aa98c794d63b75440
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 36d26c83-85ad-42c7-81bc-305a59e44c4c
+          returned: '2026-10-06T21:05:52+00:00'
+          outcome: done
+        evidence:
+          review: p1-review-1
+          reviewer: aa98c794d63b75440
+          visual: none
+          findings: p1-wall-clock-tests-flake-under-host-load,p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8,p1-r9,p1-r10,p1-r11
+  journal-check:
+    state: done
+    at: '2026-10-06T21:05:55+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-wall-clock-tests-flake-under-host-load
+  deliver:
+    state: done
+    at: '2026-10-06T21:39:02+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1058
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-06T21:05:57+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 36d26c83-85ad-42c7-81bc-305a59e44c4c
+          returned: '2026-10-06T21:38:54+00:00'
+          outcome: done
+        evidence:
+          tests: adopt-deliver-suite.log@e6f20a16343d
+          proportionality: ccb71a112b0ec0e43e5a8857ad71ca33bbf9f252:594721bdc1cfcb44b3d142ef88c01935a1fdd2bb019af4359ed29fbbfe501517
+          visual: none

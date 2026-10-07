@@ -36,6 +36,12 @@ agent has taken the prompt up (it left `idle`), not merely once it was typed.
   `focus` selects the item's workspace, then its tab (`workspace focus`, `tab
   focus`), and is False when there is no tab. `message` prompts the item's agent
   (`agent prompt`), the wave driver's conflict hand-back (spec 2026-10-06 §G).
+- **Adoption** (spec 2026-10-06-triage-batch-adopt §E). `describe`/`list_sessions`
+  join `tab list`, `agent list` and `workspace list`; `adopt` gives a session the
+  identity a dispatch would have (`tab rename <tab> <item id>`, `agent rename
+  <agent> <agent_name(item id)>`), which herdr allows on an agent it did not
+  launch (captured live, tests/fixtures/herdr/README.md). An agent is addressed by
+  its name when it has one, else by its pane id. The tab is the handle.
 - **Inside herdr only.** `preflight` refuses unless `HERDR_ENV=1` and `herdr`
   is on PATH: herdr's own rule is never to drive a session from outside it.
 
@@ -52,6 +58,8 @@ import subprocess  # noqa: F401  (tests patch `fr_herdr.runner.subprocess.run`)
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from fr_dispatch.protocols import AdoptTarget
 
 from fr_herdr import restart  # noqa: F401  (imported at module top level, never lazily: spec sr-13)
 from fr_herdr._herdr import (
@@ -206,6 +214,55 @@ class HerdrRunner:
             failed=tuple((ln.pane_id, ln.detail) for ln in report.lines if ln.verdict == "fail"),
         )
 
+    def describe(self, tab: str) -> AdoptTarget | None:
+        """The session in *tab*, or None when no tab has that id (spec §E)."""
+        for target in self.list_sessions():
+            if target.tab == tab:
+                return target
+        return None
+
+    def list_sessions(self) -> list[AdoptTarget]:
+        """Every tab of every workspace, with its single agent (one read of each list)."""
+        tabs = _list_tabs()
+        agents = _list_agents()
+        groups = {
+            str(w["workspace_id"]): (str(w["label"]) if w.get("label") is not None else None)
+            for w in _list_workspaces()
+            if w.get("workspace_id")
+        }
+        out = []
+        for tab in tabs:
+            tab_id = str(tab.get("tab_id"))
+            held = [a for a in agents if a.get("tab_id") == tab_id]
+            out.append(
+                AdoptTarget(
+                    tab=tab_id,
+                    label=str(tab.get("label") or ""),
+                    group=groups.get(str(tab.get("workspace_id"))),
+                    agent=_agent_ref(held[0]) if len(held) == 1 else None,
+                    status=str(tab.get("agent_status") or "unknown"),
+                )
+            )
+        return out
+
+    def adopt(self, item: WorkItem, tab: str) -> str:
+        """Rename *tab* to the item id and its agent to the item's agent name.
+
+        Each rename is skipped when already done, so a second call changes
+        nothing; returns the tab as the handle.
+        """
+        target = self.describe(tab)
+        if target is None:
+            raise HerdrError(f"herdr has no tab {tab}")
+        if target.agent is None:
+            raise HerdrError(f"tab {tab} does not hold exactly one agent")
+        if target.label != item.id:
+            _run_herdr(["tab", "rename", tab, item.id])
+        name = agent_name(item.id)
+        if target.agent != name:
+            _run_herdr(["agent", "rename", target.agent, name])
+        return tab
+
     def can_dispatch(self, item: WorkItem) -> bool:
         return item.unit in self.units and item.payload.get("harness") in HARNESSES
 
@@ -353,6 +410,18 @@ def _list_tabs() -> list[dict[str, Any]]:
     return [t for t in tabs if isinstance(t, dict)]
 
 
+def _list_agents() -> list[dict[str, Any]]:
+    """Every agent herdr detects, launched by it or not (`herdr agent list`)."""
+    result = _run_herdr(["agent", "list"]).get("result")
+    agents = result.get("agents", []) if isinstance(result, dict) else []
+    return [a for a in agents if isinstance(a, dict)]
+
+
+def _agent_ref(agent: dict[str, Any]) -> str:
+    """How herdr addresses *agent*: its name when it has one, else its pane id."""
+    return str(agent.get("name") or agent.get("pane_id"))
+
+
 _PRECEDENCE: tuple[SessionStatus, ...] = ("blocked", "working", "idle", "done", "unknown")
 """Most urgent first: what a session in several tabs reports."""
 
@@ -427,6 +496,7 @@ def _close_workspace(workspace: str | None) -> None:
 if TYPE_CHECKING:
     from fr_dispatch.protocols import (
         Runner,
+        SessionAdopter,
         SessionCloser,
         SessionFocuser,
         SessionInspector,
@@ -442,3 +512,4 @@ if TYPE_CHECKING:
     _focuses: SessionFocuser = HerdrRunner()
     _messages: SessionMessenger = HerdrRunner()
     _restarts: SessionRestarter = HerdrRunner()
+    _adopts: SessionAdopter = HerdrRunner()

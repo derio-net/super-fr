@@ -35,6 +35,7 @@ class _Herdr:
         self.calls: list[list[str]] = []
         self.workspaces: dict[str, Any] = {}
         self.listing: dict[str, Any] = {}
+        self.agents: dict[str, Any] = {}
 
     def __call__(self, args: list[str]) -> dict[str, Any]:
         self.calls.append(list(args))
@@ -50,6 +51,10 @@ class _Herdr:
             return _fixture("workspace-create.json")
         if args[:2] == ["tab", "rename"]:
             return _fixture("tab-rename.json")
+        if args[:2] == ["agent", "list"]:
+            return self.agents or _fixture("agent-list.json")
+        if args[:2] == ["agent", "rename"]:
+            return _fixture("agent-rename.json")
         return {}
 
     def text(self) -> str:
@@ -680,3 +685,131 @@ def test_restart_idle_is_a_session_restarter_and_summarises_the_engine_report(
     summary = runner.restart_idle(exclude=("pX",))
     assert summary == RestartSummary(ok=2, skipped=1, failed=(("p4", "did not exit"),))
     assert seen == [{"yes": True, "exclude": ("pX",)}]
+
+
+# ------------------------------------------------- session adoption (spec 2026-10-06 §E)
+#
+# The fixtures are one live capture (tests/fixtures/herdr/README.md): `wT:t1` is a
+# scratch tab whose `claude` was started by hand, not by `herdr agent start`.
+
+SCRATCH_TAB = "wT:t1"
+
+
+@pytest.fixture
+def adoptable(herdr: _Herdr) -> _Herdr:
+    herdr.listing = _fixture("tab-list-adopt.json")
+    herdr.workspaces = _fixture("workspace-list-adopt.json")
+    herdr.agents = _fixture("agent-list.json")
+    return herdr
+
+
+def test_the_live_captured_adopt_fixtures_have_herdrs_result_types() -> None:
+    assert _fixture("agent-list.json")["result"]["type"] == "agent_list"
+    assert _fixture("agent-rename.json")["result"]["type"] == "agent_info"
+    assert _fixture("agent-rename.json")["result"]["agent"]["name"] == "b-adopt-scratch-0000"
+    assert _fixture("tab-rename-adopt.json")["result"]["type"] == "tab_info"
+    hand_started = [
+        a for a in _fixture("agent-list.json")["result"]["agents"] if a["tab_id"] == SCRATCH_TAB
+    ]
+    assert len(hand_started) == 1 and "name" not in hand_started[0]
+
+
+def test_describe_reports_label_workspace_agent_and_status(adoptable: _Herdr) -> None:
+    from fr_dispatch.protocols import AdoptTarget
+
+    got = HerdrRunner.from_env().describe(SCRATCH_TAB)
+    assert got == AdoptTarget(
+        tab=SCRATCH_TAB,
+        label="1 · adopt › claude › model haiku",
+        group="fr-adopt-scratch",
+        agent="wT:p1",
+        status="blocked",
+    )
+
+
+def test_describe_an_unknown_tab_is_none(adoptable: _Herdr) -> None:
+    assert HerdrRunner.from_env().describe("wZ:t9") is None
+
+
+def test_describe_a_tab_with_no_agent_has_agent_none(adoptable: _Herdr) -> None:
+    got = HerdrRunner.from_env().describe("w7:t9")  # the `|` tab: a bare shell
+    assert got is not None and got.agent is None
+
+
+def test_describe_a_tab_with_several_agents_has_agent_none(adoptable: _Herdr) -> None:
+    agents = _fixture("agent-list.json")
+    scratch = next(a for a in agents["result"]["agents"] if a["tab_id"] == SCRATCH_TAB)
+    agents["result"]["agents"].append({**scratch, "pane_id": "wT:p2"})
+    adoptable.agents = agents
+    got = HerdrRunner.from_env().describe(SCRATCH_TAB)
+    assert got is not None and got.agent is None
+
+
+def test_describe_prefers_an_agents_name_over_its_pane(adoptable: _Herdr) -> None:
+    adoptable.agents = _fixture("agent-list-adopted.json")
+    got = HerdrRunner.from_env().describe(SCRATCH_TAB)
+    assert got is not None and got.agent == "b-adopt-scratch-0000"
+
+
+def test_list_sessions_returns_one_target_per_tab_with_its_raw_label(adoptable: _Herdr) -> None:
+    got = HerdrRunner.from_env().list_sessions()
+    tabs = _fixture("tab-list-adopt.json")["result"]["tabs"]
+    assert [t.tab for t in got] == [t["tab_id"] for t in tabs]
+    by_tab = {t.tab: t for t in got}
+    assert by_tab["w7:t5"].label == "frank#551 fr-goal finish"
+    assert by_tab["w7:t5"].group == "frank"
+    assert by_tab["w7:t5"].agent == "w7:p5"
+    assert by_tab["w9:tA"].status == "working"
+
+
+def test_list_sessions_reads_each_list_once(adoptable: _Herdr) -> None:
+    HerdrRunner.from_env().list_sessions()
+    assert sorted(c[:2] for c in adoptable.calls) == [
+        ["agent", "list"],
+        ["tab", "list"],
+        ["workspace", "list"],
+    ]
+
+
+def test_adopt_renames_the_tab_then_the_agent_and_returns_the_tab(adoptable: _Herdr) -> None:
+    item = _item()
+    handle = HerdrRunner.from_env().adopt(item, SCRATCH_TAB)
+    assert handle == SCRATCH_TAB
+    writes = [c for c in adoptable.calls if c[1] == "rename"]
+    assert writes == [
+        ["tab", "rename", SCRATCH_TAB, item.id],
+        ["agent", "rename", "wT:p1", agent_name(item.id)],
+    ]
+
+
+def test_adopt_is_a_no_op_when_already_adopted(adoptable: _Herdr) -> None:
+    item = _item()
+    tabs = _fixture("tab-list-adopt.json")
+    for t in tabs["result"]["tabs"]:
+        if t["tab_id"] == SCRATCH_TAB:
+            t["label"] = item.id
+    agents = _fixture("agent-list.json")
+    for a in agents["result"]["agents"]:
+        if a["tab_id"] == SCRATCH_TAB:
+            a["name"] = agent_name(item.id)
+    adoptable.listing, adoptable.agents = tabs, agents
+    assert HerdrRunner.from_env().adopt(item, SCRATCH_TAB) == SCRATCH_TAB
+    assert [c for c in adoptable.calls if c[1] == "rename"] == []
+
+
+def test_adopt_an_unknown_tab_raises_and_renames_nothing(adoptable: _Herdr) -> None:
+    with pytest.raises(herdr_runner.HerdrError, match="wZ:t9"):
+        HerdrRunner.from_env().adopt(_item(), "wZ:t9")
+    assert [c for c in adoptable.calls if c[1] == "rename"] == []
+
+
+def test_adopt_a_tab_without_one_agent_raises_and_renames_nothing(adoptable: _Herdr) -> None:
+    with pytest.raises(herdr_runner.HerdrError, match="agent"):
+        HerdrRunner.from_env().adopt(_item(), "w7:t9")
+    assert [c for c in adoptable.calls if c[1] == "rename"] == []
+
+
+def test_herdr_meets_the_adopt_contract(adoptable: _Herdr) -> None:
+    from fr_dispatch.testing import check_adopt_contract
+
+    check_adopt_contract(HerdrRunner.from_env())

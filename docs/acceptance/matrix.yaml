@@ -4942,6 +4942,97 @@ rows:
       - idle-batch-card-needs-you
       - idle-closeout-card-needs-you
       - idle-card-with-pr-not-flagged
+  - id: triage-batch-adopt
+    capability: Backlog triage
+    acceptance: An operator can put an already-running herdr session under the wave
+      driver for an existing batch without launching a second session; the driver then
+      counts it in flight, finds its PR (even one opened before adoption), merges it,
+      closes it out and closes its tab
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_adopt_with_an_open_pr_moves_everything_in_order
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_adopt_renames_the_tab_then_the_agent_and_returns_the_tab
+    status: not-implemented
+    notes: Unit-covered on fakes (and herdr against a live capture); stays not-implemented
+      until the post-merge operator sweep of the six hand-started sessions (spec Test
+      Plan 5) proves it live.
+    verify: live
+  - id: triage-batch-adopt-branch-rename
+    capability: Backlog triage
+    acceptance: Adopting a session renames its branch to the batch branch everywhere
+      fr keys on it (local, upstream, isolation record, marker, session indexes, run
+      cursor), publishes it, supersedes an open PR with a new one on the batch branch,
+      and tells the session's agent, so the session keeps working on the renamed branch
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_branch_rename.py#test_rename_moves_branch_record_marker_indexes_and_cursor
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_adopt_with_an_open_pr_moves_everything_in_order
+      - super-fr:tests/unit/test_triage_gitseam.py#test_publish_branch_pushes_it_and_sets_its_upstream
+    status: not-implemented
+    notes: rename_branch is unit-tested over a real tmp repo and linked worktree; the
+      supersede over a fake forge. Stays not-implemented until the post-merge live sweep
+      shows a renamed session keep working on the batch branch.
+    verify: live
+  - id: triage-batch-adopt-refusals
+    capability: Backlog triage
+    acceptance: Adopt prints its plan without --yes and, with --yes, refuses every unsafe
+      case (wrong stage, foreign or unknown tab, working agent, mid-rebase worktree,
+      existing target branch, missing version reservation) before writing anything
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_without_yes_the_full_plan_prints_and_nothing_changes
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_working_agent_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_worktree_rename_refuses_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_an_unrelated_remote_batch_branch_is_refused
+      - super-fr:tests/unit/test_isolation_branch_rename.py#test_a_worktree_mid_rebase_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_an_untrusted_open_pr_on_the_old_branch_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_an_untrusted_open_pr_on_the_batch_branch_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_the_default_branch_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_branch_checked_out_in_the_main_worktree_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_the_batch_branch_as_branch_still_gets_the_worktree_refusals
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_dispatched_or_pr_open_batch_is_refused
+    status: ci
+    notes: 'Code review p1: adds untrusted-PR (fork/foreign/unread author, either branch),
+      default-branch, main-worktree, same-branch-R9 and real dispatched/pr-open stage
+      refusals.'
+  - id: triage-batch-adopt-list
+    capability: Backlog triage
+    acceptance: An operator can list every running herdr session with the issue refs
+      in its label, read-only, as the start of a sweep
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_list_prints_every_session_with_its_issue_refs_and_writes_nothing
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_label_refs_parses_repo_issue_refs
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_list_sessions_returns_one_target_per_tab_with_its_raw_label
+    status: ci
+    notes: --list over a fake adopter prints tab, workspace, status and parsed repo#n
+      refs and writes nothing; herdr's list_sessions is tested against a live capture.
+  - id: triage-batch-adopt-resumable
+    capability: Backlog triage
+    acceptance: A batch adopt that fails part-way is finished by running the same command
+      again, with no step done twice
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-06-triage-batch-adopt-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_failure_at_each_step_exits_1_and_the_same_command_finishes_it
+      - super-fr:tests/unit/test_isolation_branch_rename.py#test_a_partial_rename_is_finished
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_refusal_raised_inside_a_step_reports_and_exits_1
+      - super-fr:tests/unit/test_isolation_branch_rename.py#test_a_cursor_commit_that_fails_is_finished_by_the_next_call
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_pr_opened_in_the_same_second_still_belongs_to_the_dispatch
+    status: ci
+    notes: 'Code review p1: a refusal inside a step reports and exits 1; a cursor commit
+      that failed is finished by the next call; the event stays of its PR in the same
+      second.'
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity

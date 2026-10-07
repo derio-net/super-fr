@@ -1638,3 +1638,89 @@ def test_the_default_snapshot_has_no_idle_sessions() -> None:
         }
     )
     assert drive_snapshot(facts, Judgements.model_validate({"schema": 3})).idle == ()
+
+
+# ------------------------------- an adopted batch (spec 2026-10-06-triage-batch-adopt §F)
+
+ADOPTED_AT = "2026-10-01T10:00:00Z"
+
+
+def _adopted(bid: str, n: int, *, branch: str, **kw: Any) -> Batch:
+    """A batch whose last dispatch is an adoption: runner herdr, a tab id as handle,
+    and a recorded *branch* that may differ from `batch_branch`."""
+    event = {"kind": "dispatch", "at": ADOPTED_AT, "runner": "herdr", "handle": "w7:t5",
+             "branch": branch}  # fmt: skip
+    return _batch(bid, n, events=[event, *kw.pop("events", [])], **kw)
+
+
+def test_recorded_branch_is_the_last_dispatch_branch_else_the_batch_branch() -> None:
+    from fr.triage.batch import recorded_branch
+
+    assert recorded_branch(_batch("x", 1)) == "feat/batch-x"
+    assert recorded_branch(_batch("y", 2, skill="debug")) == "fix/batch-y"
+    assert recorded_branch(_adopted("z", 3, branch="feat/hand-started")) == "feat/hand-started"
+
+
+def test_the_closeout_brief_names_the_recorded_branch() -> None:
+    b = _adopted("x", 1, branch="feat/hand-started")
+    assert "fr pickup --branch feat/hand-started" in closeout_brief(
+        b, run=None, checkout=Path("/w/x")
+    )
+    assert "on feat/hand-started has merged" in closeout_brief(b, run="r", checkout=Path("/w"))
+
+
+def test_archive_attribution_by_head_uses_the_recorded_branch() -> None:
+    b = _adopted("x", 1, branch="feat/hand-started",
+                 events=[{"kind": "closeout", "at": "2026-10-02T11:00:00Z", "runner": "fake",
+                          "handle": "h", "run": None, "archive": None}])  # fmt: skip
+    event = b.events[-1]
+    assert attributed(_archive(1, "chore/closeout-feat-hand-started"), b, event)  # type: ignore[arg-type]
+    assert not attributed(_archive(2, "chore/closeout-feat-batch-x"), b, event)  # type: ignore[arg-type]
+
+
+def test_the_dispatch_comment_names_the_recorded_branch() -> None:
+    from fr.triage.batch_dispatch import dispatch_comment
+
+    b = _adopted("x", 1, branch="feat/hand-started")
+    assert "Branch `feat/hand-started`." in dispatch_comment(
+        b, batch_item_id(REPO, "x"), "super-fr#1"
+    )
+
+
+def _adopt_facts(pr: PullRequest) -> Any:
+    from fr.triage.model import Facts, Issue
+
+    return Facts(
+        viewer="operator", schema=3, scope="derio-net--super-fr", kind="repo",
+        collected_at="2026-10-02T12:00:00+00:00", repos=[REPO],
+        issues=[Issue(repo=REPO, number=1, title="i", state="open",
+                      url=f"https://github.com/{REPO}/issues/1")],
+        prs=[pr], config={},
+    )  # fmt: skip
+
+
+def test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one() -> None:
+    """R13: in flight, its PR found, and its tab closed once it is finished."""
+    from fr.triage.batch import batch_pr, derive_batch_stage
+
+    b = _adopted("x", 1, branch="feat/batch-x")
+    new = _pr("x", 101, author="operator", cross_repo=False, created_at="2026-10-01T10:00:05Z")
+    old = _pr("x", 90, head_ref="feat/hand-started", author="operator", cross_repo=False,
+              created_at="2026-09-30T00:00:00Z", state="CLOSED")  # fmt: skip
+    facts = _adopt_facts(new)
+    facts.prs.append(old)
+    assert batch_pr(b, facts) == new
+    assert derive_batch_stage(b, facts) == "pr-open"
+
+    held = drive_pass(_snap([b, _batch("y", 2)], {"x": "dispatched", "y": "proposed"},
+                            max_inflight=1))  # fmt: skip
+    assert _kinds(held.actions) == [("held", "y")]
+
+    item = batch_item_id(REPO, "x")
+    done = drive_pass(
+        _snap([_adopted("x", 1, branch="feat/batch-x", events=[
+            {"kind": "closeout", "at": "2026-10-02T11:00:00Z", "runner": "fake", "handle": "h",
+             "run": None, "archive": None, "archived": True}])],
+            {"x": "merged"}, close_sessions=True, sessions=frozenset({item}))
+    )  # fmt: skip
+    assert [(a.kind, a.items) for a in done.actions if a.kind == "close"] == [("close", (item,))]

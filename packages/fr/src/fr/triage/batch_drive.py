@@ -27,9 +27,9 @@ from fr.triage.batch import (
     BatchStage,
     ForeignPr,
     QueueEntry,
-    batch_branch,
     batch_item_id,
     last_dispatch,
+    recorded_branch,
 )
 from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
 
@@ -399,12 +399,7 @@ def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Actio
     if key in snap.warned:
         return None
     since = event.at.strftime("%Y-%m-%dT%H:%M")
-    last = last_dispatch(batch)
-    pickup = (
-        f"--run {event.run}"
-        if event.run
-        else f"--branch {last.branch if last else batch_branch(batch)}"
-    )
+    pickup = f"--run {event.run}" if event.run else f"--branch {recorded_branch(batch)}"
     return Action(
         "warn", batch.id,
         f"close-out {item} was recorded at {since}Z but no runner holds it and no archive "
@@ -471,7 +466,7 @@ def housekeeping_branch(branch: str, run: str | None, plan: str | None) -> str:
 
 def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
     """The close-out work item's brief: the `fr pickup` instruction for the batch."""
-    branch = batch_branch(batch)
+    branch = recorded_branch(batch)
     pickup = f"fr pickup --run {run}" if run else f"fr pickup --branch {branch}"
     return (
         f"Close out batch {batch.id} ({batch.title}): its PR on {branch} has merged.\n"
@@ -567,7 +562,7 @@ def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
     both the head name and the files (gh#936)."""
     if not pr.trusted:
         return False
-    branch = batch_branch(batch)
+    branch = recorded_branch(batch)
     if pr.head_ref == f"chore/closeout-{branch.replace('/', '-')}":
         return True
     if not pr.head_ref.startswith(ARCHIVE_PREFIXES):
