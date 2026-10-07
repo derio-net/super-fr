@@ -2065,6 +2065,24 @@ issues:
     severity: med
     detail: 'Degraded-forge exits left after #1023: the dispatch path''s failed fetch, the export path, a stale pre-recorded close-out, and gh timeouts on big lists.'
     note: 'Follow-up of super-fr#921 (closed by #1023). Batch drive-board-lows.'
+  super-fr#1043:
+    tier: 3
+    theme: triage-drive
+    cx: L
+    verified: true
+    kind: feature
+    severity: med
+    detail: 'Overlapping scopes (repo, group, org) on one or more hosts have no coordination: `drive.lock` is per state dir, state is per scope. A signed per-issue claim (scope+host id, heartbeat, expiry) keeps other scopes hands off; each claim holder publishes its own named board.'
+    note: Operator design 2026-10-06. Wave 10. Starts with a brainstorm.
+  super-fr#1051:
+    tier: 3
+    theme: triage-drive
+    cx: XS
+    verified: true
+    kind: defect
+    severity: med
+    detail: '`collect._checks` counts every statusCheckRollup entry, so a check re-run green on the same commit keeps its stale failure; the merge train treats the PR as failing forever. Seen on export PR #1038.'
+    note: Wave 10 batch checks-latest-run.
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -4979,6 +4997,12 @@ batches:
     runner: herdr
     handle: w2Q:pA
     archive: chore/closeout-fix-batch-drive-adopt-and-trust
+  - kind: closeout
+    at: '2026-10-06T17:04:44.804025Z'
+    runner: herdr
+    handle: w2Q:pA
+    archive: chore/closeout-fix-batch-drive-adopt-and-trust
+    archived: 1036
 - id: run-evidence-witness
   title: Run evidence witnesses a backgrounded suite and a uv run --with capture
   ids:
@@ -5119,6 +5143,19 @@ batches:
     runner: herdr
     handle: w35:p4
     branch: fix/batch-drive-board-lows
+  - kind: post_merge
+    at: '2026-10-06T18:21:05.441257Z'
+  - kind: closeout
+    at: '2026-10-06T18:21:11.175176Z'
+    runner: herdr
+    handle: w35:p6
+    archive: chore/closeout-fix-batch-drive-board-lows
+  - kind: closeout
+    at: '2026-10-06T18:31:08.232946Z'
+    runner: herdr
+    handle: w35:p6
+    archive: chore/closeout-fix-batch-drive-board-lows
+    archived: 1046
 - id: closing-keyword-gate
   title: 'deliver''s closing-keyword gate: no false hit on keyword-like prose, no miss across a line break'
   ids:
@@ -5133,6 +5170,19 @@ batches:
     runner: herdr
     handle: w35:p1
     branch: fix/batch-closing-keyword-gate
+  - kind: post_merge
+    at: '2026-10-06T18:14:20.093736Z'
+  - kind: closeout
+    at: '2026-10-06T18:14:20.810246Z'
+    runner: herdr
+    handle: w35:p5
+    archive: chore/closeout-fix-batch-closing-keyword-gate
+  - kind: closeout
+    at: '2026-10-06T18:26:32.810597Z'
+    runner: herdr
+    handle: w35:p5
+    archive: chore/closeout-fix-batch-closing-keyword-gate
+    archived: 1045
 - id: pages-deploy
   title: Pages deploy survives a stale artifact and is never cancelled mid-run
   ids:
@@ -5146,6 +5196,19 @@ batches:
     runner: herdr
     handle: w35:p2
     branch: fix/batch-pages-deploy
+  - kind: post_merge
+    at: '2026-10-06T18:25:39.697602Z'
+  - kind: closeout
+    at: '2026-10-06T18:30:56.060977Z'
+    runner: herdr
+    handle: w35:p9
+    archive: chore/closeout-fix-batch-pages-deploy
+  - kind: closeout
+    at: '2026-10-06T18:39:22.935855Z'
+    runner: herdr
+    handle: w35:p9
+    archive: chore/closeout-fix-batch-pages-deploy
+    archived: 1047
 - id: state-sync-race
   title: 'triage state sync opens with O_NOFOLLOW: no check-to-write race'
   ids:
@@ -5159,6 +5222,19 @@ batches:
     runner: herdr
     handle: w35:p3
     branch: fix/batch-state-sync-race
+  - kind: post_merge
+    at: '2026-10-06T18:36:27.627097Z'
+  - kind: closeout
+    at: '2026-10-06T18:36:28.347007Z'
+    runner: herdr
+    handle: w35:pA
+    archive: chore/closeout-fix-batch-state-sync-race
+  - kind: closeout
+    at: '2026-10-06T18:45:11.315049Z'
+    runner: herdr
+    handle: w35:pA
+    archive: chore/closeout-fix-batch-state-sync-race
+    archived: 1049
 - id: driver-sessions
   title: 'Driver sessions stay current and portable: idle sessions restart on new plugins, and the driver
     runs outside herdr'
@@ -5172,6 +5248,22 @@ batches:
   after:
   - drive-board-lows
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-10-06T18:07:27.236272Z'
+    runner: herdr
+    handle: w36:p4
+    branch: feat/batch-driver-sessions
+  - kind: conflict
+    at: '2026-10-07T02:31:50.522627Z'
+    head: c5d6e6d8b1e6f5b24610c5ee0e2a0ecd4bf16f02
+    paths:
+    - docs/acceptance/matrix.yaml
+    - docs/acceptance/report_linked.html
+    - docs/acceptance/report_linked.md
+    - docs/acceptance/report_local.html
+    delivered: session
+    handle: derio-net/super-fr/run/batch-driver-sessions
 - id: model-bindings
   title: 'Model bindings survive provider churn: probe live, fall back by family then tier'
   ids:
@@ -5185,6 +5277,28 @@ batches:
     runner: herdr
     handle: w36:p3
     branch: feat/batch-model-bindings
+  - kind: conflict
+    at: '2026-10-06T20:17:28.138802Z'
+    head: e92daf0b8bc9f50b9b363785d3bf6c6ab390ac13
+    paths:
+    - docs/acceptance/matrix.yaml
+    delivered: session
+    handle: derio-net/super-fr/run/batch-model-bindings
+  - kind: post_merge
+    at: '2026-10-06T20:59:53.509799Z'
+  - kind: closeout
+    at: '2026-10-06T20:59:54.314171Z'
+    runner: herdr
+    handle: w36:p7
+    run: 2026-10-06-feat-batch-model-bindings
+    archive: chore/archive-2026-10-06-model-binding-churn
+  - kind: closeout
+    at: '2026-10-06T21:11:39.371975Z'
+    runner: herdr
+    handle: w36:p7
+    run: 2026-10-06-feat-batch-model-bindings
+    archive: chore/archive-2026-10-06-model-binding-churn
+    archived: 1056
 - id: cost-evidence
   title: 'Cost evidence: per-phase tiers and overhead in the PR body, main-session cost, handoff quality'
   ids:
@@ -5201,6 +5315,21 @@ batches:
     runner: herdr
     handle: w36:p2
     branch: feat/batch-cost-evidence
+  - kind: post_merge
+    at: '2026-10-07T02:37:41.548047Z'
+  - kind: closeout
+    at: '2026-10-07T02:37:42.661214Z'
+    runner: herdr
+    handle: w36:p8
+    run: 2026-10-06-feat-batch-cost-evidence
+    archive: chore/archive-2026-10-06-cost-evidence
+  - kind: closeout
+    at: '2026-10-07T03:01:13.290671Z'
+    runner: herdr
+    handle: w36:p8
+    run: 2026-10-06-feat-batch-cost-evidence
+    archive: chore/archive-2026-10-06-cost-evidence
+    archived: 1061
 - id: archive-followups
   title: 'Archive does its own follow-ups: price closed sessions, retarget matrix refs, offer issues for
     open ends'
@@ -5217,6 +5346,70 @@ batches:
     runner: herdr
     handle: w36:p1
     branch: feat/batch-archive-followups
+  - kind: post_merge
+    at: '2026-10-06T20:26:48.675758Z'
+  - kind: closeout
+    at: '2026-10-06T20:26:53.666956Z'
+    runner: herdr
+    handle: w36:p6
+    run: 2026-10-06-feat-batch-archive-followups
+    archive: chore/archive-2026-10-06-archive-followups
+  - kind: closeout
+    at: '2026-10-06T20:40:02.245540Z'
+    runner: herdr
+    handle: w36:p6
+    run: 2026-10-06-feat-batch-archive-followups
+    archive: chore/archive-2026-10-06-archive-followups
+    archived: 1053
+- id: triage-claims
+  title: 'Triage across scopes and hosts: signed per-issue claims, and one named board per claim holder'
+  ids:
+  - super-fr#1043
+  rationale: 'Wave 10 (operator 2026-10-06). Overlapping scopes and hosts must keep clear of each other''s
+    issues; each driving scope publishes its own board. Starts with a brainstorm: claim timing, expiry,
+    take-over and the publishing hook are the operator''s.'
+  wave: 10
+  bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-10-06T18:10:52.142825Z'
+    runner: herdr
+    handle: w37:p1
+    branch: feat/batch-triage-claims
+  - kind: conflict
+    at: '2026-10-07T03:18:39.892228Z'
+    head: fee325af982a07e29f09d4cf3f0bc64342d1db23
+    paths:
+    - docs/acceptance/matrix.yaml
+    - docs/acceptance/report_linked.html
+    - docs/acceptance/report_linked.md
+    - docs/acceptance/report_local.html
+    - packages/fr/src/fr/commands/triage_batch_cmd.py
+    - packages/fr/src/fr/commands/triage_kanban_cmd.py
+    - packages/fr/src/fr/triage/batch_drive.py
+    - packages/fr/src/fr/triage/kanban.py
+    - packages/fr/src/fr/triage/kanban_render.py
+    - packages/fr/src/fr/triage/model.py
+    - tests/integration/test_scenarios.py
+    - tests/unit/fakes.py
+    - tests/unit/test_real_ghclient.py
+    - tests/unit/test_triage_batch_drive.py
+    - tests/unit/test_triage_kanban.py
+    delivered: session
+    handle: derio-net/super-fr/run/batch-triage-claims
+- id: checks-latest-run
+  title: The driver reads only the latest run of each check, so a green re-run counts as green
+  ids:
+  - super-fr#1051
+  rationale: 'Wave 10: blocks the wave-7 export (#1038) and any PR re-run green on the same commit.'
+  wave: 10
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-10-06T20:14:12.009770Z'
+    runner: herdr
+    handle: w37:p2
+    branch: fix/batch-checks-latest-run
 features:
 - rank: 1
   title: Cost evidence
@@ -5294,4 +5487,10 @@ exports:
   at: '2026-10-06T12:13:24.423968Z'
   pr: 1021
   head: c164b17693264e68d9c61a8bb5132bc678b3fe06
+  merged: true
+- wave: '7'
+  repo: derio-net/super-fr
+  at: '2026-10-06T16:59:21.519763Z'
+  pr: 1038
+  head: f1919d411a43841293202aacdee44e29c1cf94e7
   merged: true
