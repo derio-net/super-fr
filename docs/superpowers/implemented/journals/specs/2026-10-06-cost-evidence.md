@@ -193,3 +193,8 @@ Pre-existing: brief re-keying ignored evidence.reviewer before this change; no r
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-10-06-cost-evidence-p2 created=2026-10-06T17:45:38+00:00 -->
 ### tier-2026-10-06-cost-evidence-p2 · decision · hard: changes _open_dispatch, which every dispatch relies on, and adds a run-kind 8->9 migration
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-12-resolved-2 created=2026-10-07T02:48:58+00:00 state=open resolves=sr-r1-12 tracked_by=https://github.com/derio-net/super-fr/issues/1060 -->
+### sr-r1-12-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1060] · resolves sr-r1-12: Reviewer dispatch briefs stay keyed by raw agent id (units_by_agent ignores evidence.reviewer)
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1060.
