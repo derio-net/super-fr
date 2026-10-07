@@ -1,0 +1,22 @@
+{
+  "id": "cli:agent:rename",
+  "result": {
+    "agent": {
+      "agent": "claude",
+      "agent_status": "blocked",
+      "cwd": "/tmp/fr-adopt-scratch",
+      "focused": false,
+      "foreground_cwd": "/tmp/fr-adopt-scratch",
+      "name": "b-adopt-scratch-0000",
+      "pane_id": "wT:p1",
+      "revision": 3,
+      "state_change_seq": 2437,
+      "tab_id": "wT:t1",
+      "terminal_id": "term_65d2fd8fb2aec76",
+      "terminal_title": "claude --model haiku",
+      "terminal_title_stripped": "claude --model haiku",
+      "workspace_id": "wT"
+    },
+    "type": "agent_info"
+  }
+}

@@ -32,3 +32,22 @@
   `agent_prompt_stalled` is herdr's documented one (`herdr agent prompt --help`,
   `herdr --skill`); the envelope is the shape of the captured `agent-start-pane-busy.json`
   and the message is invented. `fr_herdr` reads only `.error.code`.
+- `workspace-list-adopt.json`, `tab-list-adopt.json`, `agent-list.json`,
+  `tab-rename-adopt.json`, `agent-rename.json`, `tab-list-adopted.json`,
+  `agent-list-adopted.json` — captured live 2026-10-06 (herdr 0.9.0) for batch
+  adopt (spec 2026-10-06-triage-batch-adopt §E). A scratch workspace
+  `fr-adopt-scratch` was created with `herdr workspace create --no-focus`, and
+  `claude --model haiku` was started in its root pane with `herdr pane run` —
+  NOT `herdr agent start`, so herdr detected an agent it did not launch (it
+  carries no `name` and no `agent_session`). Then, in order: `herdr workspace
+  list`, `herdr tab list`, `herdr agent list`, `herdr tab rename wT:t1
+  derio-net/super-fr/run/batch-adopt-scratch`, `herdr agent rename wT:p1
+  b-adopt-scratch-0000` (exit 0: herdr renames an agent it did not launch, and
+  `herdr agent get b-adopt-scratch-0000` then resolves it by that name), and the
+  two lists again (`-adopted`); the scratch workspace was closed afterwards. No
+  other tab or agent was renamed, messaged or closed. Redaction: only the
+  workspaces `w7`, `w9` and the scratch `wT` are kept; workspace labels became
+  the bare repo name; tab labels without an issue ref or item id became
+  `example-tab-<n>`; every agent `cwd` became `/work/<repo>` (the scratch one
+  `/tmp/fr-adopt-scratch`), other agents' terminal titles became `claude`, and
+  session ids became sequential placeholder UUIDs. Shape unchanged.

@@ -385,3 +385,43 @@ def test_commit_paths_never_forces_past_gitignore_and_ignored_names_what_it_left
         "docs/triage/scope/snapshots/s.json",
     )
     assert wt.ignored([]) == ()
+
+
+# ------------------------------------------- batch adopt (spec 2026-10-06 §A.4, §C)
+
+
+def test_publish_branch_pushes_it_and_sets_its_upstream(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "branch", "feat/batch-x")
+    assert not checkout.remote_branch_exists("feat/batch-x")
+
+    checkout.publish_branch("feat/batch-x")
+
+    assert checkout.remote_branch_exists("feat/batch-x")
+    upstream = _git(checkout.path, "rev-parse", "--abbrev-ref", "feat/batch-x@{upstream}")
+    assert upstream.strip() == "origin/feat/batch-x"
+
+
+def test_worktree_of_finds_the_worktree_a_branch_is_checked_out_in(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    where = tmp_path / "wt"
+    _git(checkout.path, "worktree", "add", "--quiet", str(where), "-b", "feat/hand")
+
+    assert checkout.worktree_of("feat/hand") == where.resolve()
+    assert checkout.worktree_of("main") == checkout.path.resolve()
+    assert checkout.worktree_of("feat/nowhere") is None
+
+
+def test_has_branch_reads_local_refs(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    assert checkout.has_branch("main")
+    assert not checkout.has_branch("feat/none")
+
+
+def test_main_worktree_is_the_primary_checkout_even_from_a_linked_one(tmp_path: Path) -> None:
+    """Batch adopt refuses a branch checked out in the main worktree (p1-r3)."""
+    checkout = _repo(tmp_path)
+    linked = tmp_path / "linked"
+    _git(checkout.path, "worktree", "add", "--quiet", "-b", "feat/x", str(linked))
+    assert checkout.main_worktree() == checkout.path.resolve()
+    assert Checkout(linked).main_worktree() == checkout.path.resolve()
