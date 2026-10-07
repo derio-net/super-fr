@@ -51,3 +51,19 @@ Agent's reading, to confirm in the spec: the leak happens when state is pushed, 
 Operator, 2026-10-07: option (b), one long-lived driver session that wakes, over (a), a fresh session per Routine firing. Reason: the driver often has to step in to get runners unstuck, which an hourly, memoryless pass cannot do. The session stays long but gathers little context, since it is mostly status updates.
 
 Open, owed a measurement before the spec commits: what the platform does to a session whose background process is still waking it, and which wake sources survive a container swap. Observed in this session at 2026-10-07 ~17:40Z: `CLAUDE_CODE_WORKER_EPOCH=5` and a container boot time of 17:32Z, well after the session began. Read as a hint that the worker or container has already been replaced during the conversation, not yet as proof.
+
+<!-- fr:journal kind=discovery scope=spec id=wake-probe created=2026-10-07T18:41:31+00:00 -->
+### wake-probe · discovery · Wake probe: a cloud session's disk and background processes over an hour of self-wakes
+
+Measured 2026-10-07 17:38Z-18:41Z in this session: six `send_later` self-wakes ten minutes apart, each running a probe; a background shell writing one heartbeat line a minute (started 17:38:47Z, max lifetime 2 h).
+
+- **Every wake was delivered** on time (17:49, 17:59, 18:10, 18:20, 18:30, 18:41Z), each within ~1 min of the scheduled minute.
+- **Same container throughout:** container id, boot time (17:32:20Z), boot id and worker epoch (5) never changed.
+- **Disk:** every marker survived (`~/.cache`, `/tmp`, the scratchpad, the base clone's `.git`, the worktree's `.fr-isolation`).
+- **Background process:** alive at every wake; 63 heartbeat lines, the last at 18:40:47Z, none missed.
+- **Earlier evidence:** files written at 12:43Z and 12:57Z survived the restart that produced the 17:32Z boot, and five worker diagnostic logs match epoch 5. So the disk has outlived worker restarts.
+- **One probe was partial:** at 18:20Z the auto-mode permission classifier returned no verdict twice (a service error, not a denial); the probe fell back to read-only file reads.
+
+**What this does not show:** what happens to a session idle for long with no wakes. The ten-minute wakes kept it active the whole time. The heartbeat keeps running until ~19:38Z, its 2 h limit; whether the container is still the same after that idle stretch is the next data point, read at the next operator turn.
+
+**Design consequence:** a driver session waking every few minutes keeps one container, its disk and its processes. Restoring state from the forge ref is still needed on a new container (after a long idle, a restart or a reclaim), but is the exception, not every pass.
