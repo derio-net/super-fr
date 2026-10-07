@@ -1,5 +1,5 @@
 schema: 6
-ranked_at: '2026-10-06'
+ranked_at: '2026-10-07'
 tiers:
 - n: 1
   title: Work can be lost
@@ -2083,6 +2083,172 @@ issues:
     severity: med
     detail: '`collect._checks` counts every statusCheckRollup entry, so a check re-run green on the same commit keeps its stale failure; the merge train treats the PR as failing forever. Seen on export PR #1038.'
     note: Wave 10 batch checks-latest-run.
+  super-fr#1086:
+    tier: 2
+    theme: triage-board
+    cx: L
+    severity: high
+    kind: feature
+    verified: true
+    detail: 'Board columns come from batch stage only (`kanban.py` `COLUMN_TITLES`); `needs_you` (now :423) is raised only by a blocked session, a merge stop or the idle rule. **Still live:** no `mergeable`/`merge_state` read anywhere in `batch_drive.py`, so a `CONFLICTING` PR can carry the driver''s `merge ready` (part C, a false-success display). Parts A/B (two Needs-you columns read from the run cursor) and D (relay conflicts and red CI to the session) are new behaviour.'
+    note: 'Operator priority 2026-10-07. Batch with super-fr#1082 (part D is the same hand-back as #1082 case 2), super-fr#1065 and super-fr#1066. Starts with a brainstorm: column model and cursor signals.'
+  super-fr#1082:
+    tier: 3
+    theme: triage-drive
+    cx: M
+    severity: high
+    kind: defect
+    verified: true
+    detail: 'The train steps over a failing PR (`batch_drive.py` ~:867-888, warns `CI failing at`) and only updates a PR whose CI passes, so a PR made red by the driver''s own `chore: update from main` never recovers. Conflict hand-back (§G, :499) exists; no red-CI hand-back. Wave 10 stalled ~3 h on #1052.'
+    note: 'Same mechanism as super-fr#1086 part D; one batch.'
+  super-fr#1085:
+    tier: 2
+    theme: triage-claims
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: '`fr:in-progress` is removed only by `batch cancel` (`triage_batch_cmd.py` :709/:747); nothing in the driver''s claim release or `batch merge` removes it. 197 closed issues carry it, so the forge-side signal the claims model relies on is false.'
+    note: 'One-off cleanup is the operator''s (command in the issue body). Batch with super-fr#1075 and super-fr#1076 (triage-claims follow-ups).'
+  super-fr#1081:
+    tier: 2
+    theme: batch-adopt
+    cx: S
+    severity: high
+    kind: defect
+    verified: true
+    detail: 'Adopt''s R6 message (`triage_batch_cmd.py` :1408, "driven by `fr triage batch drive`") reads as a go-ahead: 3 of 9 adopted agents started migrating, merging or debugging with no operator confirmation. Want `--hold` (or hold by default) and the message shown in the dry-run plan.'
+    note: 'Small and urgent while sweeps are running; its own batch so it ships ahead of the other adopt work.'
+  super-fr#1077:
+    tier: 4
+    theme: triage-claims
+    cx: XS
+    severity: low
+    kind: parked
+    verified: true
+    detail: '**Already fixed on main:** `ClaimEnv` has lazy `_repo_index`/`_issue_index` `cached_property` lookups (`claim_sync.py` :60-81), the fix the issue names.'
+    note: 'Close recommendation: `gh issue close 1077 --repo derio-net/super-fr --reason completed --comment "Fixed by the lazy ClaimEnv indexes in claim_sync.py (triage-claims)."`'
+  super-fr#1076:
+    tier: 3
+    theme: triage-claims
+    cx: S
+    severity: low
+    kind: defect
+    verified: false
+    detail: '`batch merge` with no ids refuses the whole queue when one batch is held by another scope; skipping held batches (and naming them) is the likely answer, but the issue calls it a spec question.'
+    note: 'Batch with super-fr#1085 and super-fr#1075.'
+  super-fr#1075:
+    tier: 2
+    theme: triage-claims
+    cx: S
+    severity: med
+    kind: defect
+    verified: false
+    detail: 'With no `pr_authors`, the trusted set is `Facts.viewer`, so two hosts driven by different forge users ignore each other''s claim markers and both act: coordination silently does not happen. Fix: skill text plus a `check`/`scope show` warning when the viewer is the only trusted login.'
+    note: 'Batch with super-fr#1085 and super-fr#1076.'
+  super-fr#1074:
+    tier: 4
+    theme: runners
+    cx: L
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Paperclip run-unit runner plus a delegate port; brainstorm in progress on `feat/paperclip-runner`.'
+    note: 'Claimed by another scope (`fr:claimed`): hands off. Parked here until that scope releases it.'
+  super-fr#1073:
+    tier: 4
+    theme: skill-prose
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Tracks draft PR #474 (reporting contract, prose lint, opt-in STE style). Labelled `fr:in-progress`; the work lives on its own session.'
+    note: 'In progress elsewhere (adopted during the 2026-10-07 sweep, not in this state''s batches). Parked here; re-place once the host''s adopted batches are exported.'
+  super-fr#1072:
+    tier: 4
+    theme: batch-adopt
+    cx: S
+    severity: low
+    kind: feature
+    verified: false
+    detail: 'Draft an issue from an ad-hoc session''s transcript (`fr/usage/readers/` already reads them), confirm, file, judge. Rare once work starts from issues; a skill step may be enough.'
+  super-fr#1071:
+    tier: 4
+    theme: batch-adopt
+    cx: M
+    severity: med
+    kind: feature
+    verified: false
+    detail: '`adopt --list` found refs for 3 of 42 tabs, 2 wrong (a PR read as an issue). Want branch, workspace and PR columns from local state, forge-classified refs, and an adoptable/default-branch/no-agent mark.'
+  super-fr#1070:
+    tier: 4
+    theme: batch-adopt
+    cx: L
+    severity: low
+    kind: feature
+    verified: false
+    detail: 'A batch is one repo and one PR; coupled cross-repo sessions cannot be adopted whole, so the driver can merge half of a coupled change. Needs a spec decision: cross-repo batches or a cross-repo `after:`.'
+  super-fr#1069:
+    tier: 4
+    theme: batch-adopt
+    cx: M
+    severity: low
+    kind: feature
+    verified: false
+    detail: 'Adopt refuses `--branch <default>`; 17 of 32 sweep sessions sat on `main`. Want adopt to cut the batch branch (`fr isolation up`) and name the workspace in its message. Operator: low priority, a migration path.'
+  super-fr#1066:
+    tier: 4
+    theme: triage-board
+    cx: XS
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'fr-triage SKILL.md :101 still says "six lifecycle columns"; `COLUMN_TITLES` has seven (Partial was added).'
+    note: 'Rides the super-fr#1086 batch, which changes the column set again.'
+  super-fr#1065:
+    tier: 2
+    theme: triage-board
+    cx: S
+    severity: low
+    kind: defect
+    verified: false
+    detail: 'The card front shows the batch session''s pill, so a card in Closing out reads the batch session''s status, not the close-out''s.'
+    note: 'Rides the super-fr#1086 batch (same card code).'
+  super-fr#1062:
+    tier: 3
+    theme: merge-race
+    cx: L
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'Two green PRs merged back to back broke main (#1041 + #1058) and the release refused. Three pieces: ruleset (required checks or merge queue), a release-bot bypass via an app token, and driver support for repos that require a merge queue. Pieces 1-2 are operator-owned infra.'
+    note: 'After the super-fr#1086 batch: both change the merge train. Starts with a brainstorm, as the issue asks.'
+  super-fr#1060:
+    tier: 4
+    theme: cost-measurement
+    cx: S
+    severity: low
+    kind: defect
+    verified: true
+    detail: '`usage/file.py` `units_by_agent` (now :309) keys reviewer briefs by raw agent id and ignores `evidence.reviewer`. Pre-existing; attribution only.'
+  super-fr#1057:
+    tier: 4
+    theme: model-bindings
+    cx: XS
+    severity: low
+    kind: defect
+    verified: true
+    detail: '`bindings/probe.py` :49 `_NOT_FOUND` stops only at a quote, backslash or newline, so the reason keeps the wrapper''s `)]))`. Verdict is right; display only.'
+    note: 'Batch with super-fr#1055.'
+  super-fr#1055:
+    tier: 4
+    theme: model-bindings
+    cx: S
+    severity: low
+    kind: defect
+    verified: false
+    detail: 'A corrupt `models.yaml` raises `ModelsError`/`YAMLError` out of `fr run start` (`_orchestrator_model_notice` -> `_resolved_model`, `run_cmd.py` ~:3575); `_binding_health` is equally unguarded. Should be one clean refusal.'
+    note: 'Batch with super-fr#1057.'
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -2168,6 +2334,13 @@ patterns:
   - super-fr#878
   - super-fr#964
   body: 'Dispatch succeeds or fails on the state of one pane: a busy pane refuses, a pasted brief is not submitted, no herdr session means no dispatch, and a running session never reloads. The driver treats each dispatch as fire-and-forget.'
+- title: Who must act next is guessed from session status
+  ids:
+  - super-fr#1086
+  - super-fr#1082
+  - super-fr#1081
+  - super-fr#1065
+  body: 'The board and the driver infer the next actor from the runner''s session pill. A finished draft looks like one in progress, a red PR has no owner, an adopted agent reads a status line as a go-ahead, and a close-out card shows the wrong session. The run cursor and the PR''s mergeable state already say who acts next.'
 batches:
 - id: plan-table-header
   title: 'fr plan create: create the Implementation Plans table and name its header'
@@ -5706,6 +5879,7 @@ features:
   title: Cost evidence
   ids:
   - super-fr#597
+  - super-fr#1060
   why: 'The case for fr is cost. Per-phase tiers and overhead in the PR body make each run''s cost explain itself. #597 is probably already shipped (close candidate).'
   start: /fr-goal super-fr#838
 - rank: 2
@@ -5748,6 +5922,12 @@ features:
   - super-fr#454
   why: Claims owed a live run on Hermes, Gitea and OpenCode; valuable, but each needs a live session to close.
   start: /fr-goal super-fr#556
+- rank: 7
+  title: Cross-repo work
+  ids:
+  - super-fr#1070
+  why: Coupled changes over sibling repos cannot be one batch, so the driver can merge half of one. Needs a spec decision first.
+  start: /fr-goal super-fr#1070
 exports:
 - wave: '1'
   repo: derio-net/super-fr
