@@ -5264,6 +5264,21 @@ batches:
     - docs/acceptance/report_local.html
     delivered: session
     handle: derio-net/super-fr/run/batch-driver-sessions
+  - kind: post_merge
+    at: '2026-10-07T03:29:14.371782Z'
+  - kind: closeout
+    at: '2026-10-07T03:29:15.105324Z'
+    runner: herdr
+    handle: w36:p9
+    run: 2026-10-06-feat-batch-driver-sessions
+    archive: chore/archive-2026-10-06-driver-sessions
+  - kind: closeout
+    at: '2026-10-07T03:37:26.749927Z'
+    runner: herdr
+    handle: w36:p9
+    run: 2026-10-06-feat-batch-driver-sessions
+    archive: chore/archive-2026-10-06-driver-sessions
+    archived: 1067
 - id: model-bindings
   title: 'Model bindings survive provider churn: probe live, fall back by family then tier'
   ids:
@@ -5493,4 +5508,16 @@ exports:
   at: '2026-10-06T16:59:21.519763Z'
   pr: 1038
   head: f1919d411a43841293202aacdee44e29c1cf94e7
+  merged: true
+- wave: '6'
+  repo: derio-net/super-fr
+  at: '2026-10-07T03:26:33.458850Z'
+  pr: 1064
+  head: cbb92c6eea5d9730d02ef7ee2d394eb5157911a1
+  merged: true
+- wave: '8'
+  repo: derio-net/super-fr
+  at: '2026-10-07T03:26:33.458850Z'
+  pr: 1064
+  head: cbb92c6eea5d9730d02ef7ee2d394eb5157911a1
   merged: true
