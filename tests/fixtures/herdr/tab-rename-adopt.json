@@ -1,0 +1,15 @@
+{
+  "id": "cli:tab:rename",
+  "result": {
+    "tab": {
+      "agent_status": "blocked",
+      "focused": false,
+      "label": "derio-net/super-fr/run/batch-adopt-scratch",
+      "number": 1,
+      "pane_count": 1,
+      "tab_id": "wT:t1",
+      "workspace_id": "wT"
+    },
+    "type": "tab_info"
+  }
+}

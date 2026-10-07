@@ -141,7 +141,7 @@ def state_path(repo_root: Path, branch: str) -> Path:
 def save_state(state: IsolationState) -> Path:
     p = state_path(state.repo_root, state.branch)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(state.model_dump_json(indent=2) + "\n")
+    write_text_atomic(p, state.model_dump_json(indent=2) + "\n")  # never a truncated record
     return p
 
 

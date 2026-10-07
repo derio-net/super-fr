@@ -1,0 +1,233 @@
+{
+  "id": "cli:agent:list",
+  "result": {
+    "agents": [
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000001"
+        },
+        "agent_status": "idle",
+        "cwd": "/work/frank",
+        "focused": false,
+        "foreground_cwd": "/work/frank",
+        "pane_id": "w7:p1",
+        "revision": 26,
+        "state_change_seq": 1793,
+        "tab_id": "w7:t1",
+        "terminal_id": "term_65aff7ba867444",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w7"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000002"
+        },
+        "agent_status": "idle",
+        "cwd": "/work/frank",
+        "focused": false,
+        "foreground_cwd": "/work/frank",
+        "pane_id": "w7:p2",
+        "revision": 19,
+        "state_change_seq": 1797,
+        "tab_id": "w7:t2",
+        "terminal_id": "term_65b308d42a24423",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w7"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000003"
+        },
+        "agent_status": "idle",
+        "cwd": "/work/frank",
+        "focused": false,
+        "foreground_cwd": "/work/frank",
+        "pane_id": "w7:p5",
+        "revision": 9,
+        "state_change_seq": 1799,
+        "tab_id": "w7:t5",
+        "terminal_id": "term_65b5d1a4597c72a",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w7"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000004"
+        },
+        "agent_status": "done",
+        "cwd": "/work/frank",
+        "focused": false,
+        "foreground_cwd": "/work/frank",
+        "pane_id": "w7:p7",
+        "revision": 11,
+        "state_change_seq": 2202,
+        "tab_id": "w7:t7",
+        "terminal_id": "term_65bdcc75670f651",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w7"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000005"
+        },
+        "agent_status": "idle",
+        "cwd": "/work/frank",
+        "focused": false,
+        "foreground_cwd": "/work/frank",
+        "pane_id": "w7:p8",
+        "revision": 21,
+        "state_change_seq": 2228,
+        "tab_id": "w7:t8",
+        "terminal_id": "term_65bf98ff3a38e53",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w7"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000006"
+        },
+        "agent_status": "idle",
+        "cwd": "/work/frank",
+        "focused": false,
+        "foreground_cwd": "/work/frank",
+        "pane_id": "w7:pB",
+        "revision": 4,
+        "state_change_seq": 2345,
+        "tab_id": "w7:tB",
+        "terminal_id": "term_65cf69d82bc9762",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w7"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000007"
+        },
+        "agent_status": "idle",
+        "cwd": "/work/super-fr",
+        "focused": false,
+        "foreground_cwd": "/work/super-fr",
+        "pane_id": "w9:p1",
+        "revision": 47,
+        "state_change_seq": 1818,
+        "tab_id": "w9:t1",
+        "terminal_id": "term_65b5d1a46fc972c",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w9"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000008"
+        },
+        "agent_status": "idle",
+        "cwd": "/work/super-fr",
+        "focused": false,
+        "foreground_cwd": "/work/super-fr",
+        "pane_id": "w9:p4",
+        "revision": 25,
+        "state_change_seq": 1822,
+        "tab_id": "w9:t3",
+        "terminal_id": "term_65b75db4ea44a3f",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w9"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000009"
+        },
+        "agent_status": "idle",
+        "cwd": "/work/super-fr",
+        "focused": false,
+        "foreground_cwd": "/work/super-fr",
+        "pane_id": "w9:pA",
+        "revision": 25,
+        "state_change_seq": 2350,
+        "tab_id": "w9:t6",
+        "terminal_id": "term_65c030fd619bf54",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w9"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000010"
+        },
+        "agent_status": "working",
+        "cwd": "/work/super-fr",
+        "focused": true,
+        "foreground_cwd": "/work/super-fr",
+        "pane_id": "w9:pE",
+        "revision": 15,
+        "state_change_seq": 2435,
+        "tab_id": "w9:tA",
+        "terminal_id": "term_65d1e6945313c6f",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w9"
+      },
+      {
+        "agent": "claude",
+        "agent_status": "blocked",
+        "cwd": "/tmp/fr-adopt-scratch",
+        "focused": false,
+        "foreground_cwd": "/tmp/fr-adopt-scratch",
+        "pane_id": "wT:p1",
+        "revision": 3,
+        "state_change_seq": 2437,
+        "tab_id": "wT:t1",
+        "terminal_id": "term_65d2fd8fb2aec76",
+        "terminal_title": "claude --model haiku",
+        "terminal_title_stripped": "claude --model haiku",
+        "workspace_id": "wT"
+      }
+    ],
+    "type": "agent_list"
+  }
+}
