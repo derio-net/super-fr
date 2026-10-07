@@ -44,3 +44,10 @@ Operator, 2026-10-07:
 - **Privacy guard:** when issues are added to a triage or a wave, a check blocks when there is a chance of a privacy violation.
 
 Agent's reading, to confirm in the spec: the leak happens when state is pushed, so the same check also runs before every state push and every `docs/triage`-style export, not only when issues are added.
+
+<!-- fr:journal kind=decision scope=spec id=d3-persistent-driver created=2026-10-07T17:36:03+00:00 -->
+### d3-persistent-driver · decision · Operator decision, round 3: a persistent driver session
+
+Operator, 2026-10-07: option (b), one long-lived driver session that wakes, over (a), a fresh session per Routine firing. Reason: the driver often has to step in to get runners unstuck, which an hourly, memoryless pass cannot do. The session stays long but gathers little context, since it is mostly status updates.
+
+Open, owed a measurement before the spec commits: what the platform does to a session whose background process is still waking it, and which wake sources survive a container swap. Observed in this session at 2026-10-07 ~17:40Z: `CLAUDE_CODE_WORKER_EPOCH=5` and a container boot time of 17:32Z, well after the session began. Read as a hint that the worker or container has already been replaced during the conversation, not yet as proof.
