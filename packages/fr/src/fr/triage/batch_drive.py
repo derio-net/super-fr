@@ -15,6 +15,7 @@ testable. `tests/unit/test_triage_batch_drive.py` pins that.
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -27,8 +28,10 @@ from fr.triage.batch import (
     ForeignPr,
     QueueEntry,
     batch_item_id,
+    last_dispatch,
     recorded_branch,
 )
+from fr.triage.claims import Claim, held_line, held_members
 from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
@@ -73,6 +76,9 @@ ActionKind = Literal[
     "foreign",
     "close",
     "dedupe",
+    "claim",
+    "refresh",
+    "release",
     "export",
     "export-merge",
     "export-reconcile",
@@ -181,6 +187,20 @@ class Snapshot:
     # only for these is "not in `existing`" evidence that no tab holds it. Plan mode
     # reads no runner, so it probes none and never calls a close-out stale.
     closeout_probed: frozenset[str] = frozenset()
+    # Triage-claims §3.F. `me`: this scope's id; `held`: issue key -> the other scope's
+    # winning claim (R4, R6), from facts; the three `*_owed` lists are (key, batch id)
+    # pairs, from `claim_sync.plan_sync`: this module decides order, never what is owed.
+    me: str = ""
+    held: Mapping[str, Claim] = field(default_factory=dict)
+    claims_owed: tuple[tuple[str, str], ...] = ()
+    refresh_owed: tuple[tuple[str, str], ...] = ()
+    releases_owed: tuple[tuple[str, str], ...] = ()
+    # Sessions the runner reports idle with no PR, past `idle_session_minutes` (driver-sessions
+    # §D, R7): built by the command from live statuses, never by `views.drive_snapshot`
+    # (whose warns all read as a failing CI). `scope_args` are the drive's own, for the
+    # paste-ready focus command.
+    idle: tuple[IdleSession, ...] = ()
+    scope_args: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -199,6 +219,7 @@ class Action:
     # highest wave the export PR covers, which names its branch
     wave: str | None = None
     covers: tuple[str, ...] = ()  # export: every wave the PR records
+    key: str = ""  # claim, refresh, release: the issue key
 
 
 @dataclass(frozen=True)
@@ -211,6 +232,7 @@ class Summary:
     closing: int
     blocked: int = 0
     queued: int = 0  # merge-train members not attempted this pass (the head excluded)
+    held: int = 0  # batches another scope's claim holds: waiting on that scope, not the operator
 
     @property
     def idle(self) -> bool:
@@ -219,13 +241,19 @@ class Summary:
 
     @property
     def done(self) -> bool:
-        """Idle and nothing blocked: every driven batch is finished."""
-        return self.idle and self.blocked == 0
+        """Idle and nothing blocked or held: every driven batch is finished."""
+        return self.idle and self.blocked == 0 and self.held == 0
 
     @property
     def waiting_on_operator(self) -> bool:
         """Idle, but a blocked batch remains: only the operator can move it (R7)."""
         return self.idle and self.blocked > 0
+
+    @property
+    def stalled(self) -> bool:
+        """Idle, with only blocked batches (the operator's) and held ones (another
+        scope's, R6) left: nothing this driver can move."""
+        return self.idle and (self.blocked > 0 or self.held > 0)
 
 
 def settle(summary: Summary, *, unlanded: int = 0, held: int = 0, queued: int = 0) -> Summary:
@@ -259,6 +287,88 @@ class Pass:
     actions: tuple[Action, ...]
     summary: Summary
     trains: tuple[Train, ...] = ()
+    # (batch id, the scope ids holding its members): the batches waiting on another scope
+    held_by: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+
+# ------------------------------------------------------- idle sessions (R7, R8)
+
+
+@dataclass(frozen=True)
+class IdleSession:
+    """A session that sat idle (or done) past the threshold with nothing to show for it."""
+
+    item: str
+    batch: str
+    closeout: bool
+    since: datetime  # the dispatch, or the close-out event, it was started at
+    minutes_since: int  # whole minutes from `since` to now: NOT how long it has been idle
+    status: str = "idle"
+
+
+def idle_session(
+    batch: Batch,
+    *,
+    repo: str,
+    closeout: bool,
+    status: str | None,
+    stage: BatchStage,
+    archives: Sequence[LivePr],
+    now: datetime,
+    threshold: int,
+) -> IdleSession | None:
+    """The one definition of an idle session (driver-sessions R7): the runner reports the
+    item `idle` or `done`, it is owed work, and its last dispatch (the close-out: its
+    event) is at least *threshold* minutes old.
+
+    Owed work is a function of *stage* (`derive_batch_stage`): a batch session is owed a PR
+    only while the batch is `dispatched` (no PR yet; a cancelled, proposed or PR-carrying
+    batch owes it nothing), and a close-out session only once the batch has landed and the
+    close-out is not finished (`is_finished`: its archive PR merged, or recorded). An
+    archive PR in *archives*, open or merged, attributed to the close-out is its product.
+    Pure and stateless, so the driver and the board read the same rule."""
+    if status not in ("idle", "done"):
+        return None
+    if closeout:
+        event = closeout_event(batch)
+        if event is None or stage not in LANDED or is_finished(batch, stage, archives):
+            return None
+        if event.archived is not None or any(attributed(p, batch, event) for p in archives):
+            return None
+        since = event.at
+        item = closeout_item_id(repo, batch.id)
+    else:
+        dispatch = last_dispatch(batch)
+        if dispatch is None or stage != "dispatched":
+            return None
+        since = dispatch.at
+        item = batch_item_id(repo, batch.id)
+    age = now - since
+    if age < timedelta(minutes=threshold):  # "at least the threshold" is idle
+        return None
+    return IdleSession(item, batch.id, closeout, since, int(age.total_seconds() // 60), status)
+
+
+def _idle_actions(snap: Snapshot, chosen: Sequence[Batch]) -> list[Action]:
+    """One warn per idle session, once per driver process (its head is in `warned`)."""
+    out: list[Action] = []
+    ids = {b.id for b in chosen}
+    for idle in snap.idle:
+        key = f"idle-session\0{idle.item}\0{idle.since.isoformat()}"
+        if idle.batch not in ids or key in snap.warned:
+            continue
+        what = "archive PR" if idle.closeout else "PR"
+        cmd = shlex.join(
+            ["fr", "triage", "batch", "focus", idle.batch,
+             *(["--closeout"] if idle.closeout else []), *snap.scope_args]
+        )  # fmt: skip
+        out.append(
+            Action("warn", idle.batch,
+                   f"{idle.item} is {idle.status}, "
+                   f"{'close-out started' if idle.closeout else 'dispatched'} "
+                   f"{idle.minutes_since} min ago, with no {what}; focus it: {cmd}", head=key)
+        )  # fmt: skip
+    return out
 
 
 # ------------------------------------------------------------------ checks (R4)
@@ -799,14 +909,51 @@ def _walk_train(
     return Train(repo, head, tuple(candidates), tuple(queued), tuple(stepped), numbers), merges
 
 
+def _claim_actions(snap: Snapshot) -> list[Action]:
+    """The claim writes of a pass, ahead of every other action (§3.F): claims, then
+    refreshes, then releases. A batch outside the selection is left alone; one the
+    snapshot does not know (a dropped member's old batch) is still released."""
+    known = {b.id for b in snap.batches}
+
+    def mine(bid: str) -> bool:
+        return snap.selected is None or bid in snap.selected or bid not in known
+
+    out: list[Action] = []
+    for kind, owed, why in (
+        ("claim", snap.claims_owed, "owed"),
+        ("refresh", snap.refresh_owed, "heartbeat due"),
+        ("release", snap.releases_owed, "no longer owed"),
+    ):
+        out.extend(
+            Action(kind, bid, why, key=key)  # type: ignore[arg-type]
+            for key, bid in owed
+            if mine(bid)
+        )
+    return out
+
+
 def drive_pass(snap: Snapshot) -> Pass:
     """One pass: report foreign PRs, merge, close out, archive, dispatch, close sessions,
     then report duplicate candidates of newly finished waves — in that order, so a slot a
     merge frees is used in the same pass."""
-    actions: list[Action] = []
+    actions: list[Action] = _claim_actions(snap)
     stages = dict(snap.stages)
     merging: set[str] = set()
     chosen = tuple(b for b in snap.batches if snap.selected is None or b.id in snap.selected)
+
+    # -1. A batch with a member another scope holds is left alone this pass (R6): one
+    # `held` action, and no merge, update, close-out, archive or dispatch below.
+    held_ids: set[str] = set()
+    held_by: list[tuple[str, tuple[str, ...]]] = []
+    for batch in snap.batches:
+        members = held_members(batch.ids, snap.held)
+        if not members:
+            continue
+        held_ids.add(batch.id)
+        if batch in chosen and stages.get(batch.id) not in ("cancelled", "abandoned"):
+            held_by.append((batch.id, tuple(sorted({c.signer for _, c in members}))))
+            detail = "; ".join(held_line(k, c, snap.now) for k, c in members)
+            actions.append(Action("held", batch.id, detail))
 
     # 0. Report a PR on a batch branch that is not the batch's, once (gh#936). It
     # never reaches the queue, so it is never merged.
@@ -824,7 +971,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     by_repo: dict[str, list[QueueEntry]] = {}
     for entry in sorted(snap.queue, key=lambda e: _dispatch_key(e.batch)):
         bid = entry.batch.id
-        if snap.selected is not None and bid not in snap.selected:
+        if (snap.selected is not None and bid not in snap.selected) or bid in held_ids:
             continue
         by_repo.setdefault(snap.repos.get(bid, ""), []).append(entry)
     trains: list[Train] = []
@@ -840,7 +987,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     # (gh#990); starting one, or recording one under way, follows the selection.
     closing = 0
     for batch in snap.batches:
-        if stages.get(batch.id) not in LANDED or batch.id in merging:
+        if stages.get(batch.id) not in LANDED or batch.id in merging or batch.id in held_ids:
             continue
         if closeout_event(batch) is not None:
             continue
@@ -885,7 +1032,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     archives_blocked = 0
     for batch in chosen:
         event = closeout_event(batch)
-        if event is None or stages.get(batch.id) not in LANDED:
+        if event is None or stages.get(batch.id) not in LANDED or batch.id in held_ids:
             continue
         archives = snap.archives.get(snap.repos.get(batch.id, ""), ())
         mine = [p for p in archives if attributed(p, batch, event)]
@@ -922,6 +1069,9 @@ def drive_pass(snap: Snapshot) -> Pass:
                        pr=good.number, head=good.head)
             )  # fmt: skip
 
+    # 3a. Report idle sessions (driver-sessions R7). A warn never moves the summary.
+    actions.extend(_idle_actions(snap, chosen))
+
     # 3b. Export each finished wave's state (pages-goal R13).
     exporting, exports_closing, exports_blocked = _export_actions(snap)
     actions.extend(exporting)
@@ -940,7 +1090,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     by_id = {b.id: b for b in snap.batches}
     pending, blocked = 0, exports_blocked + archives_blocked
     for batch in sorted(chosen, key=_dispatch_key):
-        if stages.get(batch.id) != "proposed":
+        if stages.get(batch.id) != "proposed" or batch.id in held_ids:
             continue
         if batch.id in snap.awaiting:
             # No work, so not pending either: it never keeps a drive alive.
@@ -1009,8 +1159,10 @@ def drive_pass(snap: Snapshot) -> Pass:
             closing=closing,
             blocked=blocked,
             queued=sum(len(t.queued) for t in trains),
+            held=len(held_by),
         ),
         trains=tuple(trains),
+        held_by=tuple(held_by),
     )
 
 
@@ -1022,6 +1174,8 @@ def action_line(action: Action, outcome: str | None = None) -> str:
     the same words in `--once` and loop mode."""
     if action.kind == "dedupe":  # names no batch
         return f"dedupe: {outcome or action.detail}"
+    if action.kind in ("claim", "refresh", "release"):
+        return f"{action.kind} {action.key} ({action.batch}): {outcome or action.detail}"
     if action.wave is not None:
         return f"{action.kind} wave {action.wave} {action.batch}: {outcome or action.detail}"
     return f"{action.kind} {action.batch}: {outcome or action.detail}"
@@ -1034,7 +1188,9 @@ def summary_line(summary: Summary) -> str:
     )
     if summary.queued:
         line += f", queued {summary.queued}"
-    return line + (f", blocked {summary.blocked}" if summary.blocked else "")
+    if summary.blocked:
+        line += f", blocked {summary.blocked}"
+    return line + (f", held {summary.held}" if summary.held else "")
 
 
 def train_line(train: Train) -> str:

@@ -4887,6 +4887,61 @@ rows:
     status: ci
     notes: Skills edited to document pages, fragments, fields and verbs; test added;
       mirrors regenerated
+  - id: drive-post-merge-restart
+    capability: Backlog triage
+    acceptance: With post_merge_restart idle in the repo's triage config, the wave driver
+      restarts idle sessions once per pass in which that repo's post_merge succeeded,
+      reports the outcome, and never holds a close-out or ends the drive over a restart
+      failure or a runner that cannot restart
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_restart.py#test_two_closeouts_in_one_pass_restart_once_after_both_started
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_restart_idle_is_a_session_restarter_and_summarises_the_engine_report
+    status: ci
+    notes: 'phase 2: driver restarts idle sessions once per pass via SessionRestarter;
+      fake-runner tests'
+    verify: none
+  - id: drive-idle-session-report
+    capability: Backlog triage
+    acceptance: The wave driver reports once a batch session idle with no PR, or a close-out
+      session idle with no archive PR, past the repo's idle_session_minutes (default
+      60), naming the focus command, without ending the drive
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_the_driver_warns_once_per_idle_session_with_a_paste_ready_focus_command
+      - super-fr:tests/unit/test_triage_batch_drive_idle.py#test_an_idle_batch_session_with_no_pr_is_reported_with_its_focus_command
+      - super-fr:tests/unit/test_triage_batch_drive_idle.py#test_an_idle_closeout_with_no_archive_pr_is_reported
+    status: ci
+    notes: 'idle_session rule and the driver''s idle-session warn: unit tests over drive_pass
+      plus command-level tests with a fake inspecting runner'
+    verify: none
+  - id: board-idle-session
+    capability: Backlog triage
+    acceptance: The triage board marks a card needs-you, saying why, when its batch
+      or close-out session has sat idle past the threshold with nothing to show for
+      it
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py#test_a_batch_card_idle_with_no_pr_needs_you_and_says_why
+      - super-fr:tests/unit/test_triage_kanban.py#test_a_closeout_card_idle_with_no_archive_pr_needs_you_and_says_why
+      - super-fr:tests/unit/test_triage_kanban.py#test_a_card_with_a_pr_is_not_flagged
+      - super-fr:tests/unit/test_triage_kanban_cmd.py#test_write_board_judges_idleness_by_the_wall_clock
+    status: ci
+    notes: card needs-you and its reason line are pinned by kanban card tests and write_board's
+      wall clock; rendered and screenshot-checked in a headless browser (record visual
+      section)
+    verify: none
+    visual:
+      states:
+      - idle-batch-card-needs-you
+      - idle-closeout-card-needs-you
+      - idle-card-with-pr-not-flagged
   - id: triage-batch-adopt
     capability: Backlog triage
     acceptance: An operator can put an already-running herdr session under the wave
@@ -6054,11 +6109,11 @@ rows:
       executor/reviewer/orchestrator figures per cursor unit, with tokens always and
       dollars only where priced
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_usage_split.py#test_steps_by_role_sum_back_to_each_step_priced
@@ -6072,7 +6127,7 @@ rows:
     acceptance: A version-1 usage file migrates to version 2 by stamp and validates,
       its split read as not observed
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_migration_usage_split_v2.py#test_a_v1_file_is_stamped_two_and_its_body_is_untouched
@@ -6087,7 +6142,7 @@ rows:
       tokens, priced dollars, findings per phase, re-opens) with medians and sample
       sizes, read-only
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_usage_compare.py#test_cli_prints_two_tables_deterministically_and_writes_nothing
@@ -7242,15 +7297,238 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
     levels: {}
+    status: skipped
+    notes: 'Verified live 2026-10-06 on fr 5.11.2/5.12.0 (wave 9 of a real drive): batch
+      model-bindings'' PR #1042 conflicted with main in docs/acceptance/matrix.yaml;
+      the driver logged ''handed back to its session derio-net/super-fr/run/batch-model-bindings'',
+      the idle herdr session received the hand-back brief (merge origin/main, no rebase
+      or force-push, resolve the named path), resolved and pushed, and the train merged
+      #1042 (340553c4). A re-run driver did not re-send for the same head. Earlier the
+      same day #1031''s session was working when its conflict arrived; the driver waited
+      (''nothing sent, retried next pass'') rather than interrupt it.'
+    verify: live
+  - id: triage-claims-identity
+    capability: triage-claims
+    acceptance: Each triage scope on a host has a stable scope id that carries no hostname,
+      path or scope name, and its host id and scope config never leave the host.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_scope_config.py#test_scope_ids_are_stable_host_qualified_and_anonymous
+      - super-fr:tests/unit/test_triage_scope_config.py#test_the_loser_of_a_concurrent_first_use_returns_the_winners_id
+      - super-fr:tests/unit/test_triage_scope_config.py#test_first_use_creates_a_private_sixteen_hex_id_and_keeps_it
+      - super-fr:tests/unit/test_triage_scope_config.py#test_scope_yaml_is_not_durable_state
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_scope_show_prints_name_id_state_dir_and_config
+    status: ci
+    notes: 'phase 1: scope ids stable, host-qualified, anonymous; concurrent first use
+      yields one host id; scope show; scope.yaml never exported (test_triage_scope_config,
+      test_triage_claim_cmd)'
+    verify: none
+  - id: triage-claims-hands-off
+    capability: triage-claims
+    acceptance: An issue claimed by another scope is listed as held elsewhere and is
+      never batched, dispatched, merged, closed out or archived by this scope.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_check.py#test_check_reports_the_three_claim_sets_in_json
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_edit_add_issue_or_wave_refuses_a_member_held_elsewhere
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_cancel_yes_on_a_held_batch_releases_own_claims_and_leaves_held_members_alone
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_refuses_a_batch_held_elsewhere_before_anything
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_merge_refuses_a_batch_held_elsewhere
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_claims_held
+    status: ci
+    notes: 'phase 1: scenario covers check''s held_elsewhere and batch create''s refusal;
+      unit tests cover edit, dispatch, merge and cancel (R5, R6, R7). The driver''s
+      held action is phase 2 (triage-claims-driver).'
+    verify: candidate
+    scenario: tests/scenarios/triage-claims-held.sh
+  - id: triage-claims-expiry
+    capability: triage-claims
+    acceptance: A claim whose holder stopped refreshing it is reported as expired and
+      can be released or taken over only by an explicit operator command.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claims.py#test_needs_refresh_past_a_quarter_and_always_when_expired
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_take_refuses_a_live_claim
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_take_releases_an_expired_claim_naming_the_taker_then_claims
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_release_of_another_scopes_expired_claim_names_the_releaser
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_claim_take_previews_then_takes_an_expired_claim
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_claim_release_own_any_time_foreign_only_expired
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_claims_expired
+    status: ci
+    notes: 'phase 1: scenario covers check''s expired_claims and the refusal naming
+      claim take; unit tests cover own-expired refresh, take and release against a fake
+      GhClient (R7, R8, R9)'
+    verify: candidate
+    scenario: tests/scenarios/triage-claims-expired.sh
+  - id: triage-claims-writes
+    capability: triage-claims
+    acceptance: Claims are written at wave assignment (or dispatch), refreshed in place,
+      released at close-out, and a race between two claimers leaves exactly one holder.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_a_claim_racing_an_older_expired_foreign_marker_loses_and_withdraws
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_an_own_marker_naming_another_batch_is_rewritten_in_place
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_refresh_never_resurrects_a_marker_another_scope_took
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_release_edits_to_released_and_removes_the_label_when_none_remain
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_an_untrusted_older_marker_never_wins
+      - super-fr:tests/unit/test_triage_claims.py#test_an_untrusted_authors_older_marker_is_ignored_and_counted
+      - super-fr:tests/unit/test_triage_claims.py#test_owed_claims_cover_waved_and_dispatched_batches_never_releasing_ones
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_create_with_a_wave_and_yes_writes_the_claims_after_the_judgements
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_yes_claims_every_member_before_the_runner_launch
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_claim_sync_yes_writes_claims_refreshes_releases_and_records
+      - super-fr:tests/unit/test_real_ghclient.py#TestIssueComments::test_list_issue_comments_parses_the_id_from_the_url
+      - super-fr:tests/unit/test_triage_collect.py#test_a_claimed_issue_carries_its_claims_and_an_unlabelled_one_is_never_read
+      - super-fr:tests/unit/test_triage_model.py#test_a_claims_released_event_is_refused_in_schema_5
+    status: ci
+    notes: 'phase 1: claim, the race over expired claims, in-place rewrite, refresh,
+      release on open and closed issues, the label rule, untrusted markers ignored (R17),
+      create/edit --yes, dispatch claims first, the comment-id parse, collect and the
+      facts/judgements schema 6 (R2-R4, R10-R12, R17)'
+    verify: none
+  - id: triage-claims-driver
+    capability: triage-claims
+    acceptance: Each drive pass writes owed claims, refreshes and releases before acting,
+      and leaves a batch with a member held elsewhere alone.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_claim_refresh_and_release_actions_come_before_every_other_action
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_held_batch_gets_one_held_action_and_nothing_else
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_yes_pass_claims_before_dispatch_backfills_and_owes_nothing_after
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_cancelled_batchs_claims_are_released_and_recorded_once
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_claim_that_turns_out_held_stops_the_pass_acting_on_that_batch
+    status: ci
+    notes: 'phase 2: drive_pass emits claim/refresh/release/held actions; the driver
+      writes them through claim_sync'
+    verify: none
+  - id: triage-claims-board-publish
+    capability: triage-claims
+    acceptance: Each scope's board shows what other scopes hold and is published under
+      its own name after every drive pass through the scope's configured command.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py#test_held_elsewhere_lists_issues_another_scope_claims_with_holder_batch_and_expiry
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_held_elsewhere_group_names_issue_holder_batch_and_expiry
+      - super-fr:tests/unit/test_triage_kanban_cmd.py#test_board_publish_publishes_after_the_render_with_the_default_name
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_drive_pass_publishes_the_board_it_rendered
+      - super-fr:tests/unit/test_triage_skill_docs.py#test_fr_triage_skill_documents_claims_scope_config_and_publishing_in_every_copy
+    status: ci
+    notes: Board Held elsewhere group and card expiry, per-scope publish, and the skill's
+      Claims paragraph shipped in phase 3; visual states captured in the phase 3 step
+      record.
+    verify: none
+    visual:
+      states:
+      - held-elsewhere-group
+      - held-elsewhere-empty
+      - expired-claim-marked
+      - card-claim-expiry
+      - phone-width
+      - dark-theme
+      interactions:
+      - open-held-issue-link
+  - id: triage-claims-trusted-authors
+    capability: triage-claims
+    acceptance: A claim marker posted by an account the repo does not trust (a stranger
+      commenting on a public repo) never blocks a scope; markers by the viewer, its
+      pr_authors and repo owners, members and collaborators count.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R17
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claims.py#test_a_marker_by_a_repo_owner_member_or_collaborator_counts
+      - super-fr:tests/unit/test_triage_claims.py#test_a_strangers_marker_on_a_public_repo_is_ignored_and_counted
+      - super-fr:tests/unit/test_triage_claims.py#test_claim_trust_is_the_viewer_and_pr_authors_together
+      - super-fr:tests/unit/test_triage_claims.py#test_an_untrusted_authors_older_marker_is_ignored_and_counted
+      - super-fr:tests/unit/test_triage_collect.py#test_collect_counts_a_peer_hosts_marker_by_a_repo_member
+      - super-fr:tests/unit/test_triage_collect.py#test_collect_ignores_an_untrusted_authors_marker
+      - super-fr:tests/unit/test_triage_collect.py#test_collect_warns_once_per_issue_with_its_ignored_marker_counts
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_an_untrusted_older_marker_never_wins
+      - super-fr:tests/unit/test_forge_adapter_batch_ops.py#test_list_issue_comments_returns_body_author_and_created_at
+    status: ci
+    notes: 'Phase 1 review p1-r1/p1-r2: trust by author association.'
+  - id: herdr-restart-idle
+    capability: herdr runner
+    acceptance: Inside herdr, fr-herdr restart-idle lists every Claude pane with ok
+      / skip <reason> / fail <reason> and a summary, is a dry run unless --yes, never
+      sends a key to a pane it skips (busy, draft, background work, no transcript, own
+      or excluded pane), goes on past a failed pane, and refuses outside herdr
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_restart.py
+      - super-fr:tests/unit/test_fr_herdr_cli.py
+    status: ci
+    notes: 'fr-herdr restart-idle shipped (phase 1): engine and console script unit-tested
+      against live herdr 0.9.1 captures, and a candidate-walk scenario drives the installed
+      fr-herdr against a fake herdr that replays them'
+    verify: candidate
+    scenario: tests/scenarios/herdr-restart-idle.sh
+  - id: herdr-restart-idle-live
+    capability: herdr runner
+    acceptance: A restarted pane resumes the same Claude session id in the same pane
+      and tab, with the same label, herdr agent name and --model, and a pane at the
+      exit dialog is reported, never answered
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R3
+    levels: {}
     status: not-implemented
     notes: ''
     verify: live
+  - id: herdr-outside-refusal
+    capability: herdr runner
+    acceptance: Outside a herdr session the herdr runner refuses and tells the operator
+      to run drive or dispatch from a herdr pane, and the fr-triage skill documents
+      that constraint and the session-upkeep settings
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_preflight_refuses_outside_a_herdr_session
+      - super-fr:tests/unit/test_fr_triage_skill_runner_constraints.py#test_the_skill_states_the_herdr_only_rule
+      - super-fr:tests/unit/test_fr_triage_skill_runner_constraints.py#test_the_skill_names_the_session_upkeep_settings
+    status: ci
+    notes: refusal text and the fr-triage skill paragraph are pinned by tests
+    verify: none
   - id: cost-evidence-bound-model
     capability: run
     acceptance: A dispatched attempt keeps the tier and the model bound at dispatch
       beside the model that ran; resolve never overwrites them
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_executor_model.py#test_advance_records_tier_and_binding_and_leaves_model_unset
@@ -7263,8 +7541,8 @@ rows:
     acceptance: fr run cost and the rendered PR body show per phase its tier, bound
       model, model that ran (mismatch marked) and executor/reviewer/orchestrator figures
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_run_cost_phases.py#test_the_command_prints_the_role_split_and_the_phase_table

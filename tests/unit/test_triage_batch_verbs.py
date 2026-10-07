@@ -151,7 +151,7 @@ def test_create_writes_the_batch_at_the_current_schema(tmp_path: Path) -> None:
         ["super-fr#577", "super-fr#575"],
         "minor",
     )
-    assert _raw(tmp_path)["schema"] == 5
+    assert _raw(tmp_path)["schema"] == 6
 
 
 def test_create_stores_only_the_launch_values_given(tmp_path: Path) -> None:
@@ -825,3 +825,192 @@ def load_judgements_text(text: str):  # noqa: ANN201 — test helper
     from fr.triage.model import Judgements
 
     return Judgements.model_validate(yaml.safe_load(text))
+
+
+# ------------------------------------------- triage-claims: the batch-command gates
+
+from tests.unit.triage_claim_fixtures import (  # noqa: E402
+    FAR,
+    OTHER,
+    PAST,
+    calls,
+    held,
+    marker,
+    markers,
+    put_marker,
+)
+
+
+def _with6(tmp_path: Path, *batches: dict[str, Any], facts: Facts | None = None) -> None:
+    doc = yaml.safe_load(JUDGEMENTS) | {"schema": 6, "batches": list(batches)}
+    _state(tmp_path, facts, yaml.safe_dump(doc, sort_keys=False))
+
+
+def _me() -> str:
+    from fr.triage.scope_config import scope_id
+
+    return scope_id("derio-net--super-fr")
+
+
+def _held_facts(live: bool = True) -> Facts:
+    theirs = marker(OTHER, "theirs", expires=FAR if live else PAST)
+    return _facts(_issue(577), _issue(575, **held(theirs)), _issue(471), _issue(438), _issue(420))
+
+
+_CREATE = ("create", "lifecycle", "--title", "t", "--issue", "super-fr#577")
+
+
+@pytest.mark.parametrize("wave", [[], ["--wave", "1"]])
+def test_create_refuses_a_member_held_elsewhere_naming_holder_batch_and_expiry(
+    tmp_path: Path, gh: FakeGhClient, wave: list[str]
+) -> None:
+    _state(tmp_path, _held_facts())
+    before = (tmp_path / "judgements.yaml").read_text("utf-8")
+    code, out = _run(tmp_path, *_CREATE, "--issue", "super-fr#575", *wave)
+    text = " ".join(out.split())
+    assert code == 2
+    assert "super-fr#575" in text and OTHER in text and "theirs" in text and "2999" in text
+    assert "claim take" not in text
+    assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
+    assert gh.calls == []
+
+
+def test_create_refusing_an_expired_claim_names_claim_take(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    _state(tmp_path, _held_facts(live=False))
+    code, out = _run(tmp_path, *_CREATE, "--issue", "super-fr#575", "--wave", "1")
+    assert code == 2
+    assert "fr triage claim take super-fr#575" in " ".join(out.split())
+
+
+def test_create_with_a_wave_and_no_yes_prints_the_owed_claims(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    _state(tmp_path)
+    code, out = _run(tmp_path, *_CREATE, "--wave", "1")
+    assert code == 0, out
+    assert [b.id for b in _batches(tmp_path)] == ["lifecycle"]
+    assert "claim super-fr#577 for lifecycle" in out
+    assert "fr triage claim sync --yes" in out
+    assert gh.calls == []
+
+
+def test_create_with_a_wave_and_yes_writes_the_claims_after_the_judgements(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    _state(tmp_path)
+    code, out = _run(tmp_path, *_CREATE, "--issue", "super-fr#575", "--wave", "1", "--yes")
+    assert code == 0, out
+    assert [b.id for b in _batches(tmp_path)] == ["lifecycle"]
+    for n in (577, 575):
+        (m,) = markers(gh, REPO, n)
+        assert (m.signer, m.batch, m.released) == (_me(), "lifecycle", None)
+        assert "fr:claimed" in gh.issues[(REPO, n)].labels
+
+
+def test_create_without_a_wave_owes_no_claim(tmp_path: Path, gh: FakeGhClient) -> None:
+    _state(tmp_path)
+    code, out = _run(tmp_path, *_CREATE, "--yes")
+    assert code == 0, out
+    assert "fr triage claim sync" not in out
+    assert gh.calls == []
+
+
+def test_edit_add_issue_or_wave_refuses_a_member_held_elsewhere(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    _with6(
+        tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"]}, facts=_held_facts()
+    )
+    code, out = _run(tmp_path, "edit", "lifecycle", "--add-issue", "super-fr#575")
+    assert code == 2 and OTHER in out
+    assert _batches(tmp_path)[0].ids == ["super-fr#577"]
+    _with6(
+        tmp_path,
+        {"id": "lifecycle", "title": "t", "ids": ["super-fr#577", "super-fr#575"]},
+        facts=_held_facts(),
+    )
+    code, out = _run(tmp_path, "edit", "lifecycle", "--wave", "2")
+    assert code == 2 and OTHER in out
+    assert _batches(tmp_path)[0].wave is None
+    assert gh.calls == []
+
+
+def test_edit_remove_issue_yes_releases_the_dropped_member(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    ids = ["super-fr#577", "super-fr#575"]
+    _with6(tmp_path, {"id": "lifecycle", "title": "t", "ids": ids, "wave": 1})
+    put_marker(gh, REPO, 575, marker(_me(), "lifecycle", expires=FAR), 7)
+    code, out = _run(tmp_path, "edit", "lifecycle", "--remove-issue", "super-fr#575", "--yes")
+    assert code == 0, out
+    (m,) = markers(gh, REPO, 575)
+    assert m.released is not None
+    assert "fr:claimed" not in gh.issues[(REPO, 575)].labels
+
+
+def test_edit_no_wave_yes_releases_a_proposed_batch(tmp_path: Path, gh: FakeGhClient) -> None:
+    _with6(tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "wave": 1})
+    put_marker(gh, REPO, 577, marker(_me(), "lifecycle", expires=FAR), 7)
+    code, out = _run(tmp_path, "edit", "lifecycle", "--no-wave", "--yes")
+    assert code == 0, out
+    assert markers(gh, REPO, 577)[0].released is not None
+
+
+def test_cancel_yes_on_a_held_batch_releases_own_claims_and_leaves_held_members_alone(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    ids = ["super-fr#577", "super-fr#575"]
+    _with6(
+        tmp_path,
+        {"id": "lifecycle", "title": "t", "ids": ids, "wave": 1, "events": [_DISPATCH]},
+        facts=_held_facts(),
+    )
+    put_marker(gh, REPO, 577, marker(_me(), "lifecycle", expires=FAR), 7)
+    put_marker(gh, REPO, 575, marker(OTHER, "theirs", expires=FAR), 8)
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+    assert code == 0, out
+    assert markers(gh, REPO, 577)[0].released is not None
+    assert "fr:in-progress" not in gh.issues[(REPO, 577)].labels
+    # the held member: its label and comments are its holder's
+    assert "fr:in-progress" in gh.issues[(REPO, 575)].labels
+    assert "fr:claimed" in gh.issues[(REPO, 575)].labels
+    assert [m.signer for m in markers(gh, REPO, 575)] == [OTHER]
+    assert len(gh.issue_comments[(REPO, 575)]) == 1
+    events = [e.kind for e in _batches(tmp_path)[0].events]
+    assert events[-2:] == ["cancel", "claims_released"]
+
+
+def test_cancelling_a_proposed_batch_with_written_claims_uses_the_client(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    own = marker(_me(), "lifecycle", expires=FAR)
+    _with6(
+        tmp_path,
+        {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "wave": 1},
+        facts=_facts(
+            _issue(577, **held(own, 7)), _issue(575), _issue(471), _issue(438), _issue(420)
+        ),
+    )
+    put_marker(gh, REPO, 577, own, 7)
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+    assert code == 0, out
+    assert markers(gh, REPO, 577)[0].released is not None
+    assert "edit_issue_comment" in calls(gh)
+    assert [e.kind for e in _batches(tmp_path)[0].events] == ["cancel", "claims_released"]
+
+
+def test_cancelling_a_waved_proposed_batch_releases_claims_facts_never_saw(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    """p1-r8: a wave owes claims from the moment it is set, so a proposed batch with a
+    wave may hold claims written after the last collect; cancel releases them."""
+    own = marker(_me(), "lifecycle", expires=FAR)
+    _with6(tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "wave": 1})
+    put_marker(gh, REPO, 577, own, 7)
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+    assert code == 0, out
+    assert markers(gh, REPO, 577)[0].released is not None
+    assert "fr:claimed" not in gh.issues[(REPO, 577)].labels
+    assert [e.kind for e in _batches(tmp_path)[0].events] == ["cancel", "claims_released"]

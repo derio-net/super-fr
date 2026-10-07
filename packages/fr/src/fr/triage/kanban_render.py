@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 
-from fr.triage.components import GUTTER_CSS, TOKENS_CSS
-from fr.triage.kanban import Board, BoardStatus, Card, ColumnView, Member, PrView
+from fr.triage.components import GUTTER_CSS, TOKENS_CSS, stamp_text, when
+from fr.triage.kanban import Board, BoardStatus, Card, ColumnView, HeldIssue, Member, PrView
 from fr.triage.render import FONTS, _safe_url, esc, noun
 
 STATUS_LABELS: dict[BoardStatus, str] = {
@@ -48,6 +48,10 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
   align-items: start; margin-top: 16px; }
 .col { background: color-mix(in srgb, var(--line) 35%, transparent); border-radius: 8px;
   padding: 10px; min-width: 0; }
+.held { margin-top: 16px; background: color-mix(in srgb, var(--line) 35%, transparent);
+  border-radius: 8px; padding: 10px; }
+.held ul { margin: 0; padding-left: 18px; }
+.held li { margin: 4px 0; overflow-wrap: anywhere; }
 .count { color: var(--muted); font-weight: 400; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
   margin: 0 0 8px; overflow-wrap: anywhere; }
@@ -154,17 +158,12 @@ SCRIPT = """
 """
 
 
-def _when(moment: datetime) -> str:
-    return moment.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+_when = when
 
 
 def _stamp(text: str) -> str:
     """A forge timestamp as `_when` spells it; the escaped text itself when unreadable."""
-    try:
-        moment = datetime.fromisoformat(text)
-    except ValueError:
-        return esc(text)
-    return _when(moment) if moment.tzinfo else esc(text)
+    return esc(stamp_text(text))
 
 
 def _link(text: str, url: str | None) -> str:
@@ -295,6 +294,9 @@ def _card(card: Card, scope_args: Sequence[str]) -> str:
     meta = [f"{count} {noun(count, 'issue')}"]
     if card.wave is not None:
         meta.insert(0, f"wave {card.wave}")
+    if card.claim_expiry is not None:
+        word = "expired" if card.claim_expiry.expired else "expire"
+        meta.append(f"claims {word} {_when(card.claim_expiry.at)}")
     pills = ""
     if card.status is not None:
         pills += " " + _status(card.status)
@@ -312,6 +314,30 @@ def _card(card: Card, scope_args: Sequence[str]) -> str:
     return (
         f'<details class="{classes}" id="card-{esc(bid)}" data-batch="{esc(bid)}">'
         f"{summary}{_body(card, scope_args)}</details>"
+    )
+
+
+def _held_item(h: HeldIssue) -> str:
+    flag = ' <span class="pill flag">expired</span>' if h.expired else ""
+    hint = '<br><span class="meta">' + esc(h.line) + "</span>" if h.expired else ""
+    return (
+        f'<li>{_link(h.title, h.url)} <span class="mono">{esc(h.key)}</span> · held by '
+        f'<span class="mono">{esc(h.holder)}</span> for batch '
+        f'<span class="mono">{esc(h.batch)}</span> · expires '
+        f'<time datetime="{esc(h.expires.isoformat())}">{_when(h.expires)}</time>{flag}{hint}</li>'
+    )
+
+
+def _held(held: Sequence[HeldIssue]) -> str:
+    """The "Held elsewhere" group (R13): absent when no other scope holds an issue."""
+    if not held:
+        return ""
+    items = "".join(_held_item(h) for h in held)
+    return (
+        f'<section class="held" data-held="{len(held)}">'
+        f'<h2>Held elsewhere <span class="count">{len(held)}</span></h2>'
+        f'<p class="meta">Claimed by other triage scopes; this scope leaves them alone.</p>'
+        f"<ul>{items}</ul></section>"
     )
 
 
@@ -358,6 +384,7 @@ def render_board(
         f"<header><h1>Batch board</h1>"
         f'<p class="meta">{esc(board.scope)} · rendered {_when(rendered_at)} · '
         f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"
+        f"{_held(board.held)}\n"
         f"{body}\n"
         '<footer class="meta">Rendered by <code>fr triage board</code> from facts.json and '
         "judgements.yaml.</footer>\n"

@@ -1,4 +1,4 @@
-schema: 4
+schema: 5
 ranked_at: '2026-10-06'
 tiers:
 - n: 1
@@ -326,6 +326,8 @@ issues:
     detail: Archive moves journals and runs but does not turn remaining open ends into tracker issues.
     note: Product enhancement, not a broken invariant. Reconsider after the deferred journal path has usage evidence.
     severity: low
+    distinct_from:
+    - super-fr#454
   super-fr#457:
     tier: 3
     theme: installer-lifecycle
@@ -355,6 +357,8 @@ issues:
     detail: Hermes registers guards and the acceptance nag but no isolation session bind/unbind transport; bindings are traceability-only.
     note: Low priority. Keep separate from super-fr#455 because transport and include-file compatibility are distinct.
     severity: low
+    distinct_from:
+    - super-fr#458
   super-fr#453:
     tier: 3
     theme: bridge-observability
@@ -780,6 +784,8 @@ issues:
     detail: '**Still open, partly advanced**. No `fr/forge/`, parity file, CLI or tripwire. Premise drifted: `GhClient` is now **19** methods, not eight (`fr/ghclient.py:40-195`); triage-batches added `UnsupportedForgeOperation` (`:21`) and `UnsupportedBatchOps` (`:197`), inherited by glab/tea, which is a ready observe surface.'
     note: 'Same declared-vs-observed design as super-fr#510. Pair with super-fr#601 (supplies the live column). Refresh the body: `gh issue comment 611 --body ''Triage 2026-09-26: GhClient now has 19 methods; glab/tea batch ops raise UnsupportedForgeOperation via UnsupportedBatchOps (ghclient.py:197) - the observe surface for this table.''`'
     severity: low
+    distinct_from:
+    - super-fr#601
   super-fr#601:
     tier: 4
     theme: live-evidence
@@ -788,6 +794,8 @@ issues:
     detail: '**Still owed**. Plan `2026-07-09-multi-backend-git-host-adapters` is live; `09.yaml` has `P9.T1.S1` ticked (GitLab walk, 2026-09-24), `P9.T2.S1` (Gitea) and `P9.T3.S1` (scaffold + isolation, both backends) not. Only a live walk closes it.'
     note: Land super-fr#469, super-fr#618 (dispatched), super-fr#576 and super-fr#490 first, or the walk just rediscovers them. Record Gitea `list_linked_prs` as the first live cell for super-fr#611.
     severity: low
+    distinct_from:
+    - super-fr#611
   super-fr#643:
     tier: 4
     theme: test-tripwire
@@ -1714,6 +1722,8 @@ issues:
     detail: 'Degraded-forge gaps left after #916: org/group skipped repos, git fetch and the archive merge are not bounded the same way.'
     kind: defect
     severity: med
+    distinct_from:
+    - super-fr#991
   super-fr#893:
     tier: 4
     theme: acceptance-editing
@@ -1854,6 +1864,8 @@ issues:
     kind: defect
     note: Batch with super-fr#868.
     severity: low
+    distinct_from:
+    - super-fr#868
   super-fr#868:
     tier: 3
     theme: run-evidence-gates
@@ -1863,6 +1875,8 @@ issues:
     kind: defect
     note: Batch with super-fr#869.
     severity: low
+    distinct_from:
+    - super-fr#869
   super-fr#861:
     tier: 3
     theme: release
@@ -1944,6 +1958,8 @@ issues:
     kind: defect
     detail: Plan mode without a readable clone reports archived batches as `closeout start`; with `--yes` the same reading would start redundant close-out sessions.
     severity: med
+    distinct_from:
+    - super-fr#921
   super-fr#1004:
     tier: 2
     theme: triage-drive
@@ -2004,6 +2020,69 @@ issues:
     severity: low
     detail: The batch board puts a `partial` batch in Done while the driver still emits close-out due for it.
     note: Board follow-up; after board-followups.
+  super-fr#1014:
+    tier: 2
+    theme: self-hosted-forge
+    cx: S
+    verified: false
+    kind: defect
+    severity: high
+    detail: 'glab host threading passes hosts derived from MR URLs and a cloned repo''s committed `fr-profiles.yaml` with no trust gate, so `GITLAB_TOKEN` can reach a host the repo names. #994 gated gh only.'
+    note: 'Security: credential exposure. Batch glab-host-trust.'
+  super-fr#1015:
+    tier: 4
+    theme: self-hosted-forge
+    cx: XS
+    verified: false
+    kind: defect
+    severity: low
+    detail: The isolation lifecycle's injected gh runner runs the trust gate but never applies `GH_HOST`, so the gated host and the host gh talks to can diverge.
+    note: Batch glab-host-trust.
+  super-fr#1013:
+    tier: 4
+    theme: forge-adapter
+    cx: XS
+    verified: false
+    kind: defect
+    severity: low
+    detail: '`fr.gh._classify_error` matches stderr text; `GhHostRefusedError` reads as unknown and is matchable only by luck. Classify by exception type first.'
+    note: Batch glab-host-trust.
+  super-fr#1029:
+    tier: 3
+    theme: herdr-runner
+    cx: S-M
+    verified: false
+    kind: defect
+    severity: med
+    detail: 'The driver never reports a batch or close-out session that stays idle with no progress; #1028 fixed the unsubmitted brief, this is #956''s second half.'
+    note: Split from super-fr#956. Batch driver-sessions.
+  super-fr#1025:
+    tier: 3
+    theme: triage-drive
+    cx: M
+    verified: false
+    kind: defect
+    severity: med
+    detail: 'Degraded-forge exits left after #1023: the dispatch path''s failed fetch, the export path, a stale pre-recorded close-out, and gh timeouts on big lists.'
+    note: 'Follow-up of super-fr#921 (closed by #1023). Batch drive-board-lows.'
+  super-fr#1043:
+    tier: 3
+    theme: triage-drive
+    cx: L
+    verified: true
+    kind: feature
+    severity: med
+    detail: 'Overlapping scopes (repo, group, org) on one or more hosts have no coordination: `drive.lock` is per state dir, state is per scope. A signed per-issue claim (scope+host id, heartbeat, expiry) keeps other scopes hands off; each claim holder publishes its own named board.'
+    note: Operator design 2026-10-06. Wave 10. Starts with a brainstorm.
+  super-fr#1051:
+    tier: 3
+    theme: triage-drive
+    cx: XS
+    verified: true
+    kind: defect
+    severity: med
+    detail: '`collect._checks` counts every statusCheckRollup entry, so a check re-run green on the same commit keeps its stale failure; the merge train treats the PR as failing forever. Seen on export PR #1038.'
+    note: Wave 10 batch checks-latest-run.
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -3835,6 +3914,11 @@ batches:
     runner: herdr
     handle: wK:p4
     branch: fix/batch-closing-keywords
+  - kind: closeout
+    at: '2026-10-06T16:56:32.620207Z'
+    runner: hand
+    handle: archived
+    archived: 0
 - id: opencode-observe-2
   title: fr observes OpenCode sessions (run session, each child, what it returned); question answers,
     reviewer ids, cost and screenshot reads stop being the orchestrator's word
@@ -4708,6 +4792,19 @@ batches:
     runner: herdr
     handle: w2Q:p4
     branch: fix/batch-drive-restart-forge
+  - kind: post_merge
+    at: '2026-10-06T15:36:28.148691Z'
+  - kind: closeout
+    at: '2026-10-06T15:36:28.832444Z'
+    runner: herdr
+    handle: w2Q:p7
+    archive: chore/closeout-fix-batch-drive-restart-forge
+  - kind: closeout
+    at: '2026-10-06T15:43:53.161034Z'
+    runner: herdr
+    handle: w2Q:p7
+    archive: chore/closeout-fix-batch-drive-restart-forge
+    archived: 1027
 - id: herdr-dispatch-reliability
   title: 'herdr dispatch: a brief is always submitted, a busy pane is retried, one failed dispatch does
     not end the drive'
@@ -4720,6 +4817,25 @@ batches:
   after:
   - drive-restart-forge
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-10-06T15:29:24.932014Z'
+    runner: herdr
+    handle: w2Q:p6
+    branch: fix/batch-herdr-dispatch-reliability
+  - kind: post_merge
+    at: '2026-10-06T16:10:58.051772Z'
+  - kind: closeout
+    at: '2026-10-06T16:10:58.736160Z'
+    runner: herdr
+    handle: w2Q:p9
+    archive: chore/closeout-fix-batch-herdr-dispatch-reliability
+  - kind: closeout
+    at: '2026-10-06T16:18:45.849858Z'
+    runner: herdr
+    handle: w2Q:p9
+    archive: chore/closeout-fix-batch-herdr-dispatch-reliability
+    archived: 1030
 - id: debug-journal-push
   title: fr-debugging pushes its review journal entry before the PR merges
   ids:
@@ -4868,6 +4984,25 @@ batches:
   after:
   - herdr-dispatch-reliability
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-10-06T16:03:08.600142Z'
+    runner: herdr
+    handle: w2Q:p8
+    branch: fix/batch-drive-adopt-and-trust
+  - kind: post_merge
+    at: '2026-10-06T16:55:37.219367Z'
+  - kind: closeout
+    at: '2026-10-06T16:55:38.467097Z'
+    runner: herdr
+    handle: w2Q:pA
+    archive: chore/closeout-fix-batch-drive-adopt-and-trust
+  - kind: closeout
+    at: '2026-10-06T17:04:44.804025Z'
+    runner: herdr
+    handle: w2Q:pA
+    archive: chore/closeout-fix-batch-drive-adopt-and-trust
+    archived: 1036
 - id: run-evidence-witness
   title: Run evidence witnesses a backgrounded suite and a uv run --with capture
   ids:
@@ -4909,6 +5044,19 @@ batches:
     runner: herdr
     handle: w2Q:p2
     branch: fix/batch-pickup-record-drift
+  - kind: post_merge
+    at: '2026-10-06T12:16:03.944363Z'
+  - kind: closeout
+    at: '2026-10-06T12:16:10.909003Z'
+    runner: herdr
+    handle: w2Q:p5
+    archive: chore/closeout-fix-batch-pickup-record-drift
+  - kind: closeout
+    at: '2026-10-06T12:23:37.485693Z'
+    runner: herdr
+    handle: w2Q:p5
+    archive: chore/closeout-fix-batch-pickup-record-drift
+    archived: 1022
 - id: verification-kinds
   title: 'Verification before merge: candidate walks for software repos, issues closed on live evidence,
     and merge conflicts handed back to the batch session'
@@ -4929,51 +5077,374 @@ batches:
     runner: herdr
     handle: w2R:p1
     branch: feat/batch-verification-kinds
-features:
-- rank: 1
-  title: Model bindings survive provider churn
+  - kind: post_merge
+    at: '2026-10-06T16:37:35.183966Z'
+  - kind: closeout
+    at: '2026-10-06T16:37:36.119977Z'
+    runner: herdr
+    handle: w2R:p2
+    run: 2026-10-06-feat-batch-verification-kinds
+    archive: chore/archive-2026-10-06-verification-strategies
+  - kind: closeout
+    at: '2026-10-06T16:56:40.155040Z'
+    runner: herdr
+    handle: w2R:p2
+    run: 2026-10-06-feat-batch-verification-kinds
+    archive: chore/archive-2026-10-06-verification-strategies
+    archived: 1035
+- id: glab-host-trust
+  title: 'Forge host trust: glab gets the trust gate gh has, isolation applies GH_HOST, a host refusal
+    is classified by type'
   ids:
-  - super-fr#591
-  why: A binding that rots fails at dispatch, mid-wave, with nobody watching.
-  start: /fr-goal super-fr#591
-- rank: 2
-  title: Driver sessions stay current and portable
+  - super-fr#1014
+  - super-fr#1015
+  - super-fr#1013
+  rationale: 'Wave 5 (high severity): #1014 can send GITLAB_TOKEN to a host a cloned repo''s config names.
+    #1015 and #1013 are the same host-trust seam, filed by #994''s close-out.'
+  wave: 5
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-10-06T13:36:39.223895Z'
+    runner: herdr
+    handle: w2S:p1
+    branch: fix/batch-glab-host-trust
+  - kind: post_merge
+    at: '2026-10-06T15:26:44.362236Z'
+  - kind: closeout
+    at: '2026-10-06T15:26:51.352555Z'
+    runner: herdr
+    handle: w2S:p2
+    archive: chore/closeout-fix-batch-glab-host-trust
+  - kind: closeout
+    at: '2026-10-06T15:34:43.651268Z'
+    runner: herdr
+    handle: w2S:p2
+    archive: chore/closeout-fix-batch-glab-host-trust
+    archived: 1026
+- id: drive-board-lows
+  title: 'Driver and board low-severity defects: archive moves vs matrix refs, a moved head, weak cap
+    tests, a partial batch in Done'
+  ids:
+  - super-fr#937
+  - super-fr#962
+  - super-fr#884
+  - super-fr#985
+  - super-fr#1025
+  rationale: 'Wave 8 (remaining defects): all in the driver and board code; after drive-adopt-and-trust,
+    which touches the same files. #937 first: it can merge onto a red main.'
+  wave: 8
+  after:
+  - drive-adopt-and-trust
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-10-06T16:47:04.536585Z'
+    runner: herdr
+    handle: w35:p4
+    branch: fix/batch-drive-board-lows
+  - kind: post_merge
+    at: '2026-10-06T18:21:05.441257Z'
+  - kind: closeout
+    at: '2026-10-06T18:21:11.175176Z'
+    runner: herdr
+    handle: w35:p6
+    archive: chore/closeout-fix-batch-drive-board-lows
+  - kind: closeout
+    at: '2026-10-06T18:31:08.232946Z'
+    runner: herdr
+    handle: w35:p6
+    archive: chore/closeout-fix-batch-drive-board-lows
+    archived: 1046
+- id: closing-keyword-gate
+  title: 'deliver''s closing-keyword gate: no false hit on keyword-like prose, no miss across a line break'
+  ids:
+  - super-fr#868
+  - super-fr#869
+  rationale: 'Wave 8: two opposite failures of the same gate (#860).'
+  wave: 8
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-10-06T16:32:49.435436Z'
+    runner: herdr
+    handle: w35:p1
+    branch: fix/batch-closing-keyword-gate
+  - kind: post_merge
+    at: '2026-10-06T18:14:20.093736Z'
+  - kind: closeout
+    at: '2026-10-06T18:14:20.810246Z'
+    runner: herdr
+    handle: w35:p5
+    archive: chore/closeout-fix-batch-closing-keyword-gate
+  - kind: closeout
+    at: '2026-10-06T18:26:32.810597Z'
+    runner: herdr
+    handle: w35:p5
+    archive: chore/closeout-fix-batch-closing-keyword-gate
+    archived: 1045
+- id: pages-deploy
+  title: Pages deploy survives a stale artifact and is never cancelled mid-run
+  ids:
+  - super-fr#924
+  rationale: 'Wave 8: pages.yml hardening.'
+  wave: 8
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-10-06T16:33:07.357413Z'
+    runner: herdr
+    handle: w35:p2
+    branch: fix/batch-pages-deploy
+  - kind: post_merge
+    at: '2026-10-06T18:25:39.697602Z'
+  - kind: closeout
+    at: '2026-10-06T18:30:56.060977Z'
+    runner: herdr
+    handle: w35:p9
+    archive: chore/closeout-fix-batch-pages-deploy
+  - kind: closeout
+    at: '2026-10-06T18:39:22.935855Z'
+    runner: herdr
+    handle: w35:p9
+    archive: chore/closeout-fix-batch-pages-deploy
+    archived: 1047
+- id: state-sync-race
+  title: 'triage state sync opens with O_NOFOLLOW: no check-to-write race'
+  ids:
+  - super-fr#1003
+  rationale: 'Wave 8: hardening of #976''s state copy.'
+  wave: 8
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-10-06T16:33:21.358880Z'
+    runner: herdr
+    handle: w35:p3
+    branch: fix/batch-state-sync-race
+  - kind: post_merge
+    at: '2026-10-06T18:36:27.627097Z'
+  - kind: closeout
+    at: '2026-10-06T18:36:28.347007Z'
+    runner: herdr
+    handle: w35:pA
+    archive: chore/closeout-fix-batch-state-sync-race
+  - kind: closeout
+    at: '2026-10-06T18:45:11.315049Z'
+    runner: herdr
+    handle: w35:pA
+    archive: chore/closeout-fix-batch-state-sync-race
+    archived: 1049
+- id: driver-sessions
+  title: 'Driver sessions stay current and portable: idle sessions restart on new plugins, and the driver
+    runs outside herdr'
   ids:
   - super-fr#964
   - super-fr#878
-  why: Sessions keep pre-merge plugins through a long drive, and the driver only runs inside herdr.
-  start: /fr-goal super-fr#964
-- rank: 3
-  title: Cost evidence
+  - super-fr#1029
+  rationale: 'Wave 9 feature 1: stale sessions after post_merge cost hand-offs all of 2026-10-06. After
+    drive-board-lows (same driver files).'
+  wave: 9
+  after:
+  - drive-board-lows
+  bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-10-06T18:07:27.236272Z'
+    runner: herdr
+    handle: w36:p4
+    branch: feat/batch-driver-sessions
+  - kind: conflict
+    at: '2026-10-07T02:31:50.522627Z'
+    head: c5d6e6d8b1e6f5b24610c5ee0e2a0ecd4bf16f02
+    paths:
+    - docs/acceptance/matrix.yaml
+    - docs/acceptance/report_linked.html
+    - docs/acceptance/report_linked.md
+    - docs/acceptance/report_local.html
+    delivered: session
+    handle: derio-net/super-fr/run/batch-driver-sessions
+  - kind: post_merge
+    at: '2026-10-07T03:29:14.371782Z'
+  - kind: closeout
+    at: '2026-10-07T03:29:15.105324Z'
+    runner: herdr
+    handle: w36:p9
+    run: 2026-10-06-feat-batch-driver-sessions
+    archive: chore/archive-2026-10-06-driver-sessions
+  - kind: closeout
+    at: '2026-10-07T03:37:26.749927Z'
+    runner: herdr
+    handle: w36:p9
+    run: 2026-10-06-feat-batch-driver-sessions
+    archive: chore/archive-2026-10-06-driver-sessions
+    archived: 1067
+- id: model-bindings
+  title: 'Model bindings survive provider churn: probe live, fall back by family then tier'
+  ids:
+  - super-fr#591
+  rationale: 'Wave 9 feature 2: a rotted binding fails at dispatch, mid-wave.'
+  wave: 9
+  bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-10-06T16:34:29.771119Z'
+    runner: herdr
+    handle: w36:p3
+    branch: feat/batch-model-bindings
+  - kind: conflict
+    at: '2026-10-06T20:17:28.138802Z'
+    head: e92daf0b8bc9f50b9b363785d3bf6c6ab390ac13
+    paths:
+    - docs/acceptance/matrix.yaml
+    delivered: session
+    handle: derio-net/super-fr/run/batch-model-bindings
+  - kind: post_merge
+    at: '2026-10-06T20:59:53.509799Z'
+  - kind: closeout
+    at: '2026-10-06T20:59:54.314171Z'
+    runner: herdr
+    handle: w36:p7
+    run: 2026-10-06-feat-batch-model-bindings
+    archive: chore/archive-2026-10-06-model-binding-churn
+  - kind: closeout
+    at: '2026-10-06T21:11:39.371975Z'
+    runner: herdr
+    handle: w36:p7
+    run: 2026-10-06-feat-batch-model-bindings
+    archive: chore/archive-2026-10-06-model-binding-churn
+    archived: 1056
+- id: cost-evidence
+  title: 'Cost evidence: per-phase tiers and overhead in the PR body, main-session cost, handoff quality'
   ids:
   - super-fr#838
   - super-fr#793
   - super-fr#593
   - super-fr#627
-  - super-fr#597
-  why: 'The case for fr is cost. Per-phase tiers and overhead in the PR body make each run''s cost explain itself. #597 is probably already shipped (close candidate).'
-  start: /fr-goal super-fr#838
-- rank: 4
-  title: Archive does its own follow-ups
+  rationale: 'Wave 9 feature 3. #597 is a close candidate (shipped in #604), so it is not in this batch.'
+  wave: 9
+  bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-10-06T16:34:00.547743Z'
+    runner: herdr
+    handle: w36:p2
+    branch: feat/batch-cost-evidence
+  - kind: post_merge
+    at: '2026-10-07T02:37:41.548047Z'
+  - kind: closeout
+    at: '2026-10-07T02:37:42.661214Z'
+    runner: herdr
+    handle: w36:p8
+    run: 2026-10-06-feat-batch-cost-evidence
+    archive: chore/archive-2026-10-06-cost-evidence
+  - kind: closeout
+    at: '2026-10-07T03:01:13.290671Z'
+    runner: herdr
+    handle: w36:p8
+    run: 2026-10-06-feat-batch-cost-evidence
+    archive: chore/archive-2026-10-06-cost-evidence
+    archived: 1061
+- id: archive-followups
+  title: 'Archive does its own follow-ups: price closed sessions, retarget matrix refs, offer issues for
+    open ends'
   ids:
   - super-fr#930
   - super-fr#528
   - super-fr#458
-  why: Close-outs leave unpriced sessions, stale matrix refs and open ends to fix by hand.
-  start: /fr-goal super-fr#930
-- rank: 5
+  rationale: 'Wave 9 feature 4: close-outs leave these to fix by hand.'
+  wave: 9
+  bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-10-06T16:33:36.573028Z'
+    runner: herdr
+    handle: w36:p1
+    branch: feat/batch-archive-followups
+  - kind: post_merge
+    at: '2026-10-06T20:26:48.675758Z'
+  - kind: closeout
+    at: '2026-10-06T20:26:53.666956Z'
+    runner: herdr
+    handle: w36:p6
+    run: 2026-10-06-feat-batch-archive-followups
+    archive: chore/archive-2026-10-06-archive-followups
+  - kind: closeout
+    at: '2026-10-06T20:40:02.245540Z'
+    runner: herdr
+    handle: w36:p6
+    run: 2026-10-06-feat-batch-archive-followups
+    archive: chore/archive-2026-10-06-archive-followups
+    archived: 1053
+- id: triage-claims
+  title: 'Triage across scopes and hosts: signed per-issue claims, and one named board per claim holder'
+  ids:
+  - super-fr#1043
+  rationale: 'Wave 10 (operator 2026-10-06). Overlapping scopes and hosts must keep clear of each other''s
+    issues; each driving scope publishes its own board. Starts with a brainstorm: claim timing, expiry,
+    take-over and the publishing hook are the operator''s.'
+  wave: 10
+  bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-10-06T18:10:52.142825Z'
+    runner: herdr
+    handle: w37:p1
+    branch: feat/batch-triage-claims
+  - kind: conflict
+    at: '2026-10-07T03:18:39.892228Z'
+    head: fee325af982a07e29f09d4cf3f0bc64342d1db23
+    paths:
+    - docs/acceptance/matrix.yaml
+    - docs/acceptance/report_linked.html
+    - docs/acceptance/report_linked.md
+    - docs/acceptance/report_local.html
+    - packages/fr/src/fr/commands/triage_batch_cmd.py
+    - packages/fr/src/fr/commands/triage_kanban_cmd.py
+    - packages/fr/src/fr/triage/batch_drive.py
+    - packages/fr/src/fr/triage/kanban.py
+    - packages/fr/src/fr/triage/kanban_render.py
+    - packages/fr/src/fr/triage/model.py
+    - tests/integration/test_scenarios.py
+    - tests/unit/fakes.py
+    - tests/unit/test_real_ghclient.py
+    - tests/unit/test_triage_batch_drive.py
+    - tests/unit/test_triage_kanban.py
+    delivered: session
+    handle: derio-net/super-fr/run/batch-triage-claims
+- id: checks-latest-run
+  title: The driver reads only the latest run of each check, so a green re-run counts as green
+  ids:
+  - super-fr#1051
+  rationale: 'Wave 10: blocks the wave-7 export (#1038) and any PR re-run green on the same commit.'
+  wave: 10
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-10-06T20:14:12.009770Z'
+    runner: herdr
+    handle: w37:p2
+    branch: fix/batch-checks-latest-run
+features:
+- rank: 1
+  title: Cost evidence
+  ids:
+  - super-fr#597
+  why: 'The case for fr is cost. Per-phase tiers and overhead in the PR body make each run''s cost explain itself. #597 is probably already shipped (close candidate).'
+  start: /fr-goal super-fr#838
+- rank: 2
   title: Plan tooling
   ids:
   - super-fr#552
   why: Adding a phase means hand-writing its YAML.
   start: /fr-goal super-fr#552
-- rank: 6
+- rank: 3
   title: Acceptance report for every fr-enabled repo
   ids:
   - super-fr#923
   why: 'Low priority by its own text; after #877''s live check.'
   start: /fr-goal super-fr#923
-- rank: 7
+- rank: 4
   title: Operator conveniences
   ids:
   - super-fr#580
@@ -4981,14 +5452,14 @@ features:
   - super-fr#453
   why: 'Idle devcontainers, status-line wiring, bridge logs: friction only.'
   start: /fr-goal super-fr#580
-- rank: 8
+- rank: 5
   title: Forge parity beyond GitHub
   ids:
   - super-fr#611
   - super-fr#795
   why: Matters when a second forge has a user; wave 5's forge-remainder comes first.
   start: /fr-goal super-fr#611
-- rank: 9
+- rank: 6
   title: Harness and live-evidence debt
   ids:
   - super-fr#556
@@ -5001,19 +5472,6 @@ features:
   - super-fr#454
   why: Claims owed a live run on Hermes, Gitea and OpenCode; valuable, but each needs a live session to close.
   start: /fr-goal super-fr#556
-- rank: 10
-  title: Low-severity defects, after wave 6
-  ids:
-  - super-fr#937
-  - super-fr#962
-  - super-fr#884
-  - super-fr#868
-  - super-fr#869
-  - super-fr#924
-  - super-fr#1003
-  - super-fr#985
-  why: 'Low severity by classification. #937 is the one to watch: it can merge onto a red main.'
-  start: /fr-debugging super-fr#937
 exports:
 - wave: '1'
   repo: derio-net/super-fr
@@ -5038,4 +5496,28 @@ exports:
   at: '2026-10-06T11:52:25.888550Z'
   pr: 1019
   head: aa27f9c7cd7c124cd9db4baf0b787649ef71383b
+  merged: true
+- wave: '4'
+  repo: derio-net/super-fr
+  at: '2026-10-06T12:13:24.423968Z'
+  pr: 1021
+  head: c164b17693264e68d9c61a8bb5132bc678b3fe06
+  merged: true
+- wave: '7'
+  repo: derio-net/super-fr
+  at: '2026-10-06T16:59:21.519763Z'
+  pr: 1038
+  head: f1919d411a43841293202aacdee44e29c1cf94e7
+  merged: true
+- wave: '6'
+  repo: derio-net/super-fr
+  at: '2026-10-07T03:26:33.458850Z'
+  pr: 1064
+  head: cbb92c6eea5d9730d02ef7ee2d394eb5157911a1
+  merged: true
+- wave: '8'
+  repo: derio-net/super-fr
+  at: '2026-10-07T03:26:33.458850Z'
+  pr: 1064
+  head: cbb92c6eea5d9730d02ef7ee2d394eb5157911a1
   merged: true

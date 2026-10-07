@@ -221,6 +221,30 @@ def _dispatch(tmp_path: Path, *args: str) -> tuple[int, str]:
     return result.exit_code, result.output
 
 
+def _batch_comments(client: FakeGhClient, n: int) -> list[dict[str, Any]]:
+    """The member's comments other than claim markers (triage-claims)."""
+    return [
+        c
+        for c in client.issue_comments.get((REPO, n), [])
+        if not c["body"].startswith("<!-- fr-claim")
+    ]
+
+
+def _dispatch_writes(client: FakeGhClient) -> int:
+    """The dispatch's own forge writes so far: fr:in-progress labels and batch markers."""
+    labels = sum(
+        1
+        for name, kw in client.calls
+        if name == "edit_issue_labels" and "fr:in-progress" in kw["add"]
+    )
+    comments = sum(
+        1
+        for name, kw in client.calls
+        if name == "comment_issue" and not kw["body"].startswith("<!-- fr-claim")
+    )
+    return labels + comments
+
+
 def _mutations(client: FakeGhClient) -> list[str]:
     return [name for name, _ in client.calls if name != "list_issue_comments"]
 
@@ -698,17 +722,19 @@ def test_label_and_marker_reach_every_member_only_after_the_runner_dispatched(
     real_dispatch = runner.dispatch
 
     def _dispatch_first(item: WorkItem) -> str | None:
-        order.append(f"runner:{len(_mutations(gh))}")
+        # Claims precede the launch (triage-claims R3); the dispatch's own label and
+        # marker do not.
+        order.append(f"runner:{_dispatch_writes(gh)}")
         return real_dispatch(item)
 
     runner.dispatch = _dispatch_first  # type: ignore[method-assign]
     _state(tmp_path)
     code, out = _dispatch(tmp_path, "lifecycle", "--yes")
     assert code == 0, out
-    assert order == ["runner:0"]  # no forge write before the runner accepted
+    assert order == ["runner:0"]  # no dispatch write before the runner accepted
     for n in MEMBERS:
         assert "fr:in-progress" in gh.issues[(REPO, n)].labels
-        (comment,) = gh.issue_comments[(REPO, n)]
+        (comment,) = _batch_comments(gh, n)
         assert comment["body"].startswith(f"<!-- fr-batch:{ITEM} -->")
         assert "feat/batch-lifecycle" in comment["body"]
         assert "w2:p1K" not in comment["body"]  # the handle never reaches the forge
@@ -724,7 +750,10 @@ def test_a_failed_dispatch_writes_nothing(
     code, out = _dispatch(tmp_path, "lifecycle", "--yes")
     assert code == 1
     assert "tab create failed" in out
-    assert _mutations(gh) == []
+    assert _dispatch_writes(gh) == 0
+    # a wave-less batch owes no claim until dispatched: its claims are withdrawn
+    for n in MEMBERS:
+        assert all(m.released is not None for m in markers(gh, REPO, n))
     assert (tmp_path / "judgements.yaml").read_bytes() == before
 
 
@@ -747,7 +776,9 @@ def test_a_forge_failure_after_dispatch_keeps_the_event_and_names_repair(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
     _state(tmp_path)
-    gh.fail_on_mutation = 3  # ensure_labels, 577 label + comment, then 575 label fails
+    # the claims first (ensure_labels, then a label and a marker per member: 0-4), then
+    # ensure_labels, 577 label + comment, then 575 label fails
+    gh.fail_on_mutation = 8
     code, out = _dispatch(tmp_path, "lifecycle", "--yes")
     assert code == 1
     assert "super-fr#575" in out and "--repair" in out
@@ -767,7 +798,7 @@ def test_a_redispatch_after_cancel_posts_a_new_marker(
     code, out = _dispatch(tmp_path, "lifecycle", "--yes")
     assert code == 0, out
     for n in MEMBERS:
-        assert len(gh.issue_comments[(REPO, n)]) == 3
+        assert len(_batch_comments(gh, n)) == 3
 
 
 # ------------------------------------------------------------ --repair (§3.C)
@@ -941,7 +972,7 @@ def test_an_event_write_failing_after_launch_names_the_handle_and_the_recovery(
         "fr triage batch dispatch lifecycle --repair --yes --handle w2:p1K "
         "--reserved-version 4.22.0"
     ) in flat
-    assert len(runner.dispatched) == 1 and _mutations(gh) == []
+    assert len(runner.dispatched) == 1 and _dispatch_writes(gh) == 0
 
 
 def test_repair_records_the_missing_dispatch_of_a_live_run(
@@ -976,7 +1007,7 @@ def test_repair_records_the_missing_dispatch_of_a_live_run(
     assert (event.handle, event.reserved_version, event.runner) == ("w2:p1K", "4.22.0", "fake")
     for n in MEMBERS:
         assert "fr:in-progress" in gh.issues[(REPO, n)].labels
-        assert len(gh.issue_comments[(REPO, n)]) == 1
+        assert len(_batch_comments(gh, n)) == 1
 
 
 def test_repair_records_nothing_for_a_run_the_runner_does_not_hold(
@@ -1048,3 +1079,99 @@ def test_the_reserved_version_is_called_provisional_until_merge() -> None:
     line = next(ln for ln in brief.splitlines() if "Bump the version" in ln)
     assert "provisional" in line
     assert "do not pick another number" not in line
+
+
+# ------------------------------------------- triage-claims: dispatch claims first (R3, R6)
+
+from tests.unit.triage_claim_fixtures import (  # noqa: E402
+    FAR,
+    LONG_AGO,
+    OTHER,
+    PAST,
+    held,
+    marker,
+    markers,
+    put_marker,
+)
+
+
+def _me() -> str:
+    from fr.triage.scope_config import scope_id
+
+    return scope_id("derio-net--super-fr")
+
+
+def test_dispatch_yes_claims_every_member_before_the_runner_launch(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    seen: list[list[str]] = []
+    real_dispatch = runner.dispatch
+
+    def _dispatch_after_claims(item: WorkItem) -> str | None:
+        seen.append([m.signer for n in MEMBERS for m in markers(gh, REPO, n)])
+        return real_dispatch(item)
+
+    runner.dispatch = _dispatch_after_claims  # type: ignore[method-assign]
+    _state(tmp_path)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    assert seen == [[_me(), _me()]]
+    for n in MEMBERS:
+        assert {"fr:claimed", "fr:in-progress"} <= gh.issues[(REPO, n)].labels
+
+
+def test_dispatch_refuses_a_batch_held_elsewhere_before_anything(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    theirs = marker(OTHER, "theirs", expires=FAR)
+    _state(tmp_path, _facts(issues=[_issue(577), _issue(575, **held(theirs)), _issue(420)]))
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2
+    assert OTHER in out and "super-fr#575" in out
+    assert "dispatch" not in runner.calls
+    assert _mutations(gh) == []
+
+
+def test_a_claim_lost_at_dispatch_never_launches_the_runner(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    # facts know nothing, but the forge holds an older foreign marker on #575
+    put_marker(gh, REPO, 575, marker(OTHER, "theirs", expires=FAR), 9, LONG_AGO)
+    _state(tmp_path)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2, out
+    assert OTHER in out
+    assert "dispatch" not in runner.calls
+    assert runner.dispatched == []
+    assert "fr:in-progress" not in gh.issues[(REPO, 577)].labels
+    # a wave-less batch owes no claims until dispatched: the ones it made are withdrawn
+    assert all(m.released is not None for m in markers(gh, REPO, 577))
+
+
+def test_dispatch_rereads_members_facts_show_claimed_and_refuses_one_taken_since(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """p1-r4: facts say this scope claims every member for the batch, but since the
+    collect another scope took #575 over. The forge, not facts, decides."""
+    from fr.triage.claims import render_marker
+
+    mine = marker(_me(), "lifecycle", expires=PAST)
+    put_marker(gh, REPO, 577, mine, 7)
+    put_marker(gh, REPO, 575, mine, 8)
+    gh.issue_comments[(REPO, 575)][0]["body"] = render_marker(
+        mine.model_copy(update={"released": PAST, "released_by": OTHER})
+    )
+    put_marker(gh, REPO, 575, marker(OTHER, "theirs", expires=FAR, at=PAST), 9, PAST)
+    facts = _facts(
+        issues=[
+            _issue(577, **held(mine, 7)),
+            _issue(575, **held(mine, 8)),
+            _issue(420),
+        ]
+    )
+    _state(tmp_path, facts)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2, out
+    assert OTHER in out and "super-fr#575" in out
+    assert "dispatch" not in runner.calls
+    assert runner.dispatched == []

@@ -1,0 +1,55 @@
+{
+ "id": "cli:pane:process_info",
+ "result": {
+  "process_info": {
+   "foreground_process_group_id": 70332,
+   "foreground_processes": [
+    {
+     "argv": [
+      "caffeinate",
+      "-i",
+      "-t",
+      "300"
+     ],
+     "argv0": "caffeinate",
+     "cmdline": "caffeinate -i -t 300",
+     "cwd": "/home/user/Docs/projects/super-fr",
+     "name": "caffeinate",
+     "pid": 24597
+    },
+    {
+     "argv": [
+      "node",
+      "/home/user/.npm/_npx/9833c18b2d85bc59/node_modules/.bin/playwright-mcp"
+     ],
+     "argv0": "node",
+     "cmdline": "node /home/user/.npm/_npx/9833c18b2d85bc59/node_modules/.bin/playwright-mcp",
+     "cwd": "/home/user/Docs/projects/super-fr",
+     "name": "node",
+     "pid": 73595
+    },
+    {
+     "argv0": "mcp@latest",
+     "cwd": "/home/user/Docs/projects/super-fr",
+     "name": "node",
+     "pid": 71795
+    },
+    {
+     "argv": [
+      "claude",
+      "--model",
+      "claude-opus-5-5"
+     ],
+     "argv0": "claude",
+     "cmdline": "claude --model claude-opus-5-5",
+     "cwd": "/home/user/Docs/projects/super-fr",
+     "name": "2.1.291",
+     "pid": 70332
+    }
+   ],
+   "pane_id": "w36:p4",
+   "shell_pid": 66008
+  },
+  "type": "pane_process_info"
+ }
+}

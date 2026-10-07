@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import html
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import NamedTuple
 
 LIGHT = {
@@ -284,3 +285,17 @@ def collapsed(id_: str, title: str, count: int | None, body: str) -> str:
         f'<details id="{_esc(id_)}" class="fold"><summary>{_esc(title)}{n}</summary>'
         f"{body}</details>"
     )
+
+
+def when(moment: datetime) -> str:
+    """A moment as the board spells it everywhere: `YYYY-MM-DD HH:MM UTC`."""
+    return moment.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def stamp_text(text: str) -> str:
+    """A forge timestamp as `when` spells it; *text* itself (unescaped) when unreadable."""
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return text
+    return when(moment) if moment.tzinfo else text

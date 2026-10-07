@@ -102,6 +102,11 @@ MANUAL = LabelDef("manual", "BFBFBF", "Human-only; not routable to an agent")
 FR_IN_PROGRESS = LabelDef("fr:in-progress", "D93F0B", "An agent is actively working on this")
 FR_PR_READY = LabelDef("fr:pr-ready", "0E8A16", "PR is open; awaiting review")
 
+# A triage scope's claim on an issue (spec 2026-10-06-triage-claims §3.C): the label
+# beside a hidden marker comment naming the signer. Not a queue marker: it says which
+# scope may act on the issue, not that a runner holds it.
+FR_CLAIMED = LabelDef("fr:claimed", "5319E7", "Claimed by a triage scope; others keep hands off")
+
 # Protocol-owned idempotency marker — set after the runner accepted the
 # phase ("already handed to a runner, don't re-dispatch").
 FR_SYNCED = LabelDef("fr:synced", "6A630D", "Handed to the runner")

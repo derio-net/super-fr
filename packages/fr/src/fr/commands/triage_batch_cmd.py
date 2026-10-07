@@ -44,7 +44,7 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -125,6 +125,7 @@ from fr.triage.batch_drive import (
     RUNS_DIR,
     STALE_CLOSEOUT,
     Action,
+    IdleSession,
     LivePr,
     Snapshot,
     Summary,
@@ -146,6 +147,7 @@ from fr.triage.batch_drive import (
     finished_waves,
     fresh_conflicts,
     housekeeping_branch,
+    idle_session,
     is_archived,
     is_finished,
     settle,
@@ -168,6 +170,15 @@ from fr.triage.batch_merge import (
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
+from fr.triage.claim_sync import (
+    ClaimEnv,
+    ClaimOp,
+    SyncResult,
+    execute,
+    plan_sync,
+    record_releases,
+)
+from fr.triage.claims import held_line, held_map, held_members
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
@@ -177,6 +188,7 @@ from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     Batch,
     CancelEvent,
+    ClaimsReleasedEvent,
     CloseoutEvent,
     ConflictEvent,
     DispatchEvent,
@@ -192,11 +204,14 @@ from fr.triage.model import (
     state_dir,
 )
 from fr.triage.render import plural
+from fr.triage.scope_config import load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
     from fr_dispatch.work_item import WorkItem
+
+    from fr.triage.batch import BatchStage
 
 DISPATCH_INSTALL_HINT = (
     "dispatching to a runner requires fr-dispatch — install it "
@@ -208,6 +223,143 @@ def make_client(url: str) -> GhClient:
     """The forge adapter for the repo *url* lives on, on its own instance (§3.J;
     spec 2026-10-06-forge-remainder §4.D). Tests replace this."""
     return client_for_url(url)
+
+
+def claim_env(target: Path, facts: Facts) -> ClaimEnv:
+    """This scope's claim identity, config and forge clients (triage-claims §3.E): the one
+    resolver the batch verbs, the driver and the `claim` group share. The scope is the
+    one the facts were collected for (every loader checks they match). A broken host id
+    or scope config exits 2 naming its file."""
+    try:
+        me, config = scope_id(facts.scope), load_scope_config(target)
+    except TriageError as exc:
+        _fail(str(exc))
+    return ClaimEnv(
+        me=me,
+        config=config,
+        facts=facts,
+        client_for=lambda owner_repo: make_client(
+            f"https://{_host_of(facts, owner_repo)}/{owner_repo}"
+        ),
+    )
+
+
+def _stalled_line(blocked: Sequence[str], held_by: Sequence[tuple[str, Sequence[str]]]) -> str:
+    """Why an idle loop stops: batches held by another scope wait on that scope (R6) and
+    are named apart from those that need the operator (R7)."""
+    if not held_by:
+        return (
+            f"stopped: only blocked batches remain ({', '.join(blocked)}); they need the operator"
+        )
+    held = ", ".join(f"{b} ({', '.join(who)})" for b, who in held_by)
+    parts = [f"held by another scope: {held}"]
+    if blocked:
+        parts.append(f"need the operator: {', '.join(blocked)}")
+    return "stopped: only held or blocked batches remain; " + "; ".join(parts)
+
+
+def _refuse_held(env: ClaimEnv, keys: Iterable[str], what: str) -> None:
+    """Exit 2, nothing written, when another scope holds any of *keys* (R5, R6)."""
+    found = held_members(keys, held_map(env.facts, env.me))
+    if found:
+        now = _now()
+        _fail(
+            f"{what}: another triage scope holds "
+            + "; ".join(held_line(k, h, now) for k, h in found)
+        )
+
+
+def _own_claim_batch(facts: Facts, key: str, me: str) -> str | None:
+    issue = next((i for i in facts.issues if i.key == key), None)
+    own = next((c for c in issue.claims if c.signer == me), None) if issue else None
+    return own.batch if own else None
+
+
+def _settle_claims(env: ClaimEnv, ops: list[ClaimOp], *, yes: bool) -> SyncResult | None:
+    """The claim writes a create/edit made owed (R3, R10). Under --yes, written after the
+    judgements change; without it, printed with the command that writes them. A failed
+    write exits 1 naming the issue; the judgements change stands."""
+    if not ops:
+        return None
+    for op in ops:
+        if op.kind == "claim":
+            console.print(f"  claim {op.key} for {op.batch}", markup=False)
+        else:
+            console.print(f"  {op.kind} {op.key} ({op.batch})", markup=False)
+    if not yes:
+        console.print(
+            "claims not written; `fr triage claim sync --yes` writes them (or re-run with --yes)",
+            markup=False,
+        )
+        return None
+    try:
+        result = execute(env, ops, _now())
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    problems = [f"{op.kind} {op.key}: {why}" for op, why in result.failed] + [
+        f"{h.key}: held by {h.holder.signer} (batch {h.holder.batch})" for h in result.held
+    ]
+    if problems:
+        _fail(
+            "the judgements change stands, but these claim writes did not complete; "
+            "`fr triage claim sync --yes` finishes them: " + "; ".join(problems),
+            code=1,
+        )
+    return result
+
+
+def _claim_ops(batch: Batch, keys: Iterable[str], facts: Facts, me: str) -> list[ClaimOp]:
+    """Claim ops for *keys* of *batch*, skipping members facts show already claimed for it."""
+    return [
+        ClaimOp("claim", k, batch.id) for k in keys if _own_claim_batch(facts, k, me) != batch.id
+    ]
+
+
+def _withdraw_unowed(env: ClaimEnv, batch: Batch, posted: list[str]) -> None:
+    """A wave-less batch owes no claim until it is dispatched (R3): when its dispatch did
+    not happen, withdraw the markers this call posted. Best effort: a failure here leaves
+    them to `claim sync`, which releases own claims no batch owes."""
+    if batch.wave is not None or not posted:
+        return
+    try:
+        execute(env, [ClaimOp("release", k, batch.id) for k in posted], _now())
+    except UnsupportedForgeOperation:
+        pass
+
+
+def _claim_for_dispatch(env: ClaimEnv, batch: Batch) -> list[str]:
+    """Claim every member for *batch* before its launch (R3, R4); the keys whose marker
+    this call posted. A member held elsewhere refuses the batch (exit 2) and a failed
+    write exits 1, both with nothing launched.
+
+    Every member goes through the forge, including those facts show already claimed for
+    *batch* (p1-r4): facts are as old as the last collect, and a claim taken over since
+    must stop the launch. `claim` re-reads, reports Held, or rewrites the own marker in
+    place (a fresh heartbeat)."""
+    ops = [ClaimOp("claim", k, batch.id) for k in batch.ids]
+    if not ops:
+        return []
+    try:
+        result = execute(env, ops, _now())
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    posted = [op.key for op, done in result.done if done.action == "posted"]
+    if result.held or result.failed:
+        _withdraw_unowed(env, batch, posted)
+    if result.held:
+        now = _now()
+        _fail(
+            f"batch {batch.id!r} cannot be dispatched: another triage scope holds "
+            + "; ".join(held_line(h.key, h.holder, now) for h in result.held)
+            + ". Nothing was launched."
+        )
+    if result.failed:
+        _fail(
+            f"batch {batch.id!r}: these claims were not written, so nothing was launched; "
+            "re-run to complete: " + "; ".join(f"{op.key}: {why}" for op, why in result.failed),
+            code=1,
+        )
+    return posted
 
 
 def make_checkout(path: Path | None) -> Checkout:
@@ -275,6 +427,16 @@ ModelOpt = Annotated[
     typer.Option(
         "--model",
         help="Session model (the run's orchestrator); subagents use their `fr models` tiers.",
+    ),
+]
+
+
+ClaimYesOpt = Annotated[
+    bool,
+    typer.Option(
+        "--yes",
+        help="Also write the claims this change makes owed (the judgements write happens "
+        "either way).",
     ),
 ]
 
@@ -378,11 +540,12 @@ def batch_create_command(
     runner: RunnerOpt = None,
     harness: HarnessOpt = None,
     model: ModelOpt = None,
+    yes: ClaimYesOpt = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
 ) -> None:
-    """Add a proposed batch of judged issues."""
+    """Add a proposed batch of judged issues. With --wave, its claims are owed (R3)."""
     target, facts, judgements = _load_state(_scope(repo, org), dir_override)
     if not title or not issue:
         _fail("create needs --title and at least one --issue")
@@ -400,9 +563,13 @@ def batch_create_command(
         _fail(f"invalid batch: {exc}")
     if any(b.id == new.id for b in judgements.batches):
         _fail(f"batch {new.id!r} already exists; use `fr triage batch edit`")
+    env = claim_env(target, facts)
+    _refuse_held(env, new.ids, f"batch {new.id!r} cannot be created")
     _write(target, [*judgements.batches, new], facts, read=judgements.batches)
     console.print(f"created batch {new.id} ({plural(len(new.ids), 'issue')})", markup=False)
     _warn_mixed_themes(new, judgements)
+    if new.wave is not None:  # a wave makes claims owed from now (R3)
+        _settle_claims(env, _claim_ops(new, new.ids, facts, env.me), yes=yes)
 
 
 @batch_app.command("edit")
@@ -428,12 +595,13 @@ def batch_edit_command(
     runner: RunnerOpt = None,
     harness: HarnessOpt = None,
     model: ModelOpt = None,
+    yes: ClaimYesOpt = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
 ) -> None:
     """Change a proposed batch; past `proposed`, only --order (and, until it merges,
-    --wave and --after) may change."""
+    --wave and --after) may change. Claims follow the change (R3, R5, R10)."""
     if no_wave and wave is not None:
         _fail("--no-wave and --wave contradict each other")
     if no_after and after is not None:
@@ -479,9 +647,23 @@ def batch_edit_command(
         new = Batch.model_validate(doc)
     except ValidationError as exc:
         _fail(f"invalid batch: {exc}")
+    env = claim_env(target, facts)
+    added = [k for k in new.ids if k not in batch.ids]
+    checked = new.ids if wave is not None else added
+    _refuse_held(env, checked, f"batch {new.id!r} cannot take these members")
     _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
     console.print(f"edited batch {new.id}", markup=False)
     _warn_mixed_themes(new, judgements)
+    owed_before = batch.wave is not None or stage != "proposed"
+    owed_after = new.wave is not None or stage != "proposed"
+    dropped = [k for k in batch.ids if k not in new.ids]
+    ops = [ClaimOp("release", k, batch.id) for k in dropped] if owed_before else []
+    if owed_before and not owed_after:  # --no-wave on a proposed batch
+        ops += [ClaimOp("release", k, batch.id) for k in new.ids]
+    elif owed_after:
+        ops += _claim_ops(new, new.ids, facts, env.me)
+    if set_wave or add_issue or remove_issue:
+        _settle_claims(env, ops, yes=yes)
 
 
 @batch_app.command("cancel")
@@ -504,19 +686,37 @@ def batch_cancel_command(
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
     item = batch_item_id(owner_repo, batch.id)
-    touches_forge = stage != "proposed"  # a proposed batch never reached the forge
+    env = claim_env(target, facts)
+    # R6: a member another scope holds keeps its fr:in-progress label and comments;
+    # they are its holder's. This scope's own claims are released (R10).
+    held = {k for k, _ in held_members(batch.ids, held_map(facts, env.me))}
+    owes = batch.wave is not None or any(e.kind == "dispatch" for e in batch.events)
+    claimed = any(_own_claim_batch(facts, k, env.me) for k in batch.ids)
+    releases = owes or claimed
+    withdraws = [k for k in batch.ids if k not in held] if stage != "proposed" else []
+    # a proposed batch reached the forge only when its claims were written; a wave owes
+    # claims from the moment it is set, so ones written since the last collect may
+    # exist whatever facts say (p1-r8)
+    touches_forge = stage != "proposed" or claimed or batch.wave is not None
     if touches_forge:
         # gh#803: withdrawing writes labels and comments to the tracker, so it
         # is gated as dispatch is — a proposed batch writes nothing and needs
         # no clone.
         _tracking_gate(checkout_path, owner_repo, yes=yes)
     console.print(f"cancel batch {batch.id} ({stage})", markup=False)
-    if touches_forge:
+    for key in withdraws:
+        console.print(
+            f"  {key}: remove {FR_IN_PROGRESS.name}, post the withdrawal comment",
+            markup=False,
+        )
+    for key in sorted(held):
+        console.print(
+            f"  {key}: held by another triage scope; its label and comments are left to it",
+            markup=False,
+        )
+    if releases and touches_forge:
         for key in batch.ids:
-            console.print(
-                f"  {key}: remove {FR_IN_PROGRESS.name}, post the withdrawal comment",
-                markup=False,
-            )
+            console.print(f"  {key}: release this scope's claim", markup=False)
     console.print("  append a cancel event to judgements.yaml", markup=False)
     if not yes:
         console.print("nothing written; re-run with --yes to act", markup=False)
@@ -528,7 +728,7 @@ def batch_cancel_command(
         # is the one operation a backend may not support, so an unsupported
         # backend is refused (exit 2) with no member half-withdrawn.
         posted: dict[str, bool] = {}
-        for key in batch.ids:
+        for key in withdraws:
             number = int(key.rpartition("#")[2])
             try:
                 posted[key] = withdrawn_already(
@@ -538,7 +738,7 @@ def batch_cancel_command(
                 _fail(str(exc))
             except FORGE_ERRORS as exc:  # a forge failure: report the member, keep going
                 failed.append(f"{key}: {exc}")
-        for key in batch.ids:
+        for key in withdraws:
             if key not in posted:
                 continue  # its read failed: nothing written for it, reported above
             number = int(key.rpartition("#")[2])
@@ -552,14 +752,29 @@ def batch_cancel_command(
                 _fail(str(exc))
             except FORGE_ERRORS as exc:  # a forge failure: report the member, keep going
                 failed.append(f"{key}: {exc}")
+        released: list[str] = []
+        if releases and not failed:
+            try:
+                result = execute(env, [ClaimOp("release", k, batch.id) for k in batch.ids], _now())
+            except UnsupportedForgeOperation as exc:
+                _fail(str(exc))
+            failed += [f"{op.key}: {why}" for op, why in result.failed]
+            # only real releases: a member with no claim of this scope's is left to the
+            # next `claim sync`, which records it, so a claim-free cancel reads as before
+            released = [op.key for op, done in result.done if done.action == "released"]
         if failed:
             _fail(
                 "these members were not fully withdrawn, so no cancel event was written; "
                 "re-run to complete: " + "; ".join(failed),
                 code=1,
             )
+    else:
+        released = []
     event = CancelEvent(kind="cancel", at=_now_after(batch), reason=reason)
-    cancelled = batch.model_copy(update={"events": [*batch.events, event]})
+    events: list[Any] = [*batch.events, event]
+    if released:
+        events.append(ClaimsReleasedEvent(kind="claims_released", at=event.at, keys=released))
+    cancelled = batch.model_copy(update={"events": events})
     _write(target, _replace(judgements.batches, cancelled), facts, read=judgements.batches)
     console.print(f"cancelled batch {batch.id}", markup=False)
 
@@ -1018,6 +1233,8 @@ def dispatch_batch(
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
     _tracking_gate(checkout_path, owner_repo, yes=yes)  # before any forge call
+    env = claim_env(target, facts)
+    _refuse_held(env, batch.ids, f"batch {batch.id!r} cannot be dispatched")  # R6
     client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
     if (handle or reserved_version) and not repair:
         _fail("--handle and --reserved-version go with --repair only")
@@ -1131,9 +1348,13 @@ def dispatch_batch(
     if item.id in runner.existing_dispatches([item]):
         _fail(f"runner `{runner_name}` already holds {item.id} live; nothing written")
     _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
+    # R3: the claims, R4's re-read included, before the launch, which cannot be undone,
+    # and before any other forge write. A member another scope holds refuses the batch.
+    posted = _claim_for_dispatch(env, batch)
     try:
         launched = runner.dispatch(item)
-    except Exception as exc:  # the runner's own failure: nothing is written
+    except Exception as exc:  # the runner's own failure: nothing else is written
+        _withdraw_unowed(env, batch, posted)
         raise RunnerDispatchError(
             f"runner `{runner_name}` failed to dispatch {item.id}: {exc}"
         ) from exc
@@ -1603,6 +1824,9 @@ def batch_merge_command(
     if not queue:
         console.print("no pr-open batches to merge", markup=False)
         return
+    env = claim_env(target, facts)
+    for e in queue:  # R6: a batch another scope holds a member of is never merged here
+        _refuse_held(env, e.batch.ids, f"batch {e.batch.id!r} cannot be merged")
     repos = {batch_repo(e.batch, facts) for e in queue}
     if len(repos) != 1 or None in repos:
         _fail(
@@ -1966,6 +2190,9 @@ class _Driver:
         self._runners: dict[str, Runner] = {}
         self._unloadable: set[str] = set()  # runners that failed to load, reported once
         self._probes: dict[str, tuple[Runner, Any]] = {}  # per pass: live item id -> its runner
+        # per pass: runner name -> the close-out probe, for every runner whose close-out
+        # followed a successful `post_merge` in a repo that opted in (driver-sessions sr-7)
+        self._restart: dict[str, Any] = {}
         self._merge: dict[str, MergeContext] = {}
         # The waves this process's previous pass found unfinished; None before its first
         # pass, so a wave already finished at start is never reported (R10).
@@ -1981,6 +2208,13 @@ class _Driver:
         # checks that needed it were skipped, never guessed (gh#991)
         self._clone_unread: dict[str, str] = {}
         self.restart_to: str | None = None  # a newer fr post_merge installed (gh#998)
+        # per pass: the claim env (this scope's id and config), the batches a claim write
+        # found held (the pass stops acting on them), and the claim writes done so far
+        self._claims: ClaimEnv | None = None
+        self._held_now: dict[str, str] = {}
+        self.publish_failures: set[str] = set()  # R14: one warning per distinct cause
+        self.held_by: tuple[tuple[str, tuple[str, ...]], ...] = ()  # last pass: waiting on others
+        self._claim_done = SyncResult()
 
     # -------------------------------------------------------------- reaching out
 
@@ -2006,9 +2240,12 @@ class _Driver:
             self._runners[name] = load_runner(name)
         return self._runners[name]
 
-    def _try_runner(self, name: str) -> Runner | None:
-        """Runner *name*, or None (reported once) when it cannot be loaded: closing is
-        best effort, so a load failure never ends the drive (R10)."""
+    def _try_runner(
+        self, name: str, consequence: str = "its sessions are not closed"
+    ) -> Runner | None:
+        """Runner *name*, or None (reported once) when it cannot be loaded: closing and
+        the idle probe are best effort, so a load failure never ends the drive (R10).
+        *consequence* names what the caller loses, so the warning says the right thing."""
         if name in self._unloadable:
             return None
         runner, reason = try_load(name, self.runner)
@@ -2017,7 +2254,7 @@ class _Driver:
         self._unloadable.add(name)
         err_console.print(
             f"[yellow]warning:[/yellow] runner `{escape(name)}` could not be loaded "
-            f"({escape(reason or 'no reason given')}); its sessions are not closed",
+            f"({escape(reason or 'no reason given')}); {escape(consequence)}",
             soft_wrap=True,
         )
         return None
@@ -2159,6 +2396,7 @@ class _Driver:
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         done_waves = finished_waves(judgements.batches, stages)
+        claim_plan = self._claim_plan(facts, judgements, repos, unread, now)
         export_path, export_refused = self._export_config(facts)
         export_prs, export_orphans = self._export_reads(
             facts, judgements, repos, done_waves, export_path
@@ -2180,6 +2418,7 @@ class _Driver:
             stale_live, asked = self._existing(facts, stale, repos, soft=True)
             existing |= stale_live
             probed = frozenset(b.id for b in stale if closeout_item_id(repos[b.id], b.id) in asked)
+        idle = self._idle(facts, chosen, repos, stages, archives, now) if self.yes else ()
         return Snapshot(
             batches=tuple(judgements.batches),
             stages=stages,
@@ -2193,6 +2432,8 @@ class _Driver:
             archives=archives,
             existing=existing,
             closeout_probed=probed,
+            idle=idle,
+            scope_args=tuple(self.scope_args),
             warned=frozenset(self.warned),
             close_sessions=closing_sessions,
             sessions=sessions,
@@ -2212,7 +2453,46 @@ class _Driver:
             finished=done_waves,
             export_refused=export_refused,
             awaiting=frozenset(b.id for b in judgements.batches if batch_awaits_live(b, facts)),
+            **claim_plan,
         )
+
+    def _claim_plan(
+        self,
+        facts: Facts,
+        judgements: Judgements,
+        repos: dict[str, str],
+        unread: dict[str, str],
+        now: datetime,
+    ) -> dict[str, Any]:
+        """The Snapshot's claim fields (triage-claims §3.F), from facts alone: nothing here
+        reaches the forge, so plan mode shows them too. `plan_sync` decides what is owed
+        (the same reading `claim sync` has); a batch of a repo collect skipped is left
+        out, its issues' comments were not read."""
+        env = self._claims = claim_env(self.target, facts)
+        plan = plan_sync(env, judgements.batches, now)
+
+        def blind(op: ClaimOp) -> bool:
+            """A refresh of a member facts cannot see (closed: collect reads no closed
+            issue's comments): a read that writes only when the marker is due, so it is
+            made with --yes and never announced in a plan."""
+            issue = env.issue(op.key)
+            return op.kind == "refresh" and (issue is None or issue.state != "open")
+
+        def owed(kind: str) -> tuple[tuple[str, str], ...]:
+            return tuple(
+                (op.key, op.batch) for op in plan.ops
+                if op.kind == kind and repos.get(op.batch) not in unread
+                and (self.yes or not blind(op))
+            )  # fmt: skip
+
+        keys = {k for b in judgements.batches for k in b.ids}
+        return {
+            "me": env.me,
+            "held": dict(held_members(sorted(keys), held_map(facts, env.me))),
+            "claims_owed": owed("claim"),
+            "refresh_owed": owed("refresh"),
+            "releases_owed": owed("release"),
+        }
 
     def _default_branch(self, repo: str) -> str:
         """*repo*'s default branch, the only base an export PR may have (p4-r15); ""
@@ -2546,6 +2826,73 @@ class _Driver:
                     self._probes[probe.id] = (runner, probe)
         return frozenset(self._probes)
 
+    def _idle(
+        self,
+        facts: Facts,
+        chosen: list[Batch],
+        repos: dict[str, str],
+        stages: dict[str, BatchStage],
+        archives: dict[str, tuple[LivePr, ...]],
+        now: datetime,
+    ) -> tuple[IdleSession, ...]:
+        """The sessions the runner reports idle with nothing to show for it (R7).
+
+        Only candidates are probed: a batch whose last dispatch is older than the repo's
+        `idle_session_minutes` and that has no PR, and a recorded, unfinished close-out
+        older than that. One `session_statuses` per runner, and soft: a runner that cannot
+        load, refuses or raises is skipped, so no session reads idle from a read that never
+        happened. The verdict itself is `idle_session`, the one definition the board reads."""
+        from fr_dispatch.protocols import SessionInspector
+
+        candidates: list[tuple[Batch, bool, str]] = []  # (batch, is_closeout, runner name)
+        for b in chosen:
+            repo, stage = repos.get(b.id), stages.get(b.id)
+            if repo is None or stage is None:
+                continue
+            threshold = facts.config_for(repo).idle_session_minutes
+            dispatch, event = last_dispatch(b), closeout_event(b)
+            for is_closeout, owner in ((False, dispatch), (True, event)):
+                if owner is None or (is_closeout and owner.runner == "hand"):
+                    continue
+                # A candidate is a session `idle_session` would report were it idle: the
+                # rule alone decides what is owed work, so no second test lives here.
+                if idle_session(
+                    b, repo=repo, closeout=is_closeout, status="idle", stage=stage,
+                    archives=archives.get(repo, ()), now=now, threshold=threshold,
+                ) is not None:  # fmt: skip
+                    candidates.append((b, is_closeout, str(owner.runner)))
+        by_runner: dict[str, list[tuple[Batch, bool, WorkItem]]] = {}
+        for b, is_closeout, name in candidates:
+            probe = probe_item(repos[b.id], b, closeout=is_closeout, prefix=self.workspace_prefix)
+            by_runner.setdefault(name, []).append((b, is_closeout, probe))
+        found: list[IdleSession] = []
+        for name, entries in by_runner.items():
+            runner = self._try_runner(name, "idle sessions are not reported")
+            if runner is None or not isinstance(runner, SessionInspector):
+                continue
+            probes = [probe for _, _, probe in entries]
+            try:
+                refusal = runner.preflight(probes)
+                statuses = {} if refusal else runner.session_statuses(probes)
+            except Exception as exc:  # noqa: BLE001 - reporting is best effort
+                refusal, statuses = str(exc) or type(exc).__name__, {}
+            if refusal:
+                self._report_once(
+                    f"idle-probe\0{name}\0{refusal}",
+                    f"runner `{name}` cannot report session status: {refusal}",
+                )
+                continue
+            for b, is_closeout, probe in entries:
+                repo = repos[b.id]
+                idle = idle_session(
+                    b, repo=repo, closeout=is_closeout, status=statuses.get(probe.id),
+                    stage=stages[b.id], archives=archives.get(repo, ()), now=now,
+                    threshold=facts.config_for(repo).idle_session_minutes,
+                )  # fmt: skip
+                if idle is not None:
+                    found.append(idle)
+        return tuple(found)
+
     def _report_once(self, key: str, message: str) -> bool:
         """Print *message* the first time *key* is seen; whether it was printed."""
         if key in self.warned:
@@ -2629,9 +2976,11 @@ class _Driver:
         _, facts, judgements = _load_state(self.scope, self.target)
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._clone_unread = {}
+        self._restart = {}
         self._stopped, self._queued, self._conflicts = {}, 0, {}
         self._export_refusals = 0
         self._export_failures = 0
+        self._held_now, self._claim_done = {}, SyncResult()
         self.failed_write = False
         snap = self.snapshot(facts, judgements, _now())
         for repo, why in sorted(self._unread.items()):
@@ -2650,34 +2999,42 @@ class _Driver:
                 + (f", so no close-out is planned for {', '.join(mine)}" if mine else ""),
             )  # fmt: skip
         plan = drive_pass(snap)
+        self.held_by = plan.held_by
         self._unfinished = unfinished_waves(snap)
         acted = False
         in_flight = sum(1 for b in snap.batches if snap.stages[b.id] in LIVE_STAGES)
-        for train in plan.trains:
-            _say(train_line(train))
-        for action in plan.actions:
-            if not self.yes:
-                _say(action_line(action))
-                continue
-            refused = self._export_refusals
-            outcome, did, in_flight = self._act(action, facts, in_flight)
-            acted = acted or did
-            if self._export_refusals > refused:  # refused before any write: a warning
-                action = replace(action, kind="warn")
-            if outcome or action.kind != "close":  # a close reported already stays quiet
-                _say(action_line(action, outcome))
-        summary = settle(
-            plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
-        )
-        if self._left_out:  # not done, only unread: the drive keeps waiting for them
-            summary = replace(summary, pending=summary.pending + len(self._left_out))
-        if self._export_refusals:  # still owed, but only the operator can move it
-            summary = replace(
-                summary,
-                closing=summary.closing - self._export_refusals,
-                blocked=summary.blocked + self._export_refusals,
+        try:  # a pass that aborts after a post_merge still restarts what it owes (p2-r1)
+            for train in plan.trains:
+                _say(train_line(train))
+            for action in plan.actions:
+                if not self.yes:
+                    _say(action_line(action))
+                    continue
+                refused = self._export_refusals
+                outcome, did, in_flight = self._act(action, facts, in_flight)
+                acted = acted or did
+                if self._export_refusals > refused:  # refused before any write: a warning
+                    action = replace(action, kind="warn")
+                if outcome or action.kind not in ("close", "claim", "refresh", "release"):
+                    # a close reported already stays quiet, as does a claim write that wrote nothing
+                    _say(action_line(action, outcome))
+            if self.yes:
+                self._record_released(facts)
+            summary = settle(
+                plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
             )
-        _say(summary_line(summary))
+            if self._left_out:  # not done, only unread: the drive keeps waiting for them
+                summary = replace(summary, pending=summary.pending + len(self._left_out))
+            if self._export_refusals:  # still owed, but only the operator can move it
+                summary = replace(
+                    summary,
+                    closing=summary.closing - self._export_refusals,
+                    blocked=summary.blocked + self._export_refusals,
+                )
+            _say(summary_line(summary))
+        finally:
+            if self.yes:
+                self._restart_sessions()  # soft: never raises out of here
         if self.yes:
             self._write_board()
         else:
@@ -2687,11 +3044,45 @@ class _Driver:
                   if a.wave is not None and a.kind == "warn"]  # fmt: skip
         return acted, summary, stuck
 
+    def _restart_sessions(self) -> None:
+        """Restart idle sessions once per recorded runner, after every close-out this pass
+        started (driver-sessions §B, sr-7). Soft like `_sessions`: a runner that cannot
+        load, refuses, or cannot restart is reported once per process, a raise is reported,
+        and none of it holds the drive or changes `--once`'s exit code."""
+        from fr_dispatch.protocols import SessionRestarter
+
+        for name, probe in self._restart.items():
+            runner = self._try_runner(name)
+            if runner is None:
+                continue
+            if not isinstance(runner, SessionRestarter):
+                self._report_once(f"restart\0{name}", f"runner `{name}` cannot restart sessions")
+                continue
+            try:
+                refusal = runner.preflight([probe])
+                if refusal:
+                    self._report_once(
+                        f"restart\0{name}\0{refusal}",
+                        f"runner `{name}` cannot restart sessions: {refusal}",
+                    )
+                    continue
+                result = runner.restart_idle()
+            except Exception as exc:  # noqa: BLE001 - upkeep, never the drive's work
+                err_console.print(
+                    f"[yellow]warning:[/yellow] restarting `{escape(name)}` sessions failed: "
+                    f"{escape(str(exc) or type(exc).__name__)}",
+                    soft_wrap=True,
+                )
+                continue
+            _say(f"restart: {result.ok} ok, {result.skipped} skipped, {len(result.failed)} failed")
+            for pane, reason in result.failed:
+                _say(f"restart failed {pane}: {reason}")
+
     def _write_board(self) -> None:
         """Render `board.html` from what this pass left on disk (R11). A board that cannot
         be written is one warning per distinct cause and never changes the pass."""
         try:
-            triage_kanban_cmd.write_board(
+            out, _ = triage_kanban_cmd.write_board(
                 self.scope,
                 self.target,
                 scope_args=self.scope_args,
@@ -2707,6 +3098,7 @@ class _Driver:
                 )
         else:
             self.board_failures.clear()
+            triage_kanban_cmd.publish(self.scope, self.target, out, self.publish_failures)
 
     def _act(self, action: Action, facts: Facts, in_flight: int) -> tuple[str, bool, int]:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
@@ -2723,6 +3115,17 @@ class _Driver:
             return action.detail, False, in_flight
         if action.kind in ("blocked", "held"):
             return action.detail, False, in_flight
+        if action.kind in ("claim", "refresh", "release"):
+            if action.kind == "claim" and action.batch in self._held_now:
+                return "", False, in_flight  # one claim was lost: the batch's rest wait (R6)
+            line, did = self._claim_write(action)
+            return line, did, in_flight
+        if action.batch in self._held_now:  # a claim write found it held: leave it alone (R6)
+            if action.kind == "dispatch":
+                self._held += 1  # planned in flight, did not start: still pending
+            elif action.kind == "merge":
+                self._unlanded.add(action.batch)  # planned merged, did not land
+            return f"held: {self._held_now[action.batch]}", False, in_flight
         judgements = load_judgements(self.target / "judgements.yaml")
         batch = _find(judgements.batches, action.batch)
         repo = batch_repo(batch, facts)
@@ -2794,6 +3197,46 @@ class _Driver:
             True,
             in_flight + 1,
         )
+
+    def _claim_write(self, action: Action) -> tuple[str, bool]:
+        """Execute one claim, refresh or release through `claim_sync.execute` (R3, R8,
+        R10). A claim that turned out held (R4) stops the pass acting on its batch; a
+        failed write is reported, makes `--once` exit 1, and is retried next pass."""
+        assert self._claims is not None
+        op = ClaimOp(action.kind, action.key, action.batch)  # type: ignore[arg-type]
+        try:
+            result = execute(self._claims, [op], _now())
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        if result.held:
+            line = held_line(op.key, result.held[0].holder, _now())
+            self._held_now.setdefault(action.batch, line)
+            return line, False
+        if result.failed:
+            self.failed_write = True
+            return f"failed: {result.failed[0][1]}", False
+        self._claim_done.done.extend(result.done)
+        done = result.done[0][1].action
+        # Never `acted`: a claim write moves no batch, so it must not make a pass that
+        # does nothing else read as progress (exit 3, "nothing to do", still holds).
+        return ("" if done == "none" else done), False
+
+    def _record_released(self, facts: Facts) -> None:
+        """One `claims_released` event per batch released this pass, after its releases,
+        through the one judgements writer, so the next pass owes nothing (R10)."""
+        if not any(op.kind == "release" for op, _ in self._claim_done.done):
+            return
+        batches = load_judgements(self.target / "judgements.yaml").batches
+        recorded = record_releases(batches, self._claim_done, _now())
+        if recorded == batches:
+            return
+        try:
+            _save(self.target, recorded, facts, read=batches)
+        except TriageError as exc:  # idempotent at the forge: the next pass records it
+            self._report_once(
+                f"claims_released\0{exc}",
+                f"could not record the released claims ({exc}); recorded on a later pass",
+            )
 
     def _merge_batch(
         self,
@@ -3045,6 +3488,7 @@ class _Driver:
         except TriageError as exc:
             return f"close-out held: {exc}", False
         command = facts.config_for(repo).post_merge
+        post_merged = False
         if action.post_merge and command:
             try:
                 checkout.run_command(command)
@@ -3054,6 +3498,7 @@ class _Driver:
                 judgements, facts, batch, PostMergeEvent(kind="post_merge", at=_now_after(batch))
             )
             judgements = load_judgements(self.target / "judgements.yaml")
+            post_merged = True
             installed = _installed_version()
             if installed is not None and installed != __version__:
                 self.restart_to = installed  # after this pass: see `batch_drive_command`
@@ -3064,6 +3509,11 @@ class _Driver:
         archive = housekeeping_branch(branch, run, plan_slug)
         item_id = closeout_item_id(repo, batch.id)
         launch = self._launch(facts, batch, repo)
+        if post_merged and facts.config_for(repo).post_merge_restart == "idle":
+            name = str(launch.runner)  # restarted once at the end of the pass, not here
+            self._restart.setdefault(
+                name, probe_item(repo, batch, closeout=True, prefix=self.workspace_prefix)
+            )
         if action.recorded:
             self._append(
                 judgements, facts, batch,
@@ -3490,11 +3940,8 @@ def batch_drive_command(
             if driver.restart_to is not None:
                 restart = driver.restart_to
                 break
-            if summary.waiting_on_operator:
-                _say(
-                    f"stopped: only blocked batches remain ({', '.join(blocked)}); "
-                    "they need the operator"
-                )
+            if summary.stalled:
+                _say(_stalled_line(blocked, driver.held_by))
                 raise typer.Exit(code=3)
             _sleep(interval)
     if restart is not None:

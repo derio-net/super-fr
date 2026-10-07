@@ -17,6 +17,7 @@ from fr.triage.batch import ForeignPr, QueueEntry, batch_item_id
 from fr.triage.batch_drive import (
     CLOSEOUT_FALLBACK,
     Action,
+    IdleSession,
     LivePr,
     Snapshot,
     Train,
@@ -29,6 +30,7 @@ from fr.triage.batch_drive import (
     drive_pass,
     find_run,
     housekeeping_branch,
+    idle_session,
     is_archived,
     is_finished,
     summary_line,
@@ -1501,6 +1503,253 @@ def test_an_archive_pr_retargeted_off_the_default_branch_is_never_merged() -> No
     assert unknown.actions == () and (unknown.summary.closing, unknown.summary.blocked) == (1, 0)
     on_main = drive_pass(replace(snap, archives={REPO: (replace(pr, base="main"),)}))
     assert [(a.kind, a.pr) for a in on_main.actions] == [("archive", 5)]
+
+
+# ------------------------------------------------- claims (triage-claims R3, R6, R8, R10, R11)
+
+
+def _claim(signer: str = "s-other", batch: str = "theirs") -> Any:
+    from fr.triage.claims import Claim
+
+    return Claim(
+        signer=signer,
+        batch=batch,
+        claimed=NOW,
+        heartbeat=NOW,
+        expires=NOW + timedelta(hours=24),
+        comment_id=7,
+        created_at=NOW,
+    )
+
+
+def test_claim_refresh_and_release_actions_come_before_every_other_action() -> None:
+    batches = [_batch("a", 1), _batch("b", 2)]
+    got = drive_pass(
+        _snap(
+            batches,
+            {"a": "proposed", "b": "proposed"},
+            me="s-me",
+            claims_owed=(("super-fr#1", "a"),),
+            refresh_owed=(("super-fr#2", "b"),),
+            releases_owed=(("super-fr#9", "old"),),
+        )
+    )
+    assert [(a.kind, a.batch, a.key) for a in got.actions[:3]] == [
+        ("claim", "a", "super-fr#1"),
+        ("refresh", "b", "super-fr#2"),
+        ("release", "old", "super-fr#9"),
+    ]
+    assert [a.kind for a in got.actions[3:]] == ["dispatch", "dispatch"]
+
+
+def test_a_held_batch_gets_one_held_action_and_nothing_else() -> None:
+    batches = [_batch("a", 1, ids=["super-fr#1", "super-fr#2"]), _batch("b", 3)]
+    held = {"super-fr#1": _claim(), "super-fr#2": _claim()}
+    got = drive_pass(_snap(batches, {"a": "proposed", "b": "proposed"}, me="s-me", held=held))
+    assert _kinds(got.actions) == [("held", "a"), ("dispatch", "b")]
+    assert "super-fr#1" in got.actions[0].detail and "s-other" in got.actions[0].detail
+    assert "super-fr#2" in got.actions[0].detail
+
+
+def test_a_held_batch_takes_no_merge_closeout_or_archive() -> None:
+    batches = [
+        _dispatched("pr", 1, ids=["super-fr#1"]),
+        _dispatched("done", 2, events=[{"kind": "post_merge", "at": DISPATCHED}]),
+    ]
+    stages = {"pr": "pr-open", "done": "merged"}
+    held = {"super-fr#1": _claim(), "super-fr#2": _claim()}
+    got = drive_pass(_snap(batches, stages, me="s-me", held=held, released=frozenset({"done"})))
+    assert sorted(a.kind for a in got.actions) == ["held", "held"]
+
+
+def test_a_live_held_batch_counts_against_the_cap_and_a_proposed_one_does_not() -> None:
+    batches = [_dispatched("live", 1), _batch("prop", 2), _batch("free", 3)]
+    stages = {"live": "dispatched", "prop": "proposed", "free": "proposed"}
+    held = {"super-fr#1": _claim(), "super-fr#2": _claim()}
+    got = drive_pass(_snap(batches, stages, me="s-me", held=held, max_inflight=2))
+    assert ("dispatch", "free") in _kinds(got.actions)  # the proposed held one took no slot
+    capped = drive_pass(_snap(batches, stages, me="s-me", held=held, max_inflight=1))
+    assert ("dispatch", "free") not in _kinds(capped.actions)  # the live held one holds the slot
+    assert capped.summary.in_flight == 1
+
+
+def test_a_merged_batch_keeps_refreshing_and_is_released_only_once_archived() -> None:
+    batches = [_dispatched("m", 1, events=[{"kind": "post_merge", "at": DISPATCHED}])]
+    got = drive_pass(
+        _snap(
+            batches,
+            {"m": "merged"},
+            me="s-me",
+            refresh_owed=(("super-fr#1", "m"),),
+            released=frozenset({"m"}),
+        )
+    )
+    assert _kinds(got.actions)[0] == ("refresh", "m")
+    assert not [a for a in got.actions if a.kind == "release"]
+    archived = drive_pass(
+        _snap(
+            batches,
+            {"m": "merged"},
+            me="s-me",
+            releases_owed=(("super-fr#1", "m"),),
+            archived=frozenset({"m"}),
+        )  # fmt: skip
+    )
+    assert _kinds(archived.actions)[0] == ("release", "m")
+
+
+def test_a_held_batch_is_counted_held_not_blocked_and_the_drive_stalls_on_it() -> None:
+    """Review p2-r5: waiting on another scope is not waiting on the operator."""
+    batches = [_batch("a", 1, ids=["super-fr#1"])]
+    held = {"super-fr#1": _claim()}
+    got = drive_pass(_snap(batches, {"a": "proposed"}, me="s-me", held=held))
+    assert (got.summary.held, got.summary.blocked) == (1, 0)
+    assert got.held_by == (("a", ("s-other",)),)
+    assert got.summary.stalled and not got.summary.done
+    assert not got.summary.waiting_on_operator
+    assert summary_line(got.summary).endswith(", held 1")
+
+
+def test_held_batches_do_not_stall_a_drive_that_has_other_work() -> None:
+    batches = [_batch("a", 1, ids=["super-fr#1"]), _batch("b", 3)]
+    held = {"super-fr#1": _claim()}
+    got = drive_pass(_snap(batches, {"a": "proposed", "b": "proposed"}, me="s-me", held=held))
+    assert got.summary.held == 1 and not got.summary.stalled
+
+
+# --------------------------------- driver-sessions §D (R7): idle sessions, one pure rule
+
+
+def _idle(batch: Batch, **kw: Any) -> IdleSession | None:
+    kw.setdefault("status", "idle")
+    kw.setdefault("stage", "merged" if kw.get("closeout") else "dispatched")
+    kw.setdefault("archives", ())
+    kw.setdefault("closeout", False)
+    kw.setdefault("threshold", 60)
+    return idle_session(batch, repo=REPO, now=NOW, **kw)
+
+
+def test_a_batch_session_idle_past_the_threshold_with_no_pr_is_reported() -> None:
+    got = _idle(_dispatched("x", 1))
+    assert got is not None
+    assert (got.item, got.batch, got.closeout) == (batch_item_id(REPO, "x"), "x", False)
+    assert got.since == datetime(2026, 10, 1, 10, 0, tzinfo=UTC)
+    assert got.minutes_since == 26 * 60
+    assert _idle(_dispatched("x", 1), status="done") is not None
+
+
+@pytest.mark.parametrize("status", ["working", "blocked", "absent", "unknown", None])
+def test_a_session_that_is_not_idle_or_done_is_never_reported(status: str | None) -> None:
+    assert _idle(_dispatched("x", 1), status=status) is None
+
+
+def test_the_threshold_is_at_least_not_older_than() -> None:
+    # dispatched 2026-10-01 10:00; NOW is 26 h later, so 1560 min is exactly "at least".
+    assert _idle(_dispatched("x", 1), threshold=26 * 60) is not None
+    assert _idle(_dispatched("x", 1), threshold=26 * 60 + 1) is None
+
+
+def test_a_young_dispatch_or_one_with_a_pr_is_not_reported() -> None:
+    young = idle_session(
+        _dispatched("x", 1), repo=REPO, closeout=False, status="idle", stage="dispatched",
+        archives=(), now=datetime(2026, 10, 1, 10, 59, tzinfo=UTC), threshold=60,
+    )  # fmt: skip
+    assert young is None
+    for stage in ("pr-open", "merged", "partial", "abandoned"):
+        assert _idle(_dispatched("x", 1), stage=stage) is None
+
+
+@pytest.mark.parametrize("stage", ["proposed", "cancelled"])
+def test_a_batch_that_is_not_dispatched_is_owed_no_work(stage: str) -> None:
+    assert _idle(_dispatched("x", 1), stage=stage) is None
+    assert _idle(_closed("x", 1), closeout=True, stage=stage) is None
+
+
+@pytest.mark.parametrize("stage", ["dispatched", "pr-open", "abandoned"])
+def test_a_closeout_is_owed_only_once_the_batch_has_landed(stage: str) -> None:
+    assert _idle(_closed("x", 1), closeout=True, stage=stage) is None
+    assert _idle(_closed("x", 1), closeout=True, stage="partial") is not None
+
+
+def test_a_closeout_idle_past_the_threshold_with_no_archive_pr_is_reported() -> None:
+    got = _idle(_closed("x", 1), closeout=True)
+    assert got is not None and got.closeout
+    assert got.item == closeout_item_id(REPO, "x")
+    assert got.since == datetime(2026, 10, 2, 11, 0, tzinfo=UTC) and got.minutes_since == 60
+    open_pr = _archive(7, "chore/closeout-feat-batch-x", state="OPEN")
+    assert _idle(_closed("x", 1), closeout=True, archives=(open_pr,)) is None
+
+
+def test_a_finished_closeout_is_never_reported() -> None:
+    merged = _archive(7, "chore/closeout-feat-batch-x", state="MERGED")
+    assert _idle(_closed("x", 1), closeout=True, archives=(merged,)) is None
+
+
+def test_a_closeout_with_no_event_or_a_recorded_archive_is_not_reported() -> None:
+    assert _idle(_dispatched("x", 1), closeout=True) is None
+    done = _closed("x", 1)
+    done = done.model_copy(update={"events": [done.events[-1].model_copy(update={"archived": 5})]})
+    assert _idle(done, closeout=True) is None
+
+
+def _with_idle(*idle: IdleSession, **kw: Any) -> Snapshot:
+    return _snap([_dispatched("x", 1)], {"x": "dispatched"}, idle=idle, **kw)
+
+
+def _one_idle(closeout: bool = False) -> IdleSession:
+    batch = _closed("x", 1) if closeout else _dispatched("x", 1)
+    got = _idle(batch, closeout=closeout)
+    assert got is not None
+    return got
+
+
+def test_the_driver_warns_once_per_idle_session_with_a_paste_ready_focus_command() -> None:
+    idle = _one_idle()
+    snap = _with_idle(idle, scope_args=("--repo", REPO, "--dir", "/some dir"))
+    (action,) = drive_pass(snap).actions
+    assert action.kind == "warn" and action.batch == "x"
+    assert action.head == f"idle-session\0{batch_item_id(REPO, 'x')}\0{idle.since.isoformat()}"
+    assert (
+        f"{batch_item_id(REPO, 'x')} is idle, dispatched {idle.minutes_since} min ago, "
+        "with no PR; focus it: "
+    ) in action.detail
+    assert action.detail.endswith(
+        f"focus it: fr triage batch focus x --repo {REPO} --dir '/some dir'"
+    )
+    # Reported already: not repeated. The summary never moves.
+    again = _with_idle(idle, warned=frozenset({action.head}))
+    assert drive_pass(again).actions == ()
+    assert drive_pass(snap).summary == drive_pass(again).summary
+
+
+def test_a_closeout_warn_says_archive_pr_and_focuses_the_closeout() -> None:
+    idle = _one_idle(closeout=True)
+    (action,) = drive_pass(_with_idle(idle, scope_args=("--repo", REPO))).actions
+    assert "close-out started" in action.detail and "with no archive PR" in action.detail
+    assert f"fr triage batch focus x --closeout --repo {REPO}" in action.detail
+
+
+def test_an_idle_session_outside_the_selection_is_not_reported() -> None:
+    snap = _with_idle(_one_idle(), selected=frozenset())
+    assert drive_pass(snap).actions == ()
+
+
+def test_the_default_snapshot_has_no_idle_sessions() -> None:
+    from fr.triage.model import Facts, Judgements
+    from fr.triage.views import drive_snapshot
+
+    assert _snap([], {}).idle == ()
+    facts = Facts.model_validate(
+        {
+            "schema": 6,
+            "scope": "o/r",
+            "kind": "repo",
+            "collected_at": "2026-10-02T12:00:00Z",
+            "repos": [REPO],
+            "issues": [],
+        }
+    )
+    assert drive_snapshot(facts, Judgements.model_validate({"schema": 3})).idle == ()
 
 
 # ------------------------------- an adopted batch (spec 2026-10-06-triage-batch-adopt §F)

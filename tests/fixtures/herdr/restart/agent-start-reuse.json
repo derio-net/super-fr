@@ -1,0 +1,34 @@
+{
+ "id": "cli:agent:start",
+ "result": {
+  "agent": {
+   "agent": "claude",
+   "agent_session": {
+    "agent": "claude",
+    "kind": "id",
+    "source": "herdr:claude",
+    "value": "59a05366-7c6b-4b14-9b9f-9d24b85120cf"
+   },
+   "agent_status": "idle",
+   "cwd": "/home/user/.cache/fr/worktrees/super-fr/feat__batch-driver-sessions",
+   "focused": false,
+   "foreground_cwd": "/home/user/.cache/fr/worktrees/super-fr/feat__batch-driver-sessions",
+   "interactive_ready": true,
+   "name": "fr-probe",
+   "pane_id": "w2:p62",
+   "revision": 16,
+   "state_change_seq": 851,
+   "tab_id": "w2:t45",
+   "terminal_id": "term_65d3088dfef535e",
+   "terminal_title": "✳ Reply with ok",
+   "terminal_title_stripped": "Reply with ok",
+   "workspace_id": "w2"
+  },
+  "argv": [
+   "claude",
+   "--resume",
+   "59a05366-7c6b-4b14-9b9f-9d24b85120cf"
+  ],
+  "type": "agent_started"
+ }
+}

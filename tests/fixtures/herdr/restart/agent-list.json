@@ -1,0 +1,207 @@
+{
+ "id": "cli:agent:list",
+ "result": {
+  "agents": [
+   {
+    "agent": "opencode",
+    "agent_session": {
+     "agent": "opencode",
+     "kind": "id",
+     "source": "herdr:opencode",
+     "value": "ses_f36f276adffekwayIZdzkOO6xX"
+    },
+    "agent_status": "idle",
+    "cwd": "/home/user/Docs/projects/super-fr",
+    "focused": false,
+    "foreground_cwd": "/home/user/Docs/projects/super-fr",
+    "pane_id": "w2:p1D",
+    "revision": 4,
+    "state_change_seq": 10,
+    "tab_id": "w2:t1C",
+    "terminal_id": "term_65d079713e3a51",
+    "terminal_title": "<title redacted>",
+    "terminal_title_stripped": "<title redacted>",
+    "workspace_id": "w2"
+   },
+   {
+    "agent": "claude",
+    "agent_session": {
+     "agent": "claude",
+     "kind": "id",
+     "source": "herdr:claude",
+     "value": "8521da52-601a-4129-ad09-69800bf4b1b4"
+    },
+    "agent_status": "idle",
+    "cwd": "/home/user/Docs/projects/super-fr",
+    "focused": true,
+    "foreground_cwd": "/home/user/Docs/projects/super-fr",
+    "pane_id": "w2:p2W",
+    "revision": 11,
+    "state_change_seq": 843,
+    "tab_id": "w2:t1W",
+    "terminal_id": "term_65d07971406605",
+    "terminal_title": "<title redacted>",
+    "terminal_title_stripped": "<title redacted>",
+    "workspace_id": "w2"
+   },
+   {
+    "agent": "claude",
+    "agent_session": {
+     "agent": "claude",
+     "kind": "id",
+     "source": "herdr:claude",
+     "value": "b2f6a75f-6ece-48d3-998f-e04afe1254f3"
+    },
+    "agent_status": "idle",
+    "cwd": "/home/user/Docs/projects/super-fr",
+    "focused": false,
+    "foreground_cwd": "/home/user/Docs/projects/super-fr",
+    "pane_id": "w2:p5Z",
+    "revision": 10,
+    "state_change_seq": 354,
+    "tab_id": "w2:t42",
+    "terminal_id": "term_65d25f61d935427",
+    "terminal_title": "<title redacted>",
+    "terminal_title_stripped": "<title redacted>",
+    "workspace_id": "w2"
+   },
+   {
+    "agent": "claude",
+    "agent_session": {
+     "agent": "claude",
+     "kind": "id",
+     "source": "herdr:claude",
+     "value": "70611374-807e-4dc4-9141-955b66dbc3ec"
+    },
+    "agent_status": "idle",
+    "cwd": "/home/user/Docs/projects/example-project",
+    "focused": false,
+    "foreground_cwd": "/home/user/Docs/projects/example-project",
+    "pane_id": "w6:p1",
+    "revision": 4,
+    "state_change_seq": 15,
+    "tab_id": "w6:t1",
+    "terminal_id": "term_65d079714168f7",
+    "terminal_title": "<title redacted>",
+    "terminal_title_stripped": "<title redacted>",
+    "workspace_id": "w6"
+   },
+   {
+    "agent": "claude",
+    "agent_session": {
+     "agent": "claude",
+     "kind": "id",
+     "source": "herdr:claude",
+     "value": "1ee7f0e3-bfd3-449b-a323-8c290d481fc5"
+    },
+    "agent_status": "working",
+    "cwd": "/home/user/Docs/projects/super-fr",
+    "focused": false,
+    "foreground_cwd": "/home/user/Docs/projects/super-fr",
+    "interactive_ready": true,
+    "name": "b-archive-followups-ef19",
+    "pane_id": "w36:p1",
+    "revision": 5,
+    "state_change_seq": 764,
+    "tab_id": "w36:t1",
+    "terminal_id": "term_65d2e8f7fa5c44f",
+    "terminal_title": "<title redacted>",
+    "terminal_title_stripped": "<title redacted>",
+    "workspace_id": "w36"
+   },
+   {
+    "agent": "claude",
+    "agent_session": {
+     "agent": "claude",
+     "kind": "id",
+     "source": "herdr:claude",
+     "value": "8096ebf8-b0a5-4123-83fe-797c2f6f4890"
+    },
+    "agent_status": "working",
+    "cwd": "/home/user/Docs/projects/super-fr",
+    "focused": false,
+    "foreground_cwd": "/home/user/Docs/projects/super-fr",
+    "interactive_ready": true,
+    "name": "b-cost-evidence-29ef",
+    "pane_id": "w36:p2",
+    "revision": 5,
+    "state_change_seq": 778,
+    "tab_id": "w36:t2",
+    "terminal_id": "term_65d2e90ece86d50",
+    "terminal_title": "<title redacted>",
+    "terminal_title_stripped": "<title redacted>",
+    "workspace_id": "w36"
+   },
+   {
+    "agent": "claude",
+    "agent_session": {
+     "agent": "claude",
+     "kind": "id",
+     "source": "herdr:claude",
+     "value": "63cfb522-ee1d-4d86-ab42-2a133eed737e"
+    },
+    "agent_status": "working",
+    "cwd": "/home/user/Docs/projects/super-fr",
+    "focused": false,
+    "foreground_cwd": "/home/user/Docs/projects/super-fr",
+    "interactive_ready": true,
+    "name": "b-model-bindings-6dd9",
+    "pane_id": "w36:p3",
+    "revision": 5,
+    "state_change_seq": 775,
+    "tab_id": "w36:t3",
+    "terminal_id": "term_65d2e92aae2f851",
+    "terminal_title": "<title redacted>",
+    "terminal_title_stripped": "<title redacted>",
+    "workspace_id": "w36"
+   },
+   {
+    "agent": "claude",
+    "agent_session": {
+     "agent": "claude",
+     "kind": "id",
+     "source": "herdr:claude",
+     "value": "1f7d5832-5559-42d4-abe3-aa58f6893ee0"
+    },
+    "agent_status": "working",
+    "cwd": "/home/user/Docs/projects/super-fr",
+    "focused": false,
+    "foreground_cwd": "/home/user/Docs/projects/super-fr",
+    "interactive_ready": true,
+    "name": "b-driver-sessions-bc57",
+    "pane_id": "w36:p4",
+    "revision": 5,
+    "state_change_seq": 838,
+    "tab_id": "w36:t4",
+    "terminal_id": "term_65d2fdf7e1d8455",
+    "terminal_title": "<title redacted>",
+    "terminal_title_stripped": "<title redacted>",
+    "workspace_id": "w36"
+   },
+   {
+    "agent": "claude",
+    "agent_session": {
+     "agent": "claude",
+     "kind": "id",
+     "source": "herdr:claude",
+     "value": "cbb16f1b-fd32-46c2-b21b-5d302376757e"
+    },
+    "agent_status": "working",
+    "cwd": "/home/user/Docs/projects/super-fr",
+    "focused": false,
+    "foreground_cwd": "/home/user/Docs/projects/super-fr",
+    "interactive_ready": true,
+    "name": "b-triage-claims-2846",
+    "pane_id": "w37:p1",
+    "revision": 5,
+    "state_change_seq": 835,
+    "tab_id": "w37:t1",
+    "terminal_id": "term_65d2feb78f4a756",
+    "terminal_title": "<title redacted>",
+    "terminal_title_stripped": "<title redacted>",
+    "workspace_id": "w37"
+   }
+  ],
+  "type": "agent_list"
+ }
+}

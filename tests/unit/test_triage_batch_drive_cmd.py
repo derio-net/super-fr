@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,6 +24,7 @@ from fr.commands import triage_batch_cmd, triage_cmd, triage_kanban_cmd
 from fr.gh import GhError
 from fr.triage import drive_lock
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
+from fr.triage.claims import claims_from_comments, to_issue_claim
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
 from fr.triage.gitseam import Checkout
@@ -95,6 +97,7 @@ class World:
                     state=s,  # type: ignore[arg-type]
                     url=f"https://github.com/{REPO}/issues/{i}",
                     prs=linked[i],
+                    claims=self._claims(i) if s == "open" else [],
                 )
                 for i, s in self.issues.items()
             ],  # fmt: skip
@@ -102,6 +105,11 @@ class World:
             config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
             viewer="operator",
         )
+
+    def _claims(self, number: int) -> list[Any]:
+        """The un-released markers in the issue's comments, as collect records them."""
+        found = claims_from_comments(self.comments.get(number, []), {"operator"})
+        return [to_issue_claim(c) for c in found]
 
     def _pr(self, n: int) -> PullRequest:
         p = self.prs[n]
@@ -175,7 +183,7 @@ class World:
         return f"Closes {repo}#{number}"
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
-        return list(self.comments.get(number, []))
+        return [dict(c) for c in self.comments.get(number, [])]
 
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         self.calls.append("ensure_labels")
@@ -184,7 +192,18 @@ class World:
         self.calls.append(f"label {number}")
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
-        self.comments.setdefault(number, []).append({"author": "fr", "body": body})
+        # an id and a time, like the gh adapter's, and authored as the facts' viewer: a
+        # dispatch claims its members first (triage-claims R3, R17)
+        cid = 1 + sum(len(c) for c in self.comments.values())
+        self.comments.setdefault(number, []).append(
+            {"author": "operator", "body": body, "created_at": NOW.isoformat(), "id": cid}
+        )
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        for comments in self.comments.values():
+            for c in comments:
+                if c.get("id") == comment_id:
+                    c["body"] = body
 
 
 class DriveCheckout:
@@ -868,7 +887,11 @@ def test_an_archived_batch_is_recorded_once_and_never_probed_again(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert "pr_view 101" not in world.calls and checkout.release_probes == []
-    assert _lines(out, "adopt") == [] and _events(tmp_path, "b1") == ["dispatch", "closeout"]
+    assert _lines(out, "adopt") == [] and _events(tmp_path, "b1") == [
+        "dispatch",
+        "closeout",
+        "claims_released",
+    ]
 
 
 def test_a_hand_opened_closeout_pr_is_adopted_then_merged(
@@ -2960,10 +2983,13 @@ def test_a_group_scope_that_opts_in_is_warned_to_use_repo(
 
 
 def _finish(state: Path, n: int) -> None:
-    """Wave *n*'s batch is closed out and archived now."""
+    """Wave *n*'s batch is closed out and archived now. Read as YAML, not as text: an
+    earlier pass may have rewritten the file (it records released claims)."""
     path = state / "judgements.yaml"
-    line = _dispatch_event(f"w{n}")
-    path.write_text(path.read_text("utf-8").replace(line, line + ARCHIVED), "utf-8")
+    doc = yaml.safe_load(path.read_text("utf-8"))
+    batch = next(b for b in doc["batches"] if b["id"] == f"w{n}")
+    batch["events"].append(yaml.safe_load(ARCHIVED.strip().removeprefix("- ")))
+    path.write_text(yaml.safe_dump(doc), "utf-8")
 
 
 def test_one_pr_covers_three_finished_waves_and_its_merge_marks_all_three(
@@ -3327,7 +3353,7 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     assert messenger.dispatched == []
     (line,) = _lines(out, "merge")
     assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
-    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 5
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 6
 
 
 @pytest.mark.parametrize("status", ["absent", "done"])
@@ -3605,3 +3631,344 @@ def test_a_finishing_loop_runs_one_observation_pass_only_when_a_wave_was_unfinis
 
     assert code == 0
     assert len(calls) == passes
+
+
+# ------------------------------------------------- claims (triage-claims R3, R6, R8, R10, R11)
+
+
+def _me() -> str:
+    from fr.triage.scope_config import scope_id
+
+    return scope_id("derio-net--super-fr")
+
+
+def _markers(world: World, n: int) -> list[Any]:
+    from fr.triage.claims import parse_marker
+
+    found = (parse_marker(c["body"]) for c in world.comments.get(n, []))
+    return [m for m in found if m is not None and m.released is None]
+
+
+def _put(world: World, n: int, signer: str, bid: str, *, hours: float = 0, cid: int = 90) -> None:
+    from fr.triage.claims import Marker, render_marker
+
+    at = NOW - timedelta(hours=hours)
+    m = Marker(signer=signer, batch=bid, claimed=at, heartbeat=at, expires=at + timedelta(hours=4))
+    world.comments.setdefault(n, []).append(
+        {"author": "operator", "body": render_marker(m), "created_at": at.isoformat(), "id": cid}
+    )
+
+
+def test_the_snapshot_reads_owed_claims_from_facts_and_prints_them_without_yes(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    code, out = _drive(tmp_path, "--once")
+    assert code == 0, out
+    assert _lines(out, "claim") == ["claim super-fr#1 (b1): owed"]
+    assert out.index("claim super-fr#1") < out.index("dispatch b1")
+    assert world.comments == {}  # plan mode writes nothing
+
+
+def test_the_scope_config_sets_when_a_refresh_is_owed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    _put(world, 1, _me(), "b1", hours=2)
+    _state(tmp_path, world, _batch("b1", 1))  # facts now carry the claim
+    code, out = _drive(tmp_path, "--once")
+    assert code == 0, out
+    assert not _lines(out, "refresh")  # 24 hours by default: a quarter is six
+    (tmp_path / "scope.yaml").write_text("claim_expiry_hours: 4\n", encoding="utf-8")
+    code, out = _drive(tmp_path, "--once")
+    assert _lines(out, "refresh") == ["refresh super-fr#1 (b1): heartbeat due"]
+
+
+def test_a_yes_pass_claims_before_dispatch_backfills_and_owes_nothing_after(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    _state(tmp_path, world, _batch("old", 1, events=_dispatch_event("old")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out  # a claim write is no progress: the batch is still in flight
+    assert [m.batch for m in _markers(world, 1)] == ["old"]  # a pre-claims batch, backfilled
+    assert _lines(out, "claim") == ["claim super-fr#1 (old): posted"]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not _lines(out, "claim") and not _lines(out, "release")
+
+
+def test_a_cancelled_batchs_claims_are_released_and_recorded_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.issues[1] = "open"
+    cancel = "      - {kind: cancel, at: 2026-10-01T12:00:00Z}\n"
+    _put(world, 1, _me(), "gone")
+    _state(tmp_path, world, _batch("gone", 1, events=_dispatch_event("gone") + cancel))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert _lines(out, "release") == ["release super-fr#1 (gone): released"]
+    assert _markers(world, 1) == []  # the released form is no longer a claim
+    assert _events(tmp_path, "gone")[-1] == "claims_released"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not _lines(out, "release")
+    assert _events(tmp_path, "gone").count("claims_released") == 1
+
+
+def test_a_claim_that_turns_out_held_stops_the_pass_acting_on_that_batch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 2)
+    # facts (read first) know nothing of the rival marker the forge shows at write time
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    original = world.facts
+
+    def _stale() -> Facts:
+        f = original()
+        return f.model_copy(
+            update={"issues": [i.model_copy(update={"claims": []}) for i in f.issues]}
+        )
+
+    world.facts = _stale  # type: ignore[method-assign]
+    _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "super-fr#1 is claimed by triage scope s-22222222" in out
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+    assert _events(tmp_path, "b1") == []
+
+
+def _stale_claims(world: World) -> None:
+    """Facts (read first) know nothing of a rival marker the forge shows at write time."""
+    original = world.facts
+
+    def _stale() -> Facts:
+        f = original()
+        return f.model_copy(
+            update={"issues": [i.model_copy(update={"claims": []}) for i in f.issues]}
+        )
+
+    world.facts = _stale  # type: ignore[method-assign]
+
+
+def test_a_dispatch_dropped_for_a_lost_claim_is_not_counted_in_flight(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r1: the summary says what the pass did, not what it planned."""
+    _proposed(world, tmp_path, 2)
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _stale_claims(world)
+    _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
+    assert out.rstrip().splitlines()[-1] == "in flight 1, merged 0, pending 1, closing 0", out
+    assert code == 0
+
+
+def test_a_merge_dropped_for_a_lost_claim_is_not_counted_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r1: a merge left alone because the batch turned out held did not land."""
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1])
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _stale_claims(world)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [], out
+    assert "merged 0" in out.rstrip().splitlines()[-1], out
+    assert "in flight 1" in out.rstrip().splitlines()[-1], out
+
+
+def test_after_a_lost_claim_the_batchs_other_members_are_not_claimed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r2: one lost claim stops the rest of that batch's claims in the pass."""
+    world.issues.update({1: "open", 2: "open"})
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _stale_claims(world)
+    two = (
+        '  - id: b1\n    title: b1\n    ids: ["super-fr#1", "super-fr#2"]\n    wave: 1\n'
+        f"    launch: {LAUNCH}\n"
+    )
+    _state(tmp_path, world, two)
+    _drive(tmp_path, "--once", "--yes")
+    assert _markers(world, 2) == []
+    assert [m.signer for m in _markers(world, 1)] == ["s-22222222"]
+
+
+def test_a_forge_error_in_a_claim_write_exits_1_and_the_pass_goes_on(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Review p2-r4: a failed write is reported per member, never a crash."""
+    _proposed(world, tmp_path, 2)
+    real = world.comment_issue
+
+    def _flaky(repo: str, number: int, body: str) -> None:
+        if number == 1:
+            raise GhError("HTTP 502", returncode=1)
+        real(repo, number, body)
+
+    monkeypatch.setattr(world, "comment_issue", _flaky)
+    result = _drive_named(tmp_path, "--once", "--yes")
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception  # an exit, not a crash
+    assert "claim super-fr#1 (b1): failed:" in result.output
+    assert [m.batch for m in _markers(world, 2)] == ["b2"]  # the rest of the pass went on
+
+
+def test_a_failed_record_of_released_claims_is_reported_and_tried_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Review p2-r4: the release is idempotent at the forge, so the next pass records it."""
+    from fr.triage.errors import TriageError
+
+    world.issues[1] = "open"
+    cancel = "      - {kind: cancel, at: 2026-10-01T12:00:00Z}\n"
+    _put(world, 1, _me(), "gone")
+    _state(tmp_path, world, _batch("gone", 1, events=_dispatch_event("gone") + cancel))
+    real = triage_batch_cmd._save
+    calls: list[int] = []
+
+    def _save_once_refused(*a: Any, **kw: Any) -> None:
+        calls.append(1)
+        if len(calls) == 1:
+            raise TriageError("disk full")
+        real(*a, **kw)
+
+    monkeypatch.setattr(triage_batch_cmd, "_save", _save_once_refused)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "could not record the released claims (disk full)" in out, out
+    assert "claims_released" not in _events(tmp_path, "gone")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _events(tmp_path, "gone").count("claims_released") == 1, out
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not _lines(out, "release")
+    assert _events(tmp_path, "gone").count("claims_released") == 1
+
+
+def test_a_merged_then_archived_batch_refreshes_then_releases_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r4: the claim is kept (refreshed) while the batch is merged and its
+    close-out runs, released and recorded once it is archived, and nothing is owed after."""
+    from fr.triage.batch import closeout_state
+
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1], state="MERGED",
+             merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
+    _put(world, 1, _me(), "b1", hours=7)  # past a quarter of the default expiry: due
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    _, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "refresh") == ["refresh super-fr#1 (b1): refreshed"], out
+    assert not _lines(out, "release")
+    assert "claims_released" not in _events(tmp_path, "b1")
+
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + ARCHIVED))
+    _, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "release") == ["release super-fr#1 (b1): released"], out
+    assert _events(tmp_path, "b1").count("claims_released") == 1
+    assert closeout_state(load_judgements(tmp_path / "judgements.yaml").batches[0]) == "archived"
+    _, out = _drive(tmp_path, "--once", "--yes")
+    assert not _lines(out, "release") and not _lines(out, "refresh")
+    assert _events(tmp_path, "b1").count("claims_released") == 1
+
+
+def test_a_held_batch_that_is_cancelled_gets_no_held_action(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Review p2-r4: a cancelled batch is nothing to wait on."""
+    world.issues[1] = "open"
+    cancel = "      - {kind: cancel, at: 2026-10-01T12:00:00Z}\n"
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _state(tmp_path, world, _batch("gone", 1, events=_dispatch_event("gone") + cancel))
+    code, out = _drive(tmp_path, "--once")
+    assert not _lines(out, "held"), out
+
+
+def test_a_loop_with_only_held_batches_stops_naming_who_holds_them(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    sleeps: list[float],
+) -> None:  # fmt: skip
+    """Review p2-r5: a batch another scope holds waits on that scope, not the operator."""
+    world.issues.update({1: "open", 2: "open"})
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2, after="[zz]"))
+    code, out = _drive(tmp_path, "--yes")
+    assert code == 3, out
+    assert "held by another scope: b1 (s-22222222)" in out, out
+    assert "need the operator: b2" in out, out
+    assert "held 1" in out and "blocked 1" in out
+
+
+def test_a_loop_with_only_held_batches_names_no_operator_need(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    sleeps: list[float],
+) -> None:  # fmt: skip
+    world.issues[1] = "open"
+    _put(world, 1, "s-22222222", "theirs", cid=5)
+    _state(tmp_path, world, _batch("b1", 1))
+    code, out = _drive(tmp_path, "--yes")
+    assert code == 3, out
+    assert "held by another scope: b1 (s-22222222)" in out
+    assert "need the operator" not in out
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+
+
+# ------------------------------------------------------------ publishing (R14)
+
+
+def _publish_config(tmp_path: Path, argv: list[str]) -> Path:
+    out = tmp_path / "published.txt"
+    code = "import sys; open(sys.argv[1], 'a').write(sys.argv[2] + '\\n')"
+    cfg = {"publish": [sys.executable, "-c", code, str(out), *argv]}
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return out
+
+
+def test_a_drive_pass_publishes_the_board_it_rendered(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    out = _publish_config(tmp_path, ["{name}"])
+    code, said = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, said
+    assert out.read_text(encoding="utf-8") == "super-fr batches\n"
+
+
+def test_a_plan_pass_writes_no_board_and_publishes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    out = _publish_config(tmp_path, ["{name}"])
+    assert _drive(tmp_path)[0] == 0 and not out.exists()
+
+
+def test_a_failing_publish_warns_once_per_cause_and_changes_no_exit_code(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _proposed(world, tmp_path, 1)
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump({"publish": ["/no/such"]}))
+    sleeps: list[float] = []
+
+    def _stop(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise RuntimeError("end of the test loop")
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop)
+    _, out = _drive(tmp_path, "--yes", "--interval", "5")
+    assert out.count("could not publish the board") == 1 and "/no/such" in out
+    assert len(sleeps) == 3
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1"]
+
+
+def test_a_failing_publish_leaves_a_once_drive_exit_code_alone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _proposed(world, tmp_path, 1)
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump({"publish": ["/no/such"]}))
+    code, said = _drive(tmp_path, "--once", "--yes")
+    assert code == 0 and "could not publish the board" in said

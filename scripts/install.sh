@@ -97,6 +97,18 @@ for pyproject in "$PLUGIN_ROOT"/packages/*/pyproject.toml; do
     FR_RUNNER_WITH+=(--with "$(dirname "$pyproject")")
   fi
 done
+# `uv tool install --with` exposes only the main package's scripts, so the one
+# console script a workspace package ships for the operator (`fr-herdr
+# restart-idle`, spec 2026-10-06-driver-sessions §A) is asked for by name. It
+# rides the same `--with` set above, so it resolves to the workspace package.
+# An older uv has no such flag and refuses the whole install over it, so it is only
+# passed when `uv tool install --help` lists it. Without it the `--with` package's
+# script still lands in the tool env's bin, and `relink_herdr` links it from there.
+FR_EXECUTABLES_FROM=()
+fr_uv_install_help="$(uv tool install --help 2>&1 || true)"
+case "$fr_uv_install_help" in
+  *--with-executables-from*) FR_EXECUTABLES_FROM=(--with-executables-from fr-herdr) ;;
+esac
 CLAUDE_DIR="$HOME/.claude"
 RULES_DIR="$CLAUDE_DIR/rules"
 SETTINGS="$CLAUDE_DIR/settings.json"
@@ -196,7 +208,7 @@ if [[ "${1:-}" == "--install-bridge" ]]; then
   # adapter — verify before writing (review finding, 2026-06-06).
   if ! "$vk_python" -c "import fr_vk.bridge" >/dev/null 2>&1; then
     echo "  ERROR: $vk_python cannot import fr_vk.bridge — bridge wrapper not installed" >&2
-    echo "  (re-run after: uv tool install --force ${FR_RUNNER_WITH[*]} $PLUGIN_ROOT/packages/fr)" >&2
+    echo "  (re-run after: uv tool install --force ${FR_RUNNER_WITH[*]} ${FR_EXECUTABLES_FROM[*]-} $PLUGIN_ROOT/packages/fr)" >&2
     exit 1
   fi
   cat > "$wrapper_path" <<EOF
@@ -775,6 +787,15 @@ if command -v uv &>/dev/null; then
   # Only a PATH entry that is absent or a symlink is ours to manage.
   fr_path_dir="$(uv tool dir --bin 2>/dev/null || true)"
   fr_path_link="$fr_path_dir/fr"
+  # `fr-herdr` gets a second PATH entry, managed exactly like fr's (same swap through
+  # the staged rebuild), and only once an env that carries it exists.
+  fr_herdr_link="$fr_path_dir/fr-herdr"
+  relink_herdr() {  # $1 = a tool env's bin dir
+    [ -n "$fr_manage_path" ] && [ -x "$1/fr-herdr" ] || return 0
+    if [ -L "$fr_herdr_link" ] || [ ! -e "$fr_herdr_link" ]; then
+      atomic_symlink "$1/fr-herdr" "$fr_herdr_link"
+    fi
+  }
   fr_uv_bin="$HOME/.local/share/fr/uv-bin"
   fr_stage_root="$HOME/.cache/fr/install-stage"
   fr_stage=""
@@ -788,11 +809,12 @@ if command -v uv &>/dev/null; then
     rm -rf "$fr_stage"
     mkdir -p "$fr_stage"
     if UV_TOOL_DIR="$fr_stage/tools" UV_TOOL_BIN_DIR="$fr_stage/bin" \
-         uv tool install --force "${FR_RUNNER_WITH[@]}" "$PLUGIN_ROOT/packages/fr" \
-         >/dev/null 2>&1 \
+         uv tool install --force "${FR_RUNNER_WITH[@]}" ${FR_EXECUTABLES_FROM[@]+"${FR_EXECUTABLES_FROM[@]}"} \
+         "$PLUGIN_ROOT/packages/fr" >/dev/null 2>&1 \
        && { "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1 \
             || { sleep "$fr_install_retry_sleep"; "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1; }; }; then
       atomic_symlink "$fr_stage/tools/fr/bin/fr" "$fr_path_link"
+      relink_herdr "$fr_stage/tools/fr/bin"
       echo "  fr on PATH points at a staged copy while the tool env is rebuilt"
       # Let an fr that started on the old env just before the swap finish
       # loading it before that env is deleted.
@@ -810,7 +832,7 @@ if command -v uv &>/dev/null; then
     # Pipeline lives in the `if` condition so a `uv` failure (propagated by
     # `pipefail` through `sed`) is caught here instead of tripping `set -e`.
     if UV_TOOL_BIN_DIR="$fr_install_bin" uv tool install --force \
-      "${FR_RUNNER_WITH[@]}" \
+      "${FR_RUNNER_WITH[@]}" ${FR_EXECUTABLES_FROM[@]+"${FR_EXECUTABLES_FROM[@]}"} \
       "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'; then
       fr_installed=1
       break
@@ -823,6 +845,7 @@ if command -v uv &>/dev/null; then
       # runnable meanwhile.
       if [ -n "$fr_stage" ]; then
         atomic_symlink "$fr_stage/tools/fr/bin/fr" "$fr_path_link"
+        relink_herdr "$fr_stage/tools/fr/bin"
       fi
       sleep "$fr_install_retry_sleep"
     fi
@@ -854,10 +877,12 @@ if command -v uv &>/dev/null; then
     if [ -n "$fr_manage_path" ] && { [ -L "$fr_path_link" ] || [ ! -e "$fr_path_link" ]; }; then
       mkdir -p "$(dirname "$fr_path_link")"
       atomic_symlink "$fr_bin" "$fr_path_link"
+      relink_herdr "$(dirname "$fr_bin")"
       for old_stage in "$fr_stage_root"/*/; do
         old_stage="${old_stage%/}"
         [ -d "$old_stage" ] && [ "$old_stage" != "$fr_stage" ] || continue
         case "$(readlink "$fr_path_link")" in "$old_stage"/*) continue ;; esac
+        case "$(readlink "$fr_herdr_link" 2>/dev/null)" in "$old_stage"/*) continue ;; esac
         rm -rf "$old_stage"
       done
     fi

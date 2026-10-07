@@ -1410,6 +1410,148 @@ issues:
     severity: low
     reason: 'the wave-driver spec''s R20 promised the three pages keep everything they showed; #876 gave only the architecture page a fragment mechanism'
     evidence: found 2026-10-05 comparing the 10-02 hand-built pages with the fr 5.5.0 renders; spec R20 and architecture.py load_manifest read
+  super-fr#970:
+    category: gap
+    source: hand
+    severity: med
+    reason: the triage pages had no stated goal per page and duplicated sections; a design ask, not a defect
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#971:
+    category: gap
+    source: hand
+    severity: med
+    reason: 'no sweep looked for duplicate open issues after #781 was closed as not planned'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#985:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#980
+    severity: low
+    reason: '#980''s review found a partial batch in Done still carries a close-out hint, tagged out of scope'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#987:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#980
+    severity: med
+    reason: 'the batch board added in #980 shows a stopped merge as merge ready; found by #980''s own post-merge Test Plan'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#988:
+    category: latent
+    source: pipeline
+    severity: med
+    reason: 'pickup''s bare except around the manifest resolve predates the run; found at #980''s close-out'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#990:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: med
+    reason: 'the wave driver (#876) only selects waved batches, so wave-less merged batches are never adopted; found by #980''s Test Plan'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#991:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#876
+    severity: med
+    reason: the driver's plan mode (#876) reads an unreadable clone as not archived and plans close-outs
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#998:
+    category: latent
+    source: recording
+    severity: med
+    reason: 'the drive loop has read a strict TriageConfig from main every pass since #876; #976 adding `export:` exposed it, seen live'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#999:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: 'the capture-script witness misreads `uv run --with`; found during the #976 run'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1000:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#976
+    severity: low
+    reason: '#976''s review noted a cancelled-only wave leaves the board silently; recorded out of scope'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1001:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: 'the wave table markup predates #976; its phase-1 reviewer recorded the phone-width cramping out of scope'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1002:
+    category: latent
+    source: pipeline
+    severity: med
+    reason: 'implement-phase''s evidence window cannot see a backgrounded suite; #693 fixed only the deliver gate''s version of this (#594 class)'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1003:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#976
+    severity: low
+    reason: 'the state_sync copy added by #976 checks for a symlink before copying, a check-to-write race'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1004:
+    category: latent
+    source: pipeline
+    severity: med
+    reason: 'the archive-PR merge path predates #976, which added a base-branch check only to the export path'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1005:
+    category: leftover
+    source: hand
+    pr: derio-net/super-fr#969
+    severity: low
+    reason: 'the pipeline diagram''s pin table from #969 went stale as pinned issues closed; the build guard stopped regeneration'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1013:
+    category: new-feature
+    source: pipeline
+    pr: derio-net/super-fr#994
+    severity: low
+    reason: '#994 added GhHostRefusedError, which the text-based error classifier cannot recognise'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1014:
+    category: latent
+    source: pipeline
+    severity: high
+    reason: 'glab host threading (#865) never had the trust gate #994 added for gh; a cloned repo''s config can name the host GITLAB_TOKEN is sent to'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1015:
+    category: latent
+    source: pipeline
+    severity: low
+    reason: 'isolation lookups never applied GH_HOST; #994 routed them through the gated adapter without closing that gap'
+    evidence: classified from the issue body and the run that filed it; not checked against the code
+  super-fr#1029:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#1028
+    severity: med
+    reason: '#956''s idle-session report was split out of #1028 as out of scope'
+    evidence: issue body; not checked against the code
+  super-fr#1025:
+    category: leftover
+    source: pipeline
+    pr: derio-net/super-fr#1023
+    severity: med
+    reason: '#1023''s review found more degraded-forge exits of #921''s class, out of its scope'
+    evidence: issue body; not checked against the code
+  super-fr#1043:
+    category: gap
+    source: hand
+    severity: med
+    reason: no coordination exists between triage scopes or hosts; raised by the operator while discussing multi-host driving
+    evidence: drive.lock and judgements.yaml are per state dir (triage_batch_cmd.drive_lock); the only cross-host guard is the branch-on-origin check in dispatch
+  super-fr#1051:
+    category: latent
+    source: recording
+    severity: med
+    reason: 'the collector has never deduplicated check runs by name; exposed when #1038''s CI was re-run green on the same commit'
+    evidence: 'collect.py _checks read; #1038 rollup FAILURE 3 / SUCCESS 30 while gh pr checks shows all passing'
 causes:
 - title: Wave-driver review findings filed out of scope at close-out
   categories:

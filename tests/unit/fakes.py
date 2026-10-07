@@ -56,6 +56,11 @@ class FakeGhClient:
         # (repo, number) -> comments, oldest first, in the adapter's
         # `list_issue_comments` shape (spec 2026-09-25-triage-batches §3.J).
         self.issue_comments: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        # Ids `comment_issue` assigns, and the creation time it stamps.
+        self.next_comment_id: int = 1000
+        self.comment_created_at: str = "2026-09-26T00:00:00Z"
+        self.comment_author: str = "operator"  # the login triage facts name as viewer
+        self.comment_association: str = "NONE"  # GitHub's authorAssociation (R17)
         # (repo, number) -> PR record: `{number, title, body, state, draft, head_ref,
         # base_ref, url, created_at}` (batch adopt's supersede, spec 2026-10-06 §C).
         self.prs: dict[tuple[str, int], dict[str, Any]] = {}
@@ -65,8 +70,6 @@ class FakeGhClient:
         # When set, every PR create_pr opens is stamped with this creation time;
         # otherwise with the real clock, as the forge would.
         self.pr_created_at: str | None = None
-        # Who `comment_issue` posts as: the authenticated user.
-        self.comment_author: str = "fr"
 
     # ---- preload helpers (test setup) ----
 
@@ -196,13 +199,32 @@ class FakeGhClient:
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         self._gate()
         self.calls.append(("comment_issue", {"repo": repo, "number": number, "body": body}))
+        self.next_comment_id += 1
         self.issue_comments.setdefault((repo, number), []).append(
-            {"author": self.comment_author, "body": body, "created_at": "2026-09-26T00:00:00Z"}
+            {
+                "association": self.comment_association,
+                "author": self.comment_author,
+                "body": body,
+                "created_at": self.comment_created_at,
+                "id": self.next_comment_id,
+            }
         )
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
         self.calls.append(("list_issue_comments", {"repo": repo, "number": number}))
-        return list(self.issue_comments.get((repo, number), []))
+        return [dict(c) for c in self.issue_comments.get((repo, number), [])]
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        self._gate()
+        self.calls.append(
+            ("edit_issue_comment", {"repo": repo, "comment_id": comment_id, "body": body})
+        )
+        for (r, _), comments in self.issue_comments.items():
+            for c in comments:
+                if r == repo and c.get("id") == comment_id:
+                    c["body"] = body
+                    return
+        raise FakeGhError(f"no comment {comment_id} on {repo}")
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         """`gh pr list --head` records (`number, title, state, isDraft, createdAt, url,

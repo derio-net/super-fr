@@ -200,7 +200,15 @@ class GhClient(Protocol):
     # `UnsupportedForgeOperation` for each (gh#611).
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
-        """Every comment on the issue, oldest first: `{author, body, created_at}`."""
+        """Every comment on the issue, oldest first: `{author, body, created_at, id}`.
+
+        `id` is the comment's numeric id (None when the forge gave none), the handle
+        `edit_issue_comment` takes (spec 2026-10-06-triage-claims §3.C)."""
+        ...
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        """Replace the body of comment *comment_id* on *repo* (a triage claim's
+        heartbeat and release edit their marker in place, never repost it)."""
         ...
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
@@ -347,6 +355,9 @@ class UnsupportedBatchOps:
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
         raise self._unsupported("list_issue_comments")
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        raise self._unsupported("edit_issue_comment")
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         raise self._unsupported("list_prs_by_head")

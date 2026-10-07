@@ -16,7 +16,7 @@ from fr.triage.components import GUTTER_CSS, TOKENS_CSS
 from fr.triage.kanban import Board, build_board
 from fr.triage.kanban_render import CSS, SCRIPT, render_board
 
-from tests.unit.triage_board_fixtures import facts, judgements
+from tests.unit.triage_board_fixtures import batch, facts, issue, j, judgements
 from tests.unit.triage_fixtures import forbidden_imports
 from tests.unit.triage_kanban_fixtures import HOSTILE, world
 
@@ -252,3 +252,80 @@ def test_the_renderer_reads_no_clock_and_no_fr_dispatch() -> None:
     path = Path(kanban_render.__file__)
     assert forbidden_imports(path, "fr.triage", ("fr_dispatch", "time")) == []
     assert "datetime.now" not in path.read_text(encoding="utf-8")
+
+
+# ------------------------------------------- claims: held elsewhere, card expiry (R13)
+
+
+def _claim_board(
+    *,
+    held_expired: bool = False,
+    own: bool = True,
+    held: bool = True,
+    own_expires: str = "2026-10-07T09:30:00Z",
+) -> str:
+    claim = {
+        "batch": "theirs",
+        "claimed": "2026-10-05T12:00:00Z",
+        "heartbeat": "2026-10-05T12:00:00Z",
+        "comment_id": 1,
+        "created_at": "2026-10-05T12:00:00Z",
+    }
+    issues = [issue(1, claims=[{**claim, "signer": "s-aaaaaaaa", "batch": "a",
+                                "expires": own_expires}] if own else [])]  # fmt: skip
+    if held:
+        gone = "2026-10-05T08:00:00Z" if held_expired else "2026-10-07T12:00:00Z"
+        issues.append(
+            issue(2, title=HOSTILE, claims=[{**claim, "signer": "s-bbbbbbbb", "expires": gone}])
+        )
+    f = facts(issues)
+    jd = judgements({"widgets#1": j(1), "widgets#2": j(1)}, [batch("a", [1], wave=1)])
+    board = build_board(f, jd, {}, me="s-aaaaaaaa", now=AT)
+    return render_board(board, scope_args=SCOPE, rendered_at=AT, refresh=0, notes=[])
+
+
+def test_the_held_elsewhere_group_names_issue_holder_batch_and_expiry() -> None:
+    page = _claim_board()
+    m = re.search(r'<section class="held".*?</section>', page, re.S)
+    assert m
+    group = m.group(0)
+    assert "Held elsewhere" in group and "s-bbbbbbbb" in group and "theirs" in group
+    assert (
+        "2026-10-07T12:00:00" in group
+        and 'href="https://github.com/example-org/widgets/issues/2"' in group
+    )
+    assert "expired" not in group.replace("expires", "")
+
+
+def test_the_held_group_is_absent_when_nothing_is_held() -> None:
+    assert "Held elsewhere" not in _claim_board(held=False)
+
+
+def test_an_expired_held_claim_is_marked() -> None:
+    group = re.search(r'<section class="held".*?</section>', _claim_board(held_expired=True), re.S)
+    assert group and 'class="pill flag">expired<' in group.group(0)
+    assert "fr triage claim take widgets#2" in group.group(0)
+
+
+def test_forge_text_in_the_held_group_is_escaped() -> None:
+    page = _claim_board()
+    assert HOSTILE not in page and html.escape(HOSTILE) in page
+
+
+def test_an_own_card_shows_when_its_claims_expire() -> None:
+    card = _card(_claim_board(), "a")
+    assert "claims expire 2026-10-07 09:30 UTC" in card
+
+
+def test_an_own_expired_claim_is_marked_on_the_card() -> None:
+    card = _card(_claim_board(own_expires="2026-10-05T09:30:00Z"), "a")
+    assert "claims expired 2026-10-05 09:30 UTC" in card
+
+
+def test_a_card_with_no_claims_shows_no_claim_line() -> None:
+    assert "claims expire" not in _card(_claim_board(own=False), "a")
+
+
+def test_the_page_keeps_its_tokens_and_gutter_with_the_held_group() -> None:
+    page = _claim_board()
+    assert TOKENS_CSS in page and GUTTER_CSS in page
