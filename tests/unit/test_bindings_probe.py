@@ -1,0 +1,285 @@
+"""Probe, classifier and cache for `fr.bindings` (spec 2026-10-06-model-binding-churn §A).
+
+The classifier is pinned against CAPTURES of the real OpenCode CLI
+(tests/fixtures/bindings/README.md); the one exception, the in-catalogue
+"not supported" text, is transcribed from super-fr#591 and labelled so there."""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import fr.bindings
+import pytest
+from fr.bindings.probe import (
+    OpenCodeProber,
+    ProbeCache,
+    ProbeResult,
+    classify,
+)
+
+FIX = Path(__file__).resolve().parents[1] / "fixtures" / "bindings"
+
+
+def _read(name: str) -> str:
+    return (FIX / name).read_text()
+
+
+def test_the_bindings_package_imports() -> None:
+    assert fr.bindings.__doc__
+
+
+def test_a_text_event_is_live() -> None:
+    got = classify(_read("opencode-run-live.stdout"), _read("opencode-run-live.stderr"), 0)
+    assert got.verdict == "live"
+
+
+def test_model_not_found_is_dead_with_the_line_and_the_hint() -> None:
+    got = classify(
+        _read("opencode-run-not-found.stdout"), _read("opencode-run-not-found.stderr"), 1
+    )
+    assert got.verdict == "dead"
+    assert "ProviderModelNotFoundError" in got.detail
+    assert got.hint == "gpt-6.1-sol"
+
+
+def test_not_supported_transcribed_from_591_is_dead() -> None:
+    # Transcribed from super-fr#591 (the retired-but-still-listed shape), not captured here.
+    got = classify("", _read("opencode-run-not-supported.stderr"), 1)
+    assert got.verdict == "dead"
+    assert "not supported" in got.detail.lower()
+    assert got.hint is None
+    assert classify("", "ERROR: THE REQUESTED MODEL IS NOT SUPPORTED.", 1).verdict == "dead"
+
+
+def test_the_catalogue_status_is_never_read() -> None:
+    # The catalogue says "status": "active" for this model; the provider says
+    # not supported. The verdict is dead, because no code path reads `status`.
+    catalogue_line = '{"id": "m", "status": "active"}'
+    got = classify(catalogue_line, _read("opencode-run-not-supported.stderr"), 1)
+    assert got.verdict == "dead"
+    src = (Path(fr.bindings.__file__).parent).glob("*.py")
+    reads = ('get("status"', "get('status'", '["status"]', "['status']", ".status")
+    assert not any(r in p.read_text() for p in src for r in reads)
+
+
+def test_any_other_failure_is_unknown() -> None:
+    assert classify("", "", 0).verdict == "unknown"
+    assert classify("", "boom", 1).verdict == "unknown"
+    err = '{"type":"error","error":{"name":"UnknownError"}}'
+    assert classify(err, "", 1).verdict == "unknown"
+    assert classify("not json at all", "401 unauthorized", 1).verdict == "unknown"
+
+
+class _Seam:
+    """A fake `run_opencode`: records argv/cwd/timeout and replays a result."""
+
+    def __init__(self, stdout: str = "", stderr: str = "", rc: int = 0, raises=None) -> None:
+        self.calls: list[tuple[list[str], Path, float]] = []
+        self._r = (stdout, stderr, rc)
+        self._raises = raises
+
+    def __call__(self, argv: list[str], *, cwd: Path, timeout: float):
+        self.calls.append((argv, cwd, timeout))
+        assert cwd.is_dir()
+        if self._raises:
+            raise self._raises
+        return subprocess.CompletedProcess(argv, self._r[2], self._r[0], self._r[1])
+
+
+def test_the_prober_runs_the_spec_argv_in_a_fresh_cwd() -> None:
+    seam = _Seam(stdout=_read("opencode-run-live.stdout"))
+    got = OpenCodeProber(run_opencode=seam).probe("github-copilot/claude-haiku-4.5")
+    assert got.verdict == "live"
+    ((argv, cwd, timeout),) = seam.calls
+    assert argv == [
+        "opencode", "run", "--pure", "--print-logs", "--log-level", "ERROR",
+        "--format", "json", "--model=github-copilot/claude-haiku-4.5", "Reply with exactly: OK",
+    ]  # fmt: skip
+    assert timeout == 60
+    assert not (Path.cwd() == cwd) and not cwd.exists()  # a throwaway dir, gone after
+
+
+def test_a_model_id_must_be_provider_slash_model() -> None:
+    from fr.bindings import valid_model_id, valid_model_name
+
+    for ok in (
+        "prov/m", "github-copilot/claude-haiku-4.5", "p1/a_b:c.d",
+        "openrouter/anthropic/claude-3.5", "vertex/claude@20240620", "p/a+b/c@d:e",
+    ):  # fmt: skip
+        assert valid_model_id(ok), ok
+    for bad in (
+        "--auto", "--dir=/x", "-m", "prov/--auto", "prov/-x", "-p/m", "prov", "prov/",
+        "/m", "prov/a b", "prov /m", "prov/a=b", "prov/m\n", "", "a//b", "a/b/",
+        "prov/x/-y", "prov/x/--auto", "prov/x=y", "prov/x/ y", "prov/@a",
+    ):  # fmt: skip
+        assert not valid_model_id(bad), bad
+    assert valid_model_name("claude-sonnet-5") and valid_model_name("prov/m")
+    assert not valid_model_name("--auto") and not valid_model_name("a b")
+
+
+def test_an_invalid_id_is_unknown_and_never_spawns_anything() -> None:
+    seam = _Seam(stdout=_read("opencode-run-live.stdout"))
+    prober = OpenCodeProber(run_opencode=seam)
+    for bad in ("--auto", "--dir=/x", "prov/-x", "plain"):
+        got = prober.probe(bad)
+        assert got.verdict == "unknown"
+        assert got.detail == f"{bad} is not a provider/model id"
+    assert prober.catalogue("--auto") == [] and prober.catalogue("a b") == []
+    assert seam.calls == []
+
+
+def test_a_missing_cli_or_a_timeout_is_unknown_never_a_crash() -> None:
+    for exc in (FileNotFoundError("opencode"), subprocess.TimeoutExpired("opencode", 60)):
+        got = OpenCodeProber(run_opencode=_Seam(raises=exc)).probe("p/m")
+        assert got.verdict == "unknown"
+        assert got.detail
+
+
+def test_the_prober_reads_the_catalogue_through_the_same_seam() -> None:
+    seam = _Seam(stdout=_read("opencode-models-verbose.txt"))
+    entries = OpenCodeProber(run_opencode=seam).catalogue("github-copilot")
+    assert len(entries) == 4
+    assert seam.calls[0][0] == ["opencode", "models", "github-copilot", "--verbose"]
+    assert OpenCodeProber(run_opencode=_Seam(raises=FileNotFoundError())).catalogue("p") == []
+
+
+def test_prober_for_covers_opencode_only() -> None:
+    # `prober_for` is the monkeypatched seam (tests/conftest.py silences it);
+    # the implementation behind it is what is pinned here.
+    assert isinstance(fr.bindings.default_prober_for("opencode"), OpenCodeProber)
+    assert fr.bindings.default_prober_for("claude-code") is None
+    assert fr.bindings.default_prober_for("hermes") is None
+
+
+class _Counting:
+    def __init__(self) -> None:
+        self.n = 0
+
+    def probe(self, model: str) -> ProbeResult:
+        self.n += 1
+        return ProbeResult("live", "", None, 0.0)
+
+    def catalogue(self, provider: str):
+        return []
+
+
+def test_the_probe_cache_honours_ttl_and_fresh(tmp_path: Path) -> None:
+    now = [1000.0]
+    cache = ProbeCache(tmp_path / "probes.json", clock=lambda: now[0])
+    prober = _Counting()
+    assert cache.probe(prober, "opencode", "p/m").verdict == "live"
+    cache.probe(prober, "opencode", "p/m")
+    assert prober.n == 1  # cached
+    cache.probe(prober, "opencode", "p/m", fresh=True)
+    assert prober.n == 2  # fresh bypasses
+    now[0] += 6 * 3600 - 1
+    cache.probe(prober, "opencode", "p/m")
+    assert prober.n == 2  # still inside 6 h
+    now[0] += 2
+    cache.probe(prober, "opencode", "p/m")
+    assert prober.n == 3  # expired
+    # Keyed per (harness, model).
+    cache.probe(prober, "opencode", "p/other")
+    assert prober.n == 4
+    # A second cache object over the same file sees the stored verdict.
+    again = ProbeCache(tmp_path / "probes.json", clock=lambda: now[0])
+    again.probe(prober, "opencode", "p/m")
+    assert prober.n == 4
+
+
+def test_an_unknown_verdict_is_not_cached(tmp_path: Path) -> None:
+    class Flaky(_Counting):
+        def probe(self, model: str) -> ProbeResult:
+            self.n += 1
+            return ProbeResult("unknown", "timeout", None, 0.0)
+
+    cache = ProbeCache(tmp_path / "probes.json", clock=lambda: 1.0)
+    p = Flaky()
+    cache.probe(p, "opencode", "p/m")
+    cache.probe(p, "opencode", "p/m")
+    assert p.n == 2
+
+
+def test_the_validators_live_in_a_leaf_module_and_are_re_exported() -> None:
+    import fr.bindings.ids as ids
+
+    assert fr.bindings.valid_model_id is ids.valid_model_id
+    assert fr.bindings.valid_provider is ids.valid_provider
+
+
+def test_os_and_decode_errors_are_unknown_and_empty_never_a_crash() -> None:
+    for exc in (
+        PermissionError("denied"),
+        OSError("exec format"),
+        UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad"),
+    ):
+        prober = OpenCodeProber(run_opencode=_Seam(raises=exc))
+        got = prober.probe("p/m")
+        assert got.verdict == "unknown" and got.detail
+        assert prober.catalogue("p") == []
+
+
+def _entry_json(**over: object) -> dict[str, object]:
+    base = {"verdict": "live", "detail": "", "hint": None, "at": 1000.0}
+    return {**base, **over}
+
+
+def test_a_corrupt_probe_cache_is_a_miss_never_a_crash(tmp_path: Path) -> None:
+    import json
+
+    path = tmp_path / "probes.json"
+    bad_files = [
+        "{ not json",
+        json.dumps({"opencode::p/m": _entry_json(at="1000")}),
+        json.dumps({"opencode::p/m": _entry_json(verdict="garbage")}),
+        json.dumps({"opencode::p/m": _entry_json(verdict="unknown")}),
+        json.dumps({"opencode::p/m": _entry_json(detail=3)}),
+        json.dumps({"opencode::p/m": _entry_json(hint=["x"])}),
+        json.dumps({"opencode::p/m": _entry_json(at=True)}),
+        json.dumps({"opencode::p/m": {"verdict": "live"}}),
+        json.dumps({"opencode::p/m": "live"}),
+        json.dumps(["list"]),
+    ]
+    for body in bad_files:
+        path.write_text(body)
+        prober = _Counting()
+        cache = ProbeCache(path, clock=lambda: 1001.0)
+        assert cache.probe(prober, "opencode", "p/m").verdict == "live"
+        assert prober.n == 1, body  # a miss: the prober was asked
+    # A well-formed entry is a hit.
+    path.write_text(json.dumps({"opencode::p/m": _entry_json()}))
+    prober = _Counting()
+    ProbeCache(path, clock=lambda: 1001.0).probe(prober, "opencode", "p/m")
+    assert prober.n == 0
+
+
+def test_a_failing_cache_write_never_crashes_and_leaves_no_temp_file(tmp_path: Path) -> None:
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    cache = ProbeCache(blocker / "sub" / "probes.json", clock=lambda: 1.0)  # parent is a file
+    assert cache.probe(_Counting(), "opencode", "p/m").verdict == "live"
+
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)
+    try:
+        cache = ProbeCache(ro / "probes.json", clock=lambda: 1.0)
+        assert cache.probe(_Counting(), "opencode", "p/m").verdict == "live"
+        assert list(ro.iterdir()) == []
+    finally:
+        ro.chmod(0o700)
+
+
+def test_the_cache_is_written_atomically_via_replace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    calls: list[tuple[str, str]] = []
+    real = os.replace
+    monkeypatch.setattr(os, "replace", lambda a, b: (calls.append((str(a), str(b))), real(a, b))[1])
+    cache = ProbeCache(tmp_path / "probes.json", clock=lambda: 1.0)
+    cache.probe(_Counting(), "opencode", "p/m")
+    assert calls and calls[0][1] == str(tmp_path / "probes.json")
+    assert [p.name for p in tmp_path.iterdir()] == ["probes.json"]

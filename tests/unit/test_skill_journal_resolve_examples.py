@@ -36,7 +36,11 @@ def test_a_resolve_example_names_its_scope_and_slug(where: str, example: str) ->
     assert "--slug " in example, where
 
 
-def test_the_scan_finds_the_fr_goal_examples() -> None:
-    # Since spec 2026-09-25 §5.C the pipeline resolves findings through step
-    # records; the closeout's deferral line is the verb example fr-goal keeps.
-    assert sum(1 for where, _ in _examples() if where.startswith("fr-goal:")) >= 1
+def test_fr_goal_closeout_routes_deferrals_through_archive_not_resolve() -> None:
+    """Spec 2026-10-06 R13: the post-merge close-out files and defers out-of-scope
+    findings with one `fr archive --branch <b> --issues <qids>`, so fr-goal keeps no
+    per-finding `fr journal resolve` example (the generic scan still covers the
+    other skills')."""
+    assert not any(where.startswith("fr-goal:") for where, _ in _examples())
+    text = next(p for p in SKILLS if p.parent.name == "fr-goal").read_text()
+    assert "fr archive --branch <b> --issues <qid,…>" in text

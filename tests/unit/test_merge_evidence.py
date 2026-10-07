@@ -49,23 +49,28 @@ def stub_fetch(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 
 def _git(repo: Path, *args: str) -> str:
-    done = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(repo),
-            "-c",
-            "user.email=t@t",
-            "-c",
-            "user.name=t",
-            "-c",
-            "commit.gpgsign=false",
-            *args,
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        done = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "-c",
+                "commit.gpgsign=false",
+                *args,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        # CalledProcessError's message omits stderr; a note makes pytest show why.
+        e.add_note(f"git stderr: {e.stderr.strip()}")
+        raise
     return done.stdout.strip()
 
 

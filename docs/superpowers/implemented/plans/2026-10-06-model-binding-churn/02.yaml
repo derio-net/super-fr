@@ -1,0 +1,161 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Run integration — dispatch guard on both paths, gated brief keys, skill,
+    parity, docs
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - model-binding-run-integration
+  - model-binding-live-opencode
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/bindings/*
+  - packages/fr/src/fr/harness/parity.yaml
+  - tests/unit/test_run_cli.py
+  - tests/unit/test_run_binding_guard.py
+  - tests/unit/test_tripwire_harness_parity.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/skills/fr-goal/SKILL.md
+  - .hermes/skills/fr/fr-goal/SKILL.md
+  - AGENTS.md
+  - docs/explainers/01-fr-goal.*
+  - docs/acceptance/*
+  estimate_lines: 750
+tasks:
+- number: 1
+  title: RED/GREEN — `fr run start` notice and the gated brief keys (spec §C, R6)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_run_cli.py — the key-set pin at the `unbound_tiers` assertion
+      (~:1095) grows by `dead_bindings` and `binding_offers`; a gated (operator) brief on
+      FR_HARNESS=opencode with a fake prober lists a dead binding with its proposal
+      {model, rule, price_ratio} and an offer; a non-gated brief and an unprobed harness
+      carry null for both; `fr run start` prints one line per dead binding and offer and
+      still exits 0. Inject the prober through one module-level factory in fr.bindings
+      (the same one phase 1's models_cmd uses). Run: fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: run_cmd.py — `_build_brief` adds the two keys (lists only when
+      step.gate == "operator" and prober_for(harness) is not None, else null); start_cmd
+      prints the lines after the orchestrator notice. Tests green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: one `_binding_health(repo_root, tiers=None)` helper that both call sites use
+      (harness detection, config loading, check_bindings with cache); ruff + mypy clean.
+- number: 2
+  title: RED/GREEN — `_guard_dispatch_binding` on both dispatch paths (spec §C, R8,
+    R9, R11)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_run_binding_guard.py, FR_HARNESS=opencode, fake prober, tmp
+      HOME/XDG: (a) grouped implement-phase with a dead user-layer `standard` binding and a
+      family successor → advance prints SUBSTITUTED, user models.yaml now names the
+      successor, the materialised agent file says so, the plan journal holds a decision
+      `model-substitution-standard-1` whose body names old, new, reason retired, decider
+      autonomous, rule, price ratio, and it is in the same commit as the cursor move;
+      (b) flat tiered step (spec-review, tier hard) gets the same guard; (c) a pick with
+      ratio > 2 or rule hint → exit 2, no brief, unit not marked running, cursor bytes
+      unchanged, message names tried candidates and the `fr models set` line; (d) dead
+      repo-layer binding → exit 2 naming docs/superpowers/models.yaml, nothing written;
+      (e) unknown verdict → warning, brief printed; (f) tier None or non-opencode harness
+      → no probe at all; (g) set_binding raising after the journal append → models.yaml
+      and journal restored byte-for-byte, `SUBSTITUTION NOT APPLIED` printed, exit 2;
+      (h) a run with no plan artifact writes the entry to the spec journal. Run: fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: run_cmd.py — `_guard_dispatch_binding(repo_root, state, step_id, key, tier)`
+      called in `_advance_group` before `items[pending] = "running"` with the tier
+      `_dispatch_tier(..., _effective_tier(member, step), phase_n)` gives, and on the flat
+      path before its `_open_dispatch` with `step.tier`; write order exactly as spec §C
+      (remember + append + note journal, then binding + materialise, restore on failure).
+      Tests green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: move the journal-entry body formatting next to the R7 wording so operator
+      and autonomous decisions share one five-field formatter in fr.bindings; ruff + mypy
+      clean.
+- number: 3
+  title: Skill, mirrors, parity, docs (spec §D, R7, R10)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-goal/SKILL.md §1: beside the model-per-tier sentence,
+      add the spec §D sentence (a question per `dead_bindings` entry, recommended its
+      proposal; per `binding_offers` entry, recommended keep; each answer a decision naming
+      old, new, reason, decider operator and rule; an accepted change applied with
+      `fr models set`). Run `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`; their `--check` modes and the
+      three mirror tripwires plus test_tripwire_skill_tool_neutrality.py green.
+  - id: P2.T3.S2
+    text: |-
+      Add parity.yaml row `model-binding-probe` (kind: interaction; opencode partial with a
+      scope_note citing model-binding-live-opencode and the unproven mid-session agent-file
+      pickup; claude-code and hermes absent with scope notes; codex and copilot-cli
+      unsupported). `uv run fr harness parity --check` and
+      tests/unit/test_tripwire_harness_parity.py green.
+  - id: P2.T3.S3
+    text: |-
+      AGENTS.md: one `fr.bindings` paragraph under `fr` (catalogue/probe/choose/health, the
+      cache dir, OpenCode-only probing, the dispatch guard). Check
+      docs/explainers/01-fr-goal.md: only if it describes the model-per-tier question,
+      update it and regenerate the .html per .claude/rules/explainers-currency.md; else
+      record in the step record that no explainer describes it.
+  - id: P2.T3.S4
+    text: |-
+      Flip `model-binding-run-integration` to ci with `fr acceptance set-status --level
+      unit=super-fr:tests/unit/test_run_binding_guard.py#<test>` (plus the brief-key test);
+      leave model-binding-live-opencode not-implemented (live, post-merge). `uv run fr
+      acceptance check` green. Run the full suite after the last code commit into a log
+      outside the repo; commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+    P2.T3.S4:
+      state: x
+      ticked_at: '2026-10-06T18:57:34+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T18:57:34+00:00'
+    note: null
+    observed_prs: []

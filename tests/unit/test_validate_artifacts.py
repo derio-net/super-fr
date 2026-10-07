@@ -150,8 +150,9 @@ It does not leak.
 """
 
 
-GOOD_USAGE = """schema_version: 1
-run: 2019-03-04-feat-widget
+GOOD_USAGE = (
+    f"schema_version: {ARTIFACT_KINDS['usage'].current_version}\n"  # built, never typed
+    + """run: 2019-03-04-feat-widget
 captures:
   - host: h-3f9a2c1e
     harness: claude-code
@@ -162,6 +163,7 @@ captures:
       - session: s-one
         unavailable: transcript pruned
 """
+)
 
 GOOD_PROFILES = (
     f"schema_version: {ARTIFACT_KINDS['profiles'].current_version}\n"  # built, never typed

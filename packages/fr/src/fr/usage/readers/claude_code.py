@@ -75,7 +75,9 @@ def _tool_calls(records: list[dict[str, Any]]) -> tuple[ToolCall, ...]:
     return tuple(calls)
 
 
-def _messages(records: list[dict[str, Any]], agent: str) -> list[Message]:
+def _messages(
+    records: list[dict[str, Any]], agent: str, agent_id: str | None = None
+) -> list[Message]:
     out: list[Message] = []
     for first, usage, blocks in telemetry.message_groups(records):
         model = first["message"].get("model")
@@ -89,6 +91,7 @@ def _messages(records: list[dict[str, Any]], agent: str) -> list[Message]:
                 tokens=tokens_of(usage),
                 tool_calls=_tool_calls(blocks),
                 agent=agent,
+                agent_id=agent_id,
             )
         )
     return out
@@ -139,6 +142,13 @@ def _dispatch_prompts(records: list[dict[str, Any]]) -> dict[str, int]:
     return sizes
 
 
+def _stream_id(stream: Path) -> str | None:
+    """`<id>` of a subagent stream `agent-<id>.jsonl`, else `None`."""
+    if not stream.name.startswith("agent-"):
+        return None
+    return stream.name[len("agent-") : -len(".jsonl")]
+
+
 def _tool_use_id(stream: Path) -> str | None:
     meta = stream.with_name(stream.name[: -len(".jsonl")] + ".meta.json")
     try:
@@ -168,10 +178,11 @@ def read(source: Path, session: str | None = None) -> UsageRecord:
                 return unavailable(
                     session, HARNESS, f"unreadable subagent transcript: {stream.name}"
                 )
-            messages.extend(_messages(sub_records, _agent_type(stream)))
+            stream_id = _stream_id(stream)
+            messages.extend(_messages(sub_records, _agent_type(stream), stream_id))
             tool_use = _tool_use_id(stream)
-            if tool_use is not None and stream.name.startswith("agent-"):
-                by_agent[tool_use] = stream.name[len("agent-") : -len(".jsonl")]
+            if tool_use is not None and stream_id is not None:
+                by_agent[tool_use] = stream_id
         briefs = {by_agent.get(call, call): size for call, size in prompts.items()}
         return UsageRecord(
             session=session,

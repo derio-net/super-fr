@@ -125,15 +125,9 @@ def test_closeout_brief_orders_every_section_correctly(tmp_path: Path) -> None:
     i_test_plan = idx(f"Test Plan: {SPEC_REL}")
     i_status = idx("fr status")
     i_up = idx(f"fr isolation up --branch chore/archive-{SPEC_SLUG}")
-    i_spec_finding = idx(
-        f"fr journal resolve --scope spec --slug {SPEC_SLUG} --id sf1 "
-        "--state deferred --tracked-by '<#N>'"
-    )
-    i_plan_finding = idx(
-        f"fr journal resolve --scope plan --slug {SPEC_SLUG} --id pf1 "
-        "--state deferred --tracked-by '<#N>'"
-    )
-    i_archive = idx(f"fr archive --branch {BRANCH}")
+    i_spec_finding = idx(f"  - spec/{SPEC_SLUG}/sf1: a spec-scope finding")
+    i_plan_finding = idx(f"  - plan/{SPEC_SLUG}/pf1: a plan-scope finding")
+    i_archive = idx(f"fr archive --branch {BRANCH} --issues ")
     i_housekeeping_pr = idx("housekeeping PR")
     i_down = idx(f"fr isolation down --branch {BRANCH}")
 
@@ -155,18 +149,21 @@ def test_closeout_brief_orders_every_section_correctly(tmp_path: Path) -> None:
     )
 
 
-def _resolve_lines(brief: str) -> list[str]:
-    return [ln.strip() for ln in brief.splitlines() if "fr journal resolve" in ln]
+def _finding_lines(brief: str) -> list[str]:
+    return [ln for ln in brief.splitlines() if ln.startswith("  - ") and "/" in ln.split(":")[0]]
 
 
-def test_closeout_brief_runs_every_resolve_inside_the_housekeeping_workspace(
+def _archive_line(brief: str) -> str:
+    return next(ln.strip() for ln in brief.splitlines() if "fr archive --branch" in ln)
+
+
+def test_closeout_brief_lists_findings_and_files_them_inside_the_housekeeping_workspace(
     tmp_path: Path,
 ) -> None:
-    """gh#621 (1): the brief is run from the base clone on the default branch,
-    where fr writes a journal record but deliberately commits nothing. A
-    resolve line printed before `fr isolation up --branch chore/archive-…`
-    leaves its record stranded, uncommitted, on main — never reaching the
-    housekeeping PR or the journal `fr archive` moves."""
+    """gh#621 (1) + R13: the brief is run from the base clone on the default
+    branch, so the one `fr archive --issues` command (which writes the deferral
+    records) comes after `fr isolation up --branch chore/archive-…`, and no
+    per-finding `fr journal resolve` line is printed any more."""
     _spec_file(tmp_path, with_test_plan=False)
     _plan_dir(tmp_path)
     _spec_out_of_scope_finding(tmp_path)
@@ -175,38 +172,68 @@ def test_closeout_brief_runs_every_resolve_inside_the_housekeeping_workspace(
     brief = closeout_brief(tmp_path, _state())
 
     i_up = brief.index("fr isolation up --branch chore/archive-")
-    i_archive = brief.index(f"fr archive --branch {BRANCH}")
-    positions = [brief.index(line) for line in _resolve_lines(brief)]
-    assert len(positions) == 2
-    assert all(i_up < pos < i_archive for pos in positions), brief
+    i_archive = brief.index(f"fr archive --branch {BRANCH} --issues ")
+    assert "fr journal resolve" not in brief
+    assert len(_finding_lines(brief)) == 2
+    assert brief.count("fr archive --branch") == 1
+    assert i_up < i_archive
 
 
-def test_closeout_brief_resolve_lines_parse_against_the_real_cli(tmp_path: Path) -> None:
-    """gh#621 (2): each printed resolve line must be runnable as printed once
-    its placeholders are filled in. Parsed against the real `fr journal
-    resolve` click signature, so the NEXT required option added there fails
-    here too — not just `--note`."""
+def test_closeout_brief_archive_line_names_every_qid_and_the_way_to_file_none(
+    tmp_path: Path,
+) -> None:
+    _spec_file(tmp_path, with_test_plan=False)
+    _plan_dir(tmp_path)
+    _spec_out_of_scope_finding(tmp_path)
+    _plan_out_of_scope_finding(tmp_path)
+
+    line = _archive_line(closeout_brief(tmp_path, _state()))
+
+    assert line.startswith(
+        f"fr archive --branch {BRANCH} --issues spec/{SPEC_SLUG}/sf1,plan/{SPEC_SLUG}/pf1"
+    )
+    assert "--no-issues" in line
+
+
+def test_closeout_brief_archive_line_parses_against_the_real_cli(tmp_path: Path) -> None:
+    """gh#621 (2): the printed command must be runnable as printed. Parsed
+    against the real `fr archive` click signature, so a renamed option fails
+    here too."""
     import shlex
 
     import typer
-    from fr.commands.journal_cmd import journal_app
+    from fr.cli import app
 
     _spec_file(tmp_path, with_test_plan=False)
     _plan_dir(tmp_path)
     _spec_out_of_scope_finding(tmp_path)
     _plan_out_of_scope_finding(tmp_path)
 
-    brief = closeout_brief(tmp_path, _state())
-    resolve_cmd = typer.main.get_command(journal_app).commands["resolve"]  # type: ignore[attr-defined]
+    line = _archive_line(closeout_brief(tmp_path, _state()))
+    argv = shlex.split(line, comments=True)
+    assert argv[:2] == ["fr", "archive"], line
+    archive_cmd = typer.main.get_command(app).commands["archive"]  # type: ignore[attr-defined]
+    ctx = archive_cmd.make_context("archive", argv[2:])
+    assert ctx.params["branch"] == BRANCH
+    assert ctx.params["issues"] == f"spec/{SPEC_SLUG}/sf1,plan/{SPEC_SLUG}/pf1"
+    assert ctx.params["no_issues"] is False
 
-    lines = _resolve_lines(brief)
-    assert lines
-    for line in lines:
-        argv = shlex.split(line.replace("<#N>", "#618"), comments=True)
-        assert argv[:3] == ["fr", "journal", "resolve"], line
-        ctx = resolve_cmd.make_context("resolve", argv[3:])  # raises on a missing option
-        assert ctx.params["tracked_by"] == "#618"
-        assert ctx.params["note"]
+
+def test_closeout_brief_under_tracking_none_keeps_the_plain_archive_line(tmp_path: Path) -> None:
+    _spec_file(tmp_path, with_test_plan=False)
+    _plan_dir(tmp_path)
+    _plan_out_of_scope_finding(tmp_path)
+    prof = tmp_path / ".devcontainer"
+    prof.mkdir()
+    (prof / "fr-profiles.yaml").write_text(
+        "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\ntracking: {type: none}\n"
+    )
+
+    brief = closeout_brief(tmp_path, _state())
+
+    assert "no tracker is configured" in brief
+    assert "--issues" not in brief and not _finding_lines(brief)
+    assert f"fr archive --branch {BRANCH}   #" in brief
 
 
 def test_closeout_brief_names_the_checkout_to_run_it_from(tmp_path: Path) -> None:
@@ -495,8 +522,8 @@ def test_closeout_brief_without_a_plan_still_resolves_off_the_default_branch(
     brief = closeout_brief(tmp_path, state)
 
     i_up = brief.index("fr isolation up --branch chore/closeout-r1")
-    i_resolve = brief.index("fr journal resolve --scope spec")
-    i_archive = brief.index(f"fr archive --branch {BRANCH}")
+    i_finding = brief.index(f"  - spec/{SPEC_SLUG}/sf1: a spec-scope finding")
+    i_archive = brief.index(f"fr archive --branch {BRANCH} --issues spec/{SPEC_SLUG}/sf1")
     i_push = brief.index("git push -u origin chore/closeout-r1")
-    assert i_up < i_resolve < i_archive < i_push
+    assert i_up < i_finding < i_archive < i_push
     assert "chore: close out feat/x" in brief

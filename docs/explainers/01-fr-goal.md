@@ -407,7 +407,9 @@ wrote the tier's model beside steps the orchestrating agent performed itself,
 and the archive of this very project holds seven reviews credited to a model
 that did not perform them. Now it reads the session's own transcript, where
 every reply names the model that produced it. A dispatched phase records the
-model that actually served it, not the alias it was asked for, and a step the
+model that actually served it, not the alias it was asked for, and keeps the
+tier and the model that tier was bound to beside it, so the two can be
+compared rather than one overwriting the other; a step the
 orchestrator ran records the orchestrator's model. If you bind an
 `orchestrator` model and the session is running on something else, every
 `fr run advance` warns you. It never blocks: which model you run is your call.
@@ -475,9 +477,17 @@ another machine. So `fr` captures the run's usage once per host — at
 `docs/superpowers/usage/<run-id>.yaml`, committed beside the cursor and
 archived with it: per session, per model and per step, with dollars where the
 harness reports them and no hostname, path or message content in it. `fr run
-cost <run-id>` prints it as one table, a row per step, on any checkout that has
-the file, including one that never ran the run. The same honesty rule applies:
-a figure nobody could observe prints `—`, never `0`. When you want to know
+cost <run-id>` prints it on any checkout that has the file, including one that
+never ran the run, as two tables. The first has a row per step, and splits each
+step into what the orchestrating session spent itself and what its subagents
+spent: turns, cache-read and output tokens, and dollars for each. The second
+has a row per phase: the tier it was dispatched at, the model that tier was
+bound to, the model that actually ran (marked `≠` when the two are different
+models), and what the executor, the reviewer and the orchestrator each spent
+on that phase. The same honesty rule applies: a figure nobody could observe
+prints `—`, never `0`, and so does the model that ran on a phase recorded
+before the tool kept the binding and the observation apart — back then one
+field held whichever was written last, so it cannot say which it was. When you want to know
 where the money went rather than how much there was — bookkeeping against
 implementation, before a process change and after it — the `fr-audit` skill
 (`fr usage report`) reconstructs that from the harness's own session data.
@@ -1021,12 +1031,19 @@ Test Plan, if it has one, named by path; this is different from the
 acceptance tests gathered during implementation — it may require opening the
 real application, observing production behavior, checking a dashboard, or
 performing an operation with access the isolated agent never had. Then each
-out-of-scope finding from both journals appears with its own `fr journal
-resolve … --state deferred --tracked-by` line, ready to run once you have
-filed the issue; a finding you do not file stays visibly out of scope rather
-than silently closed. The brief ends with `fr status` to confirm every phase
-is complete, and the exact commands to archive the plan, its journal, and its
-run record through a housekeeping PR — run from a *separate* workspace, never
+out-of-scope finding from both journals is listed by its qualified id
+(`<scope>/<slug>/<id>`) with its title, followed by one command,
+`fr archive --branch <b> --issues <ids>`. Archive itself files one tracker
+issue per id you keep (`--no-issues` files none, and under `tracking none`
+there is nowhere to file, so the findings stay in the journal and the PR
+body), and writes a `deferred` record pointing at each issue into that
+finding's journal, staged for the same housekeeping commit; a finding you do
+not file stays visibly out of scope rather than silently closed. The same
+archive run also prices any earlier closeout's session in its usage file and
+retargets the acceptance matrix's references to everything it moved, so
+neither is a separate step. The brief ends with `fr status` to confirm every
+phase is complete, and the exact commands to archive the plan, its journal,
+and its run record through a housekeeping PR — run from a *separate* workspace, never
 inside the just-merged feature branch — before tearing down isolation or
 leaving it for garbage collection to reap
 (`packages/fr/src/fr/run/closeout.py`,

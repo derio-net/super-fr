@@ -36,7 +36,19 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+import fr.bindings
 from fr.artifacts.commit import CommitOutcome
+from fr.bindings.apply import apply_binding, materialize_from
+from fr.bindings.choose import Choice, is_autonomous
+from fr.bindings.health import BindingHealth, check_bindings, propose_for
+from fr.bindings.probe import default_probe_cache
+from fr.bindings.wording import (
+    Substitution,
+    decision_body,
+    decision_title,
+    proposal_text,
+    substitution_line,
+)
 from fr.commands.common import resolve_repo_root
 from fr.git import GitUnavailableError, git_answer
 from fr.harness import HARNESSES, load_matrix
@@ -48,8 +60,11 @@ from fr.isolation.types import IsolationError
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
+    JournalScope,
+    append_journal_entry,
     effective_finding_states,
     journal_now,
+    journal_path,
     journal_stamp_as_utc,
     parse_journal,
     phase_finding_states,
@@ -57,6 +72,13 @@ from fr.journal.model import (
     reviews_phase,
     spec_journal_slug,
     unauthorized_fixes,
+)
+from fr.models import (
+    REPO_MODELS_REL,
+    binding_layer,
+    default_models_path,
+    load_models,
+    resolved_config,
 )
 from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
@@ -3341,6 +3363,7 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         # step; a fan-out group's record is per member, in the member brief.
         "record": None if step.steps else _record_brief(state, step),
         "unbound_tiers": _unbound_tiers(resolve_repo_root()),
+        **_gated_binding_keys(step),
     }
 
 
@@ -3363,6 +3386,85 @@ def _unbound_tiers(repo_root: Path) -> list[str] | None:
     if harness is None:
         return None
     return [t for t in PHASE_TIERS if _resolved_model(repo_root, harness, t) is None]
+
+
+def _binding_health(
+    repo_root: Path, tiers: list[str] | None = None
+) -> tuple[str, list[BindingHealth]] | None:
+    """`(harness, report)` for the detected harness's bindings — `None` when no
+    harness is detected or it cannot be probed (spec 2026-10-06-model-binding-
+    churn R10: only OpenCode can). The ONE place `fr run` reaches
+    `check_bindings`: the start notice, the gated brief and the pre-dispatch
+    guard all read it, with the 6 h probe cache allowed (R3)."""
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        return None
+    if harness is None:
+        return None
+    prober = fr.bindings.prober_for(harness)
+    if prober is None:
+        return None
+    report = check_bindings(
+        harness,
+        load_models(repo_root / REPO_MODELS_REL),
+        load_models(default_models_path()),
+        prober,
+        tiers=tiers,
+        cache=default_probe_cache(),
+    )
+    return harness, report
+
+
+def _gated_binding_keys(step: Step) -> dict[str, list[dict[str, Any]] | None]:
+    """The brief's `dead_bindings` and `binding_offers` (R6): lists only for a
+    `gate: operator` step on a probed harness — the one place an operator is
+    there to answer them (R7) — and `null` everywhere else, so a dispatch
+    brief never pays for a probe nobody will act on."""
+    health = _binding_health(resolve_repo_root()) if step.gate == "operator" else None
+    if health is None:
+        return {"dead_bindings": None, "binding_offers": None}
+    _, report = health
+    dead = [
+        {
+            "tier": h.tier,
+            "model": h.model,
+            "verdict": h.verdict,
+            "proposal": None
+            if h.proposal is None
+            else {
+                "model": h.proposal.model,
+                "rule": h.proposal.rule,
+                "price_ratio": h.proposal.price_ratio,
+            },
+            "reason": h.detail,
+        }
+        for h in report
+        if h.verdict == "dead"
+    ]
+    offers = [
+        {"tier": o.tier, "model": o.model, "offer": o.offer} for h in report for o in h.offers
+    ]
+    return {"dead_bindings": dead, "binding_offers": offers}
+
+
+def _binding_notice_lines(harness: str, report: list[BindingHealth]) -> list[str]:
+    """`fr run start`'s loud lines (R6): one per dead binding, one per offer."""
+    lines: list[str] = []
+    for h in report:
+        if h.verdict == "dead":
+            line = f"warning: {harness}/{h.tier} is bound to {h.model}, which is dead ({h.detail})"
+            if h.proposal is not None:
+                line += f" — proposed: {proposal_text(h.proposal)}"
+            elif h.no_choice is not None:
+                line += f" — no replacement ({h.no_choice.reason})"
+            lines.append(line + "; review with `fr models check`")
+        lines.extend(
+            f"offer: {harness}/{o.tier} {o.model} → {o.offer} (newer, same family; never "
+            f"applied unasked — `fr models set --harness {harness} --tier {o.tier} {o.offer}`)"
+            for o in h.offers
+        )
+    return lines
 
 
 def _caller_evidence(step: Step) -> list[str]:
@@ -3502,6 +3604,208 @@ def _orchestrator_model_notice(repo_root: Path) -> str | None:
     )
 
 
+def _run_journal(repo_root: Path, state: RunState) -> tuple[JournalScope, str] | None:
+    """`(scope, slug)` of the run journal (spec 2026-10-06-model-binding-churn
+    R11): the plan journal once the run has a plan artifact, else the spec
+    journal — `None` before either exists."""
+    plan_rel = _emitted_plan(state)
+    if plan_rel is not None:
+        return "plan", Path(plan_rel).name
+    from fr.requirements import run_spec
+
+    spec_rel = run_spec(state)
+    if spec_rel is not None:
+        return "spec", spec_journal_slug(Path(spec_rel).stem)
+    return None
+
+
+def _restore_bytes(path: Path, before: bytes | None) -> None:
+    if before is None:
+        path.unlink(missing_ok=True)
+    else:
+        path.write_bytes(before)
+
+
+class _NotAppliedError(Exception):
+    """A binding change the materialiser could not carry to the dispatched
+    tier's agent file — reported, not raised, by `materialize_agents`."""
+
+
+def _substitution_id(prior: list[JournalEntry], tier: str) -> str:
+    """`model-substitution-<tier>-<n>`, `n` one past the highest suffix on file —
+    never a count, which re-issues a taken id once any number is missing."""
+    stem = f"model-substitution-{tier}-"
+    taken = [
+        int(e.id[len(stem) :])
+        for e in prior
+        if e.id.startswith(stem) and e.id[len(stem) :].isdigit()
+    ]
+    return f"{stem}{max(taken, default=0) + 1}"
+
+
+def _guard_dispatch_binding(
+    repo_root: Path, state: RunState, step_id: str, key: str, tier: str | None
+) -> None:
+    """Refuse, or repair, a dead model binding before a unit is dispatched on it
+    (spec 2026-10-06-model-binding-churn §C, R8, R9, R11).
+
+    Called on BOTH dispatch paths with the exact tier `_open_dispatch` will
+    receive, and before anything is marked running or saved — so a refusal
+    leaves the cursor byte-identical, with no brief printed. Quiet unless the
+    harness is OpenCode (the only one fr can probe), the tier is bound, and the
+    binding's verdict (cached for 6 h) is not `live`. `unknown` warns and lets
+    the dispatch go ahead: an inconclusive probe is not evidence of anything.
+    Only the verdict is read up front: the catalogue and a replacement are
+    paid for on `dead` alone, and offers never (review p2-r1) — they are
+    `fr run start`'s and the gated brief's, where someone can take one.
+
+    A `dead` binding is substituted only when R4's autonomous bound allows it
+    and the binding is the user's (R9: the repo's `models.yaml` is a tracked
+    contract fr never rewrites). The order keeps "recorded iff applied": the
+    run-journal decision is appended and noted for the cursor commit first,
+    then `fr.bindings.apply.apply_binding` sets the binding and materialises
+    the agent files; if that raises, or leaves the dispatched tier's agent
+    file unrewritten (p2-r2), both files go back to their bytes, the agent
+    files are re-materialised from them, and the advance exits 2."""
+    if tier is None or tier == PHASE_TIER_SENTINEL:
+        return
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        return
+    if harness != "opencode":
+        return
+    prober = fr.bindings.prober_for(harness)
+    if prober is None:
+        return
+    repo_cfg = load_models(repo_root / REPO_MODELS_REL)
+    user_cfg = load_models(default_models_path())
+    bound = resolved_config(repo_cfg=repo_cfg, user_cfg=user_cfg).get(harness, {})
+    model = bound.get(tier)
+    if not model:
+        return
+    cache = default_probe_cache()
+    probe = cache.probe(prober, harness, model)
+    subject = f"{step_id} ({key})" if key != step_id else step_id
+    if probe.verdict == "unknown":
+        err_console.print(
+            f"[yellow]warning: could not confirm the provider still serves {harness}/{tier} "
+            f"= {escape(model)} ({escape(probe.detail)}); dispatching {subject} anyway[/yellow]",
+            soft_wrap=True,
+        )
+        return
+    if probe.verdict != "dead":
+        return
+    chosen = propose_for(
+        tier,
+        model,
+        probe.hint,
+        bound,
+        prober,
+        is_live=lambda m: cache.probe(prober, harness, m).verdict == "live",
+    )
+    proposal = chosen if isinstance(chosen, Choice) else None
+    fix = f"`fr models set --harness {harness} --tier {tier} <model>`"
+    if binding_layer(harness, tier, repo_cfg=repo_cfg, user_cfg=user_cfg) == "repo":
+        err_console.print(
+            f"[red]{subject}: {harness}/{tier} is bound to {escape(model)}, which the provider "
+            f"no longer serves ({escape(probe.detail)}). The binding comes from "
+            f"{REPO_MODELS_REL}, a tracked file fr never rewrites: fix it there"
+            + (f" (proposed: {escape(proposal_text(proposal))})" if proposal else "")
+            + ", then advance again.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    target = _run_journal(repo_root, state)
+    if proposal is None or not is_autonomous(proposal) or target is None:
+        why = (
+            "the run has no journal yet to record a substitution in"
+            if proposal is not None and is_autonomous(proposal)
+            else "no replacement fr may choose on its own"
+        )
+        lines = [
+            f"{subject}: {harness}/{tier} is bound to {model}, which the provider no longer "
+            f"serves ({probe.detail}) — {why}.",
+            f"  tried: {', '.join(chosen.tried) if chosen.tried else 'nothing'}",
+        ]
+        if proposal is not None:
+            lines.append(f"  proposal (needs an operator's yes): {proposal_text(proposal)}")
+        else:
+            lines.append(f"  no replacement: {chosen.reason}")  # type: ignore[union-attr]
+        lines.append(f"  fix: {fix.replace('<model>', proposal.model) if proposal else fix}")
+        err_console.print(f"[red]{escape(chr(10).join(lines))}[/red]", soft_wrap=True)
+        raise typer.Exit(2)
+
+    sub = Substitution(
+        harness,
+        tier,
+        model,
+        proposal.model,
+        "retired",
+        "autonomous",
+        proposal.rule,
+        proposal.price_ratio,
+    )
+    # 1. The record first, noted so the cursor commit carries it.
+    scope, slug = target
+    journal = journal_path(repo_root, scope, slug)
+    journal_before = journal.read_bytes() if journal.is_file() else None
+    try:
+        prior = parse_journal(journal_before.decode()) if journal_before is not None else []
+    except (JournalParseError, UnicodeDecodeError) as e:
+        err_console.print(
+            f"[red]{subject}: cannot record a substitution — {scope} journal {journal} is "
+            f"unreadable: {escape(str(e))}. Fix it, or rebind with {fix}.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    entry = JournalEntry(
+        kind="decision",
+        scope=scope,
+        id=_substitution_id(prior, tier),
+        created=journal_now(),
+        phase=_item_phase(key.rsplit("/", 1)[0]) if scope == "plan" else None,
+        title=decision_title(sub),
+        body=decision_body(sub),
+    )
+    append_journal_entry(journal, slug, entry)
+    _note_record_write(repo_root, journal)
+    # 2. Then the binding, and the agent files that carry it.
+    models = default_models_path()
+    models_before = models.read_bytes() if models.is_file() else None
+    try:
+        result = apply_binding(models, harness, tier, proposal.model, repo_cfg=repo_cfg)
+        unwritten = [c for c in result.changes if c.tier == tier and c.problem is not None]
+        if unwritten:
+            raise _NotAppliedError(f"{unwritten[0].path} not updated — {unwritten[0].problem}")
+    except Exception as e:  # noqa: BLE001 — any failure un-applies, and un-records
+        # 3. Restore both, so neither the binding nor its record survives alone.
+        _restore_bytes(models, models_before)
+        try:
+            materialize_from(models, repo_cfg)
+        except Exception:  # noqa: BLE001,S110 — best effort: the bytes are what count
+            pass
+        _restore_bytes(journal, journal_before)
+        writes = _RUN_WRITES.get()
+        if writes is not None and journal in writes.paths.get(repo_root, []):
+            writes.paths[repo_root].remove(journal)
+        err_console.print(
+            f"[red]SUBSTITUTION NOT APPLIED {escape(model)} → {escape(proposal.model)}: "
+            f"{escape(str(e))}[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    for change in result.changes:
+        if change.problem is not None:
+            err_console.print(
+                f"[yellow]  WARNING: {change.path} not updated — {change.problem}[/yellow]",
+                soft_wrap=True,
+            )
+    err_console.print(
+        f"[bold yellow]{escape(substitution_line(sub))}[/bold yellow]", soft_wrap=True
+    )
+
+
 def _open_dispatch(
     state: RunState,
     step_id: str,
@@ -3550,11 +3854,15 @@ def _open_dispatch(
             # debug journal C3) is that the orchestrator's model is no longer
             # invisible: its own transcript names it, so fr records what it
             # OBSERVES there — never a resolution — and `None` when it cannot.
-            model=(
-                _resolved_model(repo_root, harness, tier)
-                if agent_type is not None
-                else orchestrator_model(os.environ)
-            ),
+            #
+            # For a SUBAGENT attempt the binding is a prediction, so it goes
+            # into `bound` beside its `tier` (spec 2026-10-06-cost-evidence
+            # §D, R7) and `model` is left for what ran: a `--model` claim, or
+            # `_observed_model` at resolve. Before run version 9 the binding
+            # sat in `model`, which is why "ran" is shown only beside `bound`.
+            model=(None if agent_type is not None else orchestrator_model(os.environ)),
+            tier=(tier if agent_type is not None else None),
+            bound=(_resolved_model(repo_root, harness, tier) if agent_type is not None else None),
             # Derived from fr's OWN environment, exactly like `harness` — the
             # agent never reports it (§4.D.1). It is what lets a later session
             # read the RIGHT transcript directory, and what stops a window
@@ -3712,35 +4020,30 @@ def _observed_model(attempt: UnitAttempt, key: str) -> UnitAttempt:
     Observed beats bound and beats reported, as `orchestrator_model` already
     does for the orchestrator's own units; a difference is said aloud, never
     blocked. Unobservable leaves the attempt as it was — an absence is not
-    a mismatch."""
+    a mismatch.
+
+    The comparison is against `bound` (spec 2026-10-06-cost-evidence §D),
+    falling back to `model` for an attempt opened before run version 9, whose
+    `model` held the binding. `tier` and `bound` are never touched."""
+    from fr.models import model_family
     from fr.run.telemetry import subagent_model
 
     if attempt.agent is None or attempt.agent_type is None:
         return attempt
     observed = subagent_model(os.environ, attempt.session, attempt.agent)
-    if observed is None or observed == attempt.model:
+    if observed is None:
         return attempt
-    if attempt.model is not None and _model_family(observed) != _model_family(attempt.model):
+    # Compared even when a claim already wrote the observed model (review
+    # p2-r2: OpenCode always claims `--model`), against the binding.
+    expected = attempt.bound if attempt.bound is not None else attempt.model
+    if expected is not None and model_family(observed) != model_family(expected):
         err_console.print(
             f"[yellow]{key}: agent {attempt.agent} ran on {observed}, but the cursor "
-            f"recorded {attempt.model}. fr records what ran. If the tier's binding was "
+            f"recorded {expected}. fr records what ran. If the tier's binding was "
             "meant, pass that model in the dispatch.[/yellow]",
             soft_wrap=True,
         )
     return attempt.model_copy(update={"model": observed})
-
-
-_MODEL_DATE = re.compile(r"-\d{8}$")
-
-
-def _model_family(model: str) -> str:
-    """`model` without a context-window suffix or a trailing snapshot date, so
-    a binding's `claude-haiku-4-5` and a transcript's
-    `claude-haiku-4-5-20251001` compare equal: the dispatch honoured the
-    binding, and a warning would be noise (review of gh#637)."""
-    from fr.usage.readers.claude_code import normalize_model
-
-    return _MODEL_DATE.sub("", normalize_model(model))
 
 
 def _build_member_brief(
@@ -3797,6 +4100,10 @@ def _build_member_brief(
         "for_each": group.for_each,
         "steps": [],
         "record": _record_brief(state, member, group, item),
+        # R6: every agent-step brief carries them; a member is never
+        # `gate: operator`, so there is nobody here to answer them.
+        "dead_bindings": None,
+        "binding_offers": None,
         **_review_findings_brief(member, item),
     }
 
@@ -4166,6 +4473,10 @@ def _advance_group(
     item, _, member_id = pending.rpartition("/")
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
+    tier = _dispatch_tier(repo_root, state, _effective_tier(member, step), phase_n)
+    # Before anything below marks the unit running or saves (R8): a refusal
+    # leaves the cursor exactly as it was.
+    _guard_dispatch_binding(repo_root, state, step.id, pending, tier)
     dispatched_at = _now()
     # The write-claim: this unit is now outstanding. A resolve for any OTHER
     # unit while it is running is a second writer — refused in `_resolve_member`.
@@ -4196,7 +4507,7 @@ def _advance_group(
             step.id,
             pending,
             agent_type=member.agent,
-            tier=_dispatch_tier(repo_root, state, _effective_tier(member, step), phase_n),
+            tier=tier,
             repo_root=repo_root,
             at=dispatched_at,
         )
@@ -4450,6 +4761,11 @@ def start_cmd(
     notice = _orchestrator_model_notice(workspace)
     if notice is not None:
         err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
+    # R6: report, never block — the run has started either way.
+    health = _binding_health(workspace)
+    if health is not None:
+        for line in _binding_notice_lines(*health):
+            err_console.print(f"[yellow]{escape(line)}[/yellow]", soft_wrap=True)
 
 
 @run_app.command("reshape")
@@ -4841,6 +5157,24 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     _render_step_and_items(state, console, _unevidenced_units(repo_root, state))
 
 
+def _cost_cursor(repo_root: Path, run_id: str) -> RunState | None:
+    """The run's cursor for `fr run cost` — live first, then archived, the
+    same fallback `load_run_usage` makes for the usage file (review p2-r1), so
+    a closed-out run keeps its per-phase table. `None` when neither reads: an
+    archived cursor older than the live model prints the step table only."""
+    from fr.run.model import archived_run_path, parse_run_state
+
+    try:
+        return load_run_state(repo_root, run_id)
+    except RunStateError:
+        pass
+    archived = archived_run_path(repo_root, run_id)
+    try:
+        return parse_run_state(archived.read_text()) if archived.is_file() else None
+    except (OSError, RunStateError):
+        return None
+
+
 @run_app.command("cost")
 def cost_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
@@ -4860,14 +5194,30 @@ def cost_cmd(
     """
     from rich.table import Table
 
-    from fr.run.cost import effective_entries, load_run_usage, recompute_entries, summarize
+    from fr.run.cost import (
+        DASH,
+        FIGURE_COLUMNS,
+        PHASE_ROLES,
+        STEP_ROLES,
+        count_text,
+        effective_entries,
+        figure_cells,
+        load_run_usage,
+        phase_rows,
+        ran_text,
+        recompute_entries,
+        summarize,
+        usd_text,
+    )
     from fr.usage.file import UsageFileError
 
     repo_root = resolve_repo_root()
     order: list[str] = []
     note = ""
+    phase_state: RunState | None = None
     if recompute:
         state = _load_or_exit(repo_root, run_id)
+        phase_state = state
         entries = recompute_entries(repo_root, state, os.environ)
         order = list(state.steps)
         note = "recomputed from this host's transcripts (not written)"
@@ -4889,10 +5239,8 @@ def cost_cmd(
             )
             raise typer.Exit(2)
         entries, replayed, ignored = effective_entries(usage)
-        try:
-            order = list(load_run_state(repo_root, run_id).steps)
-        except RunStateError:
-            order = []
+        phase_state = _cost_cursor(repo_root, run_id)
+        order = list(phase_state.steps) if phase_state is not None else []
         captures = ", ".join(f"{'+'.join(c.at)}@{c.host}" for c in usage.captures) or "none"
         note = f"captures: {captures}"
         if replayed:
@@ -4900,22 +5248,45 @@ def cost_cmd(
         if ignored:
             note += f"; {ignored} migrated entries ignored (a live capture covers them)"
     summary = summarize(entries, order)
-
-    def usd(value: float | None) -> str:
-        return "—" if value is None else f"${value:,.2f}"
-
-    def n(value: int | None) -> str:
-        return "—" if value is None else f"{value:,}"
+    usd, n = usd_text, count_text
 
     steps = Table(title=f"Cost — {run_id}")
     steps.add_column("step", overflow="fold", min_width=12)
     steps.add_column("turns", justify="right")
     steps.add_column("cost", justify="right")
+    for role in STEP_ROLES:
+        for column in FIGURE_COLUMNS:
+            steps.add_column(f"{role} {column}", justify="right", overflow="fold")
     for row in summary.steps:
-        steps.add_row(row.step, n(row.turns), usd(row.usd))
+        steps.add_row(
+            row.step,
+            n(row.turns),
+            usd(row.usd),
+            *figure_cells(row.main),
+            *figure_cells(row.subagent),
+        )
     steps.add_section()
     steps.add_row("total", "", usd(summary.total))
     console.print(steps)
+    phases = phase_rows(phase_state, entries) if phase_state is not None else []
+    if phases:
+        by_phase = Table(title="By phase")
+        for column in ("phase", "tier", "bound", "ran"):
+            by_phase.add_column(column, overflow="fold")
+        for role in PHASE_ROLES:
+            for column in FIGURE_COLUMNS:
+                by_phase.add_column(f"{role} {column}", justify="right", overflow="fold")
+        for p in phases:
+            by_phase.add_row(
+                str(p.phase),
+                p.tier or DASH,
+                p.bound or DASH,
+                ran_text(p),
+                *figure_cells(p.executor),
+                *figure_cells(p.reviewer),
+                *figure_cells(p.orchestrator),
+            )
+        console.print(by_phase)
     models = Table(title="By model")
     models.add_column("model", overflow="fold", min_width=12)
     for column in ("input", "cache write", "cache read", "output", "cost", "source"):
@@ -5198,6 +5569,8 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
                 soft_wrap=True,
             )
             raise typer.Exit(2)
+        # R8, the flat path: the tier its `_open_dispatch` below receives.
+        _guard_dispatch_binding(repo_root, state, step.id, key, step.tier)
         brief = _build_brief(step, state)
         held = _held_record(record, key)
         if held is not None:

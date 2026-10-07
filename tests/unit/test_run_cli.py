@@ -1091,8 +1091,116 @@ def test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields(tmp_pat
     step_fields = set(Step.model_fields) - {"id", "run"}
     # `run`/`workflow`/`step` are the run-identity keys the brief adds on top,
     # `record` the pre-filled step record (spec 2026-09-25 §5.C.3), and
-    # `unbound_tiers` the active harness's unbound tiers (gh#538).
-    assert set(brief) == step_fields | {"run", "workflow", "step", "record", "unbound_tiers"}
+    # `unbound_tiers` the active harness's unbound tiers (gh#538), and
+    # `dead_bindings`/`binding_offers` the gated step's binding health
+    # (spec 2026-10-06-model-binding-churn R6).
+    assert set(brief) == step_fields | {
+        "run",
+        "workflow",
+        "step",
+        "record",
+        "unbound_tiers",
+        "dead_bindings",
+        "binding_offers",
+    }
+
+
+# --- spec 2026-10-06-model-binding-churn R6: start notice, gated brief keys --
+
+_GATED_SHAPE = (
+    "workflow: gated\nschema: 1\nunit: run\n"
+    "steps:\n  - id: brainstorm\n    kind: agent\n    gate: operator\n    emits: [spec]\n"
+)
+
+
+@pytest.fixture
+def churned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """OpenCode with `standard` bound to a dead model whose same-family
+    successor is live, and `hard` live with a newer same-family offer."""
+    from tests.unit import binding_fakes as bf
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("FR_HARNESS", "opencode")
+    bf.user_models(tmp_path, "opencode:\n  standard: prov/std\n  hard: prov/hard\n")
+    prober = bf.ScriptedProber(
+        [
+            bf.ent("std", "s", "2026-01-01"),
+            bf.ent("std2", "s", "2026-04-01"),
+            bf.ent("hard", "h", "2026-01-01", 20.0),
+            bf.ent("hard2", "h", "2026-05-01", 20.0),
+        ],
+        dead={"prov/std": None},
+    )
+    bf.install(monkeypatch, prober)
+    return prober
+
+
+def test_a_gated_brief_lists_dead_bindings_and_offers(tmp_path: Path, churned) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATED_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+
+    brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
+
+    (dead,) = brief["dead_bindings"]
+    assert dead["tier"] == "standard"
+    assert dead["model"] == "prov/std"
+    assert dead["verdict"] == "dead"
+    assert dead["proposal"] == {"model": "prov/std2", "rule": "family", "price_ratio": 1.0}
+    assert "ProviderModelNotFoundError" in dead["reason"]
+    assert brief["binding_offers"] == [
+        {"tier": "hard", "model": "prov/hard", "offer": "prov/hard2"}
+    ]
+
+
+def test_an_ungated_brief_carries_null_binding_keys(tmp_path: Path, churned) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+
+    brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
+
+    assert brief["dead_bindings"] is None
+    assert brief["binding_offers"] is None
+
+
+def test_a_gated_brief_on_an_unprobed_harness_carries_null_binding_keys(
+    tmp_path: Path, churned, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit import binding_fakes as bf
+
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    bf.user_models(tmp_path, "claude-code:\n  standard: claude-sonnet-5\n")
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATED_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+
+    brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
+
+    assert brief["dead_bindings"] is None
+    assert brief["binding_offers"] is None
+    assert churned.probed == []
+
+
+def test_run_start_names_each_dead_binding_and_offer_and_never_blocks(
+    tmp_path: Path, churned
+) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATED_SHAPE)
+
+    result = _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    dead = [ln for ln in lines if "opencode/standard" in ln and "dead" in ln]
+    offer = [ln for ln in lines if "opencode/hard" in ln and "prov/hard2" in ln]
+    assert len(dead) == 1 and "prov/std2" in dead[0], result.output
+    assert len(offer) == 1, result.output
+    assert load_run_state(repo, "r1").cursor == "brainstorm"
 
 
 # --- gh#653: the brief and the records dir must match what resolve accepts --
@@ -2549,6 +2657,8 @@ def test_advance_records_the_observed_model_of_an_orchestrator_run_step(tmp_path
     assert attempt is not None
     assert attempt.agent_type is None
     assert attempt.model == "claude-sonnet-5"
+    assert attempt.tier is None
+    assert attempt.bound is None
 
 
 def test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model(tmp_path: Path) -> None:
@@ -3513,7 +3623,7 @@ def test_advance_grouped_member_opens_a_dispatch_record(
     record = records[0]
     assert record.dispatched
     assert record.agent_type == "super-fr:fr-phase-executor"
-    assert record.model == "claude-opus-5"
+    assert (record.model, record.bound) == (None, "claude-opus-5")
     assert record.returned is None
     assert record.outcome is None
 
@@ -3542,7 +3652,7 @@ def test_advance_records_the_harness_it_detected_to_resolve_the_model(
 
     assert result.exit_code == 0, result.output
     record = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"][0]
-    assert record.model == "claude-opus-5"
+    assert record.bound == "claude-opus-5"
     assert record.harness == "claude-code", "the model's own harness must be recorded with it"
 
 
@@ -3566,6 +3676,7 @@ def test_advance_records_no_harness_when_detection_is_inconclusive(
     record = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"][0]
     assert record.harness is None
     assert record.model is None
+    assert record.bound is None
 
 
 def test_advance_resolves_the_from_phase_sentinel_against_the_plan_phase_header(
@@ -3594,7 +3705,8 @@ def test_advance_resolves_the_from_phase_sentinel_against_the_plan_phase_header(
 
     assert result.exit_code == 0, result.output
     records = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"]
-    assert records[0].model == "claude-sonnet-5"
+    assert records[0].tier == "standard"
+    assert records[0].bound == "claude-sonnet-5"
     # The brief still carries the sentinel verbatim — it tells the harness to
     # look the phase up, which is a different job from recording what was sent.
     assert '"tier": "from_phase"' in result.output
@@ -3617,6 +3729,8 @@ def test_advance_records_no_model_when_the_phase_header_has_no_tier(
     assert result.exit_code == 0, result.output
     records = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"]
     assert records[0].model is None
+    assert records[0].tier is None
+    assert records[0].bound is None
 
 
 def test_advance_grouped_member_does_not_reopen_a_dispatch_record_while_still_running(
@@ -3668,7 +3782,7 @@ def test_advance_flat_agent_step_opens_a_dispatch_record_under_the_step_prefix(
     assert list(dispatch) == ["step/phase/1/implement-phase"]
     record = dispatch["step/phase/1/implement-phase"][0]
     assert record.agent_type == "super-fr:fr-phase-executor"
-    assert record.model == "claude-sonnet-5"
+    assert (record.model, record.bound) == (None, "claude-sonnet-5")
     assert record.returned is None
 
 
@@ -6765,6 +6879,10 @@ _MEMBER_BRIEF_KEYS = {
     "for_each",
     "steps",
     "record",
+    # spec 2026-10-06-model-binding-churn R6: every agent-step brief carries
+    # them; a member is never `gate: operator`, so both are always null.
+    "dead_bindings",
+    "binding_offers",
 }
 """4.28.0's member brief, key for key: the spec is the contract, so no brief
 after brainstorm carries the operator's input (spec 2026-09-29 §A, R1)."""
@@ -6778,6 +6896,7 @@ def test_member_briefs_carry_no_operator_input(tmp_path: Path) -> None:
     brief = _brief_of(first.output)
     assert brief["step"] == "code"
     assert set(brief) == _MEMBER_BRIEF_KEYS
+    assert brief["dead_bindings"] is None and brief["binding_offers"] is None
     assert "same style, 680-720" not in first.output
 
     resolved = _invoke(
