@@ -2657,6 +2657,8 @@ def test_advance_records_the_observed_model_of_an_orchestrator_run_step(tmp_path
     assert attempt is not None
     assert attempt.agent_type is None
     assert attempt.model == "claude-sonnet-5"
+    assert attempt.tier is None
+    assert attempt.bound is None
 
 
 def test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model(tmp_path: Path) -> None:
@@ -3621,7 +3623,7 @@ def test_advance_grouped_member_opens_a_dispatch_record(
     record = records[0]
     assert record.dispatched
     assert record.agent_type == "super-fr:fr-phase-executor"
-    assert record.model == "claude-opus-5"
+    assert (record.model, record.bound) == (None, "claude-opus-5")
     assert record.returned is None
     assert record.outcome is None
 
@@ -3650,7 +3652,7 @@ def test_advance_records_the_harness_it_detected_to_resolve_the_model(
 
     assert result.exit_code == 0, result.output
     record = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"][0]
-    assert record.model == "claude-opus-5"
+    assert record.bound == "claude-opus-5"
     assert record.harness == "claude-code", "the model's own harness must be recorded with it"
 
 
@@ -3674,6 +3676,7 @@ def test_advance_records_no_harness_when_detection_is_inconclusive(
     record = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"][0]
     assert record.harness is None
     assert record.model is None
+    assert record.bound is None
 
 
 def test_advance_resolves_the_from_phase_sentinel_against_the_plan_phase_header(
@@ -3702,7 +3705,8 @@ def test_advance_resolves_the_from_phase_sentinel_against_the_plan_phase_header(
 
     assert result.exit_code == 0, result.output
     records = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"]
-    assert records[0].model == "claude-sonnet-5"
+    assert records[0].tier == "standard"
+    assert records[0].bound == "claude-sonnet-5"
     # The brief still carries the sentinel verbatim — it tells the harness to
     # look the phase up, which is a different job from recording what was sent.
     assert '"tier": "from_phase"' in result.output
@@ -3725,6 +3729,8 @@ def test_advance_records_no_model_when_the_phase_header_has_no_tier(
     assert result.exit_code == 0, result.output
     records = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"]
     assert records[0].model is None
+    assert records[0].tier is None
+    assert records[0].bound is None
 
 
 def test_advance_grouped_member_does_not_reopen_a_dispatch_record_while_still_running(
@@ -3776,7 +3782,7 @@ def test_advance_flat_agent_step_opens_a_dispatch_record_under_the_step_prefix(
     assert list(dispatch) == ["step/phase/1/implement-phase"]
     record = dispatch["step/phase/1/implement-phase"][0]
     assert record.agent_type == "super-fr:fr-phase-executor"
-    assert record.model == "claude-sonnet-5"
+    assert (record.model, record.bound) == (None, "claude-sonnet-5")
     assert record.returned is None
 
 

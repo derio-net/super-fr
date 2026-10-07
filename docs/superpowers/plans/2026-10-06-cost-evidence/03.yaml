@@ -1,0 +1,101 @@
+schema_version: 2
+phase:
+  number: 3
+  title: fr usage compare and the cost-evidence audit (R10, R11)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - cost-evidence-usage-compare
+  tier: standard
+  files:
+  - packages/fr/src/fr/usage/compare.py
+  - packages/fr/src/fr/commands/usage_cmd.py
+  - tests/unit/test_usage_compare*.py
+  - tests/fixtures/usage/**
+  - docs/superpowers/audits/2026-10-06-cost-evidence-audit.md
+  - plugins/super-fr/skills/fr-audit/SKILL.md
+  - .opencode/skills/fr-audit/SKILL.md
+  - .hermes/skills/fr/fr-audit/SKILL.md
+  - AGENTS.md
+  estimate_lines: 550
+tasks:
+- number: 1
+  title: The compare engine (spec §F, R10)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_usage_compare.py over fixture runs under tmp_path: a v8 cursor with plan + journal +
+      usage v2 file, a pre-v5 cursor (v4 `items`) with a v1 usage file, and a run missing its usage file.
+      Assert per-run rows (phases, turns, main/subagent cache-read and output, usd, priced flag, findings per
+      phase, re-opened findings), per-set medians and `n`, `—` for missing inputs, selection by ISO date and by
+      run id, and byte-identical output across two calls. Confirm they fail.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: `fr/usage/compare.py`: tolerant raw cursor read (v5+ `units`, v1–v4 `items` via `fr.run.legacy`
+      as usage/backfill.py does); plan via `steps.plan.emitted.plan`; plan journal (live then
+      `implemented/journals/plans/`) findings grouped by `phase`, re-opens from the journal's resolution fold;
+      usage via `fr.run.cost.load_run_usage` + `effective_entries`. Pure function over loaded inputs returning
+      rows + set summaries. Tests green.
+  - id: P3.T1.S3
+    text: |-
+      CLI: `fr usage compare --before <date|run> --after <date|run> [--repo]` in commands/usage_cmd.py printing two
+      tables (per run, per set). Test it with typer's CliRunner over the fixtures. Confirm `usage` stays in
+      `READ_ONLY_COMMANDS` and the command writes nothing (assert the tree is unchanged).
+- number: 2
+  title: The audit (spec §G, R11)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Run `uv run fr usage compare` in the workspace for (a) #627: `--before 2026-09-20 --after 2026-09-20`
+      (cutoff = #514's merge, 2026-09-20T16:47Z; place runs of that day by their `started`), and (b) #793 item 5:
+      `--before 2026-09-29 --after 2026-09-29` (#792 merged 2026-09-28T21:38Z). Save each output.
+  - id: P3.T2.S2
+    text: |-
+      Write docs/superpowers/audits/2026-10-06-cost-evidence-audit.md: three sections — #627 handoff quality,
+      #793 item 5 phase-per-ask sizing, #593 decision rules (main-session share of tokens/cost and cache-read per
+      main-session turn by step, from the v2-split runs available, else from the step figures, saying which) —
+      each quoting its exact command and output, a conclusion, and a "Data limits" list (sample sizes, unpriced
+      captures, the Opus 5 → 5.5 change, pre-gh#637 attempt models holding the binding, Hermes delegates not
+      attributing, and the measurement campaign left out of scope). End with a recommendation between #593
+      options 1 and 4. No third-party identity (these are super-fr's own runs).
+- number: 3
+  title: Docs and quality gate
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Mention `fr usage compare` in the `fr-audit` skill (plugins/super-fr/skills/fr-audit/SKILL.md) as the
+      before/after tool, and in AGENTS.md's `fr/usage` paragraph. Run `uv run --no-project python
+      scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`. Run ruff format, ruff
+      check, mypy, then the full suite into a log outside `.records/`, after the last code commit.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-06T21:19:42+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-06T21:19:42+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-10-06T21:19:42+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-06T21:19:42+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-06T21:19:42+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-10-06T21:19:42+00:00'
+      note: null
+  completion:
+    at: '2026-10-06T21:19:42+00:00'
+    note: null
+    observed_prs: []

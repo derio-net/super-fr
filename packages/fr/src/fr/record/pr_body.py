@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -30,6 +30,7 @@ from fr.journal.model import (
 
 if TYPE_CHECKING:
     from fr.acceptance.model import Matrix, Row
+    from fr.run.cost import PhaseRow, Summary
     from fr.run.model import RunState
     from fr.verification.model import StrategyManifest
     from fr.verification.rows import SpecVerification
@@ -586,7 +587,7 @@ def _proportionality(repo_root: Path, state: RunState) -> str:
 
 
 def _cost(repo_root: Path, state: RunState) -> str:
-    from fr.run.cost import effective_entries, load_run_usage, summarize
+    from fr.run.cost import effective_entries, load_run_usage, phase_rows, summarize
     from fr.usage.capture import live_usage
 
     try:
@@ -598,26 +599,83 @@ def _cost(repo_root: Path, state: RunState) -> str:
     entries, _replayed, _ignored = effective_entries(
         live_usage(repo_root, state, "deliver", os.environ, usage, ambient=True)
     )
-    summary = summarize(entries, list(state.steps))
+    return cost_markdown(
+        summarize(entries, list(state.steps)), phase_rows(state, entries), state.run
+    )
+
+
+def _md_row(cells: Iterable[str]) -> str:
+    return "| " + " | ".join(cells) + " |"
+
+
+def cost_markdown(summary: Summary, phases: Sequence[PhaseRow], run_id: str) -> str:
+    """The `## Cost` body (spec 2026-10-06-cost-evidence §E, R9): the step
+    table with main and subagent columns, then — when the run has agentic
+    phases — the per-phase table. Same cells as `fr run cost`, through the
+    same formatters in `fr.run.cost`."""
+    from fr.run.cost import (
+        DASH,
+        FIGURE_COLUMNS,
+        PHASE_ROLES,
+        STEP_ROLES,
+        count_text,
+        figure_cells,
+        ran_text,
+        usd_text,
+    )
+
     note = ""
     if summary.total is None and any(r.turns for r in summary.steps):
         note = (
             "\n\n_Dollars are `—`: no cost recorded yet. A harness may write a "
             "session's cost only when the session ends (Claude Code does). "
-            f"`fr run cost {state.run}` reads it afterwards._"
+            f"`fr run cost {run_id}` reads it afterwards._"
         )
-
-    def usd(value: float | None) -> str:
-        return "—" if value is None else f"${value:,.2f}"
-
-    def n(value: int | None) -> str:
-        return "—" if value is None else f"{value:,}"
-
-    rows = ["| step | turns | cost |", "|---|---:|---:|"]
-    rows += [f"| {r.step} | {n(r.turns)} | {usd(r.usd)} |" for r in summary.steps]
-    rows.append(f"| **total** | | {usd(summary.total)} |")
+    role_columns = [f"{role} {c}" for role in STEP_ROLES for c in FIGURE_COLUMNS]
+    rows = [
+        _md_row(["step", "turns", "cost", *role_columns]),
+        _md_row(["---", *["---:"] * (2 + len(role_columns))]),
+    ]
+    rows += [
+        _md_row(
+            [
+                r.step,
+                count_text(r.turns),
+                usd_text(r.usd),
+                *figure_cells(r.main),
+                *figure_cells(r.subagent),
+            ]
+        )
+        for r in summary.steps
+    ]
+    rows.append(f"| **total** | | {usd_text(summary.total)} |" + " |" * len(role_columns))
+    sections = ["\n".join(rows)]
+    if phases:
+        phase_columns = [f"{role} {c}" for role in PHASE_ROLES for c in FIGURE_COLUMNS]
+        table = [
+            _md_row(["phase", "tier", "bound", "ran", *phase_columns]),
+            _md_row(["---", "---", "---", "---", *["---:"] * len(phase_columns)]),
+        ]
+        table += [
+            _md_row(
+                [
+                    str(p.phase),
+                    p.tier or DASH,
+                    p.bound or DASH,
+                    ran_text(p),
+                    *figure_cells(p.executor),
+                    *figure_cells(p.reviewer),
+                    *figure_cells(p.orchestrator),
+                ]
+            )
+            for p in phases
+        ]
+        sections.append(
+            "\n".join(table) + "\n\n_`ran` is shown only for an attempt that recorded its "
+            "bound model; `≠` marks a phase that ran on a different model family._"
+        )
     sessions = f"\n\nSessions: {summary.read} read, {summary.unavailable} unavailable."
-    return "\n".join(rows) + sessions + note
+    return "\n\n".join(sections) + sessions + note
 
 
 def _historical(state: RunState) -> str | None:

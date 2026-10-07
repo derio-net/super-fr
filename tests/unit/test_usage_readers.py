@@ -344,3 +344,38 @@ def test_opencode_briefs_are_the_task_prompt_sizes_keyed_by_child_session() -> N
 
     assert opencode.read(OC_DB, "ses_mixed").briefs == {"ses_child": 1009}
     assert opencode.read(OC_DB, "ses_paid").briefs == {}
+
+
+# --- agent_id on every message (cost-evidence spec §A, R1) --------------------
+
+
+def test_claude_code_messages_carry_the_subagent_stream_id() -> None:
+    record = claude_code.read(CC_MAIN)
+    by_agent = {
+        m.agent: {x.agent_id for x in record.messages if x.agent == m.agent}
+        for m in record.messages
+    }
+    assert by_agent["main"] == {None}
+    assert by_agent["super-fr:fr-phase-executor"] == {"af7cb1e9fc08366c6"}
+
+
+def test_hermes_child_messages_carry_the_child_session_id() -> None:
+    from fr.usage.readers import hermes
+
+    record = hermes.read(HERMES_DB, "h_actual")
+    assert {m.agent_id for m in record.messages if m.agent == "main"} == {None}
+    assert {m.agent_id for m in record.messages if m.agent == "delegate"} == {"h_actual_child"}
+
+
+def test_opencode_child_messages_carry_the_child_session_id(tmp_path: Path) -> None:
+    from fr.usage.readers import opencode
+
+    db = _db_copy(
+        OC_DB,
+        tmp_path,
+        "INSERT INTO session (id, parent_id, directory, title, time_created) "
+        "VALUES ('ses_child', 'ses_mixed', '/work/example', 'child', 0)",
+        "UPDATE message SET session_id = 'ses_child' WHERE id = 'msg_a5'",
+    )
+    record = opencode.read(db, "ses_mixed")
+    assert sorted(str(m.agent_id) for m in record.messages) == ["None", "ses_child"]

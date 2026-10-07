@@ -407,7 +407,9 @@ wrote the tier's model beside steps the orchestrating agent performed itself,
 and the archive of this very project holds seven reviews credited to a model
 that did not perform them. Now it reads the session's own transcript, where
 every reply names the model that produced it. A dispatched phase records the
-model that actually served it, not the alias it was asked for, and a step the
+model that actually served it, not the alias it was asked for, and keeps the
+tier and the model that tier was bound to beside it, so the two can be
+compared rather than one overwriting the other; a step the
 orchestrator ran records the orchestrator's model. If you bind an
 `orchestrator` model and the session is running on something else, every
 `fr run advance` warns you. It never blocks: which model you run is your call.
@@ -475,9 +477,17 @@ another machine. So `fr` captures the run's usage once per host — at
 `docs/superpowers/usage/<run-id>.yaml`, committed beside the cursor and
 archived with it: per session, per model and per step, with dollars where the
 harness reports them and no hostname, path or message content in it. `fr run
-cost <run-id>` prints it as one table, a row per step, on any checkout that has
-the file, including one that never ran the run. The same honesty rule applies:
-a figure nobody could observe prints `—`, never `0`. When you want to know
+cost <run-id>` prints it on any checkout that has the file, including one that
+never ran the run, as two tables. The first has a row per step, and splits each
+step into what the orchestrating session spent itself and what its subagents
+spent: turns, cache-read and output tokens, and dollars for each. The second
+has a row per phase: the tier it was dispatched at, the model that tier was
+bound to, the model that actually ran (marked `≠` when the two are different
+models), and what the executor, the reviewer and the orchestrator each spent
+on that phase. The same honesty rule applies: a figure nobody could observe
+prints `—`, never `0`, and so does the model that ran on a phase recorded
+before the tool kept the binding and the observation apart — back then one
+field held whichever was written last, so it cannot say which it was. When you want to know
 where the money went rather than how much there was — bookkeeping against
 implementation, before a process change and after it — the `fr-audit` skill
 (`fr usage report`) reconstructs that from the harness's own session data.
