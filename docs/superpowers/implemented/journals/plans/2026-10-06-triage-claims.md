@@ -401,3 +401,18 @@ Docstring states what raises and that the caller warns (40b96ffc7).
 ### p3-r4-resolved · finding [fixed] · resolves p3-r4: publish runs with the inherited env and cwd = state dir, undocumented and untested (phase 3)
 
 Documented in run_publish/publish_board, spec §3.G and the fr-triage skill (mirrors synced); a test pins cwd and env (75d565cf6).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r17-default-trust-across-users-resolved-2 created=2026-10-07T05:07:50+00:00 state=open resolves=p1-r17-default-trust-across-users tracked_by=https://github.com/derio-net/super-fr/issues/1075 -->
+### p1-r17-default-trust-across-users-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1075] · resolves p1-r17-default-trust-across-users: With no pr_authors, two hosts running as different forge users distrust each other's claims
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1075.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved-2 created=2026-10-07T05:07:50+00:00 state=open resolves=p1-r10 tracked_by=https://github.com/derio-net/super-fr/issues/1076 -->
+### p1-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1076] · resolves p1-r10: batch merge with no ids refuses every queued batch when one is held
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1076.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved-2 created=2026-10-07T05:07:50+00:00 state=open resolves=p2-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1077 -->
+### p2-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1077] · resolves p2-r6: env.issue/owner_repo scan facts linearly per op, so plan_sync is members times issues per pass
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1077.

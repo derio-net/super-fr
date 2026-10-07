@@ -7312,8 +7312,8 @@ rows:
     acceptance: Each triage scope on a host has a stable scope id that carries no hostname,
       path or scope name, and its host id and scope config never leave the host.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R15
     levels:
       unit:
       - super-fr:tests/unit/test_triage_scope_config.py#test_scope_ids_are_stable_host_qualified_and_anonymous
@@ -7331,9 +7331,9 @@ rows:
     acceptance: An issue claimed by another scope is listed as held elsewhere and is
       never batched, dispatched, merged, closed out or archived by this scope.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_triage_check.py#test_check_reports_the_three_claim_sets_in_json
@@ -7354,9 +7354,9 @@ rows:
     acceptance: A claim whose holder stopped refreshing it is reported as expired and
       can be released or taken over only by an explicit operator command.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_triage_claims.py#test_needs_refresh_past_a_quarter_and_always_when_expired
@@ -7378,12 +7378,12 @@ rows:
     acceptance: Claims are written at wave assignment (or dispatch), refreshed in place,
       released at close-out, and a race between two claimers leaves exactly one holder.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R11
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_triage_claim_writes.py#test_a_claim_racing_an_older_expired_foreign_marker_loses_and_withdraws
@@ -7410,11 +7410,11 @@ rows:
     acceptance: Each drive pass writes owed claims, refreshes and releases before acting,
       and leaves a batch with a member held elsewhere alone.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_claim_refresh_and_release_actions_come_before_every_other_action
@@ -7431,9 +7431,9 @@ rows:
     acceptance: Each scope's board shows what other scopes hold and is published under
       its own name after every drive pass through the scope's configured command.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R14
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R16
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban.py#test_held_elsewhere_lists_issues_another_scope_claims_with_holder_batch_and_expiry
@@ -7462,7 +7462,7 @@ rows:
       commenting on a public repo) never blocks a scope; markers by the viewer, its
       pr_authors and repo owners, members and collaborators count.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-triage-claims-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-triage-claims-design.md#R17
     levels:
       unit:
       - super-fr:tests/unit/test_triage_claims.py#test_a_marker_by_a_repo_owner_member_or_collaborator_counts
