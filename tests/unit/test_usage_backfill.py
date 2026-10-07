@@ -109,6 +109,7 @@ def test_backfill_writes_one_new_file_per_archived_run_and_touches_no_run(repo: 
         usage = load_usage(archived_usage_path(repo, run))
         assert usage is not None, run
         assert [c.at for c in usage.captures] == [("backfill",)]
+        assert usage.schema_version == 2  # born stamped, never stale
     text = archived_usage_path(repo, "2026-09-01-feat-old").read_text()
     assert "laptop.corp.example" not in text
 
@@ -120,6 +121,17 @@ def test_a_run_with_transcripts_gets_exact_dollars(repo: Path) -> None:
     entry = next(s for s in usage.captures[0].sessions if s.session == CC_SESSION)
     assert entry.unavailable is None
     assert any(m.usd_source == "exact" and m.usd for m in entry.models.values())
+
+
+def test_backfill_writes_no_main_subagent_or_unit_split(repo: Path) -> None:
+    """Archived files are not re-shaped (cost-evidence spec R6): `backfill`
+    passes no unit index, so neither section is written."""
+    _backfill(repo)
+    for run in ("2026-09-01-feat-old", "2026-09-21-feat-new"):
+        text = archived_usage_path(repo, run).read_text()
+        assert "steps_by_role" not in text and "units:" not in text
+        for capture in load_usage(archived_usage_path(repo, run)).captures:  # type: ignore[union-attr]
+            assert all(not s.steps_by_role and not s.units for s in capture.sessions)
 
 
 def test_a_run_without_transcripts_keeps_its_cursor_figures_with_no_dollars(repo: Path) -> None:

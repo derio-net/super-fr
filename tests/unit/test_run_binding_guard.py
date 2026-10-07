@@ -130,9 +130,11 @@ def test_a_dead_user_binding_is_substituted_before_a_grouped_dispatch(
     ) in result.output
     assert "standard: prov/std2" in models.read_text()
     assert "model: prov/std2" in agent.read_text()
-    # the dispatch record carries the model that will actually run
+    # the dispatch record carries the substituted binding as `bound`; `model` is
+    # what RAN, set only once observed (cost-evidence spec R7)
     (attempt,) = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"]
-    assert attempt.model == "prov/std2"
+    assert attempt.bound == "prov/std2"
+    assert attempt.model is None
     entry = next(
         e
         for e in parse_journal(_plan_journal(repo).read_text())
@@ -169,7 +171,8 @@ def test_a_flat_tiered_step_gets_the_same_guard(env: Path, monkeypatch: pytest.M
     assert "SUBSTITUTED opencode/hard: prov/hard → prov/hard2" in result.output
     assert "hard: prov/hard2" in models.read_text()
     ((attempt,),) = _attempts_by_unit(load_run_state(repo, "r1").steps["spec-review"]).values()
-    assert attempt.model == "prov/hard2"
+    assert attempt.bound == "prov/hard2"
+    assert attempt.model is None
 
 
 # ------------------------------------------- (c) no autonomous pick: refuse

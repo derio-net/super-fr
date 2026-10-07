@@ -405,7 +405,44 @@ def validate_usage(path: Path) -> list[str]:
     data, problems = _load_mapping(path)
     if problems or data is None:
         return problems
-    return _model_problems(UsageFile, data)
+    problems = _model_problems(UsageFile, data)
+    if problems:
+        return problems
+    return _split_problems(UsageFile.model_validate(data))
+
+
+_UNIT_KEY_RE = re.compile(r"^(step/[A-Za-z0-9_.-]+|phase/\d+/[A-Za-z0-9_.-]+|\(unattributed\))$")
+_STEP_ROLES = frozenset({"main", "subagent"})
+_UNIT_ROLES = frozenset({"executor", "reviewer", "agent", "orchestrator", "subagent"})
+
+
+def _split_problems(usage: Any) -> list[str]:
+    """The cost-evidence split (spec §C): role keys from the closed sets, unit
+    keys that are unit keys or `(unattributed)`, no negative figure."""
+    problems: list[str] = []
+
+    def figure(where: str, f: Any) -> None:
+        for name in ("usd", "turns", "input", "cache_write", "cache_read", "output"):
+            value = getattr(f, name)
+            if value is not None and value < 0:
+                problems.append(f"{where}: negative figure `{name}`: {value}")
+
+    for capture in usage.captures:
+        for entry in capture.sessions:
+            where = f"{capture.host}/{entry.session}"
+            for role, steps in entry.steps_by_role.items():
+                if role not in _STEP_ROLES:
+                    problems.append(f"{where}: steps_by_role has unknown role `{role}`")
+                for step, f in steps.items():
+                    figure(f"{where}: steps_by_role.{role}.{step}", f)
+            for unit, roles in entry.units.items():
+                if not _UNIT_KEY_RE.match(unit):
+                    problems.append(f"{where}: units key `{unit}` is not a unit key")
+                for role, f in roles.items():
+                    if role not in _UNIT_ROLES:
+                        problems.append(f"{where}: units.{unit} has unknown role `{role}`")
+                    figure(f"{where}: units.{unit}.{role}", f)
+    return problems
 
 
 def validate_record(path: Path) -> list[str]:

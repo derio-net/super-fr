@@ -32,7 +32,7 @@ from fr.usage.rollup import windows_from_cursor
 
 RUN = "2019-03-04-feat-widget"
 
-SPEC_EXAMPLE = f"""schema_version: 1
+SPEC_EXAMPLE = f"""schema_version: {ARTIFACT_KINDS["usage"].current_version}
 run: {RUN}
 captures:
   - host: h-3f9a2c1e
@@ -65,9 +65,9 @@ def _write(root: Path, rel: str, text: str) -> Path:
     return path
 
 
-def test_usage_is_a_registered_kind_at_version_one() -> None:
+def test_usage_is_a_registered_kind_at_version_two() -> None:
     kind = ARTIFACT_KINDS["usage"]
-    assert kind.current_version == 1
+    assert kind.current_version == 2
     assert kind.locator == "docs/superpowers/usage/*.yaml"
 
 

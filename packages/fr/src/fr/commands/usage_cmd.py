@@ -222,3 +222,55 @@ def backfill_cmd(repo: RepoOpt = None) -> None:
     )
     for path in (*report.written, *report.refreshed):
         typer.echo(f"  {path.relative_to(root)}")
+
+
+@usage_app.command("compare")
+def compare_cmd(
+    before: Annotated[
+        str,
+        typer.Option(
+            "--before", help="ISO date or timestamp (runs started before it) or a run id."
+        ),
+    ],
+    after: Annotated[
+        str,
+        typer.Option(
+            "--after", help="ISO date or timestamp (runs started at or after it) or a run id."
+        ),
+    ],
+    repo: RepoOpt = None,
+    steps: Annotated[
+        bool,
+        typer.Option(
+            "--steps",
+            help="Also print, per set, the main session's turns, tokens, cost and $/turn per step.",
+        ),
+    ] = False,
+) -> None:
+    """Compare two sets of runs: phases, turns, main/subagent tokens, cost,
+    review findings per phase and re-opened findings (read-only, deterministic).
+    Runs are read from live and archived usage files, cursors and plan journals."""
+    from fr.usage.compare import (
+        load_run_inputs,
+        mark_shared,
+        render_compare,
+        render_steps,
+        run_row,
+        select_runs,
+        step_table,
+    )
+
+    _require_host(repo)
+    root = _repo(repo)
+    try:
+        inputs = [
+            [load_run_inputs(root, r) for r in select_runs(root, sel, before=is_before)]
+            for sel, is_before in ((before, True), (after, False))
+        ]
+    except ValueError as e:
+        raise _fail(str(e)) from e
+    rows = [mark_shared([run_row(i) for i in group]) for group in inputs]
+    typer.echo(render_compare(*rows), nl=False)
+    if steps:
+        for label, group in zip(("before", "after"), inputs, strict=True):
+            typer.echo("\n" + render_steps(label, step_table(group)), nl=False)

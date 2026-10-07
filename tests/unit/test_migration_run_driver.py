@@ -29,7 +29,7 @@ def _seed(root: Path, text: str) -> Path:
 
 def test_the_hop_is_registered_and_moves_seven_to_eight() -> None:
     chain = MIGRATIONS.chain("run", 7)
-    assert [(m.from_version, m.to_version) for m in chain] == [(7, 8)]
+    assert [(m.from_version, m.to_version) for m in chain] == [(7, 8), (8, 9)]
 
 
 def test_a_v7_cursor_is_stamped_eight_and_its_body_is_untouched(tmp_path: Path) -> None:
@@ -38,8 +38,9 @@ def test_a_v7_cursor_is_stamped_eight_and_its_body_is_untouched(tmp_path: Path) 
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.failed == (), report.failed
-    assert read_version("run", cursor) == 8
-    assert cursor.read_text() == V7.replace("schema_version: 7", "schema_version: 8")
+    # The chain carries on through 8 -> 9 (`run_bound_model`), stamp-only too.
+    assert read_version("run", cursor) == 9
+    assert cursor.read_text() == V7.replace("schema_version: 7", "schema_version: 9")
     assert parse_run_state(cursor.read_text()).driver is None
 
 

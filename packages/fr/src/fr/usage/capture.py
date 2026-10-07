@@ -33,11 +33,12 @@ from fr.usage.file import (
     SessionEntry,
     UsageFile,
     UsageFileError,
+    current_usage_schema_version,
     dump_usage,
     host_label,
     load_usage,
     session_entry,
-    units_by_agent,
+    unit_index,
     upsert_capture,
     usage_path,
 )
@@ -202,14 +203,14 @@ def build_capture(
     windows = windows_from_cursor(
         {"started": state.started, "steps": {k: {"at": v.at} for k, v in state.steps.items()}}
     )
-    units = units_by_agent(state.model_dump(mode="json"))
+    index = unit_index(state.model_dump(mode="json"))
     entries: list[SessionEntry] = []
     for harness, session in pairs:
         try:
             record = read_session(harness, session, env)
         except Exception as e:  # noqa: BLE001 — a reader must not fail a step
             record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
-        entries.append(session_entry(record, windows, units))
+        entries.append(session_entry(record, windows, index))
     label = this_host(state.run, env)
     previous = existing.host(label)
     events = previous.at if previous is not None else ()
@@ -223,7 +224,7 @@ def build_capture(
         harness_now = "unknown"
     merged = _merge(previous, entries)
     if not merged:
-        merged = [session_entry(unavailable("", harness_now, NO_SESSION_FOUND), windows, units)]
+        merged = [session_entry(unavailable("", harness_now, NO_SESSION_FOUND), windows, index)]
     return Capture(
         host=label,
         harness=harness_now,
@@ -249,7 +250,7 @@ def live_usage(
     last capture on this host saw. `at` is the capture event this reading
     stands in for (the closed `Capture.at` vocabulary). Never raises; a failed
     reading leaves `file` as it was."""
-    base = file or UsageFile(run=state.run)
+    base = file or UsageFile(schema_version=current_usage_schema_version(), run=state.run)
     try:
         live = build_capture(
             repo_root, state, at, env, base, ambient=ambient, require_sessions=True
@@ -276,7 +277,9 @@ def capture(
     Never raises."""
     target = path or usage_path(repo_root, state.run)
     try:
-        existing = load_usage(target) or UsageFile(run=state.run)
+        existing = load_usage(target) or UsageFile(
+            schema_version=current_usage_schema_version(), run=state.run
+        )
         new = build_capture(
             repo_root, state, at, env, existing, ambient=ambient, require_sessions=require_sessions
         )
