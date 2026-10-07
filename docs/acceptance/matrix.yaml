@@ -6054,11 +6054,11 @@ rows:
       executor/reviewer/orchestrator figures per cursor unit, with tokens always and
       dollars only where priced
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_usage_split.py#test_steps_by_role_sum_back_to_each_step_priced
@@ -6072,7 +6072,7 @@ rows:
     acceptance: A version-1 usage file migrates to version 2 by stamp and validates,
       its split read as not observed
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_migration_usage_split_v2.py#test_a_v1_file_is_stamped_two_and_its_body_is_untouched
@@ -6087,7 +6087,7 @@ rows:
       tokens, priced dollars, findings per phase, re-opens) with medians and sample
       sizes, read-only
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_usage_compare.py#test_cli_prints_two_tables_deterministically_and_writes_nothing
@@ -7250,7 +7250,7 @@ rows:
     acceptance: A dispatched attempt keeps the tier and the model bound at dispatch
       beside the model that ran; resolve never overwrites them
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_executor_model.py#test_advance_records_tier_and_binding_and_leaves_model_unset
@@ -7263,8 +7263,8 @@ rows:
     acceptance: fr run cost and the rendered PR body show per phase its tier, bound
       model, model that ran (mismatch marked) and executor/reviewer/orchestrator figures
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-06-cost-evidence-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-cost-evidence-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_run_cost_phases.py#test_the_command_prints_the_role_split_and_the_phase_table
