@@ -30,3 +30,17 @@ Operator, 2026-10-07:
 - **Driver is an adapter.** The driver loop becomes an adapter; a `claude_cloud_driver` implementation runs as a Routine.
 - **State moves out of `~/.cache`** into the workspace, as a git-ignored file.
 - **Plugin reinstalls after a merge (`post_merge`):** open. Wanted: one general solution for every fr-isolation shape, if one exists.
+
+<!-- fr:journal kind=decision scope=spec id=d2-state-ref-and-privacy created=2026-10-07T17:20:57+00:00 -->
+### d2-state-ref-and-privacy · decision · Operator decision, round 2: state on a ref, where it lives, and a privacy guard
+
+Operator, 2026-10-07:
+
+- **Durable state is a ref on the forge** (option a), one per scope; the git-ignored workspace file is the working copy.
+- **Where the ref lives:**
+  - one repo in scope: the ref goes in that repo;
+  - several repos, or an org: if at least one is private, ask the operator to put it in one of the private ones;
+  - all public: the operator chooses between a new repo just for the refs, or a public repo, with a warning that adding an issue from a private repo to a wave later can leak it.
+- **Privacy guard:** when issues are added to a triage or a wave, a check blocks when there is a chance of a privacy violation.
+
+Agent's reading, to confirm in the spec: the leak happens when state is pushed, so the same check also runs before every state push and every `docs/triage`-style export, not only when issues are added.
