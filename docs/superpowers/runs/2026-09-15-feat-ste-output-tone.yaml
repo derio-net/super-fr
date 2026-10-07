@@ -1,7 +1,7 @@
 schema_version: 5
 run: 2026-09-15-feat-ste-output-tone
 workflow: fr-goal@1
-branch: feat/ste-output-tone
+branch: feat/batch-ste-output-tone
 started: '2026-09-15T18:21:24+00:00'
 cursor: deliver
 steps:
