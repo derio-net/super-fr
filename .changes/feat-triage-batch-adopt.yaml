@@ -1,2 +1,0 @@
-bump: minor
-summary: "fr triage batch adopt puts a session started by hand under the wave driver as an existing batch: it renames the branch to the batch branch, supersedes an open PR, labels the herdr tab and agent and records the dispatch; --list lists sessions with their issue refs."
