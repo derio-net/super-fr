@@ -20,6 +20,10 @@ every push to `main` (and by hand through `workflow_dispatch`):
    pushed with the `GITHUB_TOKEN`, so no CI ever runs on it. A plan's ceiling is
    derived from the installed major, so only the release knows it, and a major
    whose commit skipped the widening left this repo's own plans stale (gh#861).
+   A live artifact's stamp moving up (`_stamp_moved_up`) is admitted too: a PR
+   tested against a main from before another PR's artifact-version bump merges
+   carrying the old stamps, and the release's migration is the first thing to
+   see it (the #1058 release, which refused and released nothing).
    Commit `release: vX.Y.Z` as github-actions[bot], the summaries grouped by
    bump in the body.
 4. Test the committed tree AT the new version (`_run_staged_tests`), before the
@@ -301,6 +305,46 @@ def _plan_ceiling_widened(removed: list[str], added: list[str], new: str) -> boo
     return new_specs == widened
 
 
+LIVE_ARTIFACT_RE = re.compile(
+    r"^(?:docs/superpowers/(?:runs/[^/]+\.yaml|usage/[^/]+\.yaml|journals/.+\.md)"
+    r"|docs/acceptance/matrix\.yaml)$"
+)
+"""Live artifacts whose stamp a release may move (`fr.artifacts.registry`'s locators,
+minus plans, which have their own ceiling rule). `implemented/` never matches."""
+
+_STAMP_LINE_RES = (
+    re.compile(r"^schema_version: (\d+)$"),
+    re.compile(r"^<!--[ \t]*fr:journal-schema=(\d+)[ \t]*-->[ \t]*$"),
+)
+
+
+def _stamp_of(line: str) -> tuple[int, int] | None:
+    """`(carrier, version)` when `line` is an artifact stamp, else None."""
+    for carrier, rx in enumerate(_STAMP_LINE_RES):
+        m = rx.match(line)
+        if m:
+            return carrier, int(m.group(1))
+    return None
+
+
+def _stamp_moved_up(removed: list[str], added: list[str]) -> bool:
+    """The whole change is one stamp line moving up, or one missing stamp inserted.
+
+    A PR that merged after another PR moved an artifact's version carries its live
+    artifacts at the old stamp; the release's own migration rewrites exactly that
+    line. Anything else (a body line, a stamp moving down) is not mechanical and
+    still refuses."""
+    if len(added) != 1 or len(removed) > 1:
+        return False
+    new = _stamp_of(added[0])
+    if new is None:
+        return False
+    if not removed:
+        return True
+    old = _stamp_of(removed[0])
+    return old is not None and old[0] == new[0] and new[1] > old[1]
+
+
 def _major_of(bound: str) -> int | None:
     match = re.match(r"\d+", bound)
     return int(match.group()) if match else None
@@ -325,6 +369,10 @@ def verify_staged(repo: Path, old: str, new: str, fragments: list[changes.Fragme
             if not _plan_ceiling_widened(removed, added, new):
                 bad.append(f"{path} (a plan line other than its fr_version ceiling)")
             continue
+        if path not in per_file and LIVE_ARTIFACT_RE.match(path) and status == "M":
+            if not _stamp_moved_up(removed, added):
+                bad.append(f"{path} (a line other than its artifact stamp)")
+            continue
         if path not in per_file or status != "M":
             bad.append(f"{path} ({status})")
             continue
@@ -336,8 +384,8 @@ def verify_staged(repo: Path, old: str, new: str, fragments: list[changes.Fragme
             bad.append(f"{path} (a line other than its version value)")
     if bad:
         raise ReleaseError(
-            "the release commit may carry only version values, consumed fragments and "
-            "widened live-plan ceilings "
+            "the release commit may carry only version values, consumed fragments, "
+            "widened live-plan ceilings and live-artifact stamps moving up "
             "(no CI runs on it); refusing — staged outside that set:\n"
             + "\n".join(f"  - {b}" for b in bad)
         )
