@@ -806,3 +806,206 @@ def test_adding_or_deleting_a_live_plan_refuses(
     err = capsys.readouterr().err
     assert f"{PLAN_META} (D)" in err and "plans/new/_meta.yaml (A)" in err
     assert world.origin_version() == BASE
+
+
+# -- a PR that merged past an artifact-version bump: the release migrates its stamps ---
+#
+# The #1058 release: #1041 moved the `run` and `usage` stamps and migrated main's own
+# artifacts; #1058, tested against the main before it, merged afterwards carrying
+# its run cursor and usage file at the old stamps. The release's own `fr migrate
+# artifacts --yes` then rewrote both stamp lines and verify_staged refused them,
+# so nothing released. A stamp-only rewrite of a LIVE artifact is as mechanical
+# as a widened plan ceiling, and the staged tree is still tested before the push.
+
+RUN_CURSOR = "docs/superpowers/runs/2026-10-06-feat-x.yaml"
+USAGE_FILE = "docs/superpowers/usage/2026-10-06-feat-x.yaml"
+DEBUG_JOURNAL = "docs/superpowers/journals/debug/2026-10-06-x.md"
+ARCHIVED_RUN = "docs/superpowers/implemented/runs/2026-09-01-old.yaml"
+
+
+def _migrating(world: World, rewrite: Callable[[Path], None]) -> release.Commands:
+    original = world.commands()
+
+    def migrate(repo: Path) -> str | None:
+        failure = original.migrate(repo)
+        rewrite(repo)
+        return failure
+
+    return release.Commands(
+        bump=original.bump,
+        lock_check=original.lock_check,
+        gh=original.gh,
+        test=original.test,
+        migrate=migrate,
+    )
+
+
+def _bump_stamps(repo: Path) -> None:
+    for rel, old, new in (
+        (RUN_CURSOR, "schema_version: 8\n", "schema_version: 9\n"),
+        (USAGE_FILE, "schema_version: 1\n", "schema_version: 2\n"),
+        (DEBUG_JOURNAL, "<!-- fr:journal-schema=2 -->", "<!-- fr:journal-schema=3 -->"),
+    ):
+        path = repo / rel
+        path.write_text(path.read_text().replace(old, new, 1))
+
+
+def _land_stale_artifacts(world: World) -> None:
+    world.land(RUN_CURSOR, "schema_version: 8\nrun: 2026-10-06-feat-x\nbranch: feat/x\n")
+    world.land(USAGE_FILE, "schema_version: 1\nrun: 2026-10-06-feat-x\ncaptures: []\n")
+    world.land(DEBUG_JOURNAL, "<!-- fr:journal-schema=2 -->\n# x\n\nbody\n")
+
+
+def test_a_stamp_only_migration_of_live_artifacts_rides_the_release_commit(
+    world: World,
+) -> None:
+    _land_stale_artifacts(world)
+    world.fragment("feat-b", "minor", "add the feature")
+
+    cmds = _migrating(world, _bump_stamps)
+    assert release.main([], repo=world.clone, commands=cmds) == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0"
+    assert (world.origin_show(RUN_CURSOR) or "").startswith("schema_version: 9\n")
+    assert (world.origin_show(USAGE_FILE) or "").startswith("schema_version: 2\n")
+    assert (world.origin_show(DEBUG_JOURNAL) or "").startswith("<!-- fr:journal-schema=3 -->")
+    assert world.test_calls  # the migrated tree was still tested before the push
+
+
+def test_inserting_a_missing_stamp_rides_the_release_commit(world: World) -> None:
+    world.land(USAGE_FILE, "run: 2026-10-06-feat-x\ncaptures: []\n")
+    world.fragment("feat-b", "minor", "add the feature")
+
+    def insert(repo: Path) -> None:
+        path = repo / USAGE_FILE
+        path.write_text("schema_version: 2\n" + path.read_text())
+
+    assert release.main([], repo=world.clone, commands=_migrating(world, insert)) == 0
+    assert (world.origin_show(USAGE_FILE) or "").startswith("schema_version: 2\n")
+
+
+@pytest.mark.parametrize(
+    ("rel", "old", "new"),
+    [
+        (RUN_CURSOR, "branch: feat/x\n", "branch: feat/y\n"),  # a body line
+        (RUN_CURSOR, "schema_version: 8\n", "schema_version: 7\n"),  # a stamp moving down
+        (RUN_CURSOR, "schema_version: 8\n", "schema_version: 9\nextra: 1\n"),  # stamp + body
+        (ARCHIVED_RUN, "schema_version: 4\n", "schema_version: 9\n"),  # an archive
+        ("README.md", "# demo\n", "schema_version: 2\n# demo\n"),  # not an artifact
+    ],
+    ids=["body-line", "stamp-down", "stamp-plus-body", "archived", "not-an-artifact"],
+)
+def test_a_migration_beyond_a_live_stamp_refuses(
+    world: World, capsys: pytest.CaptureFixture[str], rel: str, old: str, new: str
+) -> None:
+    _land_stale_artifacts(world)
+    world.land(ARCHIVED_RUN, "schema_version: 4\nrun: old\n")
+    world.fragment("feat-b", "minor", "add the feature")
+
+    def rewrite(repo: Path) -> None:
+        path = repo / rel
+        path.write_text(path.read_text().replace(old, new, 1))
+
+    assert release.main([], repo=world.clone, commands=_migrating(world, rewrite)) != 0
+
+    assert rel in capsys.readouterr().err
+    assert world.origin_version() == BASE
+
+
+MATRIX = "docs/acceptance/matrix.yaml"
+RECORD = "docs/superpowers/runs/2026-10-06-feat-x.records/deliver.yaml"
+
+
+@pytest.mark.parametrize(
+    ("rel", "before", "after"),
+    [
+        (MATRIX, "schema_version: 3\nrows: []\n", "schema_version: 4\nrows: []\n"),
+        (RECORD, "schema_version: 7\nstep: deliver\n", "schema_version: 8\nstep: deliver\n"),
+        (
+            USAGE_FILE,
+            "---\n# usage\nrun: x\n",
+            "---\n# usage\nschema_version: 2\nrun: x\n",
+        ),  # inserted after the leading document marker and comments, as the writer does
+    ],
+    ids=["matrix", "record", "insert-after-header"],
+)
+def test_more_live_stamp_moves_ride_the_release_commit(
+    world: World, rel: str, before: str, after: str
+) -> None:
+    world.land(rel, before)
+    world.fragment("feat-b", "minor", "add the feature")
+
+    def rewrite(repo: Path) -> None:
+        (repo / rel).write_text(after)
+
+    assert release.main([], repo=world.clone, commands=_migrating(world, rewrite)) == 0
+    assert world.origin_show(rel) == after
+
+
+@pytest.mark.parametrize(
+    ("rel", "before", "after"),
+    [
+        (RUN_CURSOR, "schema_version: 8\nrun: x\n", "<!-- fr:journal-schema=9 -->\nrun: x\n"),
+        (
+            DEBUG_JOURNAL,
+            "<!-- fr:journal-schema=2 -->\n# x\n",
+            "schema_version: 3\n# x\n",
+        ),  # a YAML stamp in a journal
+        (
+            USAGE_FILE,
+            "schema_version: 1\nrun: x\n",
+            "schema_version: 1\nrun: x\nschema_version: 2\n",
+        ),
+        (USAGE_FILE, "run: x\ncaptures: []\n", "run: x\nschema_version: 2\ncaptures: []\n"),
+        (RUN_CURSOR, "schema_version: 8\nrun: x\n", "run: x\nschema_version: 9\n"),
+        (
+            "docs/superpowers/journals/implemented/old.md",
+            "<!-- fr:journal-schema=2 -->\n# x\n",
+            "<!-- fr:journal-schema=3 -->\n# x\n",
+        ),
+    ],
+    ids=[
+        "journal-stamp-in-yaml",
+        "yaml-stamp-in-journal",
+        "duplicate-stamp",
+        "inserted-below-a-key",
+        "moved-below-a-key",
+        "implemented-journal",
+    ],
+)
+def test_a_stamp_change_that_is_not_the_writers_refuses(
+    world: World, capsys: pytest.CaptureFixture[str], rel: str, before: str, after: str
+) -> None:
+    world.land(rel, before)
+    world.fragment("feat-b", "minor", "add the feature")
+
+    def rewrite(repo: Path) -> None:
+        (repo / rel).write_text(after)
+
+    assert release.main([], repo=world.clone, commands=_migrating(world, rewrite)) != 0
+    assert rel in capsys.readouterr().err
+    assert world.origin_version() == BASE
+
+
+def test_a_crlf_artifacts_stamp_move_rides_the_release_commit(world: World) -> None:
+    world.land(USAGE_FILE, "schema_version: 1\r\nrun: x\r\n")
+    world.fragment("feat-b", "minor", "add the feature")
+
+    def rewrite(repo: Path) -> None:
+        (repo / USAGE_FILE).write_bytes(b"schema_version: 2\r\nrun: x\r\n")
+
+    assert release.main([], repo=world.clone, commands=_migrating(world, rewrite)) == 0
+
+
+def test_a_change_hidden_behind_a_unicode_line_separator_refuses(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # splitlines() would cut the added line at U+2028 and never check its tail.
+    world.land(RUN_CURSOR, "schema_version: 8\nrun: x\n")
+    world.fragment("feat-b", "minor", "add the feature")
+
+    def rewrite(repo: Path) -> None:
+        (repo / RUN_CURSOR).write_text("schema_version: 9 branch: smuggled\nrun: x\n")
+
+    assert release.main([], repo=world.clone, commands=_migrating(world, rewrite)) != 0
+    assert RUN_CURSOR in capsys.readouterr().err
