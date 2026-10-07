@@ -4894,7 +4894,7 @@ rows:
       reports the outcome, and never holds a close-out or ends the drive over a restart
       failure or a runner that cannot restart
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive_restart.py#test_two_closeouts_in_one_pass_restart_once_after_both_started
@@ -4909,7 +4909,7 @@ rows:
       session idle with no archive PR, past the repo's idle_session_minutes (default
       60), naming the focus command, without ending the drive
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_the_driver_warns_once_per_idle_session_with_a_paste_ready_focus_command
@@ -4925,7 +4925,7 @@ rows:
       or close-out session has sat idle past the threshold with nothing to show for
       it
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban.py#test_a_batch_card_idle_with_no_pr_needs_you_and_says_why
@@ -7314,10 +7314,10 @@ rows:
       sends a key to a pane it skips (busy, draft, background work, no transcript, own
       or excluded pane), goes on past a failed pane, and refuses outside herdr
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_fr_herdr_restart.py
@@ -7334,7 +7334,7 @@ rows:
       and tab, with the same label, herdr agent name and --model, and a pane at the
       exit dialog is reported, never answered
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R3
     levels: {}
     status: not-implemented
     notes: ''
@@ -7345,7 +7345,7 @@ rows:
       to run drive or dispatch from a herdr pane, and the fr-triage skill documents
       that constraint and the session-upkeep settings
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-06-driver-sessions-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_preflight_refuses_outside_a_herdr_session
