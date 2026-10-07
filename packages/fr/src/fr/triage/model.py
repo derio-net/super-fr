@@ -43,12 +43,14 @@ from fr.triage.stage import Stage, derive_stage
 # schema-4 reader would answer "invalid facts" where "re-run collect" is owed. (`export`, per
 # config, was in the same position at 4; it is left as it is.) Stamping a file lower would
 # turn that reader's "unsupported schema; re-run collect" into "invalid facts" (gh#885).
-# 6 adds per-issue `claims` (2026-10-06-triage-claims §3.H, R12): every file carries the key
-# (`to_json` dumps it, `[]` included), which a closed-world schema-5 reader rejects, so the
-# stamp moves for the same reason as 4 and 5.
-# 3, 4 and 5 still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[6] = 6
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6)
+# 6 is the same story for per-config `post_merge_restart` and `idle_session_minutes`
+# (driver-sessions §C): a schema-5 reader would answer "invalid facts" where "re-run collect"
+# is owed. 7 adds per-issue `claims` (2026-10-06-triage-claims §3.H, R12): every file carries
+# the key (`to_json` dumps it, `[]` included), which a closed-world schema-6 reader rejects, so
+# the stamp moves for the same reason. 3 to 6 still load, and the first collect upgrades them.
+# Independent of JUDGEMENTS_SCHEMA.
+FACTS_SCHEMA: Literal[7] = 7
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7)
 # The version this fr WRITES: every engine write stamps 6 (spec 2026-10-06-triage-claims
 # §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
 # `conflict` event; 4 was
@@ -244,7 +246,7 @@ class Issue(_Strict):
     # createdAt of the latest fr-batch dispatch marker comment; read only for
     # issues labelled fr:in-progress (spec §3.E stale dispatch).
     dispatch_marker_at: str | None = None
-    # The claims on the issue (schema 6): read only for issues labelled fr:claimed or
+    # The claims on the issue (facts schema 7): read only for issues labelled fr:claimed or
     # fr:in-progress, from the same comment read as `dispatch_marker_at`.
     claims: list[IssueClaim] = []
 
@@ -379,6 +381,11 @@ class TriageConfig(_Strict):
     # (spec 2026-10-06-verification-strategies §G): a conflict hand-back's brief names
     # them, so a session regenerates a mirror instead of hand-resolving it.
     mirrors: list[Annotated[list[str], Field(min_length=1)]] = []
+    # After a pass in which `post_merge` succeeded, the wave driver asks the close-out's
+    # runner to restart its idle sessions, once (driver-sessions §B, R6). `none` is off.
+    post_merge_restart: Literal["none", "idle"] = "none"
+    # How long a session may sit idle before the board calls it stale (driver-sessions §D).
+    idle_session_minutes: int = Field(default=60, ge=1)
     # Where the wave driver exports this repo's triage state once a wave is finished
     # (spec 2026-10-05-triage-pages-goal R13); None: the driver never exports.
     export: ExportConfig | None = None
@@ -431,7 +438,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6] = Field(6, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7] = Field(7, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str

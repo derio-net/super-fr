@@ -24,6 +24,7 @@ lets one bad call kill the loop (apply's doctrine).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -174,6 +175,65 @@ class SessionMessenger(Protocol):
 
     def message(self, item: WorkItem, text: str) -> None:
         """Submit *text* to the item's session as a prompt. Raising is a failed send."""
+        ...
+
+
+@dataclass(frozen=True)
+class RestartSummary:
+    """What `SessionRestarter.restart_idle` did: sessions restarted, left alone, and the
+    (pane, reason) of each that failed."""
+
+    ok: int
+    skipped: int
+    failed: tuple[tuple[str, str], ...] = ()
+
+
+@runtime_checkable
+class SessionRestarter(Protocol):
+    """An optional protocol beside `Runner`, never part of it: restart the runner's idle
+    sessions so they load what a merge installed (spec 2026-10-06-driver-sessions §B).
+    The wave driver calls it once per pass; *exclude* names panes never to touch."""
+
+    def restart_idle(self, *, exclude: Sequence[str] = ()) -> RestartSummary:
+        """Restart every idle session. Raising is a failed restart."""
+
+
+@dataclass(frozen=True)
+class AdoptTarget:
+    """One live session a runner could adopt (spec 2026-10-06-triage-batch-adopt §E).
+
+    *label* is the runner's raw label: parsing issue refs out of it is triage
+    vocabulary and lives in `fr.triage`. *agent* is the session's single agent,
+    None when it has none or several; *group* the label of what holds it.
+    """
+
+    tab: str
+    label: str
+    group: str | None
+    agent: str | None
+    status: str
+
+
+@runtime_checkable
+class SessionAdopter(Protocol):
+    """An optional protocol beside `Runner`, never part of it: put a session the
+    runner did not launch under an item's identity (`fr triage batch adopt`).
+
+    `adopt` relabels the session and its agent as the runner's own dispatch of
+    *item* would have, and returns the handle; already adopted, it changes
+    nothing and returns the same handle. Raising is a failed adoption.
+    """
+
+    def describe(self, tab: str) -> AdoptTarget | None:
+        """The session *tab*, or None when the runner has no such session."""
+        ...
+
+    def list_sessions(self) -> list[AdoptTarget]:
+        """Every session the runner can see, one read."""
+        ...
+
+    def adopt(self, item: WorkItem, tab: str) -> str:
+        """Label *tab* and its agent as *item*'s session; return the handle."""
         ...
 
 

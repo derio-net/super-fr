@@ -35,12 +35,15 @@ import yaml
 from fr.usage.file import (
     NO_SESSION_FOUND,
     Capture,
+    Figure,
     SessionEntry,
     UsageFile,
     archived_usage_path,
+    current_usage_schema_version,
     dump_usage,
     load_usage,
     session_entry,
+    unit_index,
     units_by_agent,
     upsert_capture,
     usage_path,
@@ -85,7 +88,7 @@ def _entries(raw: dict[str, Any], env: Mapping[str, str]) -> list[SessionEntry]:
             record = read_session(harness, session, env)
         except Exception as e:  # noqa: BLE001 — one bad reader is one unavailable session
             record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
-        read.append(session_entry(record, windows, units))
+        read.append(session_entry(record, windows, rekey=units))
     if any(e.unavailable is None for e in read):
         return read
     entries = _cursor_figures(raw) + read
@@ -103,6 +106,13 @@ def _now() -> str:
     return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
 
 
+def _v1_steps(entry: SessionEntry) -> SessionEntry:
+    """`entry` with `steps` figures reduced to usd and turns: an archived file
+    still stamped version 1 is re-priced, never re-shaped."""
+    steps = {name: Figure(usd=f.usd, turns=f.turns) for name, f in entry.steps.items()}
+    return entry.model_copy(update={"steps": steps})
+
+
 def refreshed_file(
     usage: UsageFile, raw: dict[str, Any], env: Mapping[str, str]
 ) -> UsageFile | None:
@@ -116,7 +126,7 @@ def refreshed_file(
     if mine is None or not stale:
         return None
     harness_of = {session: harness for harness, session in sessions_of(raw)}
-    windows, units = windows_from_cursor(raw), units_by_agent(raw)
+    windows, units, index = windows_from_cursor(raw), units_by_agent(raw), unit_index(raw)
     sessions: list[SessionEntry] = []
     for entry in mine.sessions:
         if entry.session in stale:
@@ -126,7 +136,11 @@ def refreshed_file(
             except Exception:  # noqa: BLE001 — an unreadable session stays as recorded
                 record = None
             if record is not None and record.unavailable is None and record.cost.usd is not None:
-                entry = session_entry(record, windows, units)
+                # the split is re-priced, never lost; an entry without one stays so
+                keep = index if (entry.steps_by_role or entry.units) else None
+                entry = session_entry(record, windows, keep, rekey=units)
+                if keep is None:
+                    entry = _v1_steps(entry)
         sessions.append(entry)
     if tuple(sessions) == mine.sessions:
         return None
@@ -225,7 +239,11 @@ def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
                 at=("backfill",),
                 sessions=tuple(_entries(raw, env)),
             )
-            text = dump_usage(UsageFile(run=run_id, captures=(capture,)))
+            text = dump_usage(
+                UsageFile(
+                    schema_version=current_usage_schema_version(), run=run_id, captures=(capture,)
+                )
+            )
         except Exception as e:  # noqa: BLE001 — one unreadable run is that run's failure
             report.failed.append((run_id, f"{type(e).__name__}: {e}"))
             continue

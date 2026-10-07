@@ -88,6 +88,18 @@ class Attempt(BaseModel):
     agent_type: str | None = None
     harness: str | None = None
     model: str | None = None
+    """The model that RAN: observed from a transcript, or claimed with
+    `--model`. On an attempt written before run version 9 a subagent
+    attempt's `model` may hold the tier's binding instead (gh#637)."""
+
+    tier: str | None = None
+    """The tier a SUBAGENT attempt was dispatched at (spec
+    2026-10-06-cost-evidence §D, R7). `None` on an orchestrator-run attempt
+    and on every attempt written before run version 9 ("not recorded")."""
+
+    bound: str | None = None
+    """The model `tier` resolved to at dispatch — what SHOULD run. Never
+    overwritten by `resolve`; `model` holds what did."""
 
     session: str | None = None
     """The harness session id fr derived when it OPENED this attempt (§4.D.1).
@@ -168,6 +180,8 @@ class Attempt(BaseModel):
                     "agent_type",
                     "harness",
                     "model",
+                    "tier",
+                    "bound",
                     "session",
                     "returned",
                     "outcome",

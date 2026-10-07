@@ -18,6 +18,7 @@ import functools
 import json
 import re
 import subprocess
+import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
@@ -381,7 +382,7 @@ class RealGhClient:
                 repo,
                 "--json",
                 "state,isDraft,headRefOid,headRefName,baseRefName,mergeable,mergeStateStatus,"
-                "mergeCommit",
+                "mergeCommit,title,body",
             ]
         )
         raw: dict[str, Any] = json.loads(out)
@@ -394,6 +395,8 @@ class RealGhClient:
             "mergeable": raw.get("mergeable") or "UNKNOWN",
             "merge_state": raw.get("mergeStateStatus") or "UNKNOWN",
             "merge_commit": (raw.get("mergeCommit") or {}).get("oid", ""),
+            "title": raw.get("title", ""),
+            "body": raw.get("body", ""),
         }
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
@@ -441,15 +444,32 @@ class RealGhClient:
     @_hosted
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
         # Never `--draft`: the driver merges it once green (pages-goal R13).
+        made = self.create_pr(repo, head=head, base=base, title=title, body=body, draft=False)
+        return int(made["number"])
+
+    @_hosted
+    def create_pr(
+        self, repo: str, *, head: str, base: str, title: str, body: str, draft: bool
+    ) -> dict[str, Any]:
         out = _gh._run_gh(
             ["pr", "create", "--repo", repo, "--head", head, "--base", base,
-             "--title", title, "--body", body]
+             "--title", title, "--body", body, *(["--draft"] if draft else [])]
         )  # fmt: skip
         found = _PR_URL.search(out)
         if found is None:
             # a forge write failure (p4-r4): every caller catches FORGE_ERRORS
             raise _gh.GhError(f"`gh pr create` printed no PR URL: {out.strip()!r}", stdout=out)
-        return int(found.group(1))
+        url = out[: found.end()].strip().splitlines()[-1].strip()
+        return {"number": int(found.group(1)), "url": url}
+
+    @_hosted
+    def close_pr(self, repo: str, number: int) -> None:
+        _gh._run_gh(["pr", "close", str(number), "--repo", repo])
+
+    @_hosted
+    def delete_branch(self, repo: str, branch: str) -> None:
+        ref = urllib.parse.quote(branch, safe="/")  # a `#` or `?` is URL syntax (p1-r7)
+        _gh._run_gh(["api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{ref}"])
 
     def closing_ref(self, repo: str, number: int) -> str:
         return f"Closes {repo}#{number}"

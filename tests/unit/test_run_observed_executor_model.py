@@ -62,11 +62,16 @@ def _code_attempt(repo: Path):
     return attempt
 
 
-def test_advance_still_records_the_binding_as_its_prediction(
+def test_advance_records_tier_and_binding_and_leaves_model_unset(
     dispatched: tuple[Path, Path, Path, Path],
 ) -> None:
+    """Spec 2026-10-06-cost-evidence §D (R7): the binding is a prediction, so it
+    lives in `bound`; `model` is kept for what ran and stays unset until resolve."""
     repo, *_ = dispatched
-    assert _code_attempt(repo).model == "claude-opus-5"
+    attempt = _code_attempt(repo)
+    assert attempt.tier == "hard"
+    assert attempt.bound == "claude-opus-5"
+    assert attempt.model is None
 
 
 def test_resolve_records_the_model_the_subagent_transcript_names(
@@ -86,7 +91,10 @@ def test_resolve_records_the_model_the_subagent_transcript_names(
     )
 
     assert result.exit_code == 0, result.output
-    assert _code_attempt(repo).model == "claude-sonnet-5"
+    attempt = _code_attempt(repo)
+    assert attempt.model == "claude-sonnet-5"
+    assert attempt.tier == "hard", "resolve never overwrites the tier"
+    assert attempt.bound == "claude-opus-5", "resolve never overwrites the binding"
     out = _squash(result.output)
     assert "ran on claude-sonnet-5" in out
     assert "claude-opus-5" in out
@@ -138,11 +146,12 @@ def test_a_dated_id_of_the_bound_model_is_a_match_not_a_mismatch(
     assert "ran on" not in _squash(result.output)
 
 
-def test_an_unobservable_subagent_keeps_the_recorded_model(
+def test_an_unobservable_subagent_leaves_model_unset(
     dispatched: tuple[Path, Path, Path, Path],
 ) -> None:
-    """No transcript for the agent: nothing observed, nothing replaced, no
-    warning — an absence is not a mismatch."""
+    """No transcript for the agent: nothing observed, so `model` stays None
+    (rendered `—`), the binding stays in `bound`, and no warning — an absence
+    is not a mismatch."""
     repo, shipped, root, _ = dispatched
     result = _invoke_measurable(
         repo,
@@ -153,5 +162,121 @@ def test_an_unobservable_subagent_keeps_the_recorded_model(
     )
 
     assert result.exit_code == 0, result.output
-    assert _code_attempt(repo).model == "claude-opus-5"
+    attempt = _code_attempt(repo)
+    assert attempt.model is None
+    assert attempt.bound == "claude-opus-5"
+    assert "ran on" not in _squash(result.output)
+
+
+def test_a_claimed_model_survives_an_unobservable_transcript(
+    dispatched: tuple[Path, Path, Path, Path],
+) -> None:
+    """`--model` is a claim: with nothing observed it is what `model` holds."""
+    repo, shipped, root, _ = dispatched
+    result = _invoke_measurable(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", *UNIT, "--state", "done", "--agent", "zz99", "--model", "m-x"],
+        root,
+        "sess-1",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert _code_attempt(repo).model == "m-x"
+
+
+def test_an_attempt_opened_before_bound_compares_against_its_model(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A cursor written before §D carries the binding in `model`; the
+    observation is compared against it (the fallback), and replaces it."""
+    from fr.commands.run_cmd import _observed_model
+    from fr.run.model import Attempt
+
+    monkeypatch.setattr("fr.run.telemetry.subagent_model", lambda *_a: "claude-sonnet-5")
+    old = Attempt(dispatched="t", agent="a1", agent_type="fr-phase-executor", model="claude-opus-5")
+
+    observed = _observed_model(old, "k")
+
+    assert observed.model == "claude-sonnet-5"
+    assert observed.bound is None
+    assert "ran on claude-sonnet-5" in _squash(capsys.readouterr().err)
+
+
+def test_a_new_attempt_warns_against_bound_not_model(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.commands.run_cmd import _observed_model
+    from fr.run.model import Attempt
+
+    monkeypatch.setattr("fr.run.telemetry.subagent_model", lambda *_a: "claude-sonnet-5")
+    new = Attempt(
+        dispatched="t",
+        agent="a1",
+        agent_type="fr-phase-executor",
+        tier="hard",
+        bound="claude-opus-5",
+    )
+
+    observed = _observed_model(new, "k")
+
+    assert (observed.model, observed.tier, observed.bound) == (
+        "claude-sonnet-5",
+        "hard",
+        "claude-opus-5",
+    )
+    err = _squash(capsys.readouterr().err)
+    assert "ran on claude-sonnet-5" in err
+    assert "claude-opus-5" in err
+
+
+def test_a_synthesized_attempt_may_not_carry_tier_or_bound() -> None:
+    from fr.run.model import Attempt
+
+    for field in ("tier", "bound"):
+        with pytest.raises(ValueError, match=field):
+            Attempt(dispatched="t", synthesized=True, **{field: "x"})
+
+
+def _claim_then_resolve(repo: Path, shipped: Path, root: Path, model: str):
+    claim = ["run", "claim", "r1", *UNIT, "--agent", "a1f1", "--model", model]
+    assert _invoke_measurable(repo, shipped, claim, root, "sess-1").exit_code == 0
+    return _invoke_measurable(
+        repo, shipped, ["run", "resolve", "r1", *UNIT, "--state", "done"], root, "sess-1"
+    )
+
+
+def test_a_claimed_model_equal_to_the_transcript_still_warns_against_bound(
+    dispatched: tuple[Path, Path, Path, Path],
+) -> None:
+    """Review p2-r2: OpenCode always claims `--model`; when the claim matches the
+    transcript, the bound-vs-ran warning must still fire on a family difference."""
+    repo, shipped, root, session = dispatched
+    add_dispatch(
+        session, timestamp=_SAME_INSTANT, agent_id="a1f1", tool_use_id="toolu_a", usage=_USAGE_FIRST
+    )
+
+    result = _claim_then_resolve(repo, shipped, root, "claude-sonnet-5")
+
+    assert result.exit_code == 0, result.output
+    assert _code_attempt(repo).model == "claude-sonnet-5"
+    out = _squash(result.output)
+    assert "ran on claude-sonnet-5" in out and "claude-opus-5" in out
+
+
+def test_a_claimed_model_of_the_bound_family_does_not_warn(
+    dispatched: tuple[Path, Path, Path, Path],
+) -> None:
+    repo, shipped, root, session = dispatched
+    transcript = add_dispatch(
+        session, timestamp=_SAME_INSTANT, agent_id="a1f1", tool_use_id="toolu_a", usage=_USAGE_FIRST
+    )
+    transcript.write_text(
+        transcript.read_text().replace("claude-sonnet-5", "claude-opus-5-20260101")
+    )
+
+    result = _claim_then_resolve(repo, shipped, root, "claude-opus-5-20260101")
+
+    assert result.exit_code == 0, result.output
+    assert _code_attempt(repo).model == "claude-opus-5-20260101"
     assert "ran on" not in _squash(result.output)

@@ -11,6 +11,10 @@ defaults:
 # string. install.sh refuses a base clone that is off main or has stray files;
 # that holds the close-out and warns each pass until the clone is clean.
 post_merge: ["./scripts/install.sh"]
+# After a pass in which post_merge succeeded, the driver restarts the idle sessions of the
+# runner once (driver-sessions spec R6), so they load the plugins, hooks and fr it installed.
+# The driver's own pane is never restarted. `none` turns it off.
+post_merge_restart: idle
 # No `version:` block, deliberately (spec 2026-09-26-version-bump-churn §3.F):
 # super-fr PRs never edit a version, so a batch reserves no number. The worker
 # adds a `.changes/` fragment per AGENTS.md and release.yml assigns the number.

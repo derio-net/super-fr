@@ -1,0 +1,7 @@
+{
+ "error": {
+  "code": "agent_name_taken",
+  "message": "agent name fr-probe is already used; candidates: terminal_id=term_65d3088dfef535e pane_id=w2:p62 workspace_id=w2 tab_id=w2:t45 cwd=/home/user/.cache/fr/worktrees/super-fr/feat__batch-driver-sessions status=Idle"
+ },
+ "id": "cli:agent:start"
+}

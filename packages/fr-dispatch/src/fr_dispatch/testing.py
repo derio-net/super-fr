@@ -20,9 +20,9 @@ pass everything (review r2p-f12a).
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from fr_dispatch.protocols import SessionCloser
+from fr_dispatch.protocols import AdoptTarget, SessionAdopter, SessionCloser
 from fr_dispatch.work_item import RUN_PAYLOAD_KEYS, WorkItem, run_item_id
 
 if TYPE_CHECKING:
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "RUN_PAYLOAD_KEYS",
+    "check_adopt_contract",
     "check_close_contract",
     "check_constructible",
     "check_run_unit_contract",
@@ -126,3 +127,29 @@ def check_close_contract(runner: object, item: WorkItem) -> None:
         f"close({item.id}) returned {outcome!r} for an item the runner does not hold; "
         "the contract is 'absent'",
     )
+
+
+def check_adopt_contract(runner: object, *, unknown_tab: str = "contract-no-such-tab") -> None:
+    """Assert *runner* is a `SessionAdopter` whose reads keep the contract.
+
+    `describe(unknown_tab)` is None, `list_sessions()` is a list of `AdoptTarget`,
+    and each listed session describes as itself. *unknown_tab* must be one the
+    runner does not hold. Nothing is adopted: the contract only reads.
+    """
+    _require(
+        isinstance(runner, SessionAdopter),
+        f"{type(runner).__name__} is not a SessionAdopter: it lacks describe/list_sessions/adopt",
+    )
+    adopter = cast("SessionAdopter", runner)
+    got = adopter.describe(unknown_tab)
+    _require(got is None, f"describe({unknown_tab!r}) returned {got!r} for a tab it does not hold")
+    sessions = adopter.list_sessions()
+    _require(isinstance(sessions, list), f"list_sessions() returned {type(sessions).__name__}")
+    for target in sessions:
+        _require(
+            isinstance(target, AdoptTarget), f"list_sessions() yielded {target!r}, not AdoptTarget"
+        )
+        _require(
+            adopter.describe(target.tab) == target,
+            f"describe({target.tab!r}) disagrees with list_sessions() for that tab",
+        )

@@ -204,7 +204,12 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (pure `(tool, command|path) -> activity`), `rollup.py` (the harness's dollars
     split by fixed price ratios across activities and cursor step windows, plus
     turns), `render.py` (table / one HTML page, `—` for every missing figure).
-    CLI: `fr usage collect|report|backfill` (`commands/usage_cmd.py`); the
+    CLI: `fr usage collect|report|backfill|compare` (`commands/usage_cmd.py`;
+    `compare` — `usage/compare.py`, 2026-10-06 spec `cost-evidence` §F — is the
+    before/after tool: two sets of runs, selected by ISO date/timestamp or run id,
+    over committed usage files, cursors of every version and plan journals; phases
+    from the plan folder, `--steps` for the main session's per-step figures; pure
+    engine, read-only, `—` for any missing input); the
     cache lives under `$HOME/.cache/fr/usage/`, so `usage` is in
     `READ_ONLY_COMMANDS` (`backfill` only writes archive files: it creates
     missing ones and prices sessions an archived one captured while they were
@@ -456,7 +461,8 @@ On every push to `main`, `.github/workflows/release.yml` runs
 `scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`
 and then `fr migrate artifacts --yes` at the new number (at a major that widens
 this repo's own live plans' `fr_version` ceilings, which only the release can
-know; gh#861), `git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
+know; gh#861, and that moves the stamp of a live artifact a PR merged with after
+another PR bumped its kind — the #1058 release), `git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
 whole suite on that staged tree with `fr` installed at the new number**, and only
 then pushes it to `main` (the only commits that land there without a PR), tags
 it and publishes a GitHub Release whose notes are the fragment summaries. No CI

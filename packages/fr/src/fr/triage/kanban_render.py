@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 
-from fr.triage.components import GUTTER_CSS, TOKENS_CSS
+from fr.triage.components import GUTTER_CSS, TOKENS_CSS, stamp_text, when
 from fr.triage.kanban import Board, BoardStatus, Card, ColumnView, HeldIssue, Member, PrView
 from fr.triage.render import FONTS, _safe_url, esc, noun
 
@@ -158,17 +158,12 @@ SCRIPT = """
 """
 
 
-def _when(moment: datetime) -> str:
-    return moment.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+_when = when
 
 
 def _stamp(text: str) -> str:
     """A forge timestamp as `_when` spells it; the escaped text itself when unreadable."""
-    try:
-        moment = datetime.fromisoformat(text)
-    except ValueError:
-        return esc(text)
-    return _when(moment) if moment.tzinfo else esc(text)
+    return esc(stamp_text(text))
 
 
 def _link(text: str, url: str | None) -> str:

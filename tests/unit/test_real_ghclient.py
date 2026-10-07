@@ -237,3 +237,81 @@ class TestIssueComments:
         assert calls == [
             ["api", "-X", "PATCH", "repos/o/r/issues/comments/123", "-f", "body=new body"]
         ]
+
+
+# ----------------------------------------- batch adopt's PR supersede (spec 2026-10-06 §C)
+
+_GH_FIXTURES = __import__("pathlib").Path(__file__).resolve().parent.parent / "fixtures" / "gh"
+_ADOPT_REPO = "derio-net/super-fr"
+
+
+class _Recorder:
+    """`_run_gh` stand-in answering from the live captures in tests/fixtures/gh."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(self, args: list[str]) -> str:
+        self.calls.append(list(args))
+        if args[:2] == ["pr", "create"]:
+            return (_GH_FIXTURES / "pr-create-draft.stdout").read_text()
+        if args[:2] == ["pr", "view"]:
+            return (_GH_FIXTURES / "pr-view-adopt.json").read_text()
+        return ""  # `pr close` and `api -X DELETE` print nothing on stdout (captured)
+
+
+@pytest.fixture
+def recorder(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
+    fake = _Recorder()
+    monkeypatch.setattr(_gh, "_run_gh", fake)
+    return fake
+
+
+def _flag(call: list[str], flag: str) -> str:
+    return call[call.index(flag) + 1]
+
+
+class TestAdoptPrOperations:
+    @pytest.mark.parametrize("draft", [True, False])
+    def test_create_pr_issues_gh_pr_create_and_parses_number_and_url(
+        self, recorder: _Recorder, draft: bool
+    ) -> None:
+        got = RealGhClient().create_pr(
+            _ADOPT_REPO, head="feat/batch-x", base="main", title="T", body="B", draft=draft
+        )
+        assert got == {"number": 1044, "url": "https://github.com/derio-net/super-fr/pull/1044"}
+        (call,) = recorder.calls
+        assert call[:4] == ["pr", "create", "--repo", _ADOPT_REPO]
+        assert (_flag(call, "--head"), _flag(call, "--base")) == ("feat/batch-x", "main")
+        assert (_flag(call, "--title"), _flag(call, "--body")) == ("T", "B")
+        assert ("--draft" in call) is draft
+
+    def test_pr_create_still_opens_a_ready_pr_and_returns_its_number(
+        self, recorder: _Recorder
+    ) -> None:
+        got = RealGhClient().pr_create(_ADOPT_REPO, head="h", base="main", title="t", body="b")
+        assert got == 1044
+        assert "--draft" not in recorder.calls[0]
+
+    def test_close_pr_issues_gh_pr_close(self, recorder: _Recorder) -> None:
+        assert RealGhClient().close_pr(_ADOPT_REPO, 1044) is None
+        assert recorder.calls == [["pr", "close", "1044", "--repo", _ADOPT_REPO]]
+
+    def test_delete_branch_deletes_the_ref_through_the_api(self, recorder: _Recorder) -> None:
+        assert RealGhClient().delete_branch(_ADOPT_REPO, "feat/hand-started") is None
+        assert recorder.calls == [
+            [
+                "api",
+                "-X",
+                "DELETE",
+                f"repos/{_ADOPT_REPO}/git/refs/heads/feat/hand-started",
+            ]
+        ]
+
+    def test_pr_view_carries_title_and_body(self, recorder: _Recorder) -> None:
+        got = RealGhClient().pr_view(_ADOPT_REPO, 1044)
+        assert got["title"] == "scratch: fr batch adopt capture (closed immediately)"
+        assert got["body"].startswith("Live capture of `gh pr create --draft`")
+        assert got["draft"] is True and got["base_ref"] == "main"
+        fields = _flag(recorder.calls[0], "--json").split(",")
+        assert {"title", "body"} <= set(fields)

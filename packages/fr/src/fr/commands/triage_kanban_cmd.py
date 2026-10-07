@@ -288,17 +288,20 @@ def write_board(
     on disk now, with live session statuses. Returns the path written and its card count."""
     _, facts, judgements = _load_state(scope, target)
     statuses, notes = session_statuses(judgements, facts, prefix=prefix)
-    now = datetime.now(UTC)
+    rendered_at = datetime.now(UTC)
+    # The wall clock: session status is read live above, so idle minutes must be real.
     try:
         me: str | None = scope_id(facts.scope)
     except TriageError as exc:  # the board is a view: say what it cannot show, never refuse
         me = None
         notes.append(f"claims are not shown: {one_line(exc)}")
-    board = build_board(facts, judgements, statuses, stops=load_stops(target), me=me, now=now)
+    board = build_board(
+        facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at
+    )
     page = render_board(
         board,
         scope_args=scope_args,
-        rendered_at=now,
+        rendered_at=rendered_at,
         refresh=refresh,
         notes=notes,
     )

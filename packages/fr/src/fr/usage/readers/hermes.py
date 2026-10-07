@@ -137,6 +137,7 @@ def _read(source: Path, session: str) -> UsageRecord:
             tokens=Tokens(input=int(count or 0)),
             tool_calls=_tool_calls(calls),
             agent="main" if owner == session else "delegate",
+            agent_id=None if owner == session else str(owner),
         )
         for owner, ts, count, calls in messages
     ]

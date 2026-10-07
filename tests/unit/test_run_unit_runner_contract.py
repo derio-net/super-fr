@@ -235,3 +235,50 @@ def test_check_close_contract_refuses_a_non_closer() -> None:
 
     with pytest.raises(AssertionError, match="SessionCloser"):
         check_close_contract(_RunRunner(), run_item())  # type: ignore[arg-type]
+
+
+# ------------------------------------------------------------ SessionAdopter
+
+
+class _Adopter:
+    def __init__(self, *, unknown: object = None) -> None:
+        from fr_dispatch.protocols import AdoptTarget
+
+        self.held = AdoptTarget(tab="t1", label="x", group=None, agent="a1", status="idle")
+        self.unknown = unknown
+
+    def describe(self, tab: str) -> object:
+        return self.held if tab == "t1" else self.unknown
+
+    def list_sessions(self) -> list[object]:
+        return [self.held]
+
+    def adopt(self, item: WorkItem, tab: str) -> str:
+        return tab
+
+
+def test_session_adopter_is_a_runtime_protocol_a_plain_runner_is_not() -> None:
+    from fr_dispatch.protocols import SessionAdopter
+
+    assert isinstance(_Adopter(), SessionAdopter)
+    assert not isinstance(_RunRunner(), SessionAdopter)
+
+
+def test_check_adopt_contract_passes_a_conforming_adopter() -> None:
+    from fr_dispatch.testing import check_adopt_contract
+
+    check_adopt_contract(_Adopter())
+
+
+def test_check_adopt_contract_refuses_an_adopter_describing_an_unknown_tab() -> None:
+    from fr_dispatch.testing import check_adopt_contract
+
+    with pytest.raises(AssertionError, match="does not hold"):
+        check_adopt_contract(_Adopter(unknown="something"))
+
+
+def test_check_adopt_contract_refuses_a_non_adopter() -> None:
+    from fr_dispatch.testing import check_adopt_contract
+
+    with pytest.raises(AssertionError, match="SessionAdopter"):
+        check_adopt_contract(_RunRunner())

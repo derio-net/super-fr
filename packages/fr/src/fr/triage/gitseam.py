@@ -202,6 +202,36 @@ class Checkout:
         out = git(["ls-remote", "--heads", "origin", f"refs/heads/{branch}"], self.path)
         return bool(out.strip())
 
+    def has_branch(self, branch: str) -> bool:
+        """A local branch *branch* exists."""
+        return git_ok(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], self.path)
+
+    def worktree_of(self, branch: str) -> Path | None:
+        """The worktree *branch* is checked out in (`git worktree list`), or None."""
+        out = git(["worktree", "list", "--porcelain"], self.path)
+        where: Path | None = None
+        for line in out.splitlines():
+            if line.startswith("worktree "):
+                where = Path(line.removeprefix("worktree ")).resolve()
+            elif line == f"branch refs/heads/{branch}" and where is not None:
+                return where
+        return None
+
+    def main_worktree(self) -> Path:
+        """The repository's main (non-linked) worktree, wherever this checkout is: the
+        first entry of `git worktree list`."""
+        for line in git(["worktree", "list", "--porcelain"], self.path).splitlines():
+            if line.startswith("worktree "):
+                return Path(line.removeprefix("worktree ")).resolve()
+        return self.path.resolve()
+
+    def publish_branch(self, branch: str) -> None:
+        """Push local *branch* to origin and make that its upstream (batch adopt, §C)."""
+        git(
+            ["push", "--quiet", "-u", "origin", f"refs/heads/{branch}:refs/heads/{branch}"],
+            self.path,
+        )
+
     def rev_parse(self, ref: str) -> str:
         return git(["rev-parse", ref], self.path).strip()
 

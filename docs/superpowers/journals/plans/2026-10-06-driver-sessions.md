@@ -1,0 +1,356 @@
+# Journal: 2026-10-06-driver-sessions
+
+<!-- fr:journal kind=decision scope=plan id=plan-shape created=2026-10-06T18:52:57+00:00 -->
+### plan-shape · decision · Three agentic phases, one per reviewable ask; no member issue is a tracking_issue
+
+P1 restart engine + CLI + install (skeleton,
+
+<!-- fr:journal kind=discovery scope=plan id=herdr-agent-start-name-reuse created=2026-10-06T19:30:58+00:00 phase=1 -->
+### herdr-agent-start-name-reuse · discovery · herdr accepts the pane's own agent name again right after /exit; it refuses only when another pane holds it (phase 1)
+
+Probed live (herdr 0.9.1) in scratch tabs. After `/exit` the pane drops out of `agent list` (the name is released), and `agent start <same name> --kind claude --pane <same pane> -- --resume <id>` is ACCEPTED with the same agent_session.value and name (fixture agent-start-reuse.json). A different pane starting a name another pane holds gets `agent_name_taken` (agent-start-name-taken.json). So the named `agent start` path is primary, and `agent_name_taken` alone triggers the send-text fallback.
+
+<!-- fr:journal kind=discovery scope=plan id=claude-agent-count-is-not-background-work created=2026-10-06T19:30:58+00:00 phase=1 -->
+### claude-agent-count-is-not-background-work · discovery · `← N agent` is on every idle Claude status line, so only shells/monitors and the agent panel mean background work (phase 1)
+
+Spec §A treats `← N agent(s)` as background-agent evidence. Live, a freshly started session with nothing running already shows `← 1 agent`, and the count did not change while a background subagent ran (the status line then also showed `2 shells, 1 monitor` and an agent panel, `⏺ main` / `◯ general-purpose ...`, while herdr reported `done`). `has_background_work` therefore counts `N shells|monitors`, a `◯` panel row, or `← N agents` with N above 1. Using the spec's literal rule would have skipped nearly every pane. The hint segments also vanish from the status line while a draft is typed, and herdr still says `idle` then.
+
+<!-- fr:journal kind=discovery scope=plan id=pane-read-is-raw-text created=2026-10-06T19:30:58+00:00 phase=1 -->
+### pane-read-is-raw-text · discovery · `herdr pane read` prints raw terminal text, not a JSON envelope (phase 1)
+
+`_run_herdr` returns it as `{"raw": <text>}` (stripped), so the screen fixtures are that return value and restart.py reads `.get("raw")`. process-info's foreground_processes also lists non-claude processes (MCP servers; one has no `argv` key), so the claude process is found by argv[0] basename, and its cwd (not the pane's) slugs the transcript path. An extra classify reason `no-process` covers a pane with no claude in the foreground.
+
+<!-- fr:journal kind=discovery scope=plan id=exit-dialog-not-live-captured created=2026-10-06T19:30:58+00:00 phase=1 -->
+### exit-dialog-not-live-captured · discovery · Claude's exit dialog is quoted from #964, not captured (phase 1)
+
+An unsent feedback draft is not reproducible without sending feedback, so no fixture of the dialog exists; the engine matches "unsent feedback draft" / "Enter to review & send" in the visible text and the tests use that quoted string. The fixtures README says so.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t1 created=2026-10-06T19:30:58+00:00 phase=1 -->
+### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
+
+a smoke test over captured fixtures; no production code existed to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t4 created=2026-10-06T19:30:58+00:00 phase=1 -->
+### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
+
+cli.py is 58 lines of argparse over restart_idle written once to its tests; nothing duplicated or misnamed
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t5 created=2026-10-06T19:30:58+00:00 phase=1 -->
+### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
+
+shell and test additions follow the existing atomic_symlink and stub-uv patterns; nothing to tidy
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · restart_idle classified every pane from one initial agent list, so a pane that turned working during earlier serial restarts still got /exit (phase 1)
+
+restart_idle classified every pane from one initial agent list, so a pane that turned working during earlier serial restarts still got /exit
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · has_draft failed open when no line started exactly with the prompt glyph (phase 1)
+
+has_draft failed open when no line started exactly with the prompt glyph
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · only the first input line was checked, so a multi-line draft with an empty first line was missed (phase 1)
+
+only the first input line was checked, so a multi-line draft with an empty first line was missed
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · the named relaunch did not retry agent_pane_busy like the runner does (phase 1)
+
+the named relaunch did not retry agent_pane_busy like the runner does
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · only HerdrError was caught, so an OSError or non-dict herdr answer aborted the run and lost the resume line (phase 1)
+
+only HerdrError was caught, so an OSError or non-dict herdr answer aborted the run and lost the resume line
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · spec §A/R2 were not amended for the live discoveries (phase 1)
+
+spec §A/R2 were not amended for the live discoveries
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · a lone background subagent was caught only by one captured panel glyph (phase 1)
+
+a lone background subagent was caught only by one captured panel glyph
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r8 · finding [open] (reviewer: in scope) · the resume confirmation could accept a stale pre-exit agent-list entry (phase 1)
+
+the resume confirmation could accept a stale pre-exit agent-list entry
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r9 · finding [open] (reviewer: in scope) · the relaunch and resume line assumed the shell cwd equals the claude cwd (phase 1)
+
+the relaunch and resume line assumed the shell cwd equals the claude cwd
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r10 · finding [open] (reviewer: in scope) · HERDR_PANE_ID was not recorded and the tab list shape was never captured (phase 1)
+
+HERDR_PANE_ID was not recorded and the tab list shape was never captured
+
+<!-- fr:journal kind=finding scope=plan id=p1-r11 created=2026-10-06T20:44:54+00:00 phase=1 state=open review_scope=in -->
+### p1-r11 · finding [open] (reviewer: in scope) · install.sh passed --with-executables-from unconditionally, failing older uv (phase 1)
+
+install.sh passed --with-executables-from unconditionally, failing older uv
+
+<!-- fr:journal kind=discovery scope=plan id=p1-install-atomic-load-flake created=2026-10-06T20:44:54+00:00 phase=1 -->
+### p1-install-atomic-load-flake · discovery · test_fr_stays_runnable_throughout_a_reinstall failed once (1/225 fr calls) under full -n auto load (phase 1)
+
+Seen once in the fix round's first full-suite run; the fr link swap itself is unchanged by this branch (only a separate fr-herdr link is added after each fr swap). Six reruns of the file under -n 6 all passed and the final full suite was green. Recorded as a load-sensitive window in the test, not a defect of this change.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-10-06T20:44:54+00:00 phase=1 -->
+### review-p1 · review · phase 1 independent review: 11 findings, all in scope, all fixed (phase 1)
+
+Independent reviewer (separate context) raised p1-r1..p1-r11, all in scope; each verified against the code and fixed with a test by a fix round (head 82bb4c1fd); full suite green: 9792 passed, 105 skipped (/private/tmp/claude-502/driver-sessions-p1-review-suite.log).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: restart_idle classified every pane from one initial agent list, so a pane that turned working during earlier serial restarts still got /exit (phase 1)
+
+Each pane's agent-list entry is re-read right before classifying it (`gone` if absent); tests test_r1_*.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: has_draft failed open when no line started exactly with the prompt glyph (phase 1)
+
+Prompt located after stripping SGR, as the last prompt line under a rule; no prompt -> skip `no-prompt`; test_r2_*.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: only the first input line was checked, so a multi-line draft with an empty first line was missed (phase 1)
+
+Every input-box line up to the closing rule is checked, faint state carried across lines; live-captured fixture; test_r3_*.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: the named relaunch did not retry agent_pane_busy like the runner does (phase 1)
+
+Shared start_agent retry moved into _herdr.py, used by runner and restart; test_r4_*.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: only HerdrError was caught, so an OSError or non-dict herdr answer aborted the run and lost the resume line (phase 1)
+
+Per-pane catches broadened to Exception mapped to fail/skip unreadable with the resume line kept; _run_herdr always returns a dict; test_r5_*.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r6 -->
+### p1-r6-resolved · finding [fixed] · resolves p1-r6: spec §A/R2 were not amended for the live discoveries (phase 1)
+
+Spec R2, §A and Install amended: background-work rule, no-process/no-prompt/gone/unreadable skips, raw pane read, absent name, status re-read, retry, broad catch, resume process check, cwd handling, HERDR_PANE_ID, name reuse, conditional install flag.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: a lone background subagent was caught only by one captured panel glyph (phase 1)
+
+Captured a subagent-only screen in a scratch tab (fixture screen-subagent.json); herdr also reports `working` while it runs, a second guard; test_r7_*.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r8 -->
+### p1-r8-resolved · finding [fixed] · resolves p1-r8: the resume confirmation could accept a stale pre-exit agent-list entry (phase 1)
+
+Resume also requires a foreground claude in process-info; test_r8_*.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r9 -->
+### p1-r9-resolved · finding [fixed] · resolves p1-r9: the relaunch and resume line assumed the shell cwd equals the claude cwd (phase 1)
+
+Shell cwd read after exit; `cd <claude cwd>` sent before relaunch when it differs; the resume line carries the cd; test_r9_*.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r10 -->
+### p1-r10-resolved · finding [fixed] · resolves p1-r10: HERDR_PANE_ID was not recorded and the tab list shape was never captured (phase 1)
+
+tab list captured live and redacted (restart/tab-list.json), served by the scenario's fake herdr, labels asserted; README notes HERDR_PANE_ID; test_r10_*.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r11-resolved created=2026-10-06T20:44:54+00:00 phase=1 state=fixed resolves=p1-r11 -->
+### p1-r11-resolved · finding [fixed] · resolves p1-r11: install.sh passed --with-executables-from unconditionally, failing older uv (phase 1)
+
+Flag passed only when `uv tool install --help` lists it; fr-herdr linked from the tool env bin otherwise; tests in test_install_sh.py and candidate-install.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-schema-pins created=2026-10-06T21:19:22+00:00 phase=2 -->
+### p2-schema-pins · discovery · facts schema 6 moves every test pinning the written stamp (phase 2)
+
+Seven test files pinned facts schema 5 as the written stamp (collect, skeleton, cli, scope_groups x2, state_integrity, facts_schema3); all moved to 6. Spec amended nothing: section B and C matched what was built.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-06T21:19:22+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+a single small method plus a protocol; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-06T21:19:22+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+two config fields and a stamp bump; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-06T21:38:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · the owed restart lived only in memory while the post_merge event was persisted, so a pass aborted after post_merge lost it for good (phase 2)
+
+the owed restart lived only in memory while the post_merge event was persisted, so a pass aborted after post_merge lost it for good
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-06T21:38:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · the preflight-refusal test found the probe by a call-count heuristic and never asserted the refusal was reported (phase 2)
+
+the preflight-refusal test found the probe by a call-count heuristic and never asserted the refusal was reported
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-06T21:38:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · 'reported once per driver process' was untested across passes (phase 2)
+
+'reported once per driver process' was untested across passes
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-06T21:38:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · no test that a recorded close-out, or one whose post_merge is not owed, does not restart (phase 2)
+
+no test that a recorded close-out, or one whose post_merge is not owed, does not restart
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-10-06T21:38:49+00:00 phase=2 -->
+### review-p2 · review · phase 2 independent review: 4 findings, all in scope, all fixed (phase 2)
+
+Independent reviewer (separate context) raised p2-r1..p2-r4; each verified and fixed with a test (head f63e3b6c0); full suite 9807 passed, 105 skipped (/private/tmp/claude-502/driver-sessions-p2-review-suite.log).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-06T21:38:49+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: the owed restart lived only in memory while the post_merge event was persisted, so a pass aborted after post_merge lost it for good (phase 2)
+
+run_pass's actions sit in try/finally whose finally runs the soft _restart_sessions() under --yes; red-first test: a later close-out refused via can_dispatch still restarts once; spec §B amended. Chosen over persisting the owed restart: no new state or artifact shape.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-06T21:38:49+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: the preflight-refusal test found the probe by a call-count heuristic and never asserted the refusal was reported (phase 2)
+
+Test keys on the close-out probe item (wave group, no payload.kind) and asserts the refusal is reported once, the probes are close-out probes, restart_idle is not called and both close-outs still dispatch.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-06T21:38:49+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: 'reported once per driver process' was untested across passes (phase 2)
+
+Two tests drive two run_pass calls on one _Driver; the non-restarter and the refusal are each reported exactly once.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-06T21:38:49+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: no test that a recorded close-out, or one whose post_merge is not owed, does not restart (phase 2)
+
+New tests: a recorded close-out and a close-out whose PostMergeEvent already exists never call restart_idle.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-board-now-optional created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-board-now-optional · discovery · build_board's now is optional: None judges no idleness (phase 3)
+
+build_board and _card take `now`, but as an optional keyword defaulting to None, which means no idle judgement. Roughly sixty existing board tests pass statuses of `idle` against fixtures dated in the past; a required or defaulted-to-wall-clock `now` would flip every one of them. write_board passes the wall clock, which is the only caller that should.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-idle-warn-exit-3 created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-idle-warn-exit-3 · discovery · an idle-session warn leaves --once at exit 3, as any in-flight batch does (phase 3)
+
+The warn never touches the Summary, so a drive with an idle batch session still reads in flight and --once exits 3 (waiting). The command-level tests assert 0 or 3 for that reason; the point of the rule (reporting never ends or keeps alive the drive) is pinned in the pure tests by comparing summaries with and without the warn.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-headless-chrome-hangs created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-headless-chrome-hangs · discovery · Google Chrome --headless=new writes the screenshot then hangs here; the Playwright headless shell does not (phase 3)
+
+For the board's visual check the installed Chrome produced the PNG and then never exited (or exited 2). The chrome-headless-shell from the local Playwright cache, with --no-sandbox and a 60 s timeout, exits cleanly. The capture script lives in the git-ignored visual directory under /private/tmp.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-no-explainer-describes-the-driver created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-no-explainer-describes-the-driver · discovery · no docs/explainers page describes the wave driver or the board (phase 3)
+
+Grepped docs/explainers/*.md for herdr, triage and idle: the only hits are fr run check --idle and prose about a phase running long. Nothing describes the wave driver's behaviour that changes here, so no explainer was edited and no page regeneration is owed.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-board-archive-attribution-from-facts created=2026-10-06T22:17:44+00:00 phase=3 -->
+### p3-board-archive-attribution-from-facts · discovery · the board attributes archive PRs from the collected facts, not the forge (phase 3)
+
+A close-out card has no archive PR when the collected facts hold none that `attributed` claims (head under chore/archive- or chore/closeout-, trusted when not cross-repo), or when the event records `archived`. A PR opened since the last collect reads as missing until the next one; the card line says `as of <collected_at>` so the window is visible (sr-9).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-06T22:17:44+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+a pure rule and one dataclass added beside the existing close-out helpers; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-06T22:17:44+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+the idle lookup is one helper beside _card; no duplicated logic to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-10-06T22:17:44+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+a message string and one skill paragraph; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · a cancelled batch with a leftover idle session was warned and flagged needs-you (phase 3)
+
+a cancelled batch with a leftover idle session was warned and flagged needs-you
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · 'has sat idle for N min' reported minutes since dispatch, not idle duration (phase 3)
+
+'has sat idle for N min' reported minutes since dispatch, not idle duration
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · the close-out unfinished test lived only in the driver; the board read only open archive PRs (phase 3)
+
+the close-out unfinished test lived only in the driver; the board read only open archive PRs
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · threshold was >= while the spec said 'older than' (phase 3)
+
+threshold was >= while the spec said 'older than'
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · card printed raw ISO collected_at, wrapping mid-date (phase 3)
+
+card printed raw ISO collected_at, wrapping mid-date
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · a runner load failure in the idle probe warned 'its sessions are not closed' (phase 3)
+
+a runner load failure in the idle probe warned 'its sessions are not closed'
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · weak tests (raise case, non-status param, tautological failing-ci test, probe cost) (phase 3)
+
+weak tests (raise case, non-status param, tautological failing-ci test, probe cost)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=out -->
+### p3-r8 · finding [open] (reviewer: out of scope) · the card front shows the batch session's pill, so an idle close-out card reads the wrong session's status (phase 3)
+
+the card front shows the batch session's pill, so an idle close-out card reads the wrong session's status
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-10-06T22:36:36+00:00 phase=3 state=open review_scope=out -->
+### p3-r9 · finding [open] (reviewer: out of scope) · the fr-triage skill says 'six lifecycle columns'; the board has seven (phase 3)
+
+the fr-triage skill says 'six lifecycle columns'; the board has seven
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-10-06T22:36:36+00:00 phase=3 -->
+### review-p3 · review · phase 3 independent review: 7 in scope (fixed), 2 out of scope (phase 3)
+
+Independent reviewer (separate context) raised p3-r1..p3-r9, drove the board itself and opened its own fresh screenshots of the three visual states plus a phone-width long label; tried limits (exact threshold flagged, 59 s at a 1-min threshold not flagged). p3-r1..r7 fixed with tests (head 4c8372a5c; full suite 9862 passed, 105 skipped, /private/tmp/claude-502/driver-sessions-p3-review-suite.log); p3-r8, p3-r9 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: a cancelled batch with a leftover idle session was warned and flagged needs-you (phase 3)
+
+idle_session takes the stage and returns None unless a session is owed work (dispatched; close-out merged/partial); prefilter and board rely on the rule; tests at rule, driver, board.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: 'has sat idle for N min' reported minutes since dispatch, not idle duration (phase 3)
+
+Wording now 'is <status>, dispatched|close-out started <N> min ago, with no PR|archive PR'; minutes_since; spec R7/§D and SKILL.md updated.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: the close-out unfinished test lived only in the driver; the board read only open archive PRs (phase 3)
+
+idle_session takes archives (open or merged) and applies is_finished and attribution itself; board passes facts' archive PRs incl. merged; tests.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: threshold was >= while the spec said 'older than' (phase 3)
+
+Kept at-least; spec reworded; boundary tests at threshold and threshold+1.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: card printed raw ISO collected_at, wrapping mid-date (phase 3)
+
+Formatted YYYY-MM-DD HH:MM UTC via a shared components helper; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: a runner load failure in the idle probe warned 'its sessions are not closed' (phase 3)
+
+_try_runner takes a consequence; idle path says 'idle sessions are not reported'; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: weak tests (raise case, non-status param, tautological failing-ci test, probe cost) (phase 3)
+
+Raise case split and asserts one report over two passes; real statuses + command-level done; failing-ci test builds inputs that would fill idle; one session_statuses per runner per pass asserted.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=open resolves=p3-r8 out_of_scope=true -->
+### p3-r8-resolved · finding [out-of-scope] · resolves p3-r8: the card front shows the batch session's pill, so an idle close-out card reads the wrong session's status (phase 3)
+
+Out of scope: the card's single status pill (kanban_render.py) predates this change; this PR only adds the reason line, which names the close-out explicitly.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-10-06T22:36:36+00:00 phase=3 state=open resolves=p3-r9 out_of_scope=true -->
+### p3-r9-resolved · finding [out-of-scope] · resolves p3-r9: the fr-triage skill says 'six lifecycle columns'; the board has seven (phase 3)
+
+Out of scope: that sentence predates this change; this PR did not alter the board's columns.

@@ -61,6 +61,10 @@ class Message(BaseModel):
     tool_calls: tuple[ToolCall, ...] = ()
     agent: str = "main"
     """`main` for the session's own thread, else the subagent's type."""
+    agent_id: str | None = None
+    """The producing subagent's id (Claude Code: the `agent-<id>.jsonl` stream
+    name; OpenCode and Hermes: the child session id); `None` on the session's
+    own thread. The id a run cursor records as `Attempt.agent`."""
 
 
 class Cost(BaseModel):

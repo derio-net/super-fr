@@ -102,7 +102,7 @@ def windows_from_cursor(cursor: Mapping[str, object]) -> list[Window]:
     return out
 
 
-def _step_of(message: Message, windows: Sequence[Window]) -> str | None:
+def step_of(message: Message, windows: Sequence[Window]) -> str | None:
     if not windows:
         return None
     ts = parse_timestamp(message.ts)
@@ -141,6 +141,28 @@ def _prices(record: UsageRecord, weights: Mapping[str, float]) -> tuple[dict[str
     return prices, remainder
 
 
+def message_dollars(
+    record: UsageRecord, weights: Mapping[str, float] = WEIGHTS
+) -> tuple[list[float], float]:
+    """Each message's price-weighted share of the harness's dollars, in message
+    order, and the session's remainder: billed models with no message, plus a
+    per-model total that does not add up. `rollup` and the main/subagent and
+    per-unit splits all read this, so they cannot drift. An unpriced or
+    `unavailable` session has zero everywhere (callers render that `—`)."""
+    dollars, remainder, _prices = _dollars(record, weights)
+    return dollars, remainder
+
+
+def _dollars(
+    record: UsageRecord, weights: Mapping[str, float]
+) -> tuple[list[float], float, dict[str, float]]:
+    if record.unavailable is not None:
+        return [0.0] * len(record.messages), 0.0, {}
+    prices, remainder = _prices(record, weights)
+    dollars = [m.tokens.weighted(weights) * prices.get(m.model, 0.0) for m in record.messages]
+    return dollars, remainder, prices
+
+
 def rollup(
     records: Iterable[UsageRecord],
     weights: Mapping[str, float] = WEIGHTS,
@@ -150,11 +172,10 @@ def rollup(
     for record in records:
         activity: dict[str, float] = defaultdict(float)
         if record.unavailable is None:
-            prices, remainder = _prices(record, weights)
-            for message in record.messages:
-                dollars = message.tokens.weighted(weights) * prices.get(message.model, 0.0)
+            message_usd, remainder, prices = _dollars(record, weights)
+            for message, dollars in zip(record.messages, message_usd, strict=True):
                 labels = [classify(c.name, c.target) for c in message.tool_calls] or [NARRATION]
-                step = _step_of(message, windows)
+                step = step_of(message, windows)
                 for label in labels:
                     result.calls[label.sub] += 1
                 # turns are counted whether or not the message was priced: a

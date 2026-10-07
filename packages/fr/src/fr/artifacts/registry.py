@@ -400,7 +400,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # frozen as `fr.run.legacy.RunStateV6`.
             # 8: `RunState.driver` — who drives the run (gh#761), migration
             # `fr.artifacts.run_driver`. Additive, so stamp-only.
-            current_version=8,
+            # 9: `Attempt.tier` and `Attempt.bound` — the tier a subagent was
+            # dispatched at and the model it resolved to (spec
+            # `2026-10-06-cost-evidence-design` §D), migration
+            # `fr.artifacts.run_bound_model`. Additive, so stamp-only.
+            current_version=9,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,
@@ -438,8 +442,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
         ArtifactKind(
             name="usage",
             # What a run cost, persisted beside its cursor (spec
-            # `2026-09-25-lean-cost-aware-process-design` §5.B). Born at 1.
-            current_version=1,
+            # `2026-09-25-lean-cost-aware-process-design` §5.B). Born at 1;
+            # 1 -> 2 for `steps_by_role` and `units` (spec
+            # `2026-10-06-cost-evidence-design` §C), stamp only.
+            current_version=2,
             locator="docs/superpowers/usage/*.yaml",
             stamp="`schema_version` in the usage yaml",
             read_stamp=_read_yaml_stamp,
