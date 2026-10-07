@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr triage counts only the latest run of each check, so a check re-run green on the same commit no longer reads as failing (#1051)"

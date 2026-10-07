@@ -77,7 +77,10 @@ def test_captured_open_pr_shape_parses_with_summary_and_unknown_merge() -> None:
     ((pr, refs),) = parse_prs("derio-net/super-fr", raw)
 
     assert pr.state == "OPEN"
-    assert pr.checks == {"pass": len(raw[0]["statusCheckRollup"]), "fail": 0, "pending": 0}
+    # Each check ran twice on the captured head: counted once (super-fr#1051).
+    distinct = {(c["workflowName"], c["name"]) for c in raw[0]["statusCheckRollup"]}
+    assert len(distinct) < len(raw[0]["statusCheckRollup"])
+    assert pr.checks == {"pass": len(distinct), "fail": 0, "pending": 0}
     assert pr.mergeable == raw[0]["mergeable"]
     assert pr.merge_state == raw[0]["mergeStateStatus"]
     assert pr.review is None  # captured reviewDecision is "" (no review)
@@ -280,3 +283,97 @@ def test_collect_records_the_authenticated_user_once() -> None:
     facts = collect_facts(forge, SCOPE, now=NOW)
     assert facts.viewer == "me"
     assert forge.called("viewer_login") == [{}]
+
+
+def _run(name: str, conclusion: str | None, started: str | None, **extra: object) -> dict:
+    return {
+        "__typename": "CheckRun",
+        "name": name,
+        "workflowName": "CI",
+        "status": "COMPLETED" if conclusion else "IN_PROGRESS",
+        "conclusion": conclusion or "",
+        "startedAt": started,
+        "completedAt": started if conclusion else None,
+        **extra,
+    }
+
+
+def test_a_check_rerun_green_on_the_same_head_supersedes_its_failure() -> None:
+    """super-fr#1051: the rollup lists every run on the head; only the latest counts."""
+    from pathlib import Path
+
+    from fr.triage.collect import parse_prs
+
+    fixture = (
+        Path(__file__).resolve().parent.parent
+        / "fixtures"
+        / "triage"
+        / "super-fr-rerun-checks.json"
+    )
+    rollup = json.loads(fixture.read_text(encoding="utf-8"))
+    assert {c["conclusion"] for c in rollup} >= {"FAILURE", "SUCCESS"}  # the stale runs are there
+    ((pr, _),) = parse_prs("derio-net/super-fr", [_pr(1038, checks=rollup)])
+    distinct = {(c["workflowName"], c["name"]) for c in rollup}
+    assert pr.checks == {"pass": len(distinct), "fail": 0, "pending": 0}
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_the_latest_run_wins_whatever_order_the_rollup_lists_them(reverse: bool) -> None:
+    from fr.triage.collect import parse_prs
+
+    runs = [
+        _run("test", "SUCCESS", "2026-10-06T17:00:00Z"),
+        _run("test", "FAILURE", "2026-10-06T19:00:00Z"),
+    ]
+    ((pr, _),) = parse_prs("example.com/repo", [_pr(1, checks=runs[::-1] if reverse else runs)])
+    assert pr.checks == {"pass": 0, "fail": 1, "pending": 0}
+
+
+def test_a_queued_rerun_with_no_start_time_is_the_latest_run() -> None:
+    """A re-run not yet started must read pending, never the old run's green."""
+    from fr.triage.collect import parse_prs
+
+    runs = [
+        _run("test", "SUCCESS", "2026-10-06T17:00:00Z"),
+        _run("test", None, None, status="QUEUED"),
+    ]
+    ((pr, _),) = parse_prs("example.com/repo", [_pr(1, checks=runs)])
+    assert pr.checks == {"pass": 0, "fail": 0, "pending": 1}
+
+
+def test_same_named_checks_of_different_workflows_and_status_contexts_stay_apart() -> None:
+    from fr.triage.collect import parse_prs
+
+    rollup = [
+        _run("test", "SUCCESS", "2026-10-06T17:00:00Z"),
+        _run("test", "FAILURE", "2026-10-06T17:00:00Z", workflowName="Nightly"),
+        {
+            "__typename": "StatusContext",
+            "context": "ci/ext",
+            "state": "FAILURE",
+            "startedAt": "2026-10-06T17:00:00Z",
+        },
+        {
+            "__typename": "StatusContext",
+            "context": "ci/ext",
+            "state": "SUCCESS",
+            "startedAt": "2026-10-06T18:00:00Z",
+        },
+        {"conclusion": "SUCCESS"},  # no identity at all: counted, never merged
+        {"conclusion": "SUCCESS"},
+    ]
+    ((pr, _),) = parse_prs("example.com/repo", [_pr(1, checks=rollup)])
+    assert pr.checks == {"pass": 4, "fail": 1, "pending": 0}
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_runs_no_timestamp_orders_keep_the_worse_state(reverse: bool) -> None:
+    """A tie never lets list order pick green over a failure (review of #1051)."""
+    from fr.triage.collect import parse_prs
+
+    rollup = [
+        {"__typename": "StatusContext", "context": "ci/ext", "state": "FAILURE"},
+        {"__typename": "StatusContext", "context": "ci/ext", "state": "SUCCESS"},
+    ]
+    ((pr, _),) = parse_prs("example.com/repo", [_pr(1, checks=rollup[::-1] if reverse else rollup)])
+    assert pr.checks == {"pass": 0, "fail": 1, "pending": 0}
