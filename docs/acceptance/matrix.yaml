@@ -5177,7 +5177,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R23
     levels: {}
     status: not-implemented
-    notes: added during implement, operator decision d11; plan phase 7
+    notes: plan phase 7 (P7.T4.S4) writes this candidate scenario
+    scenario: tests/scenarios/cloud-triage-cloud-remedy.sh
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
