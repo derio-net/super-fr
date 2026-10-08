@@ -5237,9 +5237,23 @@ rows:
       is missing
     origin:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R23
-    levels: {}
-    status: not-implemented
-    notes: plan phase 7 (P7.T4.S4) writes this candidate scenario
+    levels:
+      unit:
+      - super-fr:tests/unit/test_cloud_remedy.py#test_detect_is_true_only_with_claude_code_remote_true
+      - super-fr:tests/unit/test_cloud_remedy.py#test_the_remedy_block_is_the_spec_text
+      - super-fr:tests/unit/test_cloud_remedy.py#test_doctor_exits_1_naming_each_failure
+      - super-fr:tests/unit/test_cloud_remedy.py#test_a_graphql_403_appends_the_block_in_a_cloud_session_only
+      - super-fr:tests/unit/test_cloud_remedy.py#test_the_worker_brief_carries_the_block_in_a_cloud_session_only
+      - super-fr:tests/unit/test_cloud_remedy.py#test_a_run_from_a_newer_fr_appends_the_block_in_a_cloud_session_only
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_cloud_triage_cloud_remedy
+    status: ci
+    notes: 'phase 7: fr.cloud (detect on CLAUDE_CODE_REMOTE=true only, check, remedy_block),
+      fr cloud doctor|setup-script (the setup script is wheel data), and the block appended
+      to a GraphQL 403 under graphql, the worker''s BLOCKED needs_action and a run cursor
+      from a newer fr, in a cloud session only; the candidate scenario tests/scenarios/cloud-triage-cloud-remedy.sh
+      runs the printed setup script with its network steps stubbed. The setup script
+      in a real cloud environment is Test Plan 16/17''s walk'
     scenario: tests/scenarios/cloud-triage-cloud-remedy.sh
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
