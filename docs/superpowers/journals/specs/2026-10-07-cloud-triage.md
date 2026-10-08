@@ -761,3 +761,8 @@ check: consistency. evidence: fr-goal SKILL.md:88,:103; fr-phase-executor.md:125
 ### s37-resolved · finding [fixed] · resolves s37: Plugin prose that ci contradicts goes beyond fr-goal §8
 
 §I 'Prose this changes': fr-goal §5, §6, §8, the fr-phase-executor agent and its mirrors (shipped through the agents kind, R19), and the 01-fr-goal explainer if it describes local-only evidence.
+
+<!-- fr:journal kind=finding scope=spec id=s38 created=2026-10-08T13:54:26+00:00 state=open review_scope=in -->
+### s38 · finding [open] (reviewer: in scope) · Test Plan 19 and §I leave out the forge refusal, non-done resolves and the dispatch order
+
+check: consistency. evidence: run_cmd.py:1922-1934,:2984-2986.
