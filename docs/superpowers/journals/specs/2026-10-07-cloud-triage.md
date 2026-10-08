@@ -706,3 +706,8 @@ R22 and §I: the witness records the CI sha and the base sha it merged with, sta
 ### s32 · finding [open] (reviewer: in scope) · 'every check green, at least one present' accepts a sha the test workflow never ran on
 
 check: codebase. evidence: R22; acceptance-report.yml, pinned-clis.yml; ci.yml ci-ok. A fast unrelated check satisfied the rule; skipped counted as success.
+
+<!-- fr:journal kind=finding scope=spec id=s32-resolved created=2026-10-08T13:54:10+00:00 state=fixed resolves=s32 -->
+### s32-resolved · finding [fixed] · resolves s32: 'every check green, at least one present' accepts a sha the test workflow never ran on
+
+§I: only gate checks count (.fr/ci.yaml gate_checks, else required checks, else refused); this repo declares ci-ok; a skipped or absent gate refuses.
