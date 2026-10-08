@@ -372,7 +372,16 @@ def _state_reason(reason: str) -> str:
 
 
 def _project(record: dict[str, Any], fields: str) -> dict[str, Any]:
-    return {f: record.get(f) for f in fields.split(",") if f}
+    """*record* cut to *fields*. A field the REST record cannot produce raises, as
+    `gh --json` does on an unknown field, rather than answering None for it."""
+    wanted = [f for f in fields.split(",") if f]
+    unknown = [f for f in wanted if f not in record]
+    if unknown:
+        raise GhError(
+            f'Unknown JSON field: "{unknown[0]}" (the github-rest record has: '
+            f"{', '.join(sorted(record))})"
+        )
+    return {f: record[f] for f in wanted}
 
 
 # ---------------------------------------------------------------------------

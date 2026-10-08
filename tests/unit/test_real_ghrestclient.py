@@ -773,3 +773,29 @@ def test_pr_required_checks_matches_runs_by_name_and_statuses_by_context() -> No
     assert rows["ci/external"] == {"name": "ci/external", "bucket": "pass", "state": "SUCCESS"}
     every = {r["name"] for r in client.pr_checks(REPO, 1080)}
     assert {"opencode-plugin-test", "ci/optional"} <= every - set(rows)
+
+
+# ---- p1-r10: an unknown field raises, as `gh --json` does ----
+
+
+def test_a_field_the_rest_record_cannot_produce_raises() -> None:
+    client = RealGhRestClient(run=FixtureGh())
+    client.PER_PAGE = 2  # type: ignore[misc]  # the captured pages are per_page=2
+    with pytest.raises(GhError, match='Unknown JSON field: "assignees"'):
+        client.list_issues(REPO, "open", limit=1, fields="number,assignees")
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        ISSUE_LIST_FIELDS,
+        ISSUE_VIEW_FIELDS,
+        "number,title,labels,createdAt,updatedAt,url,body,state,closedAt,stateReason",
+        "number,url,body,author",  # fr.archive_followups
+    ],
+)
+def test_every_field_set_fr_requests_is_produced(fields: str) -> None:
+    client = RealGhRestClient(run=FixtureGh())
+    client.PER_PAGE = 2  # type: ignore[misc]
+    [got] = client.list_issues(REPO, "open", limit=1, fields=fields)
+    assert sorted(got) == sorted(fields.split(","))
