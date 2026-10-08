@@ -46,15 +46,6 @@ CLOUD_PREFLIGHT_RUNNERS = frozenset({"claude-cloud"})
 Claude Code cloud session's CLI is a pre-warmed spare, spec 2026-10-07-cloud-triage
 §H): their brief starts by checking fr and the repo's `agents` artifact (R19)."""
 
-_INSTALL_SUPER_FR = (
-    "mkdir -p ~/.claude/plugins && "
-    "{ [ -f ~/.claude/plugins/installed_plugins.json ] || "
-    'echo \'{"version":2,"plugins":{}}\' > ~/.claude/plugins/installed_plugins.json; } && '
-    "{ [ -f ~/.claude/settings.json ] || echo '{}' > ~/.claude/settings.json; } && "
-    "git clone --quiet --branch main https://github.com/derio-net/super-fr.git "
-    "~/.cache/fr/src/super-fr && bash ~/.cache/fr/src/super-fr/scripts/install.sh"
-)
-
 
 def worker_remedy() -> str | None:
     """The cloud remedy block the worker's BLOCKED `needs_action` quotes (§H), when the
@@ -64,14 +55,26 @@ def worker_remedy() -> str | None:
     return cloud.remedy_block([cloud.AGENTS_ITEM]) if cloud.detect() else None
 
 
-def _cloud_preflight(branch: str, remedy: str | None) -> list[str]:
+def _cloud_preflight(branch: str, remedy: str | None, *, repo: str) -> list[str]:
     """The worker's first step (R19, §H): fr present, both agents dispatchable, isolation
-    entered through the CLI. A missing agent ends the turn BLOCKED, never re-homed."""
+    entered through the CLI. A missing agent ends the turn BLOCKED, never re-homed.
+    A missing fr is installed by the cloud setup script itself, embedded whole (p7-r6):
+    one install recipe, idempotent over an existing clone, never a second one-liner."""
+    from fr import cloud
+
     lines = [
         "",
         "## Before anything else (this is a cloud session)",
-        "1. Run `fr --version`. Install super-fr only if `fr` is missing: "
-        f"`{_INSTALL_SUPER_FR}`, then put `~/.local/bin` on PATH.",
+        "1. Run `fr --version`. If that fails, run `~/.local/bin/fr --version`: if that "
+        'works, fr is installed but off PATH, so run `export PATH="$HOME/.local/bin:$PATH"` '
+        "and go on. Install super-fr only if both fail: save this script (the cloud "
+        "environment's setup script, `fr cloud setup-script`) to a file, run it with "
+        '`bash`, then run `export PATH="$HOME/.local/bin:$PATH"`.',
+        "",
+        "```bash",
+        *cloud.setup_script(repo).rstrip("\n").splitlines(),
+        "```",
+        "",
         "2. Confirm that `fr-spec-reviewer` and `fr-phase-executor` are agent types you "
         "can dispatch (the repo's `.claude/agents/`). If either is not dispatchable, the "
         "repo lacks a current `agents` artifact: do nothing else, and end your turn "
@@ -118,7 +121,7 @@ def render_brief(
     titles = {i.key: i.title for i in facts.issues}
     lines = [f"{slash} {batch.title}"]
     if runner in CLOUD_PREFLIGHT_RUNNERS:
-        lines += _cloud_preflight(batch_branch(batch), remedy)
+        lines += _cloud_preflight(batch_branch(batch), remedy, repo=repo)
     lines += [
         "",
         f"Batch `{batch.id}` of {repo}: {len(batch.ids)} issues, delivered as ONE pull request.",

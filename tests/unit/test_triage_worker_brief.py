@@ -51,6 +51,38 @@ def test_it_checks_fr_and_installs_super_fr_only_when_missing() -> None:
     assert "only if" in step and "super-fr" in step and "scripts/install.sh" in step
 
 
+def test_fr_off_path_is_found_before_it_is_called_missing() -> None:
+    """p7-r6: an installed fr merely off PATH is `~/.local/bin/fr`: put it on PATH,
+    never re-clone over the existing source."""
+    step = _preflight(_brief("claude-cloud"))
+    assert "`~/.local/bin/fr --version`" in step
+    assert step.index("`fr --version`") < step.index("`~/.local/bin/fr --version`")
+    assert 'export PATH="$HOME/.local/bin:$PATH"' in step
+
+
+def test_a_missing_fr_is_installed_by_the_cloud_setup_script_itself() -> None:
+    """p7-r6: one install recipe, the setup script `fr cloud setup-script` prints (it
+    installs rsync/jq/uv and reuses an existing clone), embedded whole — never a second
+    hand-written one-liner."""
+    from fr import cloud
+
+    step = _preflight(_brief("claude-cloud"))
+    body = cloud.setup_script(REPO)
+    assert body.strip() in step
+    assert "git clone --quiet --branch main https://" not in step.replace(body.strip(), "")
+
+
+def test_the_setup_script_reuses_an_existing_clone_and_installs_its_dependencies() -> None:
+    from fr import cloud
+
+    body = cloud.setup_script()
+    assert 'if [ -d "$src/.git" ]' in body
+    assert "checkout --quiet --force -B main origin/main" in body
+    assert "clean -fdxq" in body, "a leftover file would fail install.sh's preflight"
+    for dep in ("rsync", "jq", "uv"):
+        assert dep in body
+
+
 def test_it_checks_both_agent_types() -> None:
     step = _preflight(_brief("claude-cloud"))
     assert "`fr-spec-reviewer`" in step and "`fr-phase-executor`" in step

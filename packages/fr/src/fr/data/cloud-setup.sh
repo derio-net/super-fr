@@ -29,11 +29,13 @@ mkdir -p "$HOME/.claude/plugins"
 
 # 3. super-fr from source, then its installer: the fr CLI, the derio-net--super-fr
 #    plugin and its rules. The clone lives outside the marketplace directory, which
-#    install.sh replaces.
+#    install.sh replaces; an existing one is reused, so the script is safe to re-run
+#    (the claude-cloud worker brief runs it when fr is missing).
 src="$HOME/.cache/fr/src/super-fr"
 if [ -d "$src/.git" ]; then
   git -C "$src" fetch --quiet origin main
   git -C "$src" checkout --quiet --force -B main origin/main
+  git -C "$src" clean -fdxq  # install.sh's preflight refuses a dirty tree
 else
   rm -rf "$src"
   mkdir -p "$(dirname "$src")"
