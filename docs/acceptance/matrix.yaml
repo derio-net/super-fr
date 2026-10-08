@@ -5209,10 +5209,25 @@ rows:
       first turn, and a release that changes them fails the repo's CI until it is migrated
     origin:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R19
-    levels: {}
-    status: not-implemented
-    notes: plan 2026-10-07-cloud-triage names the candidate scenario this row's walk
-      runs; written by the phase that implements the row
+    levels:
+      unit:
+      - super-fr:tests/unit/test_agents_artifact.py#test_write_agents_writes_both_stamped_files
+      - super-fr:tests/unit/test_agents_artifact.py#test_validate_fails_an_unstamped_one
+      - super-fr:tests/unit/test_agents_artifact.py#test_validate_fails_one_missing
+      - super-fr:tests/unit/test_agents_artifact.py#test_validate_fails_a_stale_one
+      - super-fr:tests/unit/test_agents_artifact.py#test_a_version_bump_re_renders_both_files_from_the_wheel
+      - super-fr:tests/unit/test_tripwire_agents_data.py#test_the_pin_matches_the_canonical_agents
+      - super-fr:tests/unit/test_triage_worker_brief.py#test_missing_agents_end_the_turn_blocked_naming_the_artifact
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_cloud_triage_repo_agents
+    status: ci
+    notes: 'phase 7: the agents artifact kind (fr.agents, fr init agents, the scaffold
+      step, validate for missing/unstamped/misnamed/stale, the unstamped repair and
+      the re-render migration a bump registers, the wheel-copy tripwire with its sha
+      pin), this repo''s own rendered agents, and the claude-cloud worker brief''s first
+      step; the candidate scenario tests/scenarios/cloud-triage-repo-agents.sh runs
+      in CI through test_scenarios.py. A worker''s first turn listing the two agents
+      in a real cloud session is Test Plan 17''s walk (row cloud-triage-driver-end-to-end)'
     scenario: tests/scenarios/cloud-triage-repo-agents.sh
   - id: cloud-triage-cloud-remedy
     capability: Backlog triage
