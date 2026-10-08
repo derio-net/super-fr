@@ -137,3 +137,8 @@ Operator, 2026-10-08: (a) the cloud environment's setup script installs super-fr
 ### d8-verification · decision · Operator decision, round 8: verification
 
 Operator, 2026-10-08: default strategy `candidate` (offline scenarios against a stubbed forge); `client-live` for (1) the github-rest backend against real GitHub from this cloud environment and (2) the cloud driver end to end. The end-to-end walk runs on derio-net/super-fr itself, on two small throwaway issues (the operator does not mind), which also exercises two scopes (host and cloud) on one repo.
+
+<!-- fr:journal kind=discovery scope=spec id=no-plugin-agents created=2026-10-08T11:39:26+00:00 -->
+### no-plugin-agents · discovery · spec-review cannot resolve in a cloud session without the super-fr plugin
+
+Observed 2026-10-08 in this session: `fr run resolve --step spec-review` refused a review done by a general-purpose subagent following `plugins/super-fr/agents/fr-spec-reviewer.md` verbatim: 'this step's reviewer is super-fr:fr-spec-reviewer. Dispatch that agent and name its id.' The agent type exists only when the super-fr plugin is installed, and a session's agent types are fixed at its start (no reload over a remote connection). So the same gate will refuse `review-phase` (fr-phase-executor's reviewer) in any cloud worker session that started without the plugin. This is direct evidence for R19: the environment's setup script must install super-fr BEFORE the session starts; the brief's fallback install (R19, second half) cannot fix the agent types of a session already running, only the CLI. The review itself is recorded in the run's spec-review record; its 15 findings are fixed in the spec.
