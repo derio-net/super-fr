@@ -79,3 +79,15 @@ Observed 2026-10-07 18:45Z, with no wake scheduled and no operator turn: the pla
 - **Timing:** about 3 minutes after the last probe turn ended (~18:42Z). During the hour of ten-minute wakes, with the same background process running, no restart happened. The cause is unknown from inside the container: an idle timeout, or a platform-side restart (one MCP server disconnected around the same time).
 
 **Design consequence:** a background process is not a reliable keep-alive or wake source; any process the driver starts must be re-creatable after a restart. The disk, including git-ignored state in the workspace, survived both restarts seen today. The forge ref remains the durable copy for when it does not (reclaim, or a session moved to a new container).
+
+<!-- fr:journal kind=discovery scope=spec id=version-drift created=2026-10-08T09:24:40+00:00 -->
+### version-drift · discovery · What a live session sees when the plugin moves under it (host, today)
+
+Read 2026-10-08 from `scripts/install.sh` (:575-615), `plugins/super-fr/hooks/hooks.json`, `fr-binary-pin.sh` and `fr/binary_identity.py`.
+
+- **Hook scripts: always the newest.** `install.sh` syncs the plugin in place into one `current` directory that is never deleted (gh#938), so a running session's hooks run the latest scripts. **Hook registration is the session's start version:** a hook added later never fires in it; a script removed later fails where it is registered.
+- **Skills:** a skill invoked before the upgrade stays in context as the old prose; a later invocation reads the new file.
+- **fr:** the SessionStart pin records `fr --identity`. Global `fr` upgraded under the session: same package dir, another version -> warn and suggest a restart. `uv run fr` from a worktree: one warning, then run. Only a PATH-reached `fr` that disagrees with the pin is refused.
+- **Driver:** re-execs itself when `post_merge` changed the installed `fr` version (`triage_batch_cmd.py` :1970, :3980).
+- **Artifacts:** a worker on its branch reads its branch's artifacts with its branch's `fr`; it meets newer stamps only when it merges `origin/main`, which brings the matching code in the same merge.
+- **Cloud, today:** no super-fr plugin is installed in a cloud session at all; whatever installs it does so at session start, so a cloud session holds one version for life unless something reloads it. `/reload-plugins` (operator's suggestion) is unverified here: what it reloads, and whether a message sent by another session runs it as a command.
