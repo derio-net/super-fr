@@ -47,10 +47,11 @@ class ClaudeCloudRunner:
 
     # ------------------------------------------------- fr.triage.driver.Mailbox
 
-    def open_mailbox(self, state_dir: Any, statuses: Any) -> None:
+    def open_mailbox(self, state_dir: Any, statuses: Any, *, read_only: bool = False) -> None:
         """Load the scope's pending requests and recorded sessions from *state_dir*, and
-        take in the sessions the agent listed or read (*statuses*, the `--statuses` JSON)."""
-        self._box = Mailbox(Path(state_dir), statuses)
+        take in the sessions the agent listed or read (*statuses*, the `--statuses` JSON).
+        With *read_only* (a board's read, p5-r8) neither file is ever written."""
+        self._box = Mailbox(Path(state_dir), statuses, read_only=read_only)
 
     def outbox(self) -> list[dict[str, Any]]:
         """Every pending request, plus a `status` request per recorded session."""

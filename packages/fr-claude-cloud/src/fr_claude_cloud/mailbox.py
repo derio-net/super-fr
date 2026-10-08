@@ -4,19 +4,30 @@ data over the scope's state directory (cloud-triage R14, R15, §F).
 Pure apart from the two files it is handed the directory of, `requests.yaml` and
 `sessions.yaml`; both travel in the scope's state ref (`fr.triage.state_ref.REF_FILES`),
 so a driver restored on a fresh workspace still holds them. Without a directory (a
-runner built by `from_env` and never opened) everything stays in memory.
+runner built by `from_env` and never opened) everything stays in memory, and a mailbox
+opened `read_only` (the board's read) never writes either file.
 
 - A request has a stable id, `<item id>:<kind>:<n>`; *n* counts that item's requests of
   that kind, kept in `requests.yaml`'s `issued`, so a retried request is a new id and a
   re-emitted one the same id.
 - A request is pending until a result names it. The agent executes the outbox with its
   session tools (`REQUEST_TABLE`) and records each result with `fr triage drive record`.
-- `status` requests are never stored: every pass asks one per recorded session, id
-  `<item id>:status:1`, and recording one updates that session's state.
+- Every session a `dispatch` or `rehome` creates carries two tags: the batch's item id
+  (`tag`) and the request's own id (`request_tag`). The agent looks the request tag up
+  before creating anything, so a request whose result was lost is replayed, never
+  duplicated, even after a rehome left two sessions under the item's tag (p5-r2).
+- A recorded session is matched by its session id; a tag only finds a session no record
+  names (p5-r1). An archived session, or one whose close was recorded (`sessions.yaml`'s
+  `closed`), releases its item and is never closed again (p5-r6).
+- `status` requests are never stored: every pass asks one per recorded session with no
+  pending close, id `<item id>:status:1`, and recording one updates that session's state.
+- `record` validates every result, applies them in memory and saves once: a refused
+  batch leaves both files byte-identical (p5-r4).
 """
 
 from __future__ import annotations
 
+import copy
 import os
 import tempfile
 from collections.abc import Iterable, Mapping
@@ -41,9 +52,13 @@ STATE_MAP: Mapping[str, FrStatus] = {
     "completed": "idle",
     "failed": "blocked",
 }
+# A session in one of these states is gone: it releases its item (p5-r6).
+ENDED_STATES = frozenset({"archived"})
 
 CLOSE_OUTCOMES = frozenset({"closed", "busy", "absent"})
 MESSAGE_OUTCOMES = frozenset({"sent", "refused"})
+# The request kinds that create a session, so carry a request-scoped tag (p5-r2).
+CREATING = frozenset({"dispatch", "rehome"})
 
 
 @dataclass(frozen=True)
@@ -56,9 +71,9 @@ class Row:
 
 REQUEST_TABLE: Mapping[str, Row] = {
     "dispatch": Row(
-        execute="list_sessions and look for one tagged `tag`; when one exists, create "
-        "nothing and record its id; otherwise create_session(repo, branch, model, tag, "
-        "prompt)",
+        execute="list_sessions and look for one tagged `request_tag`; when one exists, "
+        "create nothing and record its id; otherwise create_session(repo, branch, model, "
+        "tags = [tag, request_tag], prompt)",
         record="{id, session: <session id>}, or {id, error} when the create failed",
     ),
     "message": Row(
@@ -71,8 +86,10 @@ REQUEST_TABLE: Mapping[str, Row] = {
         record="{id, outcome: closed | busy | absent}",
     ),
     "rehome": Row(
-        execute="send_message(session, push and stop); at its next idle, "
-        "create_session(repo, branch, model, tag, prompt = the resume brief); then "
+        execute="list_sessions and look for one tagged `request_tag`; when one exists, "
+        "create nothing, archive_session on the old session and record its id; otherwise "
+        "send_message(session, push and stop); at its next idle, create_session(repo, "
+        "branch, model, tags = [tag, request_tag], prompt = the resume brief); then "
         "archive_session on the old session",
         record="{id, session: <new session id>}",
     ),
@@ -102,18 +119,24 @@ def map_state(state: object) -> FrStatus:
 
 @dataclass(frozen=True)
 class Listed:
-    """A session the agent listed or read (`--statuses`): its id, tag and state."""
+    """A session the agent listed or read (`--statuses`): its id, tags and state. An
+    entry keyed by item (or session) id with no session id of its own has `session`
+    None: it only ever updates a session already recorded (p5-r5)."""
 
-    session: str
-    tag: str | None
+    session: str | None
+    tags: tuple[str, ...]
     state: str | None
     needs_action: str | None
+
+    @property
+    def ended(self) -> bool:
+        return self.state in ENDED_STATES
 
 
 def parse_statuses(raw: Any) -> list[Listed]:
     """The agent's statuses file, in any of its three shapes: `{"sessions": [...]}`, a
-    bare list of `{id|session, tag, state, needs_action}`, or a mapping keyed by item id
-    (or session id) whose value is a state or such an object."""
+    bare list of `{id|session, tag|tags, state, needs_action}`, or a mapping keyed by item
+    id (or session id) whose value is a state or such an object."""
     if raw is None:
         return []
     entries: list[tuple[str | None, Any]] = []
@@ -122,22 +145,27 @@ def parse_statuses(raw: Any) -> list[Listed]:
     if isinstance(raw, list):
         entries = [(None, e) for e in raw]
     elif isinstance(raw, Mapping):
-        entries = list(raw.items())
+        entries = [(str(k), v) for k, v in raw.items()]
     else:
         raise ValueError("statuses: a list of sessions or a mapping of item id to state")
     out: list[Listed] = []
     for key, value in entries:
         body: Mapping[str, Any] = value if isinstance(value, Mapping) else {"state": value}
-        session = body.get("id") or body.get("session") or key
-        if not session:
+        session = body.get("id") or body.get("session")
+        if not session and not key:
             raise ValueError(f"statuses: an entry names no session: {value!r}")
-        tag = body.get("tag") or key
+        raw_tags = body.get("tags")
+        tags = [str(t) for t in raw_tags] if isinstance(raw_tags, list) else []
+        if body.get("tag"):
+            tags.insert(0, str(body["tag"]))
+        if key and key not in tags:
+            tags.insert(0, key)
         needs = body.get("needs_action")
         state = body.get("state")
         out.append(
             Listed(
-                session=str(session),
-                tag=str(tag) if tag else None,
+                session=str(session) if session else None,
+                tags=tuple(dict.fromkeys(tags)),
                 state=str(state) if state is not None else None,
                 needs_action=str(needs) if needs else None,
             )
@@ -176,10 +204,15 @@ def _write(path: Path, text: str) -> None:
 
 
 class Mailbox:
-    """The requests and sessions of one scope, loaded from (and saved to) *state_dir*."""
+    """The requests and sessions of one scope, loaded from (and saved to) *state_dir*;
+    with *read_only*, loaded only (p5-r8)."""
 
-    def __init__(self, state_dir: Path | None = None, statuses: Any = None) -> None:
+    def __init__(
+        self, state_dir: Path | None = None, statuses: Any = None, *, read_only: bool = False
+    ) -> None:
         self.state_dir = state_dir
+        self.read_only = read_only
+        self._deferred = False
         requests = _read(state_dir / REQUESTS_FILE) if state_dir else {}
         sessions = _read(state_dir / SESSIONS_FILE) if state_dir else {}
         self.requests: list[dict[str, Any]] = [dict(r) for r in requests.get("requests") or []]
@@ -187,6 +220,7 @@ class Mailbox:
             str(k): int(v) for k, v in (requests.get("issued") or {}).items()
         }
         self.sessions: list[dict[str, Any]] = [dict(s) for s in sessions.get("sessions") or []]
+        self.closed: list[str] = [str(s) for s in sessions.get("closed") or []]
         self.listed = parse_statuses(statuses)
         self._absorb(self.listed)
         self.save()
@@ -194,15 +228,18 @@ class Mailbox:
     # ------------------------------------------------------------------ storage
 
     def save(self) -> None:
-        if self.state_dir is None:
+        if self.state_dir is None or self.read_only or self._deferred:
             return
         if self.requests or self.issued or (self.state_dir / REQUESTS_FILE).is_file():
             _write(
                 self.state_dir / REQUESTS_FILE,
                 _dump({"requests": self.requests, "issued": self.issued}),
             )
-        if self.sessions or (self.state_dir / SESSIONS_FILE).is_file():
-            _write(self.state_dir / SESSIONS_FILE, _dump({"sessions": self.sessions}))
+        if self.sessions or self.closed or (self.state_dir / SESSIONS_FILE).is_file():
+            data: dict[str, Any] = {"sessions": self.sessions}
+            if self.closed:
+                data["closed"] = self.closed
+            _write(self.state_dir / SESSIONS_FILE, _dump(data))
 
     # ------------------------------------------------------------------ lookups
 
@@ -212,11 +249,34 @@ class Mailbox:
     def session_of(self, item: str) -> dict[str, Any] | None:
         return next((s for s in self.sessions if s.get("item") == item), None)
 
+    def _recorded(self, session: str) -> dict[str, Any] | None:
+        return next((s for s in self.sessions if s.get("session") == session), None)
+
+    def _live(self) -> list[Listed]:
+        """Listed sessions that are ours to find by tag: named, not ended, not closed."""
+        return [
+            x for x in self.listed if x.session and not x.ended and x.session not in self.closed
+        ]
+
     def listed_for(self, item: str) -> Listed | None:
-        """The session the agent listed under *item*'s tag (or as its recorded session)."""
+        """What the agent listed for *item*: its recorded session, matched by id (or a
+        session-less entry keyed by the item or that id); with none recorded, a live
+        session tagged with the item that no record names (p5-r1)."""
         recorded = self.session_of(item)
-        sid = recorded.get("session") if recorded else None
-        return next((x for x in self.listed if x.tag == item or (sid and x.session == sid)), None)
+        if recorded is not None:
+            sid = str(recorded["session"])
+            return next(
+                (
+                    x
+                    for x in self.listed
+                    if x.session == sid or (x.session is None and {item, sid} & set(x.tags))
+                ),
+                None,
+            )
+        return next(
+            (x for x in self._live() if item in x.tags and self._recorded(str(x.session)) is None),
+            None,
+        )
 
     def session_id(self, item: str) -> str | None:
         recorded = self.session_of(item)
@@ -226,8 +286,8 @@ class Mailbox:
         return listed.session if listed else None
 
     def held(self, items: Iterable[str]) -> set[str]:
-        """Items with a pending dispatch, a recorded session, or a listed tagged one."""
-        tags = {x.tag for x in self.listed if x.tag}
+        """Items with a pending dispatch, a recorded session, or a live listed tagged one."""
+        tags = {t for x in self._live() for t in x.tags}
         return {
             i
             for i in items
@@ -262,7 +322,10 @@ class Mailbox:
         key = f"{item}:{kind}"
         n = self.issued.get(key, 0) + 1
         self.issued[key] = n
-        request = {"id": request_id(item, kind, n), "kind": kind, "item": item, **fields}
+        rid = request_id(item, kind, n)
+        request = {"id": rid, "kind": kind, "item": item, **fields}
+        if kind in CREATING:
+            request["request_tag"] = rid
         self.requests.append(request)
         self.save()
         return request
@@ -271,6 +334,8 @@ class Mailbox:
         out = [self._annotated(r) for r in self.requests]
         for s in self.sessions:
             item = str(s["item"])
+            if self.pending(item, "close") is not None:  # being archived: nothing to ask
+                continue
             out.append(
                 self._annotated(
                     {
@@ -290,28 +355,58 @@ class Mailbox:
 
     # ------------------------------------------------------------------ results
 
-    def record(self, results: list[dict[str, Any]]) -> list[str]:
-        if not isinstance(results, list) or not all(isinstance(r, Mapping) for r in results):
-            raise ValueError("results: a list of objects, one per request, each with its id")
-        applied: list[str] = []
+    def _request(self, rid: str) -> dict[str, Any] | None:
+        return next((r for r in self.requests if r["id"] == rid), None)
+
+    def _validate(self, results: list[dict[str, Any]]) -> None:
+        """Refuse a batch with a malformed outcome before anything is applied (p5-r4)."""
         for result in results:
             rid = result.get("id")
-            if not isinstance(rid, str):
+            request = self._request(rid) if isinstance(rid, str) else None
+            if request is None:
                 continue
-            if self._apply(rid, result):
-                applied.append(rid)
+            allowed = {"close": CLOSE_OUTCOMES, "message": MESSAGE_OUTCOMES}.get(request["kind"])
+            if allowed is not None and result.get("outcome") not in allowed:
+                raise ValueError(f"{rid}: outcome is one of {sorted(allowed)}")
+
+    def record(self, results: list[dict[str, Any]]) -> list[str]:
+        """Apply *results* all or nothing, then save once; the ids applied."""
+        if not isinstance(results, list) or not all(isinstance(r, Mapping) for r in results):
+            raise ValueError("results: a list of objects, one per request, each with its id")
+        self._validate(results)
+        closing = set()  # items whose session this record closes (p5-r3)
+        for result in results:
+            request = self._request(str(result.get("id")))
+            if request is not None and request["kind"] == "close":
+                if result.get("outcome") in ("closed", "absent"):
+                    closing.add(str(request["item"]))
+        saved = copy.deepcopy((self.requests, self.issued, self.sessions, self.closed))
+        applied: list[str] = []
+        self._deferred = True
+        try:
+            for result in results:
+                rid = result.get("id")
+                if isinstance(rid, str) and self._apply(rid, result, closing):
+                    applied.append(rid)
+        except BaseException:
+            self.requests, self.issued, self.sessions, self.closed = saved
+            raise
+        finally:
+            self._deferred = False
         self.save()
         return applied
 
-    def _apply(self, rid: str, result: Mapping[str, Any]) -> bool:
+    def _apply(self, rid: str, result: Mapping[str, Any], closing: set[str]) -> bool:
         parts = split_id(rid)
         if parts is not None and parts[1] == "status":
+            if parts[0] in closing:  # closed in this same record: nothing left to update
+                return True
             recorded = self.session_of(parts[0])
             if recorded is None:
                 return False
-            self._set_state(recorded, result.get("state"), result.get("needs_action"))
+            self._observe(recorded, result.get("state"), result.get("needs_action"))
             return True
-        request = next((r for r in self.requests if r["id"] == rid), None)
+        request = self._request(rid)
         if request is None:
             return False
         kind, item = request["kind"], str(request["item"])
@@ -325,7 +420,8 @@ class Mailbox:
             if outcome not in CLOSE_OUTCOMES:
                 raise ValueError(f"{rid}: outcome is one of {sorted(CLOSE_OUTCOMES)}")
             if outcome in ("closed", "absent"):
-                self.sessions = [s for s in self.sessions if s.get("item") != item]
+                for entry in [s for s in self.sessions if s.get("item") == item]:
+                    self._end(entry, drop_close=False)  # this close is removed below
         elif kind == "message":
             outcome = result.get("outcome")
             if outcome not in MESSAGE_OUTCOMES:
@@ -338,13 +434,7 @@ class Mailbox:
             session = result.get("session")
             if not session:
                 return True  # not re-homed yet: asked again next pass
-            recorded = self.session_of(item)
-            if recorded is not None:
-                recorded["session"] = str(session)
-                recorded.pop("state", None)
-                recorded.pop("needs_action", None)
-            else:
-                self._record_session(request, str(session))
+            self._rehomed(request, str(session))
         self.requests.remove(request)
         return True
 
@@ -360,7 +450,7 @@ class Mailbox:
 
     # ------------------------------------------------------------------ sessions
 
-    def _record_session(self, request: Mapping[str, Any], session: str) -> None:
+    def _record_session(self, request: Mapping[str, Any], session: str) -> dict[str, Any]:
         item = str(request["item"])
         self.sessions = [s for s in self.sessions if s.get("item") != item]
         entry: dict[str, Any] = {"item": item, "session": session}
@@ -368,9 +458,41 @@ class Mailbox:
             if request.get(key):
                 entry[key] = request[key]
         self.sessions.append(entry)
+        return entry
 
-    @staticmethod
-    def _set_state(entry: dict[str, Any], state: object, needs: object) -> None:
+    def _rehomed(self, request: Mapping[str, Any], session: str) -> dict[str, Any]:
+        """*request*'s item moved to *session*; the old one is closed (its archive is the
+        rehome's own last step)."""
+        recorded = self.session_of(str(request["item"]))
+        if recorded is None:
+            return self._record_session(request, session)
+        old = str(recorded["session"])
+        if old != session and old not in self.closed:
+            self.closed.append(old)
+        recorded["session"] = session
+        recorded.pop("state", None)
+        recorded.pop("needs_action", None)
+        return recorded
+
+    def _end(self, entry: dict[str, Any], *, drop_close: bool = True) -> None:
+        """*entry*'s session is gone: release its item and never close it again (its
+        pending close is dropped too, unless the caller is applying that close)."""
+        if entry in self.sessions:
+            self.sessions.remove(entry)
+        sid = str(entry["session"])
+        if sid not in self.closed:
+            self.closed.append(sid)
+        if drop_close:
+            self.requests = [
+                r
+                for r in self.requests
+                if not (r["kind"] == "close" and r["item"] == entry["item"] and r["session"] == sid)
+            ]
+
+    def _observe(self, entry: dict[str, Any], state: object, needs: object) -> None:
+        if state is not None and str(state) in ENDED_STATES:
+            self._end(entry)
+            return
         if state is not None:
             entry["state"] = str(state)
         if needs:
@@ -378,17 +500,50 @@ class Mailbox:
         else:
             entry.pop("needs_action", None)
 
+    def _lost_result(self, x: Listed) -> dict[str, Any] | None:
+        """The pending create request *x* is the lost result of: the one whose request
+        tag it carries, else a dispatch for an item with no session whose item tag is
+        *x*'s only tag (a session created before request tags)."""
+        by_tag = next(
+            (r for r in self.requests if r["kind"] in CREATING and r["id"] in x.tags), None
+        )
+        if by_tag is not None:
+            return by_tag
+        return next(
+            (
+                r
+                for r in self.requests
+                if r["kind"] == "dispatch"
+                and set(x.tags) == {r["item"]}
+                and self.session_of(str(r["item"])) is None
+            ),
+            None,
+        )
+
     def _absorb(self, listed: list[Listed]) -> None:
-        """What the agent listed: a pending dispatch whose tagged session exists is
-        recorded, not created a second time (its result was lost); a recorded session's
-        state is kept beside it, so a later read without statuses still knows it."""
+        """What the agent listed. A recorded session (matched by its id, or a session-less
+        entry by the item or that id) keeps its state beside it, so a later read without
+        statuses still knows it, and an archived one ends (p5-r6). A session no record
+        names that is a pending create's lost result is recorded, not created a second
+        time; any other is left alone (p5-r1, p5-r2, p5-r5)."""
         for x in listed:
-            if x.tag:
-                pending = self.pending(x.tag, "dispatch")
-                if pending is not None and self.session_of(x.tag) is None:
-                    self._record_session(pending, x.session)
-                    self.requests.remove(pending)
-            for entry in self.sessions:
-                if entry.get("session") == x.session or (x.tag and entry.get("item") == x.tag):
-                    if x.state is not None:
-                        self._set_state(entry, x.state, x.needs_action)
+            if x.session is None:
+                for entry in list(self.sessions):
+                    if {str(entry.get("item")), str(entry.get("session"))} & set(x.tags):
+                        self._observe(entry, x.state, x.needs_action)
+                continue
+            recorded = self._recorded(x.session)
+            if recorded is not None:
+                self._observe(recorded, x.state, x.needs_action)
+                continue
+            if x.session in self.closed or x.ended:
+                continue
+            request = self._lost_result(x)
+            if request is None:
+                continue
+            if request["kind"] == "dispatch":
+                entry = self._record_session(request, x.session)
+            else:
+                entry = self._rehomed(request, x.session)
+            self.requests.remove(request)
+            self._observe(entry, x.state, x.needs_action)
