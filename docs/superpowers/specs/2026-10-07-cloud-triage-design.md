@@ -252,7 +252,14 @@ check (R8).
 `lease.yaml` in the ref: `holder` (scope id plus driver identity:
 `cloud:<host id>` for the cloud driver, `host:<host id>` for a host driver; both
 are stable across a restart with a new pid and across a re-homed driver session,
-which keeps the host id its brief carries), `started`, `expires`. Duration:
+which keeps the host id its brief carries), `generation`, `started`, `expires`.
+`generation` tells a cloud driver's sessions apart, which the shared holder
+identity cannot (p6-r4): a self-re-home increments it in the lease before the
+new session is created, the new session's brief carries the new value, and a
+driver whose brief names an older generation than the lease's stops — it drives
+nothing and schedules no further wake. The self-re-home request carries a
+request tag like every dispatch (§F), so a replay never creates a second driver
+session. Duration:
 three wake intervals plus the safety-net Routine's period, computed from the
 configured values: 3 × 5 + 60 = 75 minutes by default. Taken and
 renewed by the compare-and-swap push; released on a clean stop. A driver whose
@@ -395,10 +402,14 @@ and the repo's own cursors are migrated in the same PR (R16).
 
 Each pass reads every active batch's cursor from its batch branch
 (`read_file_at_ref` on the branch head, REST contents) and compares the recorded
-`fr_version` major with the latest release's. Equal → nothing. Different → one
-`rehome` request at the session's next idle, recorded per (run, release) in
-`rehomes.yaml`, which travels in the ref (§B), so it is never repeated, not even
-by a driver restored on a fresh container. No recorded version → reported once, never re-homed (R17).
+`fr_version` major with the latest release's. The cursor is the one whose
+`branch` is the batch's branch; a PR whose files carry several cursors (a
+`fr migrate artifacts` touches every live one) never lends another run's, and a
+batch with no matching cursor is reported, not judged (p6-r3). Equal → nothing.
+Different → one `rehome` request at the session's next idle, recorded per (run,
+release MAJOR) in `rehomes.yaml`, which travels in the ref (§B), so it is never
+repeated — not for a later patch or minor of the same major, and not by a driver
+restored on a fresh container (p6-r2). No recorded version → reported once, never re-homed (R17).
 Artifact readability is not judged by the driver: a session whose `fr` meets a
 newer artifact is already refused by fr's own migration gate, which tells it what
 to do.
