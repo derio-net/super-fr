@@ -5242,18 +5242,18 @@ rows:
       - super-fr:tests/unit/test_cloud_remedy.py#test_detect_is_true_only_with_claude_code_remote_true
       - super-fr:tests/unit/test_cloud_remedy.py#test_the_remedy_block_is_the_spec_text
       - super-fr:tests/unit/test_cloud_remedy.py#test_doctor_exits_1_naming_each_failure
-      - super-fr:tests/unit/test_cloud_remedy.py#test_a_graphql_403_appends_the_block_in_a_cloud_session_only
       - super-fr:tests/unit/test_cloud_remedy.py#test_the_worker_brief_carries_the_block_in_a_cloud_session_only
-      - super-fr:tests/unit/test_cloud_remedy.py#test_a_run_from_a_newer_fr_appends_the_block_in_a_cloud_session_only
+      - super-fr:tests/unit/test_cloud_remedy.py#test_a_graphql_403_names_the_cloud_items_in_a_cloud_session_only
+      - super-fr:tests/unit/test_cloud_remedy.py#test_a_run_from_a_newer_fr_names_the_fr_item_in_a_cloud_session_only
+      - super-fr:tests/unit/test_cloud_remedy.py#test_two_graphql_403s_print_the_block_once_after_the_error
+      - super-fr:tests/unit/test_cloud_remedy.py#test_a_403_that_is_not_a_graphql_http_403_is_not_explained
       int:
       - super-fr:tests/integration/test_scenarios.py#test_cloud_triage_cloud_remedy
     status: ci
-    notes: 'phase 7: fr.cloud (detect on CLAUDE_CODE_REMOTE=true only, check, remedy_block),
-      fr cloud doctor|setup-script (the setup script is wheel data), and the block appended
-      to a GraphQL 403 under graphql, the worker''s BLOCKED needs_action and a run cursor
-      from a newer fr, in a cloud session only; the candidate scenario tests/scenarios/cloud-triage-cloud-remedy.sh
-      runs the printed setup script with its network steps stubbed. The setup script
-      in a real cloud environment is Test Plan 16/17''s walk'
+    notes: 'p7-r3/r4: a cloud failure notes its items and the CLI boundary prints the
+      remedy block once, after fr''s own error (never inside joined or persisted messages);
+      a 403 is explained only as gh''s HTTP 403 from the GraphQL endpoint. Tests re-pointed
+      to their renamed forms.'
     scenario: tests/scenarios/cloud-triage-cloud-remedy.sh
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
