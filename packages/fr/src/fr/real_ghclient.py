@@ -399,6 +399,25 @@ class RealGhClient:
             "body": raw.get("body", ""),
         }
 
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        """Spec 2026-10-07-cloud-triage §I: the same REST routes as the
+        `github-rest` backend (`gh api` works on either), on this client's host."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).commit_checks(repo, sha)
+
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        """Spec §I (p2-r1): the `github-rest` backend's REST routes, on this host."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).required_check_names(repo, base)
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """Spec §I (p2-r7): one REST page, no file list, on this host."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).open_pr_for_head(repo, branch)
+
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return self._checks(repo, number, required=True)
 
@@ -479,6 +498,14 @@ class RealGhClient:
         _gh._run_gh(workflow_run_args(repo, workflow, inputs))
 
     @_hosted
+    def repo_visibility(self, repo: str) -> str:
+        raw = json.loads(_gh._run_gh(["repo", "view", repo, "--json", "visibility"]))
+        value = raw.get("visibility") if isinstance(raw, dict) else None
+        if not isinstance(value, str) or not value:
+            raise _gh.GhError(f"gh repo view {repo}: no visibility in the answer")
+        return value.lower()
+
+    @_hosted
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         out = _gh._run_gh(
             [
@@ -535,6 +562,19 @@ class RealGhClient:
     @_hosted
     def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
         return _gh.read_file_at_ref(repo=repo, path=path, ref=ref)
+
+    @_hosted
+    def latest_release(self, repo: str) -> str | None:
+        # REST under either api: GraphQL's `latestRelease` would need a query for one field.
+        try:
+            raw = json.loads(_gh._run_gh(["api", f"repos/{repo}/releases/latest"]))
+        except _gh.GhError as exc:
+            text = f"{exc} {getattr(exc, 'stderr', '')}".lower()
+            if "http 404" in text or "not found" in text:
+                return None
+            raise
+        tag = raw.get("tag_name") if isinstance(raw, dict) else None
+        return str(tag) if isinstance(tag, str) and tag else None
 
     @_hosted
     def viewer_login(self) -> str:

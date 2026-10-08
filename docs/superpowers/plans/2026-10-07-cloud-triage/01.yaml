@@ -1,0 +1,148 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'github-rest: a REST-only GitHub forge backend, selected by forge.api'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - cloud-triage-github-rest
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/forgeapi.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/hostclient.py
+  - packages/fr/src/fr/gh.py
+  - packages/fr/src/fr/ghclient.py
+  - tests/unit/test_forgeapi.py
+  - tests/unit/test_real_ghrestclient.py
+  - tests/unit/test_github_rest_no_graphql.py
+  - tests/unit/test_github_rest_contract.py
+  - tests/fixtures/github_rest/**
+  - tests/unit/test_cloud_triage_skeleton.py
+  - .changes/feat-cloud-triage.yaml
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: 'Skeleton smoke: a trivial test on the branch, CI green'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add tests/unit/test_cloud_triage_skeleton.py with one test that imports `fr.hostclient` and asserts `client_for_backend("github")` still returns a `RealGhClient` with no `FR_FORGE_API` set and no `~/.config/fr/forge.yaml` (monkeypatch HOME to tmp_path). Add `.changes/feat-cloud-triage.yaml` (`bump: minor`, summary: "Cloud triage: a REST-only GitHub backend, workspace state on a ref, and a claude-cloud driver and runner"). Run `uv run pytest tests/unit/test_cloud_triage_skeleton.py -q --no-cov` (passes) and `uv run --no-project python scripts/check-change-fragment.py origin/main` (ok); commit and push; CI on the branch is green before the next task.
+- number: 2
+  title: forge.api selection (R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_forgeapi.py — `fr.forgeapi.resolve()` (no arguments) returns "graphql" with nothing set; "rest" with `FR_FORGE_API=rest`; "rest" from `$HOME/.config/fr/forge.yaml` containing `api: rest`; the env var wins over the file; an invalid value in either raises `ForgeApiError` naming the source; no subprocess is spawned (monkeypatch `subprocess.run` to fail). A second test: `write_default(value)` writes the file only when absent and never overwrites. Run: fails (no module).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/forgeapi.py — `ForgeApi = Literal["rest", "graphql"]`, `ENV = "FR_FORGE_API"`, `config_path()` (same `$HOME` rule as `fr.triage.scope_config.host_id_path`, `~/.config/fr/forge.yaml`), `resolve() -> ForgeApi`, `write_default(value) -> bool` (atomic write via `fr.artifacts.atomic.write_text_atomic`, returns whether it wrote), `ForgeApiError`. Run the test file: passes.
+- number: 3
+  title: 'RealGhRestClient: reads (R1, R2)'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Capture fixtures, never construct them: from this cloud session (GraphQL refused, REST allowed) record `gh api` JSON for derio-net/super-fr into tests/fixtures/github_rest/ (repos/{r}, issues?state=open&per_page=100, one issue, its comments, pulls?state=open, one open PR's pulls/{n}, /files, /reviews, commits/{sha}/check-runs, commits/{sha}/status, actions/runs?head_sha=, branches/main/protection/required_status_checks (404 body too), contents/{path}?ref=). Record the matching GraphQL-backed `gh ... --json` outputs for the same moment from a host session into tests/fixtures/github_rest/graphql/. State in a fixtures README which session captured which file; redact nothing that is outside derio-net (all of it is derio-net).
+  - id: P1.T3.S2
+    text: |-
+      RED: tests/unit/test_real_ghrestclient.py — a fake `gh` runner keyed on argv returns the fixtures; assert `RealGhRestClient` implements every `GhClient` read (`view_issue`, `view_issue_record`, `list_issues`, `list_prs`, `list_open_prs`, `list_prs_by_head`, `pr_view`, `pr_checks`, `pr_required_checks`, `pr_status_by_url`, `pr_body`, `list_issue_comments`, `list_linked_prs`, `file_exists`, `list_dir`, `read_file`, `read_file_at_ref`, `list_repos`, `viewer_login`, `repo_merge_methods`, `closing_ref`, `default_branch`, `pr_for_branch`, `issues_enabled`) with `gh api` argv only, `per_page=100` and explicit pagination honouring each `limit`. Fails: no class.
+  - id: P1.T3.S3
+    text: |-
+      GREEN: packages/fr/src/fr/real_ghrestclient.py — `RealGhRestClient(host=None, run=None)` built on one `_api(route, *, method="GET", fields=None, paginate_limit=None)` helper over `gh api`; the §A field map: `closingIssuesReferences` parsed from body and title with GitHub's closing keywords (`close[sd]?`, `fix(e[sd])?`, `resolve[sd]?`, same-repo `#n`, `owner/repo#n`, issue URLs); `statusCheckRollup` from check-runs plus statuses (upper-cased status/conclusion, `startedAt` empty when not started); `workflowName` from actions/runs by `check_suite_id`, else the app name; `mergeable`/`mergeStateStatus` mapped to the GraphQL enums (`null` → `UNKNOWN`); `reviewDecision` from the latest review per reviewer; `isCrossRepository`; `stateReason` upper-cased; comment `url` = `html_url`. `pr_for_branch` derives owner/repo from the checkout's `origin` URL via `fr._hosts`. Run test_real_ghrestclient.py: passes.
+  - id: P1.T3.S4
+    text: |-
+      REFACTOR: move the field-map functions into small pure helpers at module top (`_rollup`, `_closing_refs`, `_merge_state`, `_review_decision`) with one docstring each citing the spec §A row; rerun the file.
+- number: 4
+  title: 'RealGhRestClient: writes and the error contract (R1)'
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in test_real_ghrestclient.py — every write (`edit_issue_labels`, `edit_issue_state`, `edit_issue_body`, `comment_issue`, `create_issue`, `ensure_labels`, `edit_issue_comment`, `pr_merge` as `PUT pulls/{n}/merge` with `sha`, `pr_create`/`create_pr` as `POST pulls` with `draft`, `close_pr`, `delete_branch`, `dispatch_workflow`) issues the REST route; a fake `gh` that answers a 403 makes every method raise `GhError` EXCEPT `pr_for_branch` and `issues_enabled`, which return None as their `GhClient` contract says (ghclient.py :323-332). Fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: implement the writes and the per-method error contract in real_ghrestclient.py; no method catches `GhError` except those two. Run the file: passes.
+- number: 5
+  title: Wire the selection into every seam (R1, R3)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_github_rest_no_graphql.py — with `FR_FORGE_API=rest`, a fake `gh` on PATH (a script under tmp_path) that exits 1 with "HTTP 403" on `api graphql`, `issue list --json`, `issue view --json`, `pr list --json`, `pr view --json`, `pr checks`, `pr merge`, `pr create`, `pr close`, `issue edit`, `issue comment`, `repo view --json`, and serves `gh api` from the fixtures. Drive `client_for_backend("github")`, `client_for_url(<github url>)`, `client_for(<fixture checkout>)`, `fr.gh.view_pr_body`, `fr.gh.list_issues`, `fr.gh.list_prs`, `fr.gh.list_open_prs`, `fr.gh.list_prs_by_head`, `fr.gh.view_issue`, `fr.gh.is_issue_closed`, `fr.gh.list_labels`, `fr.gh.list_repos`, `fr.gh.close_issue`, `fr.gh.edit_issue_labels`: each succeeds through `gh api`, none reaches a refused command; and `hostclient.pr_command`/`issue_command`/`label_command` render `gh api` spellings for every `FORGE_COMMANDS["github"]` op (create, edit, ready, fill, issue-close, issue-label, issue-unlabel, label-create) — no rendered command matches the refused list. Fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: `hostclient.client_for_backend` returns `RealGhRestClient` for github when `forgeapi.resolve() == "rest"` (one call, at the top of the github branch); `client_for_url` and `client_for` reach it through that function; the `fr.gh` helpers listed above check `forgeapi.resolve()` once and delegate to a module-level `RealGhRestClient`; `FORGE_COMMANDS` gains a `"github-rest"` table of `gh api` spellings (PR create as `gh api repos/{repo}/pulls -f head=... -f base=... -f title=... -F body=@{body} -F draft=true`, ready as the REST `PATCH` that clears `draft`, labels as `POST repos/{repo}/issues/{number}/labels`), chosen by `pr_command`/`issue_command`/`label_command` when the backend is github and the setting is rest. Run test_github_rest_no_graphql.py: passes.
+- number: 6
+  title: 'Contract test: both backends, same records (R2)'
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: tests/unit/test_github_rest_contract.py — feed the captured REST fixtures to `RealGhRestClient` and the captured GraphQL outputs to `RealGhClient` for the same moment; compare the records `fr.triage.collect` consumes (issues, open PRs with files/head_oid/checks/mergeable/reviewDecision/closingIssuesReferences, comments) field by field, asserting each §A exception explicitly: a sidebar-only closing link absent from REST, `workflowName` equal, `startedAt` empty vs GraphQL `0001-` treated the same by `collect._latest_runs`, `mergeable` null → UNKNOWN. Fails until the field map matches.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: fix the field map until the contract holds; run `uv run pytest tests/unit/test_github_rest_contract.py tests/unit/test_real_ghrestclient.py tests/unit/test_github_rest_no_graphql.py tests/unit/test_forgeapi.py -q --no-cov`: passes.
+  - id: P1.T6.S3
+    text: |-
+      Quality gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the mypy command from AGENTS.md, then the full suite `uv run pytest -q --no-cov -n auto` into a log outside the repo; all green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T3.S4:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+    P1.T6.S3:
+      state: x
+      ticked_at: '2026-10-08T13:58:42+00:00'
+      note: null
+  completion:
+    at: '2026-10-08T13:58:42+00:00'
+    note: null
+    observed_prs: []

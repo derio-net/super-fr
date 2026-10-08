@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -838,8 +838,10 @@ def _since_table(since: SnapshotDiff | None) -> str:
     return f"{head}{body}</section>"
 
 
-def _needs_section(facts: Facts, judgements: Judgements) -> str:
-    rows = needs_you(facts, judgements)
+def _needs_section(
+    facts: Facts, judgements: Judgements, session_notes: Mapping[str, str] | None = None
+) -> str:
+    rows = needs_you(facts, judgements, session_notes)
     head = '<section class="decide" id="needs-you-now"><h2>Needs you now</h2>'
     if not rows:
         return f'{head}<p class="quiet">Nothing needs you now.</p></section>'
@@ -1017,6 +1019,7 @@ def render(
     resolved: Resolved | None = None,
     *,
     board: bool = False,
+    session_notes: Mapping[str, str] | None = None,
 ) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes.
 
@@ -1025,7 +1028,8 @@ def render(
     (`<state>/board/manifest.yaml`, `fragments.resolve_manifest`): it orders the generated
     sections and places authored fragments among them; None is the default order. *board*
     links the sibling `board.html` (the batch Kanban, `fr triage board`) from the Batches
-    section; the caller says whether one exists.
+    section; the caller says whether one exists. *session_notes* are blocked sessions'
+    notes by item id (cloud-triage R15), listed under Needs you now.
     """
     show_repo = facts.kind != "repo"
     result = classify(facts, judgements)  # the one classification, shared below
@@ -1091,7 +1095,7 @@ def render(
 
     builders: dict[str, Callable[[], str]] = {
         "since": lambda: _since_table(since),
-        "needs": lambda: _needs_section(facts, judgements),
+        "needs": lambda: _needs_section(facts, judgements, session_notes),
         "next-up": lambda: _next_section(facts, judgements),
         "waves": lambda: _waves_section(facts, judgements),
         "possible-duplicates": lambda: _possible_duplicates(result.candidates, by_key),

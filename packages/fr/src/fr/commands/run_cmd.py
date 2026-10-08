@@ -460,6 +460,13 @@ def _now() -> str:
     return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
 
 
+def _fr_version() -> str:
+    """The running fr's version, recorded by `fr run start` (R16)."""
+    from fr import __version__
+
+    return __version__
+
+
 # --- usage capture (spec 2026-09-25-lean-cost-aware-process §5.B.3) ----------
 
 
@@ -1647,17 +1654,33 @@ def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
     return None
 
 
-def _evidence_hint(name: str, target: _EvidenceTarget | None) -> str:
+def _ci_configured(repo_root: Path | None) -> bool:
+    """Whether `fr services` names a CI for *repo_root* (lenient: a hint never
+    refuses). Spec 2026-10-07-cloud-triage §I step 6, p2-r8."""
+    if repo_root is None:
+        return False
+    from fr.services.resolve import resolve_services
+
+    return resolve_services(repo_root, lenient=True).ci.type != "none"
+
+
+def _evidence_hint(name: str, target: _EvidenceTarget | None, repo_root: Path | None = None) -> str:
     if name == "walk":
         return (
             "<path-to-walk-log>, the log `fr verification walk --run <run> --model <m>` "
             "wrote on this code tree"
         )
     if name == "tests":
-        return (
+        log = (
             "<path-to-log>, naming the output file of the full suite you ran "
             "yourself, in this session, during this unit"
         )
+        if _ci_configured(repo_root):
+            log += (
+                " — or --evidence tests=ci, naming this branch's CI on the pushed "
+                "head (fr reads its gate checks on the open PR)"
+            )
+        return log
     assert target is not None  # phase-scoped evidence without a target is refused first
     if name == "review":
         when = "" if target.phase is not None else ", created after this step opened"
@@ -1878,7 +1901,7 @@ def _verified_evidence(
         )
         for name in missing:
             err_console.print(
-                f"  pass --evidence {name}={_evidence_hint(name, target)}",
+                f"  pass --evidence {name}={_evidence_hint(name, target, repo_root)}",
                 markup=False,
                 soft_wrap=True,
             )
@@ -1919,7 +1942,10 @@ def _verified_evidence(
             opened=since,
             expected_agent=step.agent if target.phase is None else None,
         )
-    if "tests" in offered and phase is not None:
+    # `tests: ci` first: the phase-log branch below would read it as a path.
+    if "tests" in offered and offered["tests"] == TESTS_CI:
+        verified["tests"] = _ci_tests_witness(key, repo_root, done=state_value == "done")
+    elif "tests" in offered and phase is not None:
         verified["tests"] = _verify_phase_tests_log(
             key,
             offered["tests"],
@@ -2848,6 +2874,31 @@ fresh run while the code tree it covered is unchanged (spec
 2026-09-29-fr-goal-light-path §D, R6)."""
 _TREE_SEP = ";tree="
 REUSED_PREFIX = "reused:"
+TESTS_CI = "ci"
+"""`tests: ci` — the forge's CI on the pushed head stands in for a local suite
+log (spec 2026-10-07-cloud-triage R22, §I; `fr.run.ci_evidence`)."""
+
+
+def _ci_tests_witness(key: str, repo_root: Path, *, done: bool) -> str:
+    """`tests: ci`: on a `done` resolve the `verify_ci` witness, else the bare
+    claim (a failed unit vouches for no tree, and asks no forge). A pending gate
+    exits `CI_PENDING_EXIT` and a refusal exits 2, both before any write."""
+    from fr.run import ci_evidence
+
+    if not done:
+        return TESTS_CI
+    try:
+        return ci_evidence.verify_ci(repo_root)
+    except ci_evidence.CiPending as e:
+        err_console.print(
+            f"[yellow]{key}: tests: ci — {escape(str(e))}. Nothing was recorded: "
+            "resolve again when CI finishes.[/yellow]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(ci_evidence.CI_PENDING_EXIT) from e
+    except ci_evidence.CiEvidenceRefused as e:
+        err_console.print(f"[red]{key}: {escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
 
 
 def _latest_tests_witness(state: RunState) -> tuple[str, str] | None:
@@ -4743,6 +4794,7 @@ def start_cmd(
         cursor=manifest.steps[0].id,
         steps=steps,
         driver="standalone" if driver == "standalone" else None,
+        fr_version=_fr_version(),
     )
     _save_run_state(workspace, state)
     console.print(f"started run {rid} ({state.workflow}) — cursor: {state.cursor}")

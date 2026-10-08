@@ -1,0 +1,15 @@
+{
+  "schema": 8,
+  "scope": "example-org--gadgets+example-org--widgets",
+  "kind": "group",
+  "collected_at": "2026-10-08T12:00:00+00:00",
+  "repos": ["example-org/gadgets", "example-org/widgets"],
+  "issues": [
+    {"repo": "example-org/gadgets", "number": 1, "title": "a public issue", "state": "open",
+     "url": "https://github.example/example-org/gadgets/issues/1"},
+    {"repo": "example-org/widgets", "number": 7, "title": "a private issue", "state": "open",
+     "url": "https://github.example/example-org/widgets/issues/7"}
+  ],
+  "viewer": "operator",
+  "visibility": {"example-org/gadgets": "public", "example-org/widgets": "private"}
+}

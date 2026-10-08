@@ -9,19 +9,41 @@ from __future__ import annotations
 
 import contextvars
 import os
+import re
 import shlex
 import subprocess
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 from urllib.parse import quote
 
 from fr.ghclient import HostRefusedError
 from fr.labels import LabelDef
 
+if TYPE_CHECKING:
+    from fr.real_ghrestclient import RealGhRestClient
+
 T = TypeVar("T")
+
+
+def _rest() -> RealGhRestClient | None:
+    """The REST-only client when `forge.api` is `rest` (spec 2026-10-07-cloud-triage
+    §A, R3), else None: the helpers below that a GraphQL-backed `gh` verb serves
+    check it once and delegate. Built per call with the host in scope, so a
+    `host_scope` around the helper still applies."""
+    from fr import forgeapi
+
+    if forgeapi.resolve() != "rest":
+        return None
+    from fr.real_ghrestclient import RealGhRestClient
+
+    return RealGhRestClient(host=_HOST.get())
+
+
+def _records(value: Any) -> list[dict[str, object]]:
+    return list(value)
 
 
 class GhError(Exception):
@@ -33,6 +55,9 @@ class GhError(Exception):
         super().__init__(message)
         self.stderr = stderr
         self.returncode = returncode
+        # The cloud prerequisites this failure is explained by (`fr.cloud`), noted for the
+        # CLI boundary's one remedy block; never appended to the message (p7-r3).
+        self.cloud_items: tuple[str, ...] = ()
         # Some gh commands answer on a non-zero exit (`gh pr checks` exits 8
         # while checks are pending, with its JSON on stdout), so it is kept.
         self.stdout = stdout
@@ -168,15 +193,41 @@ def _run_gh(args: list[str]) -> str:
         ) from exc
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
-        raise GhError(
+        error = GhError(
             msg, stderr=exc.stderr or "", returncode=exc.returncode, stdout=exc.stdout or ""
-        ) from exc
+        )
+        error.cloud_items = _graphql_403_items(exc.stderr or "")
+        raise error from exc
     return result.stdout.strip()
+
+
+_GRAPHQL_403 = re.compile(r"\bHTTP 403\b")
+
+
+def _graphql_403_items(stderr: str) -> tuple[str, ...]:
+    """`(forge.api: rest,)` for GitHub's GraphQL endpoint answering HTTP 403 under
+    `forge.api: graphql` in a Claude Code cloud session, whose proxy refuses GraphQL
+    (spec 2026-10-07-cloud-triage R23), noted for the CLI boundary's one remedy block
+    (p7-r3); `()` otherwise, and always on a host. The status must be gh's `HTTP 403`
+    (p7-r4: never an issue numbered 403) and the request a GraphQL one — a REST 403,
+    or any 403 under `rest`, is GitHub's own answer, which `forge.api` does not explain."""
+    from fr import cloud, forgeapi
+
+    if not _GRAPHQL_403.search(stderr) or "/graphql" not in stderr or not cloud.detect():
+        return ()
+    try:
+        if forgeapi.resolve() != "graphql":
+            return ()
+    except forgeapi.ForgeApiError:
+        return ()
+    return cloud.note_remedy([cloud.FORGE_API_ITEM])
 
 
 def view_pr_body(ref: str, *, cwd: Path | None = None) -> str:
     """The live body of pull request `ref` (a number, URL or branch), read
     with `gh pr view` from `cwd` (its repository). Raises GhError."""
+    if (rest := _rest()) is not None:
+        return rest.pr_body(ref, cwd=cwd or Path.cwd())
     try:
         done = subprocess.run(
             ["gh", "pr", "view", ref, "--json", "body", "--jq", ".body"],
@@ -225,6 +276,8 @@ def view_issue(repo: str, number: int) -> dict[str, object]:
     """Fetch one Issue via gh issue view --json (fields: ``ISSUE_VIEW_FIELDS``)."""
     import json
 
+    if (rest := _rest()) is not None:
+        return dict(rest.view_issue_record(repo, number))
     out = _run_gh(["issue", "view", str(number), "--repo", repo, "--json", ISSUE_VIEW_FIELDS])
     result: dict[str, object] = json.loads(out)
     return result
@@ -298,6 +351,9 @@ def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
 
 def close_issue(*, repo: str, number: int) -> None:
     """Close a GitHub Issue by number."""
+    if (rest := _rest()) is not None:
+        rest.edit_issue_state(repo, number, state="CLOSED")
+        return
     _run_gh(
         [
             "issue",
@@ -316,6 +372,9 @@ def edit_issue_labels(
     add_labels: list[str],
 ) -> None:
     """Add labels to an existing issue."""
+    if (rest := _rest()) is not None:
+        rest.edit_issue_labels(repo, issue_number, add=frozenset(add_labels), remove=frozenset())
+        return
     args = ["issue", "edit", str(issue_number), "--repo", repo]
     for label in add_labels:
         args.extend(["--add-label", label])
@@ -345,6 +404,8 @@ def swap_issue_labels(
 
 def is_issue_closed(*, repo: str, number: int) -> bool:
     """Check if an issue is closed."""
+    if (rest := _rest()) is not None:
+        return rest.view_issue_record(repo, number).get("state") == "CLOSED"
     output = _run_gh(
         [
             "issue",
@@ -369,6 +430,8 @@ def list_labels(*, repo: str) -> list[dict[str, str | None]]:
     """
     import json
 
+    if (rest := _rest()) is not None:
+        return rest.list_labels(repo)
     out = _run_gh(
         [
             "label",
@@ -390,22 +453,30 @@ def list_repos(
     """Return repos under *owner* — non-archived only unless *include_archived*.
 
     ``include_archived`` exists so a caller can tell whether the list returned
-    exactly ``limit`` records (and so may be cut short) before filtering.
+    exactly ``limit`` records (and so may be cut short) before filtering. Each record
+    carries ``visibility`` lowercased when the forge gave it, so triage collect reads an
+    org's visibility from the list rather than once per repo (cloud-triage §B, p3-r9).
     """
     import json
 
+    if (rest := _rest()) is not None:
+        listed = _records(rest.list_repos(owner, limit))
+        return listed if include_archived else [r for r in listed if not r.get("isArchived")]
     out = _run_gh(
         [
             "repo",
             "list",
             owner,
             "--json",
-            "name,isArchived",
+            "name,isArchived,visibility",
             "--limit",
             str(limit),
         ]
     )
     repos: list[dict[str, object]] = json.loads(out) if out else []
+    for r in repos:
+        if isinstance(r.get("visibility"), str):
+            r["visibility"] = str(r["visibility"]).lower()
     if include_archived:
         return repos
     return [r for r in repos if not r.get("isArchived", False)]
@@ -436,6 +507,8 @@ def list_issues(
     """
     import json
 
+    if (rest := _rest()) is not None:
+        return _records(rest.list_issues(repo, state, limit, fields))
     out = _run_gh(
         [
             "issue",
@@ -458,6 +531,8 @@ def list_prs(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
     """Return PRs in *repo* via one bulk ``gh pr list`` (explicit ``--limit``)."""
     import json
 
+    if (rest := _rest()) is not None:
+        return _records(rest.list_prs(repo, state, limit))
     out = _run_gh(
         [
             "pr",
@@ -479,6 +554,8 @@ def list_prs(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
 def list_open_prs(*, repo: str, limit: int) -> list[dict[str, object]]:
     import json
 
+    if (rest := _rest()) is not None:
+        return _records(rest.list_open_prs(repo, limit))
     out = _run_gh(
         [
             "pr",
@@ -501,6 +578,8 @@ def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[s
     and `files` (the wave driver attributes a merged archive PR by them)."""
     import json
 
+    if (rest := _rest()) is not None:
+        return _records(rest.list_prs_by_head(repo, branch)[:limit])
     out = _run_gh(
         [
             "pr",

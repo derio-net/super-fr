@@ -82,6 +82,7 @@ def sandbox(tmp_path: Path) -> dict[str, Path]:
     plugins = home / ".claude" / "plugins"
     plugins.mkdir(parents=True)
     (plugins / "installed_plugins.json").write_text(json.dumps({"plugins": {}, "version": 1}))
+    (home / ".claude" / "settings.json").write_text("{}")
     uv = home / "bin" / "uv"
     uv.write_text(_UV_STUB)
     uv.chmod(0o755)

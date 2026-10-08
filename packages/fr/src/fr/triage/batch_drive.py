@@ -183,6 +183,10 @@ class Snapshot:
     # The batches whose open members all await their live walk (`batch_awaits_live`):
     # a planned one is held, never dispatched (spec §F, R18).
     awaiting: frozenset[str] = frozenset()
+    # batch id -> why the driver adapter does not dispatch it (another runner named
+    # explicitly, cloud-triage §E, p4-r1): a hold, so it takes no in-flight slot. Still
+    # pending: the driver whose runner it names may yet dispatch it.
+    refused: Mapping[str, str] = field(default_factory=dict)
     # The batches with a recorded close-out whose item `existing` was read for (gh#1025):
     # only for these is "not in `existing`" evidence that no tab holds it. Plan mode
     # reads no runner, so it probes none and never calls a close-out stale.
@@ -1107,6 +1111,10 @@ def drive_pass(snap: Snapshot) -> Pass:
             continue
         if any(stages.get(d) != "merged" for d in batch.after):
             pending += 1
+            continue
+        if batch.id in snap.refused:
+            pending += 1
+            actions.append(Action("held", batch.id, snap.refused[batch.id]))
             continue
         if len(occupants) >= snap.max_inflight:
             # The summary counts only the selection, so a cap held by batches

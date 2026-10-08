@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from fr.triage.batch import (
+    batch_item_id,
     batch_pr,
     batch_repo,
     derive_batch_stage,
@@ -40,6 +41,7 @@ from fr.triage.batch_drive import (
     Snapshot,
     checks_verdict,
     closeout_event,
+    closeout_item_id,
     drive_pass,
     held_conflict,
 )
@@ -127,7 +129,7 @@ def drive_snapshot(
 @dataclass(frozen=True)
 class Need:
     # ready-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch | unplaced
-    # | merge-conflict
+    # | merge-conflict | session-blocked
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
     text: str
@@ -143,6 +145,7 @@ NEED_LABELS = {
     "stale-dispatch": "Stale dispatch",
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
+    "session-blocked": "Session blocked",
 }
 
 
@@ -156,8 +159,12 @@ def _all_prs(facts: Facts) -> list[PullRequest]:
     return out
 
 
-def needs_you(facts: Facts, judgements: Judgements) -> list[Need]:
-    """Everything waiting on the operator, from the facts the driver reads."""
+def needs_you(
+    facts: Facts, judgements: Judgements, session_notes: Mapping[str, str] | None = None
+) -> list[Need]:
+    """Everything waiting on the operator, from the facts the driver reads. *session_notes*
+    are blocked sessions' own notes by item id, from a runner that gives them
+    (`SessionNotes`, cloud-triage R15); each is one row, and without them nothing is."""
     snap = drive_snapshot(facts, judgements)
     plan = drive_pass(snap)
     by_id = {b.id: b for b in judgements.batches}
@@ -247,6 +254,19 @@ def needs_you(facts: Facts, judgements: Judgements) -> list[Need]:
     for i in classify(facts, judgements).unplaced:
         out.append(Need("unplaced", i.key, f"{i.key} {i.title}: in no batch, feature or parked",
                         i.url))  # fmt: skip
+    for b in judgements.batches:
+        repo = snap.repos.get(b.id)
+        if repo is None or not session_notes:
+            continue
+        for item, what in (
+            (batch_item_id(repo, b.id), "session"),
+            (closeout_item_id(repo, b.id), "close-out session"),
+        ):
+            if note := session_notes.get(item):
+                out.append(
+                    Need("session-blocked", b.id, f"batch {b.id}'s {what} is blocked: {note}",
+                         f"#batch-{b.id}")
+                )  # fmt: skip
     return out
 
 

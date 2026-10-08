@@ -18,10 +18,19 @@ import typer
 from rich.markup import escape
 
 import fr.commands.triage_cmd as triage_cmd
-from fr.commands.triage_cmd import DirOpt, OrgOpt, RepoOpt, console, err_console, triage_app
+from fr.commands.triage_cmd import (
+    DirOpt,
+    OrgOpt,
+    RepoOpt,
+    WorkspaceOpt,
+    console,
+    err_console,
+    resolve_state_dir,
+    triage_app,
+)
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
-from fr.triage.model import Judgements, Scope, load_judgements, state_dir
+from fr.triage.model import Judgements, Scope, load_judgements
 from fr.triage.origins import (
     CLASSIFICATION_FILE,
     FACTS_FILE,
@@ -55,8 +64,10 @@ def _fail(message: str) -> typer.Exit:
     return typer.Exit(code=2)
 
 
-def _load(scope: Scope, dir_override: Path | None) -> tuple[Path, OriginsFacts, Origins]:
-    target = state_dir(scope, dir_override)
+def _load(
+    scope: Scope, dir_override: Path | None, workspace: Path | None
+) -> tuple[Path, OriginsFacts, Origins]:
+    target = resolve_state_dir(scope, dir_override, workspace)
     facts_path = target / FACTS_FILE
     if not facts_path.exists():
         flag = "org" if scope.kind == "org" else "repo"
@@ -76,6 +87,7 @@ def collect_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
     since: Annotated[
         str, typer.Option("--since", help="Issues created on or after this date (YYYY-MM-DD).")
     ] = "",
@@ -103,7 +115,7 @@ def collect_command(
         )
     except TriageError as exc:
         raise _fail(str(exc)) from exc
-    out = state_dir(scope, dir_override) / FACTS_FILE
+    out = resolve_state_dir(scope, dir_override, workspace) / FACTS_FILE
     write_facts(out, facts)
     for w in facts.warnings:
         err_console.print(f"[yellow]warning:[/yellow] {escape(w)}", soft_wrap=True)
@@ -115,12 +127,17 @@ def collect_command(
 
 
 @origins_app.command("check")
-def check_command(repo: RepoOpt = None, org: OrgOpt = None, dir_override: DirOpt = None) -> None:
+def check_command(
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
     """List issues with no classification, and classifications for issues not in the facts.
 
     Always exits 0; nothing is pruned.
     """
-    _, facts, origins = _load(triage_cmd._scope(repo, org), dir_override)
+    _, facts, origins = _load(triage_cmd._scope(repo, org), dir_override, workspace)
     result = check_origins(facts, origins)
     console.print(f"[bold]unclassified ({len(result.unclassified)})[/bold] — filed, no origin yet")
     for i in result.unclassified:
@@ -144,12 +161,13 @@ def render_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
     open_: bool = typer.Option(False, "--open", help="Open the page in a browser."),
 ) -> None:
     """Write origins.html from origins-facts.json, origins.yaml and (for links) judgements.yaml,
     with the fragments `origins/manifest.yaml` places among the sections."""
     scope = triage_cmd._scope(repo, org)
-    target, facts, origins = _load(scope, dir_override)
+    target, facts, origins = _load(scope, dir_override, workspace)
     judgements = _judgements(target)
     try:
         resolved = resolve_manifest(target / ORIGINS_DIR, GENERATED)

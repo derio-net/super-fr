@@ -158,6 +158,18 @@ class SessionInspector(Protocol):
 
 
 @runtime_checkable
+class SessionNotes(Protocol):
+    """An optional protocol beside `Runner`, never part of it: why a session is blocked
+    (spec 2026-10-07-cloud-triage R15). `SessionStatus` stays the closed six-value
+    Literal; a runner whose sessions say what they need (a cloud session's
+    `needs_action`) reports it here, and the board and Needs-you-now show it."""
+
+    def session_notes(self, items: Sequence[WorkItem]) -> dict[str, str]:
+        """Each blocked item's note, by item id; an item with none is left out."""
+        ...
+
+
+@runtime_checkable
 class SessionFocuser(Protocol):
     """An optional protocol beside `Runner`, never part of it: bring a session forward."""
 

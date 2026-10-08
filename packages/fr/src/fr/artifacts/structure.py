@@ -610,3 +610,33 @@ def validate_profiles(path: Path) -> list[str]:
         except ServicesError as e:
             problems.append(str(e))
     return problems
+
+
+def validate_agents(path: Path) -> list[str]:
+    """`.claude/agents/<name>.md` for each agent fr ships (spec
+    `2026-10-07-cloud-triage-design` §H, R19; the kind's `owns` leaves a repo's own
+    `fr-*.md` alone, p7-r5): front matter parses, `name` is the file's own, and the
+    stamp is present. An absent stamp would otherwise read as version 1 and pass as
+    current, so it is checked here, by name. A missing sibling is the repo-level
+    check in `fr.artifacts.validate`."""
+    from fr.agents import AGENT_NAMES, STAMP_KEY
+
+    m = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n", path.read_text(encoding="utf-8"), re.DOTALL)
+    if m is None:
+        return ["no front matter: an agent file starts with a `---` block naming the agent"]
+    try:
+        data: Any = yaml.safe_load(m.group(1))
+    except yaml.YAMLError as e:
+        return [f"front matter is not valid YAML: {e}"]
+    if not isinstance(data, dict):
+        return ["front matter is not a mapping"]
+    problems: list[str] = []
+    name = data.get("name")
+    if name != path.stem:
+        problems.append(f"front matter `name` is {name!r}, but the file is {path.name}")
+    if path.stem in AGENT_NAMES and STAMP_KEY not in data:
+        problems.append(
+            f"unstamped: `{STAMP_KEY}` is absent from the front matter — run "
+            f"`fr migrate artifacts --yes` (or `fr init agents`) to re-render it"
+        )
+    return problems

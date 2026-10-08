@@ -89,6 +89,17 @@ def _already_v8(text: str, data: object) -> bool:
     return _already_v7(text, data)
 
 
+def _already_v9(text: str, data: object) -> bool:
+    """Does `text` read as a v9 cursor? Asked by the 9 -> 10 migration
+    (`fr.artifacts.run_fr_version`).
+
+    The same live-model question again, correct for v9 only while 9 -> 10
+    stays additive (it adds `RunState.fr_version` and removes nothing). A body
+    already carrying `fr_version` is wholly v10 (the crash window between the
+    body and the stamp) and reads here too, so the runner finishes the stamp."""
+    return _already_v7(text, data)
+
+
 def split_usage(data: dict[str, Any]) -> tuple[dict[str, Any], list[Any]]:
     """`(v7 body, usage session entries)` — pure: no I/O, no clock.
 

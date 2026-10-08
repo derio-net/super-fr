@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 [manifest]
 members = [
     "fr",
+    "fr-claude-cloud",
     "fr-cncd",
     "fr-dispatch",
     "fr-herdr",
@@ -183,6 +184,23 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "rich", specifier = ">=13" },
     { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
+name = "fr-claude-cloud"
+version = "5.17.1"
+source = { editable = "packages/fr-claude-cloud" }
+dependencies = [
+    { name = "fr" },
+    { name = "fr-dispatch" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fr", editable = "packages/fr" },
+    { name = "fr-dispatch", editable = "packages/fr-dispatch" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]
@@ -719,6 +737,7 @@ version = "5.17.1"
 source = { editable = "." }
 dependencies = [
     { name = "fr" },
+    { name = "fr-claude-cloud" },
     { name = "fr-cncd" },
     { name = "fr-dispatch" },
     { name = "fr-herdr" },
@@ -739,6 +758,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fr", editable = "packages/fr" },
+    { name = "fr-claude-cloud", editable = "packages/fr-claude-cloud" },
     { name = "fr-cncd", editable = "packages/fr-cncd" },
     { name = "fr-dispatch", editable = "packages/fr-dispatch" },
     { name = "fr-herdr", editable = "packages/fr-herdr" },

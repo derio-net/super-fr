@@ -23,6 +23,7 @@ from fr.binary_identity import enforce as enforce_binary_identity
 from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
+from fr.commands.cloud_cmd import cloud_app
 from fr.commands.harness_cmd import harness_app
 from fr.commands.hermes_cmd import hermes_app
 from fr.commands.init_cmd import init_app
@@ -73,6 +74,7 @@ app.add_typer(spec_app, name="spec")
 app.add_typer(migrate_app, name="migrate")
 app.add_typer(isolation_app, name="isolation")
 app.add_typer(init_app, name="init")
+app.add_typer(cloud_app, name="cloud")
 app.add_typer(repos_app, name="repos")
 app.add_typer(journal_app, name="journal")
 app.add_typer(models_app, name="models")
@@ -88,6 +90,13 @@ app.command(name="skills")(skills_command)
 app.command(name="services", help="Read-only: the resolved forge / ci / tracking services.")(
     services_command
 )
+
+
+def _print_cloud_remedy() -> None:
+    from fr import cloud
+
+    if (block := cloud.take_remedy()) is not None:
+        typer.echo("\n" + block, err=True)
 
 
 def version_callback(value: bool) -> None:
@@ -121,6 +130,9 @@ def main(
     ),
 ) -> None:
     """VK toolchain: v2 plan-as-folder, render → observe → diff → apply."""
+    # The cloud remedy block (spec 2026-10-07-cloud-triage R23, §H), once, after fr's own
+    # error: failures note their items instead of appending it (p7-r3).
+    ctx.call_on_close(_print_cloud_remedy)
     # super-fr#746: before anything else — a wrong fr must not migrate
     # artifacts either. Refuses a PATH-reached fr that disagrees with the fr the
     # harness's integrations pinned; see fr.binary_identity.

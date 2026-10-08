@@ -1,6 +1,7 @@
 """Shared pytest fixtures."""
 
 import os
+import subprocess
 import tomllib
 from collections.abc import Iterator, Mapping
 from pathlib import Path
@@ -9,6 +10,36 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+OPERATOR_HOME = Path(os.environ.get("HOME") or Path.home())
+"""The home the suite started with: the operator's own, which no test may write
+(`_home_off_the_operators_machine`, review p3-r6)."""
+
+OPERATOR_GITCONFIG = Path(os.environ.get("GIT_CONFIG_GLOBAL") or OPERATOR_HOME / ".gitconfig")
+"""git's global config as the suite found it: the operator's, never lent to a test (p4-o1)."""
+
+
+def _operator_git_identity() -> dict[str, str]:
+    """`user.name`/`user.email` from the operator's global git config, read ONCE, at
+    session start: the only thing a test's git borrows from it (p4-o1). A key that is
+    unset (or a git that cannot say) is left out."""
+    found: dict[str, str] = {}
+    for key in ("user.name", "user.email"):
+        try:
+            got = subprocess.run(
+                ["git", "config", "--global", "--get", key],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if got.returncode == 0 and got.stdout.strip():
+            found[key] = got.stdout.strip()
+    return found
+
+
+OPERATOR_GIT_IDENTITY = _operator_git_identity()
 
 
 @pytest.fixture
@@ -61,6 +92,28 @@ def _no_inherited_fr_binary_pin(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FR_SKIP_IDENTITY", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _graphql_forge_api_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin `forge.api` to `graphql` (spec 2026-10-07-cloud-triage R3).
+
+    A suite run in a cloud session whose `~/.config/fr/forge.yaml` (or an
+    exported `FR_FORGE_API`) says `rest` would otherwise hand every GitHub test
+    the REST client. The env var outranks the file; the tests of the setting
+    itself delete it."""
+    monkeypatch.setenv("FR_FORGE_API", "graphql")
+
+
+@pytest.fixture(autouse=True)
+def _no_cloud_remedy_carried_between_tests() -> Iterator[None]:
+    """The cloud remedy items a failure notes are process-global, printed once by the
+    CLI boundary (p7-r3): one test's GraphQL 403 must not print in the next one's CLI."""
+    from fr import cloud
+
+    cloud.take_remedy()
+    yield
+    cloud.take_remedy()
+
+
 WIDE_TERMINAL_COLUMNS = "200"
 """Terminal width every in-process CLI test renders at (review r5-e15).
 
@@ -84,6 +137,48 @@ def _fixed_triage_host_id(monkeypatch: pytest.MonkeyPatch) -> None:
     id mints `~/.config/fr/host-id` in the real home. Tests of the minting itself
     delete it and point `HOME` at a tmp dir."""
     monkeypatch.setenv("FR_HOST_ID", "feedfacefeedface")
+
+
+@pytest.fixture(autouse=True)
+def _home_off_the_operators_machine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """Point `HOME` at a fresh tmp dir for every test (review p3-r6), so every fr config
+    and cache root under it (`~/.config/fr/forge.yaml` and `host-id`, `~/.cache/fr/...`)
+    is a sandbox: a test that restores a state ref (`forgeapi.write_default`) once wrote
+    the operator's real `forge.yaml`. Its own dir, not `tmp_path`, so a test that lists
+    `tmp_path` sees nothing new. A test that sets `HOME` itself still wins.
+
+    git's global config is the sandbox's own `<home>/.gitconfig`, holding only the
+    operator's identity (`OPERATOR_GIT_IDENTITY`): the real file is never lent, so a test's
+    `git config --global` cannot write it (p4-o1). What a real home lends the toolchain
+    rather than fr is kept pointing at the operator's: uv's cache and managed Pythons, so
+    a `uv run` child neither re-downloads nor loses its interpreter.
+    Pinned by `tests/unit/test_suite_home_sandbox.py`."""
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    gitconfig = home / ".gitconfig"
+    sections: dict[str, list[str]] = {}
+    for key, value in OPERATOR_GIT_IDENTITY.items():
+        section, name = key.split(".", 1)
+        quoted = value.replace("\\", "\\\\").replace('"', '\\"')
+        sections.setdefault(section, []).append(f'\t{name} = "{quoted}"')
+    gitconfig.write_text(
+        "".join(f"[{section}]\n" + "\n".join(lines) + "\n" for section, lines in sections.items()),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
+    lent = {
+        "UV_CACHE_DIR": Path(os.environ.get("XDG_CACHE_HOME") or OPERATOR_HOME / ".cache") / "uv",
+        "UV_PYTHON_INSTALL_DIR": Path(
+            os.environ.get("XDG_DATA_HOME") or OPERATOR_HOME / ".local" / "share"
+        )
+        / "uv"
+        / "python",
+    }
+    for key, path in lent.items():
+        if key not in os.environ and path.exists():
+            monkeypatch.setenv(key, str(path))
 
 
 @pytest.fixture(autouse=True)

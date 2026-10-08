@@ -1,0 +1,124 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'CI as test evidence: tests: ci on phase and deliver records'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - cloud-triage-ci-evidence
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/ci_evidence.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/git.py
+  - .fr/ci.yaml
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/agents/fr-phase-executor.md
+  - .claude/agents/*
+  - .opencode/**
+  - .hermes/**
+  - docs/explainers/01-fr-goal.*
+  - tests/unit/test_run_ci_evidence.py
+  - tests/unit/test_commit_checks.py
+  - tests/unit/test_run_resolve_tests_ci.py
+  - tests/unit/test_fr_goal_ci_evidence_prose.py
+  - tests/fixtures/github_rest/**
+  - tests/scenarios/cloud-triage-ci-evidence.sh
+  - tests/integration/test_scenarios.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: 'GhClient.commit_checks (§I)'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_commit_checks.py — `commit_checks(repo, sha)` on `RealGhRestClient` and `RealGhClient` returns `{name, workflow, status, conclusion, url}` per check from captured fixtures of `GET repos/{r}/commits/{sha}/check-runs?filter=latest` (workflow name via the run's check suite, as phase 1's `workflowName`) and `GET repos/{r}/commits/{sha}/status`; a check with a failed attempt and a green re-run yields one green record (latest per (workflow, name)); statuses keep the latest per context; the fake client serves fixtures; glab and tea raise `UnsupportedForgeOperation`. Capture the fixtures with `gh api` from this session against PR #1088's head (derio-net only). Fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: the protocol method in ghclient.py (and the fake), the shared REST implementation used by both GitHub clients, the glab/tea refusals. Run: passes.
+- number: 2
+  title: 'verify_ci (R22, §I steps 1-6)'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_run_ci_evidence.py — over a tmp repo with a bare remote and a fake client: gate names from `.fr/ci.yaml` at HEAD, else `pr_required_checks`, else refused naming both; `ci none` or a non-GitHub forge refused before any forge call; unpushed HEAD or a dirty code path refused naming it; the CI sha is HEAD, or the nearest first-parent ancestor (≤50) with HEAD's code tree that has gate checks — a `chore(fr)` commit touching only docs/superpowers/ on top of a tested sha passes with no new run; no open PR or `mergeable == CONFLICTING` refused with that reason; a pending gate raises `CiPending` (exit 75); failed, cancelled, skipped or absent gates refused naming each with its URL; non-gate failures ignored; the witness is `ci:<ci sha>+<base sha>;tree=<code_tree(HEAD)>` with the base sha from the gate's check suite. Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/run/ci_evidence.py (`verify_ci`, `CiPending`, `CiEvidenceRefused`, `load_gate_checks`); remote head via `git ls-remote origin refs/heads/<branch>` through fr.git; add `.fr/ci.yaml` (`gate_checks: [ci-ok]`) to this repo. Run: passes.
+- number: 3
+  title: 'Accept `tests: ci` in run resolve'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_run_resolve_tests_ci.py — `tests: ci` is recognised BEFORE the phase-log branch (`"tests" in offered and phase is not None`); a `done` implement-phase and a `done` deliver record with green gates record the witness; `tests: reuse` afterwards accepts it while the code tree is unchanged; a pending gate exits 75 with "resolve again when CI finishes" and the cursor byte-identical; a `failed` resolve with `tests: ci` records the bare claim `ci` and makes no forge call; existing local-log resolve tests unchanged. Fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: route the token in run_cmd's evidence block; map `CiPending` to exit 75 and `CiEvidenceRefused` to exit 2. Run the new file and tests/unit/test_run_*tests*.py: pass.
+  - id: P2.T3.S3
+    text: |-
+      RED/GREEN: tests/scenarios/cloud-triage-ci-evidence.sh (row cloud-triage-ci-evidence's `candidate` scenario, run by tests/integration/test_scenarios.py): a fresh fixture repo with a bare remote and a fake `gh` on PATH serving the PR, `commits/{sha}/check-runs` and `/status`; HEAD pushed and the gate green → `fr run resolve … --record <r>` with `tests: ci` exits 0; the gate `in_progress` → exit 75 and the cursor byte-identical; an unpushed commit → exit 2 naming it. Run test_scenarios.py: passes.
+- number: 4
+  title: 'Tell the orchestrator and the executor'
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests/unit/test_fr_goal_ci_evidence_prose.py — fr-goal §5 names `tests: ci` beside the local log and what fr verifies for each; §6 says a run using `ci` opens its draft PR when `implement` starts (the one exception to "never open the PR", citing R22); §8 says `deliver` may use `tests: ci`; the waiting rule (exit 75 is not idle; a cloud session waits for the PR-activity event, elsewhere re-run the resolve every 2 minutes for at most 45 minutes, then report blocked); the fr-phase-executor agent says: when the brief says CI evidence, commit, push and return `tests_log: ci` instead of running the full suite. Fails.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: edit plugins/super-fr/skills/fr-goal/SKILL.md and plugins/super-fr/agents/fr-phase-executor.md in harness-neutral wording (the tool-neutrality tripwire scans them); refresh this repo's `.claude/agents/fr-phase-executor.md` (still a symlink until phase 7); run `scripts/sync-opencode.py` and `scripts/sync-hermes.py` and commit the mirrors; if docs/explainers/01-fr-goal.md describes local-only test evidence, update it and regenerate the .html per .claude/rules/explainers-currency.md (or record in the record that it is owed). Run the prose test, the three mirror tripwires, tests/unit/test_tripwire_skill_tool_neutrality.py and tests/unit/test_skill_validation.py: pass.
+  - id: P2.T4.S3
+    text: |-
+      Quality gate: ruff format/check and mypy, then commit and push. This phase's own evidence may already be `tests: ci`: the orchestrator resolves with `uv run fr` from this workspace, which runs this phase's code. Otherwise run the full suite once after the last code commit into a log outside the repo.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-10-08T14:38:52+00:00'
+      note: null
+  completion:
+    at: '2026-10-08T14:38:52+00:00'
+    note: null
+    observed_prs: []

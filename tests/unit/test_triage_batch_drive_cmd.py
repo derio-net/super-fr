@@ -1257,7 +1257,11 @@ def test_the_board_copies_the_drives_repo_and_dir_only_when_given(
         return target / "board.html", 0
 
     monkeypatch.setattr(triage_kanban_cmd, "write_board", _spy)
-    monkeypatch.setattr(triage_batch_cmd, "state_dir", lambda scope, override: tmp_path)
+    monkeypatch.setattr(triage_batch_cmd, "resolve_state_dir", lambda scope, override, ws: tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.chdir(outside)  # no clone here: no --workspace to carry either
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     CliRunner().invoke(app, ["triage", "batch", "drive", "--once", "--yes", "--repo", REPO])
     assert seen == [["--repo", REPO]]
 

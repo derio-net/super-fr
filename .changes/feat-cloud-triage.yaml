@@ -1,0 +1,2 @@
+bump: minor
+summary: "Cloud triage: a REST-only GitHub backend, workspace state on a ref, and a claude-cloud driver and runner"

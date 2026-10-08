@@ -50,6 +50,7 @@ from fr.artifacts import run_main_session as _run_main_session  # noqa: F401  (i
 from fr.artifacts import run_usage_split as _run_usage_split  # noqa: F401  (isort: skip)
 from fr.artifacts import run_driver as _run_driver  # noqa: F401  (isort: skip)
 from fr.artifacts import run_bound_model as _run_bound_model  # noqa: F401  (isort: skip)
+from fr.artifacts import run_fr_version as _run_fr_version  # noqa: F401  (isort: skip)
 from fr.artifacts import usage_split_v2 as _usage_split_v2  # noqa: F401  (isort: skip)
 from fr.artifacts import record_questions as _record_questions  # noqa: F401  (isort: skip)
 from fr.artifacts import record_input_unconfirmed as _record_input_unconfirmed  # noqa: F401  (isort: skip)
@@ -63,6 +64,7 @@ from fr.artifacts import matrix_visual as _matrix_visual  # noqa: F401  (isort: 
 from fr.artifacts import matrix_strategies as _matrix_strategies  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_anchors as _matrix_anchors  # noqa: F401  (isort: skip)
 from fr.artifacts import profiles_services as _profiles_services  # noqa: F401  (isort: skip)
+from fr.artifacts import agents_kind as _agents_kind  # noqa: F401  (isort: skip)
 
 __all__ = [
     "ARTIFACT_KINDS",

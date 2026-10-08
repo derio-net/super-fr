@@ -46,9 +46,9 @@ import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import replace
-from datetime import UTC, datetime
-from pathlib import Path
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 from urllib.parse import urlparse
 
@@ -64,12 +64,17 @@ from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
     RepoOpt,
+    WorkspaceOpt,
     _load_state,
     _scope,
     batch_app,
     collect_into,
     console,
+    drive_lock_dir,
     err_console,
+    fetch_now,
+    push_now,
+    resolve_state_dir,
 )
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
@@ -107,6 +112,7 @@ from fr.triage.batch import (
     withdrawn_already,
 )
 from fr.triage.batch_dispatch import (
+    CLOUD_PREFLIGHT_RUNNERS,
     DISPATCHABLE,
     LIVE_STAGES,
     TRIAGE_CONFIG_PATH,
@@ -116,6 +122,7 @@ from fr.triage.batch_dispatch import (
     dispatched_already,
     live_reservations,
     render_brief,
+    worker_remedy,
 )
 from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
@@ -182,8 +189,10 @@ from fr.triage.claims import held_line, held_map, held_members
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
+from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
+from fr.triage.lease import acquire, load_lease, mark_pass, release
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     Batch,
@@ -201,10 +210,10 @@ from fr.triage.model import (
     Scope,
     load_judgements,
     load_scope_facts,
-    state_dir,
 )
+from fr.triage.privacy import guard_write
 from fr.triage.render import plural
-from fr.triage.scope_config import load_scope_config, scope_id
+from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
 
 if TYPE_CHECKING:
@@ -462,7 +471,40 @@ def _save(
     """
     check_open_membership(batches, facts)
     check_dependencies(batches)
+    guard_write(
+        added_keys(batches, read),
+        scope=facts_scope(facts),
+        facts=facts,
+        state_repo=load_durable(target).state_repo,
+        client_for=lambda r: make_client(f"https://{_host_of(facts, r)}/{r}"),
+    )
     save_batches(target / "judgements.yaml", batches, read=read, dry_run=dry_run)
+
+
+def added_keys(batches: Sequence[Batch], read: Sequence[Batch]) -> list[str]:
+    """The keys a write adds to a batch or a wave (cloud-triage R8): every member of a new
+    batch, each new member of an existing one, and every member of a batch whose wave was
+    set or moved."""
+    before = {b.id: b for b in read}
+    added: list[str] = []
+    for batch in batches:
+        old = before.get(batch.id)
+        if old is None:
+            added += batch.ids
+            continue
+        added += [k for k in batch.ids if k not in old.ids]
+        if batch.wave is not None and batch.wave != old.wave:
+            added += [k for k in batch.ids if k in old.ids]
+    return list(dict.fromkeys(added))
+
+
+def facts_scope(facts: Facts) -> Scope:
+    """The scope *facts* were collected for (every loader checked it matches)."""
+    if facts.kind == "repo":
+        return Scope(kind="repo", target=facts.repos[0])
+    if facts.kind == "group":
+        return Scope.group(facts.repos)
+    return Scope(kind="org", target=facts.scope)
 
 
 def _write(
@@ -502,10 +544,11 @@ def batch_list_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Print one line per batch in judgements.yaml, or "no batches"."""
     scope = _scope(repo, org)
-    path = state_dir(scope, dir_override) / "judgements.yaml"
+    path = resolve_state_dir(scope, dir_override, workspace) / "judgements.yaml"
     try:
         batches = load_judgements(path).batches if path.exists() else []
     except TriageError as exc:
@@ -544,9 +587,10 @@ def batch_create_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Add a proposed batch of judged issues. With --wave, its claims are owed (R3)."""
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     if not title or not issue:
         _fail("create needs --title and at least one --issue")
     doc: dict[str, object] = {"id": batch_id, "title": title, "ids": list(issue)}
@@ -599,6 +643,7 @@ def batch_edit_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Change a proposed batch; past `proposed`, only --order (and, until it merges,
     --wave and --after) may change. Claims follow the change (R3, R5, R10)."""
@@ -606,7 +651,7 @@ def batch_edit_command(
         _fail("--no-wave and --wave contradict each other")
     if no_after and after is not None:
         _fail("--no-after and --after contradict each other")
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     changes: dict[str, object] = {}
     for name, value in (
@@ -675,9 +720,10 @@ def batch_cancel_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Withdraw a batch: unlabel and comment on each member, append a cancel event."""
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     stage = derive_batch_stage(batch, facts)
     if stage in CLOSED_OUT:
@@ -792,9 +838,10 @@ def batch_suggest_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Print candidate groupings (shared file, theme, pattern). Writes nothing."""
-    _, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    _, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     found = suggest(judgements, facts)
     if not found:
         console.print("no suggestions")
@@ -1182,9 +1229,10 @@ def batch_dispatch_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Hand a batch to a runner as one fr-goal run, and mark its issues taken."""
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     try:
         dispatch_batch(
@@ -1218,6 +1266,8 @@ def dispatch_batch(
     group: str | None = None,
     lenient_config: bool = False,
     read_errors: bool = False,
+    driver: Driver = HOST,
+    load: Callable[[str], Runner] | None = None,
 ) -> None:
     """The body of `batch dispatch`, callable: one batch, one runner, one dispatch.
 
@@ -1228,7 +1278,14 @@ def dispatch_batch(
     handles its own way (gh#931).
     *lenient_config* is the driver's `.fr/triage.yaml` read (gh#998); *read_errors*
     its failed-fetch boundary, a `ForgeReadError` (gh#1025).
+    *driver* names the runner (cloud-triage R10): the host keeps `--to`, else the batch's.
+    *load* is the driver's own runner cache, so a mailbox runner it opened takes the
+    dispatch (cloud-triage §F); `load_runner` otherwise.
     """
+    try:
+        to = driver.runner_for(batch, to)
+    except TriageError as exc:
+        _fail(str(exc))
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
@@ -1267,7 +1324,7 @@ def dispatch_batch(
         _fail(str(exc))
     launch = resolved.launch
     runner_name, model = str(launch.runner), str(launch.model)
-    runner = load_runner(runner_name)  # step 1
+    runner = (load or load_runner)(runner_name)  # step 1
     reserved = _reservation(  # step 2
         checkout,
         facts,
@@ -1288,6 +1345,8 @@ def dispatch_batch(
         repo=owner_repo,
         closing_refs=refs,
         reserved_version=reserved,
+        runner=runner_name,
+        remedy=worker_remedy() if runner_name in CLOUD_PREFLIGHT_RUNNERS else None,
     )
     item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path, group)  # step 4
     branch = batch_branch(batch)
@@ -1383,7 +1442,8 @@ def dispatch_batch(
 # --------------------------------------------------------------- adopt (2026-10-06)
 
 ADOPT_LIST_RUNNER = "herdr"
-"""The runner `adopt --list` reads when `--to` names none: the one that adopts today."""
+"""The runner `adopt --list` reads on the host when `--to` names none; a driver with a
+runner of its own (`Driver.adopt_runner`) reads that one instead (cloud-triage §F)."""
 
 _ADOPTER_METHODS = ("describe", "list_sessions", "adopt")
 
@@ -1454,9 +1514,15 @@ def adopt_batch(
     to: str | None = None,
     checkout_path: Path | None = None,
     yes: bool = False,
+    driver: Driver = HOST,
 ) -> None:
     """The body of `batch adopt` (spec 2026-10-06-triage-batch-adopt §A): every read
-    and refusal first, then the plan, then — with *yes* — each step not yet done."""
+    and refusal first, then the plan, then — with *yes* — each step not yet done.
+    *driver* names the runner, as for `dispatch_batch` (cloud-triage R10)."""
+    try:
+        to = driver.runner_for(batch, to)
+    except TriageError as exc:
+        _fail(str(exc))
     # 1. The batch, its stage, and whether this is a re-run of an adoption (R2, R10).
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
@@ -1722,11 +1788,36 @@ def adopt_batch(
     say(f"adopted tab {tab} as batch {batch.id} on {new}")
 
 
-def _list_sessions(to: str | None) -> None:
-    """`adopt --list` (R12): every session, with the issue refs in its label."""
-    name = to or ADOPT_LIST_RUNNER
+def _scope_driver(
+    repo: str | None, org: str | None, dir_override: Path | None, workspace: Path | None
+) -> Driver:
+    """The driver of the scope `adopt --list` names: the cloud one when a cloud driver
+    holds its lease (p5-r7), else the host's; no scope named is the host's, as before."""
+    if repo is None and org is None:
+        return HOST
+    target = resolve_state_dir(_scope(repo, org), dir_override, workspace)
+    try:
+        current = load_lease(target)
+    except TriageError:
+        return HOST
+    return driver_of_holder(current.holder if current else None)
+
+
+def _list_sessions(to: str | None, driver: Driver = HOST) -> None:
+    """`adopt --list` (R12): every session, with the issue refs in its label. Without
+    `--to` it reads the driver's runner (cloud-triage §F), herdr on the host; a default
+    runner that adopts nothing skips the listing with a message."""
+    name = to or driver.adopt_runner or ADOPT_LIST_RUNNER
     runner: Any = load_runner(name)
     if not _adopter(runner):
+        if to is None:
+            console.print(
+                f"runner {name} cannot adopt sessions (it is no SessionAdopter); "
+                "adopt --list skipped",
+                markup=False,
+                soft_wrap=True,
+            )
+            return
         _fail(f"runner `{name}` cannot adopt sessions (it is no SessionAdopter)")
     try:
         sessions = runner.list_sessions()
@@ -1764,6 +1855,7 @@ def batch_adopt_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Put a running session under the wave driver as an existing batch; launches nothing.
 
@@ -1772,11 +1864,11 @@ def batch_adopt_command(
     driver's `adopt` action, which records a close-out started by hand.
     """
     if list_sessions:
-        _list_sessions(to)
+        _list_sessions(to, _scope_driver(repo, org, dir_override, workspace))
         return
     if batch_id is None or tab is None or branch is None:
         _fail("give a batch, --tab and --branch (or --list)")
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     adopt_batch(
         target, facts, judgements, batch, tab=tab, branch=branch, to=to,
@@ -1804,6 +1896,7 @@ def batch_merge_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Merge pr-open batch PRs in the computed order, re-slotting versions (§3.F).
 
@@ -1813,7 +1906,7 @@ def batch_merge_command(
     """
     if method is not None and method not in MERGE_METHODS:
         _fail(f"--method must be one of {', '.join(sorted(MERGE_METHODS))}, got {method!r}")
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     queue = pr_open_queue(judgements.batches, facts, judgements.issues)
     if batch_ids:
         wanted = {b.lower() for b in batch_ids}
@@ -1840,7 +1933,11 @@ def batch_merge_command(
         # Merge runs the collected version.files / set / relock: the same
         # freshness rule as dispatch (review r3-f3), before anything is read.
         _fresh_config(checkout, facts, owner_repo)
-        chosen = choose_method(method, client.repo_merge_methods(owner_repo))
+        chosen = choose_method(
+            method,
+            client.repo_merge_methods(owner_repo),
+            configured=facts.config_for(owner_repo).merge_method,
+        )
         ci_none = ci_none_at(checkout)  # fetched by `_fresh_config`
     except UnsupportedForgeOperation as exc:
         _fail(str(exc))
@@ -1977,7 +2074,9 @@ def _exec(argv: list[str]) -> None:
 
 @contextmanager
 def drive_lock(target: Path) -> Iterator[None]:
-    """`<state dir>/drive.lock` (pid, start time) for as long as a driver runs (R6).
+    """`<target>/drive.lock` (pid, start time) for as long as a driver runs (R6). *target*
+    is `triage_cmd.drive_lock_dir`: the `--dir`, else `~/.cache/fr/triage/<scope>/` for
+    every workspace, so it serialises the drivers of one host across clones (p3-r3).
 
     It serialises drivers only. A second driver on the same state directory refuses
     (exit 2). The lock is written to a private file first and linked into place, so
@@ -2149,6 +2248,16 @@ def _stops_train(outcome: MergeAttempt | MergeStopError | GitError) -> bool:
     return outcome.outcome in ("updated", "pending")
 
 
+@dataclass(frozen=True)
+class LeaseTerms:
+    """The lease a driver holds while it runs (cloud-triage R9, §D): whose, for how long
+    each renewal lasts, and the driver session's generation (p6-r4; 0 for a host)."""
+
+    identity: str
+    duration: timedelta
+    generation: int = 0
+
+
 class _Driver:
     """One driver run: the scope's state, the clients and clones it reaches, and
     what it has reported (a failing head, a preflight refusal) across passes."""
@@ -2165,8 +2274,14 @@ class _Driver:
         workspace_prefix: str = DEFAULT_WORKSPACE_PREFIX,
         keep_sessions: bool = False,
         scope_args: list[str] | None = None,
+        driver: Driver = HOST,
+        statuses: Any = None,
+        lease: LeaseTerms | None = None,
     ) -> None:
         self.scope, self.target, self.named = scope, target, named
+        self.adapter = driver  # the runner and post_merge of where this runs (R10, R20)
+        self.statuses = statuses  # the session statuses a mailbox runner reads (§E step 4)
+        self.lease, self.leased = lease, False  # R9: renewed every pass, when given
         self.scope_args = scope_args or []
         self.board_failures: set[str] = set()  # board write failures, since the last good one
         self.workspace_prefix = workspace_prefix
@@ -2215,6 +2330,9 @@ class _Driver:
         self.publish_failures: set[str] = set()  # R14: one warning per distinct cause
         self.held_by: tuple[tuple[str, tuple[str, ...]], ...] = ()  # last pass: waiting on others
         self._claim_done = SyncResult()
+        # The latest fr release, read by the cloud driver's pass before it runs; None
+        # (the host loop, or a release that could not be read) checks no drift (R17).
+        self.fr_release: str | None = None
 
     # -------------------------------------------------------------- reaching out
 
@@ -2236,9 +2354,73 @@ class _Driver:
         return self._checkouts[repo]
 
     def runner(self, name: str) -> Runner:
+        if not self.adapter.carries(name):  # p4-o2: not even to ask it a question
+            raise TriageError(f"runner `{name}` is not this driver's ({self.adapter.name})")
         if name not in self._runners:
-            self._runners[name] = load_runner(name)
+            loaded = load_runner(name)
+            if isinstance(loaded, Mailbox):  # its requests live in this scope's state (§F)
+                loaded.open_mailbox(self.target, self.statuses)
+            self._runners[name] = loaded
         return self._runners[name]
+
+    def outbox(self) -> list[dict[str, Any]]:
+        """Every request the mailbox runners this driver loaded hold pending (§E step 6)."""
+        out: list[dict[str, Any]] = []
+        for runner in self._runners.values():
+            if isinstance(runner, Mailbox):
+                out += runner.outbox()
+        return out
+
+    # ------------------------------------------------------------------ the lease
+
+    def take_lease(self) -> None:
+        """Before a pass: fetch the state ref, then take or renew the lease and push it
+        as a compare-and-swap (R9, R12), so a second driver loses before it acts. A lease
+        another driver holds, or a lost push, refuses (exit 2)."""
+        if self.lease is None:
+            return
+        terms, scope, target = self.lease, self.scope, self.target
+        try:
+            fetch_now(scope, target)
+            acquire(
+                target,
+                terms.identity,
+                _now(),
+                scope_id=scope_id(scope),
+                duration=terms.duration,
+                generation=terms.generation,
+                push=lambda: push_now(scope, target),
+            )
+        except TriageError as exc:
+            _fail(str(exc))
+        self.leased = True
+
+    def save_pass(self) -> None:
+        """After a pass: record it on the lease and push the state ref, every pass of a
+        long-running drive, not only when the command ends (cloud-triage §B)."""
+        if not self.leased:
+            return
+        try:
+            mark_pass(self.target, _now())
+            push_now(self.scope, self.target)
+        except TriageError as exc:
+            _fail(str(exc))
+
+    def release_lease(self) -> None:
+        """On a clean stop: remove this driver's lease and push that. Soft: a failure is
+        a warning, and the lease then expires on its own."""
+        if not self.leased or self.lease is None:
+            return
+        self.leased = False
+        try:
+            if release(self.target, self.lease.identity, scope_id=scope_id(self.scope)):
+                push_now(self.scope, self.target)
+        except TriageError as exc:
+            err_console.print(
+                f"[yellow]warning:[/yellow] the drive lease was not released ({escape(str(exc))});"
+                " it expires on its own",
+                soft_wrap=True,
+            )
 
     def _try_runner(
         self, name: str, consequence: str = "its sessions are not closed"
@@ -2246,8 +2428,8 @@ class _Driver:
         """Runner *name*, or None (reported once) when it cannot be loaded: closing and
         the idle probe are best effort, so a load failure never ends the drive (R10).
         *consequence* names what the caller loses, so the warning says the right thing."""
-        if name in self._unloadable:
-            return None
+        if name in self._unloadable or not self.adapter.carries(name):
+            return None  # another driver's runner: its sessions are that driver's (p4-o2)
         runner, reason = try_load(name, self.runner)
         if runner is not None:
             return runner
@@ -2267,7 +2449,11 @@ class _Driver:
             except TriageError as exc:  # a fetch, or main's config moved under the pass
                 raise ForgeReadError(str(exc), code=2) from exc
             try:
-                method = choose_method(None, client.repo_merge_methods(repo))
+                method = choose_method(
+                    None,
+                    client.repo_merge_methods(repo),
+                    configured=facts.config_for(repo).merge_method,
+                )
             except UnsupportedForgeOperation as exc:
                 _fail(str(exc))
             except TriageError as exc:
@@ -2453,6 +2639,7 @@ class _Driver:
             finished=done_waves,
             export_refused=export_refused,
             awaiting=frozenset(b.id for b in judgements.batches if batch_awaits_live(b, facts)),
+            refused={b.id: why for b in chosen if (why := self.adapter.refusal(b)) is not None},
             **claim_plan,
         )
 
@@ -2749,6 +2936,8 @@ class _Driver:
         by_runner: dict[str, list[WorkItem]] = {}
         for b in closing:
             launch = self._launch(facts, b, repos[b.id])
+            if not self.adapter.carries(str(launch.runner)):
+                continue  # left to the driver that carries it, never loaded here (p4-o2)
             probe = WorkItem(
                 id=closeout_item_id(repos[b.id], b.id),
                 unit="run",
@@ -2943,6 +3132,8 @@ class _Driver:
 
     def _launch(self, facts: Facts, batch: Batch, repo: str) -> Launch:
         try:
+            if self.adapter.refusal(batch) is None:  # the driver's runner (R10)
+                batch = _with_runner(batch, self.adapter.runner_for(batch))
             return resolve_launch(  # the clone's models.yaml, as dispatch_batch reads it (rg-8)
                 batch, facts.config_for(repo), orchestrator=_orchestrator(self.checkout(repo).path)
             ).launch
@@ -2973,7 +3164,7 @@ class _Driver:
                 f"{plural(len(keys), 'key')} this fr does not know ({', '.join(keys)}); "
                 "ignored until an fr that knows them runs",
             )
-        _, facts, judgements = _load_state(self.scope, self.target)
+        _, facts, judgements = _load_state(self.scope, self.target, None)
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._clone_unread = {}
         self._restart = {}
@@ -3020,6 +3211,7 @@ class _Driver:
                     _say(action_line(action, outcome))
             if self.yes:
                 self._record_released(facts)
+                self._drift(facts, snap)
             summary = settle(
                 plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
             )
@@ -3087,6 +3279,9 @@ class _Driver:
                 self.target,
                 scope_args=self.scope_args,
                 prefix=self.workspace_prefix,
+                # The cloud driver reads its own runners only, its mailbox already open
+                # (p4-o2); the host's board loads as it always did (R10).
+                loader=self.runner if self.adapter.kind == "cloud" else None,
             )
         except Exception as exc:  # noqa: BLE001 - the board is a view; it never fails a pass
             cause = triage_kanban_cmd.one_line(exc)
@@ -3186,6 +3381,8 @@ class _Driver:
                     group=self.group_of(batch),
                     lenient_config=True,
                     read_errors=True,
+                    driver=self.adapter,
+                    load=self.runner,
                 )
         except RunnerDispatchError as exc:
             return self._dispatch_failed(batch, str(exc), exc.__cause__), False, in_flight
@@ -3220,6 +3417,105 @@ class _Driver:
         # Never `acted`: a claim write moves no batch, so it must not make a pass that
         # does nothing else read as progress (exit 3, "nothing to do", still holds).
         return ("" if done == "none" else done), False
+
+    def _drift(self, facts: Facts, snap: Snapshot) -> None:
+        """R17, §G: read each live batch's run cursor from its PR head and ask its runner
+        to re-home a run recorded under another fr major, once per (run, major) and at
+        the session's idle; a run with no recorded version is reported once. Only runners
+        this driver carries that can re-home are asked; anything that cannot be read is
+        skipped this pass, never guessed."""
+        from fr_dispatch.protocols import SessionInspector
+
+        from fr.triage import drift
+
+        release = self.fr_release
+        if release is None:
+            return
+        try:
+            ledger = drift.load_ledger(self.target)
+        except TriageError as exc:
+            self._report_once(f"drift\0{exc}", f"version drift not checked: {exc}")
+            return
+        runs: list[drift.RunVersion] = []
+        runners: dict[str, Any] = {}
+        for batch in snap.batches:
+            repo, last = snap.repos.get(batch.id), last_dispatch(batch)
+            if not repo or last is None or snap.stages.get(batch.id) not in LIVE_STAGES:
+                continue
+            runner = self._try_runner(last.runner, "its runs are not checked for version drift")
+            if runner is None or not callable(getattr(runner, "rehome", None)):
+                continue
+            pr = batch_pr(batch, facts)
+            paths = drift.cursor_paths(pr.files) if pr is not None and pr.state == "OPEN" else []
+            if pr is None or not paths:
+                continue  # no cursor on the branch yet
+            # The batch's own launch values only: a re-home keeps the recorded session's
+            # repo and branch, and drift must not refuse a batch whose launch defaults
+            # the repo no longer resolves (the dispatch already happened).
+            item = _probe(repo, batch, batch.launch)
+            try:  # every cursor the PR carries: only the branch's own is the batch's (p6-r3)
+                client = self.client(facts, repo)
+                ref = pr.head_oid or pr.head_ref
+                texts = {p: client.read_file_at_ref(repo, p, ref) for p in paths}
+                path = drift.pick_cursor(texts, last.branch)
+                status = (
+                    runner.session_statuses([item]).get(item.id, "unknown")
+                    if path is not None and isinstance(runner, SessionInspector)
+                    else "unknown"
+                )
+            except Exception as exc:  # noqa: BLE001 - retried next pass, never the drive's end
+                self._report_once(
+                    f"drift\0{batch.id}\0{exc}",
+                    f"batch {batch.id}: its run cursor could not be read ({exc}); version "
+                    "drift is checked again next pass",
+                )
+                continue
+            if path is None:
+                found = sum(drift.cursor_branch(t) == last.branch for t in texts.values())
+                self._report_once(
+                    f"drift\0{batch.id}\0cursor\0{found}",
+                    f"batch {batch.id}: its PR carries "
+                    + ("no run cursor" if not found else f"{found} run cursors")
+                    + f" of branch {last.branch} among {len(texts)}; version drift is not "
+                    "checked for it",
+                )
+                continue
+            run, version = drift.read_cursor(texts[path])
+            runs.append(
+                drift.RunVersion(
+                    batch=batch.id, item=item.id, branch=last.branch,
+                    run=run or PurePosixPath(path).stem, fr_version=version, status=status,
+                )
+            )  # fmt: skip
+            runners[item.id] = (runner, item)
+        plan = drift.plan_drift(runs, release, ledger)
+        asked: list[drift.Rehome] = []
+        for rehome in plan.rehomes:
+            runner, item = runners[rehome.item]
+            try:
+                handle = runner.rehome(item, rehome.brief)
+            except Exception as exc:  # noqa: BLE001 - asked again next pass
+                self._report_once(
+                    f"rehome\0{rehome.item}\0{exc}",
+                    f"re-homing run {rehome.run} failed ({exc}); asked again next pass",
+                )
+                continue
+            asked.append(rehome)
+            _say(
+                f"rehome {rehome.batch}: run {rehome.run} started on fr {rehome.recorded}, the "
+                f"latest release is {release}: asked to re-home its session ({handle})"
+            )
+        for unknown in plan.unknown:
+            _say(
+                f"drift {unknown.batch}: run {unknown.run} has no recorded fr version; "
+                "reported, never re-homed"
+            )
+        if asked or plan.unknown:
+            ledger = ledger.with_rehomes(asked, at=_now().isoformat()).with_reported(plan.unknown)
+            try:
+                drift.save_ledger(self.target, ledger)
+            except OSError as exc:
+                self._report_once(f"ledger\0{exc}", f"{drift.REHOMES_FILE} not written: {exc}")
 
     def _record_released(self, facts: Facts) -> None:
         """One `claims_released` event per batch released this pass, after its releases,
@@ -3388,6 +3684,12 @@ class _Driver:
             batch, pr=action.pr, head=exc.head, paths=exc.paths, branch=branch,
             base=self.merge_ctx(facts, repo).main, mirrors=facts.config_for(repo).mirrors,
         )  # fmt: skip
+        if not self.adapter.carries(name):  # p4-o2: another driver's session
+            return (
+                f"{stopped}; its session runs on {name}, which this driver lacks: left to "
+                "that runner's driver",
+                False,
+            )
         runner = self.runner(name)
         since = fresh_conflicts(batch, since_dispatch=True)
         target = WorkItem(
@@ -3410,6 +3712,8 @@ class _Driver:
             if status == "idle":
                 event = self._conflict_event(exc, batch, "session", target.id)
                 self._append(judgements, facts, batch, event)
+                if isinstance(runner, Mailbox):  # sent once the agent records it (§F)
+                    return f"{stopped}; handed-back (pending) to its session {target.id}", True
                 return f"{stopped}; handed back to its session {target.id}", True
             if status not in ("absent", "done"):
                 return (
@@ -3481,6 +3785,12 @@ class _Driver:
         self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
     ) -> tuple[str, bool]:
         """§B step 2 and §C: fast-forward, post_merge, then the close-out item."""
+        foreign = self.adapter.refusal(batch)
+        if foreign is not None:  # another driver's runner dispatched it: its close-out too
+            return (
+                f"left to the driver of runner {batch.launch.runner}, never started through "
+                f"a runner this driver lacks ({foreign})"
+            ), False  # cloud-triage §E, p4-r10
         checkout = self.checkout(repo)
         try:
             checkout.fast_forward()
@@ -3491,14 +3801,14 @@ class _Driver:
         post_merged = False
         if action.post_merge and command:
             try:
-                checkout.run_command(command)
+                post_merged = self.adapter.post_merge(checkout, command)  # the host's (R20)
             except TriageError as exc:
                 return f"post_merge failed, close-out held: {exc}", False
+        if post_merged:
             batch = self._append(
                 judgements, facts, batch, PostMergeEvent(kind="post_merge", at=_now_after(batch))
             )
             judgements = load_judgements(self.target / "judgements.yaml")
-            post_merged = True
             installed = _installed_version()
             if installed is not None and installed != __version__:
                 self.restart_to = installed  # after this pass: see `batch_drive_command`
@@ -3839,6 +4149,154 @@ def _closeout_item(
     )
 
 
+def build_driver(
+    scope: Scope,
+    target: Path,
+    *,
+    batch_ids: list[str] | None,
+    checkout: list[str] | None,
+    max_inflight: int,
+    yes: bool,
+    workspace_prefix: str = DEFAULT_WORKSPACE_PREFIX,
+    keep_sessions: bool = False,
+    scope_args: list[str] | None = None,
+    adapter: Driver = HOST,
+    statuses: Any = None,
+    lease: LeaseTerms | None = None,
+) -> _Driver:
+    """The one `_Driver` both adapters run (cloud-triage R10, R13): the batches to drive,
+    their clones, and the adapter, lease and statuses of where it runs."""
+    path = target / "judgements.yaml"
+    try:
+        known = load_judgements(path).batches if path.exists() else []
+    except TriageError as exc:
+        _fail(str(exc))
+    chosen = _chosen(known, batch_ids) if known else []
+    names = {_batch_slug(scope, b.repo_name) for b in chosen}
+    return _Driver(
+        scope,
+        target,
+        named=batch_ids,
+        checkouts=_checkout_map(checkout, scope, names),
+        max_inflight=max_inflight,
+        yes=yes,
+        workspace_prefix=workspace_prefix,
+        keep_sessions=keep_sessions,
+        scope_args=scope_args,
+        driver=adapter,
+        statuses=statuses,
+        lease=lease,
+    )
+
+
+def one_pass(driver: _Driver, *, lease_taken: bool = False) -> tuple[bool, Summary, list[str]]:
+    """THE pass, the host loop's body and the cloud driver's every wake alike (cloud-triage
+    R12, R13): with --yes, fetch the state ref and renew the lease (pushed), run the pass
+    (`_Driver.run_pass`: collect, plan with `batch_drive.drive_pass`, act), then record the
+    pass on the lease and push the state. Whether it acted, the summary, the blocked ids."""
+    if driver.yes and not lease_taken:  # the cloud pass took it before its self-update
+        driver.take_lease()
+    result = driver.run_pass()
+    if driver.yes:
+        driver.save_pass()
+    return result
+
+
+def pass_exit(driver: _Driver, acted: bool, summary: Summary) -> int:
+    """The exit code of one acting pass (`--once`, `drive pass`): 1 a forge write failed,
+    0 it acted or everything is done, 3 nothing to do but wait."""
+    if driver.failed_write:
+        return 1
+    return 0 if acted or summary.done else 3
+
+
+def _host_lease(scope: Scope, target: Path, interval_s: int) -> LeaseTerms | None:
+    """The host driver's lease (R9), when the scope has a state ref to hold it on: a scope
+    with no state repo has only this host's `drive.lock`. One with a state repo whose state
+    sits in no clone cannot sync the ref, so it refuses (exit 2) naming --workspace rather
+    than drive unleased beside a cloud driver (cloud-triage §E, p4-r3)."""
+    from fr.commands.triage_cmd import state_clone
+    from fr.triage.lease import DEFAULT_ROUTINE_MIN, driver_identity, lease_duration
+    from fr.triage.scope_config import host_id
+
+    try:
+        state_repo = load_durable(target).state_repo
+        if state_repo is None:
+            return None
+        if state_clone(target) is None:
+            _fail(
+                f"{target} is in no git clone, so this driver cannot sync the state ref in "
+                f"{state_repo} nor hold the scope's drive lease, and will not drive unleased "
+                "beside another driver: run from a clone, or pass --workspace <clone>"
+            )
+        identity = driver_identity("host", host_id())
+    except TriageError as exc:
+        _fail(str(exc))
+    return LeaseTerms(identity, lease_duration(interval_s / 60, DEFAULT_ROUTINE_MIN))
+
+
+@contextmanager
+def _sigterm_interrupts() -> Iterator[None]:
+    """SIGTERM raises `KeyboardInterrupt` for the block's duration, so a terminated driver
+    stops as a Ctrl-C does and releases its lease (cloud-triage §E, p4-r4); the previous
+    handler is restored after. Off the main thread no handler can be installed: a no-op."""
+    import signal
+    import threading
+
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def interrupt(signum: int, frame: object) -> None:
+        raise KeyboardInterrupt
+
+    previous = signal.signal(signal.SIGTERM, interrupt)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
+    """`fr triage batch drive`'s loop around `one_pass` (the host adapter, R10). The newer
+    fr a `post_merge` installed, when the loop stopped to restart on it; else None."""
+    while True:
+        try:
+            acted, summary, blocked = one_pass(driver)
+        except ForgeReadError as exc:
+            if once or not driver.yes:
+                _fail(str(exc), code=exc.code)
+            # Like a refused merge (rg-4), a degraded forge ends neither the run nor
+            # the loop: reported once per cause, then read again (gh#910).
+            if str(exc) not in driver.read_failures:
+                driver.read_failures.add(str(exc))
+                err_console.print(
+                    f"[yellow]warning:[/yellow] {escape(str(exc))}; pass skipped, "
+                    f"retrying every {interval}s",
+                    soft_wrap=True,
+                )
+            _sleep(interval)
+            continue
+        driver.read_failures.clear()
+        if not driver.yes:
+            return None  # the plan of one pass, in loop mode too
+        if once:
+            code = pass_exit(driver, acted, summary)
+            if code:
+                raise typer.Exit(code=code)
+            return None
+        if summary.done:
+            if driver.observation_owed():
+                continue  # the last wave's transition is seen only by one more pass
+            return None
+        if driver.restart_to is not None:
+            return driver.restart_to
+        if summary.stalled:
+            _say(_stalled_line(blocked, driver.held_by))
+            raise typer.Exit(code=3)
+        _sleep(interval)
+
+
 @batch_app.command("drive")
 def batch_drive_command(
     batch_ids: Annotated[
@@ -3875,6 +4333,7 @@ def batch_drive_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Drive batches to completion: merge what is ready, close out what merged,
     dispatch what may start (wave order, then merge order, then id).
@@ -3885,65 +4344,32 @@ def batch_drive_command(
     if not workspace_prefix.strip():
         _fail("--workspace-prefix must not be blank")
     scope = _scope(repo, org)
-    target = state_dir(scope, dir_override)
-    path = target / "judgements.yaml"
-    try:
-        known = load_judgements(path).batches if path.exists() else []
-    except TriageError as exc:
-        _fail(str(exc))
-    chosen = _chosen(known, batch_ids) if known else []
-    names = {_batch_slug(scope, b.repo_name) for b in chosen}
-    checkouts = _checkout_map(checkout, scope, names)
-    driver = _Driver(
+    target = resolve_state_dir(scope, dir_override, workspace)
+    driver = build_driver(
         scope,
         target,
-        named=batch_ids,
-        checkouts=checkouts,
+        batch_ids=batch_ids,
+        checkout=checkout,
         max_inflight=max_inflight,
         yes=yes,
         workspace_prefix=workspace_prefix,
         keep_sessions=keep_sessions,
-        scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override),
+        scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override, workspace),
+        lease=_host_lease(scope, target, interval) if yes else None,
     )
     restart: str | None = None
-    with drive_lock(target):
-        while True:
-            try:
-                acted, summary, blocked = driver.run_pass()
-            except ForgeReadError as exc:
-                if once or not yes:
-                    _fail(str(exc), code=exc.code)
-                # Like a refused merge (rg-4), a degraded forge ends neither the run nor
-                # the loop: reported once per cause, then read again (gh#910).
-                if str(exc) not in driver.read_failures:
-                    driver.read_failures.add(str(exc))
-                    err_console.print(
-                        f"[yellow]warning:[/yellow] {escape(str(exc))}; pass skipped, "
-                        f"retrying every {interval}s",
-                        soft_wrap=True,
-                    )
-                _sleep(interval)
-                continue
-            driver.read_failures.clear()
-            if not yes:
-                return  # the plan of one pass, in loop mode too
-            if once:
-                if driver.failed_write:
-                    raise typer.Exit(code=1)
-                if acted or summary.done:
-                    return
-                raise typer.Exit(code=3)
-            if summary.done:
-                if driver.observation_owed():
-                    continue  # the last wave's transition is seen only by one more pass
-                return
-            if driver.restart_to is not None:
-                restart = driver.restart_to
-                break
-            if summary.stalled:
-                _say(_stalled_line(blocked, driver.held_by))
-                raise typer.Exit(code=3)
-            _sleep(interval)
+    with drive_lock(drive_lock_dir(scope, dir_override)):  # the fast same-host check first
+        try:
+            with _sigterm_interrupts():
+                restart = _host_loop(driver, once=once, interval=interval)
+        except KeyboardInterrupt:  # Ctrl-C or SIGTERM: a clean stop too (p4-r4)
+            driver.release_lease()
+            raise
+        except typer.Exit as stop:
+            if stop.exit_code != 2:  # a clean stop; a refusal keeps what it found
+                driver.release_lease()
+            raise
+        driver.release_lease()
     if restart is not None:
         # A `post_merge` installed a newer fr: this process still runs the code it
         # imported, which reads the state and config the new one writes (gh#998,

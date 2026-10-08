@@ -17,6 +17,7 @@ import importlib.util
 import time
 import webbrowser
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn, get_args
@@ -30,14 +31,18 @@ from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
     RepoOpt,
+    WorkspaceOpt,
     _load_state,
     _scope,
     batch_app,
     collect_into,
     console,
+    drive_lock_dir,
     err_console,
+    resolve_state_dir,
     triage_app,
 )
+from fr.triage import gitseam
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
 from fr.triage.batch_drive import (
     DEFAULT_WORKSPACE_PREFIX,
@@ -46,11 +51,12 @@ from fr.triage.batch_drive import (
     wave_group,
 )
 from fr.triage.drive_lock import live_driver
+from fr.triage.driver import Mailbox
 from fr.triage.errors import TriageError
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
-from fr.triage.model import Facts, Judgements, Scope, state_dir
+from fr.triage.model import Facts, Judgements, Scope
 from fr.triage.render import plural
 from fr.triage.scope_config import load_scope_config, publish_board, scope_id
 
@@ -162,9 +168,10 @@ def batch_focus_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Switch the terminal to a batch's live session, through the runner that dispatched it."""
-    _, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    _, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     wanted = batch_id.lower()
     batch = next((b for b in judgements.batches if b.id == wanted), None)
     if batch is None:
@@ -198,13 +205,19 @@ def batch_focus_command(
 # ---------------------------------------------------------------- the board
 
 
-def scope_args(repo: str | None, org: str | None, dir_override: Path | None) -> list[str]:
+def scope_args(
+    repo: str | None, org: str | None, dir_override: Path | None, workspace: Path | None = None
+) -> list[str]:
     """The options a copied command carries so it reads the same state: `--repo` or `--org`
     as the operator gave it, and `--dir` only when they did (R5), made absolute: the
-    command is pasted in another pane, whose working directory is not this one's."""
+    command is pasted in another pane, whose working directory is not this one's. With no
+    `--dir`, the state's workspace (cloud-triage R4) is named as `--workspace`, for the
+    same reason: the default workspace is the working directory's clone."""
     args = ["--repo", repo] if repo is not None else ["--org", str(org)]
     if dir_override is not None:
         args += ["--dir", str(dir_override.resolve())]
+    elif (root := gitseam.toplevel(workspace if workspace is not None else Path.cwd())) is not None:
+        args += ["--workspace", str(root)]
     return args
 
 
@@ -227,36 +240,72 @@ def _probes(judgements: Judgements, facts: Facts, prefix: str) -> dict[str, list
     return by_runner
 
 
+@dataclass(frozen=True)
+class SessionReads:
+    """What the runners said about the scope's sessions: each status by item id, one page
+    note per runner that could not say (R7), and the blocked sessions' own notes from a
+    runner that gives them (`SessionNotes`, cloud-triage R15)."""
+
+    statuses: dict[str, BoardStatus]
+    notes: list[str]
+    session_notes: dict[str, str]
+
+
 def session_statuses(
     judgements: Judgements, facts: Facts, *, prefix: str = DEFAULT_WORKSPACE_PREFIX
 ) -> tuple[dict[str, BoardStatus], list[str]]:
     """The live status of each batch's and each runner close-out's session, by item id,
-    and one page note per runner that could not say (R7).
+    and one page note per runner that could not say (R7); `read_sessions` without the
+    sessions' own notes."""
+    reads = read_sessions(judgements, facts, prefix=prefix)
+    return reads.statuses, reads.notes
+
+
+def read_sessions(
+    judgements: Judgements,
+    facts: Facts,
+    *,
+    prefix: str = DEFAULT_WORKSPACE_PREFIX,
+    target: Path | None = None,
+    loader: Callable[[str], Runner] | None = None,
+    notes_only: bool = False,
+) -> SessionReads:
+    """Each runner's session statuses and, from one that implements `SessionNotes`, its
+    blocked sessions' notes. With *notes_only* (the triage page, which shows notes and no
+    statuses) a runner that gives no notes is not asked anything (p5-r8).
 
     Never refuses and prints nothing: a runner that cannot be loaded, fails its
     preflight, lacks `SessionInspector` or raises leaves its items out of the result
-    (the board shows them `unknown`) and costs one note.
+    (the board shows them `unknown`) and costs one note. *loader* is a driver's own
+    runner cache (cloud-triage p4-o2: it loads only what that driver carries); without
+    one, a mailbox runner is opened on *target*, the scope's state, where its sessions are
+    recorded (§F), read-only: reading the board never writes the mailbox (p5-r8).
     """
     by_runner = _probes(judgements, facts, prefix) if judgements.batches else {}
     if not by_runner:
-        return {}, []
+        return SessionReads({}, [], {})
     if importlib.util.find_spec("fr_dispatch") is None:
-        return {}, ["fr-dispatch is not installed; session status is unavailable"]
-    from fr_dispatch.protocols import SessionInspector
+        return SessionReads({}, ["fr-dispatch is not installed; session status is unavailable"], {})
+    from fr_dispatch.protocols import SessionInspector, SessionNotes
 
     statuses: dict[str, BoardStatus] = {}
     notes: list[str] = []
+    said: dict[str, str] = {}
     for name, probes in sorted(by_runner.items()):
-        runner, reason = try_load(name)
+        runner, reason = try_load(name, loader)
         if runner is None:
             notes.append(
                 f"runner `{name}` could not be loaded ({reason}); its sessions show unknown"
             )
             continue
+        if notes_only and not isinstance(runner, SessionNotes):
+            continue
         if not isinstance(runner, SessionInspector):
             notes.append(f"runner `{name}` cannot report session status; its sessions show unknown")
             continue
         try:
+            if loader is None and target is not None and isinstance(runner, Mailbox):
+                runner.open_mailbox(target, None, read_only=True)
             refusal = runner.preflight(probes)
             if refusal:
                 notes.append(
@@ -265,6 +314,10 @@ def session_statuses(
                 )
                 continue
             found = runner.session_statuses(probes)
+            if isinstance(runner, SessionNotes):
+                said.update(
+                    {k: " ".join(str(v).split()) for k, v in runner.session_notes(probes).items()}
+                )
         except Exception as exc:  # noqa: BLE001 - a failed read is `unknown`, never a failed render
             notes.append(
                 f"runner `{name}` failed to report sessions: {one_line(exc)}; "
@@ -273,7 +326,7 @@ def session_statuses(
             continue
         for key, value in found.items():
             statuses[key] = value if value in _STATUSES else "unknown"
-    return statuses, notes
+    return SessionReads(statuses, notes, said)
 
 
 def write_board(
@@ -283,11 +336,13 @@ def write_board(
     scope_args: Sequence[str],
     refresh: int = DEFAULT_REFRESH,
     prefix: str = DEFAULT_WORKSPACE_PREFIX,
+    loader: Callable[[str], Runner] | None = None,
 ) -> tuple[Path, int]:
     """Render `board.html` into the state directory *target* from the facts and judgements
     on disk now, with live session statuses. Returns the path written and its card count."""
-    _, facts, judgements = _load_state(scope, target)
-    statuses, notes = session_statuses(judgements, facts, prefix=prefix)
+    _, facts, judgements = _load_state(scope, target, None)
+    reads = read_sessions(judgements, facts, prefix=prefix, target=target, loader=loader)
+    statuses, notes = reads.statuses, reads.notes
     rendered_at = datetime.now(UTC)
     # The wall clock: session status is read live above, so idle minutes must be real.
     try:
@@ -296,8 +351,9 @@ def write_board(
         me = None
         notes.append(f"claims are not shown: {one_line(exc)}")
     board = build_board(
-        facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at
-    )
+        facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
+        notes=reads.session_notes,
+    )  # fmt: skip
     page = render_board(
         board,
         scope_args=scope_args,
@@ -346,11 +402,14 @@ def _watch(
     interval: int,
     open_: bool,
     publish_: bool = False,
+    lock_dir: Path | None = None,
 ) -> None:
     """Re-collect and re-render every *interval* seconds until interrupted (R12). A live
-    drive keeps the board fresh itself, so an iteration that finds its lock held skips."""
-    if (holder := live_driver(target)) is not None:
-        _fail(f"a drive ({holder}) holds {target / 'drive.lock'}; it keeps the board fresh")
+    drive keeps the board fresh itself, so an iteration that finds its lock held skips.
+    The lock is read from *lock_dir* (`triage_cmd.drive_lock_dir`, p3-r3), else *target*."""
+    lock_at = lock_dir if lock_dir is not None else target
+    if (holder := live_driver(lock_at)) is not None:
+        _fail(f"a drive ({holder}) holds {lock_at / 'drive.lock'}; it keeps the board fresh")
     skipping, failures, opened = False, set[str](), False
     publish_failures: set[str] = set()
 
@@ -369,7 +428,7 @@ def _watch(
 
     try:
         while True:
-            if (holder := live_driver(target)) is not None:
+            if (holder := live_driver(lock_at)) is not None:
                 if not skipping:
                     skipping = True
                     console.print(
@@ -417,6 +476,7 @@ def board_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
     refresh: Annotated[
         int,
         typer.Option("--refresh", min=0, help="Reload the page every N seconds (0: never)."),
@@ -442,10 +502,19 @@ def board_command(
     """Write board.html: one card per batch in six lifecycle columns, with live session
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
     scope = _scope(repo, org)
-    target = state_dir(scope, dir_override)
-    args = scope_args(repo, org, dir_override)
+    target = resolve_state_dir(scope, dir_override, workspace)
+    args = scope_args(repo, org, dir_override, workspace)
     if watch:
-        _watch(scope, target, args, refresh, interval, open_, publish_)
+        _watch(
+            scope,
+            target,
+            args,
+            refresh,
+            interval,
+            open_,
+            publish_,
+            lock_dir=drive_lock_dir(scope, dir_override),
+        )
         return
     out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
     console.print(f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True)

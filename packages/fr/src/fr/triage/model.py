@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -47,10 +48,12 @@ from fr.triage.stage import Stage, derive_stage
 # (driver-sessions §C): a schema-5 reader would answer "invalid facts" where "re-run collect"
 # is owed. 7 adds per-issue `claims` (2026-10-06-triage-claims §3.H, R12): every file carries
 # the key (`to_json` dumps it, `[]` included), which a closed-world schema-6 reader rejects, so
-# the stamp moves for the same reason. 3 to 6 still load, and the first collect upgrades them.
-# Independent of JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[7] = 7
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7)
+# the stamp moves for the same reason. 8 adds per-config `merge_method` (2026-10-07-cloud-triage
+# §A): `to_json` dumps it, `null` included, which a closed-world schema-7 reader rejects; the
+# same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 3 to 7
+# still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
+FACTS_SCHEMA: Literal[8] = 8
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8)
 # The version this fr WRITES: every engine write stamps 6 (spec 2026-10-06-triage-claims
 # §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
 # `conflict` event; 4 was
@@ -164,15 +167,84 @@ class Scope:
         return self.target.split("/", 1)[0]
 
 
-def state_dir(scope: Scope, override: Path | None = None) -> Path:
-    """`--dir` if given, else `$HOME/.cache/fr/triage/<scope>/` — fr's cache root.
+STATE_EXCLUDE = ".fr/triage-state/"
+"""The `info/exclude` line that keeps every scope's workspace state out of git (R4)."""
 
-    Resolved through `_home()` like every other fr cache path; `XDG_CACHE_HOME`
-    is deliberately not read (spec-review r1).
+
+def legacy_state_dir(scope: Scope) -> Path:
+    """`$HOME/.cache/fr/triage/<scope>/`: where state lived before it moved into the
+    workspace (spec 2026-10-07-cloud-triage R4). Resolved through `_home()` like every
+    other fr cache path; `XDG_CACHE_HOME` is deliberately not read (spec-review r1)."""
+    return _home() / ".cache" / "fr" / "triage" / scope.name
+
+
+def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | None = None) -> Path:
+    """`--dir` if given, else `<workspace>/.fr/triage-state/<scope>/` (spec
+    2026-10-07-cloud-triage R4, §B).
+
+    The workspace is *workspace* (`--workspace`), else the clone holding the working
+    directory, each taken at its git toplevel. A `--workspace` that is no clone is
+    refused (`TriageError` naming it); with no `--workspace` and a working directory in
+    no clone, the state directory is `legacy_state_dir`, exactly as before (p3-r3: a host
+    command typed from `$HOME` keeps working, for every scope kind). The workspace
+    directory is kept out of git by one `info/exclude` line under the git common dir, so a
+    linked worktree is covered and no tracked file changes. The first time it is asked
+    for and does not exist, an existing `legacy_state_dir`'s durable files are copied in
+    (`import_legacy`) and the legacy directory is left where it is; once it exists,
+    nothing is copied again.
     """
+    from fr.triage import gitseam
+
     if override is not None:
         return override
-    return _home() / ".cache" / "fr" / "triage" / scope.name
+    start = workspace if workspace is not None else Path.cwd()
+    root = gitseam.toplevel(start) if start.is_dir() else None
+    if root is None:
+        if workspace is None:
+            return legacy_state_dir(scope)
+        raise TriageError(
+            f"{workspace} is in no git clone, and --workspace names the clone that holds the "
+            "state: pass a clone, or --dir to name a directory outright"
+        )
+    gitseam.ensure_excluded(root, STATE_EXCLUDE)
+    target = root / ".fr" / "triage-state" / scope.name
+    legacy = legacy_state_dir(scope)
+    if not target.exists() and legacy.is_dir():
+        import_legacy(legacy, target)
+    return target
+
+
+LEGACY_IMPORTED = ("facts.json", "scope.yaml")
+"""What a workspace takes from a legacy `~/.cache` state directory beside the
+`REF_FILES` entries (p3-r2): facts (rebuilt by the next collect anyway, but the board
+reads them now) and the host's own settings."""
+
+
+def import_legacy(legacy: Path, target: Path) -> None:
+    """Copy *legacy*'s durable files into the not-yet-existing *target* (p3-r2): every
+    `REF_FILES` entry that exists as a regular file, plus `LEGACY_IMPORTED`. Never the
+    `merge/` scratch worktrees, a `drive.lock` or a rendered page. Built beside *target*
+    and renamed into place, so a crash never leaves a half import that counts as done.
+    Nothing durable, nothing created."""
+    import os
+    import uuid
+
+    from fr.triage.state_ref import ref_entries
+
+    rels = [*ref_entries(legacy)]
+    rels += [n for n in LEGACY_IMPORTED if (legacy / n).is_file() and not (legacy / n).is_symlink()]
+    if not rels:
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = target.parent / f".{target.name}.import-{uuid.uuid4().hex}"
+    try:
+        for rel in rels:
+            (staging / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(legacy / rel, staging / rel)
+        os.rename(staging, target)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
 
 def issue_key(repo: str, number: int) -> str:
@@ -389,6 +461,10 @@ class TriageConfig(_Strict):
     # Where the wave driver exports this repo's triage state once a wave is finished
     # (spec 2026-10-05-triage-pages-goal R13); None: the driver never exports.
     export: ExportConfig | None = None
+    # The merge method to use when the forge names no default (spec 2026-10-07-cloud-triage
+    # §A): REST has no `viewerDefaultMergeMethod`, so a repo allowing several methods needs
+    # this, or `--method`, to merge. The forge's own default still wins where it names one.
+    merge_method: Literal["merge", "squash", "rebase"] | None = None
 
 
 def trusted_logins(config: TriageConfig, viewer: str | None) -> frozenset[str]:
@@ -438,7 +514,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7] = Field(7, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8] = Field(8, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -459,6 +535,10 @@ class Facts(_Strict):
     config: dict[str, TriageConfig] = {}
     # The forge login `collect` ran as: the default allowed batch PR author (gh#936).
     viewer: str | None = None
+    # OWNER/REPO -> `public` | `private` | `internal` for every collected repo whose
+    # visibility the forge answered (cloud-triage §B, §C): the state-repo decision and
+    # the privacy guard read it; a repo missing here is read live by the guard.
+    visibility: dict[str, str] = {}
 
     @model_validator(mode="after")
     def _group_needs_schema_4(self) -> Facts:

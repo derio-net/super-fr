@@ -210,6 +210,15 @@ report it received from a helper. The tool can confirm who wrote that log and
 when; it cannot confirm the command was a real test suite. That check is aimed
 at a relayed "all green", not at deliberate forgery.
 
+Where the suite is too slow to run where the agent is (a small cloud
+container, say), a phase or delivery may name the forge's CI instead. Then the
+tool reads the checks itself: the ones the repository names as its gate, each
+finished green on the pushed commit, with nothing left uncommitted or unpushed
+and an open pull request that does not conflict. What CI tested is your branch
+merged into its base, not your branch alone, and the record says so by naming
+both commits. While CI is still running the tool says to come back later and
+records nothing; it never takes "CI will pass" on trust.
+
 A user-visible UI requirement asks for the same kind of evidence, in its own
 shape. Its acceptance row names the states and the controls it has to cover,
 and the executor, the reviewer, and delivery each open their own

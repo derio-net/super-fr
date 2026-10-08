@@ -136,9 +136,12 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`plugins/super-fr/skills/fr-triage/`) that holds only the judgement
     discipline. The split is forced: the OpenCode/Hermes mirrors copy only
     `SKILL.md`, so a script bundled beside a skill never reaches them — only
-    the `fr` wheel reaches every harness. State lives under
-    `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` or `owner`, lowercased;
-    `--dir` overrides): `facts.json` (collect), `judgements.yaml` (the
+    the `fr` wheel reaches every harness. State lives in the scope's state
+    directory, the workspace's `.fr/triage-state/<scope>/` or
+    `$HOME/.cache/fr/triage/<scope>/` outside a clone (`owner--repo` or `owner`,
+    lowercased; `--dir` overrides; a scope with a state repo is synced with
+    `refs/fr/triage/<scope-id>` by `triage_cmd.resolve_state_dir`, 2026-10-07
+    cloud-triage spec): `facts.json` (collect), `judgements.yaml` (the
     agent's, shape in spec §3.D), `triage.html` (render). It is never
     committed by default, so it is NOT an artifact kind. This repo keeps a
     durable copy of its own scope's inputs and history (judgements, origins,
@@ -243,6 +246,25 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `fr journal add/resolve`, `fr plan edit --tick/--complete-phase` and
     `fr acceptance add/set-status` build one-entry records through the same
     engine.
+  - **Cloud triage** (2026-10-07 spec, `cloud-triage`) — the wave driver and its
+    workers in Claude Code cloud sessions. `fr.forgeapi` resolves the one host
+    setting `forge.api: rest | graphql` (`FR_FORGE_API`, else `~/.config/fr/forge.yaml`,
+    else `graphql`); under `rest`, `fr/real_ghrestclient.py` (`RealGhRestClient`) is
+    the GitHub client, REST routes only, because the cloud proxy refuses GraphQL.
+    `fr/triage/state_ref.py` keeps a scope's durable state on the ref
+    `refs/fr/triage/<scope-id>` (fetch before read, compare-and-swap push after every
+    change); `privacy.py` is the guard (`leak_risk`) that refuses a private repo's
+    issue in a scope whose state repo is public, and every push; `lease.py` the one
+    driver per scope; `driver.py` the driver adapter (`host` | `cloud`: runner,
+    refusals, `post_merge`), `fr triage drive pass|record` its cloud entry;
+    `drift.py` the pure version-drift planner (re-homes, the driver's self-update).
+    `fr.cloud` (`fr cloud doctor|setup-script`) checks a cloud session's prerequisites
+    and appends one remedy block to the failures they explain, only when
+    `CLAUDE_CODE_REMOTE=true`. `fr.agents` + `fr/artifacts/agents_kind.py` are the
+    `agents` artifact kind: `.claude/agents/fr-{spec-reviewer,phase-executor}.md`
+    rendered from the wheel copy (`scripts/sync-agents-data.py`, tripwire
+    `test_tripwire_agents_data.py`, whose sha pin makes an agent edit move the kind's
+    version) by `fr init agents`. Operator doc: `docs/cloud-setup.md`.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)
@@ -260,6 +282,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
   It never imports `fr.triage`, and `fr` never imports it
   (`test_import_direction.py`); `fr_dispatch.testing` holds the reusable
   run-unit contract it passes.
+- `fr-claude-cloud` — the `claude-cloud` runner (entry point `fr.runners:
+  claude-cloud`): a mailbox, not a backend. Every session action becomes a request
+  in the scope's state (`requests.yaml`, `sessions.yaml`) that the cloud driver's
+  agent executes with its session tools and records back (`fr triage drive record`);
+  re-homing is its restart. Like `fr-herdr`, it never imports `fr.triage`.
 - `fr-opencode-plugin` — **the one non-Python package**: TypeScript/Bun,
   ports the `fr-isolation-required` Claude Code hook to an OpenCode
   `tool.execute.before` plugin. Excluded from the uv workspace
@@ -285,7 +312,7 @@ uv run pytest -q --no-cov -n auto                   # fast, parallel (pytest-xdi
 uv run pytest tests/unit/test_foo.py::test_bar -q   # single test
 uv run ruff check packages/ tests/                  # lint
 uv run ruff format packages/ tests/                 # format (no --check: writes)
-uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src
+uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src packages/fr-claude-cloud/src
 uv run --no-project python scripts/bump-version.py --check   # version lockstep
 uv run pytest -n auto --no-cov --store-durations    # refresh .test_durations (pytest-split shard weights)
 ```
@@ -364,6 +391,16 @@ tripwire will catch drift anyway:
   `test_tripwire_opencode_instructions_sync.py` and
   `test_opencode_agent_mirror.py`: the skills tripwire does NOT cover the agent
   files, so an agent-only edit can leave a green skills guard and a red mirror.
+- Generated: `packages/fr/src/fr/agents/*.md` (the `fr` wheel's copy) **and** this
+  repo's `.claude/agents/fr-*.md` (its own `agents` artifact, spec
+  `2026-10-07-cloud-triage-design` §H). After editing
+  `plugins/super-fr/agents/fr-*.md`: run `scripts/sync-agents-data.py`, move the
+  `agents` kind's `current_version` in `fr/artifacts/registry.py`, update
+  `fr.agents.CANONICAL_SHA256` and `PINNED_AT_VERSION`, register the hop's
+  `fr.artifacts.agents_kind.rerender_migration` into `MIGRATIONS`, run
+  `uv run fr migrate artifacts --yes` (re-renders `.claude/agents/`), plus
+  `scripts/sync-opencode.py` for the OpenCode agent mirror.
+  `test_tripwire_agents_data.py` is the guard.
 - Generated, and easy to forget: `.hermes/skills/fr/<name>/SKILL.md` **and**
   `.hermes/SOUL.d/super-fr-rules.md`. There are **TWO** mirror generators, not
   one — `scripts/sync-hermes.py` is the second sync, guarded by

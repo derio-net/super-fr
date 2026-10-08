@@ -16,7 +16,15 @@ import typer
 from rich.markup import escape
 
 import fr.commands.triage_cmd as triage_cmd
-from fr.commands.triage_cmd import DirOpt, OrgOpt, RepoOpt, console, err_console, triage_app
+from fr.commands.triage_cmd import (
+    DirOpt,
+    OrgOpt,
+    RepoOpt,
+    WorkspaceOpt,
+    console,
+    err_console,
+    triage_app,
+)
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.history import GENERATED, HISTORY_DIR, MOVED, PAGE_FILE, render_history
@@ -36,12 +44,13 @@ def render_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
     open_: bool = typer.Option(False, "--open", help="Open the page in a browser."),
 ) -> None:
     """Write history.html: the snapshot timeline, the finished waves as tabs, then the
     authored fragments `history/manifest.yaml` places among them."""
     scope = triage_cmd._scope(repo, org)
-    target, facts, judgements = triage_cmd._load_state(scope, dir_override)
+    target, facts, judgements = triage_cmd._load_state(scope, dir_override, workspace)
     try:
         resolved = resolve_manifest(target / HISTORY_DIR, GENERATED, MOVED)
     except TriageError as exc:

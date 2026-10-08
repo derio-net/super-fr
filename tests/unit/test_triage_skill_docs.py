@@ -138,3 +138,46 @@ def test_fr_triage_skill_documents_claims_scope_config_and_publishing_in_every_c
         text = path.read_text()
         missing = [n for n in needles if n not in text]
         assert not missing, f"{path.relative_to(REPO)} lacks {missing}"
+
+
+# --- the cloud driver (2026-10-07 cloud-triage R20, R21, R23) -----------------------
+
+
+def _skill_text() -> str:
+    return TRIAGE_SKILL.read_text()
+
+
+def test_fr_triage_skill_documents_the_cloud_driver() -> None:
+    text = _skill_text()
+    for needle in (
+        "fr triage drive pass",
+        "fr triage drive record",
+        "wake",
+        "outbox",
+        "host-id",
+    ):
+        assert needle in text, f"SKILL.md must name {needle!r} (R21)"
+
+
+def test_fr_triage_skill_documents_forge_api_state_ref_repo_and_privacy() -> None:
+    text = _skill_text()
+    for needle in (
+        "forge.api",
+        "refs/fr/triage/",
+        "state_repo",
+        "privacy guard",
+        "merge_method",
+        "fr cloud doctor",
+        "docs/cloud-setup.md",
+    ):
+        assert needle in text, f"SKILL.md must name {needle!r} (R21, R23, p1-r5)"
+
+
+def test_fr_triage_skill_says_the_cloud_driver_runs_no_post_merge() -> None:
+    """R20: post_merge is the host driver's; the cloud driver runs nothing."""
+    text = _skill_text()
+    assert "cloud driver runs no `post_merge`" in text
+
+
+def test_fr_triage_skill_stays_within_its_line_budget() -> None:
+    assert len(_skill_text().strip().split("\n")) <= 120

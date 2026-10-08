@@ -70,6 +70,15 @@ class FakeGhClient:
         # When set, every PR create_pr opens is stamped with this creation time;
         # otherwise with the real clock, as the forge would.
         self.pr_created_at: str | None = None
+        # (repo, sha) -> `commit_checks` records (spec 2026-10-07-cloud-triage §I),
+        # loaded by a test from captured fixtures; an unknown sha reports none.
+        self.commit_checks_by_sha: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        # (repo, number) -> `pr_required_checks` rows.
+        self.required_checks: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        # (repo, base branch) -> `required_check_names` (spec §I, p2-r1).
+        self.required_names: dict[tuple[str, str], list[str]] = {}
+        # OWNER/REPO -> visibility; a repo missing here cannot be read (GhError).
+        self.visibility: dict[str, str] = {}
 
     # ---- preload helpers (test setup) ----
 
@@ -86,6 +95,7 @@ class FakeGhClient:
             "created_at": "2026-10-01T00:00:00Z",
             "author": "operator",
             "cross_repo": False,
+            "mergeable": "MERGEABLE",
             **fields,
         }
         self.prs[(repo, number)] = record
@@ -246,6 +256,21 @@ class FakeGhClient:
             if r == repo and p["head_ref"] == branch
         ]
 
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        self.calls.append(("required_check_names", {"repo": repo, "base": base}))
+        return sorted(self.required_names.get((repo, base), []))
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        self.calls.append(("open_pr_for_head", {"repo": repo, "branch": branch}))
+        for (r, _), p in sorted(self.prs.items()):
+            if r == repo and p["head_ref"] == branch and p["state"] == "OPEN":
+                return {"number": p["number"], "url": p["url"]}
+        return None
+
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        self.calls.append(("commit_checks", {"repo": repo, "sha": sha}))
+        return [dict(r) for r in self.commit_checks_by_sha.get((repo, sha), [])]
+
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         self.calls.append(("pr_view", {"repo": repo, "number": number}))
         p = self.prs[(repo, number)]
@@ -254,9 +279,15 @@ class FakeGhClient:
             "draft": p["draft"],
             "head_ref": p["head_ref"],
             "base_ref": p["base_ref"],
+            "mergeable": p["mergeable"],
             "title": p["title"],
             "body": p["body"],
         }
+
+    def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """`{name, bucket, state}` rows a test preloads in `required_checks`."""
+        self.calls.append(("pr_required_checks", {"repo": repo, "number": number}))
+        return [dict(r) for r in self.required_checks.get((repo, number), [])]
 
     def create_pr(
         self, repo: str, *, head: str, base: str, title: str, body: str, draft: bool
@@ -295,6 +326,12 @@ class FakeGhClient:
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         """A repo allowing every method, squash by default."""
         return {"default": "squash", "allowed": ["merge", "rebase", "squash"]}
+
+    def repo_visibility(self, repo: str) -> str:
+        self.calls.append(("repo_visibility", {"repo": repo}))
+        if repo not in self.visibility:
+            raise GhError(f"HTTP 404: Not Found (repos/{repo})")
+        return self.visibility[repo]
 
     def create_issue(
         self,

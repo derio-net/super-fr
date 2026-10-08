@@ -377,6 +377,12 @@ class RunState(BaseModel):
     A standalone brainstorm asks one question per turn by design, so its
     operator gate needs an answered question but is not held to fr-goal's
     two-round cap. Run version 8 (`fr.artifacts.run_driver`)."""
+    fr_version: str | None = None
+    """The `fr` version `fr run start` ran under (spec 2026-10-07-cloud-triage
+    §G, R16). Absent on a cursor started before run version 10
+    (`fr.artifacts.run_fr_version`), which the triage driver's drift check
+    reports as unknown and never re-homes (R17). No plugin version beside it:
+    the plugin is lockstepped with `fr`."""
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -549,11 +555,32 @@ def parse_run_state(text: str) -> RunState:
 
     if not isinstance(raw, dict):
         raise RunStateError("run state must be a YAML mapping at the top level")
+    _refuse_a_newer_cursor(raw)
 
     try:
         return RunState.model_validate(raw)
     except ValidationError as e:
         raise RunStateError(f"invalid run state: {e}") from e
+
+
+def _refuse_a_newer_cursor(raw: dict[str, Any]) -> None:
+    """A cursor stamped past what this fr writes was started by a newer fr: say so,
+    rather than the closed-world model's "extra inputs" or "field required" — and, in a
+    Claude Code cloud session, how to get a current fr (spec 2026-10-07-cloud-triage R23)."""
+    declared = raw.get("schema_version")
+    if not isinstance(declared, int) or isinstance(declared, bool):
+        return
+    supported = current_run_schema_version()
+    if declared <= supported:
+        return
+    from fr import __version__, cloud
+
+    # The remedy block is the CLI boundary's, once however many cursors refuse (p7-r3).
+    cloud.note_remedy([cloud.FR_ITEM])
+    raise RunStateError(
+        f"run state is schema {declared}, written by a newer fr; fr {__version__} reads up "
+        f"to {supported} — upgrade fr"
+    )
 
 
 def save_run_state(repo_root: Path, state: RunState) -> Path:

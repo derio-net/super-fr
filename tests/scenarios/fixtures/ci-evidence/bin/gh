@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# A fake `gh` for tests/scenarios/cloud-triage-ci-evidence.sh. It answers the
+# `gh api <GET route>` calls `fr run resolve ... tests: ci` makes through the
+# github-rest client (FR_FORGE_API=rest) with CAPTURED stdout only:
+#   - PR 1088 found as the open PR of its head branch (the github_rest capture
+#     of `pulls?head=...&state=open`), and PR 1088 itself: ../pull-1088.json
+#     (captured 2026-10-08, this directory's README);
+#   - a commit's check runs, status and Actions runs: the captured moment named
+#     by FAKE_GH_MOMENT (green-head | pending), whatever sha is asked.
+# Anything else fails loudly, so a new forge call cannot slip through — a PR's
+# files page included: verify_ci reads none (spec §I step 6, p2-r7).
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+caps="$here/../../../fixtures/github_rest"
+moment="${FAKE_GH_MOMENT:-green-head}"
+[ "${1:-}" = api ] && [ "$#" -eq 2 ] || { echo "fake gh: unexpected call: gh $*" >&2; exit 1; }
+route="$2"
+[ -n "${FAKE_GH_LOG:-}" ] && printf '%s\n' "$route" >> "$FAKE_GH_LOG"
+R=repos/derio-net/super-fr
+case "$route" in
+  "$R/pulls?head=derio-net:feat/cloud-triage&state=open&per_page=100&page=1")
+    cat "$caps/repo_pulls-head-derio-net-feat_cloud-triage-state-open-per_page-100-page-1.json" ;;
+  "$R/pulls/1088") cat "$here/pull-1088.json" ;;
+  "$R"/commits/*/check-runs\?filter=latest\&per_page=100\&page=1) cat "$caps/commit_checks/$moment/check-runs.json" ;;
+  "$R"/commits/*/status) cat "$caps/commit_checks/$moment/status.json" ;;
+  "$R"/actions/runs\?head_sha=*\&per_page=100\&page=1) cat "$caps/commit_checks/$moment/actions-runs.json" ;;
+  *) echo "fake gh: no capture for $route" >&2; exit 1 ;;
+esac

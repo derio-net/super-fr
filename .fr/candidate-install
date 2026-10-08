@@ -33,7 +33,7 @@ case "$source" in
     # resolve from a subdirectory install.
     base="${source%%#*}"
     from="$base#subdirectory=packages/fr"
-    for pkg in fr-dispatch fr-vk fr-cncd fr-herdr; do
+    for pkg in fr-dispatch fr-vk fr-cncd fr-herdr fr-claude-cloud; do
       with+=(--with "$pkg @ $base#subdirectory=packages/$pkg")
     done
     ;;

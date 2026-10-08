@@ -50,7 +50,11 @@ def stub_env(tmp_path: Path) -> dict[str, str]:
     home = tmp_path / "home"
     bin_dir = home / "bin"
     bin_dir.mkdir(parents=True)
-    (home / ".claude").mkdir()
+    (home / ".claude" / "plugins").mkdir(parents=True)
+    (home / ".claude" / "plugins" / "installed_plugins.json").write_text(
+        '{"version": 2, "plugins": {}}'
+    )
+    (home / ".claude" / "settings.json").write_text("{}")
     vk_mcp = bin_dir / "vibe-kanban-mcp"
     vk_mcp.write_text("#!/bin/sh\necho stub\n")
     vk_mcp.chmod(0o755)
@@ -75,7 +79,7 @@ def _with_args(env: dict[str, str]) -> list[str]:
 
 def test_the_workspace_declares_the_runners_the_issues_name() -> None:
     """The derivation finds something: an empty list would pass every check below."""
-    assert {"fr-vk", "fr-cncd", "fr-herdr"} <= set(runner_packages())
+    assert {"fr-vk", "fr-cncd", "fr-herdr", "fr-claude-cloud"} <= set(runner_packages())
 
 
 def test_install_sh_installs_fr_with_every_runner_package(stub_env: dict[str, str]) -> None:
@@ -107,6 +111,11 @@ def test_scaffold_runner_packages_are_the_workspace_runners() -> None:
     """The scaffold ships in the `fr` wheel, where `packages/` does not exist, so
     it keeps a literal; this is what keeps that literal honest."""
     assert sorted(scaffold.RUNNER_PACKAGES) == runner_packages()
+
+
+def test_the_scaffold_installs_the_cloud_runner() -> None:
+    """Cloud-triage §F: the POST_CREATE literal names packages/fr-claude-cloud."""
+    assert "subdirectory=packages/fr-claude-cloud" in scaffold.POST_CREATE
 
 
 def test_post_create_installs_fr_with_every_runner_package(

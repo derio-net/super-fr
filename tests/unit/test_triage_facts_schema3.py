@@ -92,8 +92,8 @@ class _Forge(FakeForge):
 
 def test_facts_are_written_at_the_current_schema() -> None:
     forge = _Forge(issues={REPO: []}, prs={REPO: []}, open_prs=[])
-    assert FACTS_SCHEMA == 7
-    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 7
+    assert FACTS_SCHEMA == 8
+    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 8
 
 
 def test_a_linked_open_pr_gains_files_head_oid_checks_and_merge_state_from_the_join() -> None:
@@ -456,7 +456,7 @@ def test_schema_5_facts_carry_mirrors_and_schema_4_files_still_read(tmp_path: Pa
         },
     )
     facts = collect_facts(forge, SCOPE, now=NOW)
-    assert facts.schema_ == FACTS_SCHEMA == 7
+    assert facts.schema_ == FACTS_SCHEMA == 8
     assert facts.config_for(REPO).mirrors == [["uv", "run", "sync.py"]]
     path = tmp_path / "facts.json"
     doc = facts.to_json()
@@ -557,7 +557,7 @@ def test_schema_6_facts_carry_the_restart_config_and_schema_5_files_still_read(
     config's full dump, so the stamp moves 5 -> 6 and 5 still loads."""
     from fr.triage.model import FACTS_READS, TriageConfig
 
-    assert FACTS_SCHEMA == 7 and FACTS_READS == (3, 4, 5, 6, 7)
+    assert FACTS_SCHEMA == 8 and FACTS_READS == (3, 4, 5, 6, 7, 8)
     default = TriageConfig()
     assert (default.post_merge_restart, default.idle_session_minutes) == ("none", 60)
     forge = _Forge(
@@ -570,7 +570,9 @@ def test_schema_6_facts_carry_the_restart_config_and_schema_5_files_still_read(
         },
     )
     facts = collect_facts(forge, SCOPE, now=NOW)
-    assert facts.schema_ == FACTS_SCHEMA  # 6 introduced these keys; claims moved it to 7
+    assert (
+        facts.schema_ == FACTS_SCHEMA
+    )  # 6 introduced these keys; claims moved it to 7, merge_method to 8
     assert facts.config_for(REPO).post_merge_restart == "idle"
     assert facts.config_for(REPO).idle_session_minutes == 30
     path = tmp_path / "facts.json"
@@ -584,3 +586,29 @@ def test_schema_6_facts_carry_the_restart_config_and_schema_5_files_still_read(
         TriageConfig(idle_session_minutes=0)
     with pytest.raises(ValueError):
         TriageConfig(post_merge_restart="all")  # type: ignore[arg-type]
+
+
+def test_schema_8_facts_carry_merge_method_and_schema_7_files_still_read(
+    tmp_path: Path,
+) -> None:
+    """cloud-triage §A (p1-r5): `merge_method` rides in the config's full dump (null
+    included), which a closed-world schema-7 reader rejects, so the stamp moves 7 -> 8
+    and a schema-7 file (no such key) still loads."""
+    forge = _Forge(
+        issues={REPO: []},
+        prs={REPO: []},
+        open_prs=[],
+        file_bodies={(REPO, CONFIG_PATH, "HEAD"): _CONFIG + "merge_method: squash\n"},
+    )
+    facts = collect_facts(forge, SCOPE, now=NOW)
+    assert facts.schema_ == FACTS_SCHEMA == 8
+    assert facts.config_for(REPO).merge_method == "squash"
+    path = tmp_path / "facts.json"
+    doc = facts.to_json()
+    assert doc["config"][REPO]["merge_method"] == "squash"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_facts(path) == facts
+    doc["schema"] = 7
+    del doc["config"][REPO]["merge_method"]
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_facts(path).config_for(REPO).merge_method is None

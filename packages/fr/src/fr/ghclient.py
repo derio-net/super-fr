@@ -234,6 +234,29 @@ class GhClient(Protocol):
         `pr_required_checks`. Empty when none is reported (yet)."""
         ...
 
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        """Every check on commit *sha*: `{name, workflow, status, conclusion, url,
+        base_sha}` — check runs (latest per workflow and name, so a failed attempt
+        re-run green is one green record) and commit statuses (latest per
+        context; `workflow` ""). `status` is `completed` once finished;
+        `conclusion` GitHub's word (`success`, `failure`, `skipped`, ...), "" while
+        unfinished; `base_sha` the PR base GitHub reports for the run ("" when
+        none). Spec 2026-10-07-cloud-triage §I: CI as test evidence. Empty when
+        nothing is reported (yet)."""
+        ...
+
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        """The check NAMES branch *base* requires (classic protection's summary
+        plus rulesets), sorted, whether or not any has reported on a commit: a
+        required check not created yet is still named. Empty when none is
+        required. Spec 2026-10-07-cloud-triage §I, gate checks (p2-r1)."""
+        ...
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """`{number, url}` of the open PR whose head is *branch*, None when there
+        is none. Reads no file list (§I step 6, p2-r7): `pr_view` gives the rest."""
+        ...
+
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         """Merge the PR only if its head is still *head_sha*; *method* is one of
         `MERGE_METHODS`. Never bypasses branch protection: a refusal raises
@@ -303,6 +326,12 @@ class GhClient(Protocol):
         """Raw text of *path* at *ref*; raises the backend's error when absent."""
         ...
 
+    def latest_release(self, repo: str) -> str | None:
+        """The tag of *repo*'s latest published release (`GET repos/{repo}/releases/latest`),
+        None when it has none (spec 2026-10-07-cloud-triage R17, R18: the fr version every
+        session should run). Raises the backend's error on any other failure."""
+        ...
+
     def viewer_login(self) -> str:
         """The login the forge CLI is authenticated as."""
         ...
@@ -335,6 +364,12 @@ class GhClient(Protocol):
         failed call, an unexpected shape, or a backend that cannot ask). Never
         raises — `fr init scaffold --tracking auto` reads None as
         inconclusive and refuses, naming the flag."""
+        ...
+
+    def repo_visibility(self, repo: str) -> str:
+        """*repo*'s visibility as the forge reports it, lowercased: `public`, `private`
+        or `internal` (spec 2026-10-07-cloud-triage §B, §C). Raises the backend's error
+        when it cannot be read: the privacy guard refuses on an unreadable answer."""
         ...
 
 
@@ -370,6 +405,15 @@ class UnsupportedBatchOps:
 
     def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         raise self._unsupported("pr_checks")
+
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        raise self._unsupported("commit_checks")
+
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        raise self._unsupported("required_check_names")
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        raise self._unsupported("open_pr_for_head")
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         raise self._unsupported("pr_merge")
@@ -416,8 +460,14 @@ class UnsupportedBatchOps:
     def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
         raise self._unsupported("read_file_at_ref")
 
+    def latest_release(self, repo: str) -> str | None:
+        raise self._unsupported("latest_release")
+
     def viewer_login(self) -> str:
         raise self._unsupported("viewer_login")
 
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         raise self._unsupported("view_issue_record")
+
+    def repo_visibility(self, repo: str) -> str:
+        raise self._unsupported("repo_visibility")

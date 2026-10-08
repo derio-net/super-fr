@@ -42,6 +42,8 @@ from typing import NamedTuple
 
 from fr.triage.errors import TriageError
 
+# The export set: a subset of `fr.triage.state_ref.REF_FILES` (the state ref carries more:
+# merge stops, the lease, durable settings, the cloud mailbox), pinned by test_triage_state_ref.
 DURABLE_FILES = ("judgements.yaml", "origins.yaml", "subsystems.yaml")
 DURABLE_DIRS = ("board", "origins", "architecture", "history", "snapshots", "authored-src")
 _SKIPPED_PARTS = frozenset({"__pycache__"})

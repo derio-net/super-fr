@@ -59,7 +59,7 @@ def test_every_sibling_package_is_an_offender(tmp_path: Path) -> None:
     `packages/*/src/` other than `fr` itself is a sibling, including ones added
     after this test was written."""
     siblings = {p.parent.name for p in PACKAGES.glob("*/src/*/__init__.py")} - {"fr"}
-    assert {"fr_cncd", "fr_dispatch", "fr_herdr", "fr_vk"} <= siblings
+    assert {"fr_claude_cloud", "fr_cncd", "fr_dispatch", "fr_herdr", "fr_vk"} <= siblings
     for name in siblings:
         (tmp_path / f"imports_{name}.py").write_text(f"from {name}.x import y\n")
     offenders = _sibling_offenders(tmp_path)
@@ -158,6 +158,35 @@ def test_fr_herdr_never_imports_fr_triage() -> None:
         if _FR_TRIAGE_IMPORT_RE.search(py.read_text())
     ]
     assert not offenders, f"fr_herdr must not import fr.triage: {offenders}"
+
+
+def test_fr_claude_cloud_never_imports_fr_triage() -> None:
+    """Cloud-triage §F: `fr-claude-cloud` is a runner like herdr: it takes a WorkItem
+    and the scope's state directory, never triage state through `fr.triage`."""
+    src = PACKAGES / "fr-claude-cloud" / "src" / "fr_claude_cloud"
+    assert (src / "__init__.py").is_file()
+    offenders = [str(py) for py in src.rglob("*.py") if _FR_TRIAGE_IMPORT_RE.search(py.read_text())]
+    assert not offenders, f"fr_claude_cloud must not import fr.triage: {offenders}"
+
+
+def test_fr_never_imports_fr_claude_cloud() -> None:
+    """`fr` reaches the cloud runner only through `fr.triage.driver.Mailbox` and the
+    registry, never by import (no soft point names it either)."""
+    offenders = {
+        str(f): roots & {"fr_claude_cloud"}
+        for f, roots in _imports_of(PACKAGES / "fr" / "src" / "fr").items()
+        if "fr_claude_cloud" in roots
+    }
+    assert not offenders, f"fr must not import the cloud runner: {offenders}"
+
+
+def test_fr_dispatch_never_imports_fr_claude_cloud() -> None:
+    offenders = {
+        str(f): roots & {"fr_claude_cloud"}
+        for f, roots in _imports_of(PACKAGES / "fr-dispatch" / "src" / "fr_dispatch").items()
+        if "fr_claude_cloud" in roots
+    }
+    assert not offenders, f"fr_dispatch must not import the adapter: {offenders}"
 
 
 def test_fr_herdr_tripwire_catches_a_triage_import(tmp_path: Path) -> None:

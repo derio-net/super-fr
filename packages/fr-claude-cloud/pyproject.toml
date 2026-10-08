@@ -1,0 +1,20 @@
+[project]
+name = "fr-claude-cloud"
+version = "5.17.1"
+description = "super-fr claude-cloud adapter: a run-unit runner whose session actions the cloud driver's agent executes with its session tools (a mailbox)"
+requires-python = ">=3.11"
+dependencies = ["fr", "fr-dispatch", "pyyaml>=6"]
+
+[project.entry-points."fr.runners"]
+claude-cloud = "fr_claude_cloud.runner:ClaudeCloudRunner"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fr_claude_cloud"]
+
+[tool.uv.sources]
+fr = { workspace = true }
+fr-dispatch = { workspace = true }

@@ -56,6 +56,9 @@ class _Forge:
     def viewer_login(self) -> str:
         return "operator"
 
+    def repo_visibility(self, *, repo: str) -> str | None:
+        return None
+
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         self.viewed.append((repo, number))
         return {
@@ -117,7 +120,7 @@ def test_org_scope_reports_a_skipped_repo_verbatim_and_still_writes(
     assert "[no access] [/red]" in result.output
     facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
     assert facts["skipped"] == [{"repo": "example-org/beta", "reason": "[no access] [/red]"}]
-    assert facts["schema"] == 7
+    assert facts["schema"] == 8
 
 
 def test_pr_limit_widens_the_window_and_a_full_list_warns(

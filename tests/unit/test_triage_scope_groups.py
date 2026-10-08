@@ -6,6 +6,7 @@ The forge is faked (`tests.unit.triage_fixtures.FakeForge`); nothing here reache
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -56,13 +57,14 @@ def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 # ----------------------------------------------------------- the scope itself
 
 
-def test_a_group_scope_name_is_the_sorted_owner_repo_slugs_joined_by_plus() -> None:
+def test_a_group_scope_name_is_the_sorted_owner_repo_slugs_joined_by_plus(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
     forward = Scope.group([BETA, ALPHA])
     backward = Scope.group([ALPHA, BETA.upper()])
     assert forward.kind == "group"
     assert forward.name == "example-org--alpha+other-org--beta"
     assert backward.name == forward.name  # order and case do not move the directory
-    assert state_dir(forward).name == forward.name
+    assert state_dir(forward, workspace=tmp_path).name == forward.name
     assert state_dir(forward, Path("/elsewhere")) == Path("/elsewhere")  # --dir overrides
 
 
@@ -89,6 +91,8 @@ def test_a_group_with_a_repeated_repo_name_is_refused_before_anything_is_written
     assert result.exit_code == 2
     assert "same" in result.output
     assert not (tmp_path / "s").exists() and forge.calls == []
+    subprocess.run(["git", "init", "--quiet", str(tmp_path / "ws")], check=True)
+    monkeypatch.chdir(tmp_path / "ws")
     default = state_dir(Scope.group(["one/same", "two/same"]))
     assert not default.exists()
 
@@ -109,7 +113,7 @@ def test_a_malformed_group_member_is_a_usage_error(
 def test_collect_reads_each_repo_in_turn_and_records_a_failed_repo_as_skipped() -> None:
     forge = _forge(failing={BETA: "HTTP 502"})
     facts = collect_facts(forge, Scope.group([BETA, ALPHA]), now=NOW)
-    assert facts.kind == "group" and facts.schema_ == FACTS_SCHEMA == 7
+    assert facts.kind == "group" and facts.schema_ == FACTS_SCHEMA == 8
     assert facts.scope == "example-org--alpha+other-org--beta"
     assert facts.repos == [ALPHA, BETA]
     assert [(s.repo, s.reason) for s in facts.skipped] == [(BETA, "HTTP 502")]
@@ -143,7 +147,7 @@ def test_facts_4_round_trips_and_schema_3_still_loads_then_is_upgraded_by_collec
     result = CliRunner().invoke(app, ["triage", "collect", "--repo", GROUP, "--dir", str(tmp_path)])
     assert result.exit_code == 0, result.output
     written = json.loads(path.read_text(encoding="utf-8"))
-    assert (written["schema"], written["kind"], written["repos"]) == (7, "group", [ALPHA, BETA])
+    assert (written["schema"], written["kind"], written["repos"]) == (8, "group", [ALPHA, BETA])
     assert load_facts(path).kind == "group"
 
 

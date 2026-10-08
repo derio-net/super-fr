@@ -35,7 +35,15 @@ def _root_version() -> str:
 
 def _lock_members() -> set[str]:
     # Hand-enumerated (review rp1-f2): the workspace's uv members today.
-    return {"fr", "fr-cncd", "fr-dispatch", "fr-herdr", "fr-vk", "super-fr-workspace"}
+    return {
+        "fr",
+        "fr-claude-cloud",
+        "fr-cncd",
+        "fr-dispatch",
+        "fr-herdr",
+        "fr-vk",
+        "super-fr-workspace",
+    }
 
 
 def test_surfaces_cover_every_known_manifest_in_this_repo() -> None:
@@ -45,6 +53,7 @@ def test_surfaces_cover_every_known_manifest_in_this_repo() -> None:
     expected = {
         "pyproject.toml",
         "packages/fr/pyproject.toml",
+        "packages/fr-claude-cloud/pyproject.toml",
         "packages/fr-cncd/pyproject.toml",
         "packages/fr-dispatch/pyproject.toml",
         "packages/fr-herdr/pyproject.toml",

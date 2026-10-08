@@ -55,7 +55,7 @@ def _marketplace_manifest() -> dict:
 def home_with_plugin_state(fake_home: Path) -> Path:  # noqa: F811
     """fake_home plus the plugin JSON files install.sh reads and rewrites."""
     plugins = fake_home / ".claude" / "plugins"
-    plugins.mkdir(parents=True)
+    plugins.mkdir(parents=True, exist_ok=True)
     (plugins / "installed_plugins.json").write_text(json.dumps({"plugins": {}, "version": 2}))
     (plugins / "known_marketplaces.json").write_text(json.dumps({}))
     (fake_home / ".claude" / "settings.json").write_text(json.dumps({}))

@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - run: uv sync
-      - run: uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src
+      - run: uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src packages/fr-claude-cloud/src
 
   test:
     runs-on: ubuntu-latest
@@ -64,8 +64,17 @@ jobs:
           uv run pytest -o addopts="--strict-markers --cov" --cov-report=
           -n auto --splits 4 --group ${{ matrix.shard }}
           --splitting-algorithm least_duration
+          --junitxml=junit-shard.xml
         env:
           COVERAGE_FILE: .coverage.shard${{ matrix.shard }}
+      # A failed test as a check-run annotation, readable through the REST API
+      # (`check-runs/{id}/annotations`) where the job log is not: the log is
+      # served from a blob host a Claude Code cloud session's proxy refuses, so
+      # without this a red shard there says only "exit code 1" (cloud-triage
+      # discovery `ci-logs-unreachable`).
+      - if: failure()
+        run: >-
+          uv run --no-project python scripts/junit_annotations.py junit-shard.xml
       # Coverage is measured on the floor leg only: both legs would upload the
       # same artifact name, and the gate needs one run of the suite, not two.
       - if: matrix.python == '3.11'

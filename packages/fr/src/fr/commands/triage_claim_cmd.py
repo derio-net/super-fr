@@ -22,10 +22,12 @@ from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
     RepoOpt,
+    WorkspaceOpt,
     _load_state,
     _scope,
     console,
     print_claim_sets,
+    resolve_state_dir,
     triage_app,
 )
 from fr.commands.triage_kanban_cmd import _fail
@@ -36,7 +38,7 @@ from fr.triage.check import claim_sets
 from fr.triage.claim_sync import ClaimEnv, SyncResult, execute, plan_sync, record_releases
 from fr.triage.claims import Claim, from_issue_claim, holder
 from fr.triage.errors import TriageError
-from fr.triage.model import Batch, Facts, normalize_key, state_dir
+from fr.triage.model import Batch, Facts, normalize_key
 from fr.triage.scope_config import default_board_name, load_scope_config, scope_id
 
 scope_app = typer.Typer(name="scope", help="This triage scope's identity and config.")
@@ -59,11 +61,14 @@ def _now() -> datetime:
 
 @scope_app.command("show")
 def scope_show_command(
-    repo: RepoOpt = None, org: OrgOpt = None, dir_override: DirOpt = None
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Print the scope's name, id, state directory and scope config. Never touches the forge."""
     scope = _scope(repo, org)
-    target = state_dir(scope, dir_override)
+    target = resolve_state_dir(scope, dir_override, workspace)
     try:
         sid, config = scope_id(scope), load_scope_config(target)
     except TriageError as exc:
@@ -84,11 +89,14 @@ def scope_show_command(
 
 @claim_app.command("list")
 def claim_list_command(
-    repo: RepoOpt = None, org: OrgOpt = None, dir_override: DirOpt = None
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """This scope's held-elsewhere, expired and owed claims, from facts. Always exits 0."""
     scope = _scope(repo, org)
-    target, facts, judgements = _load_state(scope, dir_override)
+    target, facts, judgements = _load_state(scope, dir_override, workspace)
     env = triage_batch_cmd.claim_env(target, facts)
     print_claim_sets(claim_sets(facts, judgements, env.me, _now()))
 
@@ -105,11 +113,15 @@ def _say_result(result: SyncResult) -> None:
 
 @claim_app.command("sync")
 def claim_sync_command(
-    yes: YesOpt = False, repo: RepoOpt = None, org: OrgOpt = None, dir_override: DirOpt = None
+    yes: YesOpt = False,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Write every owed claim, due refresh and owed release (R3, R8, R10, R11)."""
     scope = _scope(repo, org)
-    target, facts, judgements = _load_state(scope, dir_override)
+    target, facts, judgements = _load_state(scope, dir_override, workspace)
     env = triage_batch_cmd.claim_env(target, facts)
     now = _now()
     plan = plan_sync(env, judgements.batches, now)
@@ -189,10 +201,11 @@ def claim_take_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Replace another scope's EXPIRED claim with this scope's, for *batch* (R9)."""
     scope = _scope(repo, org)
-    target, facts, judgements = _load_state(scope, dir_override)
+    target, facts, judgements = _load_state(scope, dir_override, workspace)
     key = normalize_key(key)
     chosen = next((b for b in judgements.batches if b.id == batch.lower()), None)
     if chosen is None or key not in chosen.ids:
@@ -236,10 +249,11 @@ def claim_release_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Withdraw this scope's claim on *key* at any time, or another scope's once expired (R9)."""
     scope = _scope(repo, org)
-    target, facts, _ = _load_state(scope, dir_override)
+    target, facts, _ = _load_state(scope, dir_override, workspace)
     key = normalize_key(key)
     env = triage_batch_cmd.claim_env(target, facts)
     now = _now()

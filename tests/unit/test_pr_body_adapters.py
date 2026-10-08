@@ -162,7 +162,7 @@ def test_every_backend_declares_every_pr_operation() -> None:
 
     ops = {frozenset(table) for table in PR_COMMANDS.values()}
     assert ops == {frozenset({"create", "edit", "ready", "fill"})}
-    assert set(PR_COMMANDS) == {"github", "gitlab", "gitea"}
+    assert set(PR_COMMANDS) == {"github", "github-rest", "gitlab", "gitea"}
 
 
 @pytest.mark.parametrize("out", ["not json", "[]", '"a string"'])

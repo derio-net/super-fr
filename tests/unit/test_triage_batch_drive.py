@@ -1836,3 +1836,24 @@ def test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one
             {"x": "merged"}, close_sessions=True, sessions=frozenset({item}))
     )  # fmt: skip
     assert [(a.kind, a.items) for a in done.actions if a.kind == "close"] == [("close", (item,))]
+
+
+def test_a_batch_the_driver_refuses_is_a_hold_that_takes_no_in_flight_slot() -> None:
+    """p4-r1 (spec 2026-10-07-cloud-triage §E): a batch the driver adapter refuses
+    (another runner named explicitly) is a hold the PURE planner sees, so it takes no
+    in-flight slot: with a cap of one, a refused batch first in order does not block the
+    next one. It still counts as pending: another driver may yet dispatch it."""
+    a, b = _batch("a", 1), _batch("b", 2)
+
+    got = drive_pass(
+        _snap(
+            [a, b],
+            {"a": "proposed", "b": "proposed"},
+            max_inflight=1,
+            refused={"a": "its launch.runner is herdr"},
+        )
+    )
+
+    assert _kinds(got.actions) == [("held", "a"), ("dispatch", "b")]
+    assert "herdr" in got.actions[0].detail
+    assert got.summary.pending == 1 and got.summary.in_flight == 1

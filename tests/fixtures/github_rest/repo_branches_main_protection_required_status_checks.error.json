@@ -1,0 +1,5 @@
+{
+  "exit": 1,
+  "stdout": "{\"message\":\"Resource not accessible by integration\",\"documentation_url\":\"https://docs.github.com/rest/branches/branch-protection#get-status-checks-protection\",\"status\":\"403\"}",
+  "stderr": "gh: Resource not accessible by integration (HTTP 403)\n"
+}

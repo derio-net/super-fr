@@ -465,6 +465,7 @@ context file (it outranks `AGENTS.md`, so read both).
 | `fr-vk` | VibeKanban adapter: MCP client, card/workspace dispatch, bridge daemon |
 | `fr-cncd` | CNC daemon runner adapter |
 | `fr-herdr` | herdr runner: takes `fr triage batch dispatch` runs into a herdr tab (the first run-unit runner) |
+| `fr-claude-cloud` | claude-cloud runner: the cloud wave driver's mailbox; its agent creates, messages and archives Claude Code cloud sessions for each batch |
 | `fr-opencode-plugin` | OpenCode `tool.execute.before` port of the isolation edit guard |
 | `plugins/super-fr/hooks/hermes/` | Hermes `pre_tool_call` ports of the isolation edit + bash/push guards |
 

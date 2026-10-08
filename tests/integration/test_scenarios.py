@@ -154,6 +154,13 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "model-binding-set-probe",
         "model-binding-replacement",
         "model-binding-check",
+        "cloud-triage-ci-evidence",
+        "cloud-triage-state-ref",
+        "cloud-triage-privacy-guard",
+        "cloud-triage-driver-lease",
+        "cloud-triage-version-drift",
+        "cloud-triage-repo-agents",
+        "cloud-triage-cloud-remedy",
     }
     assert on_disk == here
 
@@ -204,3 +211,31 @@ def test_model_binding_check(installed: Path, tmp_path: Path) -> None:
 
 def test_herdr_restart_idle(installed: Path, tmp_path: Path) -> None:
     _scenario("herdr-restart-idle", installed, tmp_path)
+
+
+def test_cloud_triage_ci_evidence(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-ci-evidence", installed, tmp_path)
+
+
+def test_cloud_triage_state_ref(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-state-ref", installed, tmp_path)
+
+
+def test_cloud_triage_privacy_guard(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-privacy-guard", installed, tmp_path)
+
+
+def test_cloud_triage_driver_lease(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-driver-lease", installed, tmp_path)
+
+
+def test_cloud_triage_version_drift(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-version-drift", installed, tmp_path)
+
+
+def test_cloud_triage_repo_agents(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-repo-agents", installed, tmp_path)
+
+
+def test_cloud_triage_cloud_remedy(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-cloud-remedy", installed, tmp_path)

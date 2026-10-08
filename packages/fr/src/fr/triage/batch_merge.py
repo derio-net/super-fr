@@ -21,6 +21,7 @@ from typing import Any, Literal, Protocol
 from fr.ghclient import MERGE_METHODS, GhClient
 from fr.hostclient import FORGE_ERRORS
 from fr.triage.batch import MergeStep, QueueEntry, merge_order, with_forecast
+from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
 from fr.triage.batch_drive import ChecksVerdict, checks_verdict
 from fr.triage.batch_version import (
     all_version_files,
@@ -138,12 +139,16 @@ class MergeContext:
 # ------------------------------------------------------------------ planning
 
 
-def choose_method(explicit: str | None, methods: dict[str, Any]) -> str:
-    """The merge method (spec §3.F step 2): the repo's default, or *explicit*.
+def choose_method(
+    explicit: str | None, methods: dict[str, Any], *, configured: str | None = None
+) -> str:
+    """The merge method (spec §3.F step 2): *explicit*, else the repo's default,
+    else *configured* (`.fr/triage.yaml`'s `merge_method`, cloud-triage §A: REST
+    names no default), else the one method the repo allows.
 
     *methods* is `GhClient.repo_merge_methods`: `{default, allowed}`. An
-    explicit method the repo disallows is refused here, before anything
-    merges, rather than by the forge mid-queue (review r3-f4).
+    explicit or configured method the repo disallows is refused here, before
+    anything merges, rather than by the forge mid-queue (review r3-f4).
     """
     allowed = sorted(str(m) for m in methods.get("allowed") or [] if m in MERGE_METHODS)
     if not allowed:
@@ -157,10 +162,18 @@ def choose_method(explicit: str | None, methods: dict[str, Any]) -> str:
     default = methods.get("default")
     if default in allowed:
         return str(default)
+    if configured is not None:
+        if configured not in allowed:
+            raise TriageError(
+                f"merge_method: {configured} in {TRIAGE_CONFIG_PATH}: the repo does not allow it "
+                f"(allowed: {', '.join(allowed)}); change it, or give --method"
+            )
+        return configured
     if len(allowed) == 1:
         return allowed[0]
     raise TriageError(
-        f"the repo names no default merge method you may use; give --method ({', '.join(allowed)})"
+        "the repo names no default merge method you may use; set `merge_method` in "
+        f"{TRIAGE_CONFIG_PATH} or give --method ({', '.join(allowed)})"
     )
 
 

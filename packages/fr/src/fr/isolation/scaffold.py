@@ -429,7 +429,7 @@ _SUPER_FR_GIT = "git+https://github.com/derio-net/super-fr"
 # the set is a literal here; install.sh derives it from the workspace, and
 # tests/integration/test_runner_package_lists.py pins both to the entry points
 # (#650, #645: a runner missing here is invisible to `uv run fr`).
-RUNNER_PACKAGES = ("fr-cncd", "fr-herdr", "fr-vk")
+RUNNER_PACKAGES = ("fr-claude-cloud", "fr-cncd", "fr-herdr", "fr-vk")
 
 # Baseline: fr itself plus every runner adapter, installed from the repo's main
 # branch at create time.
@@ -557,6 +557,11 @@ def scaffold_profile(
         except ValidatorWrapperError as err:
             raise IsolationError(str(err)) from err
         include_validator_wrapper = True
+    # The agents step (spec 2026-10-07-cloud-triage R19): every fr-enabled repo
+    # carries the two agents fr-goal dispatches, so a cloud session finds them.
+    from fr.agents import write_agents
+
+    write_agents(repo_root)
     if commit:
         _commit_profile(repo_root, profile, include_validator_wrapper=include_validator_wrapper)
     return config_path
@@ -589,18 +594,28 @@ def _commit_profile(
     repo and is never committed. No-ops cleanly when nothing is staged: a
     git-ignored `.devcontainer` warns; an unchanged re-scaffold is silent.
     """
+    from fr.agents import AGENT_NAMES, AGENTS_DIR
+
     paths = [f".devcontainer/{profile}", ".devcontainer/fr-profiles.yaml"]
     if include_validator_wrapper:
         paths.append("scripts/validate-plans.sh")
+    # The agents ride along unless the repo ignores them: one ignored path makes
+    # `git add` refuse every path it was given, and the commit's pathspec with it.
+    paths += [
+        rel
+        for rel in (str(AGENTS_DIR / f"{name}.md") for name in AGENT_NAMES)
+        if (repo_root / rel).exists() and _git(repo_root, "check-ignore", "-q", rel).returncode != 0
+    ]
+    if _git(repo_root, "check-ignore", "-q", f".devcontainer/{profile}").returncode == 0:
+        print(
+            f"warning: .devcontainer is git-ignored — profile {profile!r} written "
+            "but not committed; `fr isolation up` won't see it.",
+            file=sys.stderr,
+        )
+        return
     _git(repo_root, "add", "--", *paths)
-    # `git diff --cached --quiet` → rc 0 means nothing staged (ignored/unchanged).
+    # `git diff --cached --quiet` → rc 0 means nothing staged (unchanged).
     if _git(repo_root, "diff", "--cached", "--quiet", "--", *paths).returncode == 0:
-        if _git(repo_root, "check-ignore", "-q", f".devcontainer/{profile}").returncode == 0:
-            print(
-                f"warning: .devcontainer is git-ignored — profile {profile!r} written "
-                "but not committed; `fr isolation up` won't see it.",
-                file=sys.stderr,
-            )
         return
     # Pathspec on `commit` records ONLY these paths — any other staged changes
     # the operator had stay staged, never swept into the scaffold commit.
@@ -616,6 +631,19 @@ def _commit_profile(
         # Don't leave the profile half-staged on failure (e.g. no git identity).
         _git(repo_root, "reset", "-q", "--", *paths)
         raise IsolationError(f"git commit failed: {result.stderr.strip() or result.stdout.strip()}")
+
+
+def commit_paths(repo_root: Path, paths: list[str], message: str) -> bool:
+    """Stage and commit exactly `paths` (pathspec commit: other staged work stays
+    staged); whether a commit was made. Raises `IsolationError` when git refuses."""
+    _git(repo_root, "add", "--", *paths)
+    if _git(repo_root, "diff", "--cached", "--quiet", "--", *paths).returncode == 0:
+        return False
+    result = _git(repo_root, "commit", "-m", message, "--", *paths)
+    if result.returncode != 0:
+        _git(repo_root, "reset", "-q", "--", *paths)
+        raise IsolationError(f"git commit failed: {result.stderr.strip() or result.stdout.strip()}")
+    return True
 
 
 def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
