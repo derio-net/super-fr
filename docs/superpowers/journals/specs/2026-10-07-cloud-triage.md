@@ -122,3 +122,8 @@ Read 2026-10-08 from the operator's own session list (15 sessions; repos and tit
   - **WORKING** while a turn runs; **REVIEW_READY** seen once, on a session with no summary recorded.
 - **Consequence for the mapping:** session status stays a per-session signal (batch session and close-out session each have their own); the batch's stage remains derived from forge facts (PR merged, archive PR merged), never from `completed`.
 - **Side finding for super-fr#1086:** BLOCKED plus `needs_action` is exactly the "agent ended its turn on a question" signal #1086 says herdr cannot give.
+
+<!-- fr:journal kind=decision scope=spec id=d6-github-rest created=2026-10-08T09:56:27+00:00 -->
+### d6-github-rest · decision · Operator decision, round 6: a general github-rest forge backend
+
+The REST-only GitHub client is a general backend (`github-rest`), selectable anywhere by one setting; the cloud environment selects it by default. Not a cloud-only `claude_cloud_gh`. Operator, 2026-10-08.
