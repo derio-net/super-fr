@@ -736,3 +736,8 @@ check: consistency. evidence: R22; record commits; code_tree excludes fr artifac
 ### s35 · finding [open] (reviewer: in scope) · No GhClient method reads checks by sha
 
 check: codebase. evidence: ghclient.py:225-235; real_ghclient.py:402-424.
+
+<!-- fr:journal kind=finding scope=spec id=s35-resolved created=2026-10-08T13:54:19+00:00 state=fixed resolves=s35 -->
+### s35-resolved · finding [fixed] · resolves s35: No GhClient method reads checks by sha
+
+§I: new GhClient.commit_checks(repo, sha) -> {name, workflow, status, conclusion, url}, latest per (workflow, name) via filter=latest and latest-per-context statuses, on both GitHub clients and the fake; glab/tea raise UnsupportedForgeOperation.
