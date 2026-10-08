@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# A fake `gh` for tests/scenarios/cloud-triage-driver-lease.sh (FR_FORGE_API=rest): the
+# routes one `fr triage drive pass` reads for `derio-net/super-fr` in a world with no open
+# issue and no PR. Captured answers come from tests/fixtures/github_rest (captured live
+# 2026-10-08, that directory's README): the viewer (`user`), the repo record the privacy
+# guard reads before every push, and `.fr/triage.yaml` at HEAD (it names `herdr` and a
+# `post_merge`, which the cloud driver must ignore, R10/R20). The three list routes answer
+# `[]`, GitHub's own empty page: no record shape is invented. Anything else fails loudly.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+caps="$here/../../../fixtures/github_rest"
+repo=repos/derio-net/super-fr
+[ "${1:-}" = api ] || { echo "fake gh: unexpected call: gh $*" >&2; exit 1; }
+shift
+[ -n "${FAKE_GH_LOG:-}" ] && printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+case "$*" in
+  user) cat "$caps/user.json" ;;
+  "$repo") cat "$caps/repo.json" ;;
+  "-H Accept: application/vnd.github.raw+json $repo/contents/.fr/triage.yaml?ref=HEAD")
+    cat "$caps/repo_contents_.fr_triage.yaml-ref-HEAD.txt" ;;
+  "$repo/issues?state=open&per_page=100&page=1" | \
+  "$repo/pulls?state=all&per_page=100&page=1" | \
+  "$repo/pulls?state=open&per_page=100&page=1") echo '[]' ;;
+  *) echo "fake gh: no capture for: gh api $*" >&2; exit 1 ;;
+esac

@@ -298,8 +298,9 @@ def drive_pass_command(
             + "; no session requests can be written",
             soft_wrap=True,
         )
-    try:
-        acted, summary, _ = batch.one_pass(driver)
+    try:  # drive.lock: the fast same-host check, before the lease (§D)
+        with batch.drive_lock(triage_cmd.drive_lock_dir(scope, dir_override)):
+            acted, summary, _ = batch.one_pass(driver)
     except batch.ForgeReadError as exc:
         _fail(str(exc), code=exc.code)
     _write_outbox(outbox, driver.outbox())
