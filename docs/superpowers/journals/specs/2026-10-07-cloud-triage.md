@@ -681,3 +681,8 @@ Was tier-2026-10-07-cloud-triage-p6 before the renumbering.
 ### phase-split-2026-10-07-cloud-triage-p6-2 · decision · ask: versions and drift (R16-R18)
 
 Supersedes the earlier phase-split-2026-10-07-cloud-triage-p6 entries after the renumbering (this was phase 5).
+
+<!-- fr:journal kind=decision scope=spec id=renumber-2026-10-07-cloud-triage-phases created=2026-10-08T13:50:39+00:00 -->
+### renumber-2026-10-07-cloud-triage-phases · decision · Plan phases renumbered for R22: old 2-6 are now 3-7
+
+2026-10-08, decision d10: the CI-evidence phase is inserted as phase 2, so old phase N is now N+1. Journal decisions written before this keep their old numbers: tier-2026-10-07-cloud-triage-p3 (lease) is now phase 4 (re-recorded as tier-2026-10-07-cloud-triage-p4), tier-2026-10-07-cloud-triage-p5 (run-kind migration) is now phase 6, still hard and still covered by tier-2026-10-07-cloud-triage-p6's id (whose text names the agents kind, now phase 7, re-recorded as tier-2026-10-07-cloud-triage-p7); tier-2026-10-07-cloud-triage-p6 therefore now stands for phase 6's hard tier (a migration every cursor goes through). The phase-split entries with -1/-2 suffixes record each phase's reason under its new number.
