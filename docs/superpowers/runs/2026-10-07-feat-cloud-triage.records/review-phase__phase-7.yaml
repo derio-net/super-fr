@@ -11,9 +11,9 @@ journal:
 - {kind: finding, id: p7-r5, phase: 7, review_scope: in, title: "a consumer's own fr-prefixed agent failed fr validate artifacts with no fix", body: "registry.py agents locator, structure.py validate_agents; reproduced in a scratch repo."}
 - {kind: finding, id: p7-r6, phase: 7, review_scope: in, title: "the worker brief's install one-liner failed when the clone existed and lacked rsync/jq/uv", body: "batch_dispatch.py:49-56."}
 - {kind: finding, id: p7-r7, phase: 7, review_scope: in, title: "AGENTS.md's mirror section lacked the agents-data checklist", body: "AGENTS.md 'Skills/rules: canonical source vs. generated mirrors'."}
-- {kind: finding, id: p7-o1, phase: 7, review_scope: out, title: "the org agent-worktree allowlist names only super-fr:fr-phase-executor, not the bare project-agent name fr init now writes", body: "scripts/ensure-phase-executor-allowlist.sh. Untestable here (the org hook is not in this container); only matters if a host session dispatches the bare name, which fr-goal's prose does not do. Follow-up, named in the PR body."}
+- {kind: finding, id: p7-r8, phase: 7, review_scope: out, title: "the org agent-worktree allowlist names only super-fr:fr-phase-executor, not the bare project-agent name fr init now writes", body: "scripts/ensure-phase-executor-allowlist.sh. Untestable here (the org hook is not in this container); only matters if a host session dispatches the bare name, which fr-goal's prose does not do. Follow-up, named in the PR body."}
 - {kind: decision, id: p7-agents-kind-is-the-two-shipped-files, phase: 7, title: "the agents kind owns only the two shipped files, reversing p7-agents-locator-owns-the-prefix", body: "Review p7-r5: owning the fr- prefix turned a consumer's own fr-*.md agent into a validation failure no fr command can fix. The spec names exactly the two files; ArtifactKind.owns filters to AGENT_NAMES."}
-- {kind: review, id: p7-review, phase: 7, title: "phase 7 code review: 7 findings in scope, 1 out", body: "Dispatched reviewer over a86b12f7..89ecc1fe against spec R19-R23/§H and plan 07.yaml; 4 findings reproduced, 424 targeted tests run. Received: each verified; spec amended for p7-r2 (e59214a2); a fix agent implemented all seven with a failing test first (2080e8dc, 59fcb8e5, 31647d54, 2a5bf22c, 7a57f8e9, 92eed33f); targeted suites, test_install_sh.py, the cloud-remedy scenario, ruff, mypy, fr validate artifacts and fr acceptance check pass."}
+- {kind: review, id: p7-review, phase: 7, title: "phase 7 code review: 7 findings in scope, 1 out (p7-r8)", body: "Dispatched reviewer over a86b12f7..89ecc1fe against spec R19-R23/§H and plan 07.yaml; 4 findings reproduced, 424 targeted tests run. Received: each verified; spec amended for p7-r2 (e59214a2); a fix agent implemented all seven with a failing test first (2080e8dc, 59fcb8e5, 31647d54, 2a5bf22c, 7a57f8e9, 92eed33f); targeted suites, test_install_sh.py, the cloud-remedy scenario, ruff, mypy, fr validate artifacts and fr acceptance check pass."}
 resolves:
 - {id: p7-r1, state: fixed, body: "2080e8dc: fetch origin main, refuse a tag not on origin/main, checkout -B main + clean, normal preflight; test_install_release_refuses_a_tag_that_is_not_on_main."}
 - {id: p7-self-update-install-refused-by-preflight, state: fixed, body: "Same defect as p7-r1, fixed in 2080e8dc."}
@@ -23,7 +23,7 @@ resolves:
 - {id: p7-r5, state: fixed, body: "31647d54: ArtifactKind.owns filters to the shipped names; test_validate_ignores_a_consumers_own_fr_prefixed_agent."}
 - {id: p7-r6, state: fixed, body: "92eed33f: off-PATH fr found first, else the brief embeds cloud.setup_script(); test_a_missing_fr_is_installed_by_the_cloud_setup_script_itself."}
 - {id: p7-r7, state: fixed, body: "2a5bf22c: AGENTS.md bullet, names verified against the code."}
-- {id: p7-o1, state: out-of-scope, body: "Not caused by a path fr-goal takes; recorded as a follow-up in the PR body."}
+- {id: p7-r8, state: out-of-scope, body: "Not caused by a path fr-goal takes; recorded as a follow-up in the PR body."}
 evidence:
   review: p7-review
   reviewer: abad996a58880e80a
