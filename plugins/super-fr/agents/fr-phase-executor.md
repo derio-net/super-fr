@@ -122,7 +122,7 @@ transcript:
 ```yaml
 record: <path, committed>        # with no record: none
 outcome: done | failed | blocked
-tests_log: <host-visible path> | none
+tests_log: <host-visible path> | ci | none
 summary: |
   <at most 5 lines: the blocker when blocked; the suite's pass/fail line;
    ticks and journal ids when there is no record; files touched; for a phase
@@ -140,6 +140,16 @@ tree or when any code path is newer than the log, and stores the code tree it
 covered, so `deliver` can reuse it (`tests: reuse`) instead of running the
 suite a second time. `tests_log: none` only when the phase is `failed` or
 `blocked` before a suite could mean anything.
+
+**CI evidence.** When your brief says the phase's test evidence is CI
+(`tests: ci`, for a repo whose suite is too slow to run where you are), do not
+run the full suite: run the test files you touched and their neighbours, then
+commit, push the branch, put `evidence: {tests: ci}` in the record, commit and
+push the record too, and return `tests_log: ci` instead of running the full
+suite. fr then accepts the phase only once the repo's gate checks are green on
+the pushed head (or on an ancestor with the same code tree), so leave no code
+change uncommitted or unpushed. Never open the PR yourself, even then: the
+orchestrator opens it.
 
 Keep the prose minimal; the record holds the detail.
 
