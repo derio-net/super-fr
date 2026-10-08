@@ -9,6 +9,9 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+OPERATOR_HOME = Path(os.environ.get("HOME") or Path.home())
+"""The home the suite started with: the operator's own, which no test may write
+(`_home_off_the_operators_machine`, review p3-r6)."""
 
 
 @pytest.fixture
@@ -95,6 +98,36 @@ def _fixed_triage_host_id(monkeypatch: pytest.MonkeyPatch) -> None:
     id mints `~/.config/fr/host-id` in the real home. Tests of the minting itself
     delete it and point `HOME` at a tmp dir."""
     monkeypatch.setenv("FR_HOST_ID", "feedfacefeedface")
+
+
+@pytest.fixture(autouse=True)
+def _home_off_the_operators_machine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """Point `HOME` at a fresh tmp dir for every test (review p3-r6), so every fr config
+    and cache root under it (`~/.config/fr/forge.yaml` and `host-id`, `~/.cache/fr/...`)
+    is a sandbox: a test that restores a state ref (`forgeapi.write_default`) once wrote
+    the operator's real `forge.yaml`. Its own dir, not `tmp_path`, so a test that lists
+    `tmp_path` sees nothing new. A test that sets `HOME` itself still wins.
+
+    What a real home lends the toolchain rather than fr is kept pointing at the
+    operator's: git's global config (identity, as before) and uv's cache and managed
+    Pythons, so a `uv run` child neither re-downloads nor loses its interpreter.
+    Pinned by `tests/unit/test_suite_home_sandbox.py`."""
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    lent = {
+        "GIT_CONFIG_GLOBAL": OPERATOR_HOME / ".gitconfig",
+        "UV_CACHE_DIR": Path(os.environ.get("XDG_CACHE_HOME") or OPERATOR_HOME / ".cache") / "uv",
+        "UV_PYTHON_INSTALL_DIR": Path(
+            os.environ.get("XDG_DATA_HOME") or OPERATOR_HOME / ".local" / "share"
+        )
+        / "uv"
+        / "python",
+    }
+    for key, path in lent.items():
+        if key not in os.environ and path.exists():
+            monkeypatch.setenv(key, str(path))
 
 
 @pytest.fixture(autouse=True)
