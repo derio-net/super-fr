@@ -15,6 +15,8 @@ reads (`run_cmd._latest_tests_witness`).
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -27,14 +29,20 @@ CI_PENDING_EXIT = 75
 not idle, not refused — the unit stays held until CI ends."""
 
 CI_CONFIG = ".fr/ci.yaml"
-"""The repo's gate-check declaration, read from HEAD: `gate_checks: [<name>, ...]`."""
+"""The repo's gate-check declaration, `gate_checks: [<name>, ...]`, read at the
+PR's base (`origin/<base>`) and at HEAD (§I gate checks)."""
 
 WALK_LIMIT = 50
 """How many first-parent ancestors of HEAD (HEAD included) may stand in as the
 CI sha while their code tree equals HEAD's (§I step 3)."""
 
 UNKNOWN_BASE = "unknown"
-"""The witness's base sha when GitHub names no PR on the gate's run."""
+"""The witness's base sha when no PR listed on the gate's run has the CI sha as
+its head (§I step 6, p2-r3)."""
+
+NO_CI_WAIT_SECONDS = 15 * 60
+"""How long after HEAD was committed a walk with no check at all stays pending;
+after that `verify_ci` refuses "no CI ran" (§I step 5, p2-r5)."""
 
 
 class CiEvidenceRefused(Exception):  # noqa: N818 — the name the plan (P2.T2) fixes
@@ -62,12 +70,13 @@ def _git(repo_root: Path, *args: str) -> str:
     return res.stdout
 
 
-def load_gate_checks(repo_root: Path) -> list[str] | None:
-    """The gate-check names `.fr/ci.yaml` declares at HEAD; None when HEAD has
-    no such file. A file that is not `gate_checks:` with a non-empty list of
-    names is refused, never read as "no gates"."""
+def load_gate_checks(repo_root: Path, rev: str = "HEAD") -> list[str] | None:
+    """The gate-check names `.fr/ci.yaml` declares at *rev*; None when *rev*
+    has no such file (or *rev* does not resolve, as an `origin/<base>` never
+    fetched does not). A file that is not `gate_checks:` with a non-empty list
+    of names is refused, never read as "no gates"."""
     try:
-        res = git_answer(repo_root, "show", f"HEAD:{CI_CONFIG}")
+        res = git_answer(repo_root, "show", f"{rev}:{CI_CONFIG}")
     except GitUnavailableError as e:
         raise CiEvidenceRefused(f"tests: ci — git could not read {CI_CONFIG}: {e}") from e
     if res.returncode != 0:
@@ -75,7 +84,7 @@ def load_gate_checks(repo_root: Path) -> list[str] | None:
     try:
         data = yaml.safe_load(res.stdout)
     except yaml.YAMLError as e:
-        raise CiEvidenceRefused(f"{CI_CONFIG} at HEAD is not YAML: {e}") from e
+        raise CiEvidenceRefused(f"{CI_CONFIG} at {rev} is not YAML: {e}") from e
     names = data.get("gate_checks") if isinstance(data, dict) else None
     if (
         not isinstance(names, list)
@@ -83,9 +92,22 @@ def load_gate_checks(repo_root: Path) -> list[str] | None:
         or not all(isinstance(n, str) and n.strip() for n in names)
     ):
         raise CiEvidenceRefused(
-            f"{CI_CONFIG} at HEAD must be `gate_checks: [<check name>, ...]` with at least one name"
+            f"{CI_CONFIG} at {rev} must be `gate_checks: [<check name>, ...]` "
+            "with at least one name"
         )
     return [n.strip() for n in names]
+
+
+def declared_gates(repo_root: Path, base: str | None) -> list[str] | None:
+    """The UNION of `.fr/ci.yaml` at `origin/<base>` and at HEAD, the base's
+    names first (§I gate checks, p2-r2): a branch can add a gate but never drop
+    one its base declares. *base* None reads `origin/HEAD` (the default branch).
+    None when neither declares any."""
+    base_rev = f"origin/{base}" if base else "origin/HEAD"
+    found = [load_gate_checks(repo_root, base_rev), load_gate_checks(repo_root, "HEAD")]
+    if all(f is None for f in found):
+        return None
+    return list(dict.fromkeys(n for f in found for n in f or []))
 
 
 def _check_services(repo_root: Path) -> None:
@@ -137,74 +159,95 @@ def _check_pushed(repo_root: Path) -> tuple[str, str]:
     return branch, head
 
 
-def _open_pr(client: Any, repo: str, branch: str) -> int:
-    """§I step 4: the number of the branch's open PR, refused when none or conflicting."""
-    prs = [p for p in client.list_prs_by_head(repo, branch) if p.get("state") == "OPEN"]
-    if not prs:
+def _open_pr(client: Any, repo: str, branch: str) -> tuple[int, str, str]:
+    """§I step 4: `(number, checks page URL, base branch)` of the branch's open
+    PR, refused when none or conflicting. Reads no file list (p2-r7)."""
+    found = client.open_pr_for_head(repo, branch)
+    if not found:
         raise CiEvidenceRefused(
             f"tests: ci — no open pull request for {branch}; CI runs on a pull request, "
             "so open one (a draft is enough)."
         )
-    number = int(prs[0]["number"])
-    mergeable = str(client.pr_view(repo, number).get("mergeable") or "UNKNOWN")
+    number = int(found["number"])
+    view = client.pr_view(repo, number)
+    mergeable = str(view.get("mergeable") or "UNKNOWN")
     if mergeable == "CONFLICTING":
         raise CiEvidenceRefused(
             f"tests: ci — PR #{number} conflicts with its base; GitHub runs no "
             "pull_request workflow for a conflicting PR. Resolve the conflict and push."
         )
-    return number
+    url = str(found.get("url") or f"https://github.com/{repo}/pull/{number}")
+    return number, f"{url.rstrip('/')}/checks", str(view.get("base_ref") or "")
 
 
-def _gate_names(repo_root: Path, client: Any, repo: str, pr: int) -> list[str]:
-    declared = load_gate_checks(repo_root)
+def _gate_names(repo_root: Path, client: Any, repo: str, base: str) -> list[str]:
+    """The gate set (§I gate checks): `.fr/ci.yaml` at base ∪ HEAD, else the
+    NAMES *base* requires, read whether or not they have reported (p2-r1)."""
+    declared = declared_gates(repo_root, base or None)
     if declared is not None:
         return declared
-    required = sorted({str(r["name"]) for r in client.pr_required_checks(repo, pr)})
+    required = list(client.required_check_names(repo, base)) if base else []
     if not required:
         raise CiEvidenceRefused(
-            f"tests: ci — no gate checks: HEAD has no {CI_CONFIG} and the base branch "
-            f"requires no status check. Declare them in {CI_CONFIG} "
-            "(`gate_checks: [<check name>]`) or as required checks on the base branch."
+            f"tests: ci — no gate checks: neither HEAD nor origin/{base or '<base>'} has "
+            f"{CI_CONFIG} and the base branch requires no status check. Declare them in "
+            f"{CI_CONFIG} (`gate_checks: [<check name>]`) or as required checks on the "
+            "base branch."
         )
     return required
 
 
 def _ci_sha(
-    repo_root: Path, client: Any, repo: str, head: str, gates: list[str]
+    repo_root: Path, client: Any, repo: str, gates: list[str]
 ) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
-    """§I step 3: `(ci sha, its checks, HEAD's checks)` — the first of HEAD's
-    first-parent ancestors (HEAD first, at most `WALK_LIMIT`) whose code tree is
-    HEAD's and on which CI reported a gate check. `ci sha` is "" when none is."""
+    """§I step 3: `(ci sha, its checks, every check on the walked commits)` —
+    the first of HEAD's first-parent ancestors (HEAD first, at most
+    `WALK_LIMIT`) whose code tree is HEAD's and on which CI reported a gate
+    check. `ci sha` is "" when none is."""
     from fr.run.code_tree import code_tree
 
+    walked: list[dict[str, Any]] = []
     try:
         tree = code_tree(repo_root)
         revs = _git(
             repo_root, "rev-list", "--first-parent", f"--max-count={WALK_LIMIT}", "HEAD"
         ).split()
-        head_checks: list[dict[str, Any]] = []
         for rev in revs:
             if code_tree(repo_root, rev) != tree:
                 break
             checks = client.commit_checks(repo, rev)
-            if rev == head:
-                head_checks = checks
+            walked += checks
             if any(c.get("name") in gates for c in checks):
-                return rev, checks, head_checks
+                return rev, checks, walked
     except GitUnavailableError as e:
         raise CiEvidenceRefused(f"tests: ci — git could not answer: {e}") from e
-    return "", [], head_checks
+    return "", [], walked
 
 
 def _finished(check: dict[str, Any]) -> bool:
     return check.get("status") == "completed"
 
 
-def verify_ci(repo_root: Path, client: Any = None) -> str:
+def _where(unfinished: list[dict[str, Any]], checks_page: str) -> str:
+    """§I step 5 (p2-r6): each unfinished check's URL, or the PR's checks page
+    when none has reported, so the orchestrator can say where to look."""
+    if not unfinished:
+        return f"no check reported yet: {checks_page}"
+    return "unfinished: " + "; ".join(
+        f"{c.get('name')} {c.get('url') or checks_page}" for c in unfinished
+    )
+
+
+def _committed_at(repo_root: Path) -> float:
+    return float(_git(repo_root, "log", "-1", "--format=%ct", "HEAD").strip())
+
+
+def verify_ci(repo_root: Path, client: Any = None, *, now: Callable[[], float] = time.time) -> str:
     """The `tests: ci` witness for a `done` resolve, or raise (§I steps 1-6).
 
     *client* is the repo's `GhClient` (`fr.hostclient.client_for` when None,
-    resolved only after the checks that need no forge)."""
+    resolved only after the checks that need no forge); *now* the clock the
+    no-CI wait reads (p2-r5)."""
     from fr._hosts import origin_slug
     from fr.run.code_tree import code_tree
 
@@ -217,43 +260,69 @@ def verify_ci(repo_root: Path, client: Any = None) -> str:
         from fr.hostclient import client_for
 
         client = client_for(repo_root)
-    pr = _open_pr(client, repo, branch)
-    gates = _gate_names(repo_root, client, repo, pr)
-    ci_sha, checks, head_checks = _ci_sha(repo_root, client, repo, head, gates)
+    _pr, checks_page, base = _open_pr(client, repo, branch)
+    gates = _gate_names(repo_root, client, repo, base)
+    ci_sha, checks, walked = _ci_sha(repo_root, client, repo, gates)
     if not ci_sha:
-        # No same-tree commit carries a gate yet. While HEAD's CI is still
-        # running (or has not reported at all), a gate whose job waits on
-        # others has no check run yet: pending, not absent.
-        if not head_checks or not all(_finished(c) for c in head_checks):
-            raise CiPending(head, f"no {', '.join(gates)} reported yet")
+        # No same-tree commit carries a gate yet. While CI is still running a
+        # gate whose job waits on others has no check run yet: pending, not
+        # absent. With no check at all, wait only while the head is fresh.
+        if not walked:
+            age = now() - _committed_at(repo_root)
+            if age < NO_CI_WAIT_SECONDS:
+                raise CiPending(head, f"waiting on {', '.join(gates)}; {_where([], checks_page)}")
+            raise CiEvidenceRefused(
+                f"tests: ci — no CI ran for {head[:12]}: no check on it (or on any commit "
+                f"with its code tree) {int(age // 60)} minutes after it was committed, so no "
+                f"workflow is going to answer. See {checks_page}; run the full suite into a "
+                "log and name it instead."
+            )
+        unfinished = [c for c in walked if not _finished(c)]
+        if unfinished:
+            raise CiPending(
+                head, f"waiting on {', '.join(gates)}; {_where(unfinished, checks_page)}"
+            )
         raise CiEvidenceRefused(
             f"tests: ci — gate check{'' if len(gates) == 1 else 's'} "
             f"{', '.join(gates)} absent on {head[:12]}: CI finished without "
             f"reporting {'it' if len(gates) == 1 else 'them'}."
         )
     by_gate = {g: [c for c in checks if c.get("name") == g] for g in gates}
-    failed = [
-        f"{g} {c.get('conclusion') or 'failure'} ({c.get('url') or 'no url'})"
-        for g, cs in by_gate.items()
-        for c in cs
-        if _finished(c) and c.get("conclusion") != "success"
-    ]
+    unfinished = [c for c in checks if not _finished(c)]
+    # A failed gate whose own workflow is still running is a re-run in flight:
+    # the new gate check appears only when the jobs it needs finish (p2-r4).
+    busy = {str(c.get("workflow")) for c in unfinished if c.get("workflow")}
+    failed: list[str] = []
+    rerunning: list[str] = []
+    for g, cs in by_gate.items():
+        for c in cs:
+            if _finished(c) and c.get("conclusion") != "success":
+                if c.get("workflow") and c.get("workflow") in busy:
+                    rerunning.append(g)
+                else:
+                    failed.append(
+                        f"{g} {c.get('conclusion') or 'failure'} ({c.get('url') or 'no url'})"
+                    )
     if failed:
         raise CiEvidenceRefused(
             f"tests: ci — on {ci_sha[:12]}, gate check(s) did not succeed: {'; '.join(failed)}"
         )
     running = [g for g, cs in by_gate.items() if any(not _finished(c) for c in cs)]
     absent = [g for g, cs in by_gate.items() if not cs]
-    if running or (absent and not all(_finished(c) for c in checks)):
-        raise CiPending(ci_sha, f"waiting on {', '.join(running + absent)}")
+    if running or rerunning or (absent and unfinished):
+        raise CiPending(
+            ci_sha,
+            f"waiting on {', '.join(running + rerunning + absent)}; "
+            f"{_where(unfinished, checks_page)}",
+        )
     if absent:
         raise CiEvidenceRefused(
             f"tests: ci — gate check(s) {', '.join(absent)} absent on {ci_sha[:12]}: "
             "CI finished without reporting them."
         )
-    base = next((c.get("base_sha") for g in gates for c in by_gate[g] if c.get("base_sha")), "")
+    base_sha = next((c.get("base_sha") for g in gates for c in by_gate[g] if c.get("base_sha")), "")
     try:
         tree = code_tree(repo_root)
     except GitUnavailableError as e:
         raise CiEvidenceRefused(f"tests: ci — git could not answer: {e}") from e
-    return f"ci:{ci_sha}+{base or UNKNOWN_BASE};tree={tree}"
+    return f"ci:{ci_sha}+{base_sha or UNKNOWN_BASE};tree={tree}"

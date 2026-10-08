@@ -5,7 +5,7 @@
 # (fixtures/ci-evidence/bin/gh) answers the github-rest routes with captured stdout.
 #   gate `ci-ok` not yet reported, shards running  -> exit 75, cursor byte-identical
 #   HEAD committed but not pushed                  -> exit 2, naming the commit
-#   HEAD pushed and the gate green                 -> exit 0, witness `ci:<head>+<base>;tree=`
+#   HEAD pushed and the gate green                 -> exit 0, witness `ci:<head>+unknown;tree=`
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 export PATH="$here/fixtures/ci-evidence/bin:$PATH" FR_FORGE_API=rest
@@ -74,10 +74,13 @@ expect_grep 'not pushed' "$flat" "the refusal says it is not pushed"
 [ "$(cat "$cursor")" = "$before" ] || fail "an unpushed head moved the cursor"
 [ ! -s "$FAKE_GH_LOG" ] || fail "an unpushed head still asked the forge: $(cat "$FAKE_GH_LOG")"
 
-# 3. Pushed, and the gate green: accepted, the witness recorded.
+# 3. Pushed, and the gate green: accepted, the witness recorded. The captured
+#    runs list PR 1088 with ITS head, not this fixture's commit, so the base CI
+#    merged with is not this commit's: the witness says `unknown` (spec §I step
+#    6, p2-r3), never PR 1088's base.
 git push -q origin "$branch" || fail "push 2"
-FAKE_GH_MOMENT=green run_fr out run resolve r1 --step verify --record "$record" --no-advance
+FAKE_GH_MOMENT=green-head run_fr out run resolve r1 --step verify --record "$record" --no-advance
 require_exit 0 "$out"
-expect_grep "ci:${head}\+18fa21e18b67dd02f33d4378ae71d09298323183;tree=[0-9a-f]{64}" \
+expect_grep "ci:${head}\+unknown;tree=[0-9a-f]{64}" \
   "$(cat "$cursor")" "the cursor records the ci witness"
 echo "ok: cloud-triage-ci-evidence"
