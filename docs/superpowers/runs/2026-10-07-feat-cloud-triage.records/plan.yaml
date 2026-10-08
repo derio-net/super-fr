@@ -1,9 +1,0 @@
-schema_version: 8
-run: 2026-10-07-feat-cloud-triage
-step: plan
-outcome: done
-journal: []
-resolves: []
-emitted:
-  plan: docs/superpowers/plans/2026-10-07-cloud-triage
-evidence: {}
