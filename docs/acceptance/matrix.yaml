@@ -5063,10 +5063,23 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R6
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: plan 2026-10-07-cloud-triage names the candidate scenario this row's walk
-      runs; written by the phase that implements the row
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_state_workspace.py#test_state_lives_in_the_workspace_and_is_excluded_through_the_common_dir
+      - super-fr:tests/unit/test_triage_state_workspace.py#test_the_home_cache_is_imported_once_and_left_in_place
+      - super-fr:tests/unit/test_triage_state_ref.py#test_fetch_into_a_fresh_clone_restores_every_entry_byte_for_byte
+      - super-fr:tests/unit/test_triage_state_ref.py#test_a_stale_expected_old_fails_and_changes_nothing
+      - super-fr:tests/unit/test_triage_state_repo.py#test_a_mixed_set_asks_among_the_private_ones_only
+      - super-fr:tests/unit/test_triage_state_repo.py#test_a_restore_recovers_state_repo_and_forge_api_and_writes_forge_yaml_if_absent
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_cloud_triage_state_ref
+    status: ci
+    notes: 'phase 3: workspace state dir + info/exclude + ~/.cache import (test_triage_state_workspace),
+      the ref''s REF_FILES push/fetch CAS over bare remotes (test_triage_state_ref),
+      the state-repo decision and restore of scope-durable.yaml (test_triage_state_repo);
+      the candidate scenario tests/scenarios/cloud-triage-state-ref.sh runs in CI through
+      test_scenarios.py. The cloud git proxy''s acceptance of a non-branch ref push
+      is Test Plan 16''s walk, still owed'
     scenario: tests/scenarios/cloud-triage-state-ref.sh
   - id: cloud-triage-privacy-guard
     capability: Backlog triage
