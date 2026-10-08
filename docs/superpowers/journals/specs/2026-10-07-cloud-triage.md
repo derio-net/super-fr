@@ -771,3 +771,8 @@ check: consistency. evidence: run_cmd.py:1922-1934,:2984-2986.
 ### s38-resolved · finding [fixed] · resolves s38: Test Plan 19 and §I leave out the forge refusal, non-done resolves and the dispatch order
 
 §I: the token is recognised before the phase-log branch; a non-done resolve records the bare claim without a forge call; Test Plan 19 covers both and the forge refusal.
+
+<!-- fr:journal kind=decision scope=spec id=d11-cloud-remedy created=2026-10-08T16:06:48+00:00 -->
+### d11-cloud-remedy · decision · Operator decision, round 11: fr tells a cloud user how to fix the environment
+
+Operator, 2026-10-08, during implement: 'as a UX step, if a fr task is used on a cloud runner, it should return information on how to correctly edit the cloud environment (or create a new one containing the init script)'. Recorded as R23 and §H's remedy block: detection by CLAUDE_CODE_REMOTE=true, fr cloud doctor, fr cloud setup-script, one shared remedy block appended to cloud-caused failures. Implemented in plan phase 7.
