@@ -606,3 +606,8 @@ Its own ask: the agents artifact kind (d9), setup and install hardening, the wor
 ### tier-2026-10-07-cloud-triage-p3 · decision · hard: the lease is a concurrency path every driver relies on
 
 Compare-and-swap ownership across hosts and cloud sessions, and the shared pass function the host loop moves onto; a mistake strands or doubles drivers.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-07-cloud-triage-p5 created=2026-10-08T12:18:01+00:00 -->
+### tier-2026-10-07-cloud-triage-p5 · decision · hard: a run-kind migration every cursor goes through
+
+Moves the run kind's current_version 9 -> 10 and migrates this repo's cursors; artifact-versioning rules apply.
