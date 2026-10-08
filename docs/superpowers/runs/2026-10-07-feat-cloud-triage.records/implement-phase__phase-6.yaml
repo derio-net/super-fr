@@ -1,0 +1,10 @@
+schema_version: 8
+run: 2026-10-07-feat-cloud-triage
+step: implement-phase
+item: phase/6
+outcome: done
+ticks: [P6.T1.S1, P6.T1.S2]
+refactor: {}
+journal: []
+resolves: []
+evidence: {}

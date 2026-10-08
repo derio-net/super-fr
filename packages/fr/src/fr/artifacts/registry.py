@@ -404,7 +404,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # dispatched at and the model it resolved to (spec
             # `2026-10-06-cost-evidence-design` §D), migration
             # `fr.artifacts.run_bound_model`. Additive, so stamp-only.
-            current_version=9,
+            # 10: `RunState.fr_version` — the fr a run started under (spec
+            # `2026-10-07-cloud-triage-design` §G, R16), migration
+            # `fr.artifacts.run_fr_version`. Additive, so stamp-only.
+            current_version=10,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,

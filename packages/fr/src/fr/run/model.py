@@ -377,6 +377,12 @@ class RunState(BaseModel):
     A standalone brainstorm asks one question per turn by design, so its
     operator gate needs an answered question but is not held to fr-goal's
     two-round cap. Run version 8 (`fr.artifacts.run_driver`)."""
+    fr_version: str | None = None
+    """The `fr` version `fr run start` ran under (spec 2026-10-07-cloud-triage
+    §G, R16). Absent on a cursor started before run version 10
+    (`fr.artifacts.run_fr_version`), which the triage driver's drift check
+    reports as unknown and never re-homes (R17). No plugin version beside it:
+    the plugin is lockstepped with `fr`."""
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

@@ -460,6 +460,13 @@ def _now() -> str:
     return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
 
 
+def _fr_version() -> str:
+    """The running fr's version, recorded by `fr run start` (R16)."""
+    from fr import __version__
+
+    return __version__
+
+
 # --- usage capture (spec 2026-09-25-lean-cost-aware-process §5.B.3) ----------
 
 
@@ -4787,6 +4794,7 @@ def start_cmd(
         cursor=manifest.steps[0].id,
         steps=steps,
         driver="standalone" if driver == "standalone" else None,
+        fr_version=_fr_version(),
     )
     _save_run_state(workspace, state)
     console.print(f"started run {rid} ({state.workflow}) — cursor: {state.cursor}")
