@@ -721,3 +721,8 @@ check: codebase. evidence: ci.yml coverage, validate-artifacts, change-fragment;
 ### s33-resolved · finding [fixed] · resolves s33: Requiring every check couples phase test evidence to non-test gates
 
 §I: non-gate checks are ignored; ci-ok aggregates the CI jobs the repo itself chose to gate on.
+
+<!-- fr:journal kind=finding scope=spec id=s34 created=2026-10-08T13:54:15+00:00 state=open review_scope=in -->
+### s34 · finding [open] (reviewer: in scope) · Binding to HEAD's exact sha forces a push and a CI wait after every fr bookkeeping commit
+
+check: consistency. evidence: R22; record commits; code_tree excludes fr artifact trees.
