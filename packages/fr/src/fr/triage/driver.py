@@ -38,8 +38,11 @@ class _Commands(Protocol):
 class Driver(Protocol):
     """What the pass asks of the environment it runs in."""
 
-    name: str
-    kind: DriverKind
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def kind(self) -> DriverKind: ...
 
     def runner_for(self, batch: Batch, to: str | None = None) -> str | None:
         """The runner *batch* is dispatched through, given the operator's `--to`; None
