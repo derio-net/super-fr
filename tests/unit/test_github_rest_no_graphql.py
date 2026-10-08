@@ -64,7 +64,8 @@ while rest and rest[0] in ("-X", "-H"):
         header = rest[1]
     rest = rest[2:]
 route, fields = rest[0], rest[1:]
-if fields and method == "GET" and "--jq" not in fields:
+jq = fields[fields.index("--jq") + 1] if "--jq" in fields else None
+if fields and method == "GET" and jq is None:
     method = "POST"
 if method != "GET":
     print("{{}}")
@@ -80,6 +81,12 @@ if entry.get("error"):
     sys.stdout.write(err["stdout"])
     sys.stderr.write(err["stderr"])
     sys.exit(err["exit"])
+if jq is not None:  # the path subset fr spells: `.key`, `.[n]`, chained
+    value = json.loads(body)
+    for step in jq.replace("[", ".[").split("."):
+        if step:
+            value = value[int(step[1:-1])] if step.startswith("[") else value[step]
+    body = str(value) + "\\n"
 sys.stdout.write(body)
 """
 
@@ -178,6 +185,8 @@ def test_graphql_is_the_default_without_the_setting(
 
 
 GITHUB_OPS = sorted(hostclient.FORGE_COMMANDS["github"])
+BY_HEAD = "docs/r8-light-path-benchmark"
+"""A head branch whose PR lookup was captured (`pulls?head=...`: PR 852)."""
 
 
 def _rendered(checkout: Path) -> dict[str, str]:
@@ -185,7 +194,7 @@ def _rendered(checkout: Path) -> dict[str, str]:
     label = LabelDef(name="fr:awaiting live", color="ededed", description="it's owed")
     return {
         "create": hostclient.pr_command(checkout, "create", body="pr-body.md"),
-        "edit": hostclient.pr_command(checkout, "edit", ref="feat/x", body="pr-body.md"),
+        "edit": hostclient.pr_command(checkout, "edit", ref=BY_HEAD, body="pr-body.md"),
         "edit-url": hostclient.pr_command(
             checkout, "edit", ref=f"https://github.com/{REPO}/pull/12", body="b.md"
         ),
@@ -232,6 +241,25 @@ def test_rendered_rest_commands_run_through_a_shell(fake_gh: Path, checkout: Pat
     calls = _calls(fake_gh)
     assert ["api", f"repos/{REPO}/issues/7/comments", "-f", "body=done, it's live"] in calls
     assert ["api", f"repos/{REPO}/issues/7/labels", "-f", "labels[]=fr:awaiting live"] in calls
+    # p1-r7: edit-by-branch ran the head lookup, and its number is the PR it patched.
+    lookup = f"repos/{REPO}/pulls?head=derio-net:{BY_HEAD}&state=all&per_page=100&page=1"
+    assert ["api", lookup, "--jq", ".[0].number"] in calls
+    assert ["api", "-X", "PATCH", f"repos/{REPO}/pulls/852", "-F", "body=@pr-body.md"] in calls
+
+
+@pytest.mark.parametrize(
+    ("branch", "head"),
+    [
+        ("feat/a&b", "derio-net:feat/a%26b"),
+        ("fix/x#1", "derio-net:fix/x%231"),
+        ("feat/sp ace+plus", "derio-net:feat/sp%20ace%2Bplus"),
+    ],
+)
+def test_the_head_branch_of_a_pr_lookup_is_url_encoded(
+    fake_gh: Path, checkout: Path, branch: str, head: str
+) -> None:
+    cmd = hostclient.pr_command(checkout, "ready", ref=branch)
+    assert f"pulls?head={head}&state=all" in cmd
 
 
 def test_github_without_the_setting_keeps_the_gh_cli_spellings(

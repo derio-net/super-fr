@@ -190,15 +190,19 @@ def _rest_repo(repo_root: Path) -> str:
 
 def _rest_pr_number(ref: str, repo: str) -> str:
     """A PR `ref` (URL, number or head branch) as the number a REST route takes:
-    a branch becomes a `gh api` lookup of its PR, run by the shell."""
+    a branch becomes a `gh api` lookup of its PR, run by the shell. The branch is
+    URL-encoded (`&`, `#`, `+`, a space would otherwise cut or bend the query),
+    spelled as `RealGhRestClient`'s own head lookup."""
     import shlex
+    import urllib.parse
 
     if ref.isdigit():
         return ref
     if m := _TRAILING_NUMBER.search(ref):
         return m.group(1)
     owner = repo.split("/", 1)[0]
-    route = shlex.quote(f"repos/{repo}/pulls?head={owner}:{ref}&state=all")
+    head = urllib.parse.quote(f"{owner}:{ref}", safe=":/")
+    route = shlex.quote(f"repos/{repo}/pulls?head={head}&state=all&per_page=100&page=1")
     return f"$(gh api {route} --jq '.[0].number')"
 
 
