@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextvars
 import os
+import re
 import shlex
 import subprocess
 import time
@@ -54,6 +55,9 @@ class GhError(Exception):
         super().__init__(message)
         self.stderr = stderr
         self.returncode = returncode
+        # The cloud prerequisites this failure is explained by (`fr.cloud`), noted for the
+        # CLI boundary's one remedy block; never appended to the message (p7-r3).
+        self.cloud_items: tuple[str, ...] = ()
         # Some gh commands answer on a non-zero exit (`gh pr checks` exits 8
         # while checks are pending, with its JSON on stdout), so it is kept.
         self.stdout = stdout
@@ -189,28 +193,34 @@ def _run_gh(args: list[str]) -> str:
         ) from exc
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
-        msg += _graphql_403_remedy(exc.stderr or "")
-        raise GhError(
+        error = GhError(
             msg, stderr=exc.stderr or "", returncode=exc.returncode, stdout=exc.stdout or ""
-        ) from exc
+        )
+        error.cloud_items = _graphql_403_items(exc.stderr or "")
+        raise error from exc
     return result.stdout.strip()
 
 
-def _graphql_403_remedy(stderr: str) -> str:
-    """The cloud remedy block for a 403 under `forge.api: graphql` in a Claude Code cloud
-    session, whose proxy refuses GraphQL (spec 2026-10-07-cloud-triage R23); `""`
-    otherwise, and always on a host. Under `rest` a 403 is GitHub's own answer, which
-    `forge.api` does not explain."""
+_GRAPHQL_403 = re.compile(r"\bHTTP 403\b")
+
+
+def _graphql_403_items(stderr: str) -> tuple[str, ...]:
+    """`(forge.api: rest,)` for GitHub's GraphQL endpoint answering HTTP 403 under
+    `forge.api: graphql` in a Claude Code cloud session, whose proxy refuses GraphQL
+    (spec 2026-10-07-cloud-triage R23), noted for the CLI boundary's one remedy block
+    (p7-r3); `()` otherwise, and always on a host. The status must be gh's `HTTP 403`
+    (p7-r4: never an issue numbered 403) and the request a GraphQL one — a REST 403,
+    or any 403 under `rest`, is GitHub's own answer, which `forge.api` does not explain."""
     from fr import cloud, forgeapi
 
-    if "403" not in stderr or not cloud.detect():
-        return ""
+    if not _GRAPHQL_403.search(stderr) or "/graphql" not in stderr or not cloud.detect():
+        return ()
     try:
         if forgeapi.resolve() != "graphql":
-            return ""
+            return ()
     except forgeapi.ForgeApiError:
-        return ""
-    return cloud.remedy_for([cloud.FORGE_API_ITEM])
+        return ()
+    return cloud.note_remedy([cloud.FORGE_API_ITEM])
 
 
 def view_pr_body(ref: str, *, cwd: Path | None = None) -> str:

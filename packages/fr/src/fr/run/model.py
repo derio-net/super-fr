@@ -575,9 +575,11 @@ def _refuse_a_newer_cursor(raw: dict[str, Any]) -> None:
         return
     from fr import __version__, cloud
 
+    # The remedy block is the CLI boundary's, once however many cursors refuse (p7-r3).
+    cloud.note_remedy([cloud.FR_ITEM])
     raise RunStateError(
         f"run state is schema {declared}, written by a newer fr; fr {__version__} reads up "
-        f"to {supported} — upgrade fr" + cloud.remedy_for([cloud.FR_ITEM])
+        f"to {supported} — upgrade fr"
     )
 
 

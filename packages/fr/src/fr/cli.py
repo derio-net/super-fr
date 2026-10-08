@@ -92,6 +92,13 @@ app.command(name="services", help="Read-only: the resolved forge / ci / tracking
 )
 
 
+def _print_cloud_remedy() -> None:
+    from fr import cloud
+
+    if (block := cloud.take_remedy()) is not None:
+        typer.echo("\n" + block, err=True)
+
+
 def version_callback(value: bool) -> None:
     if value:
         typer.echo(f"fr {__version__}")
@@ -123,6 +130,9 @@ def main(
     ),
 ) -> None:
     """VK toolchain: v2 plan-as-folder, render → observe → diff → apply."""
+    # The cloud remedy block (spec 2026-10-07-cloud-triage R23, §H), once, after fr's own
+    # error: failures note their items instead of appending it (p7-r3).
+    ctx.call_on_close(_print_cloud_remedy)
     # super-fr#746: before anything else — a wrong fr must not migrate
     # artifacts either. Refuses a PATH-reached fr that disagrees with the fr the
     # harness's integrations pinned; see fr.binary_identity.

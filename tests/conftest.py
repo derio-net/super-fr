@@ -103,6 +103,17 @@ def _graphql_forge_api_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FR_FORGE_API", "graphql")
 
 
+@pytest.fixture(autouse=True)
+def _no_cloud_remedy_carried_between_tests() -> Iterator[None]:
+    """The cloud remedy items a failure notes are process-global, printed once by the
+    CLI boundary (p7-r3): one test's GraphQL 403 must not print in the next one's CLI."""
+    from fr import cloud
+
+    cloud.take_remedy()
+    yield
+    cloud.take_remedy()
+
+
 WIDE_TERMINAL_COLUMNS = "200"
 """Terminal width every in-process CLI test renders at (review r5-e15).
 

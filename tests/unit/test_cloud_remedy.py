@@ -214,27 +214,39 @@ def test_cloud_is_exempt_from_the_migration_gate() -> None:
 # --- the failures the block explains (P7.T4.S3) ------------------------------------
 
 
-def test_a_graphql_403_appends_the_block_in_a_cloud_session_only(
-    home: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _gh_403(monkeypatch: pytest.MonkeyPatch, stderr: str) -> None:
     from fr import gh
 
     def boom(*args: object, **kwargs: object) -> object:
-        raise subprocess.CalledProcessError(
-            1, ["gh"], output="", stderr="gh: HTTP 403: Forbidden (https://api.github.com/graphql)"
-        )
+        raise subprocess.CalledProcessError(1, ["gh"], output="", stderr=stderr)
 
     monkeypatch.setattr(gh.subprocess, "run", boom)
+
+
+GRAPHQL_403 = "gh: HTTP 403: Forbidden (https://api.github.com/graphql)"
+
+
+def test_a_graphql_403_names_the_cloud_items_in_a_cloud_session_only(
+    home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p7-r3: the error keeps gh's own text; the block is the CLI boundary's, once."""
+    from fr import gh
+
+    _gh_403(monkeypatch, GRAPHQL_403)
     monkeypatch.setenv(cloud.CLOUD_ENV, "true")
     with pytest.raises(gh.GhError) as err:
         gh._run_gh(["issue", "list"])
-    assert str(err.value).count("This is a Claude Code cloud session") == 1
-    assert cloud.FORGE_API_ITEM in str(err.value)
+    assert "cloud session" not in str(err.value)
+    assert err.value.cloud_items == (cloud.FORGE_API_ITEM,)
+    assert cloud.take_remedy() == cloud.remedy_block([cloud.FORGE_API_ITEM])
+    assert cloud.take_remedy() is None, "taken once per process"
 
     monkeypatch.delenv(cloud.CLOUD_ENV)
     with pytest.raises(gh.GhError) as err:
         gh._run_gh(["issue", "list"])
     assert "cloud session" not in str(err.value)
+    assert err.value.cloud_items == ()
+    assert cloud.take_remedy() is None
 
 
 def test_a_403_under_rest_is_not_explained_by_forge_api(
@@ -242,15 +254,70 @@ def test_a_403_under_rest_is_not_explained_by_forge_api(
 ) -> None:
     from fr import gh
 
-    def boom(*args: object, **kwargs: object) -> object:
-        raise subprocess.CalledProcessError(1, ["gh"], output="", stderr="HTTP 403")
-
-    monkeypatch.setattr(gh.subprocess, "run", boom)
+    _gh_403(monkeypatch, "HTTP 403")
     monkeypatch.setenv(cloud.CLOUD_ENV, "true")
     monkeypatch.setenv("FR_FORGE_API", "rest")
     with pytest.raises(gh.GhError) as err:
         gh._run_gh(["api", "repos/x/y"])
-    assert "cloud session" not in str(err.value)
+    assert err.value.cloud_items == ()
+    assert cloud.take_remedy() is None
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "GraphQL: Could not resolve to an issue with the number of 403. (repository.issue)",
+        "HTTP 4031: weird",
+        "HTTP 403: Forbidden (https://api.github.com/repos/x/y/issues)",
+    ],
+)
+def test_a_403_that_is_not_a_graphql_http_403_is_not_explained(
+    home: Path, monkeypatch: pytest.MonkeyPatch, stderr: str
+) -> None:
+    """p7-r4: an issue numbered 403, or a REST 403, is not the proxy refusing GraphQL."""
+    from fr import gh
+
+    _gh_403(monkeypatch, stderr)
+    monkeypatch.setenv(cloud.CLOUD_ENV, "true")
+    monkeypatch.setenv("FR_FORGE_API", "graphql")
+    with pytest.raises(gh.GhError) as err:
+        gh._run_gh(["issue", "view", "403"])
+    assert err.value.cloud_items == ()
+    assert cloud.take_remedy() is None
+
+
+def test_two_graphql_403s_print_the_block_once_after_the_error(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p7-r3: collect joins two repos' 403s into one error; the block follows it once,
+    and only on stderr. A host prints none."""
+    from fr.cli import app
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "gh").write_text(
+        '#!/bin/sh\n[ "$1 $2" = "api user" ] && { echo derio-net; exit 0; }\n'
+        f"echo '{GRAPHQL_403}' >&2\nexit 1\n"
+    )
+    (bin_dir / "gh").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
+    monkeypatch.setenv("FR_FORGE_API", "graphql")
+    monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
+    monkeypatch.setenv(cloud.CLOUD_ENV, "true")
+    argv = ["triage", "collect", "--repo", "derio-net/a,derio-net/b", "--dir", str(tmp_path / "s")]
+
+    result = CliRunner().invoke(app, argv)
+
+    assert result.exit_code != 0
+    assert "derio-net/a" in result.stderr and "derio-net/b" in result.stderr
+    assert result.stderr.count("This is a Claude Code cloud session") == 1
+    assert result.stderr.rstrip().endswith(cloud.DOCS_URL)
+    assert "cloud session" not in result.stdout
+
+    monkeypatch.delenv(cloud.CLOUD_ENV)
+    result = CliRunner().invoke(app, argv)
+    assert result.exit_code != 0
+    assert "cloud session" not in result.output + result.stderr
 
 
 def test_the_worker_brief_carries_the_block_in_a_cloud_session_only(
@@ -264,21 +331,25 @@ def test_the_worker_brief_carries_the_block_in_a_cloud_session_only(
     assert worker_remedy() is None
 
 
-def test_a_run_from_a_newer_fr_appends_the_block_in_a_cloud_session_only(
+def test_a_run_from_a_newer_fr_names_the_fr_item_in_a_cloud_session_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """p7-r3: several newer cursors parsed in one command leave one block to print."""
     from fr.run.model import RunStateError, current_run_schema_version, parse_run_state
 
     newer = f"schema_version: {current_run_schema_version() + 1}\nrun: r\n"
     monkeypatch.setenv(cloud.CLOUD_ENV, "true")
-    with pytest.raises(RunStateError) as err:
-        parse_run_state(newer)
-    assert "upgrade fr" in str(err.value)
-    assert str(err.value).count("This is a Claude Code cloud session") == 1
-    assert cloud.FR_ITEM in str(err.value)
+    for _ in range(2):
+        with pytest.raises(RunStateError) as err:
+            parse_run_state(newer)
+        assert "upgrade fr" in str(err.value)
+        assert "cloud session" not in str(err.value)
+    assert cloud.take_remedy() == cloud.remedy_block([cloud.FR_ITEM])
+    assert cloud.take_remedy() is None
 
     monkeypatch.delenv(cloud.CLOUD_ENV)
     with pytest.raises(RunStateError) as err:
         parse_run_state(newer)
     assert "upgrade fr" in str(err.value)
     assert "cloud session" not in str(err.value)
+    assert cloud.take_remedy() is None

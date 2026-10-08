@@ -10,7 +10,10 @@ artifact, fr fails in ways that read like fr bugs. This module names the cause o
   and nothing here ever prints on one.
 - `check()` — every cloud prerequisite with its state and fix; `fr cloud doctor`.
 - `remedy_block(items)` — the one wording every failure appends, `remedy_for(items)` the
-  same gated on `detect()`; `setup_script()` — the template `fr cloud setup-script`
+  same gated on `detect()`. A failure deep in fr (a GraphQL 403, a newer run cursor)
+  does not append it to its own message, which callers join and persist (p7-r3): it
+  `note_remedy`s its items, and the CLI boundary prints `take_remedy()` once, after
+  fr's own error. `setup_script()` — the template `fr cloud setup-script`
   prints, shipped as wheel data (`fr/data/cloud-setup.sh`), never run by fr.
 """
 
@@ -68,6 +71,29 @@ def remedy_block(items: Sequence[str]) -> str:
         "this one does not). Or create a new environment with that script.\n"
         f"Docs: {DOCS_URL}"
     )
+
+
+_NOTED: dict[str, None] = {}
+"""The cloud items failures noted in this process, in order, for the CLI boundary."""
+
+
+def note_remedy(items: Sequence[str]) -> tuple[str, ...]:
+    """Record *items* for the one block the CLI prints when the command ends; returns
+    them in a cloud session and `()` on a host, where nothing is ever noted."""
+    if not detect():
+        return ()
+    for item in items:
+        _NOTED.setdefault(item)
+    return tuple(items)
+
+
+def take_remedy() -> str | None:
+    """The block for every item noted so far, once: it clears what it returns."""
+    if not _NOTED:
+        return None
+    block = remedy_block(list(_NOTED))
+    _NOTED.clear()
+    return block
 
 
 def remedy_for(items: Sequence[str]) -> str:
@@ -233,8 +259,10 @@ __all__ = [
     "Check",
     "check",
     "detect",
+    "note_remedy",
     "remedy_block",
     "remedy_for",
     "repo_root_of",
     "setup_script",
+    "take_remedy",
 ]
