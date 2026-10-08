@@ -686,3 +686,8 @@ Supersedes the earlier phase-split-2026-10-07-cloud-triage-p6 entries after the 
 ### renumber-2026-10-07-cloud-triage-phases · decision · Plan phases renumbered for R22: old 2-6 are now 3-7
 
 2026-10-08, decision d10: the CI-evidence phase is inserted as phase 2, so old phase N is now N+1. Journal decisions written before this keep their old numbers: tier-2026-10-07-cloud-triage-p3 (lease) is now phase 4 (re-recorded as tier-2026-10-07-cloud-triage-p4), tier-2026-10-07-cloud-triage-p5 (run-kind migration) is now phase 6, still hard and still covered by tier-2026-10-07-cloud-triage-p6's id (whose text names the agents kind, now phase 7, re-recorded as tier-2026-10-07-cloud-triage-p7); tier-2026-10-07-cloud-triage-p6 therefore now stands for phase 6's hard tier (a migration every cursor goes through). The phase-split entries with -1/-2 suffixes record each phase's reason under its new number.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-3 created=2026-10-08T13:53:45+00:00 -->
+### spec-review-3 · review · independent spec review of R22/§I: 8 findings
+
+Reviewer a2f206dc267b3224f (fr-spec-reviewer, dispatched by this session), 2026-10-08, over R22, §I and Test Plan 19 only. Findings s31-s38, all in scope, all fixed in the spec. Verified: run_cmd.py:1922-1934, :2691, :2845-2875, :2878-2929, :2961-3069; run/code_tree.py:61,:71; fr/git.py; services_cmd.py; ci.yml:4-7; fr-goal SKILL.md:111-112.
