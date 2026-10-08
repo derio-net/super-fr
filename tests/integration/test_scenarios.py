@@ -154,6 +154,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "model-binding-set-probe",
         "model-binding-replacement",
         "model-binding-check",
+        "cloud-triage-ci-evidence",
     }
     assert on_disk == here
 
@@ -204,3 +205,7 @@ def test_model_binding_check(installed: Path, tmp_path: Path) -> None:
 
 def test_herdr_restart_idle(installed: Path, tmp_path: Path) -> None:
     _scenario("herdr-restart-idle", installed, tmp_path)
+
+
+def test_cloud_triage_ci_evidence(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-ci-evidence", installed, tmp_path)
