@@ -25,7 +25,9 @@ from tests.unit.test_run_suite_reuse import (
     _CODE,
     _FAILED_CODE,
     _at_code,
+    _at_deliver_after,
     _code_evidence,
+    _commit_all,
     _deliver_evidence,
 )
 
@@ -203,3 +205,78 @@ def test_a_local_log_is_still_accepted(tmp_path: Path, monkeypatch: pytest.Monke
 
     assert result.exit_code == 0, result.output
     assert _code_evidence(repo)["tests"].startswith("suite.log@")
+
+
+# --- p2-r8: the PR body and the missing-evidence hint -------------------------
+
+
+def _with_deliver_tests(repo: Path, witness: str):
+    from fr.run import units as _units
+    from fr.run.model import load_run_state
+
+    state = load_run_state(repo, "r1")
+    return state.model_copy(
+        update={
+            "steps": {
+                **state.steps,
+                "deliver": _units.with_evidence(
+                    state.steps["deliver"], "step/deliver", {"tests": witness}
+                ),
+            }
+        }
+    )
+
+
+def _declare_gates(repo: Path) -> None:
+    (repo / ".fr").mkdir(exist_ok=True)
+    (repo / ".fr" / "ci.yaml").write_text("gate_checks: [ci-ok]\n")
+    _commit_all(repo, "gates")
+
+
+def test_the_pr_body_renders_a_ci_witness_as_ci_not_a_local_run(tmp_path: Path) -> None:
+    from fr.record.pr_body import render_pr_body
+
+    repo, _ = _at_deliver_after(tmp_path)
+    _declare_gates(repo)
+
+    body = render_pr_body(repo, _with_deliver_tests(repo, _witness(repo)))
+
+    assert f"CI (`ci-ok`) green on `{CI_SHA}` merged with `{BASE_SHA}`" in body
+    assert "Full suite run at delivery" not in body
+
+
+def test_the_pr_body_renders_a_reused_ci_witness_as_ci(tmp_path: Path) -> None:
+    from fr.record.pr_body import render_pr_body
+
+    repo, _ = _at_deliver_after(tmp_path)
+    _declare_gates(repo)
+    witness = f"reused:phase/1/code:ci:{CI_SHA}+unknown;tree={code_tree(repo)}"
+
+    body = render_pr_body(repo, _with_deliver_tests(repo, witness))
+
+    assert f"CI (`ci-ok`) green on `{CI_SHA}` merged with `unknown`" in body
+    assert "reused from `phase/1/code`" in body
+    assert "Full suite" not in body
+
+
+def test_the_missing_tests_hint_offers_ci_where_a_ci_is_configured(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver_after(tmp_path)
+    (repo / ".github" / "workflows").mkdir(parents=True)
+    (repo / ".github" / "workflows" / "ci.yml").write_text("on: pull_request\n")
+    _commit_all(repo, "ci")
+
+    result = _deliver(repo, shipped, None, "s-c")
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "--evidence tests=<path-to-log>" in out and "tests=ci" in out
+
+
+def test_the_missing_tests_hint_offers_no_ci_without_one(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver_after(tmp_path)
+    assert not (repo / ".github" / "workflows").exists()
+
+    result = _deliver(repo, shipped, None, "s-c")
+
+    assert result.exit_code == 2, result.output
+    assert "tests=ci" not in _squash(result.output)

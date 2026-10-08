@@ -1647,17 +1647,33 @@ def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
     return None
 
 
-def _evidence_hint(name: str, target: _EvidenceTarget | None) -> str:
+def _ci_configured(repo_root: Path | None) -> bool:
+    """Whether `fr services` names a CI for *repo_root* (lenient: a hint never
+    refuses). Spec 2026-10-07-cloud-triage §I step 6, p2-r8."""
+    if repo_root is None:
+        return False
+    from fr.services.resolve import resolve_services
+
+    return resolve_services(repo_root, lenient=True).ci.type != "none"
+
+
+def _evidence_hint(name: str, target: _EvidenceTarget | None, repo_root: Path | None = None) -> str:
     if name == "walk":
         return (
             "<path-to-walk-log>, the log `fr verification walk --run <run> --model <m>` "
             "wrote on this code tree"
         )
     if name == "tests":
-        return (
+        log = (
             "<path-to-log>, naming the output file of the full suite you ran "
             "yourself, in this session, during this unit"
         )
+        if _ci_configured(repo_root):
+            log += (
+                " — or --evidence tests=ci, naming this branch's CI on the pushed "
+                "head (fr reads its gate checks on the open PR)"
+            )
+        return log
     assert target is not None  # phase-scoped evidence without a target is refused first
     if name == "review":
         when = "" if target.phase is not None else ", created after this step opened"
@@ -1878,7 +1894,7 @@ def _verified_evidence(
         )
         for name in missing:
             err_console.print(
-                f"  pass --evidence {name}={_evidence_hint(name, target)}",
+                f"  pass --evidence {name}={_evidence_hint(name, target, repo_root)}",
                 markup=False,
                 soft_wrap=True,
             )

@@ -543,7 +543,24 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
     return "\n".join(lines) if lines else "None."
 
 
-def _tests(state: RunState) -> str | None:
+def _ci_line(repo_root: Path, witness: str) -> str:
+    """A `ci:<ci sha>+<base>;tree=<tree>` witness as the PR body says it (spec
+    2026-10-07-cloud-triage §I step 6, p2-r8): what CI proved, never a local
+    full-suite run. The gate names are the ones `.fr/ci.yaml` declares at HEAD
+    and on the default branch; with none, the base branch's required checks."""
+    from fr.run.ci_evidence import CiEvidenceRefused, declared_gates
+
+    shas, _, _tree = witness.removeprefix("ci:").partition(";tree=")
+    ci_sha, _, base = shas.partition("+")
+    try:
+        gates = declared_gates(repo_root, None)
+    except CiEvidenceRefused:
+        gates = None
+    named = ", ".join(gates) if gates else "the base branch's required checks"
+    return f"CI (`{named}`) green on `{ci_sha}` merged with `{base or 'unknown'}`"
+
+
+def _tests(repo_root: Path, state: RunState) -> str | None:
     """`deliver`'s suite evidence, or `None` when it carries none yet (spec
     2026-09-29-fr-goal-light-path §D: the PR body renders a reused unit and its
     witness). Not a required section — a body rendered before the evidence
@@ -559,9 +576,16 @@ def _tests(state: RunState) -> str | None:
     caveat = (
         " (unverified: fr could not tie the log to the command that wrote it)" if unverified else ""
     )
+    if witness.startswith("ci:"):
+        return f"{_ci_line(repo_root, witness)}{caveat}."
     if witness.startswith("reused:"):
         source, _, rest = witness.removeprefix("reused:").partition(":")
         log, _, tree = rest.partition(";tree=")
+        if log.startswith("ci:"):
+            return (
+                f"{_ci_line(repo_root, rest)}, reused from `{source}` on code tree "
+                f"`{tree[:12]}`, unchanged at delivery{caveat}."
+            )
         return (
             f"Full suite reused from `{source}` — `{log}`, on code tree `{tree[:12]}`, "
             f"unchanged at delivery{caveat}."
@@ -711,7 +735,7 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         "## Post-merge verification owed",
         _post_merge_owed(repo_root, state),
     ]
-    tests = _tests(state)
+    tests = _tests(repo_root, state)
     if tests is not None:
         parts += ["## Tests", tests]
     parts += [
