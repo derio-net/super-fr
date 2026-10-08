@@ -120,6 +120,12 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
     `fr init scaffold` writes only the fr-profiles artifact, always at its
     current version, and migrates a version-1 file in process before merging
     into it — so the gate has nothing to protect it from and never runs first.
+    `fr init agents` (2026-10-07 cloud-triage R19) likewise writes the `agents`
+    artifact only at its current version.
+
+    `cloud` was added by 2026-10-07 cloud-triage phase 7 (R23): `fr cloud doctor`
+    reads and `fr cloud setup-script` prints; neither writes, and doctor must
+    diagnose an environment that is not yet fit for fr.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
     assert trigger.EXEMPT_COMMANDS == frozenset(
@@ -134,6 +140,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
             "triage",
             "usage",
             "services",
+            "cloud",
         }
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
@@ -150,6 +157,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "triage",
         "usage",
         "services",
+        "cloud",
         "FR_SKIP_MIGRATION=1",
     )
 

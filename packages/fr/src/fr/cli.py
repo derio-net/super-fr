@@ -23,6 +23,7 @@ from fr.binary_identity import enforce as enforce_binary_identity
 from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
+from fr.commands.cloud_cmd import cloud_app
 from fr.commands.harness_cmd import harness_app
 from fr.commands.hermes_cmd import hermes_app
 from fr.commands.init_cmd import init_app
@@ -73,6 +74,7 @@ app.add_typer(spec_app, name="spec")
 app.add_typer(migrate_app, name="migrate")
 app.add_typer(isolation_app, name="isolation")
 app.add_typer(init_app, name="init")
+app.add_typer(cloud_app, name="cloud")
 app.add_typer(repos_app, name="repos")
 app.add_typer(journal_app, name="journal")
 app.add_typer(models_app, name="models")

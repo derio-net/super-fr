@@ -112,6 +112,7 @@ from fr.triage.batch import (
     withdrawn_already,
 )
 from fr.triage.batch_dispatch import (
+    CLOUD_PREFLIGHT_RUNNERS,
     DISPATCHABLE,
     LIVE_STAGES,
     TRIAGE_CONFIG_PATH,
@@ -121,6 +122,7 @@ from fr.triage.batch_dispatch import (
     dispatched_already,
     live_reservations,
     render_brief,
+    worker_remedy,
 )
 from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
@@ -1343,6 +1345,8 @@ def dispatch_batch(
         repo=owner_repo,
         closing_refs=refs,
         reserved_version=reserved,
+        runner=runner_name,
+        remedy=worker_remedy() if runner_name in CLOUD_PREFLIGHT_RUNNERS else None,
     )
     item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path, group)  # step 4
     branch = batch_branch(batch)

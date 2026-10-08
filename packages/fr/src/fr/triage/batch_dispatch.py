@@ -41,6 +41,56 @@ DISPATCHABLE = frozenset({"proposed", "cancelled", "abandoned"})
 
 TRIAGE_CONFIG_PATH = ".fr/triage.yaml"
 
+CLOUD_PREFLIGHT_RUNNERS = frozenset({"claude-cloud"})
+"""Runners whose sessions do not load the plugin's agents before their first turn (a
+Claude Code cloud session's CLI is a pre-warmed spare, spec 2026-10-07-cloud-triage
+§H): their brief starts by checking fr and the repo's `agents` artifact (R19)."""
+
+_INSTALL_SUPER_FR = (
+    "mkdir -p ~/.claude/plugins && "
+    "{ [ -f ~/.claude/plugins/installed_plugins.json ] || "
+    'echo \'{"version":2,"plugins":{}}\' > ~/.claude/plugins/installed_plugins.json; } && '
+    "{ [ -f ~/.claude/settings.json ] || echo '{}' > ~/.claude/settings.json; } && "
+    "git clone --quiet --branch main https://github.com/derio-net/super-fr.git "
+    "~/.cache/fr/src/super-fr && bash ~/.cache/fr/src/super-fr/scripts/install.sh"
+)
+
+
+def worker_remedy() -> str | None:
+    """The cloud remedy block the worker's BLOCKED `needs_action` quotes (§H), when the
+    brief is rendered in a cloud session (the cloud driver's); `None` on a host."""
+    from fr import cloud
+
+    return cloud.remedy_block([cloud.AGENTS_ITEM]) if cloud.detect() else None
+
+
+def _cloud_preflight(branch: str, remedy: str | None) -> list[str]:
+    """The worker's first step (R19, §H): fr present, both agents dispatchable, isolation
+    entered through the CLI. A missing agent ends the turn BLOCKED, never re-homed."""
+    lines = [
+        "",
+        "## Before anything else (this is a cloud session)",
+        "1. Run `fr --version`. Install super-fr only if `fr` is missing: "
+        f"`{_INSTALL_SUPER_FR}`, then put `~/.local/bin` on PATH.",
+        "2. Confirm that `fr-spec-reviewer` and `fr-phase-executor` are agent types you "
+        "can dispatch (the repo's `.claude/agents/`). If either is not dispatchable, the "
+        "repo lacks a current `agents` artifact: do nothing else, and end your turn "
+        "BLOCKED with this needs_action:",
+        "   needs_action: this repo's `agents` artifact (.claude/agents/fr-spec-reviewer.md, "
+        ".claude/agents/fr-phase-executor.md) is missing or stale. Run `fr init agents` "
+        "(or `fr migrate artifacts --yes`) on the default branch, merge it, then dispatch "
+        "this batch again.",
+    ]
+    if remedy:
+        lines += ["   " + line if line else "" for line in remedy.splitlines()]
+    lines += [
+        "   Do not ask to be re-homed: a new session from the same commit would start the "
+        "same way.",
+        f"3. Enter isolation with `fr isolation up --branch {branch}` before any edit; "
+        "never edit outside it.",
+    ]
+    return lines
+
 
 def render_brief(
     batch: Batch,
@@ -50,8 +100,14 @@ def render_brief(
     repo: str,
     closing_refs: Sequence[str],
     reserved_version: str | None,
+    runner: str | None = None,
+    remedy: str | None = None,
 ) -> str:
     """The launch brief (§3.C step 3): engine-owned, deterministic text.
+
+    A batch dispatched through a runner in `CLOUD_PREFLIGHT_RUNNERS` gets the worker's
+    first step right after its command line (cloud-triage R19); *remedy* (the cloud
+    remedy block, `worker_remedy()`) rides on its BLOCKED needs_action.
 
     The same judgements and facts always give the same bytes. *closing_refs*
     come from the adapter (`GhClient.closing_ref`), one per member in member
@@ -60,8 +116,10 @@ def render_brief(
     debug = batch.skill == "debug"
     slash = "/fr-debugging" if debug else "/fr-goal"
     titles = {i.key: i.title for i in facts.issues}
-    lines = [
-        f"{slash} {batch.title}",
+    lines = [f"{slash} {batch.title}"]
+    if runner in CLOUD_PREFLIGHT_RUNNERS:
+        lines += _cloud_preflight(batch_branch(batch), remedy)
+    lines += [
         "",
         f"Batch `{batch.id}` of {repo}: {len(batch.ids)} issues, delivered as ONE pull request.",
     ]

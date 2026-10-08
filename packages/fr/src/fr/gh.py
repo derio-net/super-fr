@@ -189,10 +189,28 @@ def _run_gh(args: list[str]) -> str:
         ) from exc
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
+        msg += _graphql_403_remedy(exc.stderr or "")
         raise GhError(
             msg, stderr=exc.stderr or "", returncode=exc.returncode, stdout=exc.stdout or ""
         ) from exc
     return result.stdout.strip()
+
+
+def _graphql_403_remedy(stderr: str) -> str:
+    """The cloud remedy block for a 403 under `forge.api: graphql` in a Claude Code cloud
+    session, whose proxy refuses GraphQL (spec 2026-10-07-cloud-triage R23); `""`
+    otherwise, and always on a host. Under `rest` a 403 is GitHub's own answer, which
+    `forge.api` does not explain."""
+    from fr import cloud, forgeapi
+
+    if "403" not in stderr or not cloud.detect():
+        return ""
+    try:
+        if forgeapi.resolve() != "graphql":
+            return ""
+    except forgeapi.ForgeApiError:
+        return ""
+    return cloud.remedy_for([cloud.FORGE_API_ITEM])
 
 
 def view_pr_body(ref: str, *, cwd: Path | None = None) -> str:

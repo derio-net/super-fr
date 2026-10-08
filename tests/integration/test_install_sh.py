@@ -40,10 +40,21 @@ def fake_home(tmp_path: Path) -> Path:
     vk_bin.write_text("#!/bin/sh\necho stub\n")
     vk_bin.chmod(0o755)
 
-    # Create .claude dir
-    (home / ".claude").mkdir()
-
+    seed_claude_files(home)
     return home
+
+
+def seed_claude_files(home: Path) -> None:
+    """The two files install.sh registers the plugin in, as the cloud setup script
+    seeds them (spec 2026-10-07-cloud-triage §H): without them it now fails."""
+    plugins = home / ".claude" / "plugins"
+    plugins.mkdir(parents=True, exist_ok=True)
+    installed = plugins / "installed_plugins.json"
+    if not installed.exists():
+        installed.write_text(json.dumps({"version": 2, "plugins": {}}))
+    settings = home / ".claude" / "settings.json"
+    if not settings.exists():
+        settings.write_text("{}")
 
 
 def _run_install(
@@ -96,6 +107,37 @@ def _run_install(
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
     return result
+
+
+# ── Registration prerequisites (cloud-triage R19) ─────────────────────
+
+
+class TestInstallRefusesWithoutRegistrationFiles:
+    """install.sh used to warn and exit 0 when it could not register the plugin,
+    so a cloud environment's setup script reported success over a session with no
+    plugin (spec 2026-10-07-cloud-triage R19, §H). It now fails, naming the file."""
+
+    @pytest.mark.parametrize(
+        "missing", [".claude/plugins/installed_plugins.json", ".claude/settings.json"]
+    )
+    def test_a_missing_registration_file_fails_naming_it(
+        self, fake_home: Path, missing: str
+    ) -> None:
+        (fake_home / missing).unlink()
+
+        result = _run_install(fake_home, expect_fail=True)
+
+        assert result.returncode != 0
+        assert missing.rsplit("/", 1)[-1] in result.stderr
+        assert "fr cloud setup-script" in result.stderr
+
+    def test_with_both_files_it_registers_the_plugin(self, fake_home: Path) -> None:
+        _run_install(fake_home)
+
+        installed = json.loads(
+            (fake_home / ".claude" / "plugins" / "installed_plugins.json").read_text()
+        )
+        assert "super-fr@derio-net--super-fr" in installed["plugins"]
 
 
 # ── Rules ────────────────────────────────────────────────────────────
@@ -533,7 +575,7 @@ class TestPluginCacheDirectory:
     def home_with_plugins(self, fake_home: Path) -> Path:
         """fake_home plus the installed_plugins.json that gates step 4."""
         plugins = fake_home / ".claude" / "plugins"
-        plugins.mkdir(parents=True)
+        plugins.mkdir(parents=True, exist_ok=True)
         (plugins / "installed_plugins.json").write_text(json.dumps({"plugins": {}, "version": 1}))
         return fake_home
 

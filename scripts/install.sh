@@ -320,6 +320,26 @@ for cmd in jq uv rsync git; do
   fi
 done
 
+# The two files Claude Code registers a plugin in. Without them steps 2 and 4
+# used to skip with a warning and exit 0, so a cloud environment's setup script
+# reported success over a session with no plugin (spec 2026-10-07-cloud-triage
+# R19). A fresh container has neither; seed them rather than guess their shape.
+missing_registration=0
+for f in "$INSTALLED_PLUGINS" "$SETTINGS"; do
+  if [ ! -f "$f" ]; then
+    echo "ERROR: $f not found — install.sh cannot register the super-fr plugin without it." >&2
+    missing_registration=1
+  fi
+done
+if [ "$missing_registration" -ne 0 ]; then
+  echo "  Seed them (a fresh Claude Code home has neither), then re-run install.sh:" >&2
+  echo "    mkdir -p \"$PLUGINS_DIR\"" >&2
+  echo "    [ -f \"$INSTALLED_PLUGINS\" ] || echo '{\"version\":2,\"plugins\":{}}' > \"$INSTALLED_PLUGINS\"" >&2
+  echo "    [ -f \"$SETTINGS\" ] || echo '{}' > \"$SETTINGS\"" >&2
+  echo "  In a Claude Code cloud environment, use the setup script \`fr cloud setup-script\` prints." >&2
+  exit 1
+fi
+
 # Preflight: PLUGIN_ROOT must be a clean checkout of main, in sync with origin.
 # This script clobbers $MARKETPLACE_DIR with PLUGIN_ROOT's contents, so anything
 # uncommitted, unpushed, or off-main gets baked into the cache. Past incidents

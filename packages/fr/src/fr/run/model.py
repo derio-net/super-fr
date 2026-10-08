@@ -555,11 +555,30 @@ def parse_run_state(text: str) -> RunState:
 
     if not isinstance(raw, dict):
         raise RunStateError("run state must be a YAML mapping at the top level")
+    _refuse_a_newer_cursor(raw)
 
     try:
         return RunState.model_validate(raw)
     except ValidationError as e:
         raise RunStateError(f"invalid run state: {e}") from e
+
+
+def _refuse_a_newer_cursor(raw: dict[str, Any]) -> None:
+    """A cursor stamped past what this fr writes was started by a newer fr: say so,
+    rather than the closed-world model's "extra inputs" or "field required" — and, in a
+    Claude Code cloud session, how to get a current fr (spec 2026-10-07-cloud-triage R23)."""
+    declared = raw.get("schema_version")
+    if not isinstance(declared, int) or isinstance(declared, bool):
+        return
+    supported = current_run_schema_version()
+    if declared <= supported:
+        return
+    from fr import __version__, cloud
+
+    raise RunStateError(
+        f"run state is schema {declared}, written by a newer fr; fr {__version__} reads up "
+        f"to {supported} — upgrade fr" + cloud.remedy_for([cloud.FR_ITEM])
+    )
 
 
 def save_run_state(repo_root: Path, state: RunState) -> Path:

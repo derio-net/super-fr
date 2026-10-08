@@ -50,7 +50,11 @@ def stub_env(tmp_path: Path) -> dict[str, str]:
     home = tmp_path / "home"
     bin_dir = home / "bin"
     bin_dir.mkdir(parents=True)
-    (home / ".claude").mkdir()
+    (home / ".claude" / "plugins").mkdir(parents=True)
+    (home / ".claude" / "plugins" / "installed_plugins.json").write_text(
+        '{"version": 2, "plugins": {}}'
+    )
+    (home / ".claude" / "settings.json").write_text("{}")
     vk_mcp = bin_dir / "vibe-kanban-mcp"
     vk_mcp.write_text("#!/bin/sh\necho stub\n")
     vk_mcp.chmod(0o755)
