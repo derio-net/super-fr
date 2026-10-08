@@ -3635,6 +3635,12 @@ class _Driver:
         self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
     ) -> tuple[str, bool]:
         """§B step 2 and §C: fast-forward, post_merge, then the close-out item."""
+        foreign = self.adapter.refusal(batch)
+        if foreign is not None:  # another driver's runner dispatched it: its close-out too
+            return (
+                f"left to the driver of runner {batch.launch.runner}, never started through "
+                f"a runner this driver lacks ({foreign})"
+            ), False  # cloud-triage §E, p4-r10
         checkout = self.checkout(repo)
         try:
             checkout.fast_forward()

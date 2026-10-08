@@ -80,14 +80,16 @@ def _proposed(world: World, tmp_path: Path, *, launch: str = "{}") -> None:
     _state(tmp_path, world, _batch("b1", 1, launch=launch))
 
 
-def _merged(world: World, tmp_path: Path, checkout: DriveCheckout, runner: str) -> None:
+def _merged(
+    world: World, tmp_path: Path, checkout: DriveCheckout, runner: str, launch: str = "{}"
+) -> None:
     world.config = CONFIG
     world.issues[1] = "closed"
     world.pr(101, "feat/batch-b1", [1], state="MERGED",
              merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
     event = (f"      - {{kind: dispatch, at: 2026-10-01T10:00:00Z, runner: {runner}, "
              "handle: h, branch: feat/batch-b1}\n")  # fmt: skip
-    _state(tmp_path, world, _batch("b1", 1, events=event))
+    _state(tmp_path, world, _batch("b1", 1, launch=launch, events=event))
     _cursor(checkout, "2026-10-01-b1", "feat/batch-b1")
     checkout.released = True
 
@@ -232,3 +234,23 @@ def test_the_cloud_runs_neither_post_merge_nor_its_restart(
     assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
     assert runners.dispatched() == {"claude-cloud": [f"{REPO}/run/closeout-b1"]}
     assert "restart" not in capsys.readouterr().out
+
+
+def test_a_close_out_another_drivers_runner_owns_is_reported_and_left_to_it(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """p4-r10 (§E): a batch dispatched with an explicit runner this driver lacks is closed
+    out by that runner's driver: reported, never dispatched through the foreign runner."""
+    _merged(world, tmp_path, checkout, "herdr", launch="{runner: herdr}")
+
+    _cloud_pass(tmp_path)
+
+    assert runners.dispatched() == {}  # herdr may be probed for its session, never used
+    assert _events(tmp_path, "b1") == ["dispatch"]
+    out = capsys.readouterr().out
+    (line,) = _lines(out, "closeout")
+    assert "herdr" in line and "left to" in line
