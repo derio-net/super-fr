@@ -611,3 +611,8 @@ Compare-and-swap ownership across hosts and cloud sessions, and the shared pass 
 ### tier-2026-10-07-cloud-triage-p5 · decision · hard: a run-kind migration every cursor goes through
 
 Moves the run kind's current_version 9 -> 10 and migrates this repo's cursors; artifact-versioning rules apply.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-07-cloud-triage-p6 created=2026-10-08T12:18:02+00:00 -->
+### tier-2026-10-07-cloud-triage-p6 · decision · hard: a new artifact kind every fr-enabled repo will carry
+
+Registers the agents kind with its stamp, validator and re-render path, and changes fr init and install.sh for every consumer repo.
