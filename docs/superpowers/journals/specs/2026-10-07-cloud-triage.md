@@ -756,3 +756,8 @@ check: consistency. evidence: §I; fr-goal SKILL.md:106 idle guard.
 ### s37 · finding [open] (reviewer: in scope) · Plugin prose that ci contradicts goes beyond fr-goal §8
 
 check: consistency. evidence: fr-goal SKILL.md:88,:103; fr-phase-executor.md:125,133-142.
+
+<!-- fr:journal kind=finding scope=spec id=s37-resolved created=2026-10-08T13:54:24+00:00 state=fixed resolves=s37 -->
+### s37-resolved · finding [fixed] · resolves s37: Plugin prose that ci contradicts goes beyond fr-goal §8
+
+§I 'Prose this changes': fr-goal §5, §6, §8, the fr-phase-executor agent and its mirrors (shipped through the agents kind, R19), and the 01-fr-goal explainer if it describes local-only evidence.
