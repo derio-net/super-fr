@@ -1186,3 +1186,129 @@ bb2ca175: lease generation bumped with the pending request in one CAS push; olde
 ### p6-r5-resolved · finding [fixed] · resolves p6-r5: the self-re-home pass dropped pending worker requests from the outbox (phase 6)
 
 bb2ca175: outbox is the pending worker requests then the driver's own; test_a_new_major_rehomes_the_driver_itself_and_its_lease_carries_over.
+
+<!-- fr:journal kind=decision scope=plan id=p7-agents-pair-missing created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-agents-pair-missing · decision · The agents kind is reported missing only when a repo carries one of the pair, never when it carries neither (phase 7)
+
+`fr validate artifacts` runs in every fr-enabled repo's CI. Reporting "missing" for a
+repo that never ran `fr init agents` would turn every consumer repo red the day this
+ships, so `_agents_set_issues` (fr/artifacts/validate.py) reports the absent sibling
+only when the other file is present. `fr cloud doctor` is where a repo with neither is
+named (its `agents` check), because that is the context that needs them.
+
+<!-- fr:journal kind=decision scope=plan id=p7-agents-unstamped-repair created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-agents-unstamped-repair · decision · An unstamped agent is fixed by a registered Repair; the re-render SchemaMigration is a factory the first bump registers (phase 7)
+
+An absent stamp reads as version 1 (registry property 1), which is the kind's current
+version, so no schema step would ever reach an unstamped file while `validate_agents`
+fails it by name. The `agents-unstamped` Repair (fr/artifacts/agents_kind.py)
+re-renders it from the wheel, so `fr migrate artifacts --yes` fixes every state the
+validator reports (the scenario relies on this). No SchemaMigration is registered at
+version 1; `rerender_migration(from, to)` is the one a release registers when it moves
+the version, and the tripwire's sha pin, taken at `PINNED_AT_VERSION`, forces the bump.
+
+<!-- fr:journal kind=decision scope=plan id=p7-agents-locator-owns-the-prefix created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-agents-locator-owns-the-prefix · decision · The locator is `.claude/agents/fr-*.md`, so fr owns that prefix and a foreign `fr-` agent fails validation (phase 7)
+
+The plan names the locator literally; a glob cannot name two files. A repo's own agent
+called `fr-something.md` is therefore reported ("not an agent fr ships ... name your own
+agent without the `fr-` prefix"), and the re-render refuses it, byte-identical.
+
+<!-- fr:journal kind=decision scope=plan id=p7-preflight-after-the-command-line created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-preflight-after-the-command-line · decision · The claude-cloud worker's preflight is the brief's first section, right after its `/fr-goal` line (phase 7)
+
+"The brief starts with" the checks, but the brief's first line is the slash command
+that starts the skill; the preflight section follows it and precedes the batch.
+Rendered only for runners in `CLOUD_PREFLIGHT_RUNNERS` (claude-cloud); the remedy block
+rides on its needs_action when the brief is rendered in a cloud session
+(`worker_remedy()`, i.e. by the cloud driver).
+
+<!-- fr:journal kind=decision scope=plan id=p7-run-refusal-is-a-newer-cursor created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-run-refusal-is-a-newer-cursor · decision · `fr run`'s refusal when the installed fr is older than the run needs is a cursor whose schema_version is past this fr's (phase 7)
+
+No such refusal existed: a newer cursor failed with pydantic's "extra inputs" or
+"field required". `parse_run_state` now refuses a cursor stamped past
+`current_run_schema_version()` with "written by a newer fr ... upgrade fr", and appends
+the remedy block (item "a current fr") in a cloud session. The run's recorded
+`fr_version` (R16) stays drift's input, not a refusal.
+
+<!-- fr:journal kind=decision scope=plan id=p7-setup-clones-outside-the-marketplace created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-setup-clones-outside-the-marketplace · decision · The setup script clones super-fr's main into ~/.cache/fr/src/super-fr, not the marketplace directory (phase 7)
+
+The plan says "clone the marketplace"; install.sh rsyncs `--delete` the checkout into
+the marketplace directory, so a clone there is replaced (p6-r1 found the same for the
+driver's self-update). The script clones (or fetches and resets) `main` in
+`~/.cache/fr/src/super-fr`, then runs its `scripts/install.sh`, whose preflight requires
+`main`.
+
+<!-- fr:journal kind=decision scope=plan id=p7-latest-release-through-the-adapter created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-latest-release-through-the-adapter · decision · `fr cloud doctor` reads the latest release through the forge adapter and treats an unreadable one as unknown, not failed (phase 7)
+
+A direct `gh` call is refused by the forge-adapter tripwire, so `_latest_release` uses
+`client_for_url(...).latest_release`. Offline or logged out, doctor reports "latest
+release unknown" and passes the `fr` check, so a doctor run never fails on the network.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-install-tests-are-integration created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-install-tests-are-integration · discovery · The install.sh tests live in tests/integration/, and four fixtures had to seed the two registration files (phase 7)
+
+The plan names tests/unit/test_install_sh.py; the file is tests/integration/test_install_sh.py.
+Its `fake_home` now seeds `installed_plugins.json` and `settings.json` (`seed_claude_files`),
+and the hand-built homes of test_install_atomic.py and test_runner_package_lists.py seed
+them too, since install.sh now refuses without them.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-no-explainer-describes-triage created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-no-explainer-describes-triage · discovery · No docs/explainers page describes fr-triage, so no explainer was owed (phase 7)
+
+docs/explainers holds 01-fr-goal, fr-isolation and the index; none names the triage
+driver or its host-only state.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-full-suite-left-to-ci created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-full-suite-left-to-ci · discovery · The full local suite was not run; evidence is the PR's CI (tests ci) (phase 7)
+
+Run locally instead: the new and touched unit files (agents artifact and tripwire,
+cloud remedy, worker brief, skill docs, migration trigger/runner, validate artifacts,
+artifact registry, init scaffold, triage batch dispatch), every tests/unit/test_tripwire_*,
+test_skill_validation, test_opencode_agent_mirror, test_import_direction and the harness
+tests (one known root-only failure), all 25 scenario tests against a fresh candidate
+install, the install.sh integration files, ruff format/check, the AGENTS.md mypy command
+with fr-claude-cloud, `fr validate artifacts` and `fr acceptance check`.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-install-lock-tests-time-out-locally created=2026-10-08T19:58:25+00:00 phase=7 -->
+### p7-install-lock-tests-time-out-locally · discovery · Two install-lock tests time out locally on the pre-phase install.sh too; CI decides them (phase 7)
+
+test_install_atomic.py's `test_a_dead_holders_lock_is_reclaimed` and
+`test_a_lock_whose_holder_died_before_writing_its_pid_is_reclaimed` hit their 60 s
+communicate timeout in this 4-core container (the lock IS reclaimed: "Reclaiming stale
+install lock" is printed). Swapping in the install.sh and test file from before this
+phase reproduces the timeout, so it is the host's speed, not this change. Every other
+install.sh integration test passes (87 run).
+
+<!-- fr:journal kind=finding scope=plan id=p7-self-update-install-refused-by-preflight created=2026-10-08T19:58:25+00:00 phase=7 state=open review_scope=in -->
+### p7-self-update-install-refused-by-preflight · finding [open] (reviewer: in scope) · The driver's self-update checks out a detached release tag, and install.sh's preflight refuses anything but main (phase 7)
+
+`triage_drive_cmd._install_release` (phase 6) runs `git checkout --detach <release>` in
+`~/.cache/fr/src/super-fr` and then `bash scripts/install.sh`, whose preflight fails
+with "Current branch is 'DETACHED', expected 'main'" unless VK_INSTALL_SKIP_PREFLIGHT=1
+(documented as testing only). The self-update therefore always warns and runs the pass
+on the installed fr. Not fixed here: it is phase 6's code and needs a choice (install at
+main once main carries the release, or a sanctioned release-tag mode in the preflight).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t1 created=2026-10-08T19:58:25+00:00 phase=7 -->
+### no-refactor-p7-t1 · discovery · no-refactor-because P7.T1 (phase 7)
+
+the kind reuses the spec kind's front-matter reader and writer, generalised to a key (one pure set_front_matter_key now shared by the stamp writers and render_agent); the scaffold commit gained the agents beside the profile and one commit_paths helper that fr init agents shares, so nothing was left duplicated to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t2 created=2026-10-08T19:58:25+00:00 phase=7 -->
+### no-refactor-p7-t2 · discovery · no-refactor-because P7.T2 (phase 7)
+
+the install.sh check is one block beside the existing tool check, and the brief section is one helper (_cloud_preflight) behind a runner set, called from the one render_brief; the fixtures of the four install test files now seed the two files through one helper in test_install_sh.py
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t3 created=2026-10-08T19:58:25+00:00 phase=7 -->
+### no-refactor-p7-t3 · discovery · no-refactor-because P7.T3 (phase 7)
+
+prose only: the skill, its two generated mirrors, AGENTS.md and the doc tests; no code to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t4 created=2026-10-08T19:58:25+00:00 phase=7 -->
+### no-refactor-p7-t4 · discovery · no-refactor-because P7.T4 (phase 7)
+
+fr.cloud is new and holds the one wording (remedy_block) every caller appends through remedy_for; each of the three call sites is a one-line append at its own error, and latest_release goes through the existing forge adapter rather than a second gh call
