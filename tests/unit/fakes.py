@@ -75,6 +75,8 @@ class FakeGhClient:
         self.commit_checks_by_sha: dict[tuple[str, str], list[dict[str, Any]]] = {}
         # (repo, number) -> `pr_required_checks` rows.
         self.required_checks: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        # (repo, base branch) -> `required_check_names` (spec §I, p2-r1).
+        self.required_names: dict[tuple[str, str], list[str]] = {}
 
     # ---- preload helpers (test setup) ----
 
@@ -251,6 +253,17 @@ class FakeGhClient:
             for (r, _), p in sorted(self.prs.items())
             if r == repo and p["head_ref"] == branch
         ]
+
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        self.calls.append(("required_check_names", {"repo": repo, "base": base}))
+        return sorted(self.required_names.get((repo, base), []))
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        self.calls.append(("open_pr_for_head", {"repo": repo, "branch": branch}))
+        for (r, _), p in sorted(self.prs.items()):
+            if r == repo and p["head_ref"] == branch and p["state"] == "OPEN":
+                return {"number": p["number"], "url": p["url"]}
+        return None
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
         self.calls.append(("commit_checks", {"repo": repo, "sha": sha}))

@@ -406,6 +406,18 @@ class RealGhClient:
 
         return RealGhRestClient(host=self._host).commit_checks(repo, sha)
 
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        """Spec §I (p2-r1): the `github-rest` backend's REST routes, on this host."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).required_check_names(repo, base)
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """Spec §I (p2-r7): one REST page, no file list, on this host."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).open_pr_for_head(repo, branch)
+
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return self._checks(repo, number, required=True)
 

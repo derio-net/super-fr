@@ -201,6 +201,9 @@
   "repos/derio-net/super-fr/pulls?head=derio-net:docs/r8-light-path-benchmark&state=all&per_page=100&page=1": {
     "file": "repo_pulls-head-derio-net-docs_r8-light-path-benchmark-state-all-per_page-100-page-1.json"
   },
+  "repos/derio-net/super-fr/pulls?head=derio-net:feat/cloud-triage&state=open&per_page=100&page=1": {
+    "file": "repo_pulls-head-derio-net-feat_cloud-triage-state-open-per_page-100-page-1.json"
+  },
   "repos/derio-net/super-fr/pulls?state=open&per_page=100&page=1": {
     "file": "repo_pulls-state-open-per_page-100-page-1.json"
   },

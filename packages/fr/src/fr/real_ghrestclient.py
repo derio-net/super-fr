@@ -322,12 +322,11 @@ def _check_row(entry: dict[str, Any]) -> dict[str, Any]:
 
 def _pr_base_sha(pulls: Iterable[dict[str, Any]] | None, sha: str) -> str:
     """The base sha of the PR whose head is *sha* in a check run's (or Actions
-    run's) `pull_requests`, else of the first PR listed; "" when none is (a
-    merged PR, a push run)."""
-    listed = list(pulls or [])
-    chosen = next((p for p in listed if (p.get("head") or {}).get("sha") == sha), None)
-    if chosen is None and listed:
-        chosen = listed[0]
+    run's) `pull_requests`; "" when no listed PR's head is *sha* (a merged PR, a
+    push run, or a PR whose head has moved on: GitHub lists the PR as it is NOW,
+    so another PR's base, or this PR's current one, may not be the base CI
+    merged with — spec §I step 6, p2-r3)."""
+    chosen = next((p for p in pulls or [] if (p.get("head") or {}).get("sha") == sha), None)
     return str(((chosen or {}).get("base") or {}).get("sha") or "")
 
 
@@ -698,21 +697,41 @@ class RealGhRestClient:
         `.../protection/required_status_checks` route, which a cloud session's
         token is refused), plus any ruleset's `required_status_checks` rule."""
         pull = self._pull(repo, number)
-        base = _q(pull["base"]["ref"])
-        branch = self._api(f"repos/{repo}/branches/{base}") or {}
-        required_cfg = (branch.get("protection") or {}).get("required_status_checks") or {}
-        required = set(required_cfg.get("contexts") or [])
-        required |= {c.get("context") for c in required_cfg.get("checks") or []}
-        for rule in self._api(f"repos/{repo}/rules/branches/{base}") or []:
-            if rule.get("type") == "required_status_checks":
-                params = rule.get("parameters") or {}
-                required |= {c.get("context") for c in params.get("required_status_checks") or []}
+        required = set(self.required_check_names(repo, pull["base"]["ref"]))
         if not required:
             return []
         from fr.triage.collect import _latest_runs
 
         rollup = _latest_runs(self._rollup_for(repo, pull["head"]["sha"]))
         return [row for row in map(_check_row, rollup) if row["name"] in required]
+
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        """The names *base* requires (spec §I, p2-r1): classic protection's
+        contexts from `GET branches/{base}` (its `protection` summary needs no
+        admin, unlike `.../protection/required_status_checks`, which a cloud
+        session's token is refused) plus every ruleset's `required_status_checks`
+        rule. Names only: no commit is read, so a check not created yet counts.
+        `RealGhClient.required_check_names` is this method."""
+        b = _q(base)
+        branch = self._api(f"repos/{repo}/branches/{b}") or {}
+        required_cfg = (branch.get("protection") or {}).get("required_status_checks") or {}
+        required = set(required_cfg.get("contexts") or [])
+        required |= {c.get("context") for c in required_cfg.get("checks") or []}
+        for rule in self._api(f"repos/{repo}/rules/branches/{b}") or []:
+            if rule.get("type") == "required_status_checks":
+                params = rule.get("parameters") or {}
+                required |= {c.get("context") for c in params.get("required_status_checks") or []}
+        return sorted(str(n) for n in required if n)
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """`{number, url}` of *branch*'s open PR from one `pulls?head=&state=open`
+        page — no per-PR file list (p2-r7). `RealGhClient` calls this too."""
+        owner = repo.split("/", 1)[0]
+        head = urllib.parse.quote(f"{owner}:{branch}", safe=":/")
+        pulls = self._paged(f"repos/{repo}/pulls?head={head}&state=open", limit=1)
+        if not pulls:
+            return None
+        return {"number": int(pulls[0]["number"]), "url": str(pulls[0].get("html_url") or "")}
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
         """Every check on *sha* (spec §I): `commits/{sha}/check-runs?filter=latest`,

@@ -245,6 +245,18 @@ class GhClient(Protocol):
         nothing is reported (yet)."""
         ...
 
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        """The check NAMES branch *base* requires (classic protection's summary
+        plus rulesets), sorted, whether or not any has reported on a commit: a
+        required check not created yet is still named. Empty when none is
+        required. Spec 2026-10-07-cloud-triage §I, gate checks (p2-r1)."""
+        ...
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """`{number, url}` of the open PR whose head is *branch*, None when there
+        is none. Reads no file list (§I step 6, p2-r7): `pr_view` gives the rest."""
+        ...
+
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         """Merge the PR only if its head is still *head_sha*; *method* is one of
         `MERGE_METHODS`. Never bypasses branch protection: a refusal raises
@@ -384,6 +396,12 @@ class UnsupportedBatchOps:
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
         raise self._unsupported("commit_checks")
+
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        raise self._unsupported("required_check_names")
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        raise self._unsupported("open_pr_for_head")
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         raise self._unsupported("pr_merge")

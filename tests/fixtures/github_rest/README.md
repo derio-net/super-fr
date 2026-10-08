@@ -97,6 +97,18 @@ The moments:
   skipped; the second run is green throughout. `filter=latest` keeps both
   suites' runs; the PR is merged, so `pull_requests` is empty.
 
+- `green-head/` — `b6604451`, PR 1088's head when read, CI green throughout:
+  every check run lists the PR with `head.sha` equal to the commit, so the base
+  sha is known (`18fa21e1`). Captured 2026-10-08 for review finding p2-r3,
+  which found that `green/` is NOT that case: it was read after the PR's head
+  had moved on to `pending/`'s commit, so its runs list the PR with that other
+  head, and its base is no longer the CI sha's (`base_sha` "", witness
+  `unknown`).
+
+Also captured for phase 2's review (p2-r7), in the root index:
+`pulls?head=derio-net:feat/cloud-triage&state=open&per_page=100&page=1`, the
+open-PR lookup `GhClient.open_pr_for_head` makes (PR 1088, no file list).
+
 No captured commit in this repo carries a commit status (every `status.json`
 has `"statuses": []`): the status-context tests derive their entries from the
 captured envelope and say so.

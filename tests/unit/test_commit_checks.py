@@ -25,7 +25,8 @@ from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
 
 from tests.unit.fakes import FakeGhClient
-from tests.unit.github_rest_support import FIXTURES, REPO, parse_api
+from tests.unit.github_rest_support import FIXTURES, REPO, FixtureGh, R, parse_api
+from tests.unit.test_real_ghrestclient import _RequiredChecksGh
 
 CHECKS = FIXTURES / "commit_checks"
 BASE = "18fa21e18b67dd02f33d4378ae71d09298323183"
@@ -87,9 +88,9 @@ def client_for_moments(request: pytest.FixtureRequest, monkeypatch: pytest.Monke
 
 
 def test_a_green_head_reports_every_check_with_its_workflow_and_base(client_for_moments) -> None:
-    client, fake = client_for_moments("green")
+    client, fake = client_for_moments("green-head")
 
-    records = _by_name(client.commit_checks(REPO, _sha("green")))
+    records = _by_name(client.commit_checks(REPO, _sha("green-head")))
 
     assert records["ci-ok"] == {
         "name": "ci-ok",
@@ -201,5 +202,104 @@ def test_glab_and_tea_refuse(client: Any) -> None:
 
 
 def test_fixture_moments_exist() -> None:
-    for moment in ("green", "pending", "rerun"):
+    for moment in ("green", "green-head", "pending", "rerun"):
         assert (CHECKS / moment / "check-runs.json").is_file(), Path(moment)
+
+
+# ---- p2-r3: a base sha only from a PR whose head IS the commit ----
+
+
+def test_a_run_whose_pr_head_moved_on_names_no_base(client_for_moments) -> None:
+    """`green/` was read after PR 1088's head had moved on (to `pending/`'s
+    commit): every check run still lists the PR, but with its CURRENT head.
+    GitHub reports the PR as it is now, so its base may not be the one CI
+    merged with: "" (the witness's `unknown`), never the first PR's base."""
+    client, _ = client_for_moments("green")
+
+    records = client.commit_checks(REPO, _sha("green"))
+
+    assert records and all(r["base_sha"] == "" for r in records)
+    raw = json.loads((CHECKS / "green" / "check-runs.json").read_text())
+    heads = {p["head"]["sha"] for r in raw["check_runs"] for p in r["pull_requests"]}
+    assert heads == {_sha("pending")}  # the captured fact the rule rests on
+
+
+# ---- p2-r1: the NAMES the base branch requires, reported or not ----
+
+
+@pytest.fixture(params=["rest", "graphql"])
+def client_on(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
+    """Both GitHub clients answering from *fake* (a `FixtureGh`)."""
+
+    def build(fake: Any) -> Any:
+        if request.param == "rest":
+            return RealGhRestClient(run=fake)
+        monkeypatch.setattr(_gh, "_run_gh", fake)
+        return RealGhClient()
+
+    return build
+
+
+def test_required_check_names_read_the_captured_unprotected_main(client_on) -> None:
+    """Captured: `main` requires no status check (protection off; the rulesets
+    carry deletion and non-fast-forward only)."""
+    fake = FixtureGh()
+
+    assert client_on(fake).required_check_names(REPO, "main") == []
+    assert fake.routes() == [f"{R}/branches/main", f"{R}/rules/branches/main"]
+
+
+def test_required_check_names_are_names_whether_or_not_they_reported(client_on) -> None:
+    """DERIVED (`_RequiredChecksGh`: the captured `branches/main` and ruleset
+    answers with required lists filled in). Only the two branch routes are read:
+    no PR, no commit, no check run, so a check not created yet is still named."""
+    fake = _RequiredChecksGh()
+
+    names = client_on(fake).required_check_names(REPO, "main")
+
+    assert names == ["ci/external", "lint", "test", "typecheck"]
+    assert fake.routes() == [f"{R}/branches/main", f"{R}/rules/branches/main"]
+
+
+def test_the_fake_serves_required_names_and_the_open_pr() -> None:
+    fake = FakeGhClient()
+    fake.required_names[(REPO, "main")] = ["ci-ok"]
+    fake.add_pr(REPO, 7, head_ref="feat/x")
+    fake.add_pr(REPO, 6, head_ref="feat/x", state="CLOSED")
+
+    assert fake.required_check_names(REPO, "main") == ["ci-ok"]
+    assert fake.required_check_names(REPO, "dev") == []
+    assert fake.open_pr_for_head(REPO, "feat/x") == {
+        "number": 7,
+        "url": f"https://github.com/{REPO}/pull/7",
+    }
+    assert fake.open_pr_for_head(REPO, "feat/y") is None
+
+
+# ---- p2-r7: the open-PR lookup reads no files ----
+
+
+def test_open_pr_for_head_reads_one_route_and_no_files(client_on) -> None:
+    """Captured: PR 1088 is the open PR of `feat/cloud-triage`."""
+    fake = FixtureGh()
+
+    got = client_on(fake).open_pr_for_head(REPO, "feat/cloud-triage")
+
+    assert got == {"number": 1088, "url": "https://github.com/derio-net/super-fr/pull/1088"}
+    assert fake.routes() == [
+        f"{R}/pulls?head=derio-net:feat/cloud-triage&state=open&per_page=100&page=1"
+    ]
+
+
+@pytest.mark.parametrize("client", [RealGlabClient(), RealTeaClient()], ids=["glab", "tea"])
+@pytest.mark.parametrize(
+    ("op", "call"),
+    [
+        ("required_check_names", lambda c: c.required_check_names("o/r", "main")),
+        ("open_pr_for_head", lambda c: c.open_pr_for_head("o/r", "b")),
+    ],
+)
+def test_glab_and_tea_refuse_the_ci_evidence_reads(client: Any, op: str, call: Any) -> None:
+    with pytest.raises(UnsupportedForgeOperation) as exc:
+        call(client)
+    assert exc.value.op == op
