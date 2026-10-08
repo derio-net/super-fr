@@ -322,6 +322,28 @@ def _is_404(exc: GhError) -> bool:
     return "http 404" in text or "not found" in text
 
 
+def _is_absent_label(exc: GhError) -> bool:
+    """The 404 GitHub answers a label removal when the issue does not carry the
+    label: message "Label does not exist" (captured,
+    `tests/fixtures/github_rest/refused/label-remove-absent.*`)."""
+    return _is_404(exc) and "label does not exist" in f"{exc} {exc.stderr} {exc.stdout}".lower()
+
+
+STATE_REASONS = frozenset({"completed", "not_planned", "reopened"})
+"""GitHub's `state_reason` spellings (§A)."""
+
+
+def _state_reason(reason: str) -> str:
+    """*reason* in GitHub's spelling: `not planned` / `NOT_PLANNED` → `not_planned`.
+    An unknown reason raises before any call is made."""
+    spelled = re.sub(r"[\s-]+", "_", reason.strip().lower())
+    if spelled not in STATE_REASONS:
+        raise ValueError(
+            f"unknown issue close reason {reason!r}: GitHub takes one of {sorted(STATE_REASONS)}"
+        )
+    return spelled
+
+
 def _project(record: dict[str, Any], fields: str) -> dict[str, Any]:
     return {f: record.get(f) for f in fields.split(",") if f}
 
@@ -735,7 +757,14 @@ class RealGhRestClient:
                 fields={"labels": sorted(add)},
             )
         for name in sorted(remove):
-            self._api(f"repos/{repo}/issues/{number}/labels/{_q(name)}", method="DELETE")
+            try:
+                self._api(f"repos/{repo}/issues/{number}/labels/{_q(name)}", method="DELETE")
+            except GhError as exc:
+                # `gh issue edit --remove-label` is idempotent: GitHub's 404
+                # "Label does not exist" is the label already gone (§A). Any
+                # other 404 (no such issue, no such repo) still raises.
+                if not _is_absent_label(exc):
+                    raise
 
     def edit_issue_state(
         self, repo: str, number: int, *, state: str, reason: str | None = None
@@ -743,8 +772,8 @@ class RealGhRestClient:
         if state not in {"OPEN", "CLOSED"}:
             raise ValueError(f"unknown issue state: {state!r}")
         fields: dict[str, Any] = {"state": state.lower()}
-        if state == "CLOSED" and reason:
-            fields["state_reason"] = reason.lower()
+        if reason:
+            fields["state_reason"] = _state_reason(reason)
         self._api(f"repos/{repo}/issues/{number}", method="PATCH", fields=fields)
 
     def edit_issue_body(self, repo: str, number: int, body: str) -> None:

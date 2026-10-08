@@ -51,6 +51,14 @@ description=x` (exit 1; the label exists, so nothing was written) — what
 `ensure_labels` reads as "update it instead". `contents/docs/no-such-path` is the
 captured 404 of a missing path.
 
+Captured 2026-10-08 in a later session of the same run (review finding p1-r1):
+`label-remove-absent.{stdout,stderr}`, the 404 "Label does not exist" of `gh api
+-X DELETE repos/derio-net/super-fr/issues/1074/labels/fr-capture-no-such-label`
+(a label the repo does not have, so nothing could be removed), which
+`edit_issue_labels` reads as "already absent"; and
+`label-remove-missing-issue.{stdout,stderr}`, the plain 404 "Not Found" of the
+same DELETE on issue 99999999, which it still raises. Both exited 1.
+
 **The GraphQL side.** The plan asked for the matching GraphQL-backed `gh --json`
 outputs "for the same moment" from a host session into `graphql/`. No host
 session was available to this capture, so **there is no `graphql/` directory**.

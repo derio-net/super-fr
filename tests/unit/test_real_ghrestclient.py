@@ -516,3 +516,65 @@ def test_a_host_refusal_is_never_softened() -> None:
         client.issues_enabled(REPO)
     with pytest.raises(GhHostRefusedError):
         client.pr_status_by_url(f"https://github.com/{REPO}/pull/1")
+
+
+# ---- review fixes (phase 1 review, p1-r1 / p1-r2) ----
+
+
+def _captured_error(name: str) -> GhError:
+    stderr = (FIXTURES / "refused" / f"{name}.stderr").read_text()
+    stdout = (FIXTURES / "refused" / f"{name}.stdout").read_text()
+    return GhError(stderr.strip(), stderr=stderr, returncode=1, stdout=stdout)
+
+
+def test_removing_a_label_the_issue_does_not_carry_is_success() -> None:
+    # p1-r1: `gh issue edit --remove-label` is idempotent; the REST DELETE answers
+    # 404 "Label does not exist" (captured), which is the label already being gone.
+    def absent(argv: list[str]) -> GhError | None:
+        if parse_api(argv)[0] == "DELETE":
+            return _captured_error("label-remove-absent")
+        return None
+
+    fake = FixtureGh(fail=absent)
+    RealGhRestClient(run=fake).edit_issue_labels(
+        REPO, 7, add=frozenset(), remove=frozenset({"fr:claimed", "fr:in-progress"})
+    )
+    assert [parse_api(a)[0] for a in fake.calls] == ["DELETE", "DELETE"]
+
+
+def test_removing_a_label_from_a_missing_issue_still_raises() -> None:
+    # p1-r1: any other 404 (here: no such issue, captured) is not "already gone".
+    def missing(argv: list[str]) -> GhError | None:
+        return _captured_error("label-remove-missing-issue")
+
+    client = RealGhRestClient(run=FixtureGh(fail=missing))
+    with pytest.raises(GhError, match="Not Found"):
+        client.edit_issue_labels(REPO, 7, add=frozenset(), remove=frozenset({"fr:claimed"}))
+
+
+@pytest.mark.parametrize(
+    ("reason", "sent"),
+    [
+        ("completed", "completed"),
+        ("not planned", "not_planned"),
+        ("NOT_PLANNED", "not_planned"),
+        ("not_planned", "not_planned"),
+        ("reopened", "reopened"),
+    ],
+)
+def test_close_reason_is_sent_in_githubs_spelling(reason: str, sent: str) -> None:
+    # p1-r2: `fr undispatch` passes "not planned"; GitHub takes `not_planned`.
+    fake = FixtureGh(writes=_writes())
+    RealGhRestClient(run=fake).edit_issue_state(REPO, 7, state="CLOSED", reason=reason)
+    assert _call(fake, "PATCH", f"{R}/issues/7") == [
+        "-f", "state=closed", "-f", f"state_reason={sent}",
+    ]  # fmt: skip
+
+
+def test_an_unknown_close_reason_is_refused_before_any_call() -> None:
+    fake = FixtureGh(writes=_writes())
+    with pytest.raises(ValueError, match="close reason.*'duplicate-ish'"):
+        RealGhRestClient(run=fake).edit_issue_state(
+            REPO, 7, state="CLOSED", reason="duplicate-ish"
+        )
+    assert fake.calls == []
