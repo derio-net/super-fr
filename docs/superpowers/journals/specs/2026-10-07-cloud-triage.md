@@ -741,3 +741,8 @@ check: codebase. evidence: ghclient.py:225-235; real_ghclient.py:402-424.
 ### s35-resolved · finding [fixed] · resolves s35: No GhClient method reads checks by sha
 
 §I: new GhClient.commit_checks(repo, sha) -> {name, workflow, status, conclusion, url}, latest per (workflow, name) via filter=latest and latest-per-context statuses, on both GitHub clients and the fake; glab/tea raise UnsupportedForgeOperation.
+
+<!-- fr:journal kind=finding scope=spec id=s36 created=2026-10-08T13:54:20+00:00 state=open review_scope=in -->
+### s36 · finding [open] (reviewer: in scope) · Waiting for CI has a wake-up only in the cloud
+
+check: consistency. evidence: §I; fr-goal SKILL.md:106 idle guard.
