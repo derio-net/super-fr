@@ -601,3 +601,8 @@ Its own ask: the run kind's 9 -> 10 migration and re-homing on an incompatible m
 ### phase-split-2026-10-07-cloud-triage-p6 · decision · ask: workers in the cloud (R19-R21)
 
 Its own ask: the agents artifact kind (d9), setup and install hardening, the worker brief, cloud post_merge and the skill.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-07-cloud-triage-p3 created=2026-10-08T12:18:00+00:00 -->
+### tier-2026-10-07-cloud-triage-p3 · decision · hard: the lease is a concurrency path every driver relies on
+
+Compare-and-swap ownership across hosts and cloud sessions, and the shared pass function the host loop moves onto; a mistake strands or doubles drivers.
