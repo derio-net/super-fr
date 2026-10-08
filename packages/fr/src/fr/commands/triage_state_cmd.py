@@ -102,7 +102,7 @@ def _ref_target(scope: Scope, target: Path, remote: str | None) -> tuple[str, st
             "this scope has no state repo (scope-durable.yaml): run `fr triage collect` at a "
             "terminal to choose one (cloud-triage R7)"
         )
-    return state_repo, remote or f"https://github.com/{state_repo}.git", scope_id(scope)
+    return state_repo, remote or triage_cmd.state_remote(state_repo), scope_id(scope)
 
 
 @state_app.command("push")
@@ -117,14 +117,14 @@ def push_command(
     on the ref this state was last fetched from or pushed to (R5); the privacy guard runs
     first (R8). Exit 2 on a refusal or a ref someone else moved."""
     scope = triage_cmd._scope(repo, org)
-    target = resolve_state_dir(scope, dir_override, workspace)
+    target = resolve_state_dir(scope, dir_override, workspace, sync=False)
     try:
         state_repo, url, sid = _ref_target(scope, target, remote)
         sha = push_state(
             target,
             url,
             sid,
-            expected_old=read_base(target),
+            expected_old=read_base(target, remote=url, ref=ref_name(sid)),
             scope=scope,
             state_repo=state_repo,
             client=triage_cmd.make_visibility_client(),
@@ -148,17 +148,26 @@ def fetch_command(
             help="OWNER/REPO holding the ref, for a fresh workspace with no state yet.",
         ),
     ] = None,
+    discard_local: Annotated[
+        bool,
+        typer.Option(
+            "--discard-local",
+            help="Overwrite state changes that were never pushed (they are lost).",
+        ),
+    ] = False,
 ) -> None:
-    """Restore the scope's state from its ref, refs/fr/triage/<scope-id> (R5): every file the
-    ref carries is written into the state directory. Exit 2 on a refusal."""
+    """Restore the scope's state from its ref, refs/fr/triage/<scope-id> (R5): the state
+    directory's ref files become exactly the ref's, and a file the ref no longer carries is
+    removed. Changes not yet pushed are never overwritten unless --discard-local. Exit 2 on
+    a refusal."""
     scope = triage_cmd._scope(repo, org)
-    target = resolve_state_dir(scope, dir_override, workspace)
+    target = resolve_state_dir(scope, dir_override, workspace, sync=False)
     try:
         if state_repo_opt is not None and load_durable(target).state_repo is None:
-            url, sid = remote or f"https://github.com/{state_repo_opt}.git", scope_id(scope)
+            url, sid = remote or triage_cmd.state_remote(state_repo_opt), scope_id(scope)
         else:
             _, url, sid = _ref_target(scope, target, remote)
-        sha = fetch_state(target, url, sid)
+        sha = fetch_state(target, url, sid, discard_local=discard_local)
     except TriageError as exc:
         _refuse(exc)
     if sha is None:

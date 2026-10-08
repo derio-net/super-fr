@@ -70,6 +70,7 @@ from fr.commands.triage_cmd import (
     batch_app,
     collect_into,
     console,
+    drive_lock_dir,
     err_console,
     resolve_state_dir,
 )
@@ -2024,7 +2025,9 @@ def _exec(argv: list[str]) -> None:
 
 @contextmanager
 def drive_lock(target: Path) -> Iterator[None]:
-    """`<state dir>/drive.lock` (pid, start time) for as long as a driver runs (R6).
+    """`<target>/drive.lock` (pid, start time) for as long as a driver runs (R6). *target*
+    is `triage_cmd.drive_lock_dir`: the `--dir`, else `~/.cache/fr/triage/<scope>/` for
+    every workspace, so it serialises the drivers of one host across clones (p3-r3).
 
     It serialises drivers only. A second driver on the same state directory refuses
     (exit 2). The lock is written to a private file first and linked into place, so
@@ -3958,7 +3961,7 @@ def batch_drive_command(
         scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override, workspace),
     )
     restart: str | None = None
-    with drive_lock(target):
+    with drive_lock(drive_lock_dir(scope, dir_override)):
         while True:
             try:
                 acted, summary, blocked = driver.run_pass()

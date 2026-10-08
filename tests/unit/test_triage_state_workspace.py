@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from fr.triage.errors import TriageError
-from fr.triage.model import STATE_EXCLUDE, Scope, state_dir
+from fr.triage.model import STATE_EXCLUDE, Scope, legacy_state_dir, state_dir
 
 SCOPE = Scope(kind="repo", target="derio-net/super-fr")
 
@@ -139,16 +139,51 @@ def test_no_cache_means_nothing_is_created_beyond_the_exclude(tmp_path: Path, ho
         SCOPE,
     ],
 )
-def test_outside_any_clone_with_no_workspace_is_refused_naming_the_flag(
+def test_outside_any_clone_with_no_workspace_the_legacy_cache_is_used_unchanged(
     tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch, scope: Scope
 ) -> None:
+    """p3-r3: a host command typed from `$HOME` keeps working, for every scope kind."""
     outside = tmp_path / "not-a-clone"
     outside.mkdir()
     monkeypatch.chdir(outside)
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
 
-    with pytest.raises(TriageError, match="--workspace"):
-        state_dir(scope)
+    assert state_dir(scope) == home / ".cache" / "fr" / "triage" / scope.name
+    assert state_dir(scope) == legacy_state_dir(scope)
+
+
+def test_the_import_copies_only_the_durable_files(tmp_path: Path, home: Path) -> None:
+    """p3-r2: the REF_FILES that exist, facts.json and scope.yaml; never the merge
+    scratch worktrees, a drive.lock or the rendered pages."""
+    _, wt = _main_and_worktree(tmp_path)
+    cache = legacy_state_dir(SCOPE)
+    files = {
+        "judgements.yaml": "j\n",
+        "facts.json": "{}\n",
+        "scope.yaml": "claim_expiry_hours: 12\n",
+        "lease.yaml": "l\n",
+        "board/manifest.yaml": "fragments: []\n",
+        "drive.lock": '{"pid": 1}\n',
+        "triage.html": "<html></html>\n",
+        "board.html": "<html></html>\n",
+        "merge/b1/.git": "gitdir: /elsewhere\n",
+        "merge/b1/src.py": "x = 1\n",
+    }
+    for rel, text in files.items():
+        (cache / rel).parent.mkdir(parents=True, exist_ok=True)
+        (cache / rel).write_text(text)
+
+    got = state_dir(SCOPE, workspace=wt)
+
+    copied = sorted(str(p.relative_to(got)) for p in got.rglob("*") if p.is_file())
+    assert copied == [
+        "board/manifest.yaml",
+        "facts.json",
+        "judgements.yaml",
+        "lease.yaml",
+        "scope.yaml",
+    ]
+    assert (cache / "drive.lock").exists() and (cache / "merge" / "b1" / "src.py").exists()
 
 
 def test_a_workspace_that_is_no_clone_is_refused(
@@ -176,7 +211,7 @@ def test_the_commands_take_workspace_beside_dir(tmp_path: Path, home: Path) -> N
     assert STATE_EXCLUDE in _exclude(main).splitlines()
 
 
-def test_a_command_outside_any_clone_exits_2_naming_workspace(
+def test_a_command_outside_any_clone_uses_the_legacy_cache(
     tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr.cli import app
@@ -187,7 +222,58 @@ def test_a_command_outside_any_clone_exits_2_naming_workspace(
     monkeypatch.chdir(outside)
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
 
-    result = CliRunner().invoke(app, ["triage", "check", "--org", "derio-net"])
+    result = CliRunner().invoke(app, ["triage", "batch", "list", "--org", "derio-net"])
 
-    assert result.exit_code == 2
-    assert "--workspace" in result.output
+    assert result.exit_code == 0, result.output
+    assert "no batches" in result.output
+    assert not (outside / ".fr").exists()
+
+
+# ------------------------------------------- drive.lock stays per host (p3-r3)
+
+
+def test_the_drive_lock_lives_in_the_home_cache_whatever_the_workspace(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.cli import app
+    from fr.commands import triage_batch_cmd
+    from typer.testing import CliRunner
+
+    _, wt = _main_and_worktree(tmp_path)
+    taken: list[Path] = []
+
+    class _StopError(Exception):
+        pass
+
+    def lock(where: Path) -> object:
+        taken.append(where)
+        raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "drive_lock", lock)
+
+    result = CliRunner().invoke(
+        app, ["triage", "batch", "drive", "--repo", SCOPE.target, "--workspace", str(wt)]
+    )
+
+    assert isinstance(result.exception, _StopError), result.output
+    assert taken == [legacy_state_dir(SCOPE)]
+
+
+def test_a_watch_in_one_clone_sees_a_drive_from_another(tmp_path: Path, home: Path) -> None:
+    import json
+    import os
+
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    _, wt = _main_and_worktree(tmp_path)
+    lock = legacy_state_dir(SCOPE) / "drive.lock"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(json.dumps({"pid": os.getpid(), "started": "x"}))
+
+    result = CliRunner().invoke(
+        app, ["triage", "board", "--repo", SCOPE.target, "--workspace", str(wt), "--watch"]
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "drive.lock" in result.output

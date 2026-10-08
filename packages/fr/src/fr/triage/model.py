@@ -183,12 +183,15 @@ def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | N
     2026-10-07-cloud-triage R4, §B).
 
     The workspace is *workspace* (`--workspace`), else the clone holding the working
-    directory, each taken at its git toplevel; neither being a clone is refused
-    (`TriageError` naming `--workspace`), for every scope kind. The directory is kept
-    out of git by one `info/exclude` line under the git common dir, so a linked
-    worktree is covered and no tracked file changes. The first time the directory is
-    asked for and does not exist, an existing `legacy_state_dir` is copied in (and
-    left where it is); once it exists, nothing is copied again.
+    directory, each taken at its git toplevel. A `--workspace` that is no clone is
+    refused (`TriageError` naming it); with no `--workspace` and a working directory in
+    no clone, the state directory is `legacy_state_dir`, exactly as before (p3-r3: a host
+    command typed from `$HOME` keeps working, for every scope kind). The workspace
+    directory is kept out of git by one `info/exclude` line under the git common dir, so a
+    linked worktree is covered and no tracked file changes. The first time it is asked
+    for and does not exist, an existing `legacy_state_dir`'s durable files are copied in
+    (`import_legacy`) and the legacy directory is left where it is; once it exists,
+    nothing is copied again.
     """
     from fr.triage import gitseam
 
@@ -197,19 +200,51 @@ def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | N
     start = workspace if workspace is not None else Path.cwd()
     root = gitseam.toplevel(start) if start.is_dir() else None
     if root is None:
-        where = f"{workspace}" if workspace is not None else "the working directory"
+        if workspace is None:
+            return legacy_state_dir(scope)
         raise TriageError(
-            f"{where} is in no git clone, and triage state lives in a workspace: run from a "
-            "clone, or pass --workspace PATH (a clone to hold the state; --dir names a "
-            "directory outright)"
+            f"{workspace} is in no git clone, and --workspace names the clone that holds the "
+            "state: pass a clone, or --dir to name a directory outright"
         )
     gitseam.ensure_excluded(root, STATE_EXCLUDE)
     target = root / ".fr" / "triage-state" / scope.name
     legacy = legacy_state_dir(scope)
     if not target.exists() and legacy.is_dir():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(legacy, target, symlinks=True)
+        import_legacy(legacy, target)
     return target
+
+
+LEGACY_IMPORTED = ("facts.json", "scope.yaml")
+"""What a workspace takes from a legacy `~/.cache` state directory beside the
+`REF_FILES` entries (p3-r2): facts (rebuilt by the next collect anyway, but the board
+reads them now) and the host's own settings."""
+
+
+def import_legacy(legacy: Path, target: Path) -> None:
+    """Copy *legacy*'s durable files into the not-yet-existing *target* (p3-r2): every
+    `REF_FILES` entry that exists as a regular file, plus `LEGACY_IMPORTED`. Never the
+    `merge/` scratch worktrees, a `drive.lock` or a rendered page. Built beside *target*
+    and renamed into place, so a crash never leaves a half import that counts as done.
+    Nothing durable, nothing created."""
+    import os
+    import uuid
+
+    from fr.triage.state_ref import ref_entries
+
+    rels = [*ref_entries(legacy)]
+    rels += [n for n in LEGACY_IMPORTED if (legacy / n).is_file() and not (legacy / n).is_symlink()]
+    if not rels:
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = target.parent / f".{target.name}.import-{uuid.uuid4().hex}"
+    try:
+        for rel in rels:
+            (staging / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(legacy / rel, staging / rel)
+        os.rename(staging, target)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
 
 def issue_key(repo: str, number: int) -> str:

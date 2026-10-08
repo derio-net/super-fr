@@ -36,6 +36,7 @@ from fr.commands.triage_cmd import (
     batch_app,
     collect_into,
     console,
+    drive_lock_dir,
     err_console,
     resolve_state_dir,
     triage_app,
@@ -356,11 +357,14 @@ def _watch(
     interval: int,
     open_: bool,
     publish_: bool = False,
+    lock_dir: Path | None = None,
 ) -> None:
     """Re-collect and re-render every *interval* seconds until interrupted (R12). A live
-    drive keeps the board fresh itself, so an iteration that finds its lock held skips."""
-    if (holder := live_driver(target)) is not None:
-        _fail(f"a drive ({holder}) holds {target / 'drive.lock'}; it keeps the board fresh")
+    drive keeps the board fresh itself, so an iteration that finds its lock held skips.
+    The lock is read from *lock_dir* (`triage_cmd.drive_lock_dir`, p3-r3), else *target*."""
+    lock_at = lock_dir if lock_dir is not None else target
+    if (holder := live_driver(lock_at)) is not None:
+        _fail(f"a drive ({holder}) holds {lock_at / 'drive.lock'}; it keeps the board fresh")
     skipping, failures, opened = False, set[str](), False
     publish_failures: set[str] = set()
 
@@ -379,7 +383,7 @@ def _watch(
 
     try:
         while True:
-            if (holder := live_driver(target)) is not None:
+            if (holder := live_driver(lock_at)) is not None:
                 if not skipping:
                     skipping = True
                     console.print(
@@ -456,7 +460,16 @@ def board_command(
     target = resolve_state_dir(scope, dir_override, workspace)
     args = scope_args(repo, org, dir_override, workspace)
     if watch:
-        _watch(scope, target, args, refresh, interval, open_, publish_)
+        _watch(
+            scope,
+            target,
+            args,
+            refresh,
+            interval,
+            open_,
+            publish_,
+            lock_dir=drive_lock_dir(scope, dir_override),
+        )
         return
     out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
     console.print(f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True)

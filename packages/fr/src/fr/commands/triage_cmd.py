@@ -1,7 +1,8 @@
 """`fr triage` CLI — backlog triage (spec 2026-09-21-fr-triage-design).
 
 `collect` reads the forge and writes `facts.json` under the scope's state
-directory (`$HOME/.cache/fr/triage/<scope>/`, or `--dir`). `check` reports the
+directory (the workspace's `.fr/triage-state/<scope>/`, or `~/.cache/fr/triage/<scope>/`
+outside a clone; `--dir` names one outright). `check` reports the
 four sets (unranked, settled, orphaned, unreachable) and always exits 0.
 `render` writes `triage.html`, and `--open` hands it to `webbrowser`.
 The `batch` sub-app's verbs live in `fr.commands.triage_batch_cmd` (spec
@@ -22,6 +23,7 @@ from __future__ import annotations
 
 import json
 import webbrowser
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -43,6 +45,7 @@ from fr.triage.model import (
     Judgements,
     Scope,
     issue_key,
+    legacy_state_dir,
     load_facts,
     load_judgements,
     load_scope_facts,
@@ -81,6 +84,23 @@ batch_app = typer.Typer(
 triage_app.add_typer(batch_app)
 
 
+_COMMAND: ContextVar[tuple[typer.Context, set[Path]] | None] = ContextVar(
+    "fr_triage_command", default=None
+)
+"""The running triage command's context and the state directories it already synced with
+the ref (`_sync_with_ref`). Taken from the group callback because `click` is typer's
+dependency, not fr's (typer ≥0.26 vendors it), so `click.get_current_context` is not
+importable everywhere fr is installed."""
+
+
+@triage_app.callback()
+def _triage_command(ctx: typer.Context) -> None:
+    token = _COMMAND.set((ctx, set()))
+    # Registered first, so it runs last (the close callbacks unwind LIFO): every push
+    # the wrapper registers still sees the command, and nothing outlives it.
+    ctx.call_on_close(lambda: _COMMAND.reset(token))
+
+
 # One option set for --repo/--org/--dir, shared by collect, check, render and batch.
 RepoOpt = Annotated[
     str | None, typer.Option("--repo", help="Triage one repo OWNER/REPO, or a group: A/B,C/D.")
@@ -103,13 +123,112 @@ WorkspaceOpt = Annotated[
 ]
 
 
-def resolve_state_dir(scope: Scope, dir_override: Path | None, workspace: Path | None) -> Path:
-    """`fr.triage.model.state_dir`, with its refusal (no clone, no `--workspace`) as exit 2."""
+def resolve_state_dir(
+    scope: Scope, dir_override: Path | None, workspace: Path | None, *, sync: bool = True
+) -> Path:
+    """`fr.triage.model.state_dir`, with its refusal (a `--workspace` that is no clone) as
+    exit 2, and THE state-ref wrapper (cloud-triage R5, §B, p3-r1): every triage command
+    reaches its state directory here, so with *sync* (every verb but the explicit `state
+    push|fetch`) the scope's ref is fetched first and pushed after a change, for every verb
+    alike (`_sync_with_ref`)."""
     try:
-        return state_dir(scope, dir_override, workspace=workspace)
+        target = state_dir(scope, dir_override, workspace=workspace)
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
+    if sync:
+        _sync_with_ref(scope, target)
+    return target
+
+
+def drive_lock_dir(scope: Scope, dir_override: Path | None) -> Path:
+    """Where the scope's `drive.lock` lives (cloud-triage R4, §B, p3-r3): `--dir` when it
+    names the state directory outright, else `~/.cache/fr/triage/<scope>/` for EVERY
+    workspace, so it stays the same-host check across clones. Created on use."""
+    return dir_override if dir_override is not None else legacy_state_dir(scope)
+
+
+def state_remote(state_repo: str) -> str:
+    """The git remote the state ref of *state_repo* is fetched from and pushed to (R5).
+    Tests replace this factory with a local bare repo."""
+    return f"https://github.com/{state_repo}.git"
+
+
+def _sync_with_ref(scope: Scope, target: Path) -> None:
+    """Fetch the scope's state ref into *target* now, and push it when the command that
+    asked for *target* has changed it (cloud-triage R5, §B "One state across workspaces").
+
+    Acts once per command and state directory, only inside a CLI command (the push runs
+    when the command's context closes). The fetch runs only when the scope has a
+    `state_repo`; it adopts the ref when the local copy is not ahead and refuses (exit 2)
+    when it would overwrite changes not yet pushed. The push runs only if the command
+    changed a ref file and the scope then has a `state_repo` (a first collect that decided
+    it included), as a compare-and-swap on the ref fetched here; a conflict refuses (exit
+    2) with the fetch-and-retry line. A state directory in no git clone (the legacy
+    `~/.cache` one, or a `--dir` outside any clone) has nowhere to hold the ref: it is used
+    as before, unsynced, and the command says so."""
+    from fr.triage import gitseam
+    from fr.triage.state_ref import fetch_state, local_tree
+
+    command = _COMMAND.get()
+    if command is None:
+        return
+    ctx, synced = command
+    if target in synced:
+        return
+    synced.add(target)
+    try:
+        state_repo = load_durable(target).state_repo
+        probe = target
+        while not probe.exists() and probe != probe.parent:
+            probe = probe.parent
+        clone = gitseam.toplevel(probe)
+        if clone is None:
+            if state_repo is not None:
+                err_console.print(
+                    f"warning: {target} is in no git clone, so it is not synced with the state "
+                    f"ref in {state_repo}; run from a clone, or pass --workspace",
+                    markup=False,
+                    soft_wrap=True,
+                )
+            return
+        before = None  # no state repo yet: one decided by this command is a change
+        if state_repo is not None:
+            fetch_state(target, state_remote(state_repo), scope_id(scope), repo=clone)
+            before = local_tree(target, repo=clone)
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
+    ctx.call_on_close(lambda: _push_if_changed(scope, target, clone, before))
+
+
+def _push_if_changed(scope: Scope, target: Path, clone: Path, before: object) -> None:
+    """The wrapper's second half: push *target* to the scope's ref when its ref files are
+    not what they were when the command started. Exit 2 on a refusal, the push conflict's
+    fetch-and-retry line included."""
+    from fr.triage.state_ref import local_tree, push_state, read_base, ref_name
+
+    try:
+        state_repo = load_durable(target).state_repo
+        if state_repo is None:
+            return
+        if before is not None and local_tree(target, repo=clone) == before:
+            return
+        remote, sid = state_remote(state_repo), scope_id(scope)
+        sha = push_state(
+            target,
+            remote,
+            sid,
+            expected_old=read_base(target, remote=remote, ref=ref_name(sid)),
+            scope=scope,
+            state_repo=state_repo,
+            client=make_visibility_client(),
+            repo=clone,
+        )
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
+    err_console.print(f"pushed {ref_name(sid)} {sha}", markup=False, soft_wrap=True)
 
 
 def make_forge() -> Forge:
@@ -206,7 +325,7 @@ def collect_command(
     scope = _scope(repo, org)
     try:
         facts, out, _ = collect_into(
-            scope, resolve_state_dir(scope, dir_override, workspace), pr_limit=pr_limit
+            scope, resolve_state_dir(scope, dir_override, workspace), pr_limit=pr_limit, settle=True
         )
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
@@ -223,6 +342,7 @@ def collect_into(
     pr_limit: int = PR_LIMIT,
     carry: bool = False,
     lenient: bool = False,
+    settle: bool = False,
 ) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
 
@@ -232,8 +352,10 @@ def collect_into(
     this scope holds closed is carried over instead of viewed again (gh#911);
     `fr triage collect` never carries. *lenient* (the driver's passes too) drops an
     unknown top-level `.fr/triage.yaml` key instead of refusing it (gh#998); `fr
-    triage collect` stays strict. Returns the stats of single-issue reads.
-    Raises `TriageError` on a refusal; writes nothing then.
+    triage collect` stays strict. *settle* (an explicit `fr triage collect` only, never
+    the drive or watch loop, p3-r7) decides an undecided state repo; without it an
+    undecided scope warns once and keeps its state local. Returns the stats of
+    single-issue reads. Raises `TriageError` on a refusal; writes nothing then.
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
@@ -268,7 +390,10 @@ def collect_into(
     out.write_text(
         json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    _settle_state_repo(target_dir, facts)
+    if settle:
+        _settle_state_repo(target_dir, facts)
+    elif load_durable(target_dir).state_repo is None:
+        err_console.print(f"warning: {NO_STATE_REPO}", markup=False, soft_wrap=True)
     return facts, out, stats
 
 
