@@ -21,10 +21,11 @@ it; every other method raises `GhError`. A 404 on a lookup whose contract has a
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import urllib.parse
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -44,33 +45,59 @@ RAW_ACCEPT = "Accept: application/vnd.github.raw"
 # The field map (spec §A), as pure helpers over REST records.
 # ---------------------------------------------------------------------------
 
-_CLOSING_KEYWORD = r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)"
-_CLOSING_REF = re.compile(
-    _CLOSING_KEYWORD
-    + r":?\s+(?:"
-    + r"https?://[^\s/]+/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/(?P<url_number>\d+)"
-    + r"|(?P<repo>[\w.-]+/[\w.-]+)?#(?P<number>\d+)"
-    + r")\b",
-    re.IGNORECASE,
-)
+GITHUB_HOST = "github.com"
+
+_CLOSING_KEYWORD = r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)"
 
 
-def _closing_refs(repo: str, *texts: str | None) -> list[dict[str, Any]]:
+@functools.lru_cache(maxsize=8)
+def _closing_ref_pattern(host: str) -> re.Pattern[str]:
+    """A closing keyword at a word boundary (so "prefixes #3" and "unresolved #5"
+    are not refs), an optional colon, then ONE reference: `#n`, `owner/repo#n`,
+    or an issue URL on *host* only (an issue on another host closes nothing)."""
+    return re.compile(
+        _CLOSING_KEYWORD
+        + r":?\s+(?:"
+        + rf"https?://{re.escape(host)}/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/(?P<url_number>\d+)"
+        + r"|(?<![\w/])(?P<repo>[\w.-]+/[\w.-]+)?#(?P<number>\d+)"
+        + r")\b",
+        re.IGNORECASE,
+    )
+
+
+def _prose(text: str) -> Iterator[str]:
+    """*text*'s lines outside code: fenced blocks and inline code spans are
+    skipped, as GitHub skips them. The whole text is read, as a merge reads it
+    (`fr.record.pr_body._prose_lines`, `as_github`)."""
+    from fr.record.pr_body import _prose_lines
+
+    for prose in _prose_lines(text, as_github=True):
+        if prose is not None:
+            yield prose[1]
+
+
+def _closing_refs(
+    repo: str, *texts: str | None, host: str = GITHUB_HOST
+) -> list[dict[str, Any]]:
     """`closingIssuesReferences` (§A row 1): the issues a PR closes, parsed from
-    its title and body with GitHub's closing keywords (`close[sd]?`,
-    `fix(e[sd])?`, `resolve[sd]?`) followed by a same-repo `#n`, an
-    `owner/repo#n` or an issue URL. In first-seen order, each once.
+    its title and body as GitHub parses them — a closing keyword (`close[sd]?`,
+    `fix(e[sd])?`, `resolve[sd]?`) at a word boundary, outside fenced and inline
+    code, followed by a same-repo `#n`, an `owner/repo#n` or an issue URL on the
+    repo's own GitHub *host*. Refs are built on *host* (a GHE host for a GHE
+    client), never a hard-coded github.com. In first-seen order, each once.
 
     Gap: an issue linked by hand in the PR sidebar is invisible to REST, and the
     GraphQL node ids (`id`, `repository.id`, `owner.id`) are not produced; collect
     reads only owner login, repo name and number."""
+    pattern = _closing_ref_pattern(host.lower())
     seen: list[tuple[str, int]] = []
     for text in texts:
-        for m in _CLOSING_REF.finditer(text or ""):
-            target = m["url_repo"] or m["repo"] or repo
-            number = int(m["url_number"] or m["number"])
-            if (target.lower(), number) not in {(r.lower(), n) for r, n in seen}:
-                seen.append((target, number))
+        for line in _prose(text or ""):
+            for m in pattern.finditer(line):
+                target = m["url_repo"] or m["repo"] or repo
+                number = int(m["url_number"] or m["number"])
+                if (target.lower(), number) not in {(r.lower(), n) for r, n in seen}:
+                    seen.append((target, number))
     out = []
     for target, number in seen:
         owner, name = target.split("/", 1)
@@ -78,7 +105,7 @@ def _closing_refs(repo: str, *texts: str | None) -> list[dict[str, Any]]:
             {
                 "number": number,
                 "repository": {"name": name, "owner": {"login": owner}},
-                "url": f"https://github.com/{owner}/{name}/issues/{number}",
+                "url": f"https://{host}/{owner}/{name}/issues/{number}",
             }
         )
     return out
@@ -192,11 +219,13 @@ def _cross_repo(pull: dict[str, Any]) -> bool:
     return head != base
 
 
-def _pr_record(repo: str, pull: dict[str, Any]) -> dict[str, Any]:
-    """A REST pull as `fr.gh.PR_LIST_FIELDS` plus `headRefOid`."""
+def _pr_record(repo: str, pull: dict[str, Any], host: str = GITHUB_HOST) -> dict[str, Any]:
+    """A REST pull as `fr.gh.PR_LIST_FIELDS` plus `headRefOid`; closing refs on *host*."""
     return {
         "author": _author(pull.get("user")),
-        "closingIssuesReferences": _closing_refs(repo, pull.get("title"), pull.get("body")),
+        "closingIssuesReferences": _closing_refs(
+            repo, pull.get("title"), pull.get("body"), host=host
+        ),
         "createdAt": pull.get("created_at"),
         "headRefName": (pull.get("head") or {}).get("ref") or "",
         "headRefOid": (pull.get("head") or {}).get("sha") or "",
@@ -366,6 +395,11 @@ class RealGhRestClient:
         self._host = host
         self._run = run
 
+    @property
+    def _web_host(self) -> str:
+        """The host issue URLs live on: the GHE host, else github.com."""
+        return self._host or GITHUB_HOST
+
     # ---- transport ----
 
     def _gh(self, args: list[str]) -> str:
@@ -501,7 +535,7 @@ class RealGhRestClient:
         out: list[dict[str, Any]] = []
         for src_repo, number in seen:
             pull = self._pull(src_repo, number)
-            closes = _closing_refs(src_repo, pull.get("title"), pull.get("body"))
+            closes = _closing_refs(src_repo, pull.get("title"), pull.get("body"), host=self._web_host)
             target = {(f"{r['repository']['owner']['login']}/{r['repository']['name']}".lower(),
                        r["number"]) for r in closes}  # fmt: skip
             if (repo.lower(), issue_number) not in target:
@@ -524,7 +558,7 @@ class RealGhRestClient:
         keep = (lambda p: bool(p.get("merged_at"))) if state == "merged" else None
         raw = self._paged(f"repos/{repo}/pulls?state={rest_state}", limit=limit, keep=keep)
         fields = _gh.PR_LIST_FIELDS.split(",")
-        return [{f: _pr_record(repo, p)[f] for f in fields} for p in raw]
+        return [{f: _pr_record(repo, p, self._web_host)[f] for f in fields} for p in raw]
 
     def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
         """`fr.gh.OPEN_PR_LIST_FIELDS`: the list fields plus files, checks,
@@ -534,7 +568,7 @@ class RealGhRestClient:
             pull = self._pull(repo, p["number"])
             mergeable, merge_state = _merge_state(pull)
             reviews = self._paged(f"repos/{repo}/pulls/{p['number']}/reviews")
-            record = _pr_record(repo, pull)
+            record = _pr_record(repo, pull, self._web_host)
             record.update(
                 files=self._files(repo, p["number"]),
                 statusCheckRollup=self._rollup_for(repo, record["headRefOid"]),
@@ -548,7 +582,7 @@ class RealGhRestClient:
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         out = []
         for p in self._pulls_by_head(repo, branch):
-            record = _pr_record(repo, p)
+            record = _pr_record(repo, p, self._web_host)
             record["files"] = self._files(repo, p["number"])
             out.append(record)
         return out

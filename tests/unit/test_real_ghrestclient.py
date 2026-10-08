@@ -578,3 +578,70 @@ def test_an_unknown_close_reason_is_refused_before_any_call() -> None:
             REPO, 7, state="CLOSED", reason="duplicate-ish"
         )
     assert fake.calls == []
+
+
+# ---- p1-r3: closing references are parsed as GitHub parses them ----
+
+
+def _refs(text: str, *, host: str = "github.com", repo: str = "o/r") -> list[tuple[str, int]]:
+    from fr.real_ghrestclient import _closing_refs
+
+    return [
+        (f"{r['repository']['owner']['login']}/{r['repository']['name']}", r["number"])
+        for r in _closing_refs(repo, text, host=host)
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "prefixes #3",
+        "unresolved #5",
+        "hotfixes #6",
+        "```\nCloses #7\n```",
+        "~~~\nfixes #7\n~~~",
+        "quoting `Closes #8` inline",
+        "Closes https://gitlab.example.com/o/r/issues/9",
+        "Closes https://ghe.example.com/o/r/issues/9",
+    ],
+)
+def test_a_non_closing_mention_is_not_a_ref(text: str) -> None:
+    assert _refs(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "want"),
+    [
+        ("Closes #3", [("o/r", 3)]),
+        ("fixed: #4", [("o/r", 4)]),
+        ("(resolves #5)", [("o/r", 5)]),
+        ("Fixes other/repo#6", [("other/repo", 6)]),
+        ("closes https://github.com/x/y/issues/7", [("x/y", 7)]),
+        ("```\ncode\n```\nCloses #8", [("o/r", 8)]),
+    ],
+)
+def test_a_closing_keyword_at_a_word_boundary_is_a_ref(
+    text: str, want: list[tuple[str, int]]
+) -> None:
+    assert _refs(text) == want
+
+
+def test_refs_are_built_on_the_repos_own_host() -> None:
+    from fr.real_ghrestclient import _closing_refs
+
+    ghe = "ghe.example.com"
+    text = "Closes #3, closes https://ghe.example.com/x/y/issues/4, fixes https://github.com/z/w/issues/5"
+    got = _closing_refs("o/r", text, host=ghe)
+    assert [r["url"] for r in got] == [
+        "https://ghe.example.com/o/r/issues/3",
+        "https://ghe.example.com/x/y/issues/4",
+    ]
+
+
+def test_a_ghe_client_builds_closing_refs_on_its_host() -> None:
+    from fr.real_ghrestclient import _pr_record
+
+    pull = load(f"{R}/pulls/508")
+    pull = {**pull, "body": "Closes #430"}
+    refs = _pr_record(REPO, pull, host="ghe.example.com")["closingIssuesReferences"]
+    assert [r["url"] for r in refs] == ["https://ghe.example.com/derio-net/super-fr/issues/430"]
