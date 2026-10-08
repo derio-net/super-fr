@@ -32,7 +32,7 @@ mkdir -p "$HOME"
 git init -q --bare "$world/state.git" || fail "bare remote"
 git config --global url."$world/state.git".insteadOf "https://github.com/$repo.git" \
   || fail "insteadOf"
-ref_sha() { git -C "$world/state.git" for-each-ref --format='%(objectname)' refs/fr/triage/; }
+ref_sha() { git -C "$world/state.git" for-each-ref --format='%(objectname)' refs/heads/fr-triage/; }
 
 # Workspace A (the fixture) seeds the ref.
 a="$PWD"

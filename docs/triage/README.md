@@ -3,7 +3,7 @@
 `fr triage` keeps its state in the scope's state directory: the workspace's
 `.fr/triage-state/<scope>/` (kept out of git through `info/exclude`), or
 `~/.cache/fr/triage/<scope>/` when run outside a clone; a scope with a state repo also keeps
-a durable copy on the ref `refs/fr/triage/<scope-id>`. Neither is reviewed, so this folder
+a durable copy on the orphan branch `refs/heads/fr-triage/<scope-id>`. Neither is reviewed, so this folder
 remains the reviewed copy for `derio-net/super-fr`: what is
 needed to regenerate the four triage pages (the backlog page `triage.html`, the
 defect-origins page, the architecture page and the history page), and the history that

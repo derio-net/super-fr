@@ -174,3 +174,64 @@ def test_no_verb_reaches_the_ref_but_the_wrapper_and_the_state_verbs() -> None:
         if "push_state" in p.read_text() or "fetch_state" in p.read_text()
     )
     assert hits == ["triage_cmd.py", "triage_state_cmd.py"]
+
+
+# ------------------------- a push the remote refuses (debug 2026-10-08-cloud-state-ref-proxy)
+
+
+def _refuse_pushes(bare: Path) -> None:
+    """A pre-receive hook refusing every push, standing in for the cloud git proxy's
+    HTTP 403: the ref does not move, and it is no compare-and-swap conflict."""
+    hook = bare / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'refused by policy' >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+
+def test_collect_whose_push_is_refused_warns_and_exits_zero(
+    tmp_path: Path, origin: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.triage_fixtures import FakeForge
+
+    forge = FakeForge(issues={REPO: []}, prs={REPO: []}, visibility={REPO: "private"})
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    ws, state = _workspace(tmp_path, "a", {})
+    _refuse_pushes(origin)
+
+    result = _invoke("collect", "--repo", REPO, "--workspace", str(ws))
+
+    assert result.exit_code == 0, result.output
+    assert (state / "facts.json").is_file()
+    flat = " ".join(result.output.split())
+    assert "warning:" in flat
+    assert ref_name(scope_id(SCOPE)) in flat
+    assert "stays local until a push succeeds" in flat
+    assert _ref(origin) == ""
+
+
+def test_a_wrapped_command_whose_push_is_refused_warns_and_exits_zero(
+    tmp_path: Path, origin: Path
+) -> None:
+    ws, state = _workspace(tmp_path, "a", {"scope-durable.yaml": DURABLE})
+    src = _export_dir(tmp_path, b"schema: 6\nissues: {}\n")
+    _refuse_pushes(origin)
+
+    result = _invoke("state", "import", "--from", str(src), "--repo", REPO, "--workspace", str(ws))
+
+    assert result.exit_code == 0, result.output
+    assert "stays local until a push succeeds" in " ".join(result.output.split())
+    assert (state / "judgements.yaml").read_bytes() == b"schema: 6\nissues: {}\n"
+    assert read_base(state, remote=str(origin), ref=ref_name(scope_id(SCOPE))) is None
+
+
+def test_state_push_whose_push_is_refused_still_fails(tmp_path: Path, origin: Path) -> None:
+    """Pushing is `state push`'s whole job: a refusal is its failure, exit 2."""
+    ws, _state = _workspace(
+        tmp_path, "a", {"scope-durable.yaml": DURABLE, "judgements.yaml": b"schema: 6\n"}
+    )
+    _refuse_pushes(origin)
+
+    result = _invoke("state", "push", "--repo", REPO, "--workspace", str(ws))
+
+    assert result.exit_code == 2, result.output
+    assert "refused by policy" in result.output
+    assert _ref(origin) == ""

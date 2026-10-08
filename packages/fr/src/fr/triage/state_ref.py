@@ -1,4 +1,4 @@
-"""A scope's durable copy: the git ref `refs/fr/triage/<scope-id>` (spec
+"""A scope's durable copy: the branch `refs/heads/fr-triage/<scope-id>` (spec
 2026-10-07-cloud-triage R5, §B).
 
 The ref points at a commit whose tree is the explicit list `REF_FILES`, not the export
@@ -8,9 +8,20 @@ mailbox. `facts.json`, the rendered pages, the host-only `scope.yaml` and the ho
 never ride on it: fr rebuilds the first two, and the last two are this host's.
 
 A push is a compare-and-swap (`--force-with-lease=<ref>:<old>`): a second writer, or a
-lost lease, fails the push (`StateRefConflict`) rather than overwriting. The commit is
-built in a temporary index, so the workspace's index, HEAD and files never move, and a
-ref outside `refs/heads/` is no branch: no branch list, no protection rule, no PR.
+lost lease, fails the push (`StateRefConflict`) rather than overwriting. A push the
+remote refuses for any other reason (a permission, a hook, a proxy's HTTP 403) is
+`StateRefPushRefused`: nothing moved, and the caller decides whether that is fatal. The
+commit is built in a temporary index, so the workspace's index, HEAD and files never
+move; it is an orphan whose tree is only `REF_FILES`, so the branch shares no history
+with the repo's code and is never a PR's base.
+
+Why a branch: a Claude Code cloud session's git proxy writes only `refs/heads/*` (it
+creates and force-updates branches, and refuses every ref outside `refs/heads/`, branch
+deletion and REST ref writes; measured 2026-10-08, debug journal
+2026-10-08-cloud-state-ref-proxy). The state used to live at `refs/fr/triage/<scope-id>`
+(`legacy_ref_name`): a fetch that finds no branch restores from that ref, records it as
+the base's ref, and so the first push creates the branch. The legacy ref is never
+deleted (the proxy would refuse that too).
 
 Every git process starts in `fr.triage.gitseam`. The clone that holds the objects is
 the git toplevel of the state directory (it lives in the workspace, R4), or *repo*.
@@ -59,7 +70,10 @@ REF_FILES: tuple[str, ...] = (
 """THE list of what the state ref carries: a name ending in `/` is a directory, taken
 whole (every regular file under it, never through a symlink)."""
 
-REF_PREFIX = "refs/fr/triage/"
+REF_PREFIX = "refs/heads/fr-triage/"
+LEGACY_REF_PREFIX = "refs/fr/triage/"
+"""Where the state ref lived before it became a branch: read for migration, never
+written or deleted."""
 BASE_FILE = ".state-ref"
 RETRY_LINE = (
     "Fetch the state again (`fr triage state fetch --discard-local` drops the change that "
@@ -72,11 +86,27 @@ class StateRefConflict(TriageError):  # noqa: N818 - the name the plan and spec 
     """The remote's ref is not the one this push was based on: someone else wrote it."""
 
 
-def ref_name(scope_id: str) -> str:
-    """`refs/fr/triage/<scope-id>`."""
+class StateRefPushRefused(TriageError):  # noqa: N818 - named beside StateRefConflict
+    """The remote refused the push (a permission, a hook, a proxy), and no lease was stale:
+    nothing on the remote moved, and the state stays local until a push succeeds."""
+
+
+def _check_scope_id(scope_id: str) -> None:
     if not scope_id or "/" in scope_id or scope_id.startswith("."):
         raise TriageError(f"{scope_id!r} is not a scope id")
+
+
+def ref_name(scope_id: str) -> str:
+    """`refs/heads/fr-triage/<scope-id>`: the branch the state is fetched from and
+    pushed to."""
+    _check_scope_id(scope_id)
     return f"{REF_PREFIX}{scope_id}"
+
+
+def legacy_ref_name(scope_id: str) -> str:
+    """`refs/fr/triage/<scope-id>`: where an older fr kept the state; only read."""
+    _check_scope_id(scope_id)
+    return f"{LEGACY_REF_PREFIX}{scope_id}"
 
 
 def _allowed(rel: str) -> bool:
@@ -223,18 +253,31 @@ def fetch_state(
     its sha, or None (nothing written) when the remote has no such ref. A path in the ref
     outside `REF_FILES` is ignored; an entry the ref no longer carries is removed.
 
+    When the remote has no branch (`ref_name`) but has the legacy ref
+    (`legacy_ref_name`), the state comes from the legacy ref, and the base records the
+    legacy ref: it is never the expected-old of a push to the branch, so the first push
+    creates the branch.
+
     Changes not yet pushed are never overwritten (p3-r4): when the ref moved past this
     directory's base and the directory differs from that base, `StateRefConflict`, and
     nothing is written, unless *discard_local*. When the ref has not moved, local changes
     are kept and nothing is written."""
     cwd = _repo(state_dir, repo)
     ref = ref_name(scope_id)
-    base = read_base(state_dir, remote=remote_repo, ref=ref)
     sha = gitseam.fetch_ref(cwd, remote_repo, ref)
     if sha is None:
-        if base is not None:
+        legacy = legacy_ref_name(scope_id)
+        sha = gitseam.fetch_ref(cwd, remote_repo, legacy)
+        if sha is not None:
+            ref = legacy  # migration: read the old ref; the next push creates the branch
+    if sha is None:
+        if any(
+            read_base(state_dir, remote=remote_repo, ref=r) is not None
+            for r in (ref, legacy_ref_name(scope_id))
+        ):
             _clear_base(state_dir)  # the remote no longer has it: no base, not a writer
         return None
+    base = read_base(state_dir, remote=remote_repo, ref=ref)
     if sha == base and not discard_local:
         return sha
     theirs = ref_tree(cwd, sha)
@@ -292,7 +335,9 @@ def push_state(
     """Commit *state_dir*'s `REF_FILES` entries and push them to the scope's ref on
     *remote_repo* (the git URL or path of *state_repo*), only if the remote's ref is still
     *expected_old* (None: it must not exist yet). The new sha; `StateRefConflict` when the
-    remote moved, and then nothing on the remote changed.
+    remote moved, `StateRefPushRefused` when the remote refused the push for any other
+    reason (a permission, a hook, a proxy's HTTP 403), and either way nothing on the
+    remote changed and the base is kept.
 
     First, the privacy guard (R8): *state_repo*'s visibility is read from the forge through
     *client* (`GET repos/{state_repo}`), and the push is refused (`PrivacyError`, nothing
@@ -307,11 +352,21 @@ def push_state(
     sha = gitseam.commit_tree_from_paths(
         cwd, state_dir, ref_entries(state_dir), parent=parent, message=f"fr triage state {ref}"
     )
-    landed = gitseam.push_ref_cas(cwd, remote_repo, sha, ref, expected_old=expected_old)
-    if not landed and expected_old is not None and not gitseam.remote_ref(cwd, remote_repo, ref):
-        # The remote no longer has the ref at all (p3-r4): the base is stale, not a sign of
-        # another writer. Create it, still as a compare-and-swap.
-        landed = gitseam.push_ref_cas(cwd, remote_repo, sha, ref, expected_old=None)
+    try:
+        landed = gitseam.push_ref_cas(cwd, remote_repo, sha, ref, expected_old=expected_old)
+        if (
+            not landed
+            and expected_old is not None
+            and not gitseam.remote_ref(cwd, remote_repo, ref)
+        ):
+            # The remote no longer has the ref at all (p3-r4): the base is stale, not a sign
+            # of another writer. Create it, still as a compare-and-swap.
+            landed = gitseam.push_ref_cas(cwd, remote_repo, sha, ref, expected_old=None)
+    except gitseam.PushRefused as exc:
+        raise StateRefPushRefused(
+            f"{remote_repo} refused the push of {ref} (not another writer: the ref did not "
+            f"move): {exc}"
+        ) from exc
     if not landed:
         raise StateRefConflict(
             f"{ref} on {remote_repo} is no longer {expected_old or 'absent'}: another writer "

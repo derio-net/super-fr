@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr triage keeps a scope's state ref on the branch refs/heads/fr-triage/<scope-id> (read from the old refs/fr/triage/ ref once), so cloud sessions can push it, and a push the remote refuses is a warning instead of failing collect"

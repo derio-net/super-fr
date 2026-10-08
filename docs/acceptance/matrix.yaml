@@ -5071,6 +5071,10 @@ rows:
       - super-fr:tests/unit/test_triage_state_ref.py#test_a_stale_expected_old_fails_and_changes_nothing
       - super-fr:tests/unit/test_triage_state_repo.py#test_a_mixed_set_asks_among_the_private_ones_only
       - super-fr:tests/unit/test_triage_state_repo.py#test_a_restore_recovers_state_repo_and_forge_api_and_writes_forge_yaml_if_absent
+      - super-fr:tests/unit/test_triage_state_ref.py#test_the_state_ref_is_a_branch_under_refs_heads
+      - super-fr:tests/unit/test_triage_state_ref.py#test_a_legacy_base_is_not_the_expected_old_of_the_first_branch_push
+      - super-fr:tests/unit/test_triage_state_ref.py#test_a_push_the_remote_refuses_is_a_refusal_not_a_conflict
+      - super-fr:tests/unit/test_triage_state_ref_sync.py#test_collect_whose_push_is_refused_warns_and_exits_zero
       int:
       - super-fr:tests/integration/test_scenarios.py#test_cloud_triage_state_ref
     status: ci
@@ -5078,8 +5082,12 @@ rows:
       the ref''s REF_FILES push/fetch CAS over bare remotes (test_triage_state_ref),
       the state-repo decision and restore of scope-durable.yaml (test_triage_state_repo);
       the candidate scenario tests/scenarios/cloud-triage-state-ref.sh runs in CI through
-      test_scenarios.py. The cloud git proxy''s acceptance of a non-branch ref push
-      is Test Plan 16''s walk, still owed'
+      test_scenarios.py. Test Plan 16''s walk (2026-10-08) measured the cloud git proxy
+      refusing every ref outside refs/heads/ (HTTP 403), so the state ref moved to the
+      orphan branch refs/heads/fr-triage/<scope-id>, read from the legacy refs/fr/triage/<scope-id>
+      when the branch is absent, and a push the remote refuses is a warning after a
+      command''s own work (debug 2026-10-08-cloud-state-ref-proxy); the walk of the
+      branch push from a cloud session is still owed'
     scenario: tests/scenarios/cloud-triage-state-ref.sh
   - id: cloud-triage-privacy-guard
     capability: Backlog triage

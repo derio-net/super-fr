@@ -45,7 +45,7 @@ R1. A `github-rest` forge backend implements, with GitHub's REST API only and no
 R2. `github-rest` returns the same records the GraphQL-backed backend returns for the same forge state, field for field, except where REST cannot express a field; each such field is listed, with how it is derived or why it is absent.
 R3. The backend is chosen by one host-level setting, `forge.api: rest | graphql` (default `graphql`), resolved before any forge client exists and without a scope, from `FR_FORGE_API`, else the host file `~/.config/fr/forge.yaml`, else `graphql`, and honoured by every place fr builds a GitHub client or calls `gh`; the cloud environment's setup script writes that file (an `export` there never reaches the session's shells, discovery `spare-preload`).
 R4. A scope's state lives in a state directory inside the workspace that runs the driver (the git toplevel of the driver's working directory, or `--workspace`), excluded from git through the repository's `info/exclude` (under `git rev-parse --git-common-dir`, so a linked worktree is covered) so no tracked file changes; an existing `~/.cache/fr/triage/<scope>/` has its durable files (the `REF_FILES` set plus `facts.json` and `scope.yaml`) imported on first use and is left in place. A command run outside any clone, with no `--workspace`, keeps using `~/.cache/fr/triage/<scope>/` exactly as today, so no host invocation that works now starts refusing. Workspaces of one scope stay one state because every state write is wrapped by the ref (R5), and the same-host `drive.lock` stays keyed per scope under `~/.cache/fr/triage/<scope>/`, whatever workspace the state lives in.
-R5. A scope's durable copy is a git ref, `refs/fr/triage/<scope-id>`, whose tree holds an explicit list of files (judgements, origins, subsystems, the page fragments and their manifests, snapshots, authored sources, merge stops, the lease, the scope's durable settings, and the cloud runner's pending requests, session records and re-home ledger); fr fetches it before it reads state and pushes it, as a compare-and-swap, after every change it makes; only the scope that owns a ref writes it.
+R5. A scope's durable copy is a git ref, the orphan branch `refs/heads/fr-triage/<scope-id>` (a branch because the cloud git proxy writes nothing outside `refs/heads/`, measured 2026-10-08, §B), whose tree holds an explicit list of files (judgements, origins, subsystems, the page fragments and their manifests, snapshots, authored sources, merge stops, the lease, the scope's durable settings, and the cloud runner's pending requests, session records and re-home ledger); fr fetches it before it reads state (from the legacy `refs/fr/triage/<scope-id>` when the branch does not exist yet) and pushes it, as a compare-and-swap, after every change it makes; only the scope that owns a ref writes it. A push the remote refuses, as opposed to a compare-and-swap conflict, is a warning after a command's own work, never its failure.
 R6. A single-repo scope keeps its ref in that repo.
 R7. A scope over several repos or an org keeps its ref in a state repo the operator names once. When at least one repo in the scope is private, fr asks the operator to choose one of the private ones. When all are public, fr asks the operator to choose between a new repo just for the refs and one of the public repos, and warns that a private repo's issue later added to a wave would then leak.
 R8. fr refuses, naming the issue and the state repo, to add an issue to a judged set, a batch or a wave when the issue's repo is private and the scope's state repo is public, and makes the same check before every push of the state ref and before every state export, reading the state repo's own visibility from the forge before each push and refusing when it cannot be read, so a repo whose visibility changed, or a hand-edited file, is caught before it leaves the workspace.
@@ -160,8 +160,16 @@ check across clones (p3-r3).
 every triage command that reads state fetches the ref first (adopting it when
 the local copy is not ahead) and every command that changes state pushes it
 after the change, through one wrapper in the triage CLI, not per verb; a push
-conflict refuses with the fetch-and-retry line. `fr triage state push|fetch`
-remain as the explicit verbs. `.state-ref` (the last pushed or fetched sha, kept
+conflict refuses with the fetch-and-retry line. A push the remote refuses for any
+other reason (a permission, a proxy's HTTP 403, a hook, a hung-up connection) is a
+warning naming the ref, saying the state stays local until a push succeeds, and
+the command exits 0: its own work (collect's `facts.json`, say) is already done,
+and failing it would only hide that. git exits 1 for both, so they are told apart
+by its words, `(stale info)` for a lost lease, and failing those by reading the
+remote's ref again: one that moved is a conflict, one that did not (or cannot be
+read) was refused. `fr triage state push|fetch` remain as the explicit verbs;
+`state push` exits 2 on a refusal, since pushing is its whole job, and so do the
+lease's and the drive's pushes (§D), which a lease cannot be held without. `.state-ref` (the last pushed or fetched sha, kept
 out of `REF_FILES`) records the remote and ref it came from; a stored sha for a
 different remote or ref, or one the remote no longer has, is discarded rather
 than reported as another writer's push (p3-r4). A fetch that would overwrite
@@ -180,7 +188,7 @@ for the pass, never re-read per repo on every pass when the list carries it
 registered artifact, only its own state directory and refs, and the rationale in
 `fr.artifacts.trigger` is updated to say so.
 
-**The ref (R5).** `refs/fr/triage/<scope-id>` points at a commit whose tree is
+**The ref (R5).** `refs/heads/fr-triage/<scope-id>` points at a commit whose tree is
 this explicit list (`fr.triage.state_ref.REF_FILES`), not the export set:
 
 - `judgements.yaml`, `origins.yaml`, `subsystems.yaml`;
@@ -203,12 +211,35 @@ this explicit list (`fr.triage.state_ref.REF_FILES`), not the export set:
 `scope.yaml` and the host id stay out, as today. `fr.triage.gitseam` gains
 `fetch_state` and `push_state`; a push is a compare-and-swap
 (`--force-with-lease=<ref>:<old>`), so a lost lease or a second writer fails the
-push rather than overwriting. Refs outside `refs/heads/` are not branches: no
-branch list, no protection rules, no PRs. The wave export to `docs/triage`
+push rather than overwriting. The wave export to `docs/triage`
 (`export:`) keeps working for repos that want a reviewed copy; it is no longer
-how state survives. **Owed measurement:** that the cloud git proxy accepts a
-push of a ref outside `refs/heads/`, to the session's repo and to a state repo
-the session did not start with; Test Plan 16 measures both.
+how state survives.
+
+**Why a branch (measured 2026-10-08).** This spec first put the ref at
+`refs/fr/triage/<scope-id>`, outside `refs/heads/`, so it would show in no branch
+list, meet no protection rule and never be a PR's head, and recorded as owed that
+the cloud git proxy would accept it. Test Plan 16's walk measured the proxy
+(debug journal `2026-10-08-cloud-state-ref-proxy`): it creates `refs/heads/*` and
+force-updates them, a `--force-with-lease` non-fast-forward included; it refuses
+every ref outside `refs/heads/` (HTTP 403), branch deletion, and REST
+`git/refs` writes. So the ref is a branch. Its commit is an orphan whose tree
+holds only `REF_FILES`, built in a temporary index: it shares no history with the
+code, so it is never mergeable into it, and the workspace's HEAD, index and files
+never move. A fetch keeps it locally under `refs/fr/fetched/`, never
+`refs/heads/`, so the workspace's own branch list does not grow.
+
+**Migration from the legacy ref.** When the remote has no
+`refs/heads/fr-triage/<scope-id>` but has `refs/fr/triage/<scope-id>`, the fetch
+restores from the legacy ref and records it in `.state-ref` as the base's ref.
+A base recorded for the legacy ref is never the expected-old of a push to the
+branch (p3-r4's remote-and-ref rule), so the first push creates the branch, as a
+compare-and-swap against "absent". The legacy ref is never deleted (the proxy
+refuses that too); once the branch exists it is read and the legacy ref ignored.
+
+**Branches a consumer sees.** A consumer repo whose CI runs `on: push` for every
+branch will see a run on each state push to these branches; scope its `push`
+trigger to its own branches (super-fr's own workflows run `push` on `main` only),
+or ignore `fr-triage/**`.
 
 **Where the ref lives (R6, R7).** Recorded as `state_repo` in
 `scope-durable.yaml` (in the ref) and mirrored to the host's `scope.yaml`. The
@@ -668,8 +699,9 @@ and the `01-fr-goal` explainer if it describes local-only test evidence
     `forge.api: rest` in `~/.config/fr/forge.yaml` and the branch build, collect,
     check and render `derio-net/super-fr` with no GraphQL error, and the board
     matches a host render of the same moment; push and fetch the scope's
-    `refs/fr/triage/<scope-id>` through the cloud git proxy, to the session's own
-    repo and to a state repo the session did not start with (R1, R2, R5).
+    `refs/heads/fr-triage/<scope-id>` through the cloud git proxy, to the session's own
+    repo and to a state repo the session did not start with (R1, R2, R5). The first
+    walk (2026-10-08) found `refs/fr/triage/<scope-id>` refused, which moved the ref.
 17. **Live, pre-merge (`client-live`), this cloud environment:** a Sonnet driver
     session drives a wave of two small throwaway super-fr issues on its own
     scope beside the host driver: dispatches a worker session per batch, whose
