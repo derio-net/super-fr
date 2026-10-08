@@ -651,3 +651,8 @@ Supersedes phase-split-2026-10-07-cloud-triage-p3 after the renumbering (was pha
 ### phase-split-2026-10-07-cloud-triage-p4-2 · decision · ask: the lease and the driver adapter (R9-R13)
 
 Supersedes phase-split-2026-10-07-cloud-triage-p4-1 after the renumbering (was phase 3).
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p5-1 created=2026-10-08T13:50:17+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p5-1 · decision · review-size: the claude-cloud runner is a new workspace package
+
+Supersedes phase-split-2026-10-07-cloud-triage-p5 after the renumbering (was phase 4; reason as phase-split-2026-10-07-cloud-triage-p4-1).
