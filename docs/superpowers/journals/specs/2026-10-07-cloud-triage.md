@@ -636,3 +636,8 @@ Measured 2026-10-08 during phase 1: `uv run pytest -q --no-cov -n auto` in this 
 ### d10-ci-evidence · decision · Operator decision, round 10: CI as test evidence, in this spec
 
 Operator, 2026-10-08, after slow-suite: open the draft PR now so every push runs CI (derio-net/super-fr#1088, opened before deliver at the operator's request), and add to THIS spec a requirement letting fr accept a green CI run on HEAD as test evidence (R22, §I), rather than filing it separately or keeping local suites only.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p2-1 created=2026-10-08T13:50:13+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p2-1 · decision · risk-first: CI as test evidence (R22) lands before the remaining phases
+
+Supersedes phase-split-2026-10-07-cloud-triage-p2. Phases were renumbered on 2026-10-08 (d10): the new phase 2 is R22, placed right after the skeleton so phases 3-7 can prove themselves with the PR's CI instead of a ~20-minute local suite in this container (discovery slow-suite).
