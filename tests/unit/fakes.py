@@ -70,6 +70,9 @@ class FakeGhClient:
         # When set, every PR create_pr opens is stamped with this creation time;
         # otherwise with the real clock, as the forge would.
         self.pr_created_at: str | None = None
+        # (repo, sha) -> `commit_checks` records (spec 2026-10-07-cloud-triage §I),
+        # loaded by a test from captured fixtures; an unknown sha reports none.
+        self.commit_checks_by_sha: dict[tuple[str, str], list[dict[str, Any]]] = {}
 
     # ---- preload helpers (test setup) ----
 
@@ -245,6 +248,10 @@ class FakeGhClient:
             for (r, _), p in sorted(self.prs.items())
             if r == repo and p["head_ref"] == branch
         ]
+
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        self.calls.append(("commit_checks", {"repo": repo, "sha": sha}))
+        return [dict(r) for r in self.commit_checks_by_sha.get((repo, sha), [])]
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         self.calls.append(("pr_view", {"repo": repo, "number": number}))

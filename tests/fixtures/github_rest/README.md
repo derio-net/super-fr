@@ -72,3 +72,31 @@ like a GraphQL answer.
 **Privacy.** Everything is `derio-net`'s own public repo and its members'
 public logins; nothing is third-party under
 `.claude/rules/third-party-privacy.md`, and nothing was redacted.
+
+## `commit_checks/` — the CI-evidence reads (plan phase 2, P2.T1.S1)
+
+Captured live on **2026-10-08** from a Claude Code cloud session with `gh api`
+against `derio-net/super-fr`, one directory per moment. Each holds the stdout,
+byte for byte, of the three routes `GhClient.commit_checks` reads, plus `sha`
+(the commit) and `captured-at` (UTC):
+
+- `check-runs.json` — `gh api 'repos/derio-net/super-fr/commits/<sha>/check-runs?filter=latest&per_page=100&page=1'`
+- `status.json` — `gh api repos/derio-net/super-fr/commits/<sha>/status`
+- `actions-runs.json` — `gh api 'repos/derio-net/super-fr/actions/runs?head_sha=<sha>&per_page=100&page=1'`
+
+The moments:
+
+- `green/` — `d9a76e7b`, phase 1's tested head on PR 1088: every check
+  completed `success`, `ci-ok` among them; each check run carries the PR with
+  its base sha.
+- `pending/` — `43956047`, PR 1088's head while its CI was running: seven test
+  shards `in_progress` and **no `ci-ok` check run at all** (a job that `needs`
+  others gets its check run only when it starts).
+- `rerun/` — `f1919d4`, PR 1038's head: CI ran twice (two check suites of the
+  `CI` workflow). The first `ci-ok`, two test shards failed and `coverage`
+  skipped; the second run is green throughout. `filter=latest` keeps both
+  suites' runs; the PR is merged, so `pull_requests` is empty.
+
+No captured commit in this repo carries a commit status (every `status.json`
+has `"statuses": []`): the status-context tests derive their entries from the
+captured envelope and say so.

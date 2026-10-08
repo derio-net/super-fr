@@ -320,6 +320,73 @@ def _check_row(entry: dict[str, Any]) -> dict[str, Any]:
     return {"name": name, "bucket": _BUCKET.get(state, "pending"), "state": state}
 
 
+def _pr_base_sha(pulls: Iterable[dict[str, Any]] | None, sha: str) -> str:
+    """The base sha of the PR whose head is *sha* in a check run's (or Actions
+    run's) `pull_requests`, else of the first PR listed; "" when none is (a
+    merged PR, a push run)."""
+    listed = list(pulls or [])
+    chosen = next((p for p in listed if (p.get("head") or {}).get("sha") == sha), None)
+    if chosen is None and listed:
+        chosen = listed[0]
+    return str(((chosen or {}).get("base") or {}).get("sha") or "")
+
+
+def _commit_check_records(
+    check_runs: Iterable[dict[str, Any]],
+    statuses: Iterable[dict[str, Any]],
+    workflow_runs: Iterable[dict[str, Any]],
+    sha: str,
+) -> list[dict[str, Any]]:
+    """`GhClient.commit_checks` (spec 2026-10-07-cloud-triage §I): one record
+    per check on *sha*, `{name, workflow, status, conclusion, url, base_sha}`,
+    the latest per (workflow, name) as `collect._latest_runs` picks it (a
+    failed attempt re-run green is one green record; a status context keeps
+    its newest state). `status` and `conclusion` are GitHub's lower-case REST
+    words (`completed`/`in_progress`/…, `success`/`failure`/…; "" while
+    unfinished); a commit status maps `pending` to status `pending`, any other
+    state to status `completed` with that state as its conclusion. `base_sha` is
+    the PR's base sha as the check run (else its suite's Actions run) reports
+    it — "" for a status context, or where GitHub names no PR."""
+    from fr.triage.collect import _latest_runs
+
+    runs, sts, actions = list(check_runs), list(statuses), list(workflow_runs)
+    entries = _rollup(runs, sts, actions)
+    source = {id(e): src for e, src in zip(entries, [*runs, *sts], strict=True)}
+    suite_base = {
+        r.get("check_suite_id"): _pr_base_sha(r.get("pull_requests"), sha) for r in actions
+    }
+    out: list[dict[str, Any]] = []
+    for entry in _latest_runs(entries):
+        src = source[id(entry)]
+        if entry["__typename"] == "StatusContext":
+            state = str(src.get("state") or "").lower()
+            done = state != "pending"
+            out.append(
+                {
+                    "name": entry["context"],
+                    "workflow": "",
+                    "status": "completed" if done else "pending",
+                    "conclusion": state if done else "",
+                    "url": entry["targetUrl"],
+                    "base_sha": "",
+                }
+            )
+            continue
+        suite = (src.get("check_suite") or {}).get("id")
+        out.append(
+            {
+                "name": entry["name"],
+                "workflow": entry["workflowName"],
+                "status": str(src.get("status") or "").lower(),
+                "conclusion": str(src.get("conclusion") or "").lower(),
+                "url": str(src.get("html_url") or src.get("details_url") or ""),
+                "base_sha": _pr_base_sha(src.get("pull_requests"), sha)
+                or suite_base.get(suite, ""),
+            }
+        )
+    return out
+
+
 def _ci(rollup: list[dict[str, Any]]) -> str:
     """`list_linked_prs`' `ci`: PASS / FAIL / PENDING / NONE over the latest run of
     each check (the GraphQL rollup's `state`, collapsed as `_coerce_ci_state`)."""
@@ -646,6 +713,19 @@ class RealGhRestClient:
 
         rollup = _latest_runs(self._rollup_for(repo, pull["head"]["sha"]))
         return [row for row in map(_check_row, rollup) if row["name"] in required]
+
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        """Every check on *sha* (spec §I): `commits/{sha}/check-runs?filter=latest`,
+        `commits/{sha}/status`, and the Actions runs naming each run's workflow.
+        `RealGhClient.commit_checks` is this method: REST works on either backend."""
+        runs = self._paged(f"repos/{repo}/commits/{sha}/check-runs?filter=latest", key="check_runs")
+        status = self._api(f"repos/{repo}/commits/{sha}/status") or {}
+        actions = (
+            self._paged(f"repos/{repo}/actions/runs?head_sha={sha}", key="workflow_runs")
+            if runs
+            else []
+        )
+        return _commit_check_records(runs, status.get("statuses") or [], actions, sha)
 
     def pr_status_by_url(self, url: str) -> dict[str, Any] | None:
         """None on any failure, as the `GhClient` contract says (fr-vk holds the card)."""

@@ -399,6 +399,13 @@ class RealGhClient:
             "body": raw.get("body", ""),
         }
 
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        """Spec 2026-10-07-cloud-triage §I: the same REST routes as the
+        `github-rest` backend (`gh api` works on either), on this client's host."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).commit_checks(repo, sha)
+
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return self._checks(repo, number, required=True)
 

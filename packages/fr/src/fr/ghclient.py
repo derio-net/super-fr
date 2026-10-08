@@ -234,6 +234,17 @@ class GhClient(Protocol):
         `pr_required_checks`. Empty when none is reported (yet)."""
         ...
 
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        """Every check on commit *sha*: `{name, workflow, status, conclusion, url,
+        base_sha}` — check runs (latest per workflow and name, so a failed attempt
+        re-run green is one green record) and commit statuses (latest per
+        context; `workflow` ""). `status` is `completed` once finished;
+        `conclusion` GitHub's word (`success`, `failure`, `skipped`, ...), "" while
+        unfinished; `base_sha` the PR base GitHub reports for the run ("" when
+        none). Spec 2026-10-07-cloud-triage §I: CI as test evidence. Empty when
+        nothing is reported (yet)."""
+        ...
+
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         """Merge the PR only if its head is still *head_sha*; *method* is one of
         `MERGE_METHODS`. Never bypasses branch protection: a refusal raises
@@ -370,6 +381,9 @@ class UnsupportedBatchOps:
 
     def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         raise self._unsupported("pr_checks")
+
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        raise self._unsupported("commit_checks")
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         raise self._unsupported("pr_merge")
