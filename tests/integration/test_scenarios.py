@@ -158,6 +158,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "cloud-triage-state-ref",
         "cloud-triage-privacy-guard",
         "cloud-triage-driver-lease",
+        "cloud-triage-version-drift",
     }
     assert on_disk == here
 
@@ -224,3 +225,7 @@ def test_cloud_triage_privacy_guard(installed: Path, tmp_path: Path) -> None:
 
 def test_cloud_triage_driver_lease(installed: Path, tmp_path: Path) -> None:
     _scenario("cloud-triage-driver-lease", installed, tmp_path)
+
+
+def test_cloud_triage_version_drift(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-version-drift", installed, tmp_path)

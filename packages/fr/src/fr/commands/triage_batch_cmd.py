@@ -3443,7 +3443,10 @@ class _Driver:
             path = drift.cursor_path(pr.files) if pr is not None and pr.state == "OPEN" else None
             if pr is None or path is None:
                 continue  # no cursor on the branch yet
-            item = _probe(repo, batch, self._launch(facts, batch, repo))
+            # The batch's own launch values only: a re-home keeps the recorded session's
+            # repo and branch, and drift must not refuse a batch whose launch defaults
+            # the repo no longer resolves (the dispatch already happened).
+            item = _probe(repo, batch, batch.launch)
             try:
                 text = self.client(facts, repo).read_file_at_ref(
                     repo, path, pr.head_oid or pr.head_ref

@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""A fake `gh` for tests/scenarios/cloud-triage-version-drift.sh (FR_FORGE_API=rest).
+
+Answers the routes one `fr triage drive pass` reads for `derio-net/super-fr` in a world
+of three open batch PRs (feat/batch-b1..b3) and no open issue. Every answer comes from
+tests/fixtures/github_rest (captured live 2026-10-08, that directory's README):
+
+- verbatim: the viewer (`user`), the repo record, `.fr/triage.yaml` at HEAD, the latest
+  release (`v5.17.1`), PR 1080's reviews, the check runs, combined status and Actions
+  runs of its head 095092b8, and any other route the index holds (`branches/main`...);
+- DERIVED from captured draft PR 1080 (itself a triage batch PR): each batch PR is that
+  record with only `number`, `head.ref` and its one changed file's name rewritten
+  (`docs/superpowers/runs/r-bN.yaml`, the batch's run cursor), so all three share its
+  head sha and therefore its captured CI;
+- the run cursors at that head are fr's own artifact (a run cursor), written by the
+  scenario into $DRIFT_CURSORS/r-bN.yaml, not a forge record.
+
+The open-issue and closed-PR lists, and the members' comments (read by the claim
+refresh, which then writes nothing), answer `[]`, GitHub's own empty page. Anything else
+fails loudly and is logged to $FAKE_GH_LOG.
+"""
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent.parent
+CAPS = HERE.parent.parent.parent / "fixtures" / "github_rest"
+R = "repos/derio-net/super-fr"
+SHA = "095092b8f4ec27dffd445d5c8f1f717f9cd216e0"
+BATCHES = {1101: "b1", 1102: "b2", 1103: "b3"}
+MEMBERS = (432, 458, 471)  # captured closed issues, one per batch
+RAW = "-H Accept: application/vnd.github.raw+json "
+INDEX = json.loads((CAPS / "index.json").read_text())
+
+
+def cap(name: str) -> str:
+    return (CAPS / name).read_text()
+
+
+def pull(n: int) -> dict:
+    record = json.loads(cap("repo_pulls_1080.json"))
+    record["number"] = n
+    record["head"]["ref"] = f"feat/batch-{BATCHES[n]}"
+    return record
+
+
+def files(n: int) -> list:
+    entries = json.loads(cap("repo_pulls_1080_files-per_page-100-page-1.json"))[:1]
+    entries[0]["filename"] = f"docs/superpowers/runs/r-{BATCHES[n]}.yaml"
+    return entries
+
+
+def answer(line: str) -> str | None:
+    fixed = {
+        "user": "user.json",
+        R: "repo.json",
+        f"{RAW}{R}/contents/.fr/triage.yaml?ref=HEAD": "repo_contents_.fr_triage.yaml-ref-HEAD.txt",
+        f"{R}/releases/latest": "repo_releases_latest.json",
+        f"{R}/commits/{SHA}/status": f"repo_commits_{SHA}_status.json",
+        f"{R}/commits/{SHA}/check-runs?per_page=100&page=1":
+            f"repo_commits_{SHA}_check-runs-per_page-100-page-1.json",
+        f"{R}/actions/runs?head_sha={SHA}&per_page=100&page=1":
+            f"repo_actions_runs-head_sha-{SHA}-per_page-100-page-1.json",
+    }
+    if line in fixed:
+        return cap(fixed[line])
+    if line in (f"{R}/issues?state=open&per_page=100&page=1",
+                f"{R}/pulls?state=all&per_page=100&page=1",
+                *(f"{R}/issues/{n}/comments?per_page=100&page=1" for n in MEMBERS)):
+        return "[]"
+    if line == f"{R}/pulls?state=open&per_page=100&page=1":
+        return json.dumps([pull(n) for n in BATCHES])
+    m = re.fullmatch(rf"{R}/pulls/(\d+)(/files|/reviews)?(\?per_page=100&page=1)?", line)
+    if m and int(m.group(1)) in BATCHES:
+        n, sub = int(m.group(1)), m.group(2)
+        if sub is None:
+            return json.dumps(pull(n))
+        if sub == "/files":
+            return json.dumps(files(n))
+        return cap("repo_pulls_1080_reviews-per_page-100-page-1.json")
+    m = re.fullmatch(
+        re.escape(f"{RAW}{R}/contents/docs/superpowers/runs/") + r"(r-b\d)\.yaml\?ref=" + SHA, line
+    )
+    if m:
+        return (Path(os.environ["DRIFT_CURSORS"]) / f"{m.group(1)}.yaml").read_text()
+    entry = INDEX.get(line.replace("-H ", "", 1) if line.startswith("-H ") else line)
+    if entry is not None:  # any other captured route, verbatim (a captured failure fails)
+        if entry.get("error"):
+            err = json.loads(cap(entry["file"]))
+            sys.stderr.write(err.get("stderr", ""))
+            sys.exit(int(err.get("exit", 1)))
+        return cap(entry["file"])
+    return None
+
+
+args = sys.argv[1:]
+if not args or args[0] != "api":
+    sys.stderr.write(f"fake gh: unexpected call: gh {' '.join(args)}\n")
+    sys.exit(1)
+line = " ".join(args[1:])
+if os.environ.get("FAKE_GH_LOG"):
+    with open(os.environ["FAKE_GH_LOG"], "a") as fh:
+        fh.write(line + "\n")
+out = answer(line)
+if out is None:
+    sys.stderr.write(f"fake gh: no capture for: gh api {line}\n")
+    sys.exit(1)
+sys.stdout.write(out)

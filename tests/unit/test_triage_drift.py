@@ -290,3 +290,19 @@ def test_a_working_session_is_not_rehomed_until_it_is_idle(
     assert result.exit_code in (0, 3), result.output
     assert _requests(outbox, "rehome") == []
     assert drift.load_ledger(state).rehomes == ()
+
+
+def test_a_batch_whose_launch_no_longer_resolves_is_still_checked(
+    tmp_path: Path, world: World, drive: list[Any]
+) -> None:
+    """Drift never resolves a launch: the dispatch already happened, and a repo whose
+    `defaults.launch` names no model must not make the pass refuse."""
+    ws, state = _workspace(tmp_path, "ws")
+    _drifting(world, state, cursors={3: "5.17.1"})
+    world.config = None  # every later collect reads no `.fr/triage.yaml`
+    outbox = tmp_path / "outbox.json"
+
+    result = _pass(state, outbox, "--workspace", str(ws), "--state-repo", REPO)
+
+    assert result.exit_code in (0, 3), result.output
+    assert [r["item"] for r in _requests(outbox, "rehome")] == [ITEM]
