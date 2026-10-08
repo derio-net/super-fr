@@ -698,3 +698,78 @@ def test_list_linked_prs_takes_state_and_draft_from_the_timeline() -> None:
         assert pr["draft"] is bool(issue.get("draft"))
         assert pr["merged"] is bool(issue["pull_request"].get("merged_at"))
         assert pr["state"] == ("CLOSED" if issue["state"] == "closed" else "OPEN")
+
+
+# ---- p1-r8: pr_required_checks joins required contexts to runs and statuses ----
+
+
+class _RequiredChecksGh(FixtureGh):
+    """The captured forge, with `main` requiring checks. No branch of a repo this
+    session may read requires a status check (captured `branches/main`: protection
+    off, rulesets carry deletion and non-fast-forward only), and PR 1080's head has
+    no commit status, so these three answers are the captured JSON with the
+    required lists and statuses filled in — GitHub's documented shapes, the
+    captured envelopes. Everything else is the capture."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        branch = load(f"{R}/branches/main")
+        branch["protection"] = {
+            "enabled": True,
+            "required_status_checks": {
+                "enforcement_level": "non_admins",
+                "contexts": ["lint", "test"],
+                "checks": [
+                    {"context": "lint", "app_id": 15368},
+                    {"context": "test", "app_id": None},
+                ],
+            },
+        }
+        rules = load(f"{R}/rules/branches/main")
+        rules.append(
+            {
+                **rules[0],
+                "type": "required_status_checks",
+                "parameters": {
+                    "strict_required_status_checks_policy": False,
+                    "do_not_enforce_on_create": False,
+                    "required_status_checks": [
+                        {"context": "typecheck", "integration_id": 15368},
+                        {"context": "ci/external"},
+                    ],
+                },
+            }
+        )
+        status = load(f"{R}/commits/{SHA_1080}/status")
+        status["statuses"] = [
+            {"context": "ci/external", "state": "success", "target_url": "https://ci.example.com/1",
+             "created_at": "2026-10-08T00:00:00Z"},
+            {"context": "ci/optional", "state": "failure", "target_url": "https://ci.example.com/2",
+             "created_at": "2026-10-08T00:00:00Z"},
+        ]  # fmt: skip
+        self.answers = {
+            f"{R}/branches/main": branch,
+            f"{R}/rules/branches/main": rules,
+            f"{R}/commits/{SHA_1080}/status": status,
+        }
+
+    def __call__(self, argv: list[str]) -> str:
+        import json
+
+        route = parse_api(argv)[2]
+        if route in self.answers:
+            self.calls.append(list(argv))
+            return json.dumps(self.answers[route])
+        return super().__call__(argv)
+
+
+def test_pr_required_checks_matches_runs_by_name_and_statuses_by_context() -> None:
+    client = RealGhRestClient(run=_RequiredChecksGh())
+    rows = {r["name"]: r for r in client.pr_required_checks(REPO, 1080)}
+    # lint/test from classic protection, typecheck/ci/external from the ruleset;
+    # the unrequired check runs and the unrequired status are left out.
+    assert set(rows) == {"lint", "test", "typecheck", "ci/external"}
+    assert rows["lint"] == {"name": "lint", "bucket": "pass", "state": "SUCCESS"}
+    assert rows["ci/external"] == {"name": "ci/external", "bucket": "pass", "state": "SUCCESS"}
+    every = {r["name"] for r in client.pr_checks(REPO, 1080)}
+    assert {"opencode-plugin-test", "ci/optional"} <= every - set(rows)
