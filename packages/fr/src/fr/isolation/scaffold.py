@@ -429,7 +429,7 @@ _SUPER_FR_GIT = "git+https://github.com/derio-net/super-fr"
 # the set is a literal here; install.sh derives it from the workspace, and
 # tests/integration/test_runner_package_lists.py pins both to the entry points
 # (#650, #645: a runner missing here is invisible to `uv run fr`).
-RUNNER_PACKAGES = ("fr-cncd", "fr-herdr", "fr-vk")
+RUNNER_PACKAGES = ("fr-claude-cloud", "fr-cncd", "fr-herdr", "fr-vk")
 
 # Baseline: fr itself plus every runner adapter, installed from the repo's main
 # branch at create time.
