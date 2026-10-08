@@ -942,3 +942,108 @@ the mailbox is one class over two files and the runner only delegates to it; the
 ### no-refactor-p5-t3 · discovery · no-refactor-because P5.T3 (phase 5)
 
 each change rides an existing seam: session_statuses became a wrapper over read_sessions (one loop, one place notes are read), the board hint and Needs-you-now each gained one optional mapping, and p4-o2 is one adapter predicate (Driver.carries) checked at the three places a runner is loaded
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · after a rehome, matching by tag let the old session overwrite the new recorded session's state (order-dependent) (phase 5)
+
+mailbox.py:215,381; reproduced.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · replaying a rehome whose result was lost created a second session (phase 5)
+
+mailbox.py:73; R14 never-duplicated.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-r3 · finding [open] (reviewer: in scope) · a status request for a session with a pending close made drive record exit 2 (phase 5)
+
+mailbox.py:270,308; triage_drive_cmd.py:365-367; reproduced.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-r4 · finding [open] (reviewer: in scope) · Mailbox.record was not atomic (phase 5)
+
+mailbox.py:293,267; reproduced.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-r5 · finding [open] (reviewer: in scope) · the item-keyed statuses shape invented a session id and consumed a pending dispatch (phase 5)
+
+mailbox.py:131,381; reproduced.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-r6 · finding [open] (reviewer: in scope) · archived sessions kept the item held and were re-closed every pass (phase 5)
+
+mailbox.py:228,37; runner.py:100; reproduced.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-r7 · finding [open] (reviewer: in scope) · adopt --list driver selection was unreachable from the CLI (phase 5)
+
+triage_batch_cmd.py:1848.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r8 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-r8 · finding [open] (reviewer: in scope) · fr triage render probed every runner and could save the mailbox from a read-only command (phase 5)
+
+triage_cmd.py:728; triage_kanban_cmd.py:311; mailbox.py:192.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r9 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-r9 · finding [open] (reviewer: in scope) · HERMES.md, README.md and subsystems.yaml lists lacked fr-claude-cloud (phase 5)
+
+HERMES.md:67; README.md:467; docs/triage/derio-net--super-fr/subsystems.yaml:33.
+
+<!-- fr:journal kind=finding scope=plan id=p5-o1 created=2026-10-08T17:44:32+00:00 phase=5 state=open review_scope=in -->
+### p5-o1 · finding [open] (reviewer: in scope) · test_version_surfaces' hand-kept lists and the committed dev/admin profiles' POST_CREATE lacked fr-claude-cloud (CI red on 6bb24bae) (phase 5)
+
+Raised by the orchestrator from the CI annotations on 6bb24bae (test_one_uv_lock_entry_per_workspace_member, test_committed_profiles_carry_the_scaffold_post_create) before review was dispatched.
+
+<!-- fr:journal kind=review scope=plan id=p5-review created=2026-10-08T17:44:32+00:00 phase=5 -->
+### p5-review · review · phase 5 code review: 9 findings in scope (phase 5)
+
+Dispatched reviewer (superpowers:requesting-code-review discipline) over 7bb849ab..9290737a against spec R14/R15/§E/§F/Test Plan 9-10 and plan 05.yaml; every mailbox finding reproduced with a throwaway script against the real mailbox. It judged the departures: the entry point naming the class is what the registry requires (all four runner packages do it); the scenario on the real runner is sound; render reading notes is legitimate but costly (p5-r8). Received (superpowers:receiving-code-review): each verified; no spec change needed (R14/§F already require never-duplicated and idempotent replay); a fix agent implemented all nine with a failing test first (41438b61, a571923c, 71816688, e3a5136a); 2225 targeted tests and 4 cloud-triage scenarios pass; ruff and mypy clean. p5-o1, caught by CI before review, fixed in 9290737a.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: after a rehome, matching by tag let the old session overwrite the new recorded session's state (order-dependent) (phase 5)
+
+41438b61: a recorded session is matched by id, the tag only finds an unrecorded one; test_after_a_rehome_the_recorded_session_is_matched_by_id_not_by_the_shared_tag.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-r2 -->
+### p5-r2-resolved · finding [fixed] · resolves p5-r2: replaying a rehome whose result was lost created a second session (phase 5)
+
+41438b61: dispatch and rehome carry a request_tag looked up first; test_a_replayed_rehome_whose_result_was_lost_creates_one_new_session.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-r3 -->
+### p5-r3-resolved · finding [fixed] · resolves p5-r3: a status request for a session with a pending close made drive record exit 2 (phase 5)
+
+41438b61: no status asked of a session with a pending close; a status for a session closed in the same record is applied; test_record_accepts_a_status_for_a_session_it_closes_in_the_same_file.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-r4 -->
+### p5-r4-resolved · finding [fixed] · resolves p5-r4: Mailbox.record was not atomic (phase 5)
+
+41438b61: validate all, apply in memory, save once, restore on any raise; test_a_refused_record_leaves_both_files_byte_identical.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-r5 -->
+### p5-r5-resolved · finding [fixed] · resolves p5-r5: the item-keyed statuses shape invented a session id and consumed a pending dispatch (phase 5)
+
+41438b61: an item-keyed status without a session id only updates a recorded session; test_an_item_keyed_status_never_invents_a_session_or_consumes_a_dispatch.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-r6 -->
+### p5-r6-resolved · finding [fixed] · resolves p5-r6: archived sessions kept the item held and were re-closed every pass (phase 5)
+
+41438b61: archived or closed sessions release the item and are never closed again (sessions.yaml closed: list); test_an_archived_session_releases_the_item_and_is_not_closed_again.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-r7 -->
+### p5-r7-resolved · finding [fixed] · resolves p5-r7: adopt --list driver selection was unreachable from the CLI (phase 5)
+
+a571923c: adopt --list follows the scope's lease holder through the CLI; test_adopt_list_in_a_cloud_scope_reads_the_cloud_runner_through_the_cli.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r8-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-r8 -->
+### p5-r8-resolved · finding [fixed] · resolves p5-r8: fr triage render probed every runner and could save the mailbox from a read-only command (phase 5)
+
+41438b61 + 71816688: read_sessions(notes_only) for render; read-only mailbox open; test_render_reads_a_cloud_mailbox_without_writing_it.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r9-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-r9 -->
+### p5-r9-resolved · finding [fixed] · resolves p5-r9: HERMES.md, README.md and subsystems.yaml lists lacked fr-claude-cloud (phase 5)
+
+e3a5136a: HERMES.md (mypy and runner lines), README.md table, subsystems.yaml paths; a repo-wide grep found no other runner list lacking it.
+
+<!-- fr:journal kind=finding scope=plan id=p5-o1-resolved created=2026-10-08T17:44:32+00:00 phase=5 state=fixed resolves=p5-o1 -->
+### p5-o1-resolved · finding [fixed] · resolves p5-o1: test_version_surfaces' hand-kept lists and the committed dev/admin profiles' POST_CREATE lacked fr-claude-cloud (CI red on 6bb24bae) (phase 5)
+
+9290737a: fr-claude-cloud in test_version_surfaces' members and manifests and in both committed profiles' POST_CREATE; CI green on 9290737a.
