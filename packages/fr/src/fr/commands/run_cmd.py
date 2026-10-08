@@ -1919,7 +1919,10 @@ def _verified_evidence(
             opened=since,
             expected_agent=step.agent if target.phase is None else None,
         )
-    if "tests" in offered and phase is not None:
+    # `tests: ci` first: the phase-log branch below would read it as a path.
+    if "tests" in offered and offered["tests"] == TESTS_CI:
+        verified["tests"] = _ci_tests_witness(key, repo_root, done=state_value == "done")
+    elif "tests" in offered and phase is not None:
         verified["tests"] = _verify_phase_tests_log(
             key,
             offered["tests"],
@@ -2848,6 +2851,31 @@ fresh run while the code tree it covered is unchanged (spec
 2026-09-29-fr-goal-light-path §D, R6)."""
 _TREE_SEP = ";tree="
 REUSED_PREFIX = "reused:"
+TESTS_CI = "ci"
+"""`tests: ci` — the forge's CI on the pushed head stands in for a local suite
+log (spec 2026-10-07-cloud-triage R22, §I; `fr.run.ci_evidence`)."""
+
+
+def _ci_tests_witness(key: str, repo_root: Path, *, done: bool) -> str:
+    """`tests: ci`: on a `done` resolve the `verify_ci` witness, else the bare
+    claim (a failed unit vouches for no tree, and asks no forge). A pending gate
+    exits `CI_PENDING_EXIT` and a refusal exits 2, both before any write."""
+    from fr.run import ci_evidence
+
+    if not done:
+        return TESTS_CI
+    try:
+        return ci_evidence.verify_ci(repo_root)
+    except ci_evidence.CiPending as e:
+        err_console.print(
+            f"[yellow]{key}: tests: ci — {escape(str(e))}. Nothing was recorded: "
+            "resolve again when CI finishes.[/yellow]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(ci_evidence.CI_PENDING_EXIT) from e
+    except ci_evidence.CiEvidenceRefused as e:
+        err_console.print(f"[red]{key}: {escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
 
 
 def _latest_tests_witness(state: RunState) -> tuple[str, str] | None:
