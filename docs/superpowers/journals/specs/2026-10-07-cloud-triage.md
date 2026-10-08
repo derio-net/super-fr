@@ -132,3 +132,8 @@ The REST-only GitHub client is a general backend (`github-rest`), selectable any
 ### d7-worker-setup · decision · Operator decision, round 7: worker sessions get super-fr from the environment's setup script
 
 Operator, 2026-10-08: (a) the cloud environment's setup script installs super-fr (clone the marketplace, run install.sh); it covers most cases on the Anthropic cloud, other cloud agents to be revisited if ever used. (c) the brief telling the worker to install it is the fallback only, when `fr` is missing. Default taken without objection: one driver per scope, enforced by a lease stored in the state ref (holder session plus an expiry its wakes refresh); a second driver is refused; an expired lease is reported, never taken over silently.
+
+<!-- fr:journal kind=decision scope=spec id=d8-verification created=2026-10-08T10:19:43+00:00 -->
+### d8-verification · decision · Operator decision, round 8: verification
+
+Operator, 2026-10-08: default strategy `candidate` (offline scenarios against a stubbed forge); `client-live` for (1) the github-rest backend against real GitHub from this cloud environment and (2) the cloud driver end to end. The end-to-end walk runs on derio-net/super-fr itself, on two small throwaway issues (the operator does not mind), which also exercises two scopes (host and cloud) on one repo.
