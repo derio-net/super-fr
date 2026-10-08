@@ -69,7 +69,7 @@ tasks:
   steps:
   - id: P7.T3.S1
     text: |-
-      RED: tests/unit/test_triage_skill_docs.py — the fr-triage skill names the cloud driver (`fr triage drive pass`/`record`, wakes, outbox execution), `forge.api`, the state ref, the state repo choice and the privacy guard, and stays within its existing line budget; the cloud driver's `post_merge` is a no-op (asserted in the adapter test from phase 4, extended here to the shipped skill text). Fails.
+      RED: tests/unit/test_triage_skill_docs.py — the fr-triage skill names the cloud driver (`fr triage drive pass`/`record`, wakes, outbox execution), `forge.api`, the state ref, the state repo choice, the privacy guard and the `.fr/triage.yaml` `merge_method` key (added in phase 1's review, p1-r5), and stays within its existing line budget; the cloud driver's `post_merge` is a no-op (asserted in the adapter test from phase 4, extended here to the shipped skill text). Fails.
   - id: P7.T3.S2
     text: |-
       GREEN: edit plugins/super-fr/skills/fr-triage/SKILL.md within budget (move detail into docs/cloud-setup.md, linked); run `scripts/sync-opencode.py` and `scripts/sync-hermes.py` and commit the mirrors; AGENTS.md gains short entries for `fr.forgeapi`, `real_ghrestclient`, `fr/triage/{state_ref,privacy,lease,driver,drift}.py`, `fr-claude-cloud` and the `agents` kind; update the docs/explainers page that describes fr-triage if it names the driver's host-only state (regenerate the .html per .claude/rules/explainers-currency.md, or record in the PR body that it is owed). Run the skill tests, the three mirror tripwires and test_skill_validation.py: pass.
