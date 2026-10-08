@@ -13,7 +13,7 @@ steps:
       spec: docs/superpowers/specs/2026-10-07-cloud-triage-design.md
   spec-review:
     state: running
-    at: '2026-10-08T11:31:51+00:00'
+    at: '2026-10-08T11:50:23+00:00'
     units:
       step/spec-review:
         attempts:
@@ -22,6 +22,13 @@ steps:
           harness: claude-code
           tier: hard
           session: 422d9058-bced-5a6c-bdcb-09e941e783d2
+          returned: '2026-10-08T11:50:23+00:00'
+          outcome: abandoned
+        - dispatched: '2026-10-08T11:50:23+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          session: 7bff76e4-8464-5368-a29d-b7e74900d9cd
   plan:
     state: pending
   plan-review:
