@@ -1,0 +1,262 @@
+schema_version: 8
+run: 2026-10-07-feat-cloud-triage
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: s1
+  review_scope: in
+  title: forge.api selection point does not exist as described
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: codebase
+
+    evidence: spec §A / R3; hostclient.py:199-236; triage_batch_cmd.py:222; triage_cmd.py:92; collect.py:660
+
+    `client_for_url` vs `client_for_backend`; the latter is provenance-blind; a repo-level `forge.api`
+    cannot pick the client needed to read `.fr/triage.yaml`.'
+- kind: finding
+  id: s2
+  review_scope: in
+  title: Cloud worker and close-out sessions still hit GraphQL outside the triage path
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: consistency
+
+    evidence: R1, R19, Test Plan 13; gh.py:177; run_cmd.py:6037; run/adopt.py:747; run/closeout.py:346;
+    isolation/local.py:2962; real_ghclient.py:130
+
+    Workers'' deliver, close-out, adopt and isolation reads are GraphQL; some fail soft.'
+- kind: finding
+  id: s3
+  review_scope: in
+  title: R2 exceptions table omits workflowName, which _latest_runs keys on
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: codebase
+
+    evidence: §A table; collect.py:232-259
+
+    REST check-runs carry no workflow name; startedAt zero-time normalisation unstated.'
+- kind: finding
+  id: s4
+  review_scope: in
+  title: Scope id, ref name and state_repo are host-local; a new container loses them
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: codebase
+
+    evidence: R5, R9, R12; scope_config.py:3-7, :34-35, :78-83; state_sync.py:45
+
+    scope_id derives from a per-host id; state_repo lives only in host-local scope.yaml.'
+- kind: finding
+  id: s5
+  review_scope: in
+  title: The ref's tree omits merge stops, the lease and scope config
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: consistency
+
+    evidence: §B vs R4, §D; state_sync.py:45-46; merge_stops.py:25'
+- kind: finding
+  id: s6
+  review_scope: in
+  title: A mailbox runner conflicts with synchronous runner calls; crash window undefined
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: consistency
+
+    evidence: R14 vs §E; protocols.py:111-138; triage_batch_cmd.py:3400-3413'
+- kind: finding
+  id: s7
+  review_scope: in
+  title: SessionStatus cannot carry needs_action
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: codebase
+
+    evidence: R15; protocols.py:142, :155; kanban.py:57'
+- kind: finding
+  id: s8
+  review_scope: in
+  title: R15 maps completed to done unconditionally, against d5's condition
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: decisions
+
+    evidence: d5; discovery cloud-session-status; triage_batch_cmd.py:3403-3422'
+- kind: finding
+  id: s9
+  review_scope: in
+  title: R18 cannot hold for a long-lived cloud driver given R20 and d4
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: consistency
+
+    evidence: R18 vs R20, §H, d4; triage_batch_cmd.py:3940-3961'
+- kind: finding
+  id: s10
+  review_scope: in
+  title: Drift-check inputs undefined
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: codebase
+
+    evidence: R17, §G; run/model.py:351-379; artifacts/registry.py:407'
+- kind: finding
+  id: s11
+  review_scope: in
+  title: The first write edits the tracked .gitignore; workspace undefined
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: codebase
+
+    evidence: §B; artifacts/trigger.py:82-116; triage/model.py:167-175'
+- kind: finding
+  id: s12
+  review_scope: in
+  title: Pushing refs/fr/triage/* through the cloud git proxy is unmeasured
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: consistency
+
+    evidence: R5, §B; no discovery covers it'
+- kind: finding
+  id: s13
+  review_scope: in
+  title: The lease's duration and self-renewal are unspecified
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: consistency
+
+    evidence: R9, §D, §E'
+- kind: finding
+  id: s14
+  review_scope: in
+  title: Test Plan 2's GraphQL list is incomplete; R8 export and R16 untested
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: consistency
+
+    evidence: Test Plan 2 vs §A; real_ghclient.py:110-119; R8; R16/§G'
+- kind: finding
+  id: s15
+  review_scope: in
+  title: fr-claude-cloud package location; some herdr-only parts already optional
+  body: 'target: spec
+
+    scope: in, per the reviewer
+
+    check: codebase
+
+    evidence: §F; fr-herdr/pyproject.toml; protocols.py:191-237; triage_batch_cmd.py:1385; batch_drive.py:457'
+- kind: review
+  id: spec-review
+  title: 'independent spec review: 15 findings'
+  body: 'verified (by the reviewer): triage_cmd.py:92 make_forge; triage_batch_cmd.py:222 make_client;
+    hostclient.py:199 client_for_backend; ghclient.py:87 GhClient; real_ghclient.py:89 RealGhClient; collect.py:232
+    _latest_runs; batch_drive.py:935 drive_pass; batch_drive.py:501 hand-back policy; triage_batch_cmd.py:1385
+    ADOPT_LIST_RUNNER; triage_batch_cmd.py:3842-3961 drive loop and re-exec; triage_claim_cmd.py:60 scope
+    show; triage_state_cmd.py:50 state export; gitseam.py; drive_lock.py:16; scope_config.py:30,:86; triage/model.py:363-391
+    TriageConfig, :167 state_dir; fr_dispatch protocols.py:36-218; run_cmd.py:4590 run start; run/model.py:351
+    RunState; artifacts/registry.py:368-407 run kind v9; artifacts/trigger.py:82-92; verifications candidate/client-live;
+    decisions d1-d8 honoured except d5''s condition (s8).'
+resolves:
+- id: s1
+  state: fixed
+  body: 'R3 and §A: `forge.api` resolves from `FR_FORGE_API` or the host''s `scope.yaml` before any client
+    exists; the repo-level key is dropped with the reason; both `client_for_backend` and `client_for_url`
+    consult it.'
+- id: s2
+  state: fixed
+  body: R1 widened to the run path (deliver, close-out, adopt, isolation, linked PRs); §A routes the direct
+    `fr.gh` helpers too, and the REST client raises on 403 instead of a soft empty answer; Test Plan 2
+    and 17 cover it.
+- id: s3
+  state: fixed
+  body: §A table adds `workflowName` (Actions runs by head_sha, mapped by check_suite_id; app name otherwise)
+    and the `startedAt`/status normalisation; Test Plan 1 asserts them.
+- id: s4
+  state: fixed
+  body: R11 starts the cloud driver with a fixed `FR_HOST_ID` (already supported, scope_config.py:29)
+    and its state repo; §B stores `state_repo`/`forge_api` in `scope-durable.yaml` inside the ref; Test
+    Plan 6 covers recovery.
+- id: s5
+  state: fixed
+  body: R5 and §B define the ref tree as an explicit list (`REF_FILES`), merge stops, lease and durable
+    settings included; Test Plan 5 round-trips every entry.
+- id: s6
+  state: fixed
+  body: R14 and §F define pending requests with stable ids stored in state, pending runner results, replay
+    every pass, and idempotent execution via session tags; Test Plan 9 covers a lost result.
+- id: s7
+  state: fixed
+  body: §F adds an optional `SessionNotes` protocol for the text; `SessionStatus` is unchanged, so herdr
+    is untouched; Test Plan 10.
+- id: s8
+  state: fixed
+  body: 'R15: completed → idle (messageable), with the reason in §F; a conflict is handed back by message;
+    Test Plan 10.'
+- id: s9
+  state: fixed
+  body: 'R18 and §E step 2: the driver compares its `fr` with the latest release before each pass, reinstalls
+    and re-execs when older, and re-homes itself on a new major so its skill text is current; R20 updated.'
+- id: s10
+  state: fixed
+  body: '§G: cursors read from each batch branch over REST; incompatibility is a different `fr` major;
+    no recorded versions → reported only; artifact readability is left to fr''s own migration gate. R17
+    narrowed accordingly; Test Plans 11-12.'
+- id: s11
+  state: fixed
+  body: 'R4 and §B: `.git/info/exclude`, never a tracked file; workspace = git toplevel or `--workspace`
+    (required outside a clone); the READ_ONLY_COMMANDS rationale is updated; Test Plan 4.'
+- id: s12
+  state: fixed
+  body: §B names it an owed measurement; Test Plan 16 pushes and fetches the scope's ref through the cloud
+    git proxy before merge.
+- id: s13
+  state: fixed
+  body: 'R9 and §D: duration = three wake intervals plus the Routine''s period (90 min default); host
+    holder is `host:<host id>`, stable across pid changes; the same holder renews its own expired lease;
+    Test Plan 8.'
+- id: s14
+  state: fixed
+  body: Test Plan 2 lists every GraphQL-backed call incl. writes and `issue view --json`; Test Plan 7
+    adds the export refusal; Test Plan 11 adds the run kind's stamp, migration, validator and chain.
+- id: s15
+  state: fixed
+  body: '§F: `packages/fr-claude-cloud`, with its version surface, mypy entry, import-direction entry
+    and contract test; the ''become optional'' list narrowed to `ADOPT_LIST_RUNNER` and the wave grouping
+    (batch_drive.py:457).'
+acceptance: []
+evidence:
+  review: spec-review
+  reviewer: abcde35f00d4afc9b
