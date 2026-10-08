@@ -1,0 +1,39 @@
+schema_version: 8
+run: 2026-10-07-feat-cloud-triage
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+- {kind: finding, id: p4-r1, phase: 4, review_scope: in, title: "a cloud-refused batch still took an in-flight slot in drive_pass", body: "batch_drive.py:1118; triage_batch_cmd.py:3162."}
+- {kind: finding, id: p4-r2, phase: 4, review_scope: in, title: "'wake within the interval only renews' compared strictly; minute-truncated wakes halved the drive rate", body: "triage_drive_cmd.py:254-258."}
+- {kind: finding, id: p4-r3, phase: 4, review_scope: in, title: "a host drive with a state_repo but state in no clone ran with no lease", body: "triage_batch_cmd.py:4068-4078."}
+- {kind: finding, id: p4-r4, phase: 4, review_scope: in, title: "the lease was not released on Ctrl-C/SIGTERM", body: "triage_batch_cmd.py:4186-4192."}
+- {kind: finding, id: p4-r5, phase: 4, review_scope: in, title: "drive record recorded with no lease, ignored expiry, took no drive.lock", body: "triage_drive_cmd.py:337."}
+- {kind: finding, id: p4-r6, phase: 4, review_scope: in, title: "phase 5's plan never named the Mailbox contract; an unloadable claude-cloud was a warning with an empty outbox", body: "triage_drive_cmd.py:288-306; 05.yaml."}
+- {kind: finding, id: p4-r7, phase: 4, review_scope: in, title: "spec §E still said drive pass --scope S", body: "spec line 277."}
+- {kind: finding, id: p4-r8, phase: 4, review_scope: in, title: "the scenario's second driver was refused by the workspace-local lease.yaml, not through the ref", body: "tests/scenarios/cloud-triage-driver-lease.sh:70."}
+- {kind: finding, id: p4-r9, phase: 4, review_scope: in, title: "drive pass handed out commands without --dir/--workspace", body: "triage_drive_cmd.py:282."}
+- {kind: finding, id: p4-r10, phase: 4, review_scope: in, title: "a cloud driver closed out a host-dispatched batch through herdr", body: "triage_batch_cmd.py:3096."}
+- {kind: finding, id: p4-r11, phase: 4, review_scope: out, title: "scope id = sha256(name, host id), so drivers with different host ids get different refs and the lease cannot arbitrate them", body: "scope_config.py:80-85; a spec/phase 3 design property."}
+- {kind: finding, id: p4-r12, phase: 4, review_scope: out, title: "tests/conftest.py lent the operator's real ~/.gitconfig as GIT_CONFIG_GLOBAL", body: "tests/conftest.py:120, from phase 3's b9408eec; filed in scope as p4-o1."}
+- {kind: finding, id: p4-o1, phase: 4, review_scope: in, title: "the suite's HOME sandbox let tests write the operator's global git config (this PR's phase 3 defect; it happened in this phase)", body: "Raised by the orchestrator from p4-r12 and the executor's report: a scenario draft wrote url.insteadOf entries into /root/.gitconfig through GIT_CONFIG_GLOBAL. This PR introduced the fixture (b9408eec), so it is this change's defect, filed in scope rather than left as p4-r12's out-of-scope note."}
+- {kind: finding, id: p4-o2, phase: 5, review_scope: in, title: "the cloud driver still loads the foreign runner (herdr) for a close-out's preflight/existing_dispatches check", body: "Found by the p4 fix agent while fixing p4-r10 (8fe0fd02): _close_out now returns before any dispatch for a batch whose runner the driver lacks, but the foreign runner is still loaded and asked preflight/existing_dispatches first, so a cloud environment without herdr hits that load. Belongs to phase 5 (the claude-cloud runner and its environment): the cloud driver must never load a runner it does not carry."}
+- {kind: review, id: p4-review, phase: 4, title: "phase 4 code review: 10 findings in scope, 2 out", body: "Dispatched reviewer (superpowers:requesting-code-review discipline) over ae78e6fb..1ae604aa (excluding the orchestrator's ce8bd6a0 and e7024b4d) against spec R9-R13/§B/§D/§E/Test Plan 8, 9, 14 and plan 04.yaml; 33 targeted tests run. It judged the three departures: --repo/--org acceptable (spec amended, p4-r7), the Mailbox seam acceptable with p4-r6, the host lease only with a state ref acceptable except outside a clone (p4-r3). Received (superpowers:receiving-code-review): each verified; the spec and plan decided r1-r7, r9, r10 (cecf1f9e); a fix agent implemented them and p4-o1 with a failing test first (d6c7a752, a13e9c03, 567c31bc, 8fe0fd02, 820127cf); 2047 targeted tests and 4 cloud-triage scenarios pass; ruff and mypy clean. p4-r11 is out of scope by design (decision d1: the cloud driver is its own scope beside the host's, kept apart by per-issue claims). p4-o2 is filed against phase 5."}
+resolves:
+- {id: p4-r1, state: fixed, body: "d6c7a752: Snapshot.refused; the planner emits held before the in-flight cap; test_a_batch_the_driver_refuses_is_a_hold_that_takes_no_in_flight_slot."}
+- {id: p4-r2, state: fixed, body: "a13e9c03: renew only under half an interval; test_only_a_wake_within_half_an_interval_of_the_last_pass_only_renews."}
+- {id: p4-r3, state: fixed, body: "567c31bc: refuses with exit 2 naming --workspace; test_a_host_drive_whose_state_is_in_no_clone_refuses_naming_workspace."}
+- {id: p4-r4, state: fixed, body: "567c31bc: SIGTERM raises KeyboardInterrupt for the loop; the lease is released and the handler restored; test_sigterm_releases_the_host_drivers_lease_and_restores_the_handler."}
+- {id: p4-r5, state: fixed, body: "a13e9c03: record requires this driver's live lease and runs under drive_lock; test_record_refuses_without_this_drivers_live_lease."}
+- {id: p4-r6, state: fixed, body: "cecf1f9e (05.yaml names the Mailbox contract) + a13e9c03: a pass refuses when the cloud runner is unloadable or keeps no Mailbox."}
+- {id: p4-r7, state: fixed, body: "cecf1f9e: §E shows drive pass --repo/--org and its options."}
+- {id: p4-r8, state: fixed, body: "a13e9c03: workspace C restored from the ref as host: with the same host id is refused through the ref's lease; the existing check kept."}
+- {id: p4-r9, state: fixed, body: "a13e9c03: triage_kanban_cmd.scope_args with --dir/--workspace; test_the_pass_hands_out_commands_with_the_full_scope_arguments."}
+- {id: p4-r10, state: fixed, body: "8fe0fd02: a close-out of a batch another driver's runner owns is reported and left to it before any fast-forward, post_merge or dispatch; the remaining foreign-runner load is p4-o2, filed against phase 5."}
+- {id: p4-r11, state: out-of-scope, body: "By design, not caused by phase 4: decision d1 makes the cloud driver its own scope beside the host one, kept apart by per-issue claims (spec 2026-10-06-triage-claims); the lease guards one scope, as R9 states."}
+- {id: p4-r12, state: out-of-scope, body: "Not caused by phase 4 (from phase 3's b9408eec); filed in scope as p4-o1 and fixed there."}
+- {id: p4-o1, state: fixed, body: "820127cf: a per-test identity-only .gitconfig; GIT_CONFIG_GLOBAL never names the operator's file; test_a_global_git_config_write_never_reaches_the_operators_file."}
+evidence:
+  review: p4-review
+  reviewer: ab807940809d021d4
+  model: claude-opus-5-5
