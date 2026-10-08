@@ -391,6 +391,16 @@ tripwire will catch drift anyway:
   `test_tripwire_opencode_instructions_sync.py` and
   `test_opencode_agent_mirror.py`: the skills tripwire does NOT cover the agent
   files, so an agent-only edit can leave a green skills guard and a red mirror.
+- Generated: `packages/fr/src/fr/agents/*.md` (the `fr` wheel's copy) **and** this
+  repo's `.claude/agents/fr-*.md` (its own `agents` artifact, spec
+  `2026-10-07-cloud-triage-design` §H). After editing
+  `plugins/super-fr/agents/fr-*.md`: run `scripts/sync-agents-data.py`, move the
+  `agents` kind's `current_version` in `fr/artifacts/registry.py`, update
+  `fr.agents.CANONICAL_SHA256` and `PINNED_AT_VERSION`, register the hop's
+  `fr.artifacts.agents_kind.rerender_migration` into `MIGRATIONS`, run
+  `uv run fr migrate artifacts --yes` (re-renders `.claude/agents/`), plus
+  `scripts/sync-opencode.py` for the OpenCode agent mirror.
+  `test_tripwire_agents_data.py` is the guard.
 - Generated, and easy to forget: `.hermes/skills/fr/<name>/SKILL.md` **and**
   `.hermes/SOUL.d/super-fr-rules.md`. There are **TWO** mirror generators, not
   one — `scripts/sync-hermes.py` is the second sync, guarded by
