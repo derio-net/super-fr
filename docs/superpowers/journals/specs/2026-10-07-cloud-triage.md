@@ -641,3 +641,8 @@ Operator, 2026-10-08, after slow-suite: open the draft PR now so every push runs
 ### phase-split-2026-10-07-cloud-triage-p2-1 · decision · risk-first: CI as test evidence (R22) lands before the remaining phases
 
 Supersedes phase-split-2026-10-07-cloud-triage-p2. Phases were renumbered on 2026-10-08 (d10): the new phase 2 is R22, placed right after the skeleton so phases 3-7 can prove themselves with the PR's CI instead of a ~20-minute local suite in this container (discovery slow-suite).
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p3-1 created=2026-10-08T13:50:14+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p3-1 · decision · ask: state in the workspace, on a ref, behind the privacy guard (R4-R8)
+
+Supersedes phase-split-2026-10-07-cloud-triage-p3 after the renumbering (was phase 2).
