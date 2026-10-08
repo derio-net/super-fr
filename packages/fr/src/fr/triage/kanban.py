@@ -406,6 +406,7 @@ def _card(
     stops: Mapping[str, MergeStop],
     claim_expiry: ClaimExpiry | None = None,
     now: datetime | None = None,
+    notes: Mapping[str, str] | None = None,
 ) -> Card:
     column = column_of(batch, facts, batches)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
@@ -422,7 +423,10 @@ def _card(
     idle = _idle_of(batch, facts, repo, status, closeout_status, now)
     needs_you = "blocked" in (status, closeout_status) or stop is not None or idle is not None
     if "blocked" in (status, closeout_status):
-        hint = NEEDS_YOU
+        # A runner that says why (`SessionNotes`, cloud-triage R15) adds its words.
+        keys = (batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id)) if repo else ()
+        said = [n for key in keys if (n := (notes or {}).get(key))]
+        hint = f"{NEEDS_YOU}: {'; '.join(said)}" if said else NEEDS_YOU
     elif stop is not None:
         hint = f"{NEEDS_YOU_MERGE_STOPPED}: {stop.reason}"
     elif idle is not None:
@@ -518,6 +522,7 @@ def build_board(
     stops: Mapping[str, MergeStop] | None = None,
     me: str | None = None,
     now: datetime | None = None,
+    notes: Mapping[str, str] | None = None,
 ) -> Board:
     """One card per batch in seven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
@@ -525,7 +530,9 @@ def build_board(
     with it a card whose session sat idle past the repo's `idle_session_minutes` with no PR is
     `needs_you` (R8), and without it the board judges no idleness. *me* is this scope's id:
     with it the board lists the issues other scopes hold and each card's claim expiry
-    (triage-claims R13), and *now* marks expired ones."""
+    (triage-claims R13), and *now* marks expired ones. *notes* are blocked sessions'
+    notes by item id, from a runner that gives them (cloud-triage R15); a blocked card's
+    hint carries its note."""
     if me and now is None:
         raise ValueError("build_board needs `now` (the clock is passed in) when given `me`")
     expiries = _own_expiries(facts, me, now) if me and now else {}
@@ -544,6 +551,7 @@ def build_board(
             live,
             claim_expiry=expiries.get(b.id),
             now=now,
+            notes=notes,
         )
         for b in batches
     ]

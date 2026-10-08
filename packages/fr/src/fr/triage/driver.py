@@ -58,6 +58,18 @@ class Driver(Protocol):
         """Run the repo's `post_merge` *argv* where this driver runs; whether it ran."""
         ...
 
+    def carries(self, runner: str) -> bool:
+        """Whether this environment has runner *runner* to load at all. A runner it does
+        not carry is never loaded, not even to ask it a question (p4-o2): its batches are
+        another driver's."""
+        ...
+
+    @property
+    def adopt_runner(self) -> str | None:
+        """The runner `adopt --list` reads when `--to` names none; None for the host's
+        own default (`ADOPT_LIST_RUNNER`)."""
+        ...
+
 
 @dataclass(frozen=True)
 class HostDriver:
@@ -75,6 +87,13 @@ class HostDriver:
     def post_merge(self, checkout: _Commands, argv: Sequence[str]) -> bool:
         checkout.run_command(list(argv))
         return True
+
+    def carries(self, runner: str) -> bool:
+        return True  # whatever the host installed; a missing one fails to load, as today
+
+    @property
+    def adopt_runner(self) -> str | None:
+        return None
 
 
 @dataclass(frozen=True)
@@ -105,6 +124,13 @@ class CloudDriver:
 
     def post_merge(self, checkout: _Commands, argv: Sequence[str]) -> bool:
         return False  # R20: nothing to install; each session starts on the current release
+
+    def carries(self, runner: str) -> bool:
+        return runner == self.runner
+
+    @property
+    def adopt_runner(self) -> str | None:
+        return self.runner
 
 
 HOST = HostDriver()

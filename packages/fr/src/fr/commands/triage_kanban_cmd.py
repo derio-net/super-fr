@@ -17,6 +17,7 @@ import importlib.util
 import time
 import webbrowser
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn, get_args
@@ -50,6 +51,7 @@ from fr.triage.batch_drive import (
     wave_group,
 )
 from fr.triage.drive_lock import live_driver
+from fr.triage.driver import Mailbox
 from fr.triage.errors import TriageError
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
@@ -238,27 +240,57 @@ def _probes(judgements: Judgements, facts: Facts, prefix: str) -> dict[str, list
     return by_runner
 
 
+@dataclass(frozen=True)
+class SessionReads:
+    """What the runners said about the scope's sessions: each status by item id, one page
+    note per runner that could not say (R7), and the blocked sessions' own notes from a
+    runner that gives them (`SessionNotes`, cloud-triage R15)."""
+
+    statuses: dict[str, BoardStatus]
+    notes: list[str]
+    session_notes: dict[str, str]
+
+
 def session_statuses(
     judgements: Judgements, facts: Facts, *, prefix: str = DEFAULT_WORKSPACE_PREFIX
 ) -> tuple[dict[str, BoardStatus], list[str]]:
     """The live status of each batch's and each runner close-out's session, by item id,
-    and one page note per runner that could not say (R7).
+    and one page note per runner that could not say (R7); `read_sessions` without the
+    sessions' own notes."""
+    reads = read_sessions(judgements, facts, prefix=prefix)
+    return reads.statuses, reads.notes
+
+
+def read_sessions(
+    judgements: Judgements,
+    facts: Facts,
+    *,
+    prefix: str = DEFAULT_WORKSPACE_PREFIX,
+    target: Path | None = None,
+    loader: Callable[[str], Runner] | None = None,
+) -> SessionReads:
+    """Each runner's session statuses and, from one that implements `SessionNotes`, its
+    blocked sessions' notes.
 
     Never refuses and prints nothing: a runner that cannot be loaded, fails its
     preflight, lacks `SessionInspector` or raises leaves its items out of the result
-    (the board shows them `unknown`) and costs one note.
+    (the board shows them `unknown`) and costs one note. *loader* is a driver's own
+    runner cache (cloud-triage p4-o2: it loads only what that driver carries); without
+    one, a mailbox runner is opened on *target*, the scope's state, where its sessions are
+    recorded (§F).
     """
     by_runner = _probes(judgements, facts, prefix) if judgements.batches else {}
     if not by_runner:
-        return {}, []
+        return SessionReads({}, [], {})
     if importlib.util.find_spec("fr_dispatch") is None:
-        return {}, ["fr-dispatch is not installed; session status is unavailable"]
-    from fr_dispatch.protocols import SessionInspector
+        return SessionReads({}, ["fr-dispatch is not installed; session status is unavailable"], {})
+    from fr_dispatch.protocols import SessionInspector, SessionNotes
 
     statuses: dict[str, BoardStatus] = {}
     notes: list[str] = []
+    said: dict[str, str] = {}
     for name, probes in sorted(by_runner.items()):
-        runner, reason = try_load(name)
+        runner, reason = try_load(name, loader)
         if runner is None:
             notes.append(
                 f"runner `{name}` could not be loaded ({reason}); its sessions show unknown"
@@ -268,6 +300,8 @@ def session_statuses(
             notes.append(f"runner `{name}` cannot report session status; its sessions show unknown")
             continue
         try:
+            if loader is None and target is not None and isinstance(runner, Mailbox):
+                runner.open_mailbox(target, None)
             refusal = runner.preflight(probes)
             if refusal:
                 notes.append(
@@ -276,6 +310,10 @@ def session_statuses(
                 )
                 continue
             found = runner.session_statuses(probes)
+            if isinstance(runner, SessionNotes):
+                said.update(
+                    {k: " ".join(str(v).split()) for k, v in runner.session_notes(probes).items()}
+                )
         except Exception as exc:  # noqa: BLE001 - a failed read is `unknown`, never a failed render
             notes.append(
                 f"runner `{name}` failed to report sessions: {one_line(exc)}; "
@@ -284,7 +322,7 @@ def session_statuses(
             continue
         for key, value in found.items():
             statuses[key] = value if value in _STATUSES else "unknown"
-    return statuses, notes
+    return SessionReads(statuses, notes, said)
 
 
 def write_board(
@@ -294,11 +332,13 @@ def write_board(
     scope_args: Sequence[str],
     refresh: int = DEFAULT_REFRESH,
     prefix: str = DEFAULT_WORKSPACE_PREFIX,
+    loader: Callable[[str], Runner] | None = None,
 ) -> tuple[Path, int]:
     """Render `board.html` into the state directory *target* from the facts and judgements
     on disk now, with live session statuses. Returns the path written and its card count."""
     _, facts, judgements = _load_state(scope, target, None)
-    statuses, notes = session_statuses(judgements, facts, prefix=prefix)
+    reads = read_sessions(judgements, facts, prefix=prefix, target=target, loader=loader)
+    statuses, notes = reads.statuses, reads.notes
     rendered_at = datetime.now(UTC)
     # The wall clock: session status is read live above, so idle minutes must be real.
     try:
@@ -307,8 +347,9 @@ def write_board(
         me = None
         notes.append(f"claims are not shown: {one_line(exc)}")
     board = build_board(
-        facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at
-    )
+        facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
+        notes=reads.session_notes,
+    )  # fmt: skip
     page = render_board(
         board,
         scope_args=scope_args,

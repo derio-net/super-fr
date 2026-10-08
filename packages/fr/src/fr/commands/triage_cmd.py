@@ -725,7 +725,15 @@ def render_command(
             soft_wrap=True,
         )
     out = target_dir / "triage.html"
-    page = render(facts, judgements, since, resolved, board=(target_dir / "board.html").is_file())
+    from fr.commands.triage_kanban_cmd import read_sessions  # it imports this module
+
+    # A blocked session's own note, from a runner that gives one (cloud-triage R15); a
+    # runner that cannot say leaves Needs you now as it was.
+    noted = read_sessions(judgements, facts, target=target_dir).session_notes
+    page = render(
+        facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
+        session_notes=noted,
+    )  # fmt: skip
     out.write_text(page, encoding="utf-8")
     # Stored only once the page exists, and only when the board differs from the latest
     # snapshot: a re-render with nothing new must not erase "Since last report".

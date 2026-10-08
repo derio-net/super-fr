@@ -1438,7 +1438,8 @@ def dispatch_batch(
 # --------------------------------------------------------------- adopt (2026-10-06)
 
 ADOPT_LIST_RUNNER = "herdr"
-"""The runner `adopt --list` reads when `--to` names none: the one that adopts today."""
+"""The runner `adopt --list` reads on the host when `--to` names none; a driver with a
+runner of its own (`Driver.adopt_runner`) reads that one instead (cloud-triage §F)."""
 
 _ADOPTER_METHODS = ("describe", "list_sessions", "adopt")
 
@@ -1783,11 +1784,21 @@ def adopt_batch(
     say(f"adopted tab {tab} as batch {batch.id} on {new}")
 
 
-def _list_sessions(to: str | None) -> None:
-    """`adopt --list` (R12): every session, with the issue refs in its label."""
-    name = to or ADOPT_LIST_RUNNER
+def _list_sessions(to: str | None, driver: Driver = HOST) -> None:
+    """`adopt --list` (R12): every session, with the issue refs in its label. Without
+    `--to` it reads the driver's runner (cloud-triage §F), herdr on the host; a default
+    runner that adopts nothing skips the listing with a message."""
+    name = to or driver.adopt_runner or ADOPT_LIST_RUNNER
     runner: Any = load_runner(name)
     if not _adopter(runner):
+        if to is None:
+            console.print(
+                f"runner {name} cannot adopt sessions (it is no SessionAdopter); "
+                "adopt --list skipped",
+                markup=False,
+                soft_wrap=True,
+            )
+            return
         _fail(f"runner `{name}` cannot adopt sessions (it is no SessionAdopter)")
     try:
         sessions = runner.list_sessions()
@@ -2320,6 +2331,8 @@ class _Driver:
         return self._checkouts[repo]
 
     def runner(self, name: str) -> Runner:
+        if not self.adapter.carries(name):  # p4-o2: not even to ask it a question
+            raise TriageError(f"runner `{name}` is not this driver's ({self.adapter.name})")
         if name not in self._runners:
             loaded = load_runner(name)
             if isinstance(loaded, Mailbox):  # its requests live in this scope's state (§F)
@@ -2391,8 +2404,8 @@ class _Driver:
         """Runner *name*, or None (reported once) when it cannot be loaded: closing and
         the idle probe are best effort, so a load failure never ends the drive (R10).
         *consequence* names what the caller loses, so the warning says the right thing."""
-        if name in self._unloadable:
-            return None
+        if name in self._unloadable or not self.adapter.carries(name):
+            return None  # another driver's runner: its sessions are that driver's (p4-o2)
         runner, reason = try_load(name, self.runner)
         if runner is not None:
             return runner
@@ -2899,6 +2912,8 @@ class _Driver:
         by_runner: dict[str, list[WorkItem]] = {}
         for b in closing:
             launch = self._launch(facts, b, repos[b.id])
+            if not self.adapter.carries(str(launch.runner)):
+                continue  # left to the driver that carries it, never loaded here (p4-o2)
             probe = WorkItem(
                 id=closeout_item_id(repos[b.id], b.id),
                 unit="run",
@@ -3239,6 +3254,9 @@ class _Driver:
                 self.target,
                 scope_args=self.scope_args,
                 prefix=self.workspace_prefix,
+                # The cloud driver reads its own runners only, its mailbox already open
+                # (p4-o2); the host's board loads as it always did (R10).
+                loader=self.runner if self.adapter.kind == "cloud" else None,
             )
         except Exception as exc:  # noqa: BLE001 - the board is a view; it never fails a pass
             cause = triage_kanban_cmd.one_line(exc)
@@ -3542,6 +3560,12 @@ class _Driver:
             batch, pr=action.pr, head=exc.head, paths=exc.paths, branch=branch,
             base=self.merge_ctx(facts, repo).main, mirrors=facts.config_for(repo).mirrors,
         )  # fmt: skip
+        if not self.adapter.carries(name):  # p4-o2: another driver's session
+            return (
+                f"{stopped}; its session runs on {name}, which this driver lacks: left to "
+                "that runner's driver",
+                False,
+            )
         runner = self.runner(name)
         since = fresh_conflicts(batch, since_dispatch=True)
         target = WorkItem(
@@ -3564,6 +3588,8 @@ class _Driver:
             if status == "idle":
                 event = self._conflict_event(exc, batch, "session", target.id)
                 self._append(judgements, facts, batch, event)
+                if isinstance(runner, Mailbox):  # sent once the agent records it (§F)
+                    return f"{stopped}; handed-back (pending) to its session {target.id}", True
                 return f"{stopped}; handed back to its session {target.id}", True
             if status not in ("absent", "done"):
                 return (
