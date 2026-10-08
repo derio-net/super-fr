@@ -274,8 +274,13 @@ dispatched. The cloud driver ignores `post_merge` and `post_merge_restart` (§H)
 `claude-cloud` is not a loop; it is a pass fr runs once per wake (R12):
 
 ```
-fr triage drive pass --scope S --statuses statuses.json --outbox outbox.json
+fr triage drive pass --repo R | --org O [--workspace W] [--state-repo S] \
+  [--interval MIN] [--routine MIN] --statuses statuses.json --outbox outbox.json
 ```
+
+(The scope is named as every other triage verb names it, `--repo`/`--org`,
+decision `p4-scope-options-not-scope-flag`; every command the pass hands the
+agent carries the same scope arguments, `--workspace`/`--dir` included, p4-r9.)
 
 1. restore state from the ref if needed; check and renew the lease (a push,
    so it runs the privacy check of §C);
@@ -292,7 +297,14 @@ fr triage drive pass --scope S --statuses statuses.json --outbox outbox.json
 
 The agent then executes the outbox with its session tools and records each
 result with `fr triage drive record --outbox outbox.json --result
-results.json`, which applies them to the state and pushes the ref. The driver
+results.json`, which applies them to the state and pushes the ref; only the
+current, unexpired holder of the scope's lease may record, under the same-host
+`drive.lock` (p4-r5). A pass whose cloud runner cannot be loaded, or keeps no
+mailbox, refuses (exit 2) rather than emitting an empty outbox (p4-r6). A batch
+the driver adapter refuses (another runner named explicitly) is a hold the
+planner sees, so it takes no in-flight slot (p4-r1); a close-out of a batch
+another driver's runner dispatched is reported and left to that driver, never
+dispatched through a runner this environment lacks (p4-r10). The driver
 section of the fr-triage skill (R21) is the agent's whole job: collect statuses,
 run `pass`, execute the outbox, run `record`, schedule the next wake. Policy
 stays in fr (R13), so a Sonnet driver suffices.
@@ -301,7 +313,13 @@ Wakes (R11): the agent schedules a self-message every `interval` (default 5
 minutes; `send_later` has one-minute granularity) after each pass, subscribes to
 PR activity on every open batch PR, and a recurring Routine fires into the
 driver session hourly in case a self-message is lost. A wake that finds a pass
-ran within the interval only renews the lease. **Owed measurements:** only
+ran less than half an interval ago only renews the lease (`send_later` truncates
+to the minute, so a strict "within the interval" would skip every other
+self-wake, p4-r2). The host driver takes the lease whenever its scope has a
+`state_repo`; one whose state sits outside any clone (so it cannot sync the
+ref) refuses to drive with `--yes`, naming `--workspace`, rather than drive
+unleased beside a cloud driver (p4-r3). A clean stop releases the lease,
+Ctrl-C and SIGTERM included (p4-r4). **Owed measurements:** only
 `send_later` self-wakes were observed (discoveries `wake-probe`,
 `wake-probe-restart`); that PR-activity events wake an idle driver session, and
 that a recurring Routine fires into the existing driver session rather than a
