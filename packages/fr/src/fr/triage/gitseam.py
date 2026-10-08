@@ -21,6 +21,7 @@ import fnmatch
 import os
 import re
 import shlex
+import stat
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -188,14 +189,23 @@ def remote_ref(cwd: Path, remote: str, ref: str) -> str | None:
     return None
 
 
+_NO_REMOTE_REF = "couldn't find remote ref"
+"""git's own words when a fetched ref does not exist on the remote."""
+
+
 def fetch_ref(cwd: Path, remote: str, ref: str) -> str | None:
     """Fetch *ref* from *remote* into the same ref here (forced: the remote is the truth),
-    returning its sha; None, fetching nothing, when the remote has no such ref."""
-    sha = remote_ref(cwd, remote, ref)
-    if sha is None:
+    then read the sha the local ref now holds (p3-r5: one round trip, no window between
+    reading a sha and fetching it). None when the remote has no such ref; a local copy
+    left from an earlier fetch is then dropped, so it is never mistaken for the remote's."""
+    try:
+        git(["fetch", "--quiet", "--no-tags", remote, f"+{ref}:{ref}"], cwd)
+    except GitError as exc:
+        if _NO_REMOTE_REF not in str(exc):
+            raise
+        git_ok(["update-ref", "-d", ref], cwd)
         return None
-    git(["fetch", "--quiet", "--no-tags", remote, f"+{ref}:{ref}"], cwd)
-    return sha
+    return git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd).strip() or None
 
 
 def has_commit(cwd: Path, sha: str) -> bool:
@@ -203,28 +213,39 @@ def has_commit(cwd: Path, sha: str) -> bool:
     return git_ok(["cat-file", "-e", f"{sha}^{{commit}}"], cwd)
 
 
+def file_mode(path: Path) -> str:
+    """The git mode of the regular file at *path*: `100755` when its owner may execute
+    it, else `100644` (p3-r12), as `git add` decides."""
+    return "100755" if path.stat().st_mode & stat.S_IXUSR else "100644"
+
+
+def hash_paths(cwd: Path, root: Path, paths: list[str], *, write: bool = False) -> list[str]:
+    """The blob sha of each of *paths* (POSIX, relative to *root*), in order, as `git
+    hash-object` names its current bytes; with *write*, the blobs are stored too."""
+    if not paths:
+        return []
+    argv = ["git", "hash-object", *(["-w"] if write else []), "--no-filters", "--stdin-paths"]
+    out: str = _run(
+        argv, cwd, stdin="".join(f"{root / p}\n" for p in paths), timeout=GIT_TIMEOUT_SECONDS
+    )
+    return out.split()
+
+
 def commit_tree_from_paths(
     cwd: Path, root: Path, paths: list[str], *, parent: str | None, message: str
 ) -> str:
     """A commit whose tree holds exactly *paths* (POSIX, relative to *root*) with their
-    current bytes, built in a temporary index: the clone's own index, HEAD and worktree
-    are never touched. Blobs are written with `hash-object -w`; the commit carries
-    *parent* when given and a fixed identity."""
+    current bytes and git mode (`file_mode`), built in a temporary index: the clone's own
+    index, HEAD and worktree are never touched. Blobs are written with `hash-object -w`;
+    the commit carries *parent* when given and a fixed identity."""
     import tempfile
 
-    blobs = (
-        _run(
-            ["git", "hash-object", "-w", "--no-filters", "--stdin-paths"],
-            cwd,
-            stdin="".join(f"{root / p}\n" for p in paths),
-            timeout=GIT_TIMEOUT_SECONDS,
-        ).split()
-        if paths
-        else []
-    )
+    blobs = hash_paths(cwd, root, paths, write=True)
     with tempfile.TemporaryDirectory(prefix="fr-state-ref-") as tmp:
         env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
-        info = "".join(f"100644 {sha}\t{p}\n" for sha, p in zip(blobs, paths, strict=True))
+        info = "".join(
+            f"{file_mode(root / p)} {sha}\t{p}\n" for sha, p in zip(blobs, paths, strict=True)
+        )
         _run(
             ["git", "update-index", "--add", "--index-info"],
             cwd,

@@ -276,3 +276,198 @@ def test_fetch_never_writes_a_path_outside_the_ref_files(tmp_path: Path, origin:
     assert sorted(p.name for p in state_b.iterdir() if not p.name.startswith(".")) == [
         "judgements.yaml"
     ]
+
+
+# ------------------------------------------- the base: remote, ref and sha (p3-r4)
+
+
+def _bare(tmp_path: Path, name: str) -> Path:
+    bare = tmp_path / name
+    _git(tmp_path, "init", "--quiet", "--bare", str(bare))
+    return bare
+
+
+def test_the_base_records_the_remote_and_ref_it_came_from(tmp_path: Path, origin: Path) -> None:
+    a = _clone(tmp_path, "a", origin)
+    state = _state(a)
+    _fill(state, {"judgements.yaml": b"a\n"})
+    ref = ref_name(SCOPE_ID)
+
+    sha = push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+
+    assert read_base(state, remote=str(origin), ref=ref) == sha
+    assert read_base(state, remote=str(tmp_path / "elsewhere.git"), ref=ref) is None
+    assert read_base(state, remote=str(origin), ref=ref_name("s-ffffffff")) is None
+
+
+def test_a_base_for_another_remote_is_discarded_not_called_another_writer(
+    tmp_path: Path, origin: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI push takes its expected_old from the base for THIS remote and ref."""
+    from fr.cli import app
+    from fr.commands import triage_cmd, triage_state_cmd
+    from typer.testing import CliRunner
+
+    other = _bare(tmp_path, "other.git")
+    a = _clone(tmp_path, "a", origin)
+    state = _state(a)
+    _fill(state, {"judgements.yaml": b"a\n", "scope-durable.yaml": b"state_repo: o/r\n"})
+    push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    monkeypatch.setattr(triage_cmd, "make_visibility_client", lambda: _Private())
+    monkeypatch.setattr(triage_state_cmd, "scope_id", lambda scope: SCOPE_ID)
+
+    result = CliRunner().invoke(
+        app,
+        ["triage", "state", "push", "--repo", "o/r", "--dir", str(state), "--remote", str(other)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert _git(other, "rev-parse", ref_name(SCOPE_ID)).strip() != ""
+
+
+def test_a_base_the_remote_no_longer_has_is_discarded(tmp_path: Path, origin: Path) -> None:
+    a = _clone(tmp_path, "a", origin)
+    state = _state(a)
+    _fill(state, {"judgements.yaml": b"a\n"})
+    ref = ref_name(SCOPE_ID)
+    first = push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    _git(origin, "update-ref", "-d", ref)  # the remote's ref is gone (recreated repo, prune)
+    (state / "judgements.yaml").write_bytes(b"a2\n")
+
+    second = push_state(state, str(origin), SCOPE_ID, expected_old=first, **PRIVATE)
+
+    assert _git(origin, "rev-parse", ref).strip() == second
+
+
+def test_a_fetch_over_unpushed_local_changes_refuses_and_writes_nothing(
+    tmp_path: Path, origin: Path
+) -> None:
+    a = _clone(tmp_path, "a", origin)
+    state_a = _state(a)
+    _fill(state_a, {"judgements.yaml": b"v1\n"})
+    v1 = push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    b = _clone(tmp_path, "b", origin)
+    state_b = b / ".fr" / "triage-state" / "scope"
+    fetch_state(state_b, str(origin), SCOPE_ID)
+    (state_a / "judgements.yaml").write_bytes(b"v2\n")
+    push_state(state_a, str(origin), SCOPE_ID, expected_old=v1, **PRIVATE)
+    (state_b / "judgements.yaml").write_bytes(b"mine, unpushed\n")
+
+    with pytest.raises(StateRefConflict, match="not pushed"):
+        fetch_state(state_b, str(origin), SCOPE_ID)
+
+    assert (state_b / "judgements.yaml").read_bytes() == b"mine, unpushed\n"
+    assert read_base(state_b, remote=str(origin), ref=ref_name(SCOPE_ID)) == v1
+
+
+def test_discard_local_lets_a_fetch_overwrite_unpushed_changes(
+    tmp_path: Path, origin: Path
+) -> None:
+    a = _clone(tmp_path, "a", origin)
+    state_a = _state(a)
+    _fill(state_a, {"judgements.yaml": b"v1\n"})
+    push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    b = _clone(tmp_path, "b", origin)
+    state_b = _state(b)
+    _fill(state_b, {"judgements.yaml": b"mine\n"})
+
+    fetch_state(state_b, str(origin), SCOPE_ID, discard_local=True)
+
+    assert (state_b / "judgements.yaml").read_bytes() == b"v1\n"
+
+
+def test_a_fetch_removes_the_files_the_ref_no_longer_carries(tmp_path: Path, origin: Path) -> None:
+    a = _clone(tmp_path, "a", origin)
+    state_a = _state(a)
+    _fill(state_a, {"judgements.yaml": b"j\n", "board/manifest.yaml": b"m\n", "lease.yaml": b"l\n"})
+    v1 = push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    b = _clone(tmp_path, "b", origin)
+    state_b = b / ".fr" / "triage-state" / "scope"
+    fetch_state(state_b, str(origin), SCOPE_ID)
+    (state_b / "facts.json").write_bytes(b"{}\n")  # not a ref file: never touched
+    (state_a / "lease.yaml").unlink()
+    (state_a / "board" / "manifest.yaml").unlink()
+    push_state(state_a, str(origin), SCOPE_ID, expected_old=v1, **PRIVATE)
+
+    fetch_state(state_b, str(origin), SCOPE_ID)
+
+    assert not (state_b / "lease.yaml").exists()
+    assert not (state_b / "board" / "manifest.yaml").exists()
+    assert (state_b / "judgements.yaml").read_bytes() == b"j\n"
+    assert (state_b / "facts.json").read_bytes() == b"{}\n"
+
+
+def test_fetch_ref_fetches_first_and_never_asks_ls_remote(
+    tmp_path: Path, origin: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p3-r5: one round trip, and no window between reading the sha and fetching it."""
+    from fr.triage import gitseam
+
+    a = _clone(tmp_path, "a", origin)
+    state = _state(a)
+    _fill(state, {"judgements.yaml": b"a\n"})
+    sha = push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    b = _clone(tmp_path, "b", origin)
+    seen: list[list[str]] = []
+    real = gitseam._run
+
+    def spy(argv: list[str], cwd: Path, **kw: Any) -> Any:
+        seen.append(argv)
+        return real(argv, cwd, **kw)
+
+    monkeypatch.setattr(gitseam, "_run", spy)
+
+    assert gitseam.fetch_ref(b, str(origin), ref_name(SCOPE_ID)) == sha
+    assert not any("ls-remote" in argv for argv in seen), seen
+    assert seen[0][:2] == ["git", "fetch"]
+
+
+def test_fetch_ref_of_a_ref_the_remote_dropped_is_none_and_drops_the_local_copy(
+    tmp_path: Path, origin: Path
+) -> None:
+    from fr.triage import gitseam
+
+    a = _clone(tmp_path, "a", origin)
+    state = _state(a)
+    _fill(state, {"judgements.yaml": b"a\n"})
+    push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    b = _clone(tmp_path, "b", origin)
+    ref = ref_name(SCOPE_ID)
+    assert gitseam.fetch_ref(b, str(origin), ref) is not None
+    _git(origin, "update-ref", "-d", ref)
+
+    assert gitseam.fetch_ref(b, str(origin), ref) is None
+    assert _git(b, "for-each-ref", ref) == ""
+
+
+# ------------------------------------------------------------- modes (p3-r12)
+
+
+def test_an_executable_keeps_its_mode_across_the_ref_and_restores_honour_the_umask(
+    tmp_path: Path, origin: Path
+) -> None:
+    import os
+    import stat
+
+    a = _clone(tmp_path, "a", origin)
+    state_a = _state(a)
+    _fill(state_a, {"judgements.yaml": b"j\n", "authored-src/build.sh": b"#!/bin/sh\n"})
+    (state_a / "authored-src" / "build.sh").chmod(0o755)
+    push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+
+    modes = {
+        line.split("\t")[1]: line.split()[0]
+        for line in _git(origin, "ls-tree", "-r", ref_name(SCOPE_ID)).splitlines()
+    }
+    assert modes == {"authored-src/build.sh": "100755", "judgements.yaml": "100644"}
+
+    b = _clone(tmp_path, "b", origin)
+    state_b = b / ".fr" / "triage-state" / "scope"
+    old = os.umask(0o027)
+    try:
+        fetch_state(state_b, str(origin), SCOPE_ID)
+    finally:
+        os.umask(old)
+
+    assert stat.S_IMODE((state_b / "judgements.yaml").stat().st_mode) == 0o640
+    assert stat.S_IMODE((state_b / "authored-src" / "build.sh").stat().st_mode) == 0o750

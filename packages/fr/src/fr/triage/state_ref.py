@@ -16,12 +16,18 @@ Every git process starts in `fr.triage.gitseam`. The clone that holds the object
 the git toplevel of the state directory (it lives in the workspace, R4), or *repo*.
 
 `read_base` / the `.state-ref` file: the sha this state directory was last fetched
-from or pushed to, the `expected_old` of its next push.
+from or pushed to, with the remote and ref it came from (p3-r4), the `expected_old` of
+its next push to that same remote and ref. A base recorded for another remote or ref is
+no base at all; one the remote no longer has is discarded, never reported as another
+writer's push. A fetch never overwrites changes not yet pushed (the local entries
+differ from the base's tree), and it removes the entries the ref no longer carries.
+Files keep their git mode across the ref (p3-r12).
 """
 
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import re
 import tempfile
@@ -55,6 +61,11 @@ whole (every regular file under it, never through a symlink)."""
 
 REF_PREFIX = "refs/fr/triage/"
 BASE_FILE = ".state-ref"
+RETRY_LINE = (
+    "Fetch the state again (`fr triage state fetch --discard-local` drops the change that "
+    "was not pushed) and retry the command"
+)
+"""THE fetch-and-retry line every push conflict ends with (cloud-triage §B, p3-r1)."""
 
 
 class StateRefConflict(TriageError):  # noqa: N818 - the name the plan and spec use
@@ -115,23 +126,49 @@ def _repo(state_dir: Path, repo: Path | None) -> Path:
     return root
 
 
-def read_base(state_dir: Path) -> str | None:
-    """The sha *state_dir* was last fetched from or pushed to; None when never."""
+def read_base(state_dir: Path, *, remote: str | None = None, ref: str | None = None) -> str | None:
+    """The sha *state_dir* was last fetched from or pushed to; None when never. Given
+    *remote* and *ref*, only a base recorded for that same remote and ref counts (p3-r4):
+    a base for another one, or one recorded before the remote was (a bare sha), is None."""
     try:
-        value = (state_dir / BASE_FILE).read_text(encoding="utf-8").strip()
+        text = (state_dir / BASE_FILE).read_text(encoding="utf-8").strip()
     except FileNotFoundError:
         return None
-    return value or None
+    try:
+        data = json.loads(text) if text.startswith("{") else {"sha": text}
+    except json.JSONDecodeError:
+        return None
+    sha = data.get("sha") if isinstance(data, dict) else None
+    if not isinstance(sha, str) or not sha:
+        return None
+    if remote is not None and data.get("remote") != remote:
+        return None
+    if ref is not None and data.get("ref") != ref:
+        return None
+    return sha
 
 
-def _write_base(state_dir: Path, sha: str) -> None:
+def _write_base(state_dir: Path, sha: str, *, remote: str, ref: str) -> None:
     state_dir.mkdir(parents=True, exist_ok=True)
-    (state_dir / BASE_FILE).write_text(f"{sha}\n", encoding="utf-8")
+    body = json.dumps({"sha": sha, "remote": remote, "ref": ref}, sort_keys=True)
+    (state_dir / BASE_FILE).write_text(f"{body}\n", encoding="utf-8")
 
 
-def _write_bytes(state_dir: Path, rel: str, content: bytes) -> None:
+def _clear_base(state_dir: Path) -> None:
+    (state_dir / BASE_FILE).unlink(missing_ok=True)
+
+
+def _umask() -> int:
+    """This process's umask (read by setting and restoring it: Python has no getter)."""
+    current = os.umask(0o022)
+    os.umask(current)
+    return current
+
+
+def _write_bytes(state_dir: Path, rel: str, content: bytes, *, executable: bool = False) -> None:
     """Write *content* to `state_dir/rel` atomically, refusing any path through a symlink
-    or outside *state_dir* (`state_sync.contained`)."""
+    or outside *state_dir* (`state_sync.contained`). The file takes the mode a new file
+    gets under the user's umask, executable when the ref says `100755` (p3-r12)."""
     state_dir.mkdir(parents=True, exist_ok=True)
     target = state_sync.contained(state_dir, rel)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -140,6 +177,7 @@ def _write_bytes(state_dir: Path, rel: str, content: bytes) -> None:
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(content)
+        os.chmod(tmp, (0o777 if executable else 0o666) & ~_umask())
         os.replace(tmp, target)
     except BaseException:
         with contextlib.suppress(OSError):
@@ -147,22 +185,81 @@ def _write_bytes(state_dir: Path, rel: str, content: bytes) -> None:
         raise
 
 
+Tree = dict[str, tuple[str, str]]
+"""`REF_FILES` path -> (git mode, blob sha): what a state directory or a ref holds."""
+
+
+def local_tree(state_dir: Path, *, repo: Path | None = None) -> Tree:
+    """What *state_dir*'s `REF_FILES` entries are now, as the ref would carry them."""
+    if not state_dir.is_dir():
+        return {}
+    cwd = _repo(state_dir, repo)
+    entries = ref_entries(state_dir)
+    blobs = gitseam.hash_paths(cwd, state_dir, entries)
+    return {
+        rel: (gitseam.file_mode(state_dir / rel), blob)
+        for rel, blob in zip(entries, blobs, strict=True)
+    }
+
+
+def ref_tree(cwd: Path, sha: str | None) -> Tree:
+    """The `REF_FILES` entries commit *sha* carries; `{}` for None or a commit this
+    clone does not have."""
+    if sha is None or not gitseam.has_commit(cwd, sha):
+        return {}
+    return {rel: (mode, blob) for mode, blob, rel in gitseam.tree_files(cwd, sha) if _allowed(rel)}
+
+
 def fetch_state(
-    state_dir: Path, remote_repo: str, scope_id: str, *, repo: Path | None = None
+    state_dir: Path,
+    remote_repo: str,
+    scope_id: str,
+    *,
+    repo: Path | None = None,
+    discard_local: bool = False,
 ) -> str | None:
-    """Fetch the scope's ref from *remote_repo* (a URL or path git can push to) and write
-    every `REF_FILES` entry it carries into *state_dir*, byte for byte; its sha, or None
-    (nothing written) when the remote has no such ref. An entry the ref does not carry is
-    left alone; a path in the ref outside `REF_FILES` is ignored."""
+    """Fetch the scope's ref from *remote_repo* (a URL or path git can push to) and make
+    *state_dir*'s `REF_FILES` entries exactly the ref's, byte for byte and mode for mode:
+    its sha, or None (nothing written) when the remote has no such ref. A path in the ref
+    outside `REF_FILES` is ignored; an entry the ref no longer carries is removed.
+
+    Changes not yet pushed are never overwritten (p3-r4): when the ref moved past this
+    directory's base and the directory differs from that base, `StateRefConflict`, and
+    nothing is written, unless *discard_local*. When the ref has not moved, local changes
+    are kept and nothing is written."""
     cwd = _repo(state_dir, repo)
     ref = ref_name(scope_id)
+    base = read_base(state_dir, remote=remote_repo, ref=ref)
     sha = gitseam.fetch_ref(cwd, remote_repo, ref)
     if sha is None:
+        if base is not None:
+            _clear_base(state_dir)  # the remote no longer has it: no base, not a writer
         return None
-    for _mode, blob, rel in gitseam.tree_files(cwd, sha):
-        if _allowed(rel):
-            _write_bytes(state_dir, rel, gitseam.blob_bytes(cwd, blob))
-    _write_base(state_dir, sha)
+    if sha == base and not discard_local:
+        return sha
+    theirs = ref_tree(cwd, sha)
+    mine = local_tree(state_dir, repo=cwd)
+    if mine != theirs:
+        was = ref_tree(cwd, base)
+        clashes = sorted(
+            rel
+            for rel in mine.keys() | theirs.keys()
+            if mine.get(rel) != theirs.get(rel) and mine.get(rel) != was.get(rel)
+        )
+        if clashes and not discard_local:
+            raise StateRefConflict(
+                f"{state_dir} has changes not pushed to {ref} on {remote_repo} "
+                f"({', '.join(clashes)}), and the ref has moved since: fetching would "
+                "overwrite them. Copy them aside, then `fr triage state fetch "
+                "--discard-local` and apply them again"
+            )
+        for rel, (mode, blob) in sorted(theirs.items()):
+            if mine.get(rel) != (mode, blob):
+                content = gitseam.blob_bytes(cwd, blob)
+                _write_bytes(state_dir, rel, content, executable=mode == "100755")
+        for rel in sorted(mine.keys() - theirs.keys()):
+            state_sync.contained(state_dir, rel).unlink(missing_ok=True)
+    _write_base(state_dir, sha, remote=remote_repo, ref=ref)
     apply_durable(state_dir)
     return sha
 
@@ -210,12 +307,17 @@ def push_state(
     sha = gitseam.commit_tree_from_paths(
         cwd, state_dir, ref_entries(state_dir), parent=parent, message=f"fr triage state {ref}"
     )
-    if not gitseam.push_ref_cas(cwd, remote_repo, sha, ref, expected_old=expected_old):
+    landed = gitseam.push_ref_cas(cwd, remote_repo, sha, ref, expected_old=expected_old)
+    if not landed and expected_old is not None and not gitseam.remote_ref(cwd, remote_repo, ref):
+        # The remote no longer has the ref at all (p3-r4): the base is stale, not a sign of
+        # another writer. Create it, still as a compare-and-swap.
+        landed = gitseam.push_ref_cas(cwd, remote_repo, sha, ref, expected_old=None)
+    if not landed:
         raise StateRefConflict(
             f"{ref} on {remote_repo} is no longer {expected_old or 'absent'}: another writer "
-            "pushed it; fetch the state again before pushing"
+            f"pushed it. {RETRY_LINE}"
         )
-    _write_base(state_dir, sha)
+    _write_base(state_dir, sha, remote=remote_repo, ref=ref)
     return sha
 
 
