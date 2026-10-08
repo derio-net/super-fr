@@ -5303,7 +5303,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R22
     levels: {}
     status: not-implemented
-    notes: added after spec review, operator decision d10
+    notes: plan phase 2 writes this candidate scenario
+    scenario: tests/scenarios/cloud-triage-ci-evidence.sh
   - id: release-on-merge
     capability: Release integrity
     acceptance: Merging a PR that carries a change fragment releases it — main gets
