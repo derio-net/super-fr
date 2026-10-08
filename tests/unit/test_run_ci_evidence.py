@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from fr.real_ghrestclient import RealGhRestClient
 from fr.run.ci_evidence import (
     CI_PENDING_EXIT,

@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from fr import gh as _gh
 from fr.ghclient import UnsupportedForgeOperation
 from fr.real_ghclient import RealGhClient

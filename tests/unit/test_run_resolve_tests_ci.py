@@ -14,7 +14,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from fr.record.model import RECORD_SCHEMA_VERSION
 from fr.run import ci_evidence
 from fr.run.ci_evidence import CI_PENDING_EXIT, CiEvidenceRefused, CiPending
@@ -186,9 +185,7 @@ def test_a_failed_resolve_records_the_bare_claim_without_the_forge(
     repo, shipped, _ = _at_code(tmp_path)
     _raising(monkeypatch, AssertionError("a failed resolve must not read CI"))
 
-    result = _invoke(
-        repo, shipped, [*_FAILED_CODE, "--agent", "impl-1", "--evidence", "tests=ci"]
-    )
+    result = _invoke(repo, shipped, [*_FAILED_CODE, "--agent", "impl-1", "--evidence", "tests=ci"])
 
     assert result.exit_code == 0, result.output
     assert _code_evidence(repo)["tests"] == "ci"
@@ -200,7 +197,9 @@ def test_a_local_log_is_still_accepted(tmp_path: Path, monkeypatch: pytest.Monke
     log = tmp_path / "suite.log"
     log.write_text("4051 passed\n")
 
-    result = _invoke(repo, shipped, [*_FAILED_CODE, "--agent", "impl-1", "--evidence", f"tests={log}"])
+    result = _invoke(
+        repo, shipped, [*_FAILED_CODE, "--agent", "impl-1", "--evidence", f"tests={log}"]
+    )
 
     assert result.exit_code == 0, result.output
     assert _code_evidence(repo)["tests"].startswith("suite.log@")

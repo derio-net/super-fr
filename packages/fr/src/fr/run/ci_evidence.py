@@ -37,11 +37,11 @@ UNKNOWN_BASE = "unknown"
 """The witness's base sha when GitHub names no PR on the gate's run."""
 
 
-class CiEvidenceRefused(Exception):
+class CiEvidenceRefused(Exception):  # noqa: N818 — the name the plan (P2.T2) fixes
     """`tests: ci` cannot be accepted; the message says why (exit 2)."""
 
 
-class CiPending(Exception):
+class CiPending(Exception):  # noqa: N818 — the name the plan (P2.T2) fixes
     """A gate check on the CI sha has not finished (exit `CI_PENDING_EXIT`)."""
 
     def __init__(self, sha: str, detail: str = "") -> None:
@@ -83,8 +83,7 @@ def load_gate_checks(repo_root: Path) -> list[str] | None:
         or not all(isinstance(n, str) and n.strip() for n in names)
     ):
         raise CiEvidenceRefused(
-            f"{CI_CONFIG} at HEAD must be `gate_checks: [<check name>, ...]` "
-            "with at least one name"
+            f"{CI_CONFIG} at HEAD must be `gate_checks: [<check name>, ...]` with at least one name"
         )
     return [n.strip() for n in names]
 
