@@ -422,9 +422,14 @@ vouches for "this code tree merged with that base", recorded as such.
 
 **Gate checks.** Only named checks count (other workflows, the change-fragment
 or acceptance gates, a second app's status, finish at their own times and are
-not test results). `.fr/ci.yaml` (read from HEAD, one key,
-`gate_checks: [<check name>, …]`) names them; with no file, the base branch's
-required status checks (`pr_required_checks`) are the gates; with neither, `ci`
+not test results). `.fr/ci.yaml` (one key, `gate_checks: [<check name>, …]`)
+names them. The gate set is the UNION of the file on the PR's base branch
+(`origin/<base>`) and the file at HEAD, so a branch can add a gate but never
+drop one its base declares; a branch that adds or edits `.fr/ci.yaml` does so in
+its own reviewed diff (p2-r2). With neither file, the gates are the NAMES the
+base branch requires (protection summary and rulesets, §A's routes), read
+whether or not those checks have reported yet, so a required check not created
+yet is pending, never skipped (p2-r1); with no file and no required check, `ci`
 is refused, naming both ways to declare one. This repo ships `.fr/ci.yaml` with
 `gate_checks: [ci-ok]` (`ci.yml`'s aggregator, which needs every test job). A
 gate check whose conclusion is `skipped` is a failure here, not a pass.
@@ -459,11 +464,25 @@ before any write:
    on the sha is still running counts as pending, not absent: an aggregator
    such as `ci-ok` gets no check run until the jobs it needs finish (discovery
    `p2-gate-absent-while-running`). Absent with every other check completed is
-   a refusal.
-6. Witness `ci:<ci sha>+<base sha>;tree=<code_tree(HEAD)>` — the base sha is
-   the PR's base head at the time of the gate's run (from the check suite's
-   `pull_requests[].base.sha`). `_latest_tests_witness` and `tests: reuse` read
-   the `;tree=` part unchanged.
+   a refusal. Likewise a FAILED gate while any other check in the gate's own
+   workflow is unfinished is pending: a re-run creates its new gate check only
+   when the jobs it needs finish (p2-r4). A walk on which no commit has any
+   check at all is pending only while the newest walked commit is less than
+   15 minutes old (committer time); after that it is refused, "no CI ran for
+   <sha>", so fr itself ends a wait no workflow will ever answer (p2-r5). Every
+   pending message names the URL of each unfinished check or, with none
+   reported, the PR's checks page, so the orchestrator can report it (p2-r6).
+6. Witness `ci:<ci sha>+<base>;tree=<code_tree(HEAD)>` — `<base>` is the base
+   sha CI merged the CI sha with, taken from a check suite whose
+   `pull_requests[].head.sha` equals the CI sha, and the literal `unknown` when
+   no listed PR's head is the CI sha (GitHub reports the PR's current state, so a
+   different head means the base may have moved since the run) (p2-r3).
+   `_latest_tests_witness` and `tests: reuse` read the `;tree=` part unchanged.
+   The PR body renders a `ci:` witness as "CI (`<gates>`) green on `<ci sha>`
+   merged with `<base>`", never as a local full-suite run, and the missing-tests
+   refusal hint offers `tests: ci` beside a log path where a CI is configured
+   (p2-r8). The open-PR lookup reads only the PR's number, state and mergeable,
+   never its files (p2-r7).
 
 The token is recognised before the phase-log branch of the evidence dispatch
 (`run_cmd`'s `"tests" in offered and phase is not None` comes first today and
