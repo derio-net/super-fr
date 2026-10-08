@@ -155,6 +155,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "model-binding-replacement",
         "model-binding-check",
         "cloud-triage-ci-evidence",
+        "cloud-triage-state-ref",
+        "cloud-triage-privacy-guard",
     }
     assert on_disk == here
 
@@ -209,3 +211,11 @@ def test_herdr_restart_idle(installed: Path, tmp_path: Path) -> None:
 
 def test_cloud_triage_ci_evidence(installed: Path, tmp_path: Path) -> None:
     _scenario("cloud-triage-ci-evidence", installed, tmp_path)
+
+
+def test_cloud_triage_state_ref(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-state-ref", installed, tmp_path)
+
+
+def test_cloud_triage_privacy_guard(installed: Path, tmp_path: Path) -> None:
+    _scenario("cloud-triage-privacy-guard", installed, tmp_path)

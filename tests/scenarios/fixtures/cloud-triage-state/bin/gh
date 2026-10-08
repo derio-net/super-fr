@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# A fake `gh` for tests/scenarios/cloud-triage-state-ref.sh. It answers the one route the
+# privacy guard reads before a push (FR_FORGE_API=rest): `GET repos/derio-net/super-fr`,
+# with the CAPTURED stdout in tests/fixtures/github_rest/repo.json (public; captured
+# 2026-10-08, that directory's README). Anything else fails loudly.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+caps="$here/../../../fixtures/github_rest"
+[ "${1:-}" = api ] && [ "$#" -eq 2 ] || { echo "fake gh: unexpected call: gh $*" >&2; exit 1; }
+[ -n "${FAKE_GH_LOG:-}" ] && printf '%s\n' "$2" >> "$FAKE_GH_LOG"
+case "$2" in
+  repos/derio-net/super-fr) cat "$caps/repo.json" ;;
+  *) echo "fake gh: no capture for $2" >&2; exit 1 ;;
+esac
