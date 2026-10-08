@@ -206,29 +206,79 @@ def _push_if_changed(scope: Scope, target: Path, clone: Path, before: object) ->
     """The wrapper's second half: push *target* to the scope's ref when its ref files are
     not what they were when the command started. Exit 2 on a refusal, the push conflict's
     fetch-and-retry line included."""
-    from fr.triage.state_ref import local_tree, push_state, read_base, ref_name
+    from fr.triage.state_ref import local_tree, read_base, ref_name, ref_tree
 
     try:
         state_repo = load_durable(target).state_repo
         if state_repo is None:
             return
-        if before is not None and local_tree(target, repo=clone) == before:
+        now = local_tree(target, repo=clone)
+        if before is not None and now == before:
             return
         remote, sid = state_remote(state_repo), scope_id(scope)
-        sha = push_state(
-            target,
-            remote,
-            sid,
-            expected_old=read_base(target, remote=remote, ref=ref_name(sid)),
-            scope=scope,
-            state_repo=state_repo,
-            client=make_visibility_client(),
-            repo=clone,
-        )
+        base = read_base(target, remote=remote, ref=ref_name(sid))
+        if base is not None and ref_tree(clone, base) == now:
+            return  # pushed already, mid-command (`push_now`: the drive's every pass)
+        sha = push_now(scope, target, clone=clone)
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
-    err_console.print(f"pushed {ref_name(sid)} {sha}", markup=False, soft_wrap=True)
+    if sha is not None:
+        err_console.print(f"pushed {ref_name(sid)} {sha}", markup=False, soft_wrap=True)
+
+
+def _clone_of(target: Path) -> Path | None:
+    from fr.triage import gitseam
+
+    probe = target
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    return gitseam.toplevel(probe)
+
+
+def push_now(scope: Scope, target: Path, *, clone: Path | None = None) -> str | None:
+    """Push *target* to the scope's state ref NOW, as the compare-and-swap on the ref it was
+    last fetched from or pushed to (R5): the drive renews its lease and saves each pass
+    through this, not only when the command ends (cloud-triage §B, §D). The new sha; None
+    when the scope has no state repo or *target* is in no clone (nowhere to push). Raises
+    `TriageError` (`StateRefConflict`, `PrivacyError` included); the caller decides."""
+    from fr.triage.state_ref import push_state, read_base, ref_name
+
+    state_repo = load_durable(target).state_repo
+    clone = clone or _clone_of(target)
+    if state_repo is None or clone is None:
+        return None
+    remote, sid = state_remote(state_repo), scope_id(scope)
+    return push_state(
+        target,
+        remote,
+        sid,
+        expected_old=read_base(target, remote=remote, ref=ref_name(sid)),
+        scope=scope,
+        state_repo=state_repo,
+        client=make_visibility_client(),
+        repo=clone,
+    )
+
+
+def fetch_now(scope: Scope, target: Path, *, state_repo: str | None = None) -> str | None:
+    """Fetch the scope's state ref into *target* NOW (R5, R12): adopted when the local copy
+    is not ahead, refused (`StateRefConflict`) when it would overwrite changes not yet
+    pushed. *state_repo* names the ref's repo for a fresh workspace that has no state yet
+    (the cloud driver's brief carries it, R11); it is recorded when the ref brought none.
+    The ref's sha; None when there is no state repo, no clone or no ref yet."""
+    from fr.triage.state_ref import fetch_state
+
+    known = load_durable(target).state_repo
+    repo_name = known or state_repo
+    clone = _clone_of(target)
+    if repo_name is None or clone is None:
+        return None
+    sha = fetch_state(target, state_remote(repo_name), scope_id(scope), repo=clone)
+    if load_durable(target).state_repo is None:
+        write_durable(target, load_durable(target).model_copy(update={"state_repo": repo_name}))
+        mirror_state_repo(target, repo_name)
+    return sha
 
 
 def make_forge() -> Forge:
@@ -705,6 +755,7 @@ def render_command(
 import fr.commands.triage_architecture_cmd  # noqa: E402, F401
 import fr.commands.triage_batch_cmd  # noqa: E402, F401
 import fr.commands.triage_claim_cmd  # noqa: E402, F401
+import fr.commands.triage_drive_cmd  # noqa: E402, F401
 import fr.commands.triage_history_cmd  # noqa: E402, F401
 import fr.commands.triage_kanban_cmd  # noqa: E402, F401
 import fr.commands.triage_origins_cmd  # noqa: E402, F401
