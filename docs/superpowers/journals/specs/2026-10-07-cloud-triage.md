@@ -701,3 +701,8 @@ check: codebase. evidence: §I; ci.yml:4-7,:21 (checkout of refs/pull/N/merge). 
 ### s31-resolved · finding [fixed] · resolves s31: CI on a pull_request tests HEAD merged into base, and a conflicting PR leaves ci waiting forever
 
 R22 and §I: the witness records the CI sha and the base sha it merged with, stated as such; step 4 refuses with no open PR or a CONFLICTING one.
+
+<!-- fr:journal kind=finding scope=spec id=s32 created=2026-10-08T13:54:09+00:00 state=open review_scope=in -->
+### s32 · finding [open] (reviewer: in scope) · 'every check green, at least one present' accepts a sha the test workflow never ran on
+
+check: codebase. evidence: R22; acceptance-report.yml, pinned-clis.yml; ci.yml ci-ok. A fast unrelated check satisfied the rule; skipped counted as success.
