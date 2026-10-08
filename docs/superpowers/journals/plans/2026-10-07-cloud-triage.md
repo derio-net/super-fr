@@ -1312,3 +1312,98 @@ prose only: the skill, its two generated mirrors, AGENTS.md and the doc tests; n
 ### no-refactor-p7-t4 · discovery · no-refactor-because P7.T4 (phase 7)
 
 fr.cloud is new and holds the one wording (remedy_block) every caller appends through remedy_for; each of the three call sites is a one-line append at its own error, and latest_release goes through the existing forge adapter rather than a second gh call
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1 created=2026-10-08T20:32:05+00:00 phase=7 state=open review_scope=in -->
+### p7-r1 · finding [open] (reviewer: in scope) · the driver's self-update checked out a detached release tag, which install.sh's preflight always refuses (phase 7)
+
+triage_drive_cmd.py _install_release; reproduced against a bare remote. Same defect as the implementer's p7-self-update-install-refused-by-preflight.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2 created=2026-10-08T20:32:05+00:00 phase=7 state=open review_scope=in -->
+### p7-r2 · finding [open] (reviewer: in scope) · install.sh refused every home without Claude Code's registration files, breaking OpenCode-only and Hermes-only installs (phase 7)
+
+scripts/install.sh:323-341; reproduced with a HOME holding only .config/opencode.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3 created=2026-10-08T20:32:05+00:00 phase=7 state=open review_scope=in -->
+### p7-r3 · finding [open] (reviewer: in scope) · the remedy block was appended to every GhError, so it repeated in joined errors and was persisted into facts.json (phase 7)
+
+gh.py:192-213, run/model.py _refuse_a_newer_cursor; reproduced with two 403s.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4 created=2026-10-08T20:32:05+00:00 phase=7 state=open review_scope=in -->
+### p7-r4 · finding [open] (reviewer: in scope) · 403 detection matched any '403' in stderr (phase 7)
+
+gh.py:205.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5 created=2026-10-08T20:32:05+00:00 phase=7 state=open review_scope=in -->
+### p7-r5 · finding [open] (reviewer: in scope) · a consumer's own fr-prefixed agent failed fr validate artifacts with no fix (phase 7)
+
+registry.py agents locator, structure.py validate_agents; reproduced in a scratch repo.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6 created=2026-10-08T20:32:05+00:00 phase=7 state=open review_scope=in -->
+### p7-r6 · finding [open] (reviewer: in scope) · the worker brief's install one-liner failed when the clone existed and lacked rsync/jq/uv (phase 7)
+
+batch_dispatch.py:49-56.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r7 created=2026-10-08T20:32:05+00:00 phase=7 state=open review_scope=in -->
+### p7-r7 · finding [open] (reviewer: in scope) · AGENTS.md's mirror section lacked the agents-data checklist (phase 7)
+
+AGENTS.md 'Skills/rules: canonical source vs. generated mirrors'.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8 created=2026-10-08T20:32:05+00:00 phase=7 state=open review_scope=out -->
+### p7-r8 · finding [open] (reviewer: out of scope) · the org agent-worktree allowlist names only super-fr:fr-phase-executor, not the bare project-agent name fr init now writes (phase 7)
+
+scripts/ensure-phase-executor-allowlist.sh. Untestable here (the org hook is not in this container); only matters if a host session dispatches the bare name, which fr-goal's prose does not do. Follow-up, named in the PR body.
+
+<!-- fr:journal kind=decision scope=plan id=p7-agents-kind-is-the-two-shipped-files created=2026-10-08T20:32:05+00:00 phase=7 -->
+### p7-agents-kind-is-the-two-shipped-files · decision · the agents kind owns only the two shipped files, reversing p7-agents-locator-owns-the-prefix (phase 7)
+
+Review p7-r5: owning the fr- prefix turned a consumer's own fr-*.md agent into a validation failure no fr command can fix. The spec names exactly the two files; ArtifactKind.owns filters to AGENT_NAMES.
+
+<!-- fr:journal kind=review scope=plan id=p7-review created=2026-10-08T20:32:05+00:00 phase=7 -->
+### p7-review · review · phase 7 code review: 7 findings in scope, 1 out (p7-r8) (phase 7)
+
+Dispatched reviewer over a86b12f7..89ecc1fe against spec R19-R23/§H and plan 07.yaml; 4 findings reproduced, 424 targeted tests run. Received: each verified; spec amended for p7-r2 (e59214a2); a fix agent implemented all seven with a failing test first (2080e8dc, 59fcb8e5, 31647d54, 2a5bf22c, 7a57f8e9, 92eed33f); targeted suites, test_install_sh.py, the cloud-remedy scenario, ruff, mypy, fr validate artifacts and fr acceptance check pass.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1-resolved created=2026-10-08T20:32:05+00:00 phase=7 state=fixed resolves=p7-r1 -->
+### p7-r1-resolved · finding [fixed] · resolves p7-r1: the driver's self-update checked out a detached release tag, which install.sh's preflight always refuses (phase 7)
+
+2080e8dc: fetch origin main, refuse a tag not on origin/main, checkout -B main + clean, normal preflight; test_install_release_refuses_a_tag_that_is_not_on_main.
+
+<!-- fr:journal kind=finding scope=plan id=p7-self-update-install-refused-by-preflight-resolved created=2026-10-08T20:32:05+00:00 phase=7 state=fixed resolves=p7-self-update-install-refused-by-preflight -->
+### p7-self-update-install-refused-by-preflight-resolved · finding [fixed] · resolves p7-self-update-install-refused-by-preflight: The driver's self-update checks out a detached release tag, and install.sh's preflight refuses anything but main (phase 7)
+
+Same defect as p7-r1, fixed in 2080e8dc.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2-resolved created=2026-10-08T20:32:05+00:00 phase=7 state=fixed resolves=p7-r2 -->
+### p7-r2-resolved · finding [fixed] · resolves p7-r2: install.sh refused every home without Claude Code's registration files, breaking OpenCode-only and Hermes-only installs (phase 7)
+
+7a57f8e9 + spec e59214a2: refuse only when Claude Code is in play or FR_REQUIRE_PLUGIN=1 (set by the cloud setup script); TestOpenCodeOnlyHomeStillInstalls.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3-resolved created=2026-10-08T20:32:05+00:00 phase=7 state=fixed resolves=p7-r3 -->
+### p7-r3-resolved · finding [fixed] · resolves p7-r3: the remedy block was appended to every GhError, so it repeated in joined errors and was persisted into facts.json (phase 7)
+
+59fcb8e5: errors note cloud items, the CLI prints the block once on close; test_two_graphql_403s_print_the_block_once_after_the_error.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4-resolved created=2026-10-08T20:32:05+00:00 phase=7 state=fixed resolves=p7-r4 -->
+### p7-r4-resolved · finding [fixed] · resolves p7-r4: 403 detection matched any '403' in stderr (phase 7)
+
+59fcb8e5: HTTP 403 plus /graphql; test_a_403_that_is_not_a_graphql_http_403_is_not_explained.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5-resolved created=2026-10-08T20:32:05+00:00 phase=7 state=fixed resolves=p7-r5 -->
+### p7-r5-resolved · finding [fixed] · resolves p7-r5: a consumer's own fr-prefixed agent failed fr validate artifacts with no fix (phase 7)
+
+31647d54: ArtifactKind.owns filters to the shipped names; test_validate_ignores_a_consumers_own_fr_prefixed_agent.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6-resolved created=2026-10-08T20:32:05+00:00 phase=7 state=fixed resolves=p7-r6 -->
+### p7-r6-resolved · finding [fixed] · resolves p7-r6: the worker brief's install one-liner failed when the clone existed and lacked rsync/jq/uv (phase 7)
+
+92eed33f: off-PATH fr found first, else the brief embeds cloud.setup_script(); test_a_missing_fr_is_installed_by_the_cloud_setup_script_itself.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r7-resolved created=2026-10-08T20:32:05+00:00 phase=7 state=fixed resolves=p7-r7 -->
+### p7-r7-resolved · finding [fixed] · resolves p7-r7: AGENTS.md's mirror section lacked the agents-data checklist (phase 7)
+
+2a5bf22c: AGENTS.md bullet, names verified against the code.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8-resolved created=2026-10-08T20:32:05+00:00 phase=7 state=open resolves=p7-r8 out_of_scope=true -->
+### p7-r8-resolved · finding [out-of-scope] · resolves p7-r8: the org agent-worktree allowlist names only super-fr:fr-phase-executor, not the bare project-agent name fr init now writes (phase 7)
+
+Not caused by a path fr-goal takes; recorded as a follow-up in the PR body.
