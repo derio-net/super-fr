@@ -167,7 +167,6 @@ def _sync_with_ref(scope: Scope, target: Path) -> None:
     2) with the fetch-and-retry line. A state directory in no git clone (the legacy
     `~/.cache` one, or a `--dir` outside any clone) has nowhere to hold the ref: it is used
     as before, unsynced, and the command says so."""
-    from fr.triage import gitseam
     from fr.triage.state_ref import fetch_state, local_tree
 
     command = _COMMAND.get()
@@ -179,10 +178,7 @@ def _sync_with_ref(scope: Scope, target: Path) -> None:
     synced.add(target)
     try:
         state_repo = load_durable(target).state_repo
-        probe = target
-        while not probe.exists() and probe != probe.parent:
-            probe = probe.parent
-        clone = gitseam.toplevel(probe)
+        clone = state_clone(target)
         if clone is None:
             if state_repo is not None:
                 err_console.print(
@@ -227,7 +223,7 @@ def _push_if_changed(scope: Scope, target: Path, clone: Path, before: object) ->
         err_console.print(f"pushed {ref_name(sid)} {sha}", markup=False, soft_wrap=True)
 
 
-def _clone_of(target: Path) -> Path | None:
+def state_clone(target: Path) -> Path | None:
     from fr.triage import gitseam
 
     probe = target
@@ -245,7 +241,7 @@ def push_now(scope: Scope, target: Path, *, clone: Path | None = None) -> str | 
     from fr.triage.state_ref import push_state, read_base, ref_name
 
     state_repo = load_durable(target).state_repo
-    clone = clone or _clone_of(target)
+    clone = clone or state_clone(target)
     if state_repo is None or clone is None:
         return None
     remote, sid = state_remote(state_repo), scope_id(scope)
@@ -271,7 +267,7 @@ def fetch_now(scope: Scope, target: Path, *, state_repo: str | None = None) -> s
 
     known = load_durable(target).state_repo
     repo_name = known or state_repo
-    clone = _clone_of(target)
+    clone = state_clone(target)
     if repo_name is None or clone is None:
         return None
     sha = fetch_state(target, state_remote(repo_name), scope_id(scope), repo=clone)

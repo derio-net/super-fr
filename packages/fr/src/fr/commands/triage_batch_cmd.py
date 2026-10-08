@@ -4068,12 +4068,12 @@ def pass_exit(driver: _Driver, acted: bool, summary: Summary) -> int:
 def _host_lease(scope: Scope, target: Path, interval_s: int) -> LeaseTerms | None:
     """The host driver's lease (R9), when the scope has a state ref to hold it on: a scope
     with no state repo, or state in no clone, has only this host's `drive.lock`."""
-    from fr.commands.triage_cmd import _clone_of
+    from fr.commands.triage_cmd import state_clone
     from fr.triage.lease import DEFAULT_ROUTINE_MIN, driver_identity, lease_duration
     from fr.triage.scope_config import host_id
 
     try:
-        if load_durable(target).state_repo is None or _clone_of(target) is None:
+        if load_durable(target).state_repo is None or state_clone(target) is None:
             return None
         identity = driver_identity("host", host_id())
     except TriageError as exc:
