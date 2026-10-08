@@ -1,0 +1,93 @@
+schema_version: 2
+phase:
+  number: 4
+  title: 'The claude-cloud runner: a mailbox over session tools'
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - cloud-triage-driver-end-to-end
+  tier: standard
+  files:
+  - packages/fr-claude-cloud/**
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/views.py
+  - pyproject.toml
+  - uv.lock
+  - scripts/version_surfaces.py
+  - packages/fr/src/fr/isolation/scaffold.py
+  - tests/integration/test_runner_package_lists.py
+  - tests/unit/test_import_direction.py
+  - tests/unit/test_claude_cloud_*.py
+  - .github/workflows/ci.yml
+  - AGENTS.md
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Package skeleton and its obligations (§F)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: extend tests/unit/test_import_direction.py (fr_claude_cloud never imports fr.triage; fr never imports fr_claude_cloud) and tests/integration/test_runner_package_lists.py (the scaffold POST_CREATE literal includes packages/fr-claude-cloud); add tests/unit/test_claude_cloud_contract.py running `fr_dispatch.testing`'s run-unit contract against `ClaudeCloudRunner`. Fails.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: packages/fr-claude-cloud (pyproject with `[project.entry-points."fr.runners"] claude-cloud = "fr_claude_cloud.runner:from_env"`, version matching the lockstep, src/fr_claude_cloud/__init__.py, runner.py stub satisfying the contract); add it to the root workspace members and `dependencies` (pyproject.toml :9), coverage `source` (:57), `scripts/version_surfaces.py`, the scaffold POST_CREATE list, the mypy command in AGENTS.md and ci.yml; `uv lock`. Run the three test files and `uv run --no-project python scripts/bump-version.py --check`: pass.
+- number: 2
+  title: Mailbox semantics (R14)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests/unit/test_claude_cloud_mailbox.py — each runner method writes a request with id `<item id>:<kind>:<n>` to requests.yaml and returns a pending result (`dispatch` → `pending:<id>`, `close` → busy while pending, hand-back recorded `handed-back (pending)`); a batch with a pending dispatch is in flight and never dispatched again; a pending request is re-emitted on every pass until its result is recorded; replaying a dispatch whose result was lost finds the tagged session (from sessions.yaml plus the agent's last `list_sessions` by tag) and records it instead of creating a second; `existing_dispatches` reads both; the request table (dispatch/message/close/rehome/status) renders the outbox entries the fr-triage skill tells the agent to execute. Fails.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: fr_claude_cloud.mailbox (pure over the state dir, paths passed in) and runner.py wiring; requests.yaml/sessions.yaml are already in REF_FILES (phase 2). Run: passes.
+- number: 3
+  title: Status, notes and the herdr-only remnants (R15)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: tests/unit/test_claude_cloud_status.py — mapping working→working, blocked→blocked, review_ready→idle, completed→idle, failed→blocked; `SessionNotes.session_notes(items)` returns blocked sessions' `needs_action`; the board and Needs-you-now show it when the runner implements the protocol and are unchanged for herdr; a session's status never changes a batch's stage (stage from forge facts only); a conflict on an idle (completed) session is handed back by message. Also: `ADOPT_LIST_RUNNER` (triage_batch_cmd.py :1385) becomes the driver's runner when it implements `SessionAdopter`, else adopt is skipped with a message; the `<prefix>-wave-<n>` grouping (batch_drive.py :457) is ignored by a runner without groups. Fails.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: `SessionNotes` runtime-checkable Protocol in fr_dispatch.protocols (SessionStatus unchanged); the mapping in fr_claude_cloud; board/views read notes when present; the two herdr-only points made optional. Run the new file plus the existing herdr and kanban tests: pass.
+  - id: P4.T3.S3
+    text: |-
+      Quality gate: ruff, mypy (with the new package), full suite `-n auto` into a log outside the repo; green.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,85 @@
+schema_version: 2
+phase:
+  number: 5
+  title: 'Versions and drift: the run kind records fr_version; re-home on an incompatible
+    major'
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - cloud-triage-version-drift
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/model.py
+  - packages/fr/src/fr/run/legacy.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/run_fr_version.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/triage/drift.py
+  - packages/fr/src/fr/commands/triage_drive_cmd.py
+  - docs/superpowers/runs/*.yaml
+  - tests/unit/test_migration_run_fr_version.py
+  - tests/unit/test_triage_drift.py
+  - tests/unit/test_migration_run_unit_record.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Run kind 9 → 10 (R16)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: tests/unit/test_migration_run_fr_version.py — `RunState.fr_version: str | None = None`; `fr run start` records the running fr's version; the `run` kind's `current_version` is 10; the 9 → 10 migration is stamp-only and refuses a cursor that does not read as v9 (left byte-identical, reported as that artifact's failure); a body already wholly v10 lets the runner finish the stamp; `fr validate artifacts` accepts a v10 cursor; the chain test asserts every hop `[2, …, 10]` (extend `test_the_run_kind_is_reachable_all_the_way_from_version_one_to_…`). Fails.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: field on RunState; registry `current_version=10` with its comment; packages/fr/src/fr/artifacts/run_fr_version.py (SchemaMigration, imported by fr/artifacts/__init__.py) following run_driver.py's stamp-only pattern (no field removed, so no new frozen model); `fr run start` sets it. Run `uv run fr migrate artifacts --yes` in the workspace and commit the migrated cursors in the same commit. Run the migration tests and `uv run fr validate artifacts`: pass.
+- number: 2
+  title: Drift detection and re-home (R17)
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_drift.py — for each active batch, the pass reads the run cursor from the batch branch head (`read_file_at_ref`, REST) and compares `fr_version` major with the latest release's: equal → nothing; different → one `rehome` request at the session's next idle, recorded in rehomes.yaml per (run, release), never two, also after a restore from the ref; no recorded version → reported once, never re-homed. Fails.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/triage/drift.py (pure: cursors + latest release in, requests out) called from the pass; latest release read via the forge client's releases route. Run: passes.
+- number: 3
+  title: The driver updates itself (R18)
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      RED: in test_triage_drift.py — before each pass: installed fr older than the latest release → reinstall (an injected installer) and re-exec the pass; latest major differs from the driver session's own start major → emit a self-`rehome` request and stop the pass; the re-homed driver keeps its lease (identity `cloud:<host id>`). Fails.
+  - id: P5.T3.S2
+    text: |-
+      GREEN: self-update step in triage_drive_cmd's pass (installer injected; the real one runs the cloud setup's documented install). Run, then the quality gate: ruff, mypy, full suite `-n auto` into a log outside the repo; green.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
