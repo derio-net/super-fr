@@ -5294,6 +5294,16 @@ rows:
       mocked and gh refusing. The tripwire fails CI on a new direct fr.gh import or
       ["gh", ...] argv. Not yet walked against a live GitLab/Gitea instance; the glab/tea
       argv shapes were checked against each CLI''s --help.'
+  - id: cloud-triage-ci-evidence
+    capability: Lean cost-aware pipeline
+    acceptance: A run whose suite is slow or impossible locally can prove a phase or
+      delivery with the forge's green CI on the exact pushed commit, and fr refuses
+      CI evidence that does not cover HEAD's code
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R22
+    levels: {}
+    status: not-implemented
+    notes: added after spec review, operator decision d10
   - id: release-on-merge
     capability: Release integrity
     acceptance: Merging a PR that carries a change fragment releases it — main gets
