@@ -91,3 +91,12 @@ Read 2026-10-08 from `scripts/install.sh` (:575-615), `plugins/super-fr/hooks/ho
 - **Driver:** re-execs itself when `post_merge` changed the installed `fr` version (`triage_batch_cmd.py` :1970, :3980).
 - **Artifacts:** a worker on its branch reads its branch's artifacts with its branch's `fr`; it meets newer stamps only when it merges `origin/main`, which brings the matching code in the same merge.
 - **Cloud, today:** no super-fr plugin is installed in a cloud session at all; whatever installs it does so at session start, so a cloud session holds one version for life unless something reloads it. `/reload-plugins` (operator's suggestion) is unverified here: what it reloads, and whether a message sent by another session runs it as a command.
+
+<!-- fr:journal kind=decision scope=spec id=d4-self-consistent-sessions created=2026-10-08T09:49:04+00:00 -->
+### d4-self-consistent-sessions · decision · Operator decision, round 4: clean, self-consistent sessions
+
+Operator, 2026-10-08: sessions stay self-consistent (the skills, fr and artifacts they started with, or their branch's), and the driver acts only on incompatible drift. The operator would prefer always-current sessions but accepts the harness and the cloud do not allow it.
+
+Evidence: `/reload-plugins`, typed by the operator in this cloud session, answered "/reload-plugins isn't available over a remote connection in this session." So nothing can reload a cloud session's plugins in place.
+
+The operator's own escape hatch for "I need the latest fr": stop the session, have the agent push its work, resume in a new session; the run cursor and the journal make resuming easy. Agent's note: that is the cloud's equivalent of `restart-idle`, a fresh session on the same branch with a resume brief, and a candidate for the driver's response to incompatible drift.
