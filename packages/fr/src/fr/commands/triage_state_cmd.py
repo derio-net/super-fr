@@ -113,9 +113,10 @@ def push_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """Push the scope's state to its ref, refs/fr/triage/<scope-id>, as a compare-and-swap
-    on the ref this state was last fetched from or pushed to (R5); the privacy guard runs
-    first (R8). Exit 2 on a refusal or a ref someone else moved."""
+    """Push the scope's state to its ref, the branch refs/heads/fr-triage/<scope-id>, as a
+    compare-and-swap on the ref this state was last fetched from or pushed to (R5); the
+    privacy guard runs first (R8). Exit 2 on a refusal (the privacy guard's, or the remote
+    refusing the push: pushing is this verb's whole job) or a ref someone else moved."""
     scope = triage_cmd._scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace, sync=False)
     try:
@@ -156,7 +157,8 @@ def fetch_command(
         ),
     ] = False,
 ) -> None:
-    """Restore the scope's state from its ref, refs/fr/triage/<scope-id> (R5): the state
+    """Restore the scope's state from its ref, refs/heads/fr-triage/<scope-id> (R5; the
+    legacy refs/fr/triage/<scope-id> when that branch does not exist yet): the state
     directory's ref files become exactly the ref's, and a file the ref no longer carries is
     removed. Changes not yet pushed are never overwritten unless --discard-local. Exit 2 on
     a refusal."""

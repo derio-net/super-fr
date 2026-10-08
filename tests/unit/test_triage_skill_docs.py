@@ -163,7 +163,7 @@ def test_fr_triage_skill_documents_forge_api_state_ref_repo_and_privacy() -> Non
     text = _skill_text()
     for needle in (
         "forge.api",
-        "refs/fr/triage/",
+        "refs/heads/fr-triage/",
         "state_repo",
         "privacy guard",
         "merge_method",

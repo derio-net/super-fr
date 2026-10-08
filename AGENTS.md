@@ -140,7 +140,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     directory, the workspace's `.fr/triage-state/<scope>/` or
     `$HOME/.cache/fr/triage/<scope>/` outside a clone (`owner--repo` or `owner`,
     lowercased; `--dir` overrides; a scope with a state repo is synced with
-    `refs/fr/triage/<scope-id>` by `triage_cmd.resolve_state_dir`, 2026-10-07
+    `refs/heads/fr-triage/<scope-id>` by `triage_cmd.resolve_state_dir`, 2026-10-07
     cloud-triage spec): `facts.json` (collect), `judgements.yaml` (the
     agent's, shape in spec §3.D), `triage.html` (render). It is never
     committed by default, so it is NOT an artifact kind. This repo keeps a
@@ -251,9 +251,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
     setting `forge.api: rest | graphql` (`FR_FORGE_API`, else `~/.config/fr/forge.yaml`,
     else `graphql`); under `rest`, `fr/real_ghrestclient.py` (`RealGhRestClient`) is
     the GitHub client, REST routes only, because the cloud proxy refuses GraphQL.
-    `fr/triage/state_ref.py` keeps a scope's durable state on the ref
-    `refs/fr/triage/<scope-id>` (fetch before read, compare-and-swap push after every
-    change); `privacy.py` is the guard (`leak_risk`) that refuses a private repo's
+    `fr/triage/state_ref.py` keeps a scope's durable state on the orphan branch
+    `refs/heads/fr-triage/<scope-id>` (the cloud git proxy writes only `refs/heads/*`;
+    fetch before read, reading the legacy `refs/fr/triage/<scope-id>` when the branch is
+    absent; compare-and-swap push after every change, a push the remote refuses only a
+    warning after a command's own work); `privacy.py` is the guard (`leak_risk`) that refuses a private repo's
     issue in a scope whose state repo is public, and every push; `lease.py` the one
     driver per scope; `driver.py` the driver adapter (`host` | `cloud`: runner,
     refusals, `post_merge`), `fr triage drive pass|record` its cloud entry;

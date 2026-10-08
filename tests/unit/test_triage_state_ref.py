@@ -1,5 +1,6 @@
-"""The state ref: a scope's durable copy, `refs/fr/triage/<scope-id>` (spec
-2026-10-07-cloud-triage R5, §B, Test Plan 5).
+"""The state ref: a scope's durable copy, the branch `refs/heads/fr-triage/<scope-id>`
+(spec 2026-10-07-cloud-triage R5, §B, Test Plan 5), read from the legacy
+`refs/fr/triage/<scope-id>` when the branch does not exist yet.
 
 Every remote is a bare repo under `tmp_path`; no ref is ever pushed anywhere else.
 """
@@ -16,7 +17,9 @@ from fr.triage.model import Scope
 from fr.triage.state_ref import (
     REF_FILES,
     StateRefConflict,
+    StateRefPushRefused,
     fetch_state,
+    legacy_ref_name,
     push_state,
     read_base,
     ref_name,
@@ -133,7 +136,12 @@ def test_ref_files_is_the_one_list_and_names_the_durable_export_set() -> None:
     dirs = tuple(e.rstrip("/") for e in REF_FILES if e.endswith("/"))
     assert set(state_sync.DURABLE_FILES) <= files
     assert state_sync.DURABLE_DIRS == dirs
-    assert ref_name(SCOPE_ID) == "refs/fr/triage/s-0123abcd"
+
+
+def test_the_state_ref_is_a_branch_under_refs_heads() -> None:
+    """The cloud git proxy writes only refs/heads/* (debug 2026-10-08-cloud-state-ref-proxy)."""
+    assert ref_name(SCOPE_ID) == "refs/heads/fr-triage/s-0123abcd"
+    assert legacy_ref_name(SCOPE_ID) == "refs/fr/triage/s-0123abcd"
 
 
 def test_push_writes_exactly_the_ref_files_that_exist(tmp_path: Path, origin: Path) -> None:
@@ -231,15 +239,21 @@ def test_creating_a_ref_that_already_exists_is_a_conflict(tmp_path: Path, origin
         push_state(state_b, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
 
-def test_the_ref_is_no_branch(tmp_path: Path, origin: Path) -> None:
+def test_the_state_branch_is_an_orphan_sharing_no_history_with_the_code(
+    tmp_path: Path, origin: Path
+) -> None:
     a = _clone(tmp_path, "a", origin)
     state = _state(a)
     _fill(state, {"judgements.yaml": b"a\n"})
-    push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
-    _git(a, "fetch", "--quiet", "origin")
+    sha = push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
-    assert "triage" not in _git(a, "branch", "-a")
-    assert "triage" not in _git(origin, "branch", "-a")
+    assert _git(origin, "branch", "--list", "fr-triage/*").split() == [f"fr-triage/{SCOPE_ID}"]
+    assert _git(origin, "rev-list", "--count", sha).strip() == "1"  # no parent
+    merge_base = subprocess.run(
+        ["git", "merge-base", sha, "main"], cwd=origin, capture_output=True, text=True
+    )
+    assert merge_base.returncode != 0  # nothing in common with the code
+    assert _git(a, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"  # HEAD never moved
 
 
 def test_a_symlink_in_the_state_is_never_pushed(tmp_path: Path, origin: Path) -> None:
@@ -438,6 +452,25 @@ def test_fetch_ref_of_a_ref_the_remote_dropped_is_none_and_drops_the_local_copy(
 
     assert gitseam.fetch_ref(b, str(origin), ref) is None
     assert _git(b, "for-each-ref", ref) == ""
+    assert _git(b, "for-each-ref", gitseam.fetched_ref(ref)) == ""
+
+
+def test_a_fetch_never_creates_a_branch_in_the_workspace(tmp_path: Path, origin: Path) -> None:
+    """The state ref is a branch on the remote; fetched, it lands under `refs/fr/fetched/`,
+    so the workspace's `git branch` never lists it."""
+    from fr.triage import gitseam
+
+    a = _clone(tmp_path, "a", origin)
+    state_a = _state(a)
+    _fill(state_a, {"judgements.yaml": b"a\n"})
+    sha = push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    b = _clone(tmp_path, "b", origin)
+
+    assert fetch_state(b / ".fr" / "triage-state" / "scope", str(origin), SCOPE_ID) == sha
+
+    assert "fr-triage" not in _git(b, "branch", "--list")
+    assert gitseam.fetched_ref(ref_name(SCOPE_ID)) == f"refs/fr/fetched/heads/fr-triage/{SCOPE_ID}"
+    assert _git(b, "rev-parse", gitseam.fetched_ref(ref_name(SCOPE_ID))).strip() == sha
 
 
 # ------------------------------------------------------------- modes (p3-r12)
@@ -471,3 +504,132 @@ def test_an_executable_keeps_its_mode_across_the_ref_and_restores_honour_the_uma
 
     assert stat.S_IMODE((state_b / "judgements.yaml").stat().st_mode) == 0o640
     assert stat.S_IMODE((state_b / "authored-src" / "build.sh").stat().st_mode) == 0o750
+
+
+# ------------------------------- the legacy ref, read for migration (debug 2026-10-08)
+
+
+def _push_legacy(tmp_path: Path, origin: Path, files: dict[str, bytes]) -> str:
+    """A state written by an fr that kept it at `refs/fr/triage/<scope-id>`."""
+    w = _clone(tmp_path, "legacy-writer", origin)
+    state = _state(w)
+    _fill(state, files)
+    sha = push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    _git(origin, "update-ref", legacy_ref_name(SCOPE_ID), sha)
+    _git(origin, "update-ref", "-d", ref_name(SCOPE_ID))
+    return sha
+
+
+def test_fetch_restores_from_the_legacy_ref_when_the_branch_is_absent(
+    tmp_path: Path, origin: Path
+) -> None:
+    legacy = _push_legacy(tmp_path, origin, {"judgements.yaml": b"old\n"})
+    b = _clone(tmp_path, "b", origin)
+    state_b = b / ".fr" / "triage-state" / "scope"
+
+    assert fetch_state(state_b, str(origin), SCOPE_ID) == legacy
+
+    assert (state_b / "judgements.yaml").read_bytes() == b"old\n"
+    assert read_base(state_b, remote=str(origin), ref=legacy_ref_name(SCOPE_ID)) == legacy
+    assert read_base(state_b, remote=str(origin), ref=ref_name(SCOPE_ID)) is None
+
+
+def test_a_legacy_base_is_not_the_expected_old_of_the_first_branch_push(
+    tmp_path: Path, origin: Path
+) -> None:
+    legacy = _push_legacy(tmp_path, origin, {"judgements.yaml": b"old\n"})
+    b = _clone(tmp_path, "b", origin)
+    state_b = b / ".fr" / "triage-state" / "scope"
+    fetch_state(state_b, str(origin), SCOPE_ID)
+    (state_b / "judgements.yaml").write_bytes(b"new\n")
+
+    sha = push_state(
+        state_b,
+        str(origin),
+        SCOPE_ID,
+        expected_old=read_base(state_b, remote=str(origin), ref=ref_name(SCOPE_ID)),
+        **PRIVATE,
+    )
+
+    assert _git(origin, "rev-parse", ref_name(SCOPE_ID)).strip() == sha
+    assert _git(origin, "show", f"{ref_name(SCOPE_ID)}:judgements.yaml") == "new\n"
+    assert _git(origin, "rev-parse", legacy_ref_name(SCOPE_ID)).strip() == legacy  # never deleted
+    assert read_base(state_b, remote=str(origin), ref=ref_name(SCOPE_ID)) == sha
+    # the next fetch reads the branch, not the legacy ref, and keeps the local state
+    assert fetch_state(state_b, str(origin), SCOPE_ID) == sha
+    assert (state_b / "judgements.yaml").read_bytes() == b"new\n"
+
+
+def test_the_branch_wins_over_the_legacy_ref_when_both_exist(tmp_path: Path, origin: Path) -> None:
+    _push_legacy(tmp_path, origin, {"judgements.yaml": b"old\n"})
+    a = _clone(tmp_path, "a", origin)
+    state_a = _state(a)
+    _fill(state_a, {"judgements.yaml": b"branch\n"})
+    sha = push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    b = _clone(tmp_path, "b", origin)
+    state_b = b / ".fr" / "triage-state" / "scope"
+
+    assert fetch_state(state_b, str(origin), SCOPE_ID) == sha
+    assert (state_b / "judgements.yaml").read_bytes() == b"branch\n"
+
+
+# ------------------------------- a refusal is not a conflict (debug 2026-10-08)
+
+
+def _refuse_pushes(bare: Path) -> None:
+    """A pre-receive hook that refuses every push, as the cloud git proxy does a ref it
+    will not write (HTTP 403): the remote's ref does not move, and no lease was stale."""
+    hook = bare / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'refused by policy' >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+
+def test_a_push_the_remote_refuses_is_a_refusal_not_a_conflict(
+    tmp_path: Path, origin: Path
+) -> None:
+    a = _clone(tmp_path, "a", origin)
+    state = _state(a)
+    _fill(state, {"judgements.yaml": b"a\n"})
+    _refuse_pushes(origin)
+
+    with pytest.raises(StateRefPushRefused, match=ref_name(SCOPE_ID)) as caught:
+        push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+
+    assert not isinstance(caught.value, StateRefConflict)
+    assert "refused by policy" in str(caught.value)
+    assert _git(origin, "for-each-ref", ref_name(SCOPE_ID)) == ""
+    assert read_base(state) is None
+
+
+def test_a_refused_push_over_an_existing_ref_is_still_a_refusal(
+    tmp_path: Path, origin: Path
+) -> None:
+    a = _clone(tmp_path, "a", origin)
+    state = _state(a)
+    _fill(state, {"judgements.yaml": b"a\n"})
+    base = push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    (state / "judgements.yaml").write_bytes(b"a2\n")
+    _refuse_pushes(origin)
+
+    with pytest.raises(StateRefPushRefused):
+        push_state(state, str(origin), SCOPE_ID, expected_old=base, **PRIVATE)
+
+    assert _git(origin, "rev-parse", ref_name(SCOPE_ID)).strip() == base
+    assert read_base(state) == base
+
+
+def test_push_ref_cas_tells_a_stale_lease_from_a_refusal(tmp_path: Path, origin: Path) -> None:
+    from fr.triage import gitseam
+
+    a = _clone(tmp_path, "a", origin)
+    head = _git(a, "rev-parse", "HEAD").strip()
+    ref = ref_name(SCOPE_ID)
+    assert gitseam.push_ref_cas(a, str(origin), head, ref, expected_old=None) is True
+    other = _git(a, "commit-tree", "HEAD^{tree}", "-m", "other").strip()
+    # a stale lease: the remote has the ref, the push expected it absent
+    assert gitseam.push_ref_cas(a, str(origin), other, ref, expected_old=None) is False
+    assert _git(origin, "rev-parse", ref).strip() == head
+
+    _refuse_pushes(origin)
+    with pytest.raises(gitseam.PushRefused, match="refused by policy"):
+        gitseam.push_ref_cas(a, str(origin), head, f"{ref}-2", expected_old=None)

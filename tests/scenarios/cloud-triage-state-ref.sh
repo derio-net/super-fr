@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Row cloud-triage-state-ref: a scope's state lives in the workspace, out of git, and its
-# durable copy is the ref refs/fr/triage/<scope-id> (spec 2026-10-07-cloud-triage R4, R5).
+# durable copy is the orphan branch refs/heads/fr-triage/<scope-id> (spec
+# 2026-10-07-cloud-triage R4, R5; a branch because the cloud git proxy writes only
+# refs/heads/*, debug 2026-10-08-cloud-state-ref-proxy).
 # Workspace A (the fixture `git init`) writes every REF_FILES entry, leaves `git status`
 # clean, and pushes to a bare remote; a second, empty workspace B with the same
 # FR_HOST_ID restores every entry byte for byte, and facts.json never travels. The one
@@ -41,9 +43,10 @@ printf '{"not": "durable"}\n' > "$state/facts.json"
 
 run_fr out triage state push --repo "$repo" --remote "$world/state.git"
 require_exit 0 "$out"
-ref="$(git -C "$world/state.git" for-each-ref --format='%(refname)' refs/fr/triage/)"
-expect_grep '^refs/fr/triage/s-[0-9a-f]{8}$' "$ref" "the push wrote the scope's ref"
-refuse_grep 'triage' "$(git -C "$world/state.git" branch -a)" "the ref is no branch"
+ref="$(git -C "$world/state.git" for-each-ref --format='%(refname)' refs/heads/fr-triage/)"
+expect_grep '^refs/heads/fr-triage/s-[0-9a-f]{8}$' "$ref" "the push wrote the scope's branch"
+[ "$(git -C "$world/state.git" rev-list --count "$ref")" = 1 ] || fail "the state branch is no orphan"
+refuse_grep 'fr-triage' "$(git branch -a)" "the state branch shows in the workspace's branches"
 expect_grep "^repos/$repo\$" "$(cat "$FAKE_GH_LOG")" "the push read the state repo's visibility"
 [ -z "$(git status --porcelain --untracked-files=all)" ] || fail "the push changed git status"
 

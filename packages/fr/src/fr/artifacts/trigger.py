@@ -115,9 +115,10 @@ stale. `fr triage` (2026-09-21 fr-triage, spec §3.F′) meets the promise
 strictly: it never reads or writes a registered artifact, and every file it
 writes is under its own state directory (`<workspace>/.fr/triage-state/<scope>/`,
 kept out of git by an `info/exclude` line, or `--dir`; 2026-10-07 cloud-triage R4),
-plus its own state ref, `refs/fr/triage/<scope-id>` (R5), which is no branch and
-holds no registered artifact. Its batch verbs (2026-09-25 triage-batches, spec §5) also write the
-forge — labels, marker comments, merges — behind `--yes`, and `batch merge`
+plus its own state ref, the orphan branch `refs/heads/fr-triage/<scope-id>` (R5), which
+shares no history with the code and holds no registered artifact. Its batch verbs
+(2026-09-25 triage-batches, spec §5) also write the forge — labels, marker comments,
+merges — behind `--yes`, and `batch merge`
 commits and pushes from scratch worktrees under that same state directory. A
 `git merge` there moves whatever artifacts the default branch carries, which
 is ordinary git, not an fr rewrite of an artifact in the invoking checkout, so

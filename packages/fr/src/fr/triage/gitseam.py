@@ -167,7 +167,7 @@ def ensure_excluded(root: Path, entry: str) -> bool:
     return True
 
 
-# ------------------------------------------------------- refs outside refs/heads
+# ------------------------------------------------- the state ref (a branch, CAS-pushed)
 
 _REF_IDENTITY = {
     "GIT_AUTHOR_NAME": "fr triage",
@@ -193,19 +193,32 @@ _NO_REMOTE_REF = "couldn't find remote ref"
 """git's own words when a fetched ref does not exist on the remote."""
 
 
+FETCHED_PREFIX = "refs/fr/fetched/"
+"""Where a fetched state ref is kept in the local clone: never under `refs/heads/`, so the
+workspace's `git branch` never lists the state branch it fetched."""
+
+
+def fetched_ref(ref: str) -> str:
+    """The local ref a fetch of the remote's fully qualified *ref* is kept in:
+    `refs/heads/fr-triage/x` -> `refs/fr/fetched/heads/fr-triage/x`."""
+    return FETCHED_PREFIX + ref.removeprefix("refs/")
+
+
 def fetch_ref(cwd: Path, remote: str, ref: str) -> str | None:
-    """Fetch *ref* from *remote* into the same ref here (forced: the remote is the truth),
-    then read the sha the local ref now holds (p3-r5: one round trip, no window between
-    reading a sha and fetching it). None when the remote has no such ref; a local copy
-    left from an earlier fetch is then dropped, so it is never mistaken for the remote's."""
+    """Fetch *ref* from *remote* into `fetched_ref(ref)` here (forced: the remote is the
+    truth), then read the sha that local ref now holds (p3-r5: one round trip, no window
+    between reading a sha and fetching it). None when the remote has no such ref; a local
+    copy left from an earlier fetch is then dropped, so it is never mistaken for the
+    remote's."""
+    local = fetched_ref(ref)
     try:
-        git(["fetch", "--quiet", "--no-tags", remote, f"+{ref}:{ref}"], cwd)
+        git(["fetch", "--quiet", "--no-tags", remote, f"+{ref}:{local}"], cwd)
     except GitError as exc:
         if _NO_REMOTE_REF not in str(exc):
             raise
-        git_ok(["update-ref", "-d", ref], cwd)
+        git_ok(["update-ref", "-d", local], cwd)
         return None
-    return git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd).strip() or None
+    return git(["rev-parse", "--verify", "--quiet", f"{local}^{{commit}}"], cwd).strip() or None
 
 
 def has_commit(cwd: Path, sha: str) -> bool:
@@ -261,18 +274,42 @@ def commit_tree_from_paths(
     return out.strip()
 
 
+class PushRefused(GitError):  # noqa: N818 - beside StateRefConflict, a refusal
+    """The remote refused a push for a reason that is not a stale lease: a permission
+    (HTTP 403 through a proxy), a hook that declined it, a connection the remote hung up.
+    The remote's ref did not move, and nobody else moved it either."""
+
+
+_STALE_LEASE = "(stale info)"
+"""git's own words when `--force-with-lease` finds the remote's ref is not the expected
+one: `! [rejected] <sha> -> <ref> (stale info)`. A remote that refuses the push says
+`! [remote rejected] ... (pre-receive hook declined)`, `RPC failed; HTTP 403` or `the
+remote end hung up unexpectedly` instead; git exits 1 for all of them."""
+
+
 def push_ref_cas(cwd: Path, remote: str, sha: str, ref: str, *, expected_old: str | None) -> bool:
     """Push *sha* to *ref* on *remote* only if the remote still has *expected_old* there
     (`--force-with-lease=<ref>:<old>`; None means the ref must not exist yet). Whether
     it landed: False when the lease was stale, i.e. the remote's ref is not
-    *expected_old* any more. Any other failure raises `GitError`."""
+    *expected_old* any more.
+
+    Any other failure is the remote refusing the push (`PushRefused`, git's words
+    carried): git exits 1 both ways, so the lease is told apart by git's `(stale info)`
+    or, failing that, by reading the remote's ref again: a ref that is not *expected_old*
+    is a lost race, one that still is (or that cannot even be read) was refused."""
     lease = f"--force-with-lease={ref}:{expected_old or ''}"
     try:
         git(["push", "--quiet", "--no-verify", lease, remote, f"{sha}:{ref}"], cwd)
-    except GitError:
-        if remote_ref(cwd, remote, ref) != expected_old:
+    except GitError as exc:
+        if _STALE_LEASE in str(exc):
             return False
-        raise
+        try:
+            now = remote_ref(cwd, remote, ref)
+        except GitError:
+            raise PushRefused(str(exc)) from exc
+        if now != expected_old:
+            return False
+        raise PushRefused(str(exc)) from exc
     return True
 
 

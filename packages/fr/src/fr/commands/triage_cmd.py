@@ -164,7 +164,9 @@ def _sync_with_ref(scope: Scope, target: Path) -> None:
     when it would overwrite changes not yet pushed. The push runs only if the command
     changed a ref file and the scope then has a `state_repo` (a first collect that decided
     it included), as a compare-and-swap on the ref fetched here; a conflict refuses (exit
-    2) with the fetch-and-retry line. A state directory in no git clone (the legacy
+    2) with the fetch-and-retry line, while a push the remote refuses (a permission, a
+    proxy's HTTP 403) is a warning: the command's own work is done, and the state stays
+    local until a push succeeds. A state directory in no git clone (the legacy
     `~/.cache` one, or a `--dir` outside any clone) has nowhere to hold the ref: it is used
     as before, unsynced, and the command says so."""
     from fr.triage.state_ref import fetch_state, local_tree
@@ -200,9 +202,17 @@ def _sync_with_ref(scope: Scope, target: Path) -> None:
 
 def _push_if_changed(scope: Scope, target: Path, clone: Path, before: object) -> None:
     """The wrapper's second half: push *target* to the scope's ref when its ref files are
-    not what they were when the command started. Exit 2 on a refusal, the push conflict's
-    fetch-and-retry line included."""
-    from fr.triage.state_ref import local_tree, read_base, ref_name, ref_tree
+    not what they were when the command started. Exit 2 on a conflict (the
+    fetch-and-retry line included) or the privacy guard; a push the remote refuses
+    (`StateRefPushRefused`) is a warning naming the ref, and the command still exits 0
+    (debug 2026-10-08-cloud-state-ref-proxy)."""
+    from fr.triage.state_ref import (
+        StateRefPushRefused,
+        local_tree,
+        read_base,
+        ref_name,
+        ref_tree,
+    )
 
     try:
         state_repo = load_durable(target).state_repo
@@ -216,6 +226,14 @@ def _push_if_changed(scope: Scope, target: Path, clone: Path, before: object) ->
         if base is not None and ref_tree(clone, base) == now:
             return  # pushed already, mid-command (`push_now`: the drive's every pass)
         sha = push_now(scope, target, clone=clone)
+    except StateRefPushRefused as exc:
+        err_console.print(
+            f"[yellow]warning:[/yellow] {escape(ref_name(scope_id(scope)))} was not pushed; "
+            f"the state stays local until a push succeeds (the next command that changes "
+            f"it, or `fr triage state push`). {escape(str(exc))}",
+            soft_wrap=True,
+        )
+        return
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
@@ -237,7 +255,8 @@ def push_now(scope: Scope, target: Path, *, clone: Path | None = None) -> str | 
     last fetched from or pushed to (R5): the drive renews its lease and saves each pass
     through this, not only when the command ends (cloud-triage §B, §D). The new sha; None
     when the scope has no state repo or *target* is in no clone (nowhere to push). Raises
-    `TriageError` (`StateRefConflict`, `PrivacyError` included); the caller decides."""
+    `TriageError` (`StateRefConflict`, `StateRefPushRefused`, `PrivacyError` included); the
+    caller decides."""
     from fr.triage.state_ref import push_state, read_base, ref_name
 
     state_repo = load_durable(target).state_repo
