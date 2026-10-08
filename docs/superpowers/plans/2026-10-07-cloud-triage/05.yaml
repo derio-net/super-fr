@@ -1,63 +1,62 @@
 schema_version: 2
 phase:
   number: 5
-  title: 'Versions and drift: the run kind records fr_version; re-home on an incompatible
-    major'
+  title: 'The claude-cloud runner: a mailbox over session tools'
   tag: agentic
   depends_on:
   - 4
   tracking_issue: null
   acceptance:
-  - cloud-triage-version-drift
-  tier: hard
+  - cloud-triage-driver-end-to-end
+  tier: standard
   files:
-  - packages/fr/src/fr/run/model.py
-  - packages/fr/src/fr/run/legacy.py
-  - packages/fr/src/fr/artifacts/registry.py
-  - packages/fr/src/fr/artifacts/run_fr_version.py
-  - packages/fr/src/fr/artifacts/__init__.py
-  - packages/fr/src/fr/artifacts/structure.py
-  - packages/fr/src/fr/commands/run_cmd.py
-  - packages/fr/src/fr/triage/drift.py
-  - packages/fr/src/fr/commands/triage_drive_cmd.py
-  - docs/superpowers/runs/*.yaml
-  - tests/unit/test_migration_run_fr_version.py
-  - tests/unit/test_triage_drift.py
-  - tests/unit/test_migration_run_unit_record.py
-  - tests/scenarios/cloud-triage-version-drift.sh
-  - tests/integration/test_scenarios.py
-  estimate_lines: 900
+  - packages/fr-claude-cloud/**
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/views.py
+  - pyproject.toml
+  - uv.lock
+  - scripts/version_surfaces.py
+  - packages/fr/src/fr/isolation/scaffold.py
+  - tests/integration/test_runner_package_lists.py
+  - tests/unit/test_import_direction.py
+  - tests/unit/test_claude_cloud_*.py
+  - .github/workflows/ci.yml
+  - AGENTS.md
+  estimate_lines: 1100
 tasks:
 - number: 1
-  title: Run kind 9 → 10 (R16)
+  title: Package skeleton and its obligations (§F)
   steps:
   - id: P5.T1.S1
     text: |-
-      RED: tests/unit/test_migration_run_fr_version.py — `RunState.fr_version: str | None = None`; `fr run start` records the running fr's version; the `run` kind's `current_version` is 10; the 9 → 10 migration is stamp-only and refuses a cursor that does not read as v9 (left byte-identical, reported as that artifact's failure); a body already wholly v10 lets the runner finish the stamp; `fr validate artifacts` accepts a v10 cursor; the chain test asserts every hop `[2, …, 10]` (extend `test_the_run_kind_is_reachable_all_the_way_from_version_one_to_…`). Fails.
+      RED: extend tests/unit/test_import_direction.py (fr_claude_cloud never imports fr.triage; fr never imports fr_claude_cloud) and tests/integration/test_runner_package_lists.py (the scaffold POST_CREATE literal includes packages/fr-claude-cloud); add tests/unit/test_claude_cloud_contract.py running `fr_dispatch.testing`'s run-unit contract against `ClaudeCloudRunner`. Fails.
   - id: P5.T1.S2
     text: |-
-      GREEN: field on RunState; registry `current_version=10` with its comment; packages/fr/src/fr/artifacts/run_fr_version.py (SchemaMigration, imported by fr/artifacts/__init__.py) following run_driver.py's stamp-only pattern (no field removed, so no new frozen model); `fr run start` sets it. Run `uv run fr migrate artifacts --yes` in the workspace and commit the migrated cursors in the same commit. Run the migration tests and `uv run fr validate artifacts`: pass.
+      GREEN: packages/fr-claude-cloud (pyproject with `[project.entry-points."fr.runners"] claude-cloud = "fr_claude_cloud.runner:from_env"`, version matching the lockstep, src/fr_claude_cloud/__init__.py, runner.py stub satisfying the contract); add it to the root workspace members and `dependencies` (pyproject.toml :9), coverage `source` (:57), `scripts/version_surfaces.py`, the scaffold POST_CREATE list, the mypy command in AGENTS.md and ci.yml; `uv lock`. Run the three test files and `uv run --no-project python scripts/bump-version.py --check`: pass.
 - number: 2
-  title: Drift detection and re-home (R17)
+  title: Mailbox semantics (R14)
   steps:
   - id: P5.T2.S1
     text: |-
-      RED: tests/unit/test_triage_drift.py — for each active batch, the pass reads the run cursor from the batch branch head (`read_file_at_ref`, REST) and compares `fr_version` major with the latest release's: equal → nothing; different → one `rehome` request at the session's next idle, recorded in rehomes.yaml per (run, release), never two, also after a restore from the ref; no recorded version → reported once, never re-homed. Fails.
+      RED: tests/unit/test_claude_cloud_mailbox.py — each runner method writes a request with id `<item id>:<kind>:<n>` to requests.yaml and returns a pending result (`dispatch` → `pending:<id>`, `close` → busy while pending, hand-back recorded `handed-back (pending)`); a batch with a pending dispatch is in flight and never dispatched again; a pending request is re-emitted on every pass until its result is recorded; replaying a dispatch whose result was lost finds the tagged session (from sessions.yaml plus the agent's last `list_sessions` by tag) and records it instead of creating a second; `existing_dispatches` reads both; the request table (dispatch/message/close/rehome/status) renders the outbox entries the fr-triage skill tells the agent to execute. Fails.
   - id: P5.T2.S2
     text: |-
-      GREEN: packages/fr/src/fr/triage/drift.py (pure: cursors + latest release in, requests out) called from the pass; latest release read via the forge client's releases route. Run: passes.
-  - id: P5.T2.S3
-    text: |-
-      RED/GREEN: tests/scenarios/cloud-triage-version-drift.sh (row cloud-triage-version-drift's `candidate` scenario, run by tests/integration/test_scenarios.py, fake forge only): two active batches whose cursors record `fr_version` 5.x and 6.x against a latest release of 6.y; one `drive pass` writes exactly one `rehome` request (for the 5.x run) to the outbox; a second pass after `drive record` writes none; a third batch with no recorded version is reported, not re-homed. Run test_scenarios.py: passes.
+      GREEN: fr_claude_cloud.mailbox (pure over the state dir, paths passed in) and runner.py wiring; requests.yaml/sessions.yaml are already in REF_FILES (phase 3). Run: passes.
 - number: 3
-  title: The driver updates itself (R18)
+  title: Status, notes and the herdr-only remnants (R15)
   steps:
   - id: P5.T3.S1
     text: |-
-      RED: in test_triage_drift.py — before each pass: installed fr older than the latest release → reinstall (an injected installer) and re-exec the pass; latest major differs from the driver session's own start major → emit a self-`rehome` request and stop the pass; the re-homed driver keeps its lease (identity `cloud:<host id>`). Fails.
+      RED: tests/unit/test_claude_cloud_status.py — mapping working→working, blocked→blocked, review_ready→idle, completed→idle, failed→blocked; `SessionNotes.session_notes(items)` returns blocked sessions' `needs_action`; the board and Needs-you-now show it when the runner implements the protocol and are unchanged for herdr; a session's status never changes a batch's stage (stage from forge facts only); a conflict on an idle (completed) session is handed back by message. Also: `ADOPT_LIST_RUNNER` (triage_batch_cmd.py :1385) becomes the driver's runner when it implements `SessionAdopter`, else adopt is skipped with a message; the `<prefix>-wave-<n>` grouping (batch_drive.py :457) is ignored by a runner without groups. Fails.
   - id: P5.T3.S2
     text: |-
-      GREEN: self-update step in triage_drive_cmd's pass (installer injected; the real one runs the cloud setup's documented install). Run, then the quality gate: ruff, mypy, full suite `-n auto` into a log outside the repo; green.
+      GREEN: `SessionNotes` runtime-checkable Protocol in fr_dispatch.protocols (SessionStatus unchanged); the mapping in fr_claude_cloud; board/views read notes when present; the two herdr-only points made optional. Run the new file plus the existing herdr and kanban tests: pass.
+  - id: P5.T3.S3
+    text: |-
+      Quality gate: ruff, mypy (with the new package), full suite `-n auto` into a log outside the repo; green.
 state:
   steps:
     P5.T1.S1:
@@ -76,15 +75,15 @@ state:
       state: ' '
       ticked_at: null
       note: null
-    P5.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
     P5.T3.S1:
       state: ' '
       ticked_at: null
       note: null
     P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S3:
       state: ' '
       ticked_at: null
       note: null

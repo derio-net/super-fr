@@ -1,81 +1,63 @@
 schema_version: 2
 phase:
   number: 6
-  title: 'Workers in the cloud: the agents artifact, setup, brief, post_merge and
-    the skill'
+  title: 'Versions and drift: the run kind records fr_version; re-home on an incompatible
+    major'
   tag: agentic
   depends_on:
   - 5
   tracking_issue: null
   acceptance:
-  - cloud-triage-repo-agents
-  - cloud-triage-driver-end-to-end
+  - cloud-triage-version-drift
   tier: hard
   files:
-  - packages/fr/src/fr/agents/**
+  - packages/fr/src/fr/run/model.py
+  - packages/fr/src/fr/run/legacy.py
   - packages/fr/src/fr/artifacts/registry.py
-  - packages/fr/src/fr/artifacts/agents_kind.py
-  - packages/fr/src/fr/artifacts/structure.py
+  - packages/fr/src/fr/artifacts/run_fr_version.py
   - packages/fr/src/fr/artifacts/__init__.py
-  - packages/fr/src/fr/commands/init_cmd.py
-  - packages/fr/src/fr/triage/batch_dispatch.py
-  - packages/fr/pyproject.toml
-  - .claude/agents/*
-  - scripts/install.sh
-  - scripts/sync-agents-data.py
-  - plugins/super-fr/skills/fr-triage/SKILL.md
-  - .opencode/**
-  - .hermes/**
-  - docs/cloud-setup.md
-  - AGENTS.md
-  - tests/unit/test_agents_artifact.py
-  - tests/unit/test_tripwire_agents_data.py
-  - tests/unit/test_triage_worker_brief.py
-  - tests/unit/test_install_sh.py
-  - tests/unit/test_triage_skill_docs.py
-  - tests/unit/test_tripwire_artifact_kinds.py
-  - tests/unit/test_migration_runner.py
-  - docs/explainers/**
-  - tests/scenarios/cloud-triage-repo-agents.sh
+  - packages/fr/src/fr/artifacts/structure.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/triage/drift.py
+  - packages/fr/src/fr/commands/triage_drive_cmd.py
+  - docs/superpowers/runs/*.yaml
+  - tests/unit/test_migration_run_fr_version.py
+  - tests/unit/test_triage_drift.py
+  - tests/unit/test_migration_run_unit_record.py
+  - tests/scenarios/cloud-triage-version-drift.sh
   - tests/integration/test_scenarios.py
-  estimate_lines: 1000
+  estimate_lines: 900
 tasks:
 - number: 1
-  title: The agents artifact kind (R19)
+  title: Run kind 9 → 10 (R16)
   steps:
   - id: P6.T1.S1
     text: |-
-      RED: tests/unit/test_tripwire_agents_data.py — `packages/fr/src/fr/agents/{fr-spec-reviewer,fr-phase-executor}.md` (wheel package data) are byte-identical to `plugins/super-fr/agents/`, and a pinned sha256 per file in `fr.agents.CANONICAL_SHA256` matches: changing a canonical agent without bumping the `agents` kind's `current_version` and the pin fails with a message saying so. tests/unit/test_agents_artifact.py — `render_agent(name, version)` = canonical text with `fr_artifact_version: <v>` added to its front matter; `fr init` writes both into `.claude/agents/`; `fr validate artifacts` passes them and fails one missing, unstamped, with mismatched `name`, or stale; `iter_paths_of` locates exactly the two files. Fails.
+      RED: tests/unit/test_migration_run_fr_version.py — `RunState.fr_version: str | None = None`; `fr run start` records the running fr's version; the `run` kind's `current_version` is 10; the 9 → 10 migration is stamp-only and refuses a cursor that does not read as v9 (left byte-identical, reported as that artifact's failure); a body already wholly v10 lets the runner finish the stamp; `fr validate artifacts` accepts a v10 cursor; the chain test asserts every hop `[2, …, 10]` (extend `test_the_run_kind_is_reachable_all_the_way_from_version_one_to_…`). Fails.
   - id: P6.T1.S2
     text: |-
-      GREEN: scripts/sync-agents-data.py (copy + `--check`), the data copy, `fr.agents` (paths via importlib.resources, `render_agent`, `CANONICAL_SHA256`); registry `ArtifactKind(name="agents", current_version=1, locator=".claude/agents/fr-*.md", stamp="`fr_artifact_version` in the agent's front matter", read/write via the spec kind's front-matter helpers generalised to a key parameter, validate=validate_agents)`; `fr init scaffold` gains the agents step. Re-run test_tripwire_artifact_kinds.py and test_migration_runner.py (no migration registered at version 1): pass.
-  - id: P6.T1.S3
-    text: |-
-      RED/GREEN: the re-render migration path — a test that registers a temporary version 2 in a monkeypatched registry and checks `fr migrate artifacts --yes` re-renders both files from the installed wheel copy, atomically, refusing (byte-identical) a file whose `name` is not one fr ships; document in agents_kind.py that the first real bump registers this migration. Replace this repo's `.claude/agents/*.md` symlinks with rendered, stamped files via `uv run fr init` (or the agents step alone) and commit. Run the agents tests and `uv run fr validate artifacts`: pass.
-  - id: P6.T1.S4
-    text: |-
-      RED/GREEN: tests/scenarios/cloud-triage-repo-agents.sh (row cloud-triage-repo-agents' `candidate` scenario, run by tests/integration/test_scenarios.py): in a fresh git fixture, the agents step of `fr init` writes `.claude/agents/fr-spec-reviewer.md` and `fr-phase-executor.md` with the stamp; `fr validate artifacts` exits 0; after deleting the stamp line from one file it exits non-zero naming that file; after `fr migrate artifacts --yes` it exits 0 again. Run test_scenarios.py: passes.
+      GREEN: field on RunState; registry `current_version=10` with its comment; packages/fr/src/fr/artifacts/run_fr_version.py (SchemaMigration, imported by fr/artifacts/__init__.py) following run_driver.py's stamp-only pattern (no field removed, so no new frozen model); `fr run start` sets it. Run `uv run fr migrate artifacts --yes` in the workspace and commit the migrated cursors in the same commit. Run the migration tests and `uv run fr validate artifacts`: pass.
 - number: 2
-  title: Setup script, install.sh and the worker brief (R19)
+  title: Drift detection and re-home (R17)
   steps:
   - id: P6.T2.S1
     text: |-
-      RED: tests/unit/test_install_sh.py — with a HOME lacking `~/.claude/plugins/installed_plugins.json` or `~/.claude/settings.json`, `scripts/install.sh` exits non-zero naming the missing file instead of warning and exiting 0. tests/unit/test_triage_worker_brief.py — the batch brief (`batch_dispatch.render_brief`) for a claude-cloud batch starts with: check `fr --version`, install super-fr when missing; confirm `fr-spec-reviewer` and `fr-phase-executor` are dispatchable agent types; when not, end the turn BLOCKED with a needs_action naming the `agents` artifact (`fr init` / `fr migrate artifacts --yes`); no rehome request is emitted for that state; enter isolation with `fr isolation up` before any edit. Fails.
+      RED: tests/unit/test_triage_drift.py — for each active batch, the pass reads the run cursor from the batch branch head (`read_file_at_ref`, REST) and compares `fr_version` major with the latest release's: equal → nothing; different → one `rehome` request at the session's next idle, recorded in rehomes.yaml per (run, release), never two, also after a restore from the ref; no recorded version → reported once, never re-homed. Fails.
   - id: P6.T2.S2
     text: |-
-      GREEN: install.sh fails on the two missing files (message names them and the seeding commands); the brief section, rendered only for runners without plugin-loaded agents (claude-cloud). docs/cloud-setup.md documents the environment setup script (apt install rsync, seed the two files, clone the marketplace, run install.sh, write `api: rest` to ~/.config/fr/forge.yaml) and the driver's per-wake host-id write. Run: passes.
+      GREEN: packages/fr/src/fr/triage/drift.py (pure: cursors + latest release in, requests out) called from the pass; latest release read via the forge client's releases route. Run: passes.
+  - id: P6.T2.S3
+    text: |-
+      RED/GREEN: tests/scenarios/cloud-triage-version-drift.sh (row cloud-triage-version-drift's `candidate` scenario, run by tests/integration/test_scenarios.py, fake forge only): two active batches whose cursors record `fr_version` 5.x and 6.x against a latest release of 6.y; one `drive pass` writes exactly one `rehome` request (for the 5.x run) to the outbox; a second pass after `drive record` writes none; a third batch with no recorded version is reported, not re-homed. Run test_scenarios.py: passes.
 - number: 3
-  title: post_merge in the cloud, the skill and its mirrors (R20, R21)
+  title: The driver updates itself (R18)
   steps:
   - id: P6.T3.S1
     text: |-
-      RED: tests/unit/test_triage_skill_docs.py — the fr-triage skill names the cloud driver (`fr triage drive pass`/`record`, wakes, outbox execution), `forge.api`, the state ref, the state repo choice and the privacy guard, and stays within its existing line budget; the cloud driver's `post_merge` is a no-op (asserted in the adapter test from phase 3, extended here to the shipped skill text). Fails.
+      RED: in test_triage_drift.py — before each pass: installed fr older than the latest release → reinstall (an injected installer) and re-exec the pass; latest major differs from the driver session's own start major → emit a self-`rehome` request and stop the pass; the re-homed driver keeps its lease (identity `cloud:<host id>`). Fails.
   - id: P6.T3.S2
     text: |-
-      GREEN: edit plugins/super-fr/skills/fr-triage/SKILL.md within budget (move detail into docs/cloud-setup.md, linked); run `scripts/sync-opencode.py` and `scripts/sync-hermes.py` and commit the mirrors; AGENTS.md gains short entries for `fr.forgeapi`, `real_ghrestclient`, `fr/triage/{state_ref,privacy,lease,driver,drift}.py`, `fr-claude-cloud` and the `agents` kind; update the docs/explainers page that describes fr-triage if it names the driver's host-only state (regenerate the .html per .claude/rules/explainers-currency.md, or record in the PR body that it is owed). Run the skill tests, the three mirror tripwires and test_skill_validation.py: pass.
-  - id: P6.T3.S3
-    text: |-
-      Quality gate: ruff format/check, mypy, `uv run fr validate artifacts`, `uv run fr acceptance check`, full suite `-n auto` into a log outside the repo; all green.
+      GREEN: self-update step in triage_drive_cmd's pass (installer injected; the real one runs the cloud setup's documented install). Run, then the quality gate: ruff, mypy, full suite `-n auto` into a log outside the repo; green.
 state:
   steps:
     P6.T1.S1:
@@ -83,14 +65,6 @@ state:
       ticked_at: null
       note: null
     P6.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
-    P6.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
-    P6.T1.S4:
       state: ' '
       ticked_at: null
       note: null
@@ -102,15 +76,15 @@ state:
       state: ' '
       ticked_at: null
       note: null
+    P6.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
     P6.T3.S1:
       state: ' '
       ticked_at: null
       note: null
     P6.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
-    P6.T3.S3:
       state: ' '
       ticked_at: null
       note: null

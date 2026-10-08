@@ -1,62 +1,62 @@
 schema_version: 2
 phase:
   number: 4
-  title: 'The claude-cloud runner: a mailbox over session tools'
+  title: 'The lease and the driver adapter: drive pass and record'
   tag: agentic
   depends_on:
   - 3
   tracking_issue: null
   acceptance:
+  - cloud-triage-driver-lease
   - cloud-triage-driver-end-to-end
-  tier: standard
+  tier: hard
   files:
-  - packages/fr-claude-cloud/**
-  - packages/fr-dispatch/src/fr_dispatch/protocols.py
-  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/lease.py
+  - packages/fr/src/fr/triage/driver.py
+  - packages/fr/src/fr/triage/drive_lock.py
   - packages/fr/src/fr/triage/batch_drive.py
-  - packages/fr/src/fr/triage/kanban.py
-  - packages/fr/src/fr/triage/views.py
-  - pyproject.toml
-  - uv.lock
-  - scripts/version_surfaces.py
-  - packages/fr/src/fr/isolation/scaffold.py
-  - tests/integration/test_runner_package_lists.py
-  - tests/unit/test_import_direction.py
-  - tests/unit/test_claude_cloud_*.py
-  - .github/workflows/ci.yml
-  - AGENTS.md
-  estimate_lines: 1100
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_drive_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - tests/unit/test_triage_lease.py
+  - tests/unit/test_triage_driver_*.py
+  - tests/scenarios/cloud-triage-driver-lease.sh
+  - tests/integration/test_scenarios.py
+  estimate_lines: 1400
 tasks:
 - number: 1
-  title: Package skeleton and its obligations (§F)
+  title: The lease (R9)
   steps:
   - id: P4.T1.S1
     text: |-
-      RED: extend tests/unit/test_import_direction.py (fr_claude_cloud never imports fr.triage; fr never imports fr_claude_cloud) and tests/integration/test_runner_package_lists.py (the scaffold POST_CREATE literal includes packages/fr-claude-cloud); add tests/unit/test_claude_cloud_contract.py running `fr_dispatch.testing`'s run-unit contract against `ClaudeCloudRunner`. Fails.
+      RED: tests/unit/test_triage_lease.py — `Lease(holder, started, expires)` in lease.yaml; `lease_duration(interval_min=5, routine_min=60) == 75 min` and follows its inputs; `take_or_renew(state, identity, now)`: free → taken; same holder → renewed, also when expired; other holder, unexpired → `LeaseHeld` naming holder and expiry; other holder, expired → `LeaseExpired` reported, not taken; `take(force=True)` (the `fr triage lease take --yes` path) takes it. Identity strings: `host:<host id>`, `cloud:<host id>`; a re-homed cloud driver (new session, same host id) renews. Two drivers racing: both read the same old ref, the second compare-and-swap push fails. Fails.
   - id: P4.T1.S2
     text: |-
-      GREEN: packages/fr-claude-cloud (pyproject with `[project.entry-points."fr.runners"] claude-cloud = "fr_claude_cloud.runner:from_env"`, version matching the lockstep, src/fr_claude_cloud/__init__.py, runner.py stub satisfying the contract); add it to the root workspace members and `dependencies` (pyproject.toml :9), coverage `source` (:57), `scripts/version_surfaces.py`, the scaffold POST_CREATE list, the mypy command in AGENTS.md and ci.yml; `uv lock`. Run the three test files and `uv run --no-project python scripts/bump-version.py --check`: pass.
+      GREEN: packages/fr/src/fr/triage/lease.py (pure functions over the state dir plus `state_ref.push_state` for the CAS); `fr triage lease {show,take}` (take refuses without `--yes`); `drive_lock.py` stays as the fast same-host check before the lease. Run: passes.
 - number: 2
-  title: Mailbox semantics (R14)
+  title: Driver adapter and runner selection (R10)
   steps:
   - id: P4.T2.S1
     text: |-
-      RED: tests/unit/test_claude_cloud_mailbox.py — each runner method writes a request with id `<item id>:<kind>:<n>` to requests.yaml and returns a pending result (`dispatch` → `pending:<id>`, `close` → busy while pending, hand-back recorded `handed-back (pending)`); a batch with a pending dispatch is in flight and never dispatched again; a pending request is re-emitted on every pass until its result is recorded; replaying a dispatch whose result was lost finds the tagged session (from sessions.yaml plus the agent's last `list_sessions` by tag) and records it instead of creating a second; `existing_dispatches` reads both; the request table (dispatch/message/close/rehome/status) renders the outbox entries the fr-triage skill tells the agent to execute. Fails.
+      RED: tests/unit/test_triage_driver_adapter.py — `fr.triage.driver.Driver` protocol with `host` wrapping today's loop (the existing drive tests still pass unchanged); with one `.fr/triage.yaml` naming `launch.runner: herdr` and `post_merge`, a host scope dispatches through herdr and runs post_merge, a cloud scope dispatches through `claude-cloud` and runs neither `post_merge` nor `post_merge_restart`; a batch whose explicit `launch.runner` differs from the driver's is reported (`warn`) and not dispatched. Fails.
   - id: P4.T2.S2
     text: |-
-      GREEN: fr_claude_cloud.mailbox (pure over the state dir, paths passed in) and runner.py wiring; requests.yaml/sessions.yaml are already in REF_FILES (phase 2). Run: passes.
+      GREEN: driver.py; dispatch, adopt and the drive loop take the runner name from the driver adapter instead of the batch's `launch.runner` default (triage_batch_cmd.py :1094, :1269, :1487); `post_merge` execution moves behind the adapter. Run the new file and the existing tests/unit/test_triage_batch_drive*.py: pass.
 - number: 3
-  title: Status, notes and the herdr-only remnants (R15)
+  title: drive pass and drive record (R12, R13)
   steps:
   - id: P4.T3.S1
     text: |-
-      RED: tests/unit/test_claude_cloud_status.py — mapping working→working, blocked→blocked, review_ready→idle, completed→idle, failed→blocked; `SessionNotes.session_notes(items)` returns blocked sessions' `needs_action`; the board and Needs-you-now show it when the runner implements the protocol and are unchanged for herdr; a session's status never changes a batch's stage (stage from forge facts only); a conflict on an idle (completed) session is handed back by message. Also: `ADOPT_LIST_RUNNER` (triage_batch_cmd.py :1385) becomes the driver's runner when it implements `SessionAdopter`, else adopt is skipped with a message; the `<prefix>-wave-<n>` grouping (batch_drive.py :457) is ignored by a runner without groups. Fails.
+      RED: tests/unit/test_triage_driver_pass.py — `fr triage drive pass --scope S --statuses statuses.json --outbox outbox.json` over a fixture scope with a fake forge: restores state from the ref when missing or older, renews the lease (a push, so the privacy check runs), collects, reads statuses and the previous results, plans with `batch_drive.drive_pass` (same decisions the host loop makes for the same facts, compared action for action), performs forge actions itself, writes session requests to the outbox, exits 0, or 3 when nothing is left but waiting; a wake within `interval` of the last pass only renews the lease. `fr triage drive record --outbox --result` applies every result to the state and pushes the ref. Fails.
   - id: P4.T3.S2
     text: |-
-      GREEN: `SessionNotes` runtime-checkable Protocol in fr_dispatch.protocols (SessionStatus unchanged); the mapping in fr_claude_cloud; board/views read notes when present; the two herdr-only points made optional. Run the new file plus the existing herdr and kanban tests: pass.
+      GREEN: packages/fr/src/fr/commands/triage_drive_cmd.py registered under `fr triage drive` (keeping `fr triage batch drive` as the host adapter's entry); the pass is the host loop's body factored into one function both adapters call, so policy stays single-sourced. Run: passes.
   - id: P4.T3.S3
     text: |-
-      Quality gate: ruff, mypy (with the new package), full suite `-n auto` into a log outside the repo; green.
+      RED/GREEN: tests/scenarios/cloud-triage-driver-lease.sh (row cloud-triage-driver-lease's `candidate` scenario, run by tests/integration/test_scenarios.py, shape of tests/scenarios/triage-claims-held.sh): an empty workspace restored from a bare-remote ref, one `drive pass` against the fake forge and a scripted session executor that fills results.json, then `drive record`; asserts the ref advanced and the outbox emptied; then a second driver with another FR_HOST_ID runs `drive pass` and exits 2 naming the holder and expiry, and `fr triage lease take` without `--yes` changes nothing. Run test_scenarios.py: passes.
+  - id: P4.T3.S4
+    text: |-
+      REFACTOR + quality gate: the host loop now calls the shared pass function; delete any duplicated planning code; ruff, mypy, full suite `-n auto` into a log outside the repo; green.
 state:
   steps:
     P4.T1.S1:
@@ -84,6 +84,10 @@ state:
       ticked_at: null
       note: null
     P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S4:
       state: ' '
       ticked_at: null
       note: null

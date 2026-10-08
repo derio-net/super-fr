@@ -1,62 +1,77 @@
 schema_version: 2
 phase:
   number: 3
-  title: 'The lease and the driver adapter: drive pass and record'
+  title: State in the workspace, durable on a ref, behind a privacy guard
   tag: agentic
   depends_on:
   - 2
   tracking_issue: null
   acceptance:
-  - cloud-triage-driver-lease
-  - cloud-triage-driver-end-to-end
-  tier: hard
+  - cloud-triage-state-ref
+  - cloud-triage-privacy-guard
+  tier: standard
   files:
-  - packages/fr/src/fr/triage/lease.py
-  - packages/fr/src/fr/triage/driver.py
-  - packages/fr/src/fr/triage/drive_lock.py
-  - packages/fr/src/fr/triage/batch_drive.py
-  - packages/fr/src/fr/commands/triage_batch_cmd.py
-  - packages/fr/src/fr/commands/triage_drive_cmd.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/state_ref.py
+  - packages/fr/src/fr/triage/state_sync.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/triage/scope_config.py
+  - packages/fr/src/fr/triage/privacy.py
+  - packages/fr/src/fr/triage/collect.py
   - packages/fr/src/fr/commands/triage_cmd.py
-  - tests/unit/test_triage_lease.py
-  - tests/unit/test_triage_driver_*.py
-  - tests/scenarios/cloud-triage-driver-lease.sh
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_state_cmd.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - tests/unit/test_triage_state_*.py
+  - tests/unit/test_triage_privacy.py
+  - tests/unit/test_triage_model.py
+  - tests/scenarios/cloud-triage-state-ref.sh
+  - tests/scenarios/cloud-triage-privacy-guard.sh
   - tests/integration/test_scenarios.py
-  estimate_lines: 1400
+  estimate_lines: 1300
 tasks:
 - number: 1
-  title: The lease (R9)
+  title: State directory in the workspace (R4)
   steps:
   - id: P3.T1.S1
     text: |-
-      RED: tests/unit/test_triage_lease.py — `Lease(holder, started, expires)` in lease.yaml; `lease_duration(interval_min=5, routine_min=60) == 75 min` and follows its inputs; `take_or_renew(state, identity, now)`: free → taken; same holder → renewed, also when expired; other holder, unexpired → `LeaseHeld` naming holder and expiry; other holder, expired → `LeaseExpired` reported, not taken; `take(force=True)` (the `fr triage lease take --yes` path) takes it. Identity strings: `host:<host id>`, `cloud:<host id>`; a re-homed cloud driver (new session, same host id) renews. Two drivers racing: both read the same old ref, the second compare-and-swap push fails. Fails.
+      RED: tests/unit/test_triage_state_workspace.py — in a tmp git repo with a linked worktree, `state_dir(scope, workspace=<worktree>)` is `<worktree>/.fr/triage-state/<scope>/`; first use appends `.fr/triage-state/` to `$(git rev-parse --git-common-dir)/info/exclude` once (idempotent), and `git status --porcelain` stays empty after writing a file there; an existing `~/.cache/fr/triage/<scope>/` is copied in on first use and left in place, and not copied again; an org scope outside any clone with no `--workspace` raises `TriageError` naming the flag. Fails.
   - id: P3.T1.S2
     text: |-
-      GREEN: packages/fr/src/fr/triage/lease.py (pure functions over the state dir plus `state_ref.push_state` for the CAS); `fr triage lease {show,take}` (take refuses without `--yes`); `drive_lock.py` stays as the fast same-host check before the lease. Run: passes.
+      GREEN: `fr.triage.model.state_dir(scope, override=None, *, workspace=None)` resolves the workspace (explicit, else the git toplevel of cwd via `gitseam`), ensures the exclude entry and the one-time import; `--workspace PATH` is added beside `--dir` on the triage commands that take `--dir`; `--dir` keeps winning. Update `fr.artifacts.trigger.READ_ONLY_COMMANDS`'s rationale comment for `triage` (still no registered artifact; it writes its own state dir and refs). Run the file and tests/unit/test_triage_model.py: pass.
 - number: 2
-  title: Driver adapter and runner selection (R10)
+  title: 'The state ref: REF_FILES, fetch and compare-and-swap push (R5)'
   steps:
   - id: P3.T2.S1
     text: |-
-      RED: tests/unit/test_triage_driver_adapter.py — `fr.triage.driver.Driver` protocol with `host` wrapping today's loop (the existing drive tests still pass unchanged); with one `.fr/triage.yaml` naming `launch.runner: herdr` and `post_merge`, a host scope dispatches through herdr and runs post_merge, a cloud scope dispatches through `claude-cloud` and runs neither `post_merge` nor `post_merge_restart`; a batch whose explicit `launch.runner` differs from the driver's is reported (`warn`) and not dispatched. Fails.
+      RED: tests/unit/test_triage_state_ref.py — with a bare tmp remote: `push_state` writes `refs/fr/triage/<scope-id>` whose tree holds exactly `REF_FILES` that exist (judgements.yaml, origins.yaml, subsystems.yaml, board/, origins/, architecture/, history/, snapshots/, authored-src/, merge-stops.json, lease.yaml, scope-durable.yaml, requests.yaml, sessions.yaml, rehomes.yaml) and never facts.json, rendered pages or scope.yaml; `fetch_state` into a fresh clone restores every entry byte for byte; a push whose expected old value is stale fails (`StateRefConflict`) and changes nothing; the ref is not listed by `git branch -a`. Fails.
   - id: P3.T2.S2
     text: |-
-      GREEN: driver.py; dispatch, adopt and the drive loop take the runner name from the driver adapter instead of the batch's `launch.runner` default (triage_batch_cmd.py :1094, :1269, :1487); `post_merge` execution moves behind the adapter. Run the new file and the existing tests/unit/test_triage_batch_drive*.py: pass.
+      GREEN: packages/fr/src/fr/triage/state_ref.py — `REF_FILES` (tuple, the one list), `ref_name(scope_id)`, `fetch_state(state_dir, remote_repo, scope_id) -> str | None` (old sha), `push_state(state_dir, remote_repo, scope_id, *, expected_old)`. Git runs only through `fr.triage.gitseam` (new `fetch_ref`, `push_ref_cas` using `git push --force-with-lease=<ref>:<old>`, `commit_tree_from_paths` building a commit with `git hash-object`/`mktree`/`commit-tree` in a temp index, never touching the worktree's index). `state_sync`'s DURABLE_FILES/DURABLE_DIRS are derived from or asserted equal to the file/dir subset of REF_FILES. Run: passes.
 - number: 3
-  title: drive pass and drive record (R12, R13)
+  title: Durable settings and where the ref lives (R6, R7, R11)
   steps:
   - id: P3.T3.S1
     text: |-
-      RED: tests/unit/test_triage_driver_pass.py — `fr triage drive pass --scope S --statuses statuses.json --outbox outbox.json` over a fixture scope with a fake forge: restores state from the ref when missing or older, renews the lease (a push, so the privacy check runs), collects, reads statuses and the previous results, plans with `batch_drive.drive_pass` (same decisions the host loop makes for the same facts, compared action for action), performs forge actions itself, writes session requests to the outbox, exits 0, or 3 when nothing is left but waiting; a wake within `interval` of the last pass only renews the lease. `fr triage drive record --outbox --result` applies every result to the state and pushes the ref. Fails.
+      RED: tests/unit/test_triage_state_repo.py — `ScopeConfig` accepts optional `state_repo` and `forge_api`; `scope-durable.yaml` round-trips both; `decide_state_repo(repos, visibility, ask)`: one repo → that repo, no question; a mixed set → asks among the private ones only; all public → asks between "a new repo for the refs" and each public repo, and the warning text names the leak; non-interactive with none decided → state stays local and one warning per pass. A restore into a fresh workspace recovers `state_repo` and `forge_api` and writes `forge.api` to `~/.config/fr/forge.yaml` only when that file is absent (`fr.forgeapi.write_default`). Fails.
   - id: P3.T3.S2
     text: |-
-      GREEN: packages/fr/src/fr/commands/triage_drive_cmd.py registered under `fr triage drive` (keeping `fr triage batch drive` as the host adapter's entry); the pass is the host loop's body factored into one function both adapters call, so policy stays single-sourced. Run: passes.
-  - id: P3.T3.S3
+      GREEN: fields on `ScopeConfig`; `fr.triage.state_ref.decide_state_repo` (pure; the prompt is injected); collect records each scope repo's `visibility` in facts from `GET repos/{r}` (REST, already read by the github-rest client); the first collect of a scope with no `state_repo` decides it and writes scope-durable.yaml plus the scope.yaml mirror. Run: passes.
+- number: 4
+  title: The privacy guard (R8)
+  steps:
+  - id: P3.T4.S1
     text: |-
-      RED/GREEN: tests/scenarios/cloud-triage-driver-lease.sh (row cloud-triage-driver-lease's `candidate` scenario, run by tests/integration/test_scenarios.py, shape of tests/scenarios/triage-claims-held.sh): an empty workspace restored from a bare-remote ref, one `drive pass` against the fake forge and a scripted session executor that fills results.json, then `drive record`; asserts the ref advanced and the outbox emptied; then a second driver with another FR_HOST_ID runs `drive pass` and exits 2 naming the holder and expiry, and `fr triage lease take` without `--yes` changes nothing. Run test_scenarios.py: passes.
-  - id: P3.T3.S4
+      RED: tests/unit/test_triage_privacy.py — `leak_risk(keys, state_repo, visibility)` true iff a key's repo is private and the state repo public; `batch create --issue`, `batch edit --add-issue`, the wave setters, a judgement write adding a key, `push_state` and `state export` each exit 2 naming the issue, its repo and the state repo when it is true, and proceed when the state repo is private; `push_state` reads the state repo's visibility with `GET repos/{state_repo}` immediately before writing, also when the state repo is outside the scope and when facts.json is absent (then the keys' repos are read the same way); an unreadable visibility refuses the push. Fails.
+  - id: P3.T4.S2
     text: |-
-      REFACTOR + quality gate: the host loop now calls the shared pass function; delete any duplicated planning code; ruff, mypy, full suite `-n auto` into a log outside the repo; green.
+      GREEN: packages/fr/src/fr/triage/privacy.py (`leak_risk`, `check_or_refuse`, `live_visibility(client, repo)`); call sites in triage_batch_cmd (create/edit/wave), the judgement writer, `state_ref.push_state` and `triage_state_cmd` export. Run the privacy tests and the existing triage batch tests: pass.
+  - id: P3.T4.S3
+    text: |-
+      RED/GREEN: the two rows' `candidate` scenarios, run by tests/integration/test_scenarios.py (shape of tests/scenarios/triage-claims-held.sh, fake forge only): tests/scenarios/cloud-triage-state-ref.sh — a scope's state written in a workspace leaves `git status` clean, is pushed to a bare-remote `refs/fr/triage/<scope-id>`, and a second, empty workspace with the same FR_HOST_ID restores every REF_FILES entry from it; tests/scenarios/cloud-triage-privacy-guard.sh — with a public state repo, `batch create --issue <private-repo issue>` exits 2 naming the issue, its repo and the state repo, and judgements.yaml is byte-identical afterwards. Run test_scenarios.py: passes.
+  - id: P3.T4.S4
+    text: |-
+      REFACTOR + quality gate: one `_refuse(issue, repo, state_repo)` message builder shared by every call site; ruff format/check, mypy, full suite `-n auto` into a log outside the repo; green.
 state:
   steps:
     P3.T1.S1:
@@ -83,11 +98,19 @@ state:
       state: ' '
       ticked_at: null
       note: null
-    P3.T3.S3:
+    P3.T4.S1:
       state: ' '
       ticked_at: null
       note: null
-    P3.T3.S4:
+    P3.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S4:
       state: ' '
       ticked_at: null
       note: null
