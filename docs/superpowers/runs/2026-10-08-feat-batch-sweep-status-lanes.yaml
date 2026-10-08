@@ -1,0 +1,24 @@
+schema_version: 9
+run: 2026-10-08-feat-batch-sweep-status-lanes
+workflow: fr-goal@1
+branch: feat/batch-sweep-status-lanes
+started: '2026-10-08T16:23:01+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
