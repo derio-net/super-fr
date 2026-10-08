@@ -631,3 +631,8 @@ Supersedes phase-split-2026-10-07-cloud-triage-p6. R19-R21 are also cited by the
 ### slow-suite · discovery · The full suite takes ~20 minutes in a 4-core cloud container; branch pushes run no CI
 
 Measured 2026-10-08 during phase 1: `uv run pytest -q --no-cov -n auto` in this cloud container (4 cores) ran for over 20 minutes, against ~2.5 minutes on a 12-core host (AGENTS.md). And .github/workflows/ci.yml triggers on `push: [main]` and `pull_request` only, so the branch's pushes before a PR existed ran no CI at all; a draft PR does trigger it (no `types:` filter).
+
+<!-- fr:journal kind=decision scope=spec id=d10-ci-evidence created=2026-10-08T13:48:21+00:00 -->
+### d10-ci-evidence · decision · Operator decision, round 10: CI as test evidence, in this spec
+
+Operator, 2026-10-08, after slow-suite: open the draft PR now so every push runs CI (derio-net/super-fr#1088, opened before deliver at the operator's request), and add to THIS spec a requirement letting fr accept a green CI run on HEAD as test evidence (R22, §I), rather than filing it separately or keeping local suites only.
