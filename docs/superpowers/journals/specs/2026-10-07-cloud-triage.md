@@ -100,3 +100,13 @@ Operator, 2026-10-08: sessions stay self-consistent (the skills, fr and artifact
 Evidence: `/reload-plugins`, typed by the operator in this cloud session, answered "/reload-plugins isn't available over a remote connection in this session." So nothing can reload a cloud session's plugins in place.
 
 The operator's own escape hatch for "I need the latest fr": stop the session, have the agent push its work, resume in a new session; the run cursor and the journal make resuming easy. Agent's note: that is the cloud's equivalent of `restart-idle`, a fresh session on the same branch with a resume brief, and a candidate for the driver's response to incompatible drift.
+
+<!-- fr:journal kind=decision scope=spec id=d5-fr-decides created=2026-10-08T09:53:35+00:00 -->
+### d5-fr-decides · decision · Operator decision, round 5: fr decides, the agent carries out; Sonnet drives; re-homing
+
+Operator, 2026-10-08:
+
+- **fr decides, the agent carries out** (option a): the cloud runner is a mailbox; fr plans each pass and does the forge work; the agent executes session requests and records their outcomes through fr.
+- **The driver session runs on Sonnet;** Opus would be overkill for it.
+- **Re-homing: yes.** On incompatible drift the driver has the worker push and stop, then starts a fresh session on the same branch with a resume brief. Not token-efficient, but pragmatic.
+- **Status mapping:** `completed` maps to done only if it means after a close-out (see discovery `cloud-session-status`).
