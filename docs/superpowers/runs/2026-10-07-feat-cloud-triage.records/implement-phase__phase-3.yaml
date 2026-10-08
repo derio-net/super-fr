@@ -3,7 +3,7 @@ run: 2026-10-07-feat-cloud-triage
 step: implement-phase
 item: phase/3
 outcome: done
-ticks: [P3.T1.S1, P3.T1.S2]
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2]
 refactor: {}
 journal: []
 resolves: []

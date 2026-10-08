@@ -47,13 +47,24 @@ def _run(
     text: bool = True,
     ok: tuple[int, ...] = (0,),
     timeout: float | None = None,
+    env: dict[str, str] | None = None,
+    stdin: str | None = None,
 ) -> Any:
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
     `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
-    `GitError` with the command's own words."""
+    `GitError` with the command's own words. *env* is laid over the process environment;
+    *stdin* is fed to the command (text mode only)."""
+    full_env = {**os.environ, **env} if env else None
     try:
         result = subprocess.run(
-            argv, cwd=cwd, capture_output=True, text=text, check=False, timeout=timeout
+            argv,
+            cwd=cwd,
+            capture_output=True,
+            text=text,
+            check=False,
+            timeout=timeout,
+            env=full_env,
+            input=stdin,
         )
     except subprocess.TimeoutExpired as exc:
         raise GitError(f"`{shlex.join(argv)}` timed out after {timeout:g}s in {cwd}") from exc
@@ -153,6 +164,114 @@ def ensure_excluded(root: Path, entry: str) -> bool:
     with exclude.open("a", encoding="utf-8") as fh:
         fh.write(f"{sep}{entry}\n")
     return True
+
+
+# ------------------------------------------------------- refs outside refs/heads
+
+_REF_IDENTITY = {
+    "GIT_AUTHOR_NAME": "fr triage",
+    "GIT_AUTHOR_EMAIL": "fr-triage@example.invalid",
+    "GIT_COMMITTER_NAME": "fr triage",
+    "GIT_COMMITTER_EMAIL": "fr-triage@example.invalid",
+}
+"""Who a state-ref commit is by: fixed, so a container with no git identity can write
+one, and nothing about the operator rides along (cloud-triage §B)."""
+
+
+def remote_ref(cwd: Path, remote: str, ref: str) -> str | None:
+    """The sha *remote* has at the fully qualified *ref*, or None when it has none."""
+    out = git(["ls-remote", "--refs", remote, ref], cwd)
+    for line in out.splitlines():
+        sha, _, name = line.partition("\t")
+        if name == ref:
+            return sha
+    return None
+
+
+def fetch_ref(cwd: Path, remote: str, ref: str) -> str | None:
+    """Fetch *ref* from *remote* into the same ref here (forced: the remote is the truth),
+    returning its sha; None, fetching nothing, when the remote has no such ref."""
+    sha = remote_ref(cwd, remote, ref)
+    if sha is None:
+        return None
+    git(["fetch", "--quiet", "--no-tags", remote, f"+{ref}:{ref}"], cwd)
+    return sha
+
+
+def has_commit(cwd: Path, sha: str) -> bool:
+    """Whether *sha* names a commit this clone has."""
+    return git_ok(["cat-file", "-e", f"{sha}^{{commit}}"], cwd)
+
+
+def commit_tree_from_paths(
+    cwd: Path, root: Path, paths: list[str], *, parent: str | None, message: str
+) -> str:
+    """A commit whose tree holds exactly *paths* (POSIX, relative to *root*) with their
+    current bytes, built in a temporary index: the clone's own index, HEAD and worktree
+    are never touched. Blobs are written with `hash-object -w`; the commit carries
+    *parent* when given and a fixed identity."""
+    import tempfile
+
+    blobs = (
+        _run(
+            ["git", "hash-object", "-w", "--no-filters", "--stdin-paths"],
+            cwd,
+            stdin="".join(f"{root / p}\n" for p in paths),
+            timeout=GIT_TIMEOUT_SECONDS,
+        ).split()
+        if paths
+        else []
+    )
+    with tempfile.TemporaryDirectory(prefix="fr-state-ref-") as tmp:
+        env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
+        info = "".join(f"100644 {sha}\t{p}\n" for sha, p in zip(blobs, paths, strict=True))
+        _run(
+            ["git", "update-index", "--add", "--index-info"],
+            cwd,
+            env=env,
+            stdin=info,
+            timeout=GIT_TIMEOUT_SECONDS,
+        )
+        tree = _run(["git", "write-tree"], cwd, env=env, timeout=GIT_TIMEOUT_SECONDS).strip()
+    argv = ["git", "commit-tree", tree, "-m", message]
+    if parent is not None:
+        argv += ["-p", parent]
+    out: str = _run(argv, cwd, env=_REF_IDENTITY, timeout=GIT_TIMEOUT_SECONDS)
+    return out.strip()
+
+
+def push_ref_cas(cwd: Path, remote: str, sha: str, ref: str, *, expected_old: str | None) -> bool:
+    """Push *sha* to *ref* on *remote* only if the remote still has *expected_old* there
+    (`--force-with-lease=<ref>:<old>`; None means the ref must not exist yet). Whether
+    it landed: False when the lease was stale, i.e. the remote's ref is not
+    *expected_old* any more. Any other failure raises `GitError`."""
+    lease = f"--force-with-lease={ref}:{expected_old or ''}"
+    try:
+        git(["push", "--quiet", "--no-verify", lease, remote, f"{sha}:{ref}"], cwd)
+    except GitError:
+        if remote_ref(cwd, remote, ref) != expected_old:
+            return False
+        raise
+    return True
+
+
+def tree_files(cwd: Path, sha: str) -> list[tuple[str, str, str]]:
+    """`(mode, blob sha, path)` for every blob in *sha*'s tree, recursively."""
+    out = git_bytes(["ls-tree", "-r", "-z", "--full-tree", sha], cwd)
+    entries = []
+    for record in out.split(b"\0"):
+        if not record:
+            continue
+        meta, _, path = record.partition(b"\t")
+        mode, kind, blob = meta.decode().split(" ")
+        if kind == "blob":
+            entries.append((mode, blob, path.decode("utf-8", "surrogateescape")))
+    return entries
+
+
+def blob_bytes(cwd: Path, sha: str) -> bytes:
+    """The bytes of blob *sha*, exactly as stored."""
+    return git_bytes(["cat-file", "blob", sha], cwd)
 
 
 def run_declared(command: str, cwd: Path, **fields: str) -> None:
