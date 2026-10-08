@@ -1131,3 +1131,58 @@ drift.py is pure and new; the pass gained one method (_Driver._drift) on existin
 ### no-refactor-p6-t3 · discovery · no-refactor-because P6.T3 (phase 6)
 
 the self-update is one function in triage_drive_cmd beside the pass it guards, and its plan is drift.py's; the only shared code touched is one_pass's new lease_taken flag
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1 created=2026-10-08T18:37:37+00:00 phase=6 state=open review_scope=in -->
+### p6-r1 · finding [open] (reviewer: in scope) · the driver's self-update cloned into the marketplace dir, whose .git install.sh deletes, so the second update failed (phase 6)
+
+triage_drive_cmd.py _install_release.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2 created=2026-10-08T18:37:37+00:00 phase=6 state=open review_scope=in -->
+### p6-r2 · finding [open] (reviewer: in scope) · the rehome ledger keyed on the exact release, so every same-major patch or minor re-homed the run again (phase 6)
+
+drift.py Ledger.rehomed.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3 created=2026-10-08T18:37:37+00:00 phase=6 state=open review_scope=in -->
+### p6-r3 · finding [open] (reviewer: in scope) · cursor_path took the first cursor in the PR, which can be another run's (phase 6)
+
+drift.py cursor_path.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4 created=2026-10-08T18:37:37+00:00 phase=6 state=open review_scope=in -->
+### p6-r4 · finding [open] (reviewer: in scope) · a self-re-home could leave two drivers holding one lease identity (phase 6)
+
+lease.py; triage_drive_cmd.py self-re-home.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5 created=2026-10-08T18:37:37+00:00 phase=6 state=open review_scope=in -->
+### p6-r5 · finding [open] (reviewer: in scope) · the self-re-home pass dropped pending worker requests from the outbox (phase 6)
+
+triage_drive_cmd.py self-re-home outbox.
+
+<!-- fr:journal kind=review scope=plan id=p6-review created=2026-10-08T18:37:37+00:00 phase=6 -->
+### p6-review · review · phase 6 code review: 5 findings in scope (phase 6)
+
+Dispatched reviewer over phase 6 against spec R16-R18/§G and plan 06.yaml. Received: each verified; the spec was amended for r2-r4 (18c111d0: lease generation, major-keyed ledger, the batch branch's own cursor); a fix agent implemented all five with a failing test first (bb2ca175); 4015 targeted tests and 5 cloud-triage scenarios pass; ruff and mypy clean.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1-resolved created=2026-10-08T18:37:37+00:00 phase=6 state=fixed resolves=p6-r1 -->
+### p6-r1-resolved · finding [fixed] · resolves p6-r1: the driver's self-update cloned into the marketplace dir, whose .git install.sh deletes, so the second update failed (phase 6)
+
+bb2ca175: source clone kept at ~/.cache/fr/src/super-fr, fetched and checked out at the tag, then its install.sh run; test_install_release_keeps_its_source_clone_outside_the_marketplace.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2-resolved created=2026-10-08T18:37:37+00:00 phase=6 state=fixed resolves=p6-r2 -->
+### p6-r2-resolved · finding [fixed] · resolves p6-r2: the rehome ledger keyed on the exact release, so every same-major patch or minor re-homed the run again (phase 6)
+
+bb2ca175: ledger matches (run, release major); test_a_run_rehomed_onto_a_major_is_never_rehomed_for_its_later_patches_or_minors.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3-resolved created=2026-10-08T18:37:37+00:00 phase=6 state=fixed resolves=p6-r3 -->
+### p6-r3-resolved · finding [fixed] · resolves p6-r3: cursor_path took the first cursor in the PR, which can be another run's (phase 6)
+
+bb2ca175: the cursor whose branch is the batch branch; none or several reported once; test_the_batchs_cursor_is_the_one_whose_branch_is_the_batchs.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4-resolved created=2026-10-08T18:37:37+00:00 phase=6 state=fixed resolves=p6-r4 -->
+### p6-r4-resolved · finding [fixed] · resolves p6-r4: a self-re-home could leave two drivers holding one lease identity (phase 6)
+
+bb2ca175: lease generation bumped with the pending request in one CAS push; older generations drive nothing; test_an_old_generation_pass_or_record_drives_nothing, test_a_replayed_self_rehome_creates_one_session.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5-resolved created=2026-10-08T18:37:37+00:00 phase=6 state=fixed resolves=p6-r5 -->
+### p6-r5-resolved · finding [fixed] · resolves p6-r5: the self-re-home pass dropped pending worker requests from the outbox (phase 6)
+
+bb2ca175: outbox is the pending worker requests then the driver's own; test_a_new_major_rehomes_the_driver_itself_and_its_lease_carries_over.
