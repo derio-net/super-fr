@@ -5116,10 +5116,27 @@ rows:
       the operator
     origin:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: plan 2026-10-07-cloud-triage names the candidate scenario this row's walk
-      runs; written by the phase that implements the row
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_lease.py#test_another_holder_is_refused_while_the_lease_is_live
+      - super-fr:tests/unit/test_triage_lease.py#test_the_same_holder_renews_its_own_expired_lease
+      - super-fr:tests/unit/test_triage_lease.py#test_a_rehomed_cloud_driver_with_the_same_host_id_is_the_same_holder
+      - super-fr:tests/unit/test_triage_lease.py#test_an_expired_foreign_lease_is_reported_and_not_taken
+      - super-fr:tests/unit/test_triage_lease.py#test_the_duration_is_three_wake_intervals_plus_the_routine_period
+      - super-fr:tests/unit/test_triage_lease.py#test_two_drivers_reading_the_same_old_ref_the_second_push_fails
+      - super-fr:tests/unit/test_triage_driver_pass.py#test_another_drivers_live_lease_refuses_the_pass_naming_holder_and_expiry
+      - super-fr:tests/unit/test_triage_driver_pass.py#test_the_host_loop_takes_and_releases_the_lease_with_a_state_repo
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_cloud_triage_driver_lease
+    status: ci
+    notes: 'phase 4: lease.yaml on the state ref, taken and renewed by a compare-and-swap
+      push (test_triage_lease: a second driver refused, the same holder renews its expired
+      lease, a re-homed cloud driver renews, an expired foreign lease reported and taken
+      only by lease take --yes, 75-minute default duration, two racing drivers lose
+      the second push); drive pass refuses another driver''s lease and the host loop
+      takes and releases it (test_triage_driver_pass); candidate scenario cloud-triage-driver-lease
+      restores an empty workspace from the ref, passes, records, and refuses a second
+      driver'
     scenario: tests/scenarios/cloud-triage-driver-lease.sh
   - id: cloud-triage-driver-end-to-end
     capability: Backlog triage
