@@ -15,6 +15,10 @@ post_merge: ["./scripts/install.sh"]
 # runner once (driver-sessions spec R6), so they load the plugins, hooks and fr it installed.
 # The driver's own pane is never restarted. `none` turns it off.
 post_merge_restart: idle
+# The driver's merge method. This repo allows several, and under `forge.api: rest` (a
+# cloud driver) fr cannot read the default from the forge, so it refuses to merge until
+# one is named here (fr-triage skill, "The driver"). Squash is this repo's convention.
+merge_method: squash
 # No `version:` block, deliberately (spec 2026-09-26-version-bump-churn §3.F):
 # super-fr PRs never edit a version, so a batch reserves no number. The worker
 # adds a `.changes/` fragment per AGENTS.md and release.yml assigns the number.
