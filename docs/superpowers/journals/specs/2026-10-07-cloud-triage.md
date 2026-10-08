@@ -746,3 +746,8 @@ check: codebase. evidence: ghclient.py:225-235; real_ghclient.py:402-424.
 ### s36 · finding [open] (reviewer: in scope) · Waiting for CI has a wake-up only in the cloud
 
 check: consistency. evidence: §I; fr-goal SKILL.md:106 idle guard.
+
+<!-- fr:journal kind=finding scope=spec id=s36-resolved created=2026-10-08T13:54:22+00:00 state=fixed resolves=s36 -->
+### s36-resolved · finding [fixed] · resolves s36: Waiting for CI has a wake-up only in the cloud
+
+§I Waiting: pending exits 75, not an idle point; fr-goal tells a host orchestrator to re-run the resolve every 2 minutes for at most 45, then report blocked.
