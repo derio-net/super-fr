@@ -189,6 +189,151 @@ journal:
     TriageConfig, :167 state_dir; fr_dispatch protocols.py:36-218; run_cmd.py:4590 run start; run/model.py:351
     RunState; artifacts/registry.py:368-407 run kind v9; artifacts/trigger.py:82-92; verifications candidate/client-live;
     decisions d1-d8 honoured except d5''s condition (s8).'
+- kind: finding
+  id: s16
+  review_scope: in
+  title: R19/§H rest on a premise spare-preload disproved, and their fallback (re-home) cannot help
+  body: |
+    target: spec
+    check: decisions
+    evidence: R19; §H para 1; Background ("A session's plugins cannot be reloaded in place"); journal spare-preload, plugin-late-load, agents-late-load, no-plugin-agents, d7; run_cmd.py:2387-2395
+    R19's "runs before the session starts so the plugin's agents and hooks are loaded" is false (spare-preload); its "a running session cannot load a plugin's agents" and the Background sentence are contradicted by agents-late-load. The remedy loops: a re-homed session is another pre-warmed spare with the same race. Fix: say the setup script installs into the container and the plugin reaches the session late; the worker's first step waits, bounded, for fr-spec-reviewer/fr-phase-executor to be dispatchable, and on timeout ends BLOCKED with a needs_action, no re-home; add an owed measurement and a Test Plan 17 observation. The gate accepts the bare agent name, so user- or repo-scoped agent files are a candidate fix. Hooks are unproven in a worker; say what a worker without them may do. R18's "re-home itself so its skill text is current" assumes skills cannot refresh in place, which plugin-late-load puts in doubt.
+- kind: finding
+  id: s17
+  review_scope: in
+  title: §H's setup script, done as described, is the silent half-install that setup-script measured
+  body: |
+    target: spec
+    check: decisions
+    evidence: §H; journal setup-script; scripts/install.sh:94-99
+    §H names neither the apt install of rsync nor seeding installed_plugins.json/settings.json; the owed follow-up (install.sh creates them or fails, not warn-and-exit-0) is in no requirement or Test Plan row.
+- kind: finding
+  id: s18
+  review_scope: in
+  title: Environment set by the setup script likely never reaches the session; FR_HOST_ID 'restored into its workspace' has no mechanism
+  body: |
+    target: spec
+    check: consistency
+    evidence: R3; R11; §B Identity; §H; journal spare-preload; scope_config.py:34-35,58-63
+    The CLI process starts before the setup script, so its `export` cannot reach the session's shells; FR_FORGE_API=rest may never be set. R11 never says how FR_HOST_ID is restored per wake. Persist both in files fr reads (`~/.config/fr/host-id` exists, scope_config.py:34; the forge setting needs a host-level file or the environment's own variables), and test that a fresh shell resolves both.
+- kind: finding
+  id: s19
+  review_scope: in
+  title: forge.api is said to resolve from 'the host's scope.yaml', but scope.yaml is per scope and the run path has none
+  body: |
+    target: spec
+    check: codebase
+    evidence: R3; §A Selection; scope_config.py:30,86-106; §B scope-durable.yaml
+    scope.yaml is one file per scope; `resolve()` has no scope and run-path callers have none to pass; the order omits scope-durable.yaml's forge_api; ScopeConfig is extra="forbid", so forge_api/state_repo must become fields. Name one host-level source (env var, then e.g. ~/.config/fr/forge.yaml), how scope-durable.yaml feeds it, and add the model fields.
+- kind: finding
+  id: s20
+  review_scope: in
+  title: The gh commands fr tells agents to run (pr create/edit/ready, issue close/edit) are GraphQL-backed and outside R1
+  body: |
+    target: spec
+    check: codebase
+    evidence: hostclient.py:85-96 FORGE_COMMANDS["github"]; R1; Test Plan 17
+    Agents run `gh pr create --draft`, `gh pr edit`, `gh pr ready`, `gh issue close`, `gh issue edit --add-label`, `gh label create` at deliver and close-out; most are GraphQL. Under rest, FORGE_COMMANDS needs a REST variant (gh api routes or an fr verb), with a test that no GraphQL-backed command is named.
+- kind: finding
+  id: s21
+  review_scope: in
+  title: "'Raise on a 403' conflicts with GhClient methods whose contract is None on any failure"
+  body: |
+    target: spec
+    check: codebase
+    evidence: §A last bullet; ghclient.py:323-332; real_ghclient.py:565-577; isolation/local.py:2962
+    pr_for_branch and issues_enabled promise None on failure. List per method whether it raises or keeps its contract, and test both; pr_for_branch's REST client must derive owner/repo from the checkout.
+- kind: finding
+  id: s22
+  review_scope: in
+  title: Pending requests, re-home records and session ids are not in REF_FILES, so they are lost on a fresh container
+  body: |
+    target: spec
+    check: consistency
+    evidence: R14; §F requests.yaml; §G; §B REF_FILES; Test Plan 17
+    A driver restored on a new container loses pending requests, can re-home twice (breaking R17's at-most-once), and loses dispatched session ids. Add them to REF_FILES; extend Test Plans 5 and 9.
+- kind: finding
+  id: s23
+  review_scope: in
+  title: The driver's self-re-home strands it behind its own lease
+  body: |
+    target: spec
+    check: consistency
+    evidence: R9; §D holder = session id; R18; §E step 2
+    A re-homed driver has a new session id, so its own lease refuses it for 90 minutes and then needs `lease take --yes`. Use `cloud:<FR_HOST_ID>` as the holder, or hand the lease over; add to Test Plans 8 and 12.
+- kind: finding
+  id: s24
+  review_scope: in
+  title: Lease default does not match its own formula (3x5 + 60 = 75, not 90)
+  body: |
+    target: spec
+    check: consistency
+    evidence: R9; §D; §E defaults
+    Settle one value and test the computed duration.
+- kind: finding
+  id: s25
+  review_scope: in
+  title: No rule says how a cloud scope's batches reach the claude-cloud runner when the repo config says herdr
+  body: |
+    target: spec
+    check: codebase
+    evidence: .fr/triage.yaml:4-7,13-17; triage_batch_cmd.py:1094-1095,1269-1270,1487-1488; Test Plan 17
+    Runner comes from launch.runner, defaulting to the repo's .fr/triage.yaml (herdr here), which both scopes read. State whether the driver adapter, a scope setting or --to decides, which settings the cloud driver ignores (post_merge, post_merge_restart), and test one repo config with two scopes.
+- kind: finding
+  id: s26
+  review_scope: in
+  title: "Privacy guard: no source for the state repo's visibility, and the lease push runs before any collect"
+  body: |
+    target: spec
+    check: consistency
+    evidence: §C; §B; §E steps 1 and 3; R7
+    A dedicated state repo is not in the scope, so collect never reads its visibility; on a fresh container facts.json is absent; §E pushes the lease before collect. Read the state repo's visibility with GET repos/{state_repo} before each push; unknown refuses. Test both in Test Plan 7.
+- kind: finding
+  id: s27
+  review_scope: in
+  title: Stale and mismatched cross-references between the design and the Test Plan
+  body: |
+    target: spec
+    check: consistency
+    evidence: §B owed measurement (says Test Plan 12; it is 16); Test Plan 16 only pushes to the session's own repo; R4/Test Plan 4 `.git/info/exclude` vs §B `<git-common-dir>/info/exclude`; Test Plan 13 vs R19
+- kind: finding
+  id: s28
+  review_scope: in
+  title: The new runner package's obligations list misses surfaces fr-herdr is pinned in
+  body: |
+    target: spec
+    check: codebase
+    evidence: §F; pyproject.toml:9,:57; tests/integration/test_runner_package_lists.py:78 and the scaffold POST_CREATE; scripts/install.sh:94-99
+    Missing: root workspace dependencies, coverage source, and the scaffold's literal runner-package list.
+- kind: finding
+  id: s29
+  review_scope: in
+  title: R16 records a plugin version with no named source, and nothing reads it
+  body: |
+    target: spec
+    check: codebase
+    evidence: R16; §G; no plugin_version helper under packages/; journal plugin-late-load
+    Name the source (installed_plugins.json's entry) and what a disagreement with the loaded plugin means, or drop it; R17 compares only fr_version.
+- kind: finding
+  id: s30
+  review_scope: in
+  title: Two wake sources are assumed, not measured
+  body: |
+    target: spec
+    check: decisions
+    evidence: R11; §E Wakes; journal wake-probe, wake-probe-restart, d3
+    Only send_later was measured. PR-activity subscriptions and a recurring Routine firing into an existing session are unobserved; list them as owed measurements and observe each in Test Plan 17.
+- kind: review
+  id: spec-review-2
+  title: "independent spec review: 15 findings"
+  body: |
+    R19 does not hold (s16); §H does not hold as written (s17, s18); §F holds as a mailbox, with durability gaps s22, s23.
+    verified (by the reviewer): hostclient.py:199-239; triage_cmd.py:92-97; triage_batch_cmd.py:222-225,:1385,:402,:410,:580; run_cmd.py:6037,:2387-2395; run/closeout.py:346; run/adopt.py:747; isolation/local.py:2962; gh.py:177-182,:233; real_ghclient.py:80,:130; triage/collect.py:232-256; triage/model.py:167-175; state_sync.py:45-46; merge_stops.py:25; scope_config.py:29,78-83; drive_lock.py:1; batch_drive.py:453-457,:935; triage_state_cmd.py:50; artifacts/trigger.py:82; artifacts/registry.py:407; fr_dispatch protocols.py:36,82,123,142,170; fr_dispatch testing.py:87-129; test_import_direction.py:139-160; scripts/version_surfaces.py:9; ci.yml:33; plugins/super-fr/agents/*.md. Decisions d1-d8 checked against R1-R21: no contradictions beyond s16 (R19 vs d7).
+- kind: decision
+  id: d9-repo-agents-artifact
+  title: "Operator decision, round 9: repo-scoped fr agents become an artifact kind"
+  body: |
+    Operator, 2026-10-08, after discovery `repo-agents` (two probe sessions: the plugin's agents absent at session start, repo `.claude/agents/` files present from the first turn). Asked how fr should keep repo-scoped agent files current in repos that run cloud workers; options were a new artifact kind, `fr init` plus a separate drift check, or opt-in per repo. Answer: **a new artifact kind** (`agents`): `fr init` writes stamped copies of `fr-spec-reviewer` and `fr-phase-executor` into `.claude/agents/`; a release that changes them moves the kind's version, so `fr validate artifacts` and the migration gate keep the repo's CI red until `fr migrate artifacts --yes` re-renders them. The operator raised the idea (a new fr-init step, plus a check at every fr release, part of the migration that fails CI until done). This supersedes d7's premise that the setup script makes the plugin's agents available; d7's fallback (install `fr` when missing) stands.
 resolves:
 - id: s1
   state: fixed
@@ -256,7 +401,58 @@ resolves:
   body: '§F: `packages/fr-claude-cloud`, with its version surface, mypy entry, import-direction entry
     and contract test; the ''become optional'' list narrowed to `ADOPT_LIST_RUNNER` and the wave grouping
     (batch_drive.py:457).'
-acceptance: []
+- id: s16
+  state: fixed
+  body: 'Background rewritten from the discoveries; R19 and §H now take the agents from the repo (`agents` artifact kind, d9), the worker''s first step checks the two agent types and ends BLOCKED with a needs_action naming the artifact instead of re-homing; hooks are defence in depth with their presence an owed measurement in Test Plan 17; R18''s rationale no longer assumes skills cannot refresh. Test Plans 13, 17, 18.'
+- id: s17
+  state: fixed
+  body: '§H names the setup script''s rsync install and the seeding of installed_plugins.json and settings.json; R19 requires install.sh to fail rather than warn and exit 0; Test Plan 13 covers it.'
+- id: s18
+  state: fixed
+  body: 'R3 and §A: forge.api comes from `~/.config/fr/forge.yaml`, written by the setup script, never an export. R11 and §B Identity: the brief carries the host id and every wake writes it to `~/.config/fr/host-id` when missing. Test Plans 3 and 6 check a fresh shell.'
+- id: s19
+  state: fixed
+  body: '§A: `resolve()` takes no scope; order FR_FORGE_API, `~/.config/fr/forge.yaml`, graphql; scope-durable.yaml''s value is written to the host file on restore only when absent; §B makes `forge_api`/`state_repo` optional ScopeConfig fields. Test Plan 3.'
+- id: s20
+  state: fixed
+  body: 'R1 includes FORGE_COMMANDS; §A gives them a github-rest spelling via `gh api` routes, named in briefs when rest is selected; Test Plans 2 and 17.'
+- id: s21
+  state: fixed
+  body: '§A: per-method contract: pr_for_branch and issues_enabled keep None, every other method raises on 403; pr_for_branch derives owner/repo from the checkout''s origin; R1 says so; Test Plan 2 tests both sets.'
+- id: s22
+  state: fixed
+  body: 'R5 and §B REF_FILES add requests.yaml, sessions.yaml and rehomes.yaml; §F and §G point at them; Test Plans 5, 9 and 12 restore them.'
+- id: s23
+  state: fixed
+  body: 'R9 and §D: the holder is `cloud:<host id>`, which a re-homed driver keeps; Test Plans 8 and 12.'
+- id: s24
+  state: fixed
+  body: 'R9 and §D: 3 × 5 + 60 = 75 minutes, computed from the configured values; Test Plan 8 asserts the computation.'
+- id: s25
+  state: fixed
+  body: 'R10 and §E: the driver adapter supplies the runner, overriding the repo''s launch.runner default; an explicit foreign launch.runner is reported, not dispatched; the cloud driver ignores post_merge and post_merge_restart; Test Plan 9 runs one repo config with two scopes.'
+- id: s26
+  state: fixed
+  body: 'R8 and §C: the state repo''s visibility is read with GET repos/{state_repo} before every push and export, unknown refuses; with no facts the keys'' repos are read the same way; the lease push goes through the check (§E step 1); Test Plan 7.'
+- id: s27
+  state: fixed
+  body: '§B now cites Test Plan 16, which also pushes to a state repo the session did not start with; R4 and Test Plan 4 use the git common dir''s info/exclude; Test Plan 13 covers R19''s agent check.'
+- id: s28
+  state: fixed
+  body: '§F''s obligations add the root dependencies, the coverage source and the scaffold POST_CREATE runner-package list (test_runner_package_lists.py).'
+- id: s29
+  state: fixed
+  body: 'R16 and §G drop the plugin version: it is lockstepped with fr''s and the loaded version is unreadable from inside a session; the agents a worker uses are checked through the `agents` artifact''s stamp instead.'
+- id: s30
+  state: fixed
+  body: '§E lists PR-activity wakes and the Routine firing into the existing session as owed measurements; R11 says so; Test Plan 17 observes each once.'
+acceptance:
+- id: cloud-triage-repo-agents
+  capability: Backlog triage
+  acceptance: A repo that runs fr-goal workers in Claude cloud sessions carries fr's reviewer and phase-executor agents itself, so they are dispatchable from a session's first turn, and a release that changes them fails the repo's CI until it is migrated
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R19
+  status: not-implemented
 evidence:
-  review: spec-review
-  reviewer: abcde35f00d4afc9b
+  review: spec-review-2
+  reviewer: a3afde920c281aa44

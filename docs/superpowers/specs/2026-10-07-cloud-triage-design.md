@@ -21,9 +21,13 @@ What the container does keep was measured, not assumed (discoveries `wake-probe`
 `wake-probe-restart`): scheduled self-wakes arrive on time; a session woken every
 ten minutes keeps one container, its disk and its processes; a restart keeps the
 disk (`~/.cache`, `/tmp`, the clone, the worktree) and kills every process. A
-session's plugins cannot be reloaded in place (`/reload-plugins` is unavailable
-over a remote connection), and a cloud session has no super-fr plugin until
-something installs it. A cloud session's `status_bucket` follows the platform's
+session's plugins cannot be reloaded on request (`/reload-plugins` is unavailable
+over a remote connection). The session's CLI is a pre-warmed spare that loaded
+its configuration before the environment's setup script ran, so a plugin that
+script installs reaches the session late or not at all, and its agent types are
+not there when the session starts; agent files committed in the repo's
+`.claude/agents/` are (discoveries `spare-preload`, `plugin-late-load`,
+`agents-late-load`, `repo-agents`). A cloud session's `status_bucket` follows the platform's
 summary of its last turn: BLOCKED means it waits on the operator, with a
 `needs_action` line saying for what; COMPLETED means the agent judged its last
 task done and the session can still be messaged (discovery
@@ -32,30 +36,30 @@ task done and the session can still be messaged (discovery
 The operator wants triage, the runners and the driver to run in a cloud session,
 as one more scope among many: several drivers, on several hosts or on one,
 covering different repo sets and orgs, kept apart by per-issue claims (spec
-`2026-10-06-triage-claims`). The decisions are journal entries `d1`-`d8`; the
-independent spec review's findings `s1`-`s15` are resolved in this text.
+`2026-10-06-triage-claims`). The decisions are journal entries `d1`-`d9`; the
+independent spec reviews' findings `s1`-`s30` are resolved in this text.
 
 ## Requirements
 
-R1. A `github-rest` forge backend implements, with GitHub's REST API only and no GraphQL call, every forge operation fr performs on the triage path (collect, check, render, batch dispatch, merge, cancel, adopt, drive, claims, export) and on the run path a worker or close-out session uses (deliver's live PR body read, close-out's PR body read, adopt's PR status, isolation's PR-for-branch, linked PRs); with it selected, a refused GraphQL call is an error, never a silent empty answer.
+R1. A `github-rest` forge backend implements, with GitHub's REST API only and no GraphQL call, every forge operation fr performs on the triage path (collect, check, render, batch dispatch, merge, cancel, adopt, drive, claims, export) and on the run path a worker or close-out session uses (deliver's live PR body read, close-out's PR body read, adopt's PR status, isolation's PR-for-branch, linked PRs), and every forge command fr hands an agent to run (`FORGE_COMMANDS`: PR create, edit and ready, issue close and edit, label create); with it selected, a refused GraphQL call is an error, never a silent empty answer, except for the client methods whose contract already answers `None` when the forge cannot say (§A).
 R2. `github-rest` returns the same records the GraphQL-backed backend returns for the same forge state, field for field, except where REST cannot express a field; each such field is listed, with how it is derived or why it is absent.
-R3. The backend is chosen by one setting, `forge.api: rest | graphql` (default `graphql`), resolved before any forge client exists, from `FR_FORGE_API` or the host's `scope.yaml`, and honoured by every place fr builds a GitHub client or calls `gh`; the cloud environment's setup script exports `FR_FORGE_API=rest`.
-R4. A scope's state lives in a state directory inside the workspace that runs the driver (the git toplevel of the driver's working directory, or `--workspace`), excluded from git through `.git/info/exclude` so no tracked file changes; an existing `~/.cache/fr/triage/<scope>/` is imported on first use and left in place.
-R5. A scope's durable copy is a git ref, `refs/fr/triage/<scope-id>`, whose tree holds an explicit list of files (judgements, origins, subsystems, the page fragments and their manifests, snapshots, authored sources, merge stops, the lease, and the scope's durable settings); fr fetches it before it reads state and pushes it, as a compare-and-swap, after every change it makes; only the scope that owns a ref writes it.
+R3. The backend is chosen by one host-level setting, `forge.api: rest | graphql` (default `graphql`), resolved before any forge client exists and without a scope, from `FR_FORGE_API`, else the host file `~/.config/fr/forge.yaml`, else `graphql`, and honoured by every place fr builds a GitHub client or calls `gh`; the cloud environment's setup script writes that file (an `export` there never reaches the session's shells, discovery `spare-preload`).
+R4. A scope's state lives in a state directory inside the workspace that runs the driver (the git toplevel of the driver's working directory, or `--workspace`), excluded from git through the repository's `info/exclude` (under `git rev-parse --git-common-dir`, so a linked worktree is covered) so no tracked file changes; an existing `~/.cache/fr/triage/<scope>/` is imported on first use and left in place.
+R5. A scope's durable copy is a git ref, `refs/fr/triage/<scope-id>`, whose tree holds an explicit list of files (judgements, origins, subsystems, the page fragments and their manifests, snapshots, authored sources, merge stops, the lease, the scope's durable settings, and the cloud runner's pending requests, session records and re-home ledger); fr fetches it before it reads state and pushes it, as a compare-and-swap, after every change it makes; only the scope that owns a ref writes it.
 R6. A single-repo scope keeps its ref in that repo.
 R7. A scope over several repos or an org keeps its ref in a state repo the operator names once. When at least one repo in the scope is private, fr asks the operator to choose one of the private ones. When all are public, fr asks the operator to choose between a new repo just for the refs and one of the public repos, and warns that a private repo's issue later added to a wave would then leak.
-R8. fr refuses, naming the issue and the state repo, to add an issue to a judged set, a batch or a wave when the issue's repo is private and the scope's state repo is public, and makes the same check before every push of the state ref and before every state export, so a repo whose visibility changed, or a hand-edited file, is caught before it leaves the workspace.
-R9. One driver runs per scope: a lease in the state ref (holder = scope id plus driver identity, start, expiry) replaces the process-id `drive.lock` as the cross-host check. The holder renews it every pass; its duration is three wake intervals plus the safety-net Routine's period (default 90 minutes); a driver with the same holder identity renews its own expired lease; any other driver is refused, and an expired lease held by someone else is reported and taken over only by an explicit operator command.
-R10. The driver loop is an adapter. The existing host loop (`fr triage batch drive`) is the first implementation and behaves as today; `claude-cloud` is the second.
-R11. The `claude-cloud` driver runs in one long-lived cloud session on a model the operator sets (Sonnet by default), started with a fixed identity: `FR_HOST_ID` and the scope's state repo are given to it at start and restored into its workspace on every wake. It wakes from scheduled self-messages at an interval the operator sets, from GitHub activity on its batch PRs, and from a recurring Routine as a safety net, and relies on no background process to stay alive or to wake.
+R8. fr refuses, naming the issue and the state repo, to add an issue to a judged set, a batch or a wave when the issue's repo is private and the scope's state repo is public, and makes the same check before every push of the state ref and before every state export, reading the state repo's own visibility from the forge before each push and refusing when it cannot be read, so a repo whose visibility changed, or a hand-edited file, is caught before it leaves the workspace.
+R9. One driver runs per scope: a lease in the state ref (holder = scope id plus driver identity, start, expiry) replaces the process-id `drive.lock` as the cross-host check. The driver identity is `host:<host id>` for a host driver and `cloud:<host id>` for a cloud driver, so neither a new pid nor a re-homed session changes it. The holder renews it every pass; its duration is three wake intervals plus the safety-net Routine's period (default 3 × 5 + 60 = 75 minutes); a driver with the same holder identity renews its own expired lease; any other driver is refused, and an expired lease held by someone else is reported and taken over only by an explicit operator command.
+R10. The driver loop is an adapter. The existing host loop (`fr triage batch drive`) is the first implementation and behaves as today; `claude-cloud` is the second. The driver adapter, not the repo, decides which runner a scope's batches use: a cloud scope dispatches every batch through `claude-cloud`, whatever `launch.runner` the repo's `.fr/triage.yaml` names, and ignores that file's `post_merge` and `post_merge_restart` (R20).
+R11. The `claude-cloud` driver runs in one long-lived cloud session on a model the operator sets (Sonnet by default), started with a fixed identity: its brief carries a host id and the scope's state repo, and the first step of every wake writes the host id to `~/.config/fr/host-id` and `forge.api: rest` to `~/.config/fr/forge.yaml` when either is missing, so a fresh container derives the same scope id. It wakes from scheduled self-messages at an interval the operator sets, from GitHub activity on its batch PRs, and from a recurring Routine as a safety net, and relies on no background process to stay alive or to wake; the last two wake sources are owed a measurement (§E).
 R12. On every wake, the `claude-cloud` driver restores the workspace state from the ref when it is missing or older than the ref, runs one driver pass, pushes the state ref, and schedules its next wake.
 R13. fr makes every decision of a pass (dispatch, merge, update, hand-back, re-home, close, claims) with the same policy code the host driver runs; the agent only executes the session actions fr requests and reports each outcome back through fr.
 R14. A `claude-cloud` runner implements the runner protocol as a mailbox: dispatch, message, close, re-home and status are requests with stable ids that fr writes for the driver's agent to execute with its session tools; an unexecuted or unrecorded request stays pending in the scope's state and is replayed, never duplicated; every session it creates carries the batch's item id as a tag, so a dispatch whose result was lost is found again.
 R15. The runner maps each cloud session's state onto fr's session statuses (working → working; blocked → blocked; review_ready → idle; completed → idle; failed → blocked) and reports a blocked session's `needs_action` text beside its status. A batch's stage stays derived from forge facts and never from a session's state.
-R16. Every run records the super-fr plugin version and the `fr` version it started with.
+R16. Every run records the `fr` version it started with. (The plugin's version is lockstepped with `fr`'s, so it is not recorded separately; the agents a worker dispatches are the repo's `agents` artifact, whose stamp fr's own gate checks, R19.)
 R17. The driver acts on version drift only when it is incompatible: the run's recorded `fr` major differs from the current release's. It then re-homes the session at its next idle moment (the session pushes its work and stops; a fresh session continues the same branch from a resume brief built from the run cursor and journal), at most once per (run, release). A run with no recorded versions is reported, never re-homed.
-R18. The driver itself runs the current release: before each pass it compares the installed `fr` with the latest release and, when older, reinstalls and runs the pass on the new one; when the release's major differs from the one its own session started with, it re-homes itself (R17) so its skill text is current too.
-R19. A cloud worker session gets super-fr from the cloud environment's setup script, which runs before the session starts so the plugin's agents and hooks are loaded. The worker brief makes the worker check `fr --version` and the plugin's agents before its first step; when they are missing, it installs super-fr and asks to be re-homed, because a running session cannot load a plugin's agents (discovery `no-plugin-agents`).
+R18. The driver itself runs the current release: before each pass it compares the installed `fr` with the latest release and, when older, reinstalls and runs the pass on the new one; when the release's major differs from the one its own session started with, it re-homes itself (R17), since the skill text it loaded cannot be relied on to refresh in place (discovery `plugin-late-load`).
+R19. A cloud session's fr agents come from the repo, not the plugin: `.claude/agents/fr-spec-reviewer.md` and `.claude/agents/fr-phase-executor.md` are a new artifact kind, `agents` (§H), written by `fr init`, stamped with the version they were rendered for, refreshed by `fr migrate artifacts --yes` and checked by `fr validate artifacts`, so a release that changes them leaves the repo's CI red until it is migrated. The cloud environment's setup script installs the `fr` CLI and the plugin into the container (rsync installed, the Claude settings files seeded), and `scripts/install.sh` fails, rather than warning and exiting 0, when it cannot register the plugin. The worker brief's first step checks `fr --version` (installing super-fr when it is missing) and that `fr-spec-reviewer` and `fr-phase-executor` are dispatchable agent types; when they are not, the worker ends BLOCKED with a `needs_action` naming the missing `agents` artifact, and is not re-homed, since a fresh session would start the same way. A worker enters fr-isolation through the CLI itself; the plugin's hooks are defence in depth there, and their presence in a worker session is an owed measurement (§H).
 R20. The `post_merge` step is an operation of the environment the driver runs in: the host runs the repo's `post_merge` argument list as today; the cloud runs nothing, since every new session installs the current release at its start and the driver updates itself (R18).
 R21. The fr-triage skill documents the cloud driver, `forge.api`, the state ref, the state repo choice and the privacy guard, within its existing line budget.
 
@@ -63,11 +67,16 @@ R21. The fr-triage skill documents the cloud driver, `forge.api`, the state ref,
 
 ### A. `github-rest`: a forge backend, not a cloud feature
 
-**Selection (R3).** `fr.forgeapi.resolve()` reads `FR_FORGE_API`, else the
-host's `scope.yaml` `forge_api:`, else `graphql`. It needs no forge client, so a
-repo-level key is deliberately not offered: collect reads `.fr/triage.yaml`
-through the client the setting picks. The resolved value is consulted in one
-place per seam:
+**Selection (R3).** `fr.forgeapi.resolve()` takes no argument and reads
+`FR_FORGE_API`, else `api:` in the host file `~/.config/fr/forge.yaml` (beside
+`host-id`, same `$HOME` rule as `scope_config.host_id_path`), else `graphql`. It
+needs no forge client and no scope, so the run-path callers, which have none,
+resolve it the same way; a repo-level key is deliberately not offered: collect
+reads `.fr/triage.yaml` through the client the setting picks. A scope's
+`scope-durable.yaml` (§B) records the `forge_api` the scope was driven with;
+restoring a fresh workspace from the ref writes it to `forge.yaml` only when that
+file is absent, and the host file always wins over it. The resolved value is
+consulted in one place per seam:
 
 - `hostclient.client_for_backend("github")` and `client_for_url` return
   `RealGhRestClient` when it is `rest` (today `client_for_backend` is
@@ -79,9 +88,18 @@ place per seam:
 - the module-level helpers that call `gh` directly (`fr.gh.view_pr_body` :177 and
   the `list_*`/`view_*` helpers) route to the REST implementation when it is
   `rest`;
-- `RealGhRestClient` never falls back to GraphQL, and its methods raise on a 403
-  rather than returning the soft empty answer some GraphQL methods return on
-  `GhError` (`list_linked_prs`, real_ghclient.py :130) (R1).
+- the agent-facing commands (`hostclient.FORGE_COMMANDS["github"]` :85-96: PR
+  create/edit/ready, issue close, `issue edit --add-label`, label create) gain a
+  `github-rest` variant spelled as `gh api` calls on the matching REST routes, and
+  fr names that variant in every brief and refusal line when `rest` is selected;
+- `RealGhRestClient` never falls back to GraphQL. Its error contract is per
+  method, never blanket: a method whose `GhClient` contract answers `None` when
+  the forge cannot say (`pr_for_branch`, `issues_enabled`, ghclient.py :323-332)
+  keeps that contract, so isolation's callers (`isolation/local.py` :2962) are
+  unchanged; every other method raises on a 403 rather than returning the soft
+  empty answer some GraphQL methods return on `GhError` (`list_linked_prs`,
+  real_ghclient.py :130) (R1). `pr_for_branch` takes only a checkout, so the REST
+  client derives `owner/repo` from that checkout's `origin` URL.
 
 **Calls.** Every call is `gh api` against REST routes (the proxy injects auth;
 `gh api` works where `gh pr list --json` does not). Pagination is explicit
@@ -129,7 +147,15 @@ this explicit list (`fr.triage.state_ref.REF_FILES`), not the export set:
 - `merge-stops.json`;
 - `lease.yaml` (§D);
 - `scope-durable.yaml`: the scope's durable settings, `state_repo` and
-  `forge_api`, so a fresh workspace recovers them from the ref.
+  `forge_api`, so a fresh workspace recovers them from the ref
+  (`ScopeConfig` is `extra="forbid"`, scope_config.py :89, so both become
+  optional fields of the host `scope.yaml` model too, where `state_repo` is
+  mirrored);
+- the cloud runner's mailbox (§F): `requests.yaml` (pending requests and their
+  recorded results), `sessions.yaml` (every session dispatched, by item id) and
+  `rehomes.yaml` (the per-(run, release) re-home ledger, §G), so a driver
+  restored on a fresh container neither loses a pending request nor re-homes a
+  run twice.
 
 `facts.json` and the rendered pages are left out (fr rebuilds them). The host-only
 `scope.yaml` and the host id stay out, as today. `fr.triage.gitseam` gains
@@ -140,7 +166,7 @@ branch list, no protection rules, no PRs. The wave export to `docs/triage`
 (`export:`) keeps working for repos that want a reviewed copy; it is no longer
 how state survives. **Owed measurement:** that the cloud git proxy accepts a
 push of a ref outside `refs/heads/`, to the session's repo and to a state repo
-the session did not start with; Test Plan 12 asserts it.
+the session did not start with; Test Plan 16 measures both.
 
 **Where the ref lives (R6, R7).** Recorded as `state_repo` in
 `scope-durable.yaml` (in the ref) and mirrored to the host's `scope.yaml`. The
@@ -152,9 +178,13 @@ pass. The cloud driver is started with its state repo (R11), so it can fetch its
 ref before it has any local state.
 
 **Identity.** The scope id is `sha256(name, host id)` (`scope_config.py`), and
-`FR_HOST_ID` already overrides the host id. The cloud driver is started with a
-fixed `FR_HOST_ID` (R11), so a fresh container derives the same scope id, finds
-its own ref, and recognises its own claims.
+`FR_HOST_ID` already overrides the host id, which otherwise lives in
+`~/.config/fr/host-id` (scope_config.py :34). Each tool call is a fresh shell,
+so an environment variable set during one wake does not reach the next: the
+cloud driver's brief carries its host id, and the first step of every wake
+writes it to `~/.config/fr/host-id` when the file is missing (R11). A fresh
+container therefore derives the same scope id, finds its own ref, and
+recognises its own claims.
 
 ### C. The privacy guard
 
@@ -162,16 +192,24 @@ One predicate, `fr.triage.privacy.leak_risk(scope, state_repo, keys)`, true when
 any key's repo is private and the state repo is public. It is called by
 `batch create`/`edit` (`--issue`, `--add-issue`), by the wave setters, by every
 judgement write that adds a key, by `push_state` and by `state export`. Each
-refuses with exit 2, naming the issue, its repo and the state repo. Visibility is
-read from facts, refreshed by every collect, so a repo made private after the
-fact is caught at the next push (R8).
+refuses with exit 2, naming the issue, its repo and the state repo. The scope's
+repos' visibility is read from facts, refreshed by every collect, so a repo made
+private after the fact is caught at the next push. The state repo's own
+visibility is not in facts (it need not be a repo in the scope, and a fresh
+container has no `facts.json`), so `push_state` and `state export` read it with
+`GET repos/{state_repo}` immediately before writing, and refuse when it cannot be
+read; with no facts yet, the keys' repos are read the same way. The lease push
+that opens a pass (§E step 1) is a push like any other and goes through the same
+check (R8).
 
 ### D. The lease
 
-`lease.yaml` in the ref: `holder` (scope id plus driver identity: the cloud
-driver's session id, or `host:<host id>` for a host driver, which is stable
-across a restart with a new pid), `started`, `expires`. Duration: three wake
-intervals plus the safety-net Routine's period, 90 minutes by default. Taken and
+`lease.yaml` in the ref: `holder` (scope id plus driver identity:
+`cloud:<host id>` for the cloud driver, `host:<host id>` for a host driver; both
+are stable across a restart with a new pid and across a re-homed driver session,
+which keeps the host id its brief carries), `started`, `expires`. Duration:
+three wake intervals plus the safety-net Routine's period, computed from the
+configured values: 3 × 5 + 60 = 75 minutes by default. Taken and
 renewed by the compare-and-swap push; released on a clean stop. A driver whose
 holder identity matches renews its own expired lease; anyone else is refused,
 and an expired foreign lease is reported and taken only with `fr triage lease
@@ -180,14 +218,22 @@ take --yes` (R9). `drive_lock.py` stays as the fast same-host first check.
 ### E. The driver adapter
 
 `fr.triage.driver` defines `Driver`: run passes until done, given a runner, a
-forge client and a state store. `host` wraps today's loop unchanged (R10).
+forge client and a state store. `host` wraps today's loop unchanged (R10). The
+driver supplies the runner: dispatch, adopt and the drive loop take the runner
+from the driver adapter instead of a batch's `launch.runner` default
+(`triage_batch_cmd.py` :1094, :1269, :1487 read it from the repo's
+`.fr/triage.yaml` today, `herdr` on this repo), so a host scope and a cloud scope
+over the same repo, reading the same file, each dispatch through their own runner.
+A batch's explicit `launch.runner` other than the driver's is reported and not
+dispatched. The cloud driver ignores `post_merge` and `post_merge_restart` (§H).
 `claude-cloud` is not a loop; it is a pass fr runs once per wake (R12):
 
 ```
 fr triage drive pass --scope S --statuses statuses.json --outbox outbox.json
 ```
 
-1. restore state from the ref if needed; check and renew the lease;
+1. restore state from the ref if needed; check and renew the lease (a push,
+   so it runs the privacy check of §C);
 2. self-update (R18): compare the installed `fr` with the latest release; if
    older, reinstall and re-exec the pass; if the major moved past the driver
    session's own, emit a self-`rehome` request and stop;
@@ -210,16 +256,24 @@ Wakes (R11): the agent schedules a self-message every `interval` (default 5
 minutes; `send_later` has one-minute granularity) after each pass, subscribes to
 PR activity on every open batch PR, and a recurring Routine fires into the
 driver session hourly in case a self-message is lost. A wake that finds a pass
-ran within the interval only renews the lease.
+ran within the interval only renews the lease. **Owed measurements:** only
+`send_later` self-wakes were observed (discoveries `wake-probe`,
+`wake-probe-restart`); that PR-activity events wake an idle driver session, and
+that a recurring Routine fires into the existing driver session rather than a
+new one, are unobserved, and Test Plan 17 observes each.
 
 ### F. The `claude-cloud` runner
 
 A new workspace package, `packages/fr-claude-cloud` (entry point `fr.runners:
 claude-cloud`), a sibling of `fr-herdr` with the same obligations: a member of
-the uv workspace, a version surface in `scripts/version_surfaces.py`, the mypy
-command in AGENTS.md and CI, an entry in `test_import_direction.py` (it never
-imports `fr.triage`, and `fr` never imports it), and the `fr_dispatch.testing`
-run-unit contract.
+the uv workspace and of the root `dependencies` (pyproject.toml :9), the
+coverage `source` (:57), a version surface in `scripts/version_surfaces.py`, the
+mypy command in AGENTS.md and CI, the runner-package list the devcontainer
+scaffold's `POST_CREATE` keeps as a literal (pinned by
+`tests/integration/test_runner_package_lists.py`; `install.sh` derives its own
+`--with` set), an entry in `test_import_direction.py` (it never imports
+`fr.triage`, and `fr` never imports it), and the `fr_dispatch.testing` run-unit
+contract.
 
 **Mailbox semantics (R14).** The driver uses runner results within a pass
 (`dispatch` returns a handle, `close` returns closed/busy/absent, a hand-back
@@ -239,8 +293,8 @@ records "handed back" after `message`). With a mailbox those are not known until
   (recording the existing session) when one exists; `send_message` carries the
   request id, and the agent skips one it has already sent; `archive_session` is
   idempotent;
-- `existing_dispatches` reads the recorded sessions plus the tagged sessions the
-  agent last listed, so a dispatch whose result was lost is found again, not
+- `existing_dispatches` reads the recorded sessions (`sessions.yaml`, in the ref,
+  §B) plus the tagged sessions the agent last listed, so a dispatch whose result was lost is found again, not
   duplicated.
 
 | request | agent executes | result recorded |
@@ -268,28 +322,75 @@ adopt; re-homing is its restart (R17).
 
 ### G. Versions and drift
 
-`fr run start` records `plugin_version` and `fr_version` in the run cursor. That
-changes the cursor's shape: the `run` kind's `current_version` moves 9 → 10 with
-a registered migration (old cursors get neither field, which R17 treats as
-unknown) and its structure validator, per `.claude/rules/artifact-versioning.md`,
+`fr run start` records `fr_version` in the run cursor (no separate plugin
+version: the plugin's version is lockstepped with `fr`'s, `scripts/version_surfaces.py`,
+and the version the session actually loaded is not readable from inside it,
+discovery `plugin-late-load`). That changes the cursor's shape: the `run` kind's
+`current_version` moves 9 → 10 with a registered migration (old cursors get no
+field, which R17 treats as unknown) and its structure validator, per `.claude/rules/artifact-versioning.md`,
 and the repo's own cursors are migrated in the same PR (R16).
 
 Each pass reads every active batch's cursor from its batch branch
 (`read_file_at_ref` on the branch head, REST contents) and compares the recorded
 `fr_version` major with the latest release's. Equal → nothing. Different → one
-`rehome` request at the session's next idle, recorded per (run, release) so it is
-never repeated. No recorded version → reported once, never re-homed (R17).
+`rehome` request at the session's next idle, recorded per (run, release) in
+`rehomes.yaml`, which travels in the ref (§B), so it is never repeated, not even
+by a driver restored on a fresh container. No recorded version → reported once, never re-homed (R17).
 Artifact readability is not judged by the driver: a session whose `fr` meets a
 newer artifact is already refused by fr's own migration gate, which tells it what
 to do.
 
 ### H. Worker sessions and `post_merge`
 
-The cloud environment's setup script clones the super-fr marketplace, runs
-`scripts/install.sh`, and exports `FR_FORGE_API=rest` (documented, not shipped
-as a file: it is environment configuration). The worker brief gains a first
-step: `fr --version` and the plugin's agents; when missing, install super-fr and request a re-home, since the running session cannot load the agents (R19).
-`post_merge` becomes a driver-environment operation: `host` runs the configured
+**Agents come from the repo (R19).** A cloud session's CLI is a pre-warmed spare
+that loaded its agent types before the setup script ran: the plugin's
+`super-fr:fr-*` agents were absent for five minutes and two user turns in a
+fresh session, while the same agents committed under the repo's
+`.claude/agents/` were dispatchable in its first turn (discoveries
+`spare-preload`, `repo-agents`). The reviewer gate already accepts the bare name
+(`run_cmd._same_agent`). So the two agents become a new artifact kind, `agents`,
+registered in `fr.artifacts.registry` like the others
+(`.claude/rules/artifact-versioning.md`):
+
+- **files:** `.claude/agents/fr-spec-reviewer.md` and
+  `.claude/agents/fr-phase-executor.md`, each the canonical
+  `plugins/super-fr/agents/<name>.md` with one added front-matter key,
+  `fr_artifact_version`, the stamp. The canonical files ship in the `fr` wheel as
+  generated package data, as the verification strategies do, guarded by a
+  tripwire, so every harness's `fr` can render them;
+- **written** by `fr init` (a new scaffold step) for every fr-enabled repo, and
+  in this repo too, replacing the symlinks this branch committed as an
+  experiment;
+- **migrated** by `fr migrate artifacts --yes`: a release that changes either
+  canonical file moves the kind's `current_version`, and the migration
+  re-renders both files from the installed `fr`, so the repo's CI is red
+  (`fr validate artifacts`, the migration gate) until someone migrates it, as
+  with every other kind;
+- **validated** by `fr validate artifacts`: present, stamped, front matter
+  parses, `name` matches the file.
+
+The plugin keeps shipping its own `super-fr:` agents for host sessions; a host
+session then sees both names, which is harmless, and the gate accepts either.
+
+**The setup script** (documented, not shipped as a file: it is environment
+configuration, measured in discovery `setup-script`) installs `rsync`, seeds
+`~/.claude/plugins/installed_plugins.json` (`{"version":2,"plugins":{}}`) and
+`~/.claude/settings.json` (`{}`) when absent, clones the super-fr marketplace,
+runs `scripts/install.sh`, and writes `api: rest` to `~/.config/fr/forge.yaml`.
+`install.sh` itself now fails, naming the missing file, instead of warning and
+exiting 0 when it cannot register the plugin.
+
+**The worker brief's first step:** `fr --version` (install super-fr when it is
+missing, d7's fallback), then confirm `fr-spec-reviewer` and `fr-phase-executor`
+are dispatchable agent types. When they are not, the repo lacks a current
+`agents` artifact: the worker ends its turn BLOCKED with a `needs_action` naming
+it (`fr init` or `fr migrate artifacts --yes`, then a new session), and is not
+re-homed, since a fresh session from the same commit would start the same way.
+A worker enters fr-isolation through the CLI (`fr isolation up`), so isolation
+does not depend on the plugin's hooks; whether those hooks are live in a worker
+session is an owed measurement, observed in Test Plan 17.
+
+**`post_merge`** becomes a driver-environment operation: `host` runs the configured
 argument list; the cloud driver runs nothing, because every session it starts
 installs the current release and the driver updates itself before each pass
 (R18, R20).
@@ -305,55 +406,85 @@ installs the current release and the driver updates itself before each pass
    path reaches GraphQL: a fake `gh` that fails on `api graphql`, `issue list
    --json`, `issue view --json`, `pr list --json`, `pr view --json`, `pr checks`,
    `pr merge`, `pr create`, `pr close`, `issue edit`, `issue comment` and `repo
-   view --json`; a 403 from it is raised, not swallowed (R1, R3).
-3. Unit: `forge.api` resolves from `FR_FORGE_API`, then `scope.yaml`, else
-   `graphql`, with no forge call (R3).
-4. Unit: state lives in the workspace; `.git/info/exclude` gains the entry and no
-   tracked file changes; a `~/.cache` copy is imported once (R4).
+   view --json`; a 403 from it is raised, not swallowed, by every method except
+   `pr_for_branch` and `issues_enabled`, which answer `None` as their contract
+   says; with `rest` selected, no `FORGE_COMMANDS` entry fr prints for an agent
+   names a GraphQL-backed `gh` command (R1, R3).
+3. Unit: `forge.api` resolves from `FR_FORGE_API`, then `~/.config/fr/forge.yaml`,
+   else `graphql`, with no scope and no forge call; a fresh shell with only the
+   file set resolves `rest`; a ref restore writes `scope-durable.yaml`'s value to
+   the file only when it is absent (R3).
+4. Unit: state lives in the workspace; the repository's `info/exclude` (under
+   the git common dir, from a linked worktree too) gains the entry and no tracked
+   file changes; a `~/.cache` copy is imported once (R4).
 5. Unit: `push_state`/`fetch_state` round-trip every `REF_FILES` entry into a
-   fresh clone, merge stops and lease included; a concurrent writer's push fails
-   the compare-and-swap (R5, R9).
+   fresh clone, merge stops, lease, `requests.yaml`, `sessions.yaml` and
+   `rehomes.yaml` included; a concurrent writer's push fails the compare-and-swap
+   (R5, R9).
 6. Unit: the state-repo decision for one repo, a mixed set, and an all-public
    set, including the warning; a fresh workspace recovers `state_repo` and
-   `forge_api` from the ref (R6, R7, R11).
+   `forge_api` from the ref; the wake's first step writes the brief's host id to
+   `~/.config/fr/host-id` when missing and the scope id is unchanged (R6, R7, R11).
 7. Unit: the privacy guard refuses a private issue into a batch, a wave, a push
    and a `state export` when the state repo is public, and allows them when it is
-   private (R8).
+   private; the state repo's visibility is read from the forge before each push,
+   with no `facts.json` and when the state repo is outside the scope; an
+   unreadable visibility refuses the push, the lease push included (R8).
 8. Unit: a second driver is refused by the lease; the same holder renews its own
-   expired lease; an expired foreign lease is reported and not taken without the
-   operator command (R9).
+   expired lease; a re-homed cloud driver (new session, same host id) renews the
+   lease as the same holder; an expired foreign lease is reported and not taken
+   without the operator command; the duration is computed from the configured
+   interval and Routine period, 75 minutes by default (R9).
 9. Unit: `drive pass` over a fixture scope makes the same decisions the host loop
    makes for the same facts; `drive record` applies every result; a pass whose
    results were lost re-emits its pending requests, and replaying them creates no
-   second session (tag lookup) (R10, R13, R14).
+   second session (tag lookup); a driver restored from the ref on a fresh
+   workspace still holds its pending requests and recorded sessions; with one
+   `.fr/triage.yaml` naming `herdr`, a host scope dispatches through herdr and a
+   cloud scope through `claude-cloud`, and the cloud driver runs no `post_merge`
+   (R10, R13, R14).
 10. Unit: the status mapping, `completed` → idle with a conflict handed back by
     message, `needs_action` reported through `SessionNotes`, and a session's state
     never changing a batch's stage (R15).
 11. Unit: the run kind's 9 → 10 migration, its validator, and every hop of the
-    chain; a run started now records both versions (R16).
+    chain; a run started now records its `fr` version (R16).
 12. Unit: drift — same major requests nothing; a different major requests one
-    re-home per (run, release), never two; a run with no versions is reported
-    only; the driver's self-update reinstalls on a newer release and self-re-homes
-    on a new major (R17, R18).
+    re-home per (run, release), never two, also after a restore from the ref; a
+    run with no version is reported only; the driver's self-update reinstalls on
+    a newer release and self-re-homes on a new major, keeping its lease (R17, R18).
 13. Unit: the worker brief's first step checks `fr --version` and installs only
-    when missing; the cloud driver's `post_merge` runs nothing (R19, R20).
+    when missing, then checks the two agent types and, when either is missing,
+    ends BLOCKED naming the `agents` artifact with no re-home request; the cloud
+    driver's `post_merge` runs nothing; `install.sh` exits non-zero when it cannot
+    register the plugin (R19, R20).
 14. Scenario (`candidate`): a scripted pass against the fake forge and a fake
     session executor, from an empty workspace restored from the ref (R12).
 15. Unit: the fr-triage skill names the cloud driver, `forge.api`, the state ref,
     the state repo choice and the privacy guard, and stays within its line budget
     (R21).
 16. **Live, pre-merge (`client-live`), this cloud environment:** with
-    `FR_FORGE_API=rest` and the branch build, collect, check and render
-    `derio-net/super-fr` with no GraphQL error, and the board matches a host
-    render of the same moment; push and fetch the scope's
-    `refs/fr/triage/<scope-id>` through the cloud git proxy (R1, R2, R5).
+    `forge.api: rest` in `~/.config/fr/forge.yaml` and the branch build, collect,
+    check and render `derio-net/super-fr` with no GraphQL error, and the board
+    matches a host render of the same moment; push and fetch the scope's
+    `refs/fr/triage/<scope-id>` through the cloud git proxy, to the session's own
+    repo and to a state repo the session did not start with (R1, R2, R5).
 17. **Live, pre-merge (`client-live`), this cloud environment:** a Sonnet driver
     session drives a wave of two small throwaway super-fr issues on its own
-    scope beside the host driver: dispatches a worker session per batch, shows a
-    blocked worker's `needs_action`, hands back a conflict by message, re-homes
-    one worker on a simulated major drift, lets the workers deliver (deliver's PR
-    body read over REST), merges, closes out, and survives a container restart by
-    restoring from the ref (R11-R15, R17-R20).
+    scope beside the host driver: dispatches a worker session per batch, whose
+    first turn lists `fr-spec-reviewer` and `fr-phase-executor` from the repo's
+    `agents` artifact (and records whether the plugin's hooks are live there),
+    shows a blocked worker's `needs_action`, hands back a conflict by message,
+    re-homes one worker on a simulated major drift, lets the workers deliver
+    (deliver's PR body read over REST, the PR opened with the REST spelling of
+    `FORGE_COMMANDS`), merges, closes out, and survives a container restart by
+    restoring from the ref; it observes, once each, a PR-activity event waking
+    the idle driver and the hourly Routine firing into the existing driver
+    session (R11-R15, R17-R20).
+18. Unit: the `agents` kind — `fr init` writes both files from the wheel's copy
+    with the stamp; `fr validate artifacts` passes them and fails a missing,
+    unstamped or stale one; moving the kind's `current_version` makes the
+    migration re-render both and every hop of the chain is asserted; the wheel's
+    copy matches `plugins/super-fr/agents/` (tripwire) (R19).
 
 ## Verification
 
