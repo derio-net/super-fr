@@ -368,3 +368,47 @@ def test_the_cloud_driver_never_loads_a_runner_it_does_not_carry(
     assert world_merged
     said = " ".join(second.output.split())
     assert "closeout b3: left to the driver of runner herdr" in said
+
+
+# ------------------------------------------ p5-r8: render reads notes, writes nothing
+
+
+def _render(state: Path) -> Any:
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    return CliRunner().invoke(app, ["triage", "render", "--repo", REPO, "--dir", str(state)])
+
+
+def test_render_probes_no_runner_that_gives_no_notes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _one_dispatched(tmp_path)
+    herdr = _Inspector({B1: "blocked"})  # statuses, but no session notes
+    monkeypatch.setattr(triage_kanban_cmd, "load_runner", lambda name: herdr)
+
+    result = _render(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert herdr.asked == []  # its statuses would be discarded: it is never asked
+
+
+def test_render_reads_a_cloud_mailbox_without_writing_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = World()
+    world.issues[1] = "open"
+    _state(tmp_path, world, _batch("b1", 1, events=CLOUD_DISPATCH))
+    sessions = tmp_path / "sessions.yaml"
+    sessions.write_text(  # flow style: any rewrite of it would show
+        "{sessions: [{item: " + B1 + ", session: s1, state: blocked, needs_action: approve}]}\n"
+    )
+    before = sessions.read_bytes()
+    monkeypatch.setattr(triage_kanban_cmd, "load_runner", lambda name: ClaudeCloudRunner.from_env())
+
+    result = _render(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert sessions.read_bytes() == before
+    assert not (tmp_path / "requests.yaml").exists()
+    assert "approve" in (tmp_path / "triage.html").read_text()

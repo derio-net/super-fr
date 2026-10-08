@@ -729,7 +729,7 @@ def render_command(
 
     # A blocked session's own note, from a runner that gives one (cloud-triage R15); a
     # runner that cannot say leaves Needs you now as it was.
-    noted = read_sessions(judgements, facts, target=target_dir).session_notes
+    noted = read_sessions(judgements, facts, target=target_dir, notes_only=True).session_notes
     page = render(
         facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
         session_notes=noted,

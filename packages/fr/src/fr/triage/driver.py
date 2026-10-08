@@ -144,7 +144,9 @@ class Mailbox(Protocol):
     and writes its pending requests to the outbox; `drive record` hands it the agent's
     results. `claude-cloud` implements it; fr never imports that package."""
 
-    def open_mailbox(self, state_dir: Any, statuses: Any) -> None: ...
+    def open_mailbox(self, state_dir: Any, statuses: Any, *, read_only: bool = False) -> None:
+        """Load the scope's mailbox from *state_dir*; with *read_only*, never write it."""
+        ...
 
     def outbox(self) -> list[dict[str, Any]]: ...
 

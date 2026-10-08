@@ -268,16 +268,18 @@ def read_sessions(
     prefix: str = DEFAULT_WORKSPACE_PREFIX,
     target: Path | None = None,
     loader: Callable[[str], Runner] | None = None,
+    notes_only: bool = False,
 ) -> SessionReads:
     """Each runner's session statuses and, from one that implements `SessionNotes`, its
-    blocked sessions' notes.
+    blocked sessions' notes. With *notes_only* (the triage page, which shows notes and no
+    statuses) a runner that gives no notes is not asked anything (p5-r8).
 
     Never refuses and prints nothing: a runner that cannot be loaded, fails its
     preflight, lacks `SessionInspector` or raises leaves its items out of the result
     (the board shows them `unknown`) and costs one note. *loader* is a driver's own
     runner cache (cloud-triage p4-o2: it loads only what that driver carries); without
     one, a mailbox runner is opened on *target*, the scope's state, where its sessions are
-    recorded (§F).
+    recorded (§F), read-only: reading the board never writes the mailbox (p5-r8).
     """
     by_runner = _probes(judgements, facts, prefix) if judgements.batches else {}
     if not by_runner:
@@ -296,12 +298,14 @@ def read_sessions(
                 f"runner `{name}` could not be loaded ({reason}); its sessions show unknown"
             )
             continue
+        if notes_only and not isinstance(runner, SessionNotes):
+            continue
         if not isinstance(runner, SessionInspector):
             notes.append(f"runner `{name}` cannot report session status; its sessions show unknown")
             continue
         try:
             if loader is None and target is not None and isinstance(runner, Mailbox):
-                runner.open_mailbox(target, None)
+                runner.open_mailbox(target, None, read_only=True)
             refusal = runner.preflight(probes)
             if refusal:
                 notes.append(

@@ -51,7 +51,7 @@ class MailboxRunner(FakeRunner):
         self.requests: list[dict[str, Any]] = []
         self.recorded: list[dict[str, Any]] = []
 
-    def open_mailbox(self, state_dir: Any, statuses: Any) -> None:
+    def open_mailbox(self, state_dir: Any, statuses: Any, *, read_only: bool = False) -> None:
         self.opened.append((Path(state_dir), statuses))
 
     def dispatch(self, item: Any) -> str | None:
