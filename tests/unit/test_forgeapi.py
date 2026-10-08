@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from fr import forgeapi
 from fr.forgeapi import ForgeApiError
 

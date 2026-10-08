@@ -430,8 +430,8 @@ def list_repos(
     import json
 
     if (rest := _rest()) is not None:
-        repos = _records(rest.list_repos(owner, limit))
-        return repos if include_archived else [r for r in repos if not r.get("isArchived")]
+        listed = _records(rest.list_repos(owner, limit))
+        return listed if include_archived else [r for r in listed if not r.get("isArchived")]
     out = _run_gh(
         [
             "repo",

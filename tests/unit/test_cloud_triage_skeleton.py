@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from fr import hostclient
 from fr.real_ghclient import RealGhClient
 

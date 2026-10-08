@@ -15,12 +15,12 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from fr import gh as fr_gh
 from fr import hostclient
 from fr.gh import GhError
 from fr.labels import LabelDef
 from fr.real_ghrestclient import RealGhRestClient
+
 from tests.unit.github_rest_support import FIXTURES, REPO
 
 REFUSED = (

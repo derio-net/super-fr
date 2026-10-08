@@ -132,7 +132,7 @@ def _rollup(
     return out
 
 
-_MERGEABLE = {True: "MERGEABLE", False: "CONFLICTING"}
+_MERGEABLE: dict[object, str] = {True: "MERGEABLE", False: "CONFLICTING"}
 
 
 def _merge_state(pull: dict[str, Any]) -> tuple[str, str]:
@@ -462,9 +462,7 @@ class RealGhRestClient:
         return [_project(_issue_record(i), fields or _gh.ISSUE_LIST_FIELDS) for i in raw]
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
-        return [
-            _comment_record(c) for c in self._paged(f"repos/{repo}/issues/{number}/comments")
-        ]
+        return [_comment_record(c) for c in self._paged(f"repos/{repo}/issues/{number}/comments")]
 
     def list_linked_prs(self, repo: str, issue_number: int) -> list[dict[str, Any]]:
         """PRs that close the issue: the PRs its timeline cross-references whose
@@ -686,7 +684,11 @@ class RealGhRestClient:
         """`fr.gh.list_labels`' records (`name`, `color`, `description`); not a
         `GhClient` method."""
         return [
-            {"name": lbl.get("name"), "color": lbl.get("color"), "description": lbl.get("description")}
+            {
+                "name": lbl.get("name"),
+                "color": lbl.get("color"),
+                "description": lbl.get("description"),
+            }
             for lbl in self._paged(f"repos/{repo}/labels")
         ]
 
@@ -715,9 +717,7 @@ class RealGhRestClient:
         return str(self._api(f"repos/{repo}/contents/{path}", accept=RAW_ACCEPT))
 
     def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
-        endpoint = (
-            f"repos/{repo}/contents/{urllib.parse.quote(path, safe='/')}?ref={_q(ref)}"
-        )
+        endpoint = f"repos/{repo}/contents/{urllib.parse.quote(path, safe='/')}?ref={_q(ref)}"
         return str(self._api(endpoint, accept=RAW_ACCEPT + "+json"))
 
     def closing_ref(self, repo: str, number: int) -> str:
@@ -730,7 +730,9 @@ class RealGhRestClient:
     ) -> None:
         if add:
             self._api(
-                f"repos/{repo}/issues/{number}/labels", method="POST", fields={"labels": sorted(add)}
+                f"repos/{repo}/issues/{number}/labels",
+                method="POST",
+                fields={"labels": sorted(add)},
             )
         for name in sorted(remove):
             self._api(f"repos/{repo}/issues/{number}/labels/{_q(name)}", method="DELETE")
@@ -774,9 +776,7 @@ class RealGhRestClient:
                 )
             fields = {"color": ld.color, "description": ld.description}
             try:
-                self._api(
-                    f"repos/{repo}/labels", method="POST", fields={"name": ld.name, **fields}
-                )
+                self._api(f"repos/{repo}/labels", method="POST", fields={"name": ld.name, **fields})
             except GhError as exc:
                 if "already_exists" not in f"{exc} {exc.stderr} {exc.stdout}":
                     raise

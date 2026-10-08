@@ -37,9 +37,7 @@ def config_path() -> Path:
 
 def _checked(value: object, source: str) -> ForgeApi:
     if value not in _VALUES:
-        raise ForgeApiError(
-            f"{source}: forge.api must be one of {sorted(_VALUES)}, got {value!r}"
-        )
+        raise ForgeApiError(f"{source}: forge.api must be one of {sorted(_VALUES)}, got {value!r}")
     return cast("ForgeApi", value)
 
 

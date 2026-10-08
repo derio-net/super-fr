@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from fr.gh import GhError, ISSUE_LIST_FIELDS, ISSUE_VIEW_FIELDS, PR_LIST_FIELDS
+from fr.gh import ISSUE_LIST_FIELDS, ISSUE_VIEW_FIELDS, PR_LIST_FIELDS, GhError
 from fr.ghclient import GhClient
 from fr.real_ghrestclient import RealGhRestClient
+
 from tests.unit.github_rest_support import (
     FIXTURES,
     REPO,
@@ -128,9 +128,8 @@ def test_list_open_prs_reads_per_pr_facts_with_per_page_100() -> None:
     runs = load(f"{R}/commits/{SHA_1080}/check-runs?per_page=100&page=1")["check_runs"]
     assert len(pr["statusCheckRollup"]) == len(runs)
     assert {c["workflowName"] for c in pr["statusCheckRollup"]} <= {
-        r["name"] for r in load(f"{R}/actions/runs?head_sha={SHA_1080}&per_page=100&page=1")[
-            "workflow_runs"
-        ]
+        r["name"]
+        for r in load(f"{R}/actions/runs?head_sha={SHA_1080}&per_page=100&page=1")["workflow_runs"]
     }
     assert all("per_page=100" in r for r in fake.routes() if "?" in r and "head=" not in r)
     _assert_rest_only(fake)
@@ -364,7 +363,9 @@ def _call(fake: FixtureGh, method: str, route: str) -> list[str]:
 def test_issue_writes_use_the_rest_routes() -> None:
     fake = FixtureGh(writes=_writes())
     client = RealGhRestClient(run=fake)
-    client.edit_issue_labels(REPO, 7, add=frozenset({"b", "a"}), remove=frozenset({"fr:in-progress"}))
+    client.edit_issue_labels(
+        REPO, 7, add=frozenset({"b", "a"}), remove=frozenset({"fr:in-progress"})
+    )
     assert _call(fake, "POST", f"{R}/issues/7/labels") == ["-f", "labels[]=a", "-f", "labels[]=b"]
     _call(fake, "DELETE", f"{R}/issues/7/labels/fr%3Ain-progress")
     client.edit_issue_state(REPO, 7, state="CLOSED", reason="completed")
@@ -428,7 +429,9 @@ def test_pr_writes_use_the_rest_routes() -> None:
 
 def test_pr_create_opens_a_ready_pr() -> None:
     fake = FixtureGh(writes=_writes())
-    assert RealGhRestClient(run=fake).pr_create(REPO, head="h", base="b", title="t", body="x") == 1080
+    assert (
+        RealGhRestClient(run=fake).pr_create(REPO, head="h", base="b", title="t", body="x") == 1080
+    )
     assert _call(fake, "POST", f"{R}/pulls")[-2:] == ["-F", "draft=false"]
 
 
@@ -475,9 +478,7 @@ def _every_call(client: RealGhRestClient, repo_dir: Path, run: Any) -> dict[str,
         "edit_issue_state": lambda: client.edit_issue_state(REPO, 1, state="CLOSED"),
         "edit_issue_body": lambda: client.edit_issue_body(REPO, 1, "b"),
         "comment_issue": lambda: client.comment_issue(REPO, 1, "b"),
-        "create_issue": lambda: client.create_issue(
-            REPO, title="t", body="b", labels=frozenset()
-        ),
+        "create_issue": lambda: client.create_issue(REPO, title="t", body="b", labels=frozenset()),
         "ensure_labels": lambda: client.ensure_labels(REPO, ["x"]),
         "edit_issue_comment": lambda: client.edit_issue_comment(REPO, 1, "b"),
         "pr_merge": lambda: client.pr_merge(REPO, 1, head_sha="a", method="merge"),
