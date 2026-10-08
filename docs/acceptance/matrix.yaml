@@ -5117,7 +5117,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R17
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: plan 2026-10-07-cloud-triage names the candidate scenario this row's walk
+      runs; written by the phase that implements the row
+    scenario: tests/scenarios/cloud-triage-version-drift.sh
   - id: cloud-triage-repo-agents
     capability: Backlog triage
     acceptance: A repo that runs fr-goal workers in Claude cloud sessions carries fr's
