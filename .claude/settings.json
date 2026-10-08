@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "derio-net--super-fr": {
+      "source": {
+        "source": "github",
+        "repo": "derio-net/super-fr"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "super-fr@derio-net--super-fr": true,
+    "super-fr-dispatch@derio-net--super-fr": true
+  }
+}

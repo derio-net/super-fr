@@ -1,0 +1,1 @@
+../../plugins/super-fr/agents/fr-spec-reviewer.md
