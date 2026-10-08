@@ -5167,6 +5167,17 @@ rows:
     notes: plan 2026-10-07-cloud-triage names the candidate scenario this row's walk
       runs; written by the phase that implements the row
     scenario: tests/scenarios/cloud-triage-repo-agents.sh
+  - id: cloud-triage-cloud-remedy
+    capability: Backlog triage
+    acceptance: In a Claude Code cloud session, an fr failure caused by the environment
+      tells the operator how to fix the cloud environment's setup script (or create
+      a new environment) once, with the script to paste, and fr cloud doctor lists what
+      is missing
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R23
+    levels: {}
+    status: not-implemented
+    notes: added during implement, operator decision d11; plan phase 7
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
