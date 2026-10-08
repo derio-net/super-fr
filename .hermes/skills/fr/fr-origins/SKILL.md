@@ -14,7 +14,7 @@ You can already read an issue and the code it names. A classification done in ch
 
 ## State: two files, two owners
 
-Everything lives in the scope's triage state directory, the same one `fr triage` uses (`$HOME/.cache/fr/triage/<scope>/`; `--dir D` overrides). Pass the same scope options to every command: `--repo OWNER/REPO`, a comma-separated group `--repo A/B,C/D`, or `--org OWNER`.
+Everything lives in the scope's triage state directory, the same one `fr triage` uses (the workspace's `.fr/triage-state/<scope>/`, or `~/.cache/fr/triage/<scope>/` outside a clone; `--dir D` overrides). Pass the same scope options to every command: `--repo OWNER/REPO`, a comma-separated group `--repo A/B,C/D`, or `--org OWNER`.
 
 | File | Written by | Holds |
 |---|---|---|

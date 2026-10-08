@@ -1,8 +1,10 @@
 # Triage state for this repo
 
-`fr triage` keeps its state outside every repo, in `~/.cache/fr/triage/<scope>/`. That
-is the right default for a consumer repo, but it makes this repo's own triage history
-live on one machine. This folder is the durable copy for `derio-net/super-fr`: what is
+`fr triage` keeps its state in the scope's state directory: the workspace's
+`.fr/triage-state/<scope>/` (kept out of git through `info/exclude`), or
+`~/.cache/fr/triage/<scope>/` when run outside a clone; a scope with a state repo also keeps
+a durable copy on the ref `refs/fr/triage/<scope-id>`. Neither is reviewed, so this folder
+remains the reviewed copy for `derio-net/super-fr`: what is
 needed to regenerate the four triage pages (the backlog page `triage.html`, the
 defect-origins page, the architecture page and the history page), and the history that
 cannot be regenerated.
@@ -45,7 +47,7 @@ fr triage collect --repo derio-net/super-fr --pr-limit 1000
 fr triage origins collect --repo derio-net/super-fr --since 2026-09-22
 fr triage check --repo derio-net/super-fr          # unranked: judge with the fr-triage skill
 fr triage origins check --repo derio-net/super-fr  # unclassified: the fr-origins skill
-python3 ~/.cache/fr/triage/derio-net--super-fr/authored-src/build.py
+python3 .fr/triage-state/derio-net--super-fr/authored-src/build.py   # the state directory
 fr triage render --repo derio-net/super-fr
 fr triage origins render --repo derio-net/super-fr
 fr triage architecture render --repo derio-net/super-fr --now-ref origin/main
@@ -53,7 +55,7 @@ fr triage history render --repo derio-net/super-fr
 uv run fr triage state export --to docs/triage --repo derio-net/super-fr
 ```
 
-The cache stays the working copy because `fr triage batch drive` writes `judgements.yaml`
+The state directory stays the working copy because `fr triage batch drive` writes `judgements.yaml`
 on every pass. `.fr/triage.yaml` sets `export: {path: docs/triage}`, so the driver exports
 the state as a PR once a wave finishes and merges it when green; export by hand after a
 triage session.

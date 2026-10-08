@@ -14,7 +14,7 @@ description: >
 
 Four pages, one question each: the backlog page `triage.html` (`fr triage render`: what do I do next?), origins (`fr triage origins render`), architecture (`fr triage architecture render`) and history (`fr triage history render`: how did we get here?). Hand-written analysis lives in fragments listed in `<state>/<page>/manifest.yaml`, never in an edited page; the dirs are `board/` (for `triage.html`, not the Kanban `board.html`), `origins/`, `architecture/` and `history/`. `fr triage state export --to <dir>` / `import --from <dir>` copy the durable state to and from a repo; `export: {path: <dir>}` in `.fr/triage.yaml` makes `batch drive` export finished waves (see **The driver**).
 
-Everything lives in `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` for `--repo OWNER/REPO`, `owner` for `--org OWNER`, lowercased). `--repo A/B,C/D` is a group; two repos with same name are refused (keys are `<repo-name>#<n>`); batches stay single-repo.
+Everything lives in the scope's state directory: the workspace's `.fr/triage-state/<scope>/`, or `~/.cache/fr/triage/<scope>/` outside a clone (`<scope>` is `owner--repo` for `--repo OWNER/REPO`, `owner` for `--org OWNER`, lowercased). `--repo A/B,C/D` is a group; two repos with same name are refused (keys are `<repo-name>#<n>`); batches stay single-repo.
 
 | File | Written by | Holds |
 |---|---|---|

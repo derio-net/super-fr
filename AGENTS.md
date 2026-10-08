@@ -136,9 +136,12 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`plugins/super-fr/skills/fr-triage/`) that holds only the judgement
     discipline. The split is forced: the OpenCode/Hermes mirrors copy only
     `SKILL.md`, so a script bundled beside a skill never reaches them — only
-    the `fr` wheel reaches every harness. State lives under
-    `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` or `owner`, lowercased;
-    `--dir` overrides): `facts.json` (collect), `judgements.yaml` (the
+    the `fr` wheel reaches every harness. State lives in the scope's state
+    directory, the workspace's `.fr/triage-state/<scope>/` or
+    `$HOME/.cache/fr/triage/<scope>/` outside a clone (`owner--repo` or `owner`,
+    lowercased; `--dir` overrides; a scope with a state repo is synced with
+    `refs/fr/triage/<scope-id>` by `triage_cmd.resolve_state_dir`, 2026-10-07
+    cloud-triage spec): `facts.json` (collect), `judgements.yaml` (the
     agent's, shape in spec §3.D), `triage.html` (render). It is never
     committed by default, so it is NOT an artifact kind. This repo keeps a
     durable copy of its own scope's inputs and history (judgements, origins,
