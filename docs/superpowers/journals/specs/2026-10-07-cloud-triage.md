@@ -716,3 +716,8 @@ check: codebase. evidence: R22; acceptance-report.yml, pinned-clis.yml; ci.yml c
 ### s33 · finding [open] (reviewer: in scope) · Requiring every check couples phase test evidence to non-test gates
 
 check: codebase. evidence: ci.yml coverage, validate-artifacts, change-fragment; acceptance-report.yml.
+
+<!-- fr:journal kind=finding scope=spec id=s33-resolved created=2026-10-08T13:54:13+00:00 state=fixed resolves=s33 -->
+### s33-resolved · finding [fixed] · resolves s33: Requiring every check couples phase test evidence to non-test gates
+
+§I: non-gate checks are ignored; ci-ok aggregates the CI jobs the repo itself chose to gate on.
