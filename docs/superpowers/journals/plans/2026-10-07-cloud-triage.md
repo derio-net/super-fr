@@ -305,3 +305,108 @@ the routing is one branch plus one helper beside the existing witness helpers; n
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 prose and mirrors only; the mirrors are generated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · required-checks fallback used only checks already reported: a not-yet-created required gate was skipped, none reported refused instead of pending (phase 2)
+
+ci_evidence.py:158-169; real_ghrestclient.py:700-715.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · gate_checks read from HEAD's .fr/ci.yaml let the branch under test choose a weaker gate (phase 2)
+
+ci_evidence.py:70.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · witness base sha fell back to the first-listed PR, so ci:<sha>+<base> could name a merge CI never tested (phase 2)
+
+real_ghrestclient.py:323-332; the captured green fixture showed the mismatch.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · a failed gate with a re-run in flight refused instead of pending (phase 2)
+
+ci_evidence.py:235-248.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · HEAD with zero checks was pending forever (phase 2)
+
+ci_evidence.py:227.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · pending output named no URL though fr-goal says to report the gate's URL (phase 2)
+
+ci_evidence.py:228,248.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · the open-PR lookup fetched every file page of every PR on each resolve and retry (phase 2)
+
+real_ghrestclient.py:663-669 via list_prs_by_head(state=all).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · PR body rendered a ci witness as 'Full suite run at delivery'; the missing-tests hint offered only a log (phase 2)
+
+pr_body.py:567; run_cmd.py:1656.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r9 · finding [open] (reviewer: in scope) · 01-fr-goal.html not regenerated after the .md change (phase 2)
+
+explainers-currency.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10 created=2026-10-08T14:58:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r10 · finding [open] (reviewer: in scope) · no tests for WALK_LIMIT, a reverted code change, a failed gate during a re-run, a partial required set (phase 2)
+
+tests/unit/test_run_ci_evidence.py.
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-10-08T14:58:28+00:00 phase=2 -->
+### p2-review · review · phase 2 code review: 10 findings in scope (phase 2)
+
+Dispatched reviewer (superpowers:requesting-code-review discipline) over 39a1efb9..bc1f170 against spec R22/§I/Test Plan 19 and plan 02.yaml; read-only, 65 targeted tests run. Raised p2-r1..p2-r10, all in scope. Received (superpowers:receiving-code-review): each verified against the code; the spec decided p2-r1..r8 (b6604451: gate union with the base, names-only required checks, re-run and no-CI waits, honest base, URLs, files-free lookup, PR body wording); a fix agent implemented them with a failing test first (60ae306c, 0bae3530, 31817d45; 203 targeted + scenario pass, ruff/mypy clean); p2-r9 regenerated with blog-craft's renderer after a byte-identical re-render of main's page (adc20d1a).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: required-checks fallback used only checks already reported: a not-yet-created required gate was skipped, none reported refused instead of pending (phase 2)
+
+60ae306c + 0bae3530: required_check_names(repo, base) reads names whether or not reported; unreported required gates are pending; test_a_partially_reported_required_set_is_pending.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: gate_checks read from HEAD's .fr/ci.yaml let the branch under test choose a weaker gate (phase 2)
+
+b6604451 (spec) + 0bae3530: gates are the union of .fr/ci.yaml at origin/<base> and HEAD; test_a_branch_cannot_drop_a_gate_its_base_declares.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: witness base sha fell back to the first-listed PR, so ci:<sha>+<base> could name a merge CI never tested (phase 2)
+
+60ae306c: base only from a suite whose PR head is the CI sha, else unknown; fresh green-head capture; test_a_run_whose_pr_moved_on_witnesses_an_unknown_base.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: a failed gate with a re-run in flight refused instead of pending (phase 2)
+
+0bae3530: a failed gate is pending while its own workflow runs; test_a_failed_gate_while_its_workflow_re_runs_is_pending.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: HEAD with zero checks was pending forever (phase 2)
+
+0bae3530: no checks anywhere -> pending for 15 minutes after HEAD's committer time, then 'no CI ran'; test_no_check_fifteen_minutes_on_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: pending output named no URL though fr-goal says to report the gate's URL (phase 2)
+
+0bae3530: pending names each unfinished check's URL or the PR's checks page; test_pending_names_each_unfinished_checks_url.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: the open-PR lookup fetched every file page of every PR on each resolve and retry (phase 2)
+
+60ae306c + 0bae3530: open_pr_for_head makes one pulls?head=&state=open call, no files; test_the_open_pr_lookup_reads_no_files.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: PR body rendered a ci witness as 'Full suite run at delivery'; the missing-tests hint offered only a log (phase 2)
+
+31817d45: ci witness rendered as 'CI (<gates>) green on <sha> merged with <base>'; hint offers tests=ci where a CI is configured.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r9 -->
+### p2-r9-resolved · finding [fixed] · resolves p2-r9: 01-fr-goal.html not regenerated after the .md change (phase 2)
+
+adc20d1a: regenerated with blog-craft tools/render_explainer.py; main's unmodified .md re-rendered byte-identical first; tripwire passes.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved created=2026-10-08T14:58:28+00:00 phase=2 state=fixed resolves=p2-r10 -->
+### p2-r10-resolved · finding [fixed] · resolves p2-r10: no tests for WALK_LIMIT, a reverted code change, a failed gate during a re-run, a partial required set (phase 2)
+
+0bae3530: WALK_LIMIT, revert, re-run and partial-set tests added.
