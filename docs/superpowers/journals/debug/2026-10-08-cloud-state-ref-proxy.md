@@ -29,3 +29,8 @@ state_ref.REF_PREFIX = refs/fr/triage/ (spec R5 chose a non-branch ref so it sho
 ### review · review · Orchestrator review of the fix: no findings
 
 Reviewed the diff of gitseam.py, state_ref.py and triage_cmd.py against the root cause. A stale lease is still recognised by git's '(stale info)', or failing that by re-reading the remote ref, so a lost race stays StateRefConflict. A refusal leaves the ref unmoved and becomes StateRefPushRefused. A legacy-ref base is recorded under the legacy name, so the first push to the branch uses expected-old None. Only _push_if_changed downgrades a refusal to a warning; state push, the lease and drive pushes still fail. Fetched refs are kept under refs/fr/fetched/, so the workspace never gains a local fr-triage branch. Findings raised: none. Not live-proven yet: the walk 16 rerun against this build is owed.
+
+<!-- fr:journal kind=finding scope=debug id=live-proof created=2026-10-08T21:11:38+00:00 state=fixed -->
+### live-proof · finding [fixed] · Live from a cloud session: the state branch pushes and fetches through the proxy
+
+This cloud session, branch build 9eff6abf, forge.api rest, walk 16 client clone (scope s-22ba5885, state_repo derio-net/super-fr): fr triage collect exits 0 (48 open issues; no ref file changed, so no push). fr triage state push wrote refs/heads/fr-triage/s-22ba5885 = 0eb90420 through the proxy, exit 0. The commit is an orphan (rev-list count 1) whose tree is scope-durable.yaml only. fr triage state fetch restored it, and the clone has no local fr-triage/* branch (the fetch lands under refs/fr/fetched/). The refused-push warning path is covered by unit tests only: this proxy now accepts the push.
