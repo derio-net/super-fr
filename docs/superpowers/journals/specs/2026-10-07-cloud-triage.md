@@ -167,3 +167,412 @@ Observed 2026-10-08, same session, after `plugin-late-load` was written: the ses
 ### repo-agents · discovery · Repo-scoped agent files are dispatchable from a cloud session's first turn; the plugin's are not
 
 Measured 2026-10-08 with two fresh cloud sessions in this environment (same setup script). Probe 1, on main (no `.claude/agents/`, no project settings): at 0-5 min and across two user turns, only the built-in agent types and no super-fr skills; `super-fr:fr-spec-reviewer` "not found" five times. Probe 2, on feat/cloud-triage (`.claude/agents/fr-spec-reviewer.md` and `fr-phase-executor.md`, symlinks to the canonical files, plus project `enabledPlugins`): `fr-spec-reviewer` and `fr-phase-executor` were listed in its first turn, and a dispatch of the bare `fr-spec-reviewer` returned at once; `super-fr:fr-spec-reviewer` was still "not found" and no super-fr skills were listed. So project agent files are read when the session is assigned, the plugin is not, and the project `enabledPlugins` did not make the plugin load at start. The reviewer gate accepts the bare name (run_cmd.py `_same_agent`). The plugin did arrive late in one session (`plugin-late-load`, `agents-late-load`) but not in probe 1 within 5 minutes, so it cannot be relied on. Consequence: a repo that runs fr-goal workers in the cloud needs the agent files committed under `.claude/agents/`.
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · forge.api selection point does not exist as described
+
+target: spec
+scope: in, per the reviewer
+check: codebase
+evidence: spec §A / R3; hostclient.py:199-236; triage_batch_cmd.py:222; triage_cmd.py:92; collect.py:660
+`client_for_url` vs `client_for_backend`; the latter is provenance-blind; a repo-level `forge.api` cannot pick the client needed to read `.fr/triage.yaml`.
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · Cloud worker and close-out sessions still hit GraphQL outside the triage path
+
+target: spec
+scope: in, per the reviewer
+check: consistency
+evidence: R1, R19, Test Plan 13; gh.py:177; run_cmd.py:6037; run/adopt.py:747; run/closeout.py:346; isolation/local.py:2962; real_ghclient.py:130
+Workers' deliver, close-out, adopt and isolation reads are GraphQL; some fail soft.
+
+<!-- fr:journal kind=finding scope=spec id=s3 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s3 · finding [open] (reviewer: in scope) · R2 exceptions table omits workflowName, which _latest_runs keys on
+
+target: spec
+scope: in, per the reviewer
+check: codebase
+evidence: §A table; collect.py:232-259
+REST check-runs carry no workflow name; startedAt zero-time normalisation unstated.
+
+<!-- fr:journal kind=finding scope=spec id=s4 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s4 · finding [open] (reviewer: in scope) · Scope id, ref name and state_repo are host-local; a new container loses them
+
+target: spec
+scope: in, per the reviewer
+check: codebase
+evidence: R5, R9, R12; scope_config.py:3-7, :34-35, :78-83; state_sync.py:45
+scope_id derives from a per-host id; state_repo lives only in host-local scope.yaml.
+
+<!-- fr:journal kind=finding scope=spec id=s5 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s5 · finding [open] (reviewer: in scope) · The ref's tree omits merge stops, the lease and scope config
+
+target: spec
+scope: in, per the reviewer
+check: consistency
+evidence: §B vs R4, §D; state_sync.py:45-46; merge_stops.py:25
+
+<!-- fr:journal kind=finding scope=spec id=s6 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s6 · finding [open] (reviewer: in scope) · A mailbox runner conflicts with synchronous runner calls; crash window undefined
+
+target: spec
+scope: in, per the reviewer
+check: consistency
+evidence: R14 vs §E; protocols.py:111-138; triage_batch_cmd.py:3400-3413
+
+<!-- fr:journal kind=finding scope=spec id=s7 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s7 · finding [open] (reviewer: in scope) · SessionStatus cannot carry needs_action
+
+target: spec
+scope: in, per the reviewer
+check: codebase
+evidence: R15; protocols.py:142, :155; kanban.py:57
+
+<!-- fr:journal kind=finding scope=spec id=s8 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s8 · finding [open] (reviewer: in scope) · R15 maps completed to done unconditionally, against d5's condition
+
+target: spec
+scope: in, per the reviewer
+check: decisions
+evidence: d5; discovery cloud-session-status; triage_batch_cmd.py:3403-3422
+
+<!-- fr:journal kind=finding scope=spec id=s9 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s9 · finding [open] (reviewer: in scope) · R18 cannot hold for a long-lived cloud driver given R20 and d4
+
+target: spec
+scope: in, per the reviewer
+check: consistency
+evidence: R18 vs R20, §H, d4; triage_batch_cmd.py:3940-3961
+
+<!-- fr:journal kind=finding scope=spec id=s10 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s10 · finding [open] (reviewer: in scope) · Drift-check inputs undefined
+
+target: spec
+scope: in, per the reviewer
+check: codebase
+evidence: R17, §G; run/model.py:351-379; artifacts/registry.py:407
+
+<!-- fr:journal kind=finding scope=spec id=s11 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s11 · finding [open] (reviewer: in scope) · The first write edits the tracked .gitignore; workspace undefined
+
+target: spec
+scope: in, per the reviewer
+check: codebase
+evidence: §B; artifacts/trigger.py:82-116; triage/model.py:167-175
+
+<!-- fr:journal kind=finding scope=spec id=s12 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s12 · finding [open] (reviewer: in scope) · Pushing refs/fr/triage/* through the cloud git proxy is unmeasured
+
+target: spec
+scope: in, per the reviewer
+check: consistency
+evidence: R5, §B; no discovery covers it
+
+<!-- fr:journal kind=finding scope=spec id=s13 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s13 · finding [open] (reviewer: in scope) · The lease's duration and self-renewal are unspecified
+
+target: spec
+scope: in, per the reviewer
+check: consistency
+evidence: R9, §D, §E
+
+<!-- fr:journal kind=finding scope=spec id=s14 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s14 · finding [open] (reviewer: in scope) · Test Plan 2's GraphQL list is incomplete; R8 export and R16 untested
+
+target: spec
+scope: in, per the reviewer
+check: consistency
+evidence: Test Plan 2 vs §A; real_ghclient.py:110-119; R8; R16/§G
+
+<!-- fr:journal kind=finding scope=spec id=s15 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s15 · finding [open] (reviewer: in scope) · fr-claude-cloud package location; some herdr-only parts already optional
+
+target: spec
+scope: in, per the reviewer
+check: codebase
+evidence: §F; fr-herdr/pyproject.toml; protocols.py:191-237; triage_batch_cmd.py:1385; batch_drive.py:457
+
+<!-- fr:journal kind=review scope=spec id=spec-review created=2026-10-08T12:14:06+00:00 -->
+### spec-review · review · independent spec review: 15 findings
+
+verified (by the reviewer): triage_cmd.py:92 make_forge; triage_batch_cmd.py:222 make_client; hostclient.py:199 client_for_backend; ghclient.py:87 GhClient; real_ghclient.py:89 RealGhClient; collect.py:232 _latest_runs; batch_drive.py:935 drive_pass; batch_drive.py:501 hand-back policy; triage_batch_cmd.py:1385 ADOPT_LIST_RUNNER; triage_batch_cmd.py:3842-3961 drive loop and re-exec; triage_claim_cmd.py:60 scope show; triage_state_cmd.py:50 state export; gitseam.py; drive_lock.py:16; scope_config.py:30,:86; triage/model.py:363-391 TriageConfig, :167 state_dir; fr_dispatch protocols.py:36-218; run_cmd.py:4590 run start; run/model.py:351 RunState; artifacts/registry.py:368-407 run kind v9; artifacts/trigger.py:82-92; verifications candidate/client-live; decisions d1-d8 honoured except d5's condition (s8).
+
+<!-- fr:journal kind=finding scope=spec id=s16 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s16 · finding [open] (reviewer: in scope) · R19/§H rest on a premise spare-preload disproved, and their fallback (re-home) cannot help
+
+target: spec
+check: decisions
+evidence: R19; §H para 1; Background ("A session's plugins cannot be reloaded in place"); journal spare-preload, plugin-late-load, agents-late-load, no-plugin-agents, d7; run_cmd.py:2387-2395
+R19's "runs before the session starts so the plugin's agents and hooks are loaded" is false (spare-preload); its "a running session cannot load a plugin's agents" and the Background sentence are contradicted by agents-late-load. The remedy loops: a re-homed session is another pre-warmed spare with the same race. Fix: say the setup script installs into the container and the plugin reaches the session late; the worker's first step waits, bounded, for fr-spec-reviewer/fr-phase-executor to be dispatchable, and on timeout ends BLOCKED with a needs_action, no re-home; add an owed measurement and a Test Plan 17 observation. The gate accepts the bare agent name, so user- or repo-scoped agent files are a candidate fix. Hooks are unproven in a worker; say what a worker without them may do. R18's "re-home itself so its skill text is current" assumes skills cannot refresh in place, which plugin-late-load puts in doubt.
+
+<!-- fr:journal kind=finding scope=spec id=s17 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s17 · finding [open] (reviewer: in scope) · §H's setup script, done as described, is the silent half-install that setup-script measured
+
+target: spec
+check: decisions
+evidence: §H; journal setup-script; scripts/install.sh:94-99
+§H names neither the apt install of rsync nor seeding installed_plugins.json/settings.json; the owed follow-up (install.sh creates them or fails, not warn-and-exit-0) is in no requirement or Test Plan row.
+
+<!-- fr:journal kind=finding scope=spec id=s18 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s18 · finding [open] (reviewer: in scope) · Environment set by the setup script likely never reaches the session; FR_HOST_ID 'restored into its workspace' has no mechanism
+
+target: spec
+check: consistency
+evidence: R3; R11; §B Identity; §H; journal spare-preload; scope_config.py:34-35,58-63
+The CLI process starts before the setup script, so its `export` cannot reach the session's shells; FR_FORGE_API=rest may never be set. R11 never says how FR_HOST_ID is restored per wake. Persist both in files fr reads (`~/.config/fr/host-id` exists, scope_config.py:34; the forge setting needs a host-level file or the environment's own variables), and test that a fresh shell resolves both.
+
+<!-- fr:journal kind=finding scope=spec id=s19 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s19 · finding [open] (reviewer: in scope) · forge.api is said to resolve from 'the host's scope.yaml', but scope.yaml is per scope and the run path has none
+
+target: spec
+check: codebase
+evidence: R3; §A Selection; scope_config.py:30,86-106; §B scope-durable.yaml
+scope.yaml is one file per scope; `resolve()` has no scope and run-path callers have none to pass; the order omits scope-durable.yaml's forge_api; ScopeConfig is extra="forbid", so forge_api/state_repo must become fields. Name one host-level source (env var, then e.g. ~/.config/fr/forge.yaml), how scope-durable.yaml feeds it, and add the model fields.
+
+<!-- fr:journal kind=finding scope=spec id=s20 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s20 · finding [open] (reviewer: in scope) · The gh commands fr tells agents to run (pr create/edit/ready, issue close/edit) are GraphQL-backed and outside R1
+
+target: spec
+check: codebase
+evidence: hostclient.py:85-96 FORGE_COMMANDS["github"]; R1; Test Plan 17
+Agents run `gh pr create --draft`, `gh pr edit`, `gh pr ready`, `gh issue close`, `gh issue edit --add-label`, `gh label create` at deliver and close-out; most are GraphQL. Under rest, FORGE_COMMANDS needs a REST variant (gh api routes or an fr verb), with a test that no GraphQL-backed command is named.
+
+<!-- fr:journal kind=finding scope=spec id=s21 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s21 · finding [open] (reviewer: in scope) · 'Raise on a 403' conflicts with GhClient methods whose contract is None on any failure
+
+target: spec
+check: codebase
+evidence: §A last bullet; ghclient.py:323-332; real_ghclient.py:565-577; isolation/local.py:2962
+pr_for_branch and issues_enabled promise None on failure. List per method whether it raises or keeps its contract, and test both; pr_for_branch's REST client must derive owner/repo from the checkout.
+
+<!-- fr:journal kind=finding scope=spec id=s22 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s22 · finding [open] (reviewer: in scope) · Pending requests, re-home records and session ids are not in REF_FILES, so they are lost on a fresh container
+
+target: spec
+check: consistency
+evidence: R14; §F requests.yaml; §G; §B REF_FILES; Test Plan 17
+A driver restored on a new container loses pending requests, can re-home twice (breaking R17's at-most-once), and loses dispatched session ids. Add them to REF_FILES; extend Test Plans 5 and 9.
+
+<!-- fr:journal kind=finding scope=spec id=s23 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s23 · finding [open] (reviewer: in scope) · The driver's self-re-home strands it behind its own lease
+
+target: spec
+check: consistency
+evidence: R9; §D holder = session id; R18; §E step 2
+A re-homed driver has a new session id, so its own lease refuses it for 90 minutes and then needs `lease take --yes`. Use `cloud:<FR_HOST_ID>` as the holder, or hand the lease over; add to Test Plans 8 and 12.
+
+<!-- fr:journal kind=finding scope=spec id=s24 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s24 · finding [open] (reviewer: in scope) · Lease default does not match its own formula (3x5 + 60 = 75, not 90)
+
+target: spec
+check: consistency
+evidence: R9; §D; §E defaults
+Settle one value and test the computed duration.
+
+<!-- fr:journal kind=finding scope=spec id=s25 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s25 · finding [open] (reviewer: in scope) · No rule says how a cloud scope's batches reach the claude-cloud runner when the repo config says herdr
+
+target: spec
+check: codebase
+evidence: .fr/triage.yaml:4-7,13-17; triage_batch_cmd.py:1094-1095,1269-1270,1487-1488; Test Plan 17
+Runner comes from launch.runner, defaulting to the repo's .fr/triage.yaml (herdr here), which both scopes read. State whether the driver adapter, a scope setting or --to decides, which settings the cloud driver ignores (post_merge, post_merge_restart), and test one repo config with two scopes.
+
+<!-- fr:journal kind=finding scope=spec id=s26 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s26 · finding [open] (reviewer: in scope) · Privacy guard: no source for the state repo's visibility, and the lease push runs before any collect
+
+target: spec
+check: consistency
+evidence: §C; §B; §E steps 1 and 3; R7
+A dedicated state repo is not in the scope, so collect never reads its visibility; on a fresh container facts.json is absent; §E pushes the lease before collect. Read the state repo's visibility with GET repos/{state_repo} before each push; unknown refuses. Test both in Test Plan 7.
+
+<!-- fr:journal kind=finding scope=spec id=s27 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s27 · finding [open] (reviewer: in scope) · Stale and mismatched cross-references between the design and the Test Plan
+
+target: spec
+check: consistency
+evidence: §B owed measurement (says Test Plan 12; it is 16); Test Plan 16 only pushes to the session's own repo; R4/Test Plan 4 `.git/info/exclude` vs §B `<git-common-dir>/info/exclude`; Test Plan 13 vs R19
+
+<!-- fr:journal kind=finding scope=spec id=s28 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s28 · finding [open] (reviewer: in scope) · The new runner package's obligations list misses surfaces fr-herdr is pinned in
+
+target: spec
+check: codebase
+evidence: §F; pyproject.toml:9,:57; tests/integration/test_runner_package_lists.py:78 and the scaffold POST_CREATE; scripts/install.sh:94-99
+Missing: root workspace dependencies, coverage source, and the scaffold's literal runner-package list.
+
+<!-- fr:journal kind=finding scope=spec id=s29 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s29 · finding [open] (reviewer: in scope) · R16 records a plugin version with no named source, and nothing reads it
+
+target: spec
+check: codebase
+evidence: R16; §G; no plugin_version helper under packages/; journal plugin-late-load
+Name the source (installed_plugins.json's entry) and what a disagreement with the loaded plugin means, or drop it; R17 compares only fr_version.
+
+<!-- fr:journal kind=finding scope=spec id=s30 created=2026-10-08T12:14:06+00:00 state=open review_scope=in -->
+### s30 · finding [open] (reviewer: in scope) · Two wake sources are assumed, not measured
+
+target: spec
+check: decisions
+evidence: R11; §E Wakes; journal wake-probe, wake-probe-restart, d3
+Only send_later was measured. PR-activity subscriptions and a recurring Routine firing into an existing session are unobserved; list them as owed measurements and observe each in Test Plan 17.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-2 created=2026-10-08T12:14:06+00:00 -->
+### spec-review-2 · review · independent spec review: 15 findings
+
+R19 does not hold (s16); §H does not hold as written (s17, s18); §F holds as a mailbox, with durability gaps s22, s23.
+verified (by the reviewer): hostclient.py:199-239; triage_cmd.py:92-97; triage_batch_cmd.py:222-225,:1385,:402,:410,:580; run_cmd.py:6037,:2387-2395; run/closeout.py:346; run/adopt.py:747; isolation/local.py:2962; gh.py:177-182,:233; real_ghclient.py:80,:130; triage/collect.py:232-256; triage/model.py:167-175; state_sync.py:45-46; merge_stops.py:25; scope_config.py:29,78-83; drive_lock.py:1; batch_drive.py:453-457,:935; triage_state_cmd.py:50; artifacts/trigger.py:82; artifacts/registry.py:407; fr_dispatch protocols.py:36,82,123,142,170; fr_dispatch testing.py:87-129; test_import_direction.py:139-160; scripts/version_surfaces.py:9; ci.yml:33; plugins/super-fr/agents/*.md. Decisions d1-d8 checked against R1-R21: no contradictions beyond s16 (R19 vs d7).
+
+<!-- fr:journal kind=decision scope=spec id=d9-repo-agents-artifact created=2026-10-08T12:14:06+00:00 -->
+### d9-repo-agents-artifact · decision · Operator decision, round 9: repo-scoped fr agents become an artifact kind
+
+Operator, 2026-10-08, after discovery `repo-agents` (two probe sessions: the plugin's agents absent at session start, repo `.claude/agents/` files present from the first turn). Asked how fr should keep repo-scoped agent files current in repos that run cloud workers; options were a new artifact kind, `fr init` plus a separate drift check, or opt-in per repo. Answer: **a new artifact kind** (`agents`): `fr init` writes stamped copies of `fr-spec-reviewer` and `fr-phase-executor` into `.claude/agents/`; a release that changes them moves the kind's version, so `fr validate artifacts` and the migration gate keep the repo's CI red until `fr migrate artifacts --yes` re-renders them. The operator raised the idea (a new fr-init step, plus a check at every fr release, part of the migration that fails CI until done). This supersedes d7's premise that the setup script makes the plugin's agents available; d7's fallback (install `fr` when missing) stands.
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: forge.api selection point does not exist as described
+
+R3 and §A: `forge.api` resolves from `FR_FORGE_API` or the host's `scope.yaml` before any client exists; the repo-level key is dropped with the reason; both `client_for_backend` and `client_for_url` consult it.
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: Cloud worker and close-out sessions still hit GraphQL outside the triage path
+
+R1 widened to the run path (deliver, close-out, adopt, isolation, linked PRs); §A routes the direct `fr.gh` helpers too, and the REST client raises on 403 instead of a soft empty answer; Test Plan 2 and 17 cover it.
+
+<!-- fr:journal kind=finding scope=spec id=s3-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s3 -->
+### s3-resolved · finding [fixed] · resolves s3: R2 exceptions table omits workflowName, which _latest_runs keys on
+
+§A table adds `workflowName` (Actions runs by head_sha, mapped by check_suite_id; app name otherwise) and the `startedAt`/status normalisation; Test Plan 1 asserts them.
+
+<!-- fr:journal kind=finding scope=spec id=s4-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s4 -->
+### s4-resolved · finding [fixed] · resolves s4: Scope id, ref name and state_repo are host-local; a new container loses them
+
+R11 starts the cloud driver with a fixed `FR_HOST_ID` (already supported, scope_config.py:29) and its state repo; §B stores `state_repo`/`forge_api` in `scope-durable.yaml` inside the ref; Test Plan 6 covers recovery.
+
+<!-- fr:journal kind=finding scope=spec id=s5-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s5 -->
+### s5-resolved · finding [fixed] · resolves s5: The ref's tree omits merge stops, the lease and scope config
+
+R5 and §B define the ref tree as an explicit list (`REF_FILES`), merge stops, lease and durable settings included; Test Plan 5 round-trips every entry.
+
+<!-- fr:journal kind=finding scope=spec id=s6-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s6 -->
+### s6-resolved · finding [fixed] · resolves s6: A mailbox runner conflicts with synchronous runner calls; crash window undefined
+
+R14 and §F define pending requests with stable ids stored in state, pending runner results, replay every pass, and idempotent execution via session tags; Test Plan 9 covers a lost result.
+
+<!-- fr:journal kind=finding scope=spec id=s7-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s7 -->
+### s7-resolved · finding [fixed] · resolves s7: SessionStatus cannot carry needs_action
+
+§F adds an optional `SessionNotes` protocol for the text; `SessionStatus` is unchanged, so herdr is untouched; Test Plan 10.
+
+<!-- fr:journal kind=finding scope=spec id=s8-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s8 -->
+### s8-resolved · finding [fixed] · resolves s8: R15 maps completed to done unconditionally, against d5's condition
+
+R15: completed → idle (messageable), with the reason in §F; a conflict is handed back by message; Test Plan 10.
+
+<!-- fr:journal kind=finding scope=spec id=s9-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s9 -->
+### s9-resolved · finding [fixed] · resolves s9: R18 cannot hold for a long-lived cloud driver given R20 and d4
+
+R18 and §E step 2: the driver compares its `fr` with the latest release before each pass, reinstalls and re-execs when older, and re-homes itself on a new major so its skill text is current; R20 updated.
+
+<!-- fr:journal kind=finding scope=spec id=s10-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s10 -->
+### s10-resolved · finding [fixed] · resolves s10: Drift-check inputs undefined
+
+§G: cursors read from each batch branch over REST; incompatibility is a different `fr` major; no recorded versions → reported only; artifact readability is left to fr's own migration gate. R17 narrowed accordingly; Test Plans 11-12.
+
+<!-- fr:journal kind=finding scope=spec id=s11-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s11 -->
+### s11-resolved · finding [fixed] · resolves s11: The first write edits the tracked .gitignore; workspace undefined
+
+R4 and §B: `.git/info/exclude`, never a tracked file; workspace = git toplevel or `--workspace` (required outside a clone); the READ_ONLY_COMMANDS rationale is updated; Test Plan 4.
+
+<!-- fr:journal kind=finding scope=spec id=s12-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s12 -->
+### s12-resolved · finding [fixed] · resolves s12: Pushing refs/fr/triage/* through the cloud git proxy is unmeasured
+
+§B names it an owed measurement; Test Plan 16 pushes and fetches the scope's ref through the cloud git proxy before merge.
+
+<!-- fr:journal kind=finding scope=spec id=s13-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s13 -->
+### s13-resolved · finding [fixed] · resolves s13: The lease's duration and self-renewal are unspecified
+
+R9 and §D: duration = three wake intervals plus the Routine's period (90 min default); host holder is `host:<host id>`, stable across pid changes; the same holder renews its own expired lease; Test Plan 8.
+
+<!-- fr:journal kind=finding scope=spec id=s14-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s14 -->
+### s14-resolved · finding [fixed] · resolves s14: Test Plan 2's GraphQL list is incomplete; R8 export and R16 untested
+
+Test Plan 2 lists every GraphQL-backed call incl. writes and `issue view --json`; Test Plan 7 adds the export refusal; Test Plan 11 adds the run kind's stamp, migration, validator and chain.
+
+<!-- fr:journal kind=finding scope=spec id=s15-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s15 -->
+### s15-resolved · finding [fixed] · resolves s15: fr-claude-cloud package location; some herdr-only parts already optional
+
+§F: `packages/fr-claude-cloud`, with its version surface, mypy entry, import-direction entry and contract test; the 'become optional' list narrowed to `ADOPT_LIST_RUNNER` and the wave grouping (batch_drive.py:457).
+
+<!-- fr:journal kind=finding scope=spec id=s16-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s16 -->
+### s16-resolved · finding [fixed] · resolves s16: R19/§H rest on a premise spare-preload disproved, and their fallback (re-home) cannot help
+
+Background rewritten from the discoveries; R19 and §H now take the agents from the repo (`agents` artifact kind, d9), the worker's first step checks the two agent types and ends BLOCKED with a needs_action naming the artifact instead of re-homing; hooks are defence in depth with their presence an owed measurement in Test Plan 17; R18's rationale no longer assumes skills cannot refresh. Test Plans 13, 17, 18.
+
+<!-- fr:journal kind=finding scope=spec id=s17-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s17 -->
+### s17-resolved · finding [fixed] · resolves s17: §H's setup script, done as described, is the silent half-install that setup-script measured
+
+§H names the setup script's rsync install and the seeding of installed_plugins.json and settings.json; R19 requires install.sh to fail rather than warn and exit 0; Test Plan 13 covers it.
+
+<!-- fr:journal kind=finding scope=spec id=s18-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s18 -->
+### s18-resolved · finding [fixed] · resolves s18: Environment set by the setup script likely never reaches the session; FR_HOST_ID 'restored into its workspace' has no mechanism
+
+R3 and §A: forge.api comes from `~/.config/fr/forge.yaml`, written by the setup script, never an export. R11 and §B Identity: the brief carries the host id and every wake writes it to `~/.config/fr/host-id` when missing. Test Plans 3 and 6 check a fresh shell.
+
+<!-- fr:journal kind=finding scope=spec id=s19-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s19 -->
+### s19-resolved · finding [fixed] · resolves s19: forge.api is said to resolve from 'the host's scope.yaml', but scope.yaml is per scope and the run path has none
+
+§A: `resolve()` takes no scope; order FR_FORGE_API, `~/.config/fr/forge.yaml`, graphql; scope-durable.yaml's value is written to the host file on restore only when absent; §B makes `forge_api`/`state_repo` optional ScopeConfig fields. Test Plan 3.
+
+<!-- fr:journal kind=finding scope=spec id=s20-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s20 -->
+### s20-resolved · finding [fixed] · resolves s20: The gh commands fr tells agents to run (pr create/edit/ready, issue close/edit) are GraphQL-backed and outside R1
+
+R1 includes FORGE_COMMANDS; §A gives them a github-rest spelling via `gh api` routes, named in briefs when rest is selected; Test Plans 2 and 17.
+
+<!-- fr:journal kind=finding scope=spec id=s21-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s21 -->
+### s21-resolved · finding [fixed] · resolves s21: 'Raise on a 403' conflicts with GhClient methods whose contract is None on any failure
+
+§A: per-method contract: pr_for_branch and issues_enabled keep None, every other method raises on 403; pr_for_branch derives owner/repo from the checkout's origin; R1 says so; Test Plan 2 tests both sets.
+
+<!-- fr:journal kind=finding scope=spec id=s22-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s22 -->
+### s22-resolved · finding [fixed] · resolves s22: Pending requests, re-home records and session ids are not in REF_FILES, so they are lost on a fresh container
+
+R5 and §B REF_FILES add requests.yaml, sessions.yaml and rehomes.yaml; §F and §G point at them; Test Plans 5, 9 and 12 restore them.
+
+<!-- fr:journal kind=finding scope=spec id=s23-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s23 -->
+### s23-resolved · finding [fixed] · resolves s23: The driver's self-re-home strands it behind its own lease
+
+R9 and §D: the holder is `cloud:<host id>`, which a re-homed driver keeps; Test Plans 8 and 12.
+
+<!-- fr:journal kind=finding scope=spec id=s24-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s24 -->
+### s24-resolved · finding [fixed] · resolves s24: Lease default does not match its own formula (3x5 + 60 = 75, not 90)
+
+R9 and §D: 3 × 5 + 60 = 75 minutes, computed from the configured values; Test Plan 8 asserts the computation.
+
+<!-- fr:journal kind=finding scope=spec id=s25-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s25 -->
+### s25-resolved · finding [fixed] · resolves s25: No rule says how a cloud scope's batches reach the claude-cloud runner when the repo config says herdr
+
+R10 and §E: the driver adapter supplies the runner, overriding the repo's launch.runner default; an explicit foreign launch.runner is reported, not dispatched; the cloud driver ignores post_merge and post_merge_restart; Test Plan 9 runs one repo config with two scopes.
+
+<!-- fr:journal kind=finding scope=spec id=s26-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s26 -->
+### s26-resolved · finding [fixed] · resolves s26: Privacy guard: no source for the state repo's visibility, and the lease push runs before any collect
+
+R8 and §C: the state repo's visibility is read with GET repos/{state_repo} before every push and export, unknown refuses; with no facts the keys' repos are read the same way; the lease push goes through the check (§E step 1); Test Plan 7.
+
+<!-- fr:journal kind=finding scope=spec id=s27-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s27 -->
+### s27-resolved · finding [fixed] · resolves s27: Stale and mismatched cross-references between the design and the Test Plan
+
+§B now cites Test Plan 16, which also pushes to a state repo the session did not start with; R4 and Test Plan 4 use the git common dir's info/exclude; Test Plan 13 covers R19's agent check.
+
+<!-- fr:journal kind=finding scope=spec id=s28-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s28 -->
+### s28-resolved · finding [fixed] · resolves s28: The new runner package's obligations list misses surfaces fr-herdr is pinned in
+
+§F's obligations add the root dependencies, the coverage source and the scaffold POST_CREATE runner-package list (test_runner_package_lists.py).
+
+<!-- fr:journal kind=finding scope=spec id=s29-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s29 -->
+### s29-resolved · finding [fixed] · resolves s29: R16 records a plugin version with no named source, and nothing reads it
+
+R16 and §G drop the plugin version: it is lockstepped with fr's and the loaded version is unreadable from inside a session; the agents a worker uses are checked through the `agents` artifact's stamp instead.
+
+<!-- fr:journal kind=finding scope=spec id=s30-resolved created=2026-10-08T12:14:06+00:00 state=fixed resolves=s30 -->
+### s30-resolved · finding [fixed] · resolves s30: Two wake sources are assumed, not measured
+
+§E lists PR-activity wakes and the Routine firing into the existing session as owed measurements; R11 says so; Test Plan 17 observes each once.

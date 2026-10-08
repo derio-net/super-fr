@@ -5112,6 +5112,16 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
+  - id: cloud-triage-repo-agents
+    capability: Backlog triage
+    acceptance: A repo that runs fr-goal workers in Claude cloud sessions carries fr's
+      reviewer and phase-executor agents itself, so they are dispatchable from a session's
+      first turn, and a release that changes them fails the repo's CI until it is migrated
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R19
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
