@@ -4056,18 +4056,49 @@ def pass_exit(driver: _Driver, acted: bool, summary: Summary) -> int:
 
 def _host_lease(scope: Scope, target: Path, interval_s: int) -> LeaseTerms | None:
     """The host driver's lease (R9), when the scope has a state ref to hold it on: a scope
-    with no state repo, or state in no clone, has only this host's `drive.lock`."""
+    with no state repo has only this host's `drive.lock`. One with a state repo whose state
+    sits in no clone cannot sync the ref, so it refuses (exit 2) naming --workspace rather
+    than drive unleased beside a cloud driver (cloud-triage §E, p4-r3)."""
     from fr.commands.triage_cmd import state_clone
     from fr.triage.lease import DEFAULT_ROUTINE_MIN, driver_identity, lease_duration
     from fr.triage.scope_config import host_id
 
     try:
-        if load_durable(target).state_repo is None or state_clone(target) is None:
+        state_repo = load_durable(target).state_repo
+        if state_repo is None:
             return None
+        if state_clone(target) is None:
+            _fail(
+                f"{target} is in no git clone, so this driver cannot sync the state ref in "
+                f"{state_repo} nor hold the scope's drive lease, and will not drive unleased "
+                "beside another driver: run from a clone, or pass --workspace <clone>"
+            )
         identity = driver_identity("host", host_id())
     except TriageError as exc:
         _fail(str(exc))
     return LeaseTerms(identity, lease_duration(interval_s / 60, DEFAULT_ROUTINE_MIN))
+
+
+@contextmanager
+def _sigterm_interrupts() -> Iterator[None]:
+    """SIGTERM raises `KeyboardInterrupt` for the block's duration, so a terminated driver
+    stops as a Ctrl-C does and releases its lease (cloud-triage §E, p4-r4); the previous
+    handler is restored after. Off the main thread no handler can be installed: a no-op."""
+    import signal
+    import threading
+
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def interrupt(signum: int, frame: object) -> None:
+        raise KeyboardInterrupt
+
+    previous = signal.signal(signal.SIGTERM, interrupt)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
@@ -4173,7 +4204,11 @@ def batch_drive_command(
     restart: str | None = None
     with drive_lock(drive_lock_dir(scope, dir_override)):  # the fast same-host check first
         try:
-            restart = _host_loop(driver, once=once, interval=interval)
+            with _sigterm_interrupts():
+                restart = _host_loop(driver, once=once, interval=interval)
+        except KeyboardInterrupt:  # Ctrl-C or SIGTERM: a clean stop too (p4-r4)
+            driver.release_lease()
+            raise
         except typer.Exit as stop:
             if stop.exit_code != 2:  # a clean stop; a refusal keeps what it found
                 driver.release_lease()

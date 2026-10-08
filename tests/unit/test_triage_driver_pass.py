@@ -83,6 +83,9 @@ class Runners:
         self.asked.append(name)
         return self.by_name.setdefault(name, FakeRunner())
 
+    def dispatched_any(self) -> bool:
+        return any(r.dispatched for r in self.by_name.values())
+
     @property
     def cloud(self) -> MailboxRunner:
         runner = self.by_name["claude-cloud"]
@@ -584,3 +587,94 @@ def test_record_takes_the_same_host_drive_lock(
     assert result.exit_code == 2, result.output
     assert "another driver holds" in " ".join(result.output.split())
     assert runners.cloud.recorded == []
+
+
+# --------------------------------------------- the host driver's lease (p4-r3, r4)
+
+
+def test_a_host_drive_whose_state_is_in_no_clone_refuses_naming_workspace(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners, clock: list[Any]
+) -> None:
+    """p4-r3 (§E): a scope with a `state_repo` whose state sits outside any clone cannot
+    sync the ref, so it cannot hold the lease: it refuses with --yes, naming --workspace,
+    rather than drive unleased beside a cloud driver."""
+    state = tmp_path / "state"
+    _world(world, state)
+    (state / "scope-durable.yaml").write_text(f"state_repo: {REPO}\n")
+
+    result = CliRunner().invoke(
+        app, ["triage", "batch", "drive", "--once", "--yes", "--repo", REPO, "--dir", str(state)]
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "--workspace" in result.output
+    assert world.passes == [] and world.merged == []  # type: ignore[attr-defined]
+    assert runners.dispatched_any() is False
+    assert load_lease(state) is None
+
+
+def _interrupted_loop(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch, interrupt: Any
+) -> tuple[Any, Path]:
+    _, state = _workspace(tmp_path, "a")
+    _world(world, state)
+    (state / "scope-durable.yaml").write_text(f"state_repo: {REPO}\n")
+    leased: list[Any] = []
+
+    def nap(seconds: float) -> None:
+        leased.append(load_lease(state))
+        interrupt()
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", nap)
+    result = CliRunner().invoke(
+        app, ["triage", "batch", "drive", "--yes", "--repo", REPO, "--dir", str(state)]
+    )
+    assert leased and leased[0] is not None, "the loop held the lease while it napped"
+    return result, state
+
+
+def test_ctrl_c_releases_the_host_drivers_lease(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    visibility: _Private,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """p4-r4 (§E): a clean stop releases the lease, Ctrl-C included."""
+
+    def ctrl_c() -> None:
+        raise KeyboardInterrupt
+
+    result, state = _interrupted_loop(tmp_path, world, monkeypatch, ctrl_c)
+
+    assert result.exit_code != 0
+    assert load_lease(state) is None, "released on Ctrl-C"
+    assert "lease.yaml" not in _git(remote, "ls-tree", "--name-only", _ref(remote))
+
+
+def test_sigterm_releases_the_host_drivers_lease_and_restores_the_handler(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    visibility: _Private,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import os
+    import signal
+
+    before = signal.getsignal(signal.SIGTERM)
+
+    def term() -> None:
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    result, state = _interrupted_loop(tmp_path, world, monkeypatch, term)
+
+    assert result.exit_code != 0
+    assert load_lease(state) is None, "released on SIGTERM"
+    assert signal.getsignal(signal.SIGTERM) == before
