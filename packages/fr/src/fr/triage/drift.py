@@ -24,7 +24,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from packaging.version import InvalidVersion, Version
@@ -228,3 +228,81 @@ def save_ledger(state_dir: Path, ledger: Ledger) -> None:
         data["driver"] = ledger.driver
     state_dir.mkdir(parents=True, exist_ok=True)
     write_text_atomic(state_dir / REHOMES_FILE, yaml.safe_dump(data, sort_keys=False))
+
+
+# ------------------------------------------------------- the driver itself (R18)
+
+REEXEC_ENV = "FR_TRIAGE_REEXEC"
+"""Set to the release a pass re-executed itself for: a pass that still finds an older fr
+under it runs on that fr rather than reinstalling again (no loop)."""
+
+SelfAction = Literal["none", "reinstall", "rehome"]
+
+
+@dataclass(frozen=True)
+class SelfUpdate:
+    action: SelfAction
+    release: str | None = None
+    start: str | None = None  # the driver session's start version, to record
+
+
+def plan_self_update(installed: str, release: str | None, ledger: Ledger) -> SelfUpdate:
+    """R18, before each pass. The session's start version is the ledger's, else the
+    installed fr (its first pass). A release major past the start's → re-home the driver
+    (the skill text it loaded cannot refresh in place); else an installed fr older than
+    the release → reinstall. A dev build newer than every release does neither."""
+    start = str(ledger.driver.get("start") or installed)
+    want, have = major(release), major(start)
+    if release is None or want is None:
+        return SelfUpdate("none", start=start)
+    if have is not None and want > have:
+        return SelfUpdate("rehome", release, start)
+    if older(installed, release):
+        return SelfUpdate("reinstall", release, start)
+    return SelfUpdate("none", release, start)
+
+
+def driver_brief(*, scope_args: Sequence[str], state_repo: str | None, host_id: str,
+                 release: str) -> str:  # fmt: skip
+    """The fresh driver session's brief: the same driver (host id, so the same lease
+    holder, §D), on the release it re-homes onto."""
+    args = " ".join(scope_args)
+    state = f" --state-repo {state_repo}" if state_repo else ""
+    return (
+        f"You are the cloud triage driver, re-homed onto fr {release}.\n"
+        f"1. Write `{host_id}` to ~/.config/fr/host-id when that file is missing: it is "
+        "this driver's identity, and the drive lease it holds.\n"
+        f"2. Run the fr-triage skill's driver section: `fr triage drive pass {args}{state} "
+        "--outbox <outbox>`, execute the outbox, `fr triage drive record`, and schedule "
+        "the next wake."
+    )
+
+
+def driver_request(release: str, brief: str) -> dict[str, Any]:
+    """The self-re-home request the pass writes to the outbox, and stops."""
+    return {
+        "id": f"{DRIVER_REQUEST_PREFIX}{release}",
+        "kind": "rehome",
+        "item": "driver",
+        "session": "self",
+        "release": release,
+        "prompt": brief,
+        "execute": "create_session(this repo, model = this session's, prompt) for a fresh "
+        "driver session; then stop this one: schedule no further wake",
+        "record": "{id, session: <new session id>}",
+    }
+
+
+def record_driver_result(ledger: Ledger, result: Mapping[str, Any]) -> Ledger:
+    """Apply the agent's result for the pending self-re-home: the new session runs the
+    release, so it becomes the driver's start. Raises when no such request is pending."""
+    pending = ledger.driver.get("pending")
+    rid = result.get("id")
+    if not isinstance(pending, Mapping) or pending.get("id") != rid:
+        raise TriageError(f"no pending driver request is named {rid}")
+    if not result.get("session"):
+        raise TriageError(f"{rid}: a re-home result names the new session (`session`)")
+    release = str(pending.get("release") or "")
+    driver = {k: v for k, v in ledger.driver.items() if k != "pending"}
+    driver["start"] = release.lstrip("vV")
+    return replace(ledger, driver=driver)

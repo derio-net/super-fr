@@ -4172,12 +4172,12 @@ def build_driver(
     )
 
 
-def one_pass(driver: _Driver) -> tuple[bool, Summary, list[str]]:
+def one_pass(driver: _Driver, *, lease_taken: bool = False) -> tuple[bool, Summary, list[str]]:
     """THE pass, the host loop's body and the cloud driver's every wake alike (cloud-triage
     R12, R13): with --yes, fetch the state ref and renew the lease (pushed), run the pass
     (`_Driver.run_pass`: collect, plan with `batch_drive.drive_pass`, act), then record the
     pass on the lease and push the state. Whether it acted, the summary, the blocked ids."""
-    if driver.yes:
+    if driver.yes and not lease_taken:  # the cloud pass took it before its self-update
         driver.take_lease()
     result = driver.run_pass()
     if driver.yes:

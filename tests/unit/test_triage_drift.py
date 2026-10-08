@@ -230,11 +230,17 @@ def runners(monkeypatch: pytest.MonkeyPatch) -> Runners:
 
 
 @pytest.fixture
-def drive(request: pytest.FixtureRequest, cloud: ClaudeCloudRunner) -> list[Any]:
+def drive(
+    request: pytest.FixtureRequest, cloud: ClaudeCloudRunner, monkeypatch: pytest.MonkeyPatch
+) -> list[Any]:
     """A cloud drive pass's world: the clone, the state remote, a private repo and the
-    clock (returned, so a test can move it)."""
+    clock (returned, so a test can move it). The driver runs fr 6.0.0, so a `v6.0.0`
+    release leaves it alone (`selfupdate` overrides that)."""
+    from fr.commands import triage_drive_cmd
+
     for name in ("checkout", "remote", "visibility"):
         request.getfixturevalue(name)
+    monkeypatch.setattr(triage_drive_cmd, "_installed_version", lambda: "6.0.0")
     now: list[Any] = request.getfixturevalue("clock")
     return now
 
@@ -306,3 +312,145 @@ def test_a_batch_whose_launch_no_longer_resolves_is_still_checked(
 
     assert result.exit_code in (0, 3), result.output
     assert [r["item"] for r in _requests(outbox, "rehome")] == [ITEM]
+
+
+# ------------------------------------------------- the driver updates itself (R18)
+
+
+def test_self_update_plans_from_the_installed_fr_the_release_and_the_sessions_start() -> None:
+    plan = drift.plan_self_update
+    assert plan("5.17.1", "v5.17.1", Ledger()).action == "none"
+    assert plan("5.16.0", "v5.17.1", Ledger()).action == "reinstall"
+    assert plan("5.17.1", "v6.0.0", Ledger()).action == "rehome"
+    # the session's start, not the installed fr, is what a new major is held to
+    started = Ledger().with_driver(start="5.16.0")
+    assert plan("6.0.0", "v6.0.0", started).action == "rehome"
+    assert plan("6.0.0", "v6.0.0", Ledger().with_driver(start="6.0.0")).action == "none"
+    # a dev build newer than every release never re-homes onto an older one
+    assert plan("6.0.0", "v5.17.1", Ledger()).action == "none"
+    assert plan("5.17.1", None, Ledger()).action == "none"
+    assert plan("5.16.0", "v5.17.1", Ledger()).start == "5.16.0"
+
+
+@pytest.fixture
+def selfupdate(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """The installed fr, the installer and the re-exec, injected (R18)."""
+    from fr.commands import triage_drive_cmd
+
+    seen: dict[str, Any] = {"installed": "5.17.1", "installs": [], "reexecs": [], "fail": None}
+
+    def install(release: str) -> None:
+        seen["installs"].append(release)
+        if seen["fail"]:
+            raise RuntimeError(seen["fail"])
+
+    def reexec(release: str) -> None:
+        seen["reexecs"].append(release)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(triage_drive_cmd, "_installed_version", lambda: seen["installed"])
+    monkeypatch.setattr(triage_drive_cmd, "_install_release", install)
+    monkeypatch.setattr(triage_drive_cmd, "_reexec", reexec)
+    monkeypatch.delenv(drift.REEXEC_ENV, raising=False)
+    return seen
+
+
+def test_an_older_installed_fr_is_reinstalled_and_the_pass_rerun_on_it(
+    tmp_path: Path, world: World, drive: list[Any], selfupdate: dict[str, Any]
+) -> None:
+    ws, state = _workspace(tmp_path, "ws")
+    _drifting(world, state, cursors={3: "5.17.1"}, release="v5.17.1")
+    selfupdate["installed"] = "5.16.0"
+    outbox = tmp_path / "outbox.json"
+
+    result = _pass(state, outbox, "--workspace", str(ws), "--state-repo", REPO)
+
+    assert result.exit_code == 0, result.output
+    assert selfupdate["installs"] == ["v5.17.1"]
+    assert selfupdate["reexecs"] == ["v5.17.1"]
+    assert not outbox.exists(), "the pass runs on the new fr, not on this one"
+
+
+def test_a_reexec_that_still_finds_an_older_fr_runs_the_pass_without_looping(
+    tmp_path: Path,
+    world: World,
+    drive: list[Any],
+    selfupdate: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ws, state = _workspace(tmp_path, "ws")
+    _drifting(world, state, cursors={3: "5.17.1"}, release="v5.17.1")
+    selfupdate["installed"] = "5.16.0"
+    monkeypatch.setenv(drift.REEXEC_ENV, "v5.17.1")
+    outbox = tmp_path / "outbox.json"
+
+    result = _pass(state, outbox, "--workspace", str(ws), "--state-repo", REPO)
+
+    assert result.exit_code in (0, 3), result.output
+    assert selfupdate["installs"] == [] and selfupdate["reexecs"] == []
+    assert "still runs on 5.16.0" in result.output
+    assert outbox.exists()
+
+
+def test_a_failed_reinstall_is_reported_and_the_pass_runs_on_the_installed_fr(
+    tmp_path: Path, world: World, drive: list[Any], selfupdate: dict[str, Any]
+) -> None:
+    ws, state = _workspace(tmp_path, "ws")
+    _drifting(world, state, cursors={3: "5.17.1"}, release="v5.17.1")
+    selfupdate["installed"], selfupdate["fail"] = "5.16.0", "no network"
+    outbox = tmp_path / "outbox.json"
+
+    result = _pass(state, outbox, "--workspace", str(ws), "--state-repo", REPO)
+
+    assert result.exit_code in (0, 3), result.output
+    assert selfupdate["reexecs"] == []
+    assert "no network" in result.output
+    assert outbox.exists()
+
+
+def test_a_new_major_rehomes_the_driver_itself_and_its_lease_carries_over(
+    tmp_path: Path,
+    world: World,
+    drive: list[Any],
+    selfupdate: dict[str, Any],
+) -> None:
+    from fr.triage.lease import load_lease
+
+    ws, state = _workspace(tmp_path, "ws")
+    _drifting(world, state, cursors={3: "5.17.1"}, release="v6.0.0")
+    outbox = tmp_path / "outbox.json"
+
+    first = _pass(state, outbox, "--workspace", str(ws), "--state-repo", REPO)
+
+    assert first.exit_code == 0, first.output
+    requests = json.loads(outbox.read_text())["requests"]
+    assert [(r["id"], r["kind"], r["session"]) for r in requests] == [
+        ("driver:rehome:v6.0.0", "rehome", "self")
+    ], "the pass stops: no batch request, no batch re-home"
+    assert HOST_ID in requests[0]["prompt"] and "fr triage drive pass" in requests[0]["prompt"]
+    assert selfupdate["installs"] == []
+    holder = load_lease(state)
+    assert holder is not None and holder.holder.endswith(f"cloud:{HOST_ID}")
+
+    drive[0] = drive[0] + timedelta(minutes=10)  # the old session wakes once more
+    again = _pass(state, outbox, "--workspace", str(ws), "--interval", "0")
+    assert [r["id"] for r in json.loads(outbox.read_text())["requests"]] == [
+        "driver:rehome:v6.0.0"
+    ], "the same request, never a second one"
+    assert again.exit_code == 0, again.output
+
+    results = tmp_path / "results.json"
+    results.write_text(json.dumps([{"id": "driver:rehome:v6.0.0", "session": "s-driver-2"}]))
+    recorded = _record(state, outbox, results)
+    assert recorded.exit_code == 0, recorded.output
+    assert drift.load_ledger(state).driver == {"start": "6.0.0"}
+
+    selfupdate["installed"] = "6.0.0"  # the fresh session installed the release
+    drive[0] = drive[0] + timedelta(minutes=10)
+    resumed = _pass(state, outbox, "--workspace", str(ws), "--interval", "0")
+
+    assert resumed.exit_code in (0, 3), resumed.output
+    assert all(r["kind"] != "rehome" or r["item"] == ITEM
+               for r in json.loads(outbox.read_text())["requests"])  # fmt: skip
+    after = load_lease(state)
+    assert after is not None and after.holder == holder.holder

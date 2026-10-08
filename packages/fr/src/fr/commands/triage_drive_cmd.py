@@ -194,6 +194,111 @@ def latest_fr_release() -> str | None:
         return None
 
 
+def _installed_version() -> str:
+    """The fr running this pass; tests replace it."""
+    from fr import __version__
+
+    return __version__
+
+
+def _install_release(release: str) -> None:
+    """Install fr *release* the way the cloud setup does (spec §H): the super-fr
+    marketplace clone at the release's tag, then its `scripts/install.sh`. Raises on any
+    failure; tests replace it."""
+    import subprocess
+    from pathlib import Path as _Path
+
+    from fr.triage.drift import FR_RELEASE_REPO
+
+    clone = _Path.home() / ".claude" / "plugins" / "marketplaces" / "derio-net--super-fr"
+
+    def run(*argv: str) -> None:
+        subprocess.run(argv, check=True, capture_output=True, text=True)
+
+    if not (clone / ".git").exists():
+        run("git", "clone", "--quiet", f"https://github.com/{FR_RELEASE_REPO}.git", str(clone))
+    run("git", "-C", str(clone), "fetch", "--quiet", "--tags", "origin")
+    run("git", "-C", str(clone), "checkout", "--quiet", "--detach", release)
+    run("bash", str(clone / "scripts" / "install.sh"))
+
+
+def _reexec(release: str) -> None:
+    """Run this same pass again on the fr just installed (first `fr` on PATH), marked so
+    it never reinstalls the same release twice. Never returns; tests replace it."""
+    import os
+    import sys
+
+    from fr.triage.drift import REEXEC_ENV
+
+    os.environ[REEXEC_ENV] = release
+    sys.stdout.flush()
+    os.execvp("fr", ["fr", *sys.argv[1:]])
+
+
+def _self_update(
+    scope: Any,
+    target: Path,
+    release: str | None,
+    *,
+    scope_args: list[str],
+    state_repo: str | None,
+) -> tuple[dict[str, Any] | None, bool]:
+    """§E step 2 (R18): `(the self-re-home request, None to go on; re-execute?)`. The
+    driver session's start version is recorded on its first pass that knows the release;
+    a re-home is written to the ledger and pushed with the lease, so a fresh container
+    re-emits the same request rather than a second one."""
+    import os
+
+    from fr.triage import drift
+    from fr.triage.scope_config import load_durable
+
+    if release is None:
+        return None, False
+    installed = _installed_version()
+    try:
+        ledger = drift.load_ledger(target)
+    except TriageError as exc:
+        _fail(str(exc))
+    plan = drift.plan_self_update(installed, release, ledger)
+    if plan.action == "rehome":
+        pending = ledger.driver.get("pending")
+        if not isinstance(pending, dict) or pending.get("release") != release:
+            repo_of_state = state_repo or load_durable(target).state_repo
+            brief = drift.driver_brief(
+                scope_args=scope_args, state_repo=repo_of_state, host_id=host_id(),
+                release=release,
+            )  # fmt: skip
+            pending = drift.driver_request(release, brief)
+        drift.save_ledger(target, ledger.with_driver(start=plan.start, pending=pending))
+        try:
+            triage_cmd.push_now(scope, target)
+        except TriageError as exc:
+            _fail(str(exc))
+        return pending, False
+    if "start" not in ledger.driver:
+        drift.save_ledger(target, ledger.with_driver(start=plan.start))
+    if plan.action != "reinstall":
+        return None, False
+    if os.environ.get(drift.REEXEC_ENV) == release:
+        err_console.print(
+            f"[yellow]warning:[/yellow] reinstalled fr {escape(release)}, but this pass still "
+            f"runs on {escape(installed)}; running it on {escape(installed)}",
+            soft_wrap=True,
+        )
+        return None, False
+    try:
+        _install_release(release)
+    except Exception as exc:  # noqa: BLE001 - the pass still runs, on the installed fr
+        err_console.print(
+            f"[yellow]warning:[/yellow] installing fr {escape(release)} failed "
+            f"({escape(str(exc) or type(exc).__name__)}); this pass runs on {escape(installed)}",
+            soft_wrap=True,
+        )
+        return None, False
+    console.print(f"installed fr {release}; running the pass on it", markup=False)
+    return None, True
+
+
 def _read_json(path: Path | None, what: str) -> Any:
     if path is None or not path.exists():
         return None
@@ -313,11 +418,32 @@ def drive_pass_command(
         _fail(f"runner `{CLOUD_RUNNER}` keeps no mailbox, so no session request could be "
               "written; nothing done")  # fmt: skip
     driver.fr_release = latest_fr_release()  # R17: what each run's major is held to
+    stop: dict[str, Any] | None = None  # the self-re-home request that ends this pass
+    reexec = False
     try:  # drive.lock: the fast same-host check, before the lease (§D)
         with batch.drive_lock(triage_cmd.drive_lock_dir(scope, dir_override)):
-            acted, summary, _ = batch.one_pass(driver)
+            driver.take_lease()  # §E step 1, before the self-update (step 2)
+            stop, reexec = _self_update(
+                scope, target, driver.fr_release,
+                scope_args=scope_args(repo, org, dir_override, workspace),
+                state_repo=state_repo,
+            )  # fmt: skip
+            if stop is None and not reexec:
+                acted, summary, _ = batch.one_pass(driver, lease_taken=True)
     except batch.ForgeReadError as exc:
         _fail(str(exc), code=exc.code)
+    if reexec:  # outside drive.lock: the new process takes it again under this pid
+        assert driver.fr_release is not None
+        _reexec(driver.fr_release)
+    if stop is not None:
+        _write_outbox(outbox, [stop])
+        console.print(
+            f"re-homing this driver onto fr {stop['release']}: its session started on another "
+            "major; execute the outbox, record it, and stop this session",
+            markup=False,
+            soft_wrap=True,
+        )
+        return
     _write_outbox(outbox, driver.outbox())
     code = batch.pass_exit(driver, acted, summary)
     if code:
@@ -374,6 +500,18 @@ def _record(target: Path, outbox: Path, result: Path) -> None:
         results = results.get("results")
     if not isinstance(results, list) or not all(isinstance(r, dict) for r in results):
         _fail(f"{result}: a list of results, one object per request")
+    from fr.triage import drift
+
+    mine = [r for r in results if str(r.get("id", "")).startswith(drift.DRIVER_REQUEST_PREFIX)]
+    if mine:  # the driver's own re-home (R18): the ledger's, not the runner's mailbox
+        try:
+            ledger = drift.load_ledger(target)
+            for r in mine:
+                ledger = drift.record_driver_result(ledger, r)
+        except TriageError as exc:
+            _fail(str(exc))
+        drift.save_ledger(target, ledger)
+        results = [r for r in results if r not in mine]
     if results:
         runner = batch.load_runner(CLOUD_RUNNER)
         if not isinstance(runner, Mailbox):
@@ -387,4 +525,4 @@ def _record(target: Path, outbox: Path, result: Path) -> None:
         if unknown:
             _fail(f"no pending request is named {', '.join(unknown)}; the rest were recorded")
     _write_outbox(outbox, [])
-    console.print(f"recorded {len(results)} result(s)", markup=False)
+    console.print(f"recorded {len(results) + len(mine)} result(s)", markup=False)
