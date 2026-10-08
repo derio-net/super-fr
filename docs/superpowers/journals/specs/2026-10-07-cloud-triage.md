@@ -596,3 +596,8 @@ Its own ask and its own package: the mailbox runner and the status mapping.
 ### phase-split-2026-10-07-cloud-triage-p5 · decision · ask: versions and drift (R16-R18)
 
 Its own ask: the run kind's 9 -> 10 migration and re-homing on an incompatible major.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p6 created=2026-10-08T12:17:58+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p6 · decision · ask: workers in the cloud (R19-R21)
+
+Its own ask: the agents artifact kind (d9), setup and install hardening, the worker brief, cloud post_merge and the skill.
