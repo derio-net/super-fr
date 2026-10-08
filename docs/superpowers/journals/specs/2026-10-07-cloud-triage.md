@@ -696,3 +696,8 @@ Reviewer a2f206dc267b3224f (fr-spec-reviewer, dispatched by this session), 2026-
 ### s31 · finding [open] (reviewer: in scope) · CI on a pull_request tests HEAD merged into base, and a conflicting PR leaves ci waiting forever
 
 check: codebase. evidence: §I; ci.yml:4-7,:21 (checkout of refs/pull/N/merge). The witness claimed a tree CI never ran; a conflicting PR runs no pull_request workflow.
+
+<!-- fr:journal kind=finding scope=spec id=s31-resolved created=2026-10-08T13:54:07+00:00 state=fixed resolves=s31 -->
+### s31-resolved · finding [fixed] · resolves s31: CI on a pull_request tests HEAD merged into base, and a conflicting PR leaves ci waiting forever
+
+R22 and §I: the witness records the CI sha and the base sha it merged with, stated as such; step 4 refuses with no open PR or a CONFLICTING one.
