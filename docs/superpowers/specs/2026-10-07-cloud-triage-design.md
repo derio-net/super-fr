@@ -62,7 +62,7 @@ R18. The driver itself runs the current release: before each pass it compares th
 R19. A cloud session's fr agents come from the repo, not the plugin: `.claude/agents/fr-spec-reviewer.md` and `.claude/agents/fr-phase-executor.md` are a new artifact kind, `agents` (§H), written by `fr init`, stamped with the version they were rendered for, refreshed by `fr migrate artifacts --yes` and checked by `fr validate artifacts`, so a release that changes them leaves the repo's CI red until it is migrated. The cloud environment's setup script installs the `fr` CLI and the plugin into the container (rsync installed, the Claude settings files seeded), and `scripts/install.sh` fails, rather than warning and exiting 0, when it cannot register the plugin. The worker brief's first step checks `fr --version` (installing super-fr when it is missing) and that `fr-spec-reviewer` and `fr-phase-executor` are dispatchable agent types; when they are not, the worker ends BLOCKED with a `needs_action` naming the missing `agents` artifact, and is not re-homed, since a fresh session would start the same way. A worker enters fr-isolation through the CLI itself; the plugin's hooks are defence in depth there, and their presence in a worker session is an owed measurement (§H).
 R20. The `post_merge` step is an operation of the environment the driver runs in: the host runs the repo's `post_merge` argument list as today; the cloud runs nothing, since every new session installs the current release at its start and the driver updates itself (R18).
 R21. The fr-triage skill documents the cloud driver, `forge.api`, the state ref, the state repo choice and the privacy guard, within its existing line budget.
-R22. A phase unit's or `deliver`'s test evidence may be the forge's CI instead of a local suite log: `evidence: {tests: ci}`. fr accepts it only when HEAD is pushed (the remote branch points at HEAD), no code path is uncommitted, and every check run and commit status on HEAD's sha has completed with success, skipped or neutral, with at least one present. It records the same code-tree witness a local log does, so `tests: reuse` keeps working. A pending check refuses with "resolve again when CI finishes"; a failed one refuses naming it; a repo whose `fr services` CI is `none` refuses `ci` outright. A local log stays accepted everywhere (§I).
+R22. A phase unit's or `deliver`'s test evidence may be the forge's CI instead of a local suite log: `evidence: {tests: ci}`. On a `done` resolve fr accepts it only when HEAD is pushed and no code path is uncommitted; the branch has an open, non-conflicting pull request; and the repo's **gate checks** (the names in `.fr/ci.yaml`'s `gate_checks`, else the base branch's required status checks; neither → `ci` refused) have each completed with success on the CI sha — HEAD, or the nearest pushed first-parent ancestor whose code tree equals HEAD's. Every other check is ignored. The witness records the CI sha, the base sha CI merged it with, and HEAD's code tree, so `tests: reuse` keeps working and nobody mistakes it for a test of HEAD alone. A pending gate refuses with its own exit code and "resolve again when CI finishes"; a failed or absent one refuses naming it; a repo whose `fr services` CI is `none`, or a forge other than GitHub, refuses `ci` outright. A local log stays accepted everywhere (§I).
 
 ## Design
 
@@ -402,28 +402,73 @@ A cloud container is small (4 cores here, discovery `slow-suite`): this repo's
 full suite, about 2.5 minutes on a 12-core host, takes about 20 minutes there,
 while the repo's own CI runs it sharded four ways on every push to a PR. So a
 phase executor or `deliver` may name the CI run instead of a local log
-(R22). `fr.run.ci_evidence.verify_ci(repo_root, client)`:
+(R22). What CI proves is narrower than a local log, and the design says so
+rather than hiding it: a `pull_request` workflow checks out the synthetic merge
+of the head into the base (`actions/checkout` with no `ref:`), so a green run
+vouches for "this code tree merged with that base", recorded as such.
 
-1. HEAD's sha is the remote branch's head (`git ls-remote` through `gitseam`'s
-   counterpart in `fr.git`), and `dirty_code_paths` is empty; else exit 2
-   naming what is unpushed or uncommitted.
-2. The forge client (either backend, `forge.api` R3) lists every check run and
-   commit status on that sha (`pr_checks`-shaped records from
-   `GET commits/{sha}/check-runs` and `/status` on REST). None present, or any
-   not completed → exit 2, "CI has not finished for <sha>; resolve again when it
-   does". Any conclusion other than success, skipped or neutral → exit 2 naming
-   each failed check and its URL.
-3. The witness is `ci:<sha>;tree=<code tree>` — `code_tree(HEAD)`, the same tree
-   `_verify_phase_tests_log` records — so `_latest_tests_witness` and `tests:
-   reuse` read it unchanged.
+**Gate checks.** Only named checks count (other workflows, the change-fragment
+or acceptance gates, a second app's status, finish at their own times and are
+not test results). `.fr/ci.yaml` (read from HEAD, one key,
+`gate_checks: [<check name>, …]`) names them; with no file, the base branch's
+required status checks (`pr_required_checks`) are the gates; with neither, `ci`
+is refused, naming both ways to declare one. This repo ships `.fr/ci.yaml` with
+`gate_checks: [ci-ok]` (`ci.yml`'s aggregator, which needs every test job). A
+gate check whose conclusion is `skipped` is a failure here, not a pass.
 
-`ci` is refused when `fr services` reports `ci none`, and on a forge other than
-GitHub until its adapter lists commit checks (glab and tea raise
-`UnsupportedForgeOperation`). The executor's brief says: commit, push, return
-`tests_log: ci`; the orchestrator resolves once CI finishes (a PR-activity event
-wakes it). CI only runs on a pull request, so a run using `ci` evidence opens its
-draft PR when `implement` starts rather than at `deliver`; fr-goal §8 says so.
-The local-log path is unchanged.
+**Reading checks: `GhClient.commit_checks(repo, sha)`.** A new protocol method
+returning `{name, workflow, status, conclusion, url}` per check: check runs
+from `GET commits/{sha}/check-runs?filter=latest` (workflow from the run's check
+suite, as §A's `workflowName`), commit statuses from `GET commits/{sha}/status`
+(latest per context). Latest per (workflow, name), so a failed attempt re-run
+green counts as green. `RealGhRestClient` and `RealGhClient` both implement it
+with those REST routes (`gh api` works on either backend); the fake client
+serves fixtures; glab and tea raise `UnsupportedForgeOperation`.
+
+`fr.run.ci_evidence.verify_ci(repo_root, client)`, in order, every refusal
+before any write:
+
+1. `fr services` CI is not `none` and the forge is GitHub; else refuse.
+2. HEAD is the remote branch's head (`git ls-remote`, through `fr.git`) and
+   `dirty_code_paths` is empty; else refuse naming what is unpushed or dirty.
+3. The CI sha: walk HEAD's first-parent ancestors (at most 50) while
+   `code_tree(<rev>) == code_tree(HEAD)`; the first one CI reported gate checks
+   on is the CI sha. fr's own bookkeeping commits change no code path
+   (`code_tree` excludes fr's artifact trees), so a `chore(fr)` commit on top of
+   a tested sha needs no new CI run.
+4. An open PR exists for the branch and `pr_view`'s `mergeable` is not
+   `CONFLICTING`; else refuse with that reason (GitHub runs no `pull_request`
+   workflow for a conflicting PR, so waiting would never end).
+5. Every gate check on the CI sha is completed with `success`; pending →
+   refuse with exit **75** and "CI has not finished for <sha>; resolve again
+   when it does" (the cursor unmoved); failed, cancelled, skipped or absent →
+   exit 2 naming each and its URL.
+6. Witness `ci:<ci sha>+<base sha>;tree=<code_tree(HEAD)>` — the base sha is
+   the PR's base head at the time of the gate's run (from the check suite's
+   `pull_requests[].base.sha`). `_latest_tests_witness` and `tests: reuse` read
+   the `;tree=` part unchanged.
+
+The token is recognised before the phase-log branch of the evidence dispatch
+(`run_cmd`'s `"tests" in offered and phase is not None` comes first today and
+would read `ci` as a file path). On a non-`done` resolve, `tests: ci` is
+accepted without reading CI and recorded as the bare claim `ci`: a failed phase
+vouches for no tree, as a failed local-log resolve already does.
+
+**Waiting.** Exit 75 is not an idle point: the unit stays held. In a cloud
+session the PR-activity subscription wakes the orchestrator when the run ends.
+Everywhere else fr-goal tells the orchestrator to wait with a bounded loop
+(re-run the resolve every 2 minutes, at most 45 minutes, then report the unit
+blocked with the gate's URL).
+
+**Prose this changes,** all in this PR: fr-goal §5 (what fr verifies for an
+executor's evidence, and the `ci` alternative), §6 (the draft PR is opened when
+`implement` starts for a run that uses `ci`, an exception to "never open the PR"
+that names this requirement), §8 (`deliver` may say `tests: ci`); the
+fr-phase-executor agent (commit, push, return `tests_log: ci` instead of
+running the full suite, when the brief says so), with its OpenCode and Hermes
+mirrors, shipping to other repos through the `agents` kind's re-render (R19);
+and the `01-fr-goal` explainer if it describes local-only test evidence
+(`.claude/rules/explainers-currency.md`). The local-log path is unchanged.
 
 ## Test Plan
 
@@ -516,10 +561,17 @@ The local-log path is unchanged.
     migration re-render both and every hop of the chain is asserted; the wheel's
     copy matches `plugins/super-fr/agents/` (tripwire) (R19).
 19. Unit: `tests: ci` on an implement-phase and a `deliver` record — accepted
-    with every check on HEAD's sha green, recording `ci:<sha>;tree=<tree>`, which
-    `tests: reuse` then accepts; refused when HEAD is unpushed, a code path is
-    dirty, no check exists, one is still running, one failed (named), or `fr
-    services` says `ci none`; a local log is still accepted (R22).
+    when the gate checks (`.fr/ci.yaml`, else required checks) are green on the
+    CI sha, recording `ci:<ci sha>+<base sha>;tree=<tree>`, which `tests: reuse`
+    then accepts; accepted through a `chore(fr)` commit on top of the tested sha
+    (same code tree) without a new run; a non-gate check failing is ignored; a
+    gate re-run green after a failed attempt counts as green; refused (exit 75,
+    cursor unmoved) while a gate is pending; refused (exit 2) when HEAD is
+    unpushed, a code path is dirty, no PR is open, the PR conflicts, a gate
+    failed, was skipped or is absent, no gates are declared, `fr services` says
+    `ci none`, or the forge is not GitHub; recognised before the phase-log
+    branch; on a `failed` resolve recorded as the bare claim without a forge
+    call; a local log is still accepted (R22).
 
 ## Verification
 
