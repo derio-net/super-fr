@@ -1,0 +1,34 @@
+schema_version: 8
+run: 2026-10-07-feat-cloud-triage
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+- {kind: finding, id: p1-r1, phase: 1, review_scope: in, title: "edit_issue_labels removal DELETEs a label not on the issue -> 404 GhError; GraphQL path is idempotent", body: "real_ghrestclient.py ~737; callers tracker/github.py:110-112 and triage/claim_writes.py:61 break under rest."}
+- {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "edit_issue_state sends reason.lower() verbatim; 'not planned' -> 422", body: "real_ghrestclient.py ~746; undispatch_cmd.py:120."}
+- {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "_closing_refs lacks a leading word boundary and a host check; code fences not excluded", body: "real_ghrestclient.py:47-55: 'prefixes #3', 'unresolved #5' and non-GitHub issue URLs became closing refs; refs hard-coded to github.com."}
+- {kind: finding, id: p1-r4, phase: 1, review_scope: in, title: "list_linked_prs fetches pulls/{n} for every cross-referencing PR", body: "real_ghrestclient.py:470-482: the timeline carries title/body/state; extra calls, and a 403 on a non-closing cross-repo mention failed the call."}
+- {kind: finding, id: p1-r5, phase: 1, review_scope: in, title: "repo_merge_methods always default None, so choose_method refuses merge/drive on multi-method repos under rest", body: "real_ghrestclient.py:663-672; triage/batch_merge.py:157-164; super-fr allows all three."}
+- {kind: finding, id: p1-r6, phase: 1, review_scope: in, title: "spec §A not amended for the gaps phase 1 found", body: "required-checks 403 route still named; CCR ready, viewerDefaultMergeMethod, author.name, REVIEW_REQUIRED, node ids, org repo listing unlisted though R2 requires each."}
+- {kind: finding, id: p1-r7, phase: 1, review_scope: in, title: "the shell-execution test passed edit-by-branch without its head lookup running; branch not URL-encoded", body: "test_github_rest_no_graphql.py:213-226; hostclient.py:205-206."}
+- {kind: finding, id: p1-r8, phase: 1, review_scope: in, title: "pr_required_checks matching logic untested", body: "only the nothing-required case was exercised (test_real_ghrestclient.py:174-181)."}
+- {kind: finding, id: p1-r9, phase: 1, review_scope: in, title: "acceptance row cloud-triage-github-rest not updated with phase 1's unit evidence", body: "matrix.yaml:5045-5046 levels {}."}
+- {kind: finding, id: p1-r10, phase: 1, review_scope: in, title: "_project silently yields None for fields REST records lack", body: "real_ghrestclient.py:325-326; gh --json fails on an unknown field."}
+- {kind: finding, id: p1-r11, phase: 1, review_scope: out, title: "tracker/github.py:114 passes state='closed' in lower case; both clients accept only OPEN/CLOSED", body: "Found by the fix agent while fixing p1-r1. Pre-existing on main (RealGhClient raises ValueError the same way), so moving a tracker item to done fails on either backend; not caused by this change."}
+- {kind: review, id: p1-review, phase: 1, title: "phase 1 code review: 10 findings in scope, 1 out", body: "Dispatched reviewer (superpowers:requesting-code-review discipline) over 2cd15337..d9a76e7b against spec R1-R3/§A and plan 01.yaml; read-only, targeted checks only (CI ran the full suite green on d9a76e7b). Raised p1-r1..p1-r10, all in scope. Received (superpowers:receiving-code-review): each verified against the code; p1-r6 fixed in the spec (0686d3ff), p1-r9 by fr acceptance set-status (ae2e5856), the rest by a fix agent with a failing test first (217df288, 6d903f73, 18e87557, 628bf447, 2e539e87, 2257ee33, 4e1571d9, ec1e980a); 2115 targeted tests pass, ruff and mypy clean. p1-r11 surfaced while fixing, out of scope. p1-r5's new .fr/triage.yaml merge_method key is documented in the fr-triage skill by phase 7 (R21)."}
+resolves:
+- {id: p1-r1, state: fixed, body: "217df288: a 'Label does not exist' 404 is success, any other 404 raises; captured fixtures; test_removing_a_label_the_issue_does_not_carry_is_success."}
+- {id: p1-r2, state: fixed, body: "217df288: reasons mapped to completed/not_planned/reopened, unknown refused before any call; test_close_reason_is_sent_in_githubs_spelling."}
+- {id: p1-r3, state: fixed, body: "6d903f73: word boundary, fenced/inline code skipped (fr.record.pr_body's reader), issue URLs on the repo's own host only, refs built on that host; test_a_non_closing_mention_is_not_a_ref."}
+- {id: p1-r4, state: fixed, body: "18e87557: timeline fields used; pulls/{n} fetched only for closing PRs; test_list_linked_prs_fetches_pulls_only_for_closing_prs."}
+- {id: p1-r5, state: fixed, body: "628bf447 plus spec §A (0686d3ff): optional merge_method in .fr/triage.yaml, used when the forge names no default; refusal names the key; facts.json schema 7 -> 8 with 3-7 still read."}
+- {id: p1-r6, state: fixed, body: "0686d3ff: §A lists every gap and the branches/{base} + rules/branches/{base} required-checks routes, plus the closing-ref, label-removal and state_reason rules."}
+- {id: p1-r7, state: fixed, body: "2e539e87: the shell test uses a captured head lookup and asserts the PATCH went to pulls/852; branch URL-encoded."}
+- {id: p1-r8, state: fixed, body: "2257ee33: test_pr_required_checks_matches_runs_by_name_and_statuses_by_context (captured JSON with required lists filled in, said in its docstring)."}
+- {id: p1-r9, state: fixed, body: "ae2e5856: three unit level refs added; status stays not-implemented until Test Plan 16's client-live walk."}
+- {id: p1-r10, state: fixed, body: "4e1571d9: _project raises GhError on an unknown field; every field set fr requests is tested."}
+- {id: p1-r11, state: out-of-scope, body: "Pre-existing on main: tracker/github.py:114's lower-case state fails on both backends; this change did not cause it and does not touch that path."}
+evidence:
+  review: p1-review
+  reviewer: a299ca21650e5d4db
+  model: claude-opus-5-5
