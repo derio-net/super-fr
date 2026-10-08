@@ -690,3 +690,143 @@ lease.py is a handful of pure functions over one file plus acquire's write-then-
 ### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
 
 the adapter is two small frozen dataclasses; the runner choice reuses the existing _with_runner/--to path (runner_for returns the --to the host already had), so no selection code was duplicated
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · a cloud-refused batch still took an in-flight slot in drive_pass (phase 4)
+
+batch_drive.py:1118; triage_batch_cmd.py:3162.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · 'wake within the interval only renews' compared strictly; minute-truncated wakes halved the drive rate (phase 4)
+
+triage_drive_cmd.py:254-258.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · a host drive with a state_repo but state in no clone ran with no lease (phase 4)
+
+triage_batch_cmd.py:4068-4078.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · the lease was not released on Ctrl-C/SIGTERM (phase 4)
+
+triage_batch_cmd.py:4186-4192.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · drive record recorded with no lease, ignored expiry, took no drive.lock (phase 4)
+
+triage_drive_cmd.py:337.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · phase 5's plan never named the Mailbox contract; an unloadable claude-cloud was a warning with an empty outbox (phase 4)
+
+triage_drive_cmd.py:288-306; 05.yaml.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · spec §E still said drive pass --scope S (phase 4)
+
+spec line 277.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r8 · finding [open] (reviewer: in scope) · the scenario's second driver was refused by the workspace-local lease.yaml, not through the ref (phase 4)
+
+tests/scenarios/cloud-triage-driver-lease.sh:70.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r9 · finding [open] (reviewer: in scope) · drive pass handed out commands without --dir/--workspace (phase 4)
+
+triage_drive_cmd.py:282.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-r10 · finding [open] (reviewer: in scope) · a cloud driver closed out a host-dispatched batch through herdr (phase 4)
+
+triage_batch_cmd.py:3096.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=out -->
+### p4-r11 · finding [open] (reviewer: out of scope) · scope id = sha256(name, host id), so drivers with different host ids get different refs and the lease cannot arbitrate them (phase 4)
+
+scope_config.py:80-85; a spec/phase 3 design property.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=out -->
+### p4-r12 · finding [open] (reviewer: out of scope) · tests/conftest.py lent the operator's real ~/.gitconfig as GIT_CONFIG_GLOBAL (phase 4)
+
+tests/conftest.py:120, from phase 3's b9408eec; filed in scope as p4-o1.
+
+<!-- fr:journal kind=finding scope=plan id=p4-o1 created=2026-10-08T16:55:15+00:00 phase=4 state=open review_scope=in -->
+### p4-o1 · finding [open] (reviewer: in scope) · the suite's HOME sandbox let tests write the operator's global git config (this PR's phase 3 defect; it happened in this phase) (phase 4)
+
+Raised by the orchestrator from p4-r12 and the executor's report: a scenario draft wrote url.insteadOf entries into /root/.gitconfig through GIT_CONFIG_GLOBAL. This PR introduced the fixture (b9408eec), so it is this change's defect, filed in scope rather than left as p4-r12's out-of-scope note.
+
+<!-- fr:journal kind=finding scope=plan id=p4-o2 created=2026-10-08T16:55:15+00:00 phase=5 state=open review_scope=in -->
+### p4-o2 · finding [open] (reviewer: in scope) · the cloud driver still loads the foreign runner (herdr) for a close-out's preflight/existing_dispatches check (phase 5)
+
+Found by the p4 fix agent while fixing p4-r10 (8fe0fd02): _close_out now returns before any dispatch for a batch whose runner the driver lacks, but the foreign runner is still loaded and asked preflight/existing_dispatches first, so a cloud environment without herdr hits that load. Belongs to phase 5 (the claude-cloud runner and its environment): the cloud driver must never load a runner it does not carry.
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-10-08T16:55:15+00:00 phase=4 -->
+### p4-review · review · phase 4 code review: 10 findings in scope, 2 out (phase 4)
+
+Dispatched reviewer (superpowers:requesting-code-review discipline) over ae78e6fb..1ae604aa (excluding the orchestrator's ce8bd6a0 and e7024b4d) against spec R9-R13/§B/§D/§E/Test Plan 8, 9, 14 and plan 04.yaml; 33 targeted tests run. It judged the three departures: --repo/--org acceptable (spec amended, p4-r7), the Mailbox seam acceptable with p4-r6, the host lease only with a state ref acceptable except outside a clone (p4-r3). Received (superpowers:receiving-code-review): each verified; the spec and plan decided r1-r7, r9, r10 (cecf1f9e); a fix agent implemented them and p4-o1 with a failing test first (d6c7a752, a13e9c03, 567c31bc, 8fe0fd02, 820127cf); 2047 targeted tests and 4 cloud-triage scenarios pass; ruff and mypy clean. p4-r11 is out of scope by design (decision d1: the cloud driver is its own scope beside the host's, kept apart by per-issue claims). p4-o2 is filed against phase 5.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: a cloud-refused batch still took an in-flight slot in drive_pass (phase 4)
+
+d6c7a752: Snapshot.refused; the planner emits held before the in-flight cap; test_a_batch_the_driver_refuses_is_a_hold_that_takes_no_in_flight_slot.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: 'wake within the interval only renews' compared strictly; minute-truncated wakes halved the drive rate (phase 4)
+
+a13e9c03: renew only under half an interval; test_only_a_wake_within_half_an_interval_of_the_last_pass_only_renews.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: a host drive with a state_repo but state in no clone ran with no lease (phase 4)
+
+567c31bc: refuses with exit 2 naming --workspace; test_a_host_drive_whose_state_is_in_no_clone_refuses_naming_workspace.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: the lease was not released on Ctrl-C/SIGTERM (phase 4)
+
+567c31bc: SIGTERM raises KeyboardInterrupt for the loop; the lease is released and the handler restored; test_sigterm_releases_the_host_drivers_lease_and_restores_the_handler.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: drive record recorded with no lease, ignored expiry, took no drive.lock (phase 4)
+
+a13e9c03: record requires this driver's live lease and runs under drive_lock; test_record_refuses_without_this_drivers_live_lease.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: phase 5's plan never named the Mailbox contract; an unloadable claude-cloud was a warning with an empty outbox (phase 4)
+
+cecf1f9e (05.yaml names the Mailbox contract) + a13e9c03: a pass refuses when the cloud runner is unloadable or keeps no Mailbox.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: spec §E still said drive pass --scope S (phase 4)
+
+cecf1f9e: §E shows drive pass --repo/--org and its options.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r8 -->
+### p4-r8-resolved · finding [fixed] · resolves p4-r8: the scenario's second driver was refused by the workspace-local lease.yaml, not through the ref (phase 4)
+
+a13e9c03: workspace C restored from the ref as host: with the same host id is refused through the ref's lease; the existing check kept.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r9 -->
+### p4-r9-resolved · finding [fixed] · resolves p4-r9: drive pass handed out commands without --dir/--workspace (phase 4)
+
+a13e9c03: triage_kanban_cmd.scope_args with --dir/--workspace; test_the_pass_hands_out_commands_with_the_full_scope_arguments.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-r10 -->
+### p4-r10-resolved · finding [fixed] · resolves p4-r10: a cloud driver closed out a host-dispatched batch through herdr (phase 4)
+
+8fe0fd02: a close-out of a batch another driver's runner owns is reported and left to it before any fast-forward, post_merge or dispatch; the remaining foreign-runner load is p4-o2, filed against phase 5.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=open resolves=p4-r11 out_of_scope=true -->
+### p4-r11-resolved · finding [out-of-scope] · resolves p4-r11: scope id = sha256(name, host id), so drivers with different host ids get different refs and the lease cannot arbitrate them (phase 4)
+
+By design, not caused by phase 4: decision d1 makes the cloud driver its own scope beside the host one, kept apart by per-issue claims (spec 2026-10-06-triage-claims); the lease guards one scope, as R9 states.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=open resolves=p4-r12 out_of_scope=true -->
+### p4-r12-resolved · finding [out-of-scope] · resolves p4-r12: tests/conftest.py lent the operator's real ~/.gitconfig as GIT_CONFIG_GLOBAL (phase 4)
+
+Not caused by phase 4 (from phase 3's b9408eec); filed in scope as p4-o1 and fixed there.
+
+<!-- fr:journal kind=finding scope=plan id=p4-o1-resolved created=2026-10-08T16:55:15+00:00 phase=4 state=fixed resolves=p4-o1 -->
+### p4-o1-resolved · finding [fixed] · resolves p4-o1: the suite's HOME sandbox let tests write the operator's global git config (this PR's phase 3 defect; it happened in this phase) (phase 4)
+
+820127cf: a per-test identity-only .gitconfig; GIT_CONFIG_GLOBAL never names the operator's file; test_a_global_git_config_write_never_reaches_the_operators_file.

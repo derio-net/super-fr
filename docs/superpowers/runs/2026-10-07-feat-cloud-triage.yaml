@@ -175,13 +175,20 @@ steps:
           tests: ci:ef85d153a065765c1e72f7a9d0e03d3de2fd2534+18fa21e18b67dd02f33d4378ae71d09298323183;tree=7a8a79062901faff437795126d52adeb9a9b6e01a513f30139dafb9e1299bea3
           visual: none
       phase/4/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-08T16:36:58+00:00'
           agent: ab807940809d021d4
           harness: claude-code
           model: claude-opus-5-5
           session: 7bff76e4-8464-5368-a29d-b7e74900d9cd
+          returned: '2026-10-08T16:55:16+00:00'
+          outcome: done
+        evidence:
+          review: p4-review
+          reviewer: ab807940809d021d4
+          visual: none
+          findings: p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7,p4-r8,p4-r9,p4-r10,p4-r11,p4-r12,p4-o1
   journal-check:
     state: pending
   deliver:
