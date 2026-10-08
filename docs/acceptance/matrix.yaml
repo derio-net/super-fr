@@ -5039,9 +5039,9 @@ rows:
       judge, render, batch, merge and drive a backlog by setting one option, and gets
       the same records as with GraphQL apart from a listed set of fields
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_github_rest_contract.py
@@ -5073,10 +5073,10 @@ rows:
       for several repos or an org, in a state repo the operator chose with the privacy
       trade-off spelled out
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_triage_state_workspace.py#test_state_lives_in_the_workspace_and_is_excluded_through_the_common_dir
@@ -5109,7 +5109,7 @@ rows:
       it to a triage, a batch or a wave, or pushing or exporting state that contains
       it, is refused with the issue and both repos named
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_triage_privacy.py#test_leak_risk_is_a_private_key_into_a_public_state_repo
@@ -5137,7 +5137,7 @@ rows:
       a second is refused, and an abandoned lease is reported and taken over only by
       the operator
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_triage_lease.py#test_another_holder_is_refused_while_the_lease_is_live
@@ -5167,16 +5167,16 @@ rows:
       blocked session waits for, hands work back, merges and closes out, keeps going
       across container restarts, and makes the same decisions the host driver would
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R11
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R12
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R14
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R15
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R18
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R19
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R20
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R21
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R19
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R21
     levels:
       unit:
       - super-fr:tests/unit/test_claude_cloud_mailbox.py#test_the_pass_emits_the_real_runners_outbox_and_replays_it_until_recorded
@@ -5220,8 +5220,8 @@ rows:
       makes them incompatible, the driver moves its work to a fresh session on the same
       branch once, and otherwise leaves it alone
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R16
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R17
     levels:
       unit:
       - super-fr:tests/unit/test_migration_run_fr_version.py#test_a_v9_cursor_is_stamped_ten_and_its_body_is_untouched
@@ -5249,7 +5249,7 @@ rows:
       reviewer and phase-executor agents itself, so they are dispatchable from a session's
       first turn, and a release that changes them fails the repo's CI until it is migrated
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R19
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R19
     levels:
       unit:
       - super-fr:tests/unit/test_agents_artifact.py#test_write_agents_writes_both_stamped_files
@@ -5277,7 +5277,7 @@ rows:
       a new environment) once, with the script to paste, and fr cloud doctor lists what
       is missing
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R23
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R23
     levels:
       unit:
       - super-fr:tests/unit/test_cloud_remedy.py#test_detect_is_true_only_with_claude_code_remote_true
@@ -5464,7 +5464,7 @@ rows:
       delivery with the forge's green CI on the exact pushed commit, and fr refuses
       CI evidence that does not cover HEAD's code
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R22
+    - super-fr:docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md#R22
     levels:
       unit:
       - super-fr:tests/unit/test_run_ci_evidence.py#test_a_green_gate_on_head_is_the_witness

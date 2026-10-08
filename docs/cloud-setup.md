@@ -2,8 +2,11 @@
 
 A Claude Code cloud session runs in a container prepared by its **environment's setup
 script**. Every new session runs that script before its first turn; a session that is
-already running does not. fr relies on the script for four things, and on the repo for a
-fifth (spec `docs/superpowers/specs/2026-10-07-cloud-triage-design.md`, R19-R23, §H).
+already running does not. A new session can also be a pre-warmed spare whose script ran
+before the latest release, so its `fr` may be older than the release (measured by the
+2026-10-08 live walk, derio-net/super-fr#1098): check `fr --version` first. fr relies on
+the script for four things, and on the repo for a fifth (spec
+`docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md`, R19-R23, §H).
 
 | Prerequisite | Why | Fixed by |
 |---|---|---|

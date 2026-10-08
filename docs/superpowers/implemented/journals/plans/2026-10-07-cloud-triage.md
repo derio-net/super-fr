@@ -1407,3 +1407,23 @@ Same defect as p7-r1, fixed in 2080e8dc.
 ### p7-r8-resolved · finding [out-of-scope] · resolves p7-r8: the org agent-worktree allowlist names only super-fr:fr-phase-executor, not the bare project-agent name fr init now writes (phase 7)
 
 Not caused by a path fr-goal takes; recorded as a follow-up in the PR body.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r11-resolved-2 created=2026-10-08T23:25:08+00:00 state=open resolves=p1-r11 tracked_by=https://github.com/derio-net/super-fr/issues/1102 -->
+### p1-r11-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1102] · resolves p1-r11: tracker/github.py:114 passes state='closed' in lower case; both clients accept only OPEN/CLOSED
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1102.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11-resolved-2 created=2026-10-08T23:25:08+00:00 state=open resolves=p4-r11 tracked_by=https://github.com/derio-net/super-fr/issues/1103 -->
+### p4-r11-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1103] · resolves p4-r11: scope id = sha256(name, host id), so drivers with different host ids get different refs and the lease cannot arbitrate them
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1103.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12-resolved-2 created=2026-10-08T23:25:08+00:00 state=open resolves=p4-r12 tracked_by=https://github.com/derio-net/super-fr/issues/1104 -->
+### p4-r12-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1104] · resolves p4-r12: tests/conftest.py lent the operator's real ~/.gitconfig as GIT_CONFIG_GLOBAL
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1104.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8-resolved-2 created=2026-10-08T23:25:08+00:00 state=open resolves=p7-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1105 -->
+### p7-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1105] · resolves p7-r8: the org agent-worktree allowlist names only super-fr:fr-phase-executor, not the bare project-agent name fr init now writes
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1105.
