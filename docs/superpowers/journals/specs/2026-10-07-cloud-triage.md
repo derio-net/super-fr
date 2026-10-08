@@ -586,3 +586,8 @@ Its own reviewable ask: where a scope's state lives and how it survives a contai
 ### phase-split-2026-10-07-cloud-triage-p3 · decision · ask: the lease and the driver adapter (R9-R13)
 
 Its own ask: one driver per scope and the pass/record split of the drive loop.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p4 created=2026-10-08T12:17:55+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p4 · decision · ask: the claude-cloud runner (R14-R15)
+
+Its own ask and its own package: the mailbox runner and the status mapping.
