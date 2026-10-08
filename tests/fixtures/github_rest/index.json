@@ -207,6 +207,9 @@
   "repos/derio-net/super-fr/pulls?state=open&per_page=100&page=1": {
     "file": "repo_pulls-state-open-per_page-100-page-1.json"
   },
+  "repos/derio-net/super-fr/releases/latest": {
+    "file": "repo_releases_latest.json"
+  },
   "repos/derio-net/super-fr/rules/branches/main": {
     "file": "repo_rules_branches_main.json"
   },

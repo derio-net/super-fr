@@ -564,6 +564,19 @@ class RealGhClient:
         return _gh.read_file_at_ref(repo=repo, path=path, ref=ref)
 
     @_hosted
+    def latest_release(self, repo: str) -> str | None:
+        # REST under either api: GraphQL's `latestRelease` would need a query for one field.
+        try:
+            raw = json.loads(_gh._run_gh(["api", f"repos/{repo}/releases/latest"]))
+        except _gh.GhError as exc:
+            text = f"{exc} {getattr(exc, 'stderr', '')}".lower()
+            if "http 404" in text or "not found" in text:
+                return None
+            raise
+        tag = raw.get("tag_name") if isinstance(raw, dict) else None
+        return str(tag) if isinstance(tag, str) and tag else None
+
+    @_hosted
     def viewer_login(self) -> str:
         return _gh.viewer_login()
 

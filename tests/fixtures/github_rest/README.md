@@ -112,3 +112,8 @@ open-PR lookup `GhClient.open_pr_for_head` makes (PR 1088, no file list).
 No captured commit in this repo carries a commit status (every `status.json`
 has `"statuses": []`): the status-context tests derive their entries from the
 captured envelope and say so.
+
+Captured for phase 6 (version drift, R17/R18), in the root index:
+`releases/latest` (`repo_releases_latest.json`), the route
+`GhClient.latest_release` reads: release `v5.17.1`, captured 2026-10-08 with
+`gh api` through a sandboxed session's egress proxy, byte for byte.

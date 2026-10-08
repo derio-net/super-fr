@@ -175,6 +175,25 @@ def lease_take_command(
     )
 
 
+def latest_fr_release() -> str | None:
+    """The latest fr release's tag, through the forge client's releases route (R17, R18);
+    None, with a warning, when it cannot be read: drift is then not checked this pass."""
+    from fr.commands import triage_batch_cmd as batch
+    from fr.triage.drift import FR_RELEASE_REPO
+
+    try:
+        client = batch.make_client(f"https://github.com/{FR_RELEASE_REPO}")
+        return client.latest_release(FR_RELEASE_REPO)
+    except Exception as exc:  # noqa: BLE001 - drift is upkeep; the pass goes on without it
+        err_console.print(
+            f"[yellow]warning:[/yellow] the latest fr release could not be read "
+            f"({escape(str(exc) or type(exc).__name__)}); version drift is not checked "
+            "this pass",
+            soft_wrap=True,
+        )
+        return None
+
+
 def _read_json(path: Path | None, what: str) -> Any:
     if path is None or not path.exists():
         return None
@@ -293,6 +312,7 @@ def drive_pass_command(
     if not isinstance(runner, Mailbox):
         _fail(f"runner `{CLOUD_RUNNER}` keeps no mailbox, so no session request could be "
               "written; nothing done")  # fmt: skip
+    driver.fr_release = latest_fr_release()  # R17: what each run's major is held to
     try:  # drive.lock: the fast same-host check, before the lease (§D)
         with batch.drive_lock(triage_cmd.drive_lock_dir(scope, dir_override)):
             acted, summary, _ = batch.one_pass(driver)

@@ -918,6 +918,16 @@ class RealGhRestClient:
         endpoint = f"repos/{repo}/contents/{urllib.parse.quote(path, safe='/')}?ref={_q(ref)}"
         return str(self._api(endpoint, accept=RAW_ACCEPT + "+json"))
 
+    def latest_release(self, repo: str) -> str | None:
+        try:
+            raw = self._api(f"repos/{repo}/releases/latest")
+        except GhError as exc:
+            if _is_404(exc):
+                return None
+            raise
+        tag = raw.get("tag_name") if isinstance(raw, dict) else None
+        return str(tag) if isinstance(tag, str) and tag else None
+
     def closing_ref(self, repo: str, number: int) -> str:
         return f"Closes {repo}#{number}"
 

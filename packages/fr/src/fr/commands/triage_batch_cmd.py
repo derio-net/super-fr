@@ -48,7 +48,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 from urllib.parse import urlparse
 
@@ -2325,6 +2325,9 @@ class _Driver:
         self.publish_failures: set[str] = set()  # R14: one warning per distinct cause
         self.held_by: tuple[tuple[str, tuple[str, ...]], ...] = ()  # last pass: waiting on others
         self._claim_done = SyncResult()
+        # The latest fr release, read by the cloud driver's pass before it runs; None
+        # (the host loop, or a release that could not be read) checks no drift (R17).
+        self.fr_release: str | None = None
 
     # -------------------------------------------------------------- reaching out
 
@@ -3202,6 +3205,7 @@ class _Driver:
                     _say(action_line(action, outcome))
             if self.yes:
                 self._record_released(facts)
+                self._drift(facts, snap)
             summary = settle(
                 plan.summary, unlanded=len(self._unlanded), held=self._held, queued=self._queued
             )
@@ -3407,6 +3411,91 @@ class _Driver:
         # Never `acted`: a claim write moves no batch, so it must not make a pass that
         # does nothing else read as progress (exit 3, "nothing to do", still holds).
         return ("" if done == "none" else done), False
+
+    def _drift(self, facts: Facts, snap: Snapshot) -> None:
+        """R17, §G: read each live batch's run cursor from its PR head and ask its runner
+        to re-home a run recorded under another fr major, once per (run, release) and at
+        the session's idle; a run with no recorded version is reported once. Only runners
+        this driver carries that can re-home are asked; anything that cannot be read is
+        skipped this pass, never guessed."""
+        from fr_dispatch.protocols import SessionInspector
+
+        from fr.triage import drift
+
+        release = self.fr_release
+        if release is None:
+            return
+        try:
+            ledger = drift.load_ledger(self.target)
+        except TriageError as exc:
+            self._report_once(f"drift\0{exc}", f"version drift not checked: {exc}")
+            return
+        runs: list[drift.RunVersion] = []
+        runners: dict[str, Any] = {}
+        for batch in snap.batches:
+            repo, last = snap.repos.get(batch.id), last_dispatch(batch)
+            if not repo or last is None or snap.stages.get(batch.id) not in LIVE_STAGES:
+                continue
+            runner = self._try_runner(last.runner, "its runs are not checked for version drift")
+            if runner is None or not callable(getattr(runner, "rehome", None)):
+                continue
+            pr = batch_pr(batch, facts)
+            path = drift.cursor_path(pr.files) if pr is not None and pr.state == "OPEN" else None
+            if pr is None or path is None:
+                continue  # no cursor on the branch yet
+            item = _probe(repo, batch, self._launch(facts, batch, repo))
+            try:
+                text = self.client(facts, repo).read_file_at_ref(
+                    repo, path, pr.head_oid or pr.head_ref
+                )
+                status = (
+                    runner.session_statuses([item]).get(item.id, "unknown")
+                    if isinstance(runner, SessionInspector)
+                    else "unknown"
+                )
+            except Exception as exc:  # noqa: BLE001 - retried next pass, never the drive's end
+                self._report_once(
+                    f"drift\0{batch.id}\0{exc}",
+                    f"batch {batch.id}: its run cursor could not be read ({exc}); version "
+                    "drift is checked again next pass",
+                )
+                continue
+            run, version = drift.read_cursor(text)
+            runs.append(
+                drift.RunVersion(
+                    batch=batch.id, item=item.id, branch=last.branch,
+                    run=run or PurePosixPath(path).stem, fr_version=version, status=status,
+                )
+            )  # fmt: skip
+            runners[item.id] = (runner, item)
+        plan = drift.plan_drift(runs, release, ledger)
+        asked: list[drift.Rehome] = []
+        for rehome in plan.rehomes:
+            runner, item = runners[rehome.item]
+            try:
+                handle = runner.rehome(item, rehome.brief)
+            except Exception as exc:  # noqa: BLE001 - asked again next pass
+                self._report_once(
+                    f"rehome\0{rehome.item}\0{exc}",
+                    f"re-homing run {rehome.run} failed ({exc}); asked again next pass",
+                )
+                continue
+            asked.append(rehome)
+            _say(
+                f"rehome {rehome.batch}: run {rehome.run} started on fr {rehome.recorded}, the "
+                f"latest release is {release}: asked to re-home its session ({handle})"
+            )
+        for unknown in plan.unknown:
+            _say(
+                f"drift {unknown.batch}: run {unknown.run} has no recorded fr version; "
+                "reported, never re-homed"
+            )
+        if asked or plan.unknown:
+            ledger = ledger.with_rehomes(asked, at=_now().isoformat()).with_reported(plan.unknown)
+            try:
+                drift.save_ledger(self.target, ledger)
+            except OSError as exc:
+                self._report_once(f"ledger\0{exc}", f"{drift.REHOMES_FILE} not written: {exc}")
 
     def _record_released(self, facts: Facts) -> None:
         """One `claims_released` event per batch released this pass, after its releases,

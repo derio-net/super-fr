@@ -326,6 +326,12 @@ class GhClient(Protocol):
         """Raw text of *path* at *ref*; raises the backend's error when absent."""
         ...
 
+    def latest_release(self, repo: str) -> str | None:
+        """The tag of *repo*'s latest published release (`GET repos/{repo}/releases/latest`),
+        None when it has none (spec 2026-10-07-cloud-triage R17, R18: the fr version every
+        session should run). Raises the backend's error on any other failure."""
+        ...
+
     def viewer_login(self) -> str:
         """The login the forge CLI is authenticated as."""
         ...
@@ -453,6 +459,9 @@ class UnsupportedBatchOps:
 
     def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
         raise self._unsupported("read_file_at_ref")
+
+    def latest_release(self, repo: str) -> str | None:
+        raise self._unsupported("latest_release")
 
     def viewer_login(self) -> str:
         raise self._unsupported("viewer_login")
