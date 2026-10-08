@@ -751,3 +751,8 @@ check: consistency. evidence: §I; fr-goal SKILL.md:106 idle guard.
 ### s36-resolved · finding [fixed] · resolves s36: Waiting for CI has a wake-up only in the cloud
 
 §I Waiting: pending exits 75, not an idle point; fr-goal tells a host orchestrator to re-run the resolve every 2 minutes for at most 45, then report blocked.
+
+<!-- fr:journal kind=finding scope=spec id=s37 created=2026-10-08T13:54:23+00:00 state=open review_scope=in -->
+### s37 · finding [open] (reviewer: in scope) · Plugin prose that ci contradicts goes beyond fr-goal §8
+
+check: consistency. evidence: fr-goal SKILL.md:88,:103; fr-phase-executor.md:125,133-142.
