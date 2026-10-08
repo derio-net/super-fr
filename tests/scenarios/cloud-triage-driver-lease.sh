@@ -24,8 +24,9 @@ scope=derio-net--super-fr
 world="$(mktemp -d)"
 trap 'rm -rf "$world"' EXIT
 export HOME="$world/home" FAKE_GH_LOG="$world/gh.log"
-# git's global config is this world's own file: the test suite lends the operator's
-# (GIT_CONFIG_GLOBAL) to its children, and the insteadOf below must never reach it.
+# git's global config is this world's own file: whatever GIT_CONFIG_GLOBAL the caller
+# set (the suite's sandbox, or an operator's own walk), the insteadOf below must never
+# reach it.
 export GIT_CONFIG_GLOBAL="$world/gitconfig"
 mkdir -p "$HOME"
 git init -q --bare "$world/state.git" || fail "bare remote"

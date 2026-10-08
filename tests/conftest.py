@@ -1,6 +1,7 @@
 """Shared pytest fixtures."""
 
 import os
+import subprocess
 import tomllib
 from collections.abc import Iterator, Mapping
 from pathlib import Path
@@ -12,6 +13,33 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 OPERATOR_HOME = Path(os.environ.get("HOME") or Path.home())
 """The home the suite started with: the operator's own, which no test may write
 (`_home_off_the_operators_machine`, review p3-r6)."""
+
+OPERATOR_GITCONFIG = Path(os.environ.get("GIT_CONFIG_GLOBAL") or OPERATOR_HOME / ".gitconfig")
+"""git's global config as the suite found it: the operator's, never lent to a test (p4-o1)."""
+
+
+def _operator_git_identity() -> dict[str, str]:
+    """`user.name`/`user.email` from the operator's global git config, read ONCE, at
+    session start: the only thing a test's git borrows from it (p4-o1). A key that is
+    unset (or a git that cannot say) is left out."""
+    found: dict[str, str] = {}
+    for key in ("user.name", "user.email"):
+        try:
+            got = subprocess.run(
+                ["git", "config", "--global", "--get", key],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if got.returncode == 0 and got.stdout.strip():
+            found[key] = got.stdout.strip()
+    return found
+
+
+OPERATOR_GIT_IDENTITY = _operator_git_identity()
 
 
 @pytest.fixture
@@ -110,14 +138,26 @@ def _home_off_the_operators_machine(
     the operator's real `forge.yaml`. Its own dir, not `tmp_path`, so a test that lists
     `tmp_path` sees nothing new. A test that sets `HOME` itself still wins.
 
-    What a real home lends the toolchain rather than fr is kept pointing at the
-    operator's: git's global config (identity, as before) and uv's cache and managed
-    Pythons, so a `uv run` child neither re-downloads nor loses its interpreter.
+    git's global config is the sandbox's own `<home>/.gitconfig`, holding only the
+    operator's identity (`OPERATOR_GIT_IDENTITY`): the real file is never lent, so a test's
+    `git config --global` cannot write it (p4-o1). What a real home lends the toolchain
+    rather than fr is kept pointing at the operator's: uv's cache and managed Pythons, so
+    a `uv run` child neither re-downloads nor loses its interpreter.
     Pinned by `tests/unit/test_suite_home_sandbox.py`."""
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("HOME", str(home))
+    gitconfig = home / ".gitconfig"
+    sections: dict[str, list[str]] = {}
+    for key, value in OPERATOR_GIT_IDENTITY.items():
+        section, name = key.split(".", 1)
+        quoted = value.replace("\\", "\\\\").replace('"', '\\"')
+        sections.setdefault(section, []).append(f'\t{name} = "{quoted}"')
+    gitconfig.write_text(
+        "".join(f"[{section}]\n" + "\n".join(lines) + "\n" for section, lines in sections.items()),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
     lent = {
-        "GIT_CONFIG_GLOBAL": OPERATOR_HOME / ".gitconfig",
         "UV_CACHE_DIR": Path(os.environ.get("XDG_CACHE_HOME") or OPERATOR_HOME / ".cache") / "uv",
         "UV_PYTHON_INSTALL_DIR": Path(
             os.environ.get("XDG_DATA_HOME") or OPERATOR_HOME / ".local" / "share"

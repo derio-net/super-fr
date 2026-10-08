@@ -46,3 +46,28 @@ def test_writing_the_forge_default_never_touches_the_operators_file() -> None:
 def test_each_test_gets_a_fresh_home() -> None:
     """Run twice in one session (here and above), the write above must not leak here."""
     assert not forgeapi.config_path().exists()
+
+
+def test_a_global_git_config_write_never_reaches_the_operators_file() -> None:
+    """p4-o1: the sandboxed home's own `.gitconfig` is git's global config, holding only
+    the operator's identity read once at session start; the real file is never lent, so
+    a test's `git config --global` leaves it byte-identical."""
+    import os
+    import subprocess
+
+    from tests.conftest import OPERATOR_GIT_IDENTITY, OPERATOR_GITCONFIG
+
+    before = _snapshot(OPERATOR_GITCONFIG)
+    own = Path.home() / ".gitconfig"
+    assert os.environ["GIT_CONFIG_GLOBAL"] == str(own)
+
+    subprocess.run(["git", "config", "--global", "sandbox.probe", "written"], check=True)
+
+    assert _snapshot(OPERATOR_GITCONFIG) == before
+    assert "sandbox.probe" not in (before or b"").decode(errors="replace")
+    assert "written" in own.read_text()
+    for key, value in OPERATOR_GIT_IDENTITY.items():
+        got = subprocess.run(
+            ["git", "config", "--global", "--get", key], capture_output=True, text=True
+        )
+        assert got.stdout.strip() == value
