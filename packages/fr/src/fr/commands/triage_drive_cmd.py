@@ -12,9 +12,9 @@ hands the agent's results back to the runner and pushes the ref. `fr triage batc
 stays the host adapter's entry.
 
 Exit codes: 0 success (`pass`: acted, or everything is done); 3 (`pass`) nothing to do
-but wait, or a wake within the interval of the last pass, which only renews the lease;
-2 a refusal (a lease held by another driver, a push conflict, a runner that keeps no
-mailbox); 1 a forge write failed.
+but wait, or a wake within half an interval of the last pass, which only renews the
+lease; 2 a refusal (a lease held by another driver, a push conflict, a cloud runner that
+cannot be loaded or keeps no mailbox); 1 a forge write failed.
 """
 
 from __future__ import annotations
@@ -227,14 +227,14 @@ def drive_pass_command(
     """One pass of the cloud driver (R12): restore the state from its ref when it is
     missing or older, renew the drive lease (pushed), collect, plan and act with the host
     driver's own policy (R13), run every forge action itself, and write the session
-    requests to --outbox for the agent to execute. A wake within --interval of the last
-    pass only renews the lease.
+    requests to --outbox for the agent to execute. A wake within half of --interval of the
+    last pass only renews the lease (p4-r2: `send_later` truncates to the minute).
 
     Exit codes: 0 acted or everything is done; 3 nothing to do but wait, or a wake that
     only renewed the lease; 2 a refusal (another driver's lease included); 1 a forge
     write failed."""
     from fr.commands import triage_batch_cmd as batch
-    from fr.commands.triage_kanban_cmd import try_load
+    from fr.commands.triage_kanban_cmd import scope_args, try_load
     from fr.triage.driver import CLOUD, CLOUD_RUNNER, Mailbox
 
     scope = triage_cmd._scope(repo, org)
@@ -255,9 +255,9 @@ def drive_pass_command(
         current is not None
         and current.holder == holder_of(sid, identity)
         and current.last_pass is not None
-        and now - current.last_pass < timedelta(minutes=interval)
+        and now - current.last_pass < timedelta(minutes=interval) / 2
     )
-    if recent:  # a wake within the interval of the last pass: renew, nothing else
+    if recent:  # a wake within half an interval of the last pass: renew, nothing else (p4-r2)
         assert current is not None and current.last_pass is not None
         try:
             acquire(target, identity, now, scope_id=sid, duration=duration,
@@ -267,7 +267,7 @@ def drive_pass_command(
         _write_outbox(outbox, [])
         console.print(
             f"renewed the drive lease; the last pass ran at {current.last_pass.isoformat()}, "
-            f"within the {interval:g}-minute interval",
+            f"within half the {interval:g}-minute interval",
             markup=False,
             soft_wrap=True,
         )
@@ -279,25 +279,20 @@ def drive_pass_command(
         checkout=None,
         max_inflight=max_inflight,
         yes=True,
-        scope_args=["--repo", repo] if repo else ["--org", org] if org else [],
+        scope_args=scope_args(repo, org, dir_override, workspace),  # p4-r9
         adapter=CLOUD,
         statuses=_read_json(statuses, "statuses"),
         lease=batch.LeaseTerms(identity, duration),
     )
     # The cloud runner is opened before the pass, so a request still pending from an
     # earlier pass is re-emitted even when this pass asks nothing new of it (§F).
+    # A pass that could write no session request refuses before it acts (p4-r6).
     runner, reason = try_load(CLOUD_RUNNER, driver.runner)
-    if runner is None or not isinstance(runner, Mailbox):
-        err_console.print(
-            f"[yellow]warning:[/yellow] runner `{CLOUD_RUNNER}` "
-            + (
-                f"could not be loaded ({escape(reason or 'no reason given')})"
-                if runner is None
-                else "keeps no mailbox"
-            )  # fmt: skip
-            + "; no session requests can be written",
-            soft_wrap=True,
-        )
+    if runner is None:
+        _fail(f"runner `{CLOUD_RUNNER}` could not be loaded ({reason}); nothing done")
+    if not isinstance(runner, Mailbox):
+        _fail(f"runner `{CLOUD_RUNNER}` keeps no mailbox, so no session request could be "
+              "written; nothing done")  # fmt: skip
     try:  # drive.lock: the fast same-host check, before the lease (§D)
         with batch.drive_lock(triage_cmd.drive_lock_dir(scope, dir_override)):
             acted, summary, _ = batch.one_pass(driver)
@@ -322,10 +317,11 @@ def drive_record_command(
 ) -> None:
     """Apply every result the agent recorded for the outbox's requests to the scope's
     state (through the cloud runner's mailbox), empty the outbox, and push the state ref.
-    Only the lease's holder records. Exit 2 on a refusal: a lease another driver holds, a
-    result no pending request names, or a runner that keeps no mailbox."""
+    Only the current, unexpired holder of the scope's lease records, under the same-host
+    `drive.lock` (p4-r5). Exit 2 on a refusal: no live lease of this driver's, a driver
+    holding the lock, a result no pending request names, or a runner that keeps no
+    mailbox."""
     from fr.commands import triage_batch_cmd as batch
-    from fr.triage.driver import CLOUD_RUNNER, Mailbox
 
     scope = triage_cmd._scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)
@@ -334,11 +330,25 @@ def drive_record_command(
         current = load_lease(target)
     except TriageError as exc:
         _fail(str(exc))
-    if current is not None and current.holder != holder:
+    if current is None:
+        _fail(f"no drive lease is held for this scope, so this driver ({holder}) does not "
+              "hold it: nothing recorded; run `fr triage drive pass` first")  # fmt: skip
+    if current.holder != holder:
         _fail(
             f"the drive lease is held by {current.holder} (expires "
             f"{current.expires.isoformat()}), not this driver ({holder}): nothing recorded"
         )
+    if current.expired(_now()):
+        _fail(f"this driver's drive lease expired at {current.expires.isoformat()}: nothing "
+              "recorded; run `fr triage drive pass` to renew it first")  # fmt: skip
+    with batch.drive_lock(triage_cmd.drive_lock_dir(scope, dir_override)):  # §D, p4-r5
+        _record(target, outbox, result)
+
+
+def _record(target: Path, outbox: Path, result: Path) -> None:
+    from fr.commands import triage_batch_cmd as batch
+    from fr.triage.driver import CLOUD_RUNNER, Mailbox
+
     results = _read_json(result, "results")
     if isinstance(results, dict):
         results = results.get("results")

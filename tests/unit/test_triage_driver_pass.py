@@ -434,3 +434,153 @@ def test_the_host_loop_takes_and_releases_the_lease_with_a_state_repo(
     ]  # fmt: skip
     assert any(f"host:{HOST_ID}" in text for text in leases), "the lease was pushed"
     assert leases[0] == "", "the release was pushed last"
+
+
+# ------------------------------------------- review fixes (p4-r2, r5, r6, r9)
+
+
+@pytest.mark.parametrize(
+    ("after", "renews_only"),
+    [
+        (timedelta(minutes=2, seconds=29), True),  # under half the interval: renew only
+        (timedelta(minutes=2, seconds=30), False),  # half the interval: a full pass
+        (timedelta(minutes=4), False),  # a minute-truncated self-wake, still a pass
+    ],
+)
+def test_only_a_wake_within_half_an_interval_of_the_last_pass_only_renews(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    after: timedelta,
+    renews_only: bool,
+) -> None:
+    """p4-r2 (§E): `send_later` truncates to the minute, so a strict "within the interval"
+    would skip every other self-wake; only a wake under HALF an interval only renews."""
+    state = tmp_path / "state"
+    _world(world, state)
+    assert _pass(state, tmp_path / "o1.json", "--interval", "5").exit_code == 0
+    passes = len(world.passes)  # type: ignore[attr-defined]
+    clock[0] = NOW + after
+
+    result = _pass(state, tmp_path / "o2.json", "--interval", "5")
+
+    ran = len(world.passes) - passes  # type: ignore[attr-defined]
+    if renews_only:
+        assert result.exit_code == 3 and "renewed" in result.output, result.output
+        assert ran == 0
+    else:
+        assert "renewed" not in result.output, result.output
+        assert ran == 1
+
+
+def test_a_pass_refuses_when_the_cloud_runner_cannot_be_loaded(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    clock: list[Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """p4-r6 (§E): no runner, no outbox to write: refuse (exit 2) before any action,
+    rather than warn and emit an empty outbox."""
+
+    def unloadable(name: str) -> Any:
+        raise RuntimeError("no adapter named claude-cloud is installed")
+
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", unloadable)
+    state = tmp_path / "state"
+    _world(world, state)
+    outbox = tmp_path / "outbox.json"
+
+    result = _pass(state, outbox)
+
+    assert result.exit_code == 2, result.output
+    assert "claude-cloud" in result.output and "no adapter" in " ".join(result.output.split())
+    assert world.merged == [] and not outbox.exists()
+
+
+def test_a_pass_refuses_when_the_cloud_runner_keeps_no_mailbox(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners, clock: list[Any]
+) -> None:
+    runners.by_name["claude-cloud"] = FakeRunner()  # dispatches, but keeps no mailbox
+    state = tmp_path / "state"
+    _world(world, state)
+    outbox = tmp_path / "outbox.json"
+
+    result = _pass(state, outbox)
+
+    assert result.exit_code == 2, result.output
+    assert "mailbox" in result.output
+    assert world.merged == [] and not outbox.exists()
+
+
+def test_the_pass_hands_out_commands_with_the_full_scope_arguments(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """p4-r9 (§E): every command the pass hands the agent reads the same state, so it
+    carries `--dir`/`--workspace` too, as the board's copied commands do."""
+    seen: list[list[str]] = []
+    real = triage_batch_cmd.build_driver
+
+    def spy(*args: Any, **kw: Any) -> Any:
+        seen.append(list(kw["scope_args"]))
+        return real(*args, **kw)
+
+    monkeypatch.setattr(triage_batch_cmd, "build_driver", spy)
+    state = tmp_path / "state"
+    _world(world, state)
+
+    assert _pass(state, tmp_path / "outbox.json").exit_code == 0
+
+    assert seen == [["--repo", REPO, "--dir", str(state.resolve())]]
+
+
+def test_record_refuses_without_this_drivers_live_lease(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners, clock: list[Any]
+) -> None:
+    """p4-r5 (§E): only the current, UNEXPIRED holder of the scope's lease records: no
+    lease and an expired lease of its own are refusals too."""
+    state = tmp_path / "state"
+    _world(world, state)
+    outbox = tmp_path / "outbox.json"
+    assert _pass(state, outbox).exit_code == 0
+    results = tmp_path / "results.json"
+    results.write_text("[]")
+
+    clock[0] = NOW + lease_duration() + timedelta(minutes=1)
+    expired = _record(state, outbox, results)
+    assert expired.exit_code == 2, expired.output
+    assert "expired" in expired.output
+
+    (state / "lease.yaml").unlink()
+    free = _record(state, outbox, results)
+    assert free.exit_code == 2, free.output
+    assert "no drive lease" in " ".join(free.output.split())
+    assert runners.cloud.recorded == []
+
+
+def test_record_takes_the_same_host_drive_lock(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners, clock: list[Any]
+) -> None:
+    import os
+
+    state = tmp_path / "state"
+    _world(world, state)
+    outbox = tmp_path / "outbox.json"
+    assert _pass(state, outbox).exit_code == 0
+    requests = json.loads(outbox.read_text())["requests"]
+    results = tmp_path / "results.json"
+    results.write_text(json.dumps([{"id": requests[0]["id"], "session": "s"}]))
+    (state / "drive.lock").write_text(json.dumps({"pid": os.getpid(), "started": "t"}))
+
+    result = _record(state, outbox, results)
+
+    assert result.exit_code == 2, result.output
+    assert "another driver holds" in " ".join(result.output.split())
+    assert runners.cloud.recorded == []
