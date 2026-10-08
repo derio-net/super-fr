@@ -203,7 +203,8 @@ def _installed_version() -> str:
 
 def _install_release(release: str, *, remote: str | None = None) -> None:
     """Install fr *release* the way the cloud setup does (spec §H): a super-fr source
-    clone at the release's tag, then its `scripts/install.sh`. The clone lives under
+    clone on a clean `main` at origin/main, which must contain the release's tag, then
+    its `scripts/install.sh` with its normal preflight. The clone lives under
     `~/.cache/fr/src/super-fr`, never in the marketplace directory, which install.sh
     replaces (dropping its `.git`), so a second reinstall finds the clone it left (p6-r1).
     *remote* defaults to the release repo. Raises `RuntimeError` naming the failed step
@@ -227,17 +228,34 @@ def _install_release(release: str, *, remote: str | None = None) -> None:
         except OSError as exc:
             raise RuntimeError(f"`{argv[0]}` could not run: {exc}") from exc
 
-    if (clone / ".git").is_dir():
-        run("git", "-C", str(clone), "remote", "set-url", "origin", url)
-        run("git", "-C", str(clone), "fetch", "--quiet", "--force", "--tags", "origin")
-    else:
+    if not (clone / ".git").is_dir():
         if clone.exists():
             import shutil
 
             shutil.rmtree(clone)  # a half-made clone from an interrupted install
         clone.parent.mkdir(parents=True, exist_ok=True)
         run("git", "clone", "--quiet", url, str(clone))
-    run("git", "-C", str(clone), "checkout", "--quiet", "--force", "--detach", release)
+    git = ("git", "-C", str(clone))
+    run(*git, "remote", "set-url", "origin", url)
+    run(*git, "fetch", "--quiet", "--force", "--tags", "origin", "main")
+    # install.sh's preflight installs only a clean `main` in sync with origin/main
+    # (p7-r1), so the release is installed from there, never from a detached tag:
+    # refuse a tag main does not contain rather than install something else.
+    try:
+        on_main = subprocess.run(
+            [*git, "merge-base", "--is-ancestor", f"refs/tags/{release}", "origin/main"],
+            capture_output=True, text=True,
+        )  # fmt: skip
+    except OSError as exc:
+        raise RuntimeError(f"`git` could not run: {exc}") from exc
+    if on_main.returncode != 0:
+        said = " ".join((on_main.stderr or "").split())
+        raise RuntimeError(
+            f"release tag {release} is not on origin/main of {url}; refusing to install "
+            f"it (install.sh installs only main){': ' + said if said else ''}"
+        )
+    run(*git, "checkout", "--quiet", "--force", "-B", "main", "origin/main")
+    run(*git, "clean", "-fdxq")
     run("bash", str(clone / "scripts" / "install.sh"))
 
 
