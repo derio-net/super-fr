@@ -1,0 +1,22 @@
+schema_version: 8
+run: 2026-10-07-feat-cloud-triage
+step: review-phase
+item: phase/6
+outcome: done
+journal:
+- {kind: finding, id: p6-r1, phase: 6, review_scope: in, title: "the driver's self-update cloned into the marketplace dir, whose .git install.sh deletes, so the second update failed", body: "triage_drive_cmd.py _install_release."}
+- {kind: finding, id: p6-r2, phase: 6, review_scope: in, title: "the rehome ledger keyed on the exact release, so every same-major patch or minor re-homed the run again", body: "drift.py Ledger.rehomed."}
+- {kind: finding, id: p6-r3, phase: 6, review_scope: in, title: "cursor_path took the first cursor in the PR, which can be another run's", body: "drift.py cursor_path."}
+- {kind: finding, id: p6-r4, phase: 6, review_scope: in, title: "a self-re-home could leave two drivers holding one lease identity", body: "lease.py; triage_drive_cmd.py self-re-home."}
+- {kind: finding, id: p6-r5, phase: 6, review_scope: in, title: "the self-re-home pass dropped pending worker requests from the outbox", body: "triage_drive_cmd.py self-re-home outbox."}
+- {kind: review, id: p6-review, phase: 6, title: "phase 6 code review: 5 findings in scope", body: "Dispatched reviewer over phase 6 against spec R16-R18/§G and plan 06.yaml. Received: each verified; the spec was amended for r2-r4 (18c111d0: lease generation, major-keyed ledger, the batch branch's own cursor); a fix agent implemented all five with a failing test first (bb2ca175); 4015 targeted tests and 5 cloud-triage scenarios pass; ruff and mypy clean."}
+resolves:
+- {id: p6-r1, state: fixed, body: "bb2ca175: source clone kept at ~/.cache/fr/src/super-fr, fetched and checked out at the tag, then its install.sh run; test_install_release_keeps_its_source_clone_outside_the_marketplace."}
+- {id: p6-r2, state: fixed, body: "bb2ca175: ledger matches (run, release major); test_a_run_rehomed_onto_a_major_is_never_rehomed_for_its_later_patches_or_minors."}
+- {id: p6-r3, state: fixed, body: "bb2ca175: the cursor whose branch is the batch branch; none or several reported once; test_the_batchs_cursor_is_the_one_whose_branch_is_the_batchs."}
+- {id: p6-r4, state: fixed, body: "bb2ca175: lease generation bumped with the pending request in one CAS push; older generations drive nothing; test_an_old_generation_pass_or_record_drives_nothing, test_a_replayed_self_rehome_creates_one_session."}
+- {id: p6-r5, state: fixed, body: "bb2ca175: outbox is the pending worker requests then the driver's own; test_a_new_major_rehomes_the_driver_itself_and_its_lease_carries_over."}
+evidence:
+  review: p6-review
+  reviewer: a2ced6a3afd7653e1
+  model: claude-opus-5-5
