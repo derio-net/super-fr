@@ -613,9 +613,10 @@ def validate_profiles(path: Path) -> list[str]:
 
 
 def validate_agents(path: Path) -> list[str]:
-    """`.claude/agents/fr-*.md` (spec `2026-10-07-cloud-triage-design` §H, R19):
-    front matter parses, `name` is the file's own and one fr ships, and the stamp
-    is present. An absent stamp would otherwise read as version 1 and pass as
+    """`.claude/agents/<name>.md` for each agent fr ships (spec
+    `2026-10-07-cloud-triage-design` §H, R19; the kind's `owns` leaves a repo's own
+    `fr-*.md` alone, p7-r5): front matter parses, `name` is the file's own, and the
+    stamp is present. An absent stamp would otherwise read as version 1 and pass as
     current, so it is checked here, by name. A missing sibling is the repo-level
     check in `fr.artifacts.validate`."""
     from fr.agents import AGENT_NAMES, STAMP_KEY
@@ -633,12 +634,7 @@ def validate_agents(path: Path) -> list[str]:
     name = data.get("name")
     if name != path.stem:
         problems.append(f"front matter `name` is {name!r}, but the file is {path.name}")
-    if path.stem not in AGENT_NAMES:
-        problems.append(
-            f"{path.stem!r} is not an agent fr ships ({', '.join(AGENT_NAMES)}); fr owns "
-            f"`.claude/agents/fr-*.md`, so name your own agent without the `fr-` prefix"
-        )
-    elif STAMP_KEY not in data:
+    if path.stem in AGENT_NAMES and STAMP_KEY not in data:
         problems.append(
             f"unstamped: `{STAMP_KEY}` is absent from the front matter — run "
             f"`fr migrate artifacts --yes` (or `fr init agents`) to re-render it"

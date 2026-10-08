@@ -99,6 +99,10 @@ class ArtifactKind:
     and an empty list when the artifact is valid. Every kind carries one —
     "every version ships a structure validator" is only true if a new kind
     cannot be registered without one."""
+    owns: Callable[[Path], bool] | None = None
+    """Which of the locator's matches are this kind's, when a glob cannot say it
+    exactly; `None` owns every match. The `agents` kind is the two files fr ships, not
+    every `fr-*.md` a repo keeps beside them (p7-r5)."""
 
     def read_version(self, path: Path) -> int:
         """The version `path` is on — `PRE_FRAMEWORK_VERSION` when unstamped."""
@@ -368,6 +372,13 @@ def _write_spec_stamp(path: Path, version: int) -> None:
 AGENTS_STAMP_KEY = "fr_artifact_version"
 
 
+def _is_shipped_agent(path: Path) -> bool:
+    """One of the agents fr ships: a repo's own `fr-helper.md` is not the kind's (p7-r5)."""
+    from fr.agents import AGENT_NAMES
+
+    return path.stem in AGENT_NAMES
+
+
 def _read_agents_stamp(path: Path) -> int | None:
     return _read_front_matter_key(path, AGENTS_STAMP_KEY)
 
@@ -558,6 +569,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             read_stamp=_read_agents_stamp,
             write_version=_write_agents_stamp,
             validate=validate_agents,
+            owns=_is_shipped_agent,
         ),
     )
 }
@@ -587,6 +599,8 @@ def iter_paths_of(repo_root: Path, kind: ArtifactKind) -> Iterator[Path]:
     """
     for path in sorted(repo_root.glob(kind.locator)):
         if ARCHIVE_SEGMENT in path.relative_to(repo_root).parts:
+            continue
+        if kind.owns is not None and not kind.owns(path):
             continue
         if path.is_file():
             yield path

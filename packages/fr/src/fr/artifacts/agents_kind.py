@@ -66,7 +66,7 @@ def _unstamped(path: Path) -> bool:
     from fr.agents import AGENT_NAMES
 
     if path.stem not in AGENT_NAMES:
-        return False  # the validator names it; nothing fr renders can fix it
+        return False  # a repo's own `fr-*.md`, not the kind's (p7-r5)
     try:
         return _read_front_matter_key(path, AGENTS_STAMP_KEY) is None
     except ArtifactStampError:

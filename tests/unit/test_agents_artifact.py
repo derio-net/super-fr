@@ -104,6 +104,7 @@ def test_iter_paths_of_locates_exactly_the_two_files(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     write_agents(repo)
     (repo / ".claude" / "agents" / "my-own-agent.md").write_text("---\nname: my-own-agent\n---\n")
+    (repo / ".claude" / "agents" / "fr-helper.md").write_text("---\nname: fr-helper\n---\n")
 
     found = [p.name for p in iter_paths_of(repo, KIND)]
 
@@ -159,17 +160,14 @@ def test_validate_fails_a_mismatched_name(tmp_path: Path) -> None:
     assert len(issues) == 1 and "name" in issues[0]
 
 
-def test_validate_fails_a_name_fr_does_not_ship(tmp_path: Path) -> None:
+def test_validate_ignores_a_consumers_own_fr_prefixed_agent(tmp_path: Path) -> None:
+    """p7-r5: the kind is the two files fr ships, not the `fr-` prefix; a repo's own
+    `.claude/agents/fr-helper.md` (unstamped, any shape) is not fr's to judge."""
     repo = _repo(tmp_path)
     write_agents(repo)
-    (repo / ".claude" / "agents" / "fr-custom.md").write_text(
-        f"---\nname: fr-custom\n{STAMP_KEY}: 1\n---\n"
-    )
+    (repo / ".claude" / "agents" / "fr-helper.md").write_text("no front matter at all\n")
 
-    issues = _issues(repo)
-
-    assert len(issues) == 1 and issues[0].startswith("fr-custom.md")
-    assert "not an agent fr ships" in issues[0]
+    assert _issues(repo) == []
 
 
 def test_validate_fails_a_stale_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -225,7 +223,7 @@ def test_a_version_bump_re_renders_both_files_from_the_wheel(tmp_path: Path) -> 
     assert [m.to_version for m in reg.chain("agents", 1)] == [2]
 
 
-def test_the_re_render_refuses_a_name_fr_does_not_ship_and_leaves_it_byte_identical(
+def test_the_re_render_leaves_a_consumers_own_fr_prefixed_agent_byte_identical(
     tmp_path: Path,
 ) -> None:
     from fr.artifacts.agents_kind import rerender_migration
@@ -241,7 +239,7 @@ def test_the_re_render_refuses_a_name_fr_does_not_ship_and_leaves_it_byte_identi
 
     report = run_migrations(repo, dry_run=False, registry=reg)
 
-    assert [f.path.name for f in report.failed] == ["fr-custom.md"]
+    assert not report.failed
     assert foreign.read_bytes() == original
     for name in AGENT_NAMES:
         assert (repo / ".claude" / "agents" / f"{name}.md").read_text() == render_agent(name, 2)

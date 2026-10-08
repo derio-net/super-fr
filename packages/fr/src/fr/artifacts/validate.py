@@ -220,6 +220,8 @@ def validate_repo(repo_root: Path, *, kind_name: str | None = None) -> Validatio
         # rewrite a directory). Reporting it here is the difference between
         # "your `_meta.yaml` is a directory" and silence.
         for match in sorted(repo_root.glob(kind.locator)):
+            if kind.owns is not None and not kind.owns(match):
+                continue
             if match.is_dir():
                 issues.append(
                     ValidationIssue(
