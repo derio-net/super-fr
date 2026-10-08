@@ -5181,10 +5181,26 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R16
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R17
-    levels: {}
-    status: not-implemented
-    notes: plan 2026-10-07-cloud-triage names the candidate scenario this row's walk
-      runs; written by the phase that implements the row
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_run_fr_version.py#test_a_v9_cursor_is_stamped_ten_and_its_body_is_untouched
+      - super-fr:tests/unit/test_migration_run_fr_version.py#test_fr_run_start_records_the_running_frs_version
+      - super-fr:tests/unit/test_triage_drift.py#test_a_pass_rehomes_only_the_run_on_another_major_once
+      - super-fr:tests/unit/test_triage_drift.py#test_a_working_session_is_not_rehomed_until_it_is_idle
+      - super-fr:tests/unit/test_triage_drift.py#test_the_ledger_travels_in_the_ref_so_a_restore_never_rehomes_twice
+      - super-fr:tests/unit/test_triage_drift.py#test_a_new_major_rehomes_the_driver_itself_and_its_lease_carries_over
+      - super-fr:tests/unit/test_triage_drift.py#test_an_older_installed_fr_is_reinstalled_and_the_pass_rerun_on_it
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_cloud_triage_version_drift
+    status: ci
+    notes: 'phase 6: fr run start records fr_version (run kind 9 -> 10, stamp-only migration);
+      each cloud pass reads every live batch''s run cursor at its PR head and the latest
+      fr release (REST releases/latest), and asks claude-cloud to re-home a run on another
+      major once per (run, release), at the session''s idle, keeping rehomes.yaml in
+      the state ref; a versionless run is reported once; the driver reinstalls on a
+      newer release and re-homes itself on a new major, keeping its lease (test_triage_drift);
+      candidate scenario cloud-triage-version-drift writes exactly one rehome request
+      and none after drive record'
     scenario: tests/scenarios/cloud-triage-version-drift.sh
   - id: cloud-triage-repo-agents
     capability: Backlog triage
