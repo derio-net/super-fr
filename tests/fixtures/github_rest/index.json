@@ -55,6 +55,10 @@
   "repos/derio-net/super-fr/commits/f1919d411a43841293202aacdee44e29c1cf94e7/status": {
     "file": "repo_commits_f1919d411a43841293202aacdee44e29c1cf94e7_status.json"
   },
+  "repos/derio-net/super-fr/contents/docs/no-such-path": {
+    "file": "repo_contents_docs_no-such-path.error.json",
+    "error": true
+  },
   "repos/derio-net/super-fr/issues/1074": {
     "file": "repo_issues_1074.json"
   },

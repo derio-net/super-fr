@@ -25,9 +25,10 @@ What each group is for:
   `../triage/dedupe-calibration.json`, `pulls/<n>` for every closed or merged PR
   in `../triage/super-fr-prs.json`, PR 1044 (`../gh/pr-view-adopt.json`), and the
   check runs, status and Actions runs of PR 1038's head `f1919d4`
-  (`../triage/super-fr-rerun-checks.json`); issue 430's timeline plus the check
-  runs and status of the heads of the PRs it names (517, 508): the contract test
-  (`tests/unit/test_github_rest_contract.py`).
+  (`../triage/super-fr-rerun-checks.json`): the contract test
+  (`tests/unit/test_github_rest_contract.py`);
+- issue 430's timeline plus the check runs, status and Actions runs of the heads
+  of the PRs it names (517, 508): `list_linked_prs`.
 
 Two requests the cloud token is refused, kept because the refusal is the fact:
 
@@ -43,6 +44,12 @@ captured in the same session (both exited 1, stdout empty):
 `gh api graphql -f query='{viewer{login}}'` (`graphql.stderr`) and
 `gh pr list --repo derio-net/super-fr --limit 1 --json number`
 (`pr-list.stderr`).
+
+Also in `refused/`, from the same session: `label-create-exists.{stdout,stderr}`,
+the 422 of `gh api repos/derio-net/super-fr/labels -f name=bug -f color=d73a4a -f
+description=x` (exit 1; the label exists, so nothing was written) — what
+`ensure_labels` reads as "update it instead". `contents/docs/no-such-path` is the
+captured 404 of a missing path.
 
 **The GraphQL side.** The plan asked for the matching GraphQL-backed `gh --json`
 outputs "for the same moment" from a host session into `graphql/`. No host

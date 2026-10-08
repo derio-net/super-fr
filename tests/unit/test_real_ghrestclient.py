@@ -16,7 +16,15 @@ import pytest
 from fr.gh import GhError, ISSUE_LIST_FIELDS, ISSUE_VIEW_FIELDS, PR_LIST_FIELDS
 from fr.ghclient import GhClient
 from fr.real_ghrestclient import RealGhRestClient
-from tests.unit.github_rest_support import REPO, FixtureGh, R, forbidden, load, parse_api
+from tests.unit.github_rest_support import (
+    FIXTURES,
+    REPO,
+    FixtureGh,
+    R,
+    forbidden,
+    load,
+    parse_api,
+)
 
 SHA_1080 = "095092b8f4ec27dffd445d5c8f1f717f9cd216e0"
 
@@ -235,12 +243,10 @@ def test_contents_reads() -> None:
 
 
 def test_file_exists_and_list_dir_read_a_404_as_absent() -> None:
-    def missing(argv: list[str]) -> GhError | None:
-        return GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)", returncode=1)
-
-    client = RealGhRestClient(run=FixtureGh(fail=missing))
-    assert client.file_exists(REPO, "nope") is False
-    assert client.list_dir(REPO, "nope") == []
+    # The captured 404 of a missing path (index: contents/docs/no-such-path).
+    client, _ = _client()
+    assert client.file_exists(REPO, "docs/no-such-path") is False
+    assert client.list_dir(REPO, "docs/no-such-path") == []
 
 
 def test_list_repos_is_refused_from_a_cloud_session() -> None:
@@ -322,3 +328,190 @@ def test_list_issues_pages_use_per_page_100_by_default() -> None:
     with pytest.raises(GhError):
         RealGhRestClient(run=fake).list_issues(REPO, "open", limit=5)
     assert fake.routes() == [f"{R}/issues?state=open&per_page=100&page=1"]
+
+
+# ---- writes and the error contract (P1.T4) ----
+
+# A write's answer is the resource it made; the captured GET of a resource of
+# that kind stands in for it (only `html_url` / `number` are read back).
+_ISSUE_JSON = (FIXTURES / "repo_issues_1074.json").read_text().strip()
+_PULL_JSON = (FIXTURES / "repo_pulls_1080.json").read_text().strip()
+
+
+def _writes() -> dict[tuple[str, str], str]:
+    return {
+        ("POST", f"{R}/issues/7/labels"): "[]",
+        ("DELETE", f"{R}/issues/7/labels/fr%3Ain-progress"): "",
+        ("PATCH", f"{R}/issues/7"): _ISSUE_JSON,
+        ("POST", f"{R}/issues/7/comments"): "{}",
+        ("POST", f"{R}/issues"): _ISSUE_JSON,
+        ("POST", f"{R}/labels"): "{}",
+        ("PATCH", f"{R}/issues/comments/9"): "{}",
+        ("PUT", f"{R}/pulls/7/merge"): "{}",
+        ("POST", f"{R}/pulls"): _PULL_JSON,
+        ("PATCH", f"{R}/pulls/7"): "{}",
+        ("DELETE", f"{R}/git/refs/heads/feat/x%23y"): "",
+        ("POST", f"{R}/actions/workflows/prerelease.yml/dispatches"): "",
+    }
+
+
+def _call(fake: FixtureGh, method: str, route: str) -> list[str]:
+    hits = [a for a in fake.calls if parse_api(a)[0] == method and parse_api(a)[2] == route]
+    assert len(hits) == 1, (method, route, fake.calls)
+    return parse_api(hits[0])[3]
+
+
+def test_issue_writes_use_the_rest_routes() -> None:
+    fake = FixtureGh(writes=_writes())
+    client = RealGhRestClient(run=fake)
+    client.edit_issue_labels(REPO, 7, add=frozenset({"b", "a"}), remove=frozenset({"fr:in-progress"}))
+    assert _call(fake, "POST", f"{R}/issues/7/labels") == ["-f", "labels[]=a", "-f", "labels[]=b"]
+    _call(fake, "DELETE", f"{R}/issues/7/labels/fr%3Ain-progress")
+    client.edit_issue_state(REPO, 7, state="CLOSED", reason="completed")
+    assert _call(fake, "PATCH", f"{R}/issues/7") == [
+        "-f", "state=closed", "-f", "state_reason=completed",
+    ]  # fmt: skip
+    client.comment_issue(REPO, 7, "@not-a-file")
+    assert _call(fake, "POST", f"{R}/issues/7/comments") == ["-f", "body=@not-a-file"]
+    url = client.create_issue(REPO, title="t", body="b", labels=frozenset({"x"}))
+    assert url == "https://github.com/derio-net/super-fr/issues/1074"
+    client.edit_issue_comment(REPO, 9, "new")
+    assert _call(fake, "PATCH", f"{R}/issues/comments/9") == ["-f", "body=new"]
+    client.ensure_labels(REPO, ["fresh"])
+    assert _call(fake, "POST", f"{R}/labels")[:2] == ["-f", "name=fresh"]
+    _assert_rest_only(fake)
+
+
+def test_edit_issue_body_patches_the_issue() -> None:
+    fake = FixtureGh(writes=_writes())
+    RealGhRestClient(run=fake).edit_issue_body(REPO, 7, "body")
+    assert _call(fake, "PATCH", f"{R}/issues/7") == ["-f", "body=body"]
+
+
+def test_ensure_labels_updates_a_label_that_exists() -> None:
+    stderr = (FIXTURES / "refused" / "label-create-exists.stderr").read_text()
+    stdout = (FIXTURES / "refused" / "label-create-exists.stdout").read_text()
+
+    def exists(argv: list[str]) -> GhError | None:
+        if parse_api(argv)[:3] == ("POST", None, f"{R}/labels"):
+            return GhError(stderr.strip(), stderr=stderr, returncode=1, stdout=stdout)
+        return None
+
+    writes = {("PATCH", f"{R}/labels/bug"): "{}"}
+    fake = FixtureGh(writes=writes, fail=exists)
+    RealGhRestClient(run=fake).ensure_labels(REPO, ["bug"])
+    assert _call(fake, "PATCH", f"{R}/labels/bug") == [
+        "-f", "color=ededed", "-f", "description=",
+    ]  # fmt: skip
+
+
+def test_pr_writes_use_the_rest_routes() -> None:
+    fake = FixtureGh(writes=_writes())
+    client = RealGhRestClient(run=fake)
+    client.pr_merge(REPO, 7, head_sha="abc", method="squash")
+    assert _call(fake, "PUT", f"{R}/pulls/7/merge") == [
+        "-f", "merge_method=squash", "-f", "sha=abc",
+    ]  # fmt: skip
+    made = client.create_pr(REPO, head="h", base="main", title="t", body="b", draft=True)
+    assert made == {"number": 1080, "url": "https://github.com/derio-net/super-fr/pull/1080"}
+    assert _call(fake, "POST", f"{R}/pulls")[-2:] == ["-F", "draft=true"]
+    client.close_pr(REPO, 7)
+    assert _call(fake, "PATCH", f"{R}/pulls/7") == ["-f", "state=closed"]
+    client.delete_branch(REPO, "feat/x#y")
+    _call(fake, "DELETE", f"{R}/git/refs/heads/feat/x%23y")
+    client.dispatch_workflow(REPO, "prerelease.yml", inputs={"version": "1.2.3"})
+    assert _call(fake, "POST", f"{R}/actions/workflows/prerelease.yml/dispatches") == [
+        "-f", "ref=main", "-f", "inputs[version]=1.2.3",
+    ]  # fmt: skip
+    _assert_rest_only(fake)
+
+
+def test_pr_create_opens_a_ready_pr() -> None:
+    fake = FixtureGh(writes=_writes())
+    assert RealGhRestClient(run=fake).pr_create(REPO, head="h", base="b", title="t", body="x") == 1080
+    assert _call(fake, "POST", f"{R}/pulls")[-2:] == ["-F", "draft=false"]
+
+
+def test_pr_merge_refuses_an_unknown_method() -> None:
+    with pytest.raises(ValueError, match="merge method"):
+        RealGhRestClient(run=FixtureGh()).pr_merge(REPO, 7, head_sha="a", method="ff")
+
+
+# The methods whose `GhClient` contract answers None when the forge cannot say
+# (ghclient.py: pr_for_branch, issues_enabled, default_branch "never raises",
+# pr_status_by_url "None on any not-found/error condition"). Every other method
+# raises the 403 — never a soft empty answer.
+_SOFT = {"pr_for_branch", "issues_enabled", "default_branch", "pr_status_by_url"}
+
+
+def _every_call(client: RealGhRestClient, repo_dir: Path, run: Any) -> dict[str, Any]:
+    return {
+        "view_issue": lambda: client.view_issue(REPO, 1),
+        "view_issue_record": lambda: client.view_issue_record(REPO, 1),
+        "list_issues": lambda: client.list_issues(REPO, "open", 5),
+        "list_prs": lambda: client.list_prs(REPO, "all", 5),
+        "list_open_prs": lambda: client.list_open_prs(REPO, 5),
+        "list_prs_by_head": lambda: client.list_prs_by_head(REPO, "b"),
+        "pr_view": lambda: client.pr_view(REPO, 1),
+        "pr_checks": lambda: client.pr_checks(REPO, 1),
+        "pr_required_checks": lambda: client.pr_required_checks(REPO, 1),
+        "pr_status_by_url": lambda: client.pr_status_by_url(f"https://github.com/{REPO}/pull/1"),
+        "pr_body": lambda: client.pr_body("1", cwd=repo_dir),
+        "list_issue_comments": lambda: client.list_issue_comments(REPO, 1),
+        "list_linked_prs": lambda: client.list_linked_prs(REPO, 1),
+        "file_exists": lambda: client.file_exists(REPO, "x"),
+        "list_dir": lambda: client.list_dir(REPO, "x"),
+        "read_file": lambda: client.read_file(REPO, "x"),
+        "read_file_at_ref": lambda: client.read_file_at_ref(REPO, "x", "HEAD"),
+        "list_repos": lambda: client.list_repos("derio-net", 5),
+        "viewer_login": lambda: client.viewer_login(),
+        "repo_merge_methods": lambda: client.repo_merge_methods(REPO),
+        "default_branch": lambda: client.default_branch(cwd=repo_dir, run=run),
+        "pr_for_branch": lambda: client.pr_for_branch("b", cwd=repo_dir, run=run),
+        "issues_enabled": lambda: client.issues_enabled(REPO),
+        "edit_issue_labels": lambda: client.edit_issue_labels(
+            REPO, 1, add=frozenset({"a"}), remove=frozenset()
+        ),
+        "edit_issue_state": lambda: client.edit_issue_state(REPO, 1, state="CLOSED"),
+        "edit_issue_body": lambda: client.edit_issue_body(REPO, 1, "b"),
+        "comment_issue": lambda: client.comment_issue(REPO, 1, "b"),
+        "create_issue": lambda: client.create_issue(
+            REPO, title="t", body="b", labels=frozenset()
+        ),
+        "ensure_labels": lambda: client.ensure_labels(REPO, ["x"]),
+        "edit_issue_comment": lambda: client.edit_issue_comment(REPO, 1, "b"),
+        "pr_merge": lambda: client.pr_merge(REPO, 1, head_sha="a", method="merge"),
+        "pr_create": lambda: client.pr_create(REPO, head="h", base="b", title="t", body="x"),
+        "create_pr": lambda: client.create_pr(
+            REPO, head="h", base="b", title="t", body="x", draft=True
+        ),
+        "close_pr": lambda: client.close_pr(REPO, 1),
+        "delete_branch": lambda: client.delete_branch(REPO, "b"),
+        "dispatch_workflow": lambda: client.dispatch_workflow(REPO, "w.yml", inputs={}),
+    }
+
+
+def test_a_403_is_raised_by_every_method_except_the_soft_contracts(tmp_path: Path) -> None:
+    repo_dir = _checkout(tmp_path)
+    fake = FixtureGh(fail=forbidden)
+    client = RealGhRestClient(run=fake)
+    run = _Runner(fake)
+    calls = _every_call(client, repo_dir, run)
+    assert set(READS) - {"closing_ref"} <= set(calls)  # closing_ref calls no forge
+    for name, call in calls.items():
+        if name in _SOFT:
+            assert call() is None, name
+        else:
+            with pytest.raises(GhError, match="403"):
+                call()
+    _assert_rest_only(fake)
+
+
+def test_a_host_refusal_is_never_softened() -> None:
+    from fr.gh import GhHostRefusedError
+
+    client = RealGhRestClient(host="ghe.example.invalid", run=FixtureGh())
+    with pytest.raises(GhHostRefusedError):
+        client.issues_enabled(REPO)
+    with pytest.raises(GhHostRefusedError):
+        client.pr_status_by_url(f"https://github.com/{REPO}/pull/1")
