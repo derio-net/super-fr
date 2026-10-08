@@ -1,0 +1,13 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-10-07-feat-cloud-triage --step implement-phase --item phase/1 --record docs/superpowers/runs/2026-10-07-feat-cloud-triage.records/implement-phase__phase-1.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 8
+run: 2026-10-07-feat-cloud-triage
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1]
+refactor: {}
+journal: []
+resolves: []
+evidence: {}
