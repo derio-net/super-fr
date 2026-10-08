@@ -726,3 +726,8 @@ check: codebase. evidence: ci.yml coverage, validate-artifacts, change-fragment;
 ### s34 · finding [open] (reviewer: in scope) · Binding to HEAD's exact sha forces a push and a CI wait after every fr bookkeeping commit
 
 check: consistency. evidence: R22; record commits; code_tree excludes fr artifact trees.
+
+<!-- fr:journal kind=finding scope=spec id=s34-resolved created=2026-10-08T13:54:16+00:00 state=fixed resolves=s34 -->
+### s34-resolved · finding [fixed] · resolves s34: Binding to HEAD's exact sha forces a push and a CI wait after every fr bookkeeping commit
+
+§I step 3: the CI sha is the nearest pushed first-parent ancestor with HEAD's code tree (at most 50), recorded in the witness.
