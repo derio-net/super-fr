@@ -73,6 +73,8 @@ class FakeGhClient:
         # (repo, sha) -> `commit_checks` records (spec 2026-10-07-cloud-triage §I),
         # loaded by a test from captured fixtures; an unknown sha reports none.
         self.commit_checks_by_sha: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        # (repo, number) -> `pr_required_checks` rows.
+        self.required_checks: dict[tuple[str, int], list[dict[str, Any]]] = {}
 
     # ---- preload helpers (test setup) ----
 
@@ -89,6 +91,7 @@ class FakeGhClient:
             "created_at": "2026-10-01T00:00:00Z",
             "author": "operator",
             "cross_repo": False,
+            "mergeable": "MERGEABLE",
             **fields,
         }
         self.prs[(repo, number)] = record
@@ -261,9 +264,15 @@ class FakeGhClient:
             "draft": p["draft"],
             "head_ref": p["head_ref"],
             "base_ref": p["base_ref"],
+            "mergeable": p["mergeable"],
             "title": p["title"],
             "body": p["body"],
         }
+
+    def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """`{name, bucket, state}` rows a test preloads in `required_checks`."""
+        self.calls.append(("pr_required_checks", {"repo": repo, "number": number}))
+        return [dict(r) for r in self.required_checks.get((repo, number), [])]
 
     def create_pr(
         self, repo: str, *, head: str, base: str, title: str, body: str, draft: bool
