@@ -5155,9 +5155,23 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R19
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R20
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R21
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_claude_cloud_mailbox.py#test_the_pass_emits_the_real_runners_outbox_and_replays_it_until_recorded
+      - super-fr:tests/unit/test_claude_cloud_mailbox.py#test_a_lost_dispatch_result_is_found_by_its_tag_and_recorded_not_created_again
+      - super-fr:tests/unit/test_claude_cloud_mailbox.py#test_a_driver_restored_on_a_fresh_workspace_keeps_its_requests_and_sessions
+      - super-fr:tests/unit/test_claude_cloud_status.py#test_a_cloud_state_maps_onto_an_fr_session_status
+      - super-fr:tests/unit/test_claude_cloud_status.py#test_the_board_card_shows_a_blocked_sessions_note
+      - super-fr:tests/unit/test_claude_cloud_status.py#test_needs_you_now_lists_a_blocked_sessions_note_and_nothing_without_one
+      - super-fr:tests/unit/test_claude_cloud_status.py#test_a_sessions_state_never_changes_a_batchs_stage_or_the_plan
+      - super-fr:tests/unit/test_claude_cloud_status.py#test_a_conflict_on_a_completed_session_is_handed_back_by_message
+      - super-fr:tests/unit/test_claude_cloud_status.py#test_the_cloud_driver_never_loads_a_runner_it_does_not_carry
     status: not-implemented
-    notes: ''
+    notes: 'phase 5: the claude-cloud runner is a mailbox (R14) — pending requests replayed
+      until recorded, a lost dispatch found by its tag, requests and sessions restored
+      from the ref — and maps session state and needs_action (R15) onto the board and
+      Needs you now; unit evidence only. Still not-implemented: the end-to-end acceptance
+      is a live cloud walk (verify: client-live), owed by a later phase'
     verify: client-live
   - id: cloud-triage-version-drift
     capability: Backlog triage
