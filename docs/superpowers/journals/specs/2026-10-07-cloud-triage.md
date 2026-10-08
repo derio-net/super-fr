@@ -671,3 +671,8 @@ R22 adds a second way to satisfy fr's tests evidence; a mistake would let CI vou
 ### tier-2026-10-07-cloud-triage-p4 · decision · hard: the lease is a concurrency path every driver relies on
 
 Was tier-2026-10-07-cloud-triage-p3 before the renumbering.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-07-cloud-triage-p7 created=2026-10-08T13:50:24+00:00 -->
+### tier-2026-10-07-cloud-triage-p7 · decision · hard: a new artifact kind every fr-enabled repo will carry
+
+Was tier-2026-10-07-cloud-triage-p6 before the renumbering.
