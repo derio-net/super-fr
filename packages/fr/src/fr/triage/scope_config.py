@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -20,6 +21,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from fr.forgeapi import ForgeApi
 from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import run_publish
@@ -92,6 +94,65 @@ class ScopeConfig(BaseModel):
     board_name: str | None = None
     # An argument list, never a shell string: `{board}`, `{name}`, `{scope_id}`.
     publish: list[str] = []
+    # The scope's durable settings (cloud-triage §B): their home is `scope-durable.yaml`,
+    # which rides on the state ref; `state_repo` is mirrored here, `forge_api` may be.
+    state_repo: str | None = None
+    forge_api: ForgeApi | None = None
+
+
+SCOPE_DURABLE_FILE = "scope-durable.yaml"
+
+
+class ScopeDurable(BaseModel):
+    """`<state dir>/scope-durable.yaml`: the settings a scope keeps on its state ref, so a
+    fresh workspace recovers them (cloud-triage R5-R7, §B): where the ref lives, and the
+    forge API the scope's driver talks to."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    state_repo: str | None = None
+    forge_api: ForgeApi | None = None
+
+
+def load_durable(state_dir: Path) -> ScopeDurable:
+    """The durable settings in *state_dir*; the defaults when there are none."""
+    path = state_dir / SCOPE_DURABLE_FILE
+    if not path.exists():
+        return ScopeDurable()
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        return ScopeDurable.model_validate({} if data is None else data)
+    except (OSError, yaml.YAMLError, ValidationError) as exc:
+        raise TriageError(f"{path}: invalid {SCOPE_DURABLE_FILE}: {exc}") from exc
+
+
+def write_durable(state_dir: Path, durable: ScopeDurable) -> None:
+    """Write *durable* to `<state_dir>/scope-durable.yaml` (fr's own file, rewritten whole)."""
+    from fr.artifacts.atomic import write_text_atomic
+
+    state_dir.mkdir(parents=True, exist_ok=True)
+    body = yaml.safe_dump(durable.model_dump(exclude_none=True), sort_keys=False)
+    write_text_atomic(state_dir / SCOPE_DURABLE_FILE, "" if body == "{}\n" else body)
+
+
+_STATE_REPO_LINE = re.compile(r"^state_repo:.*$", re.M)
+
+
+def mirror_state_repo(state_dir: Path, state_repo: str) -> None:
+    """Set `state_repo:` in the host's `scope.yaml`, keeping every other line (the operator's
+    comments included): the one line is replaced, or appended when absent."""
+    from fr.artifacts.atomic import write_text_atomic
+
+    path = state_dir / SCOPE_CONFIG_FILE
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    line = f"state_repo: {json.dumps(state_repo)}"
+    if _STATE_REPO_LINE.search(text):
+        text = _STATE_REPO_LINE.sub(lambda _m: line, text, count=1)
+    else:
+        text += ("" if not text or text.endswith("\n") else "\n") + line + "\n"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    write_text_atomic(path, text)
+    load_scope_config(state_dir)  # the file must still load
 
 
 def load_scope_config(state_dir: Path) -> ScopeConfig:

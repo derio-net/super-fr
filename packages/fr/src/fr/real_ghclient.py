@@ -498,6 +498,14 @@ class RealGhClient:
         _gh._run_gh(workflow_run_args(repo, workflow, inputs))
 
     @_hosted
+    def repo_visibility(self, repo: str) -> str:
+        raw = json.loads(_gh._run_gh(["repo", "view", repo, "--json", "visibility"]))
+        value = raw.get("visibility") if isinstance(raw, dict) else None
+        if not isinstance(value, str) or not value:
+            raise _gh.GhError(f"gh repo view {repo}: no visibility in the answer")
+        return value.lower()
+
+    @_hosted
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         out = _gh._run_gh(
             [

@@ -87,6 +87,8 @@ class Forge(Protocol):
 
     def viewer_login(self) -> str: ...
 
+    def repo_visibility(self, *, repo: str) -> str | None: ...
+
 
 GH_MISSING = (
     "gh (the GitHub CLI) was not found on PATH: install it from https://cli.github.com "
@@ -160,6 +162,10 @@ class ClientForge:
     def viewer_login(self) -> str:
         with _forge_errors():
             return self._client.viewer_login()
+
+    def repo_visibility(self, *, repo: str) -> str | None:
+        with _forge_errors():
+            return self._client.repo_visibility(repo)
 
 
 def scope_repos(
@@ -441,6 +447,20 @@ def collect_facts(
     )[0]
 
 
+def _visibility(forge: Forge, repos: Iterable[str]) -> dict[str, str]:
+    """Each repo's visibility as the forge answers it (cloud-triage §B, §C); a repo whose
+    read fails is left out, never guessed: the privacy guard reads a missing one live."""
+    out: dict[str, str] = {}
+    for repo in repos:
+        try:
+            value = forge.repo_visibility(repo=repo)
+        except ForgeError:
+            continue
+        if value:
+            out[repo] = value.lower()
+    return out
+
+
 def collect_facts_counted(
     forge: Forge,
     scope: Scope,
@@ -619,6 +639,7 @@ def collect_facts_counted(
         judged_prs=judged_prs,
         config=config,
         viewer=viewer,
+        visibility=_visibility(forge, collected),
     )
     return facts, CollectStats(viewed=viewed, carried=carried_n, ignored=ignored)
 

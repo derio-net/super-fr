@@ -56,6 +56,9 @@ class _Forge:
     def viewer_login(self) -> str:
         return "operator"
 
+    def repo_visibility(self, *, repo: str) -> str | None:
+        return None
+
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         self.viewed.append((repo, number))
         return {

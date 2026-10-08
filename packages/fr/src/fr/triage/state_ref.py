@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import tempfile
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path, PurePosixPath
 
 from fr.triage import gitseam, state_sync
@@ -159,7 +161,22 @@ def fetch_state(
         if _allowed(rel):
             _write_bytes(state_dir, rel, gitseam.blob_bytes(cwd, blob))
     _write_base(state_dir, sha)
+    apply_durable(state_dir)
     return sha
+
+
+def apply_durable(state_dir: Path) -> None:
+    """Carry the restored `scope-durable.yaml` to where this host reads it (cloud-triage
+    §B, R11): `state_repo` mirrored into `scope.yaml`, and `forge_api` written to
+    `~/.config/fr/forge.yaml` only when that file is absent (the host file always wins)."""
+    from fr import forgeapi
+    from fr.triage.scope_config import load_durable, load_scope_config, mirror_state_repo
+
+    durable = load_durable(state_dir)
+    if durable.state_repo and load_scope_config(state_dir).state_repo != durable.state_repo:
+        mirror_state_repo(state_dir, durable.state_repo)
+    if durable.forge_api is not None:
+        forgeapi.write_default(durable.forge_api)
 
 
 def push_state(
@@ -187,3 +204,60 @@ def push_state(
         )
     _write_base(state_dir, sha)
     return sha
+
+
+# ------------------------------------------------------------ where it lives
+
+NEW_REPO = "a new repo for the refs"
+"""The choice offered beside the public repos when no repo of the scope is private (R7);
+the prompt then asks for its OWNER/REPO."""
+
+LEAK_WARNING = (
+    "every repo in this scope is public: if a private repo's issue is later added to a "
+    "batch or a wave, keeping the state ref in a public repo would leak it (fr refuses "
+    "that add, R8). A new repo just for the refs, made private, avoids the refusal."
+)
+
+Ask = Callable[[str, list[str], str | None], str | None]
+"""`(question, choices, warning) -> answer`: the operator's prompt, injected; None when
+nothing was answered."""
+
+_SLUG = re.compile(r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+")
+
+
+def is_private(visibility: str | None) -> bool:
+    """`private` or `internal`: anything a public reader cannot see."""
+    return visibility in ("private", "internal")
+
+
+def decide_state_repo(
+    repos: Iterable[str], visibility: Mapping[str, str], ask: Ask | None
+) -> str | None:
+    """Where a scope's state ref lives (R6, R7). Pure; the prompt is *ask*.
+
+    One repo: that repo, and no question. Several, at least one private: the operator
+    picks one of the private ones. All public (a repo whose visibility is unknown counts
+    as public here: it is never offered as the safe choice): the operator picks between
+    a new repo for the refs and each public repo, warned of the leak. None when *ask*
+    is None (non-interactive) or gives no answer: the state then stays local. An answer
+    outside the choices is refused (`TriageError`)."""
+    ordered = sorted(set(repos))
+    if len(ordered) == 1:
+        return ordered[0]
+    if not ordered or ask is None:
+        return None
+    private = [r for r in ordered if is_private(visibility.get(r))]
+    if private:
+        choices, warning = private, None
+        question = "Which private repo of this scope keeps its state ref?"
+    else:
+        choices, warning = [NEW_REPO, *ordered], LEAK_WARNING
+        question = "Where does this scope keep its state ref?"
+    answer = ask(question, choices, warning)
+    if answer is None:
+        return None
+    if answer in choices and answer != NEW_REPO:
+        return answer
+    if warning is not None and _SLUG.fullmatch(answer) and answer != NEW_REPO:
+        return answer  # the new repo's name
+    raise TriageError(f"{answer!r} is not one of {', '.join(c for c in choices if c != NEW_REPO)}")

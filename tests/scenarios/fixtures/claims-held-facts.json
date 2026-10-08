@@ -57,5 +57,6 @@
   "batch_prs": [],
   "judged_prs": [],
   "config": {},
-  "viewer": "operator"
+  "viewer": "operator",
+  "visibility": {}
 }

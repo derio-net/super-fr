@@ -829,6 +829,16 @@ class RealGhRestClient:
         value = raw.get("has_issues") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None
 
+    def repo_visibility(self, repo: str) -> str:
+        """`visibility` of `GET repos/{repo}`, else `private` read as public/private."""
+        raw = self._api(f"repos/{repo}")
+        value = raw.get("visibility") if isinstance(raw, dict) else None
+        if isinstance(value, str) and value:
+            return value.lower()
+        if isinstance(raw, dict) and isinstance(raw.get("private"), bool):
+            return "private" if raw["private"] else "public"
+        raise GhError(f"GET repos/{repo}: no visibility in the answer")
+
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         """`allowed` from the repo's `allow_*` flags. Gap: REST has no
         `viewerDefaultMergeMethod`, so `default` is None."""

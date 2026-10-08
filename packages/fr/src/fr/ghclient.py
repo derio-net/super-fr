@@ -360,6 +360,12 @@ class GhClient(Protocol):
         inconclusive and refuses, naming the flag."""
         ...
 
+    def repo_visibility(self, repo: str) -> str:
+        """*repo*'s visibility as the forge reports it, lowercased: `public`, `private`
+        or `internal` (spec 2026-10-07-cloud-triage §B, §C). Raises the backend's error
+        when it cannot be read: the privacy guard refuses on an unreadable answer."""
+        ...
+
 
 class UnsupportedBatchOps:
     """The §3.J batch operations, each declared unsupported for `backend`.
@@ -453,3 +459,6 @@ class UnsupportedBatchOps:
 
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         raise self._unsupported("view_issue_record")
+
+    def repo_visibility(self, repo: str) -> str:
+        raise self._unsupported("repo_visibility")

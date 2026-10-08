@@ -78,6 +78,7 @@ class FakeForge:
         comments: dict[tuple[str, int], list[dict[str, Any]]] | None = None,
         head_prs: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
         viewer: str = "operator",
+        visibility: dict[str, str] | None = None,
     ) -> None:
         self.issues = issues
         self.prs = prs
@@ -88,7 +89,11 @@ class FakeForge:
         self.comments = comments or {}
         self.head_prs = head_prs or {}
         self.viewer = viewer
+        self.visibility = visibility or {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        # Kept apart from `calls`: collect reads every repo's visibility (cloud-triage
+        # §B), and the call-sequence assertions predate it.
+        self.visibility_calls: list[str] = []
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         self.calls.append(("list_repos", {"owner": owner, "limit": limit}))
@@ -134,6 +139,10 @@ class FakeForge:
     def viewer_login(self) -> str:
         self.calls.append(("viewer_login", {}))
         return self.viewer
+
+    def repo_visibility(self, *, repo: str) -> str | None:
+        self.visibility_calls.append(repo)
+        return self.visibility.get(repo)
 
     def anchor_reads(self) -> list[dict[str, Any]]:
         """`read_file_at_ref` calls other than collect's one config read per repo."""

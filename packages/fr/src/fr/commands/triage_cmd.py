@@ -30,6 +30,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr.artifacts.trigger import is_interactive
 from fr.hostclient import client_for_backend
 from fr.triage.batch import last_dispatch
 from fr.triage.check import ClaimSets, classify
@@ -47,7 +48,7 @@ from fr.triage.model import (
     state_dir,
 )
 from fr.triage.render import GENERATED, plural, render
-from fr.triage.scope_config import scope_id
+from fr.triage.scope_config import load_durable, mirror_state_repo, scope_id, write_durable
 from fr.triage.snapshot import (
     acceptance_rows,
     diff_snapshots,
@@ -57,6 +58,7 @@ from fr.triage.snapshot import (
     store_snapshot,
     take_snapshot,
 )
+from fr.triage.state_ref import NEW_REPO, Ask, decide_state_repo
 
 console = Console()
 err_console = Console(stderr=True)
@@ -259,7 +261,56 @@ def collect_into(
     out.write_text(
         json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    _settle_state_repo(target_dir, facts)
     return facts, out, stats
+
+
+NO_STATE_REPO = (
+    "no state repo for this scope: its state stays in this workspace and is never pushed. "
+    "Run `fr triage collect` at a terminal to choose one (cloud-triage R7)."
+)
+
+
+def state_repo_prompt() -> Ask | None:
+    """The operator's prompt for the state-repo choice; None when no operator is at a
+    terminal (`fr.artifacts.trigger.is_interactive`). Tests replace this factory."""
+    if not is_interactive():
+        return None
+
+    def ask(question: str, choices: list[str], warning: str | None) -> str | None:
+        if warning:
+            err_console.print(f"warning: {warning}", markup=False, soft_wrap=True)
+        for n, choice in enumerate(choices, 1):
+            console.print(f"  {n}. {choice}", markup=False, soft_wrap=True)
+        picked: str = typer.prompt(f"{question} [1-{len(choices)}]", default="", show_default=False)
+        if not picked.strip():
+            return None
+        if not picked.strip().isdigit() or not 1 <= int(picked) <= len(choices):
+            return picked.strip()  # refused by the decision, naming the choices
+        choice = choices[int(picked) - 1]
+        if choice == NEW_REPO:
+            name: str = typer.prompt("OWNER/REPO of the new repo (create it yourself, private)")
+            return name.strip() or None
+        return choice
+
+    return ask
+
+
+def _settle_state_repo(target_dir: Path, facts: Facts) -> None:
+    """Decide where the scope's state ref lives on its first collect (R6, R7, §B), from the
+    scope's repos and the visibility collect just recorded, and write it to
+    `scope-durable.yaml` and the `scope.yaml` mirror. Decided once: an existing
+    `state_repo` is never asked again. Undecided (non-interactive), it warns, once per
+    collect, and the state stays local."""
+    durable = load_durable(target_dir)
+    if durable.state_repo:
+        return
+    chosen = decide_state_repo(facts.repos, facts.visibility, state_repo_prompt())
+    if chosen is None:
+        err_console.print(f"warning: {NO_STATE_REPO}", markup=False, soft_wrap=True)
+        return
+    write_durable(target_dir, durable.model_copy(update={"state_repo": chosen}))
+    mirror_state_repo(target_dir, chosen)
 
 
 def _previous_facts(path: Path, scope: Scope) -> Facts | None:

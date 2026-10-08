@@ -49,7 +49,8 @@ from fr.triage.stage import Stage, derive_stage
 # is owed. 7 adds per-issue `claims` (2026-10-06-triage-claims §3.H, R12): every file carries
 # the key (`to_json` dumps it, `[]` included), which a closed-world schema-6 reader rejects, so
 # the stamp moves for the same reason. 8 adds per-config `merge_method` (2026-10-07-cloud-triage
-# §A): `to_json` dumps it, `null` included, which a closed-world schema-7 reader rejects. 3 to 7
+# §A): `to_json` dumps it, `null` included, which a closed-world schema-7 reader rejects; the
+# same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 3 to 7
 # still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
 FACTS_SCHEMA: Literal[8] = 8
 FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8)
@@ -499,6 +500,10 @@ class Facts(_Strict):
     config: dict[str, TriageConfig] = {}
     # The forge login `collect` ran as: the default allowed batch PR author (gh#936).
     viewer: str | None = None
+    # OWNER/REPO -> `public` | `private` | `internal` for every collected repo whose
+    # visibility the forge answered (cloud-triage §B, §C): the state-repo decision and
+    # the privacy guard read it; a repo missing here is read live by the guard.
+    visibility: dict[str, str] = {}
 
     @model_validator(mode="after")
     def _group_needs_schema_4(self) -> Facts:

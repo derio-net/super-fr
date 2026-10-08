@@ -62,6 +62,9 @@ class FixtureForge:
     def viewer_login(self) -> str:
         return "operator"
 
+    def repo_visibility(self, *, repo: str) -> str | None:
+        return None
+
 
 def test_collect_writes_facts_json_from_the_forge(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
