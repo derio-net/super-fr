@@ -626,3 +626,8 @@ Supersedes phase-split-2026-10-07-cloud-triage-p4. Its requirements (R14, R15) a
 ### phase-split-2026-10-07-cloud-triage-p6-1 · decision · review-size: the agents artifact kind and the worker setup are a separate ~1000-line change
 
 Supersedes phase-split-2026-10-07-cloud-triage-p6. R19-R21 are also cited by the broad end-to-end row that phases 3 and 4 link. Folded into an earlier phase it would add a new artifact kind (registry, stamp, validator, re-render path, wheel data and tripwire), install.sh, the worker brief and the skill with its three mirrors to a phase already near 1400 lines.
+
+<!-- fr:journal kind=discovery scope=spec id=slow-suite created=2026-10-08T13:48:20+00:00 -->
+### slow-suite · discovery · The full suite takes ~20 minutes in a 4-core cloud container; branch pushes run no CI
+
+Measured 2026-10-08 during phase 1: `uv run pytest -q --no-cov -n auto` in this cloud container (4 cores) ran for over 20 minutes, against ~2.5 minutes on a 12-core host (AGENTS.md). And .github/workflows/ci.yml triggers on `push: [main]` and `pull_request` only, so the branch's pushes before a PR existed ran no CI at all; a draft PR does trigger it (no `types:` filter).
