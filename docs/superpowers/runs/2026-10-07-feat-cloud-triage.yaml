@@ -25,6 +25,7 @@ steps:
           returned: '2026-10-08T11:50:23+00:00'
           outcome: abandoned
         - dispatched: '2026-10-08T11:50:23+00:00'
+          agent: a3afde920c281aa44
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
           tier: hard
