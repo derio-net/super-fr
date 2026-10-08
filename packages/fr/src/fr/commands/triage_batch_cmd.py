@@ -185,6 +185,7 @@ from fr.triage.claims import held_line, held_map, held_members
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
+from fr.triage.driver import HOST, Driver
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
@@ -1260,6 +1261,7 @@ def dispatch_batch(
     group: str | None = None,
     lenient_config: bool = False,
     read_errors: bool = False,
+    driver: Driver = HOST,
 ) -> None:
     """The body of `batch dispatch`, callable: one batch, one runner, one dispatch.
 
@@ -1270,7 +1272,12 @@ def dispatch_batch(
     handles its own way (gh#931).
     *lenient_config* is the driver's `.fr/triage.yaml` read (gh#998); *read_errors*
     its failed-fetch boundary, a `ForgeReadError` (gh#1025).
+    *driver* names the runner (cloud-triage R10): the host keeps `--to`, else the batch's.
     """
+    try:
+        to = driver.runner_for(batch, to)
+    except TriageError as exc:
+        _fail(str(exc))
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
@@ -1496,9 +1503,15 @@ def adopt_batch(
     to: str | None = None,
     checkout_path: Path | None = None,
     yes: bool = False,
+    driver: Driver = HOST,
 ) -> None:
     """The body of `batch adopt` (spec 2026-10-06-triage-batch-adopt §A): every read
-    and refusal first, then the plan, then — with *yes* — each step not yet done."""
+    and refusal first, then the plan, then — with *yes* — each step not yet done.
+    *driver* names the runner, as for `dispatch_batch` (cloud-triage R10)."""
+    try:
+        to = driver.runner_for(batch, to)
+    except TriageError as exc:
+        _fail(str(exc))
     # 1. The batch, its stage, and whether this is a re-run of an adoption (R2, R10).
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
@@ -2215,8 +2228,10 @@ class _Driver:
         workspace_prefix: str = DEFAULT_WORKSPACE_PREFIX,
         keep_sessions: bool = False,
         scope_args: list[str] | None = None,
+        driver: Driver = HOST,
     ) -> None:
         self.scope, self.target, self.named = scope, target, named
+        self.adapter = driver  # the runner and post_merge of where this runs (R10, R20)
         self.scope_args = scope_args or []
         self.board_failures: set[str] = set()  # board write failures, since the last good one
         self.workspace_prefix = workspace_prefix
@@ -2997,6 +3012,8 @@ class _Driver:
 
     def _launch(self, facts: Facts, batch: Batch, repo: str) -> Launch:
         try:
+            if self.adapter.refusal(batch) is None:  # the driver's runner (R10)
+                batch = _with_runner(batch, self.adapter.runner_for(batch))
             return resolve_launch(  # the clone's models.yaml, as dispatch_batch reads it (rg-8)
                 batch, facts.config_for(repo), orchestrator=_orchestrator(self.checkout(repo).path)
             ).launch
@@ -3060,7 +3077,13 @@ class _Driver:
         try:  # a pass that aborts after a post_merge still restarts what it owes (p2-r1)
             for train in plan.trains:
                 _say(train_line(train))
+            batches = {b.id: b for b in judgements.batches}
             for action in plan.actions:
+                why = self._refused(action, batches)
+                if why is not None:  # a batch this driver does not dispatch (R10): reported
+                    self._held += 1
+                    _say(action_line(replace(action, kind="warn"), why))
+                    continue
                 if not self.yes:
                     _say(action_line(action))
                     continue
@@ -3097,6 +3120,12 @@ class _Driver:
         stuck += [f"export wave {a.wave} {a.batch}" for a in plan.actions
                   if a.wave is not None and a.kind == "warn"]  # fmt: skip
         return acted, summary, stuck
+
+    def _refused(self, action: Action, batches: Mapping[str, Batch]) -> str | None:
+        """Why the driver does not start *action*'s dispatch (its adapter's `refusal`);
+        None for any other action, or one it starts."""
+        batch = batches.get(action.batch) if action.kind == "dispatch" else None
+        return self.adapter.refusal(batch) if batch is not None else None
 
     def _restart_sessions(self) -> None:
         """Restart idle sessions once per recorded runner, after every close-out this pass
@@ -3240,6 +3269,7 @@ class _Driver:
                     group=self.group_of(batch),
                     lenient_config=True,
                     read_errors=True,
+                    driver=self.adapter,
                 )
         except RunnerDispatchError as exc:
             return self._dispatch_failed(batch, str(exc), exc.__cause__), False, in_flight
@@ -3545,14 +3575,14 @@ class _Driver:
         post_merged = False
         if action.post_merge and command:
             try:
-                checkout.run_command(command)
+                post_merged = self.adapter.post_merge(checkout, command)  # the host's (R20)
             except TriageError as exc:
                 return f"post_merge failed, close-out held: {exc}", False
+        if post_merged:
             batch = self._append(
                 judgements, facts, batch, PostMergeEvent(kind="post_merge", at=_now_after(batch))
             )
             judgements = load_judgements(self.target / "judgements.yaml")
-            post_merged = True
             installed = _installed_version()
             if installed is not None and installed != __version__:
                 self.restart_to = installed  # after this pass: see `batch_drive_command`
