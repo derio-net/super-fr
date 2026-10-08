@@ -372,7 +372,7 @@ def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
 
     loaded = load_facts(path)
 
-    assert facts.to_json()["schema"] == 7
+    assert facts.to_json()["schema"] == 8
     assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 
@@ -686,9 +686,9 @@ def test_collect_ignores_an_untrusted_authors_marker() -> None:
     assert next(i for i in facts.issues if i.number == 1).claims == []
 
 
-def test_collected_facts_are_schema_7() -> None:
+def test_collected_facts_are_schema_8() -> None:
     facts = collect_facts(_claim_forge({}), SUPER_FR, now=NOW)
-    assert facts.to_json()["schema"] == 7
+    assert facts.to_json()["schema"] == 8
 
 
 def test_collect_counts_a_peer_hosts_marker_by_a_repo_member() -> None:

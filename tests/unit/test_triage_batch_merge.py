@@ -752,3 +752,65 @@ def test_merge_refuses_a_batch_held_elsewhere(
     assert code == 2
     assert OTHER in out and "super-fr#1" in out
     assert forge.merged == [] and checkout.worktrees == []
+
+
+# ------------------------------- merge_method in .fr/triage.yaml (cloud-triage §A, p1-r5)
+
+
+def test_the_config_takes_an_optional_merge_method() -> None:
+    assert TriageConfig().merge_method is None
+    assert TriageConfig.model_validate({"merge_method": "rebase"}).merge_method == "rebase"
+    with pytest.raises(ValueError, match="merge_method"):
+        TriageConfig.model_validate({"merge_method": "fast-forward"})
+
+
+@pytest.mark.parametrize(
+    ("methods", "configured", "want"),
+    [
+        ({"default": None, "allowed": ["merge", "squash"]}, "squash", "squash"),
+        ({"default": None, "allowed": ["merge", "rebase", "squash"]}, "rebase", "rebase"),
+        # The forge's own default still wins where it names one.
+        ({"default": "merge", "allowed": ["merge", "squash"]}, "squash", "merge"),
+        # One allowed method needs no setting.
+        ({"default": None, "allowed": ["squash"]}, None, "squash"),
+    ],
+)
+def test_choose_method_uses_the_configured_method_when_the_forge_names_none(
+    methods: dict[str, Any], configured: str | None, want: str
+) -> None:
+    from fr.triage.batch_merge import choose_method
+
+    assert choose_method(None, methods, configured=configured) == want
+
+
+def test_choose_method_refuses_a_configured_method_the_repo_disallows() -> None:
+    from fr.triage.batch_merge import choose_method
+    from fr.triage.errors import TriageError
+
+    with pytest.raises(TriageError, match=r"merge_method: rebase.*\.fr/triage\.yaml"):
+        choose_method(None, {"default": None, "allowed": ["merge", "squash"]}, configured="rebase")
+
+
+def test_several_allowed_and_no_default_names_the_config_key_and_the_flag() -> None:
+    from fr.triage.batch_merge import choose_method
+    from fr.triage.errors import TriageError
+
+    with pytest.raises(TriageError) as exc:
+        choose_method(None, {"default": None, "allowed": ["merge", "squash"]})
+    assert "--method" in str(exc.value)
+    assert "merge_method" in str(exc.value) and ".fr/triage.yaml" in str(exc.value)
+
+
+def test_merge_uses_the_repos_configured_merge_method(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _setup(
+        tmp_path,
+        monkeypatch,
+        [("solo", 1, None, "minor", "4.22.0", ["a.py"])],
+        config={**CONFIG, "merge_method": "squash"},
+    )
+    forge.methods = {"default": None, "allowed": ["merge", "squash"]}
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 0, out
+    assert forge.merged == [(1001, "head-solo", "squash")]

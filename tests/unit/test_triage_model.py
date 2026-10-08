@@ -363,11 +363,11 @@ def test_one_key_in_both_duplicate_fields_is_refused(tmp_path: Path) -> None:
 # --------------------------------------- triage-claims §3.H (facts 6, judgements 6)
 
 
-@pytest.mark.parametrize("schema", [3, 4, 5, 6, 7])
-def test_facts_schemas_3_to_7_load(tmp_path: Path, schema: int) -> None:
+@pytest.mark.parametrize("schema", [3, 4, 5, 6, 7, 8])
+def test_facts_schemas_3_to_8_load(tmp_path: Path, schema: int) -> None:
     from fr.triage.model import FACTS_READS, FACTS_SCHEMA, load_facts
 
-    assert FACTS_SCHEMA == 7 and FACTS_READS == (3, 4, 5, 6, 7)
+    assert FACTS_SCHEMA == 8 and FACTS_READS == (3, 4, 5, 6, 7, 8)
     path = tmp_path / "facts.json"
     doc = {
         "schema": schema,

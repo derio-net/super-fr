@@ -1840,7 +1840,11 @@ def batch_merge_command(
         # Merge runs the collected version.files / set / relock: the same
         # freshness rule as dispatch (review r3-f3), before anything is read.
         _fresh_config(checkout, facts, owner_repo)
-        chosen = choose_method(method, client.repo_merge_methods(owner_repo))
+        chosen = choose_method(
+            method,
+            client.repo_merge_methods(owner_repo),
+            configured=facts.config_for(owner_repo).merge_method,
+        )
         ci_none = ci_none_at(checkout)  # fetched by `_fresh_config`
     except UnsupportedForgeOperation as exc:
         _fail(str(exc))
@@ -2267,7 +2271,11 @@ class _Driver:
             except TriageError as exc:  # a fetch, or main's config moved under the pass
                 raise ForgeReadError(str(exc), code=2) from exc
             try:
-                method = choose_method(None, client.repo_merge_methods(repo))
+                method = choose_method(
+                    None,
+                    client.repo_merge_methods(repo),
+                    configured=facts.config_for(repo).merge_method,
+                )
             except UnsupportedForgeOperation as exc:
                 _fail(str(exc))
             except TriageError as exc:

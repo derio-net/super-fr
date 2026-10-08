@@ -47,10 +47,11 @@ from fr.triage.stage import Stage, derive_stage
 # (driver-sessions §C): a schema-5 reader would answer "invalid facts" where "re-run collect"
 # is owed. 7 adds per-issue `claims` (2026-10-06-triage-claims §3.H, R12): every file carries
 # the key (`to_json` dumps it, `[]` included), which a closed-world schema-6 reader rejects, so
-# the stamp moves for the same reason. 3 to 6 still load, and the first collect upgrades them.
-# Independent of JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[7] = 7
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7)
+# the stamp moves for the same reason. 8 adds per-config `merge_method` (2026-10-07-cloud-triage
+# §A): `to_json` dumps it, `null` included, which a closed-world schema-7 reader rejects. 3 to 7
+# still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
+FACTS_SCHEMA: Literal[8] = 8
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8)
 # The version this fr WRITES: every engine write stamps 6 (spec 2026-10-06-triage-claims
 # §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
 # `conflict` event; 4 was
@@ -389,6 +390,10 @@ class TriageConfig(_Strict):
     # Where the wave driver exports this repo's triage state once a wave is finished
     # (spec 2026-10-05-triage-pages-goal R13); None: the driver never exports.
     export: ExportConfig | None = None
+    # The merge method to use when the forge names no default (spec 2026-10-07-cloud-triage
+    # §A): REST has no `viewerDefaultMergeMethod`, so a repo allowing several methods needs
+    # this, or `--method`, to merge. The forge's own default still wins where it names one.
+    merge_method: Literal["merge", "squash", "rebase"] | None = None
 
 
 def trusted_logins(config: TriageConfig, viewer: str | None) -> frozenset[str]:
@@ -438,7 +443,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7] = Field(7, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8] = Field(8, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
