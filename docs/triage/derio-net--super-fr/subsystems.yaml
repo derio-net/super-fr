@@ -30,7 +30,7 @@ subsystems:
     then_ref: v4.14.3
     themes: [plan-scaffold, plan-shape, plan-tooling, plan-reviewability, archive-workflow, archive-safety, archive-hygiene, closeout, spec-refs]
   - name: dispatch & runners
-    path: ["packages/fr-dispatch/src/*", "packages/fr-vk/src/*", "packages/fr-cncd/src/*", "packages/fr-herdr/src/*"]
+    path: ["packages/fr-dispatch/src/*", "packages/fr-vk/src/*", "packages/fr-cncd/src/*", "packages/fr-herdr/src/*", "packages/fr-claude-cloud/src/*"]
     then_ref: v4.14.3
     themes: [runner-dispatch, herdr-runner, bridge-observability]
   - name: acceptance matrix
