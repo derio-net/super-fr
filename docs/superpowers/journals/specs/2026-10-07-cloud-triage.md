@@ -127,3 +127,8 @@ Read 2026-10-08 from the operator's own session list (15 sessions; repos and tit
 ### d6-github-rest · decision · Operator decision, round 6: a general github-rest forge backend
 
 The REST-only GitHub client is a general backend (`github-rest`), selectable anywhere by one setting; the cloud environment selects it by default. Not a cloud-only `claude_cloud_gh`. Operator, 2026-10-08.
+
+<!-- fr:journal kind=decision scope=spec id=d7-worker-setup created=2026-10-08T10:07:00+00:00 -->
+### d7-worker-setup · decision · Operator decision, round 7: worker sessions get super-fr from the environment's setup script
+
+Operator, 2026-10-08: (a) the cloud environment's setup script installs super-fr (clone the marketplace, run install.sh); it covers most cases on the Anthropic cloud, other cloud agents to be revisited if ever used. (c) the brief telling the worker to install it is the fallback only, when `fr` is missing. Default taken without objection: one driver per scope, enforced by a lease stored in the state ref (holder session plus an expiry its wakes refresh); a second driver is refused; an expired lease is reported, never taken over silently.
