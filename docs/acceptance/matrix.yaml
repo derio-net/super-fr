@@ -5042,9 +5042,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R3
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_github_rest_contract.py
+      - super-fr:tests/unit/test_github_rest_no_graphql.py
+      - super-fr:tests/unit/test_forgeapi.py
     status: not-implemented
-    notes: ''
+    notes: phase 1 adds unit evidence (contract against captured GraphQL records, no-GraphQL
+      seams, forge.api resolution), run in CI; the row's client-live walk (Test Plan
+      16) is still owed, so the status does not move yet (review p1-r9)
     verify: client-live
   - id: cloud-triage-state-ref
     capability: Backlog triage
