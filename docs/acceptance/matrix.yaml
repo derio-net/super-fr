@@ -5189,12 +5189,31 @@ rows:
       - super-fr:tests/unit/test_claude_cloud_status.py#test_a_conflict_on_a_completed_session_is_handed_back_by_message
       - super-fr:tests/unit/test_claude_cloud_status.py#test_the_cloud_driver_never_loads_a_runner_it_does_not_carry
     status: not-implemented
-    notes: 'phase 5: the claude-cloud runner is a mailbox (R14) — pending requests replayed
-      until recorded, a lost dispatch found by its tag, requests and sessions restored
-      from the ref — and maps session state and needs_action (R15) onto the board and
-      Needs you now; unit evidence only. Still not-implemented: the end-to-end acceptance
-      is a live cloud walk (verify: client-live), owed by a later phase'
+    notes: 'Walk 17 ran end to end and failed: the driver''s mechanics hold (dispatch,
+      merge train, conflict hand-back, PR-activity and Routine wakes, restore after
+      restart), but a worker without its pipeline skill ships an unreviewed PR (derio-net/super-fr#1098)
+      and close-outs never start (derio-net/super-fr#1099); cloud git setup gaps in
+      derio-net/super-fr#1100, export collision risk in derio-net/super-fr#1101. Stays
+      not-implemented until those land and the walk passes.'
     verify: client-live
+    walks:
+    - strategy: client-live
+      harness: claude-code
+      model: sonnet
+      outcome: fail
+      at: '2026-10-08T23:24:50Z'
+      evidence: 'walk 17, 2026-10-08, Claude Code cloud: a driver session drove scope
+        s-e7803c78 (batches walk17-a/b for throwaway #1093/#1094). Passed: dispatch
+        of one worker session per batch; merge train with merge_method (#1095 updated
+        then merged); a real add/add conflict on #1096 handed back by message, resolved
+        by the worker (merge, no rebase), then merged; PR-activity wakes (check_suite.completed,
+        pull_request.closed) and the hourly Routine woke the idle driver; a simulated
+        container restart restored the state from refs/heads/fr-triage/s-e7803c78 and
+        kept the lease. Failed: workers had no fr-goal skill and shipped PRs with no
+        run (#1098); close-outs were created on the deleted batch branch and read as
+        working (#1099); origin/HEAD unset, detached checkout and missing merge_method
+        needed hand fixes (#1100). Not exercised: a version-drift re-home, a blocked
+        worker''s needs_action.'
   - id: cloud-triage-version-drift
     capability: Backlog triage
     acceptance: A session keeps the plugin and fr versions it started with; when a release
