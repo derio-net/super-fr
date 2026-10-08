@@ -1047,3 +1047,87 @@ e3a5136a: HERMES.md (mypy and runner lines), README.md table, subsystems.yaml pa
 ### p5-o1-resolved · finding [fixed] · resolves p5-o1: test_version_surfaces' hand-kept lists and the committed dev/admin profiles' POST_CREATE lacked fr-claude-cloud (CI red on 6bb24bae) (phase 5)
 
 9290737a: fr-claude-cloud in test_version_surfaces' members and manifests and in both committed profiles' POST_CREATE; CI green on 9290737a.
+
+<!-- fr:journal kind=decision scope=plan id=p6-drift-reads-the-cursor-from-the-pr-files created=2026-10-08T18:20:21+00:00 phase=6 -->
+### p6-drift-reads-the-cursor-from-the-pr-files · decision · The pass finds a batch's run cursor among its open PR's changed files and reads it at the PR head (phase 6)
+
+§G says the pass reads the cursor "from the batch branch head". The run id is not
+known to triage, and REST lists no directory at a ref, so `_Driver._drift` takes the
+one `docs/superpowers/runs/<run>.yaml` among `batch_pr(...).files` (facts already
+carry them) and reads it with `read_file_at_ref(repo, path, head_oid)`. A batch with
+no open PR, or whose PR carries no cursor yet, is skipped that pass, never reported
+as versionless; only a cursor read without `fr_version` is.
+
+<!-- fr:journal kind=decision scope=plan id=p6-rehome-at-idle created=2026-10-08T18:20:21+00:00 phase=6 -->
+### p6-rehome-at-idle · decision · A drifted run's rehome request is written only when its session is idle, like the conflict hand-back (phase 6)
+
+R17's "at its next idle moment" is applied by the planner (`plan_drift` needs status
+`idle` from the runner's `session_statuses`), the rule the conflict hand-back already
+keeps; a working or blocked session is asked again on a later pass. The (run,
+release) entry is written to rehomes.yaml when the request is written, so a lost
+result is re-emitted by the mailbox (same id), never asked twice.
+
+<!-- fr:journal kind=decision scope=plan id=p6-ledger-shape created=2026-10-08T18:20:21+00:00 phase=6 -->
+### p6-ledger-shape · decision · rehomes.yaml holds rehomes per (run, release), the runs reported versionless, and the driver's own start and pending self-rehome (phase 6)
+
+"Reported once" must survive a fresh process (every cloud wake is one), so the
+reported runs live in the ledger too, beside `rehomes`. `driver.start` is the fr the
+driver session started with (recorded on its first pass that read a release);
+`driver.pending` is the self-rehome request, re-emitted until `drive record` names
+it, which sets `start` to the release. Results whose id starts `driver:rehome:` are
+routed to the ledger, the rest to the runner's mailbox.
+
+<!-- fr:journal kind=decision scope=plan id=p6-driver-rehomes-on-a-greater-major created=2026-10-08T18:20:21+00:00 phase=6 -->
+### p6-driver-rehomes-on-a-greater-major · decision · The driver re-homes itself only when the release's major is GREATER than its start's (R18 says "differs") (phase 6)
+
+A dev build newer than every release (this repo's candidate install, once fr reaches
+6.0 before 6.0 is released) would otherwise re-home onto an older fr on every pass.
+Runs keep R17's literal "differs". The spec's R18 wording may want the same
+qualification; not edited here (the spec is outside this phase's files).
+
+<!-- fr:journal kind=decision scope=plan id=p6-self-update-install-and-reexec created=2026-10-08T18:20:21+00:00 phase=6 -->
+### p6-self-update-install-and-reexec · decision · The real installer is the cloud setup's (the marketplace clone at the release tag, then install.sh); the re-exec runs the first fr on PATH, once per release (phase 6)
+
+`_install_release` clones or fetches `~/.claude/plugins/marketplaces/derio-net--super-fr`,
+checks out the release tag and runs `scripts/install.sh`, the §H setup-script steps
+phase 7 documents; `_reexec` sets FR_TRIAGE_REEXEC=<release> and execs `fr` with the
+same arguments, outside drive.lock (the same pid takes it again). A re-exec that
+still finds the older fr warns and runs the pass on it; a failed install warns and
+runs it too. Neither has run live: both are injected in every test.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-drift-scenario-forge created=2026-10-08T18:20:21+00:00 phase=6 -->
+### p6-drift-scenario-forge · discovery · The version-drift scenario's forge derives three batch PRs from captured draft PR 1080 and serves every other route from the captured index (phase 6)
+
+Each batch PR is PR 1080's record with only number, head.ref and its one changed
+file's name rewritten (all three share its head and so its captured CI); members are
+captured closed issues 432/458/471, whose comments answer `[]` (the claim refresh
+then writes nothing). The cursors at that head are fr's own artifact. The latest
+release is the capture `v5.17.1` (added this phase, `repos/.../releases/latest`), so
+the cursors record 4.9.0 and 5.17.0 rather than the plan's 5.x and 6.x: the shape
+(one run on another major, one on the release's, one with none) is the plan's.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-full-suite-left-to-ci created=2026-10-08T18:20:21+00:00 phase=6 -->
+### p6-full-suite-left-to-ci · discovery · P6.T3.S2's full local suite was not run; evidence is the PR's CI, as the dispatch directed (phase 6)
+
+Run locally instead: test_migration_*, test_run_*, test_validate_artifacts,
+test_triage_*, test_claude_cloud_*, test_real_ghrestclient, test_github_rest_*,
+test_forgeapi, test_release_script, test_import_direction, test_tripwire_* (4722
+passed, the one known root-only failure) and the six cloud_triage scenario tests
+against a fresh candidate install; ruff format/check and the AGENTS.md mypy command
+with fr-claude-cloud (clean); `fr validate artifacts`, `fr acceptance check` and
+`fr run status` on this run's migrated cursor.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-10-08T18:20:21+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+a stamp-only hop is one module copied from run_bound_model.py, one optional field, one line in start_cmd and the version pins the older hop tests carried; _already_v9 joins its two siblings in the one module allowed to consult the live model, so nothing was duplicated to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t2 created=2026-10-08T18:20:21+00:00 phase=6 -->
+### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
+
+drift.py is pure and new; the pass gained one method (_Driver._drift) on existing seams (batch_pr, _probe, _try_runner, the mailbox runner's rehome), and the client gained one route on each backend
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t3 created=2026-10-08T18:20:21+00:00 phase=6 -->
+### no-refactor-p6-t3 · discovery · no-refactor-because P6.T3 (phase 6)
+
+the self-update is one function in triage_drive_cmd beside the pass it guards, and its plan is drift.py's; the only shared code touched is one_pass's new lease_taken flag
