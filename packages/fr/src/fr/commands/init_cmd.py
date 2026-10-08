@@ -132,6 +132,35 @@ def migrate(
     typer.echo(SECRETS_BLOCK)
 
 
+@init_app.command("agents")
+def agents_cmd(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+    no_commit: bool = typer.Option(
+        False, "--no-commit", help="Write the files only; do not commit them."
+    ),
+) -> None:
+    """Render fr's two dispatched agents into .claude/agents/ (the `agents` artifact,
+    stamped) and commit them, so a Claude Code cloud session can dispatch
+    fr-spec-reviewer and fr-phase-executor from its first turn. Idempotent."""
+    from fr.agents import AGENT_NAMES, agent_path, write_agents
+    from fr.isolation.scaffold import commit_paths
+
+    repo_root = repo.resolve()
+    written = write_agents(repo_root)
+    for path in written:
+        typer.echo(f"wrote {path}")
+    if not written:
+        typer.echo("agents already current: " + ", ".join(f"{n}.md" for n in AGENT_NAMES))
+    if no_commit or not written or not (repo_root / ".git").exists():
+        return
+    rel = [str(agent_path(repo_root, n).relative_to(repo_root)) for n in AGENT_NAMES]
+    try:
+        commit_paths(repo_root, rel, "chore(fr): render the agents artifact")
+    except IsolationError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(2) from err
+
+
 @init_app.command("validator-wrapper")
 def validator_wrapper_cmd(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),

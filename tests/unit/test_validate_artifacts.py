@@ -198,7 +198,20 @@ def seed_good_repo(root: Path) -> dict[str, Path]:
         "usage": _w(root, "docs/superpowers/usage/2019-03-04-feat-widget.yaml", GOOD_USAGE),
         "record": _w(root, GOOD_RECORD_REL, GOOD_RECORD),
         "profiles": _w(root, ".devcontainer/fr-profiles.yaml", GOOD_PROFILES),
+        # The `agents` kind is a pair: one alone is reported missing its sibling.
+        "agents": _seed_agents(root),
     }
+
+
+def _seed_agents(root: Path) -> Path:
+    from fr.agents import write_agents
+
+    written = write_agents(root)
+    return next(p for p in written if p.stem == "fr-spec-reviewer")
+
+
+SEEDED_COUNT = len(ARTIFACT_KINDS) + 1
+"""One artifact per kind, plus the `agents` kind's second file."""
 
 
 # --- 1. a well-formed artifact of every kind passes -----------------------
@@ -215,7 +228,7 @@ def test_a_well_formed_artifact_of_every_kind_passes(tmp_path: Path) -> None:
     report = validate_repo(tmp_path)
     assert report.issues == (), [str(i) for i in report.issues]
     assert report.ok
-    assert report.checked == len(ARTIFACT_KINDS)
+    assert report.checked == SEEDED_COUNT
 
 
 def test_validation_never_writes(tmp_path: Path) -> None:
@@ -297,6 +310,11 @@ MISSING_FIELD_CASES = {
         GOOD_PROFILES.replace("  type: none\n", "  host: ci.example.com\n"),
         "type",
     ),
+    "agents": (
+        ".claude/agents/fr-spec-reviewer.md",
+        "---\nname: fr-spec-reviewer\ndescription: x\n---\nbody\n",
+        "fr_artifact_version",
+    ),
 }
 
 
@@ -327,7 +345,7 @@ def test_only_the_corrupt_artifact_is_reported(tmp_path: Path) -> None:
     _w(tmp_path, rel, corrupted)
     report = validate_repo(tmp_path)
     assert {i.kind for i in report.issues} == {"run"}
-    assert report.checked == len(ARTIFACT_KINDS), "a failure must not stop the other kinds"
+    assert report.checked == SEEDED_COUNT, "a failure must not stop the other kinds"
 
 
 def test_a_cross_reference_that_does_not_resolve_is_caught(tmp_path: Path) -> None:
@@ -704,7 +722,7 @@ def test_cli_passes_on_a_clean_repo(tmp_path: Path) -> None:
     seed_good_repo(tmp_path)
     result = _invoke(tmp_path, ["validate", "artifacts"])
     assert result.exit_code == 0, result.output
-    assert str(len(ARTIFACT_KINDS)) in result.output
+    assert str(SEEDED_COUNT) in result.output
 
 
 def test_cli_fails_naming_the_file_and_the_field(tmp_path: Path) -> None:

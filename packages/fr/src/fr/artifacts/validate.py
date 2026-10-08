@@ -178,6 +178,33 @@ def _records_dir_issues(repo_root: Path) -> list[ValidationIssue]:
     return out
 
 
+AGENTS_KIND = "agents"
+
+
+def _agents_set_issues(repo_root: Path) -> list[ValidationIssue]:
+    """The `agents` kind is a pair (spec 2026-10-07-cloud-triage §H): a repo that
+    carries one of fr's two agents and not the other cannot run fr-goal from a
+    cloud session, and the per-file validator never sees the absent one. A repo
+    with neither has not opted in, and is not reported."""
+    from fr.agents import AGENT_NAMES, agent_path
+
+    present = [n for n in AGENT_NAMES if agent_path(repo_root, n).exists()]
+    if not present:
+        return []
+    return [
+        ValidationIssue(
+            kind=AGENTS_KIND,
+            path=agent_path(repo_root, name),
+            message=(
+                f"missing: the repo carries {', '.join(f'{p}.md' for p in present)} but not "
+                f"this one — run `fr init agents` to render both"
+            ),
+        )
+        for name in AGENT_NAMES
+        if name not in present
+    ]
+
+
 def validate_repo(repo_root: Path, *, kind_name: str | None = None) -> ValidationReport:
     """Validate every live artifact under `repo_root` (or just one kind's).
 
@@ -217,6 +244,8 @@ def validate_repo(repo_root: Path, *, kind_name: str | None = None) -> Validatio
             issues.extend(validate_artifact(kind, path))
     if kind_name in (None, RECORD_KIND):
         issues.extend(_records_dir_issues(repo_root))
+    if kind_name in (None, AGENTS_KIND):
+        issues.extend(_agents_set_issues(repo_root))
     if kind_name is None:
         issues.extend(_workflow_issues(repo_root))
     return ValidationReport(issues=tuple(issues), checked=checked)

@@ -23,7 +23,17 @@ from fr.artifacts.registry import (
     write_version,
 )
 
-EXPECTED_KINDS = {"plan", "journal", "run", "matrix", "spec", "usage", "record", "profiles"}
+EXPECTED_KINDS = {
+    "plan",
+    "journal",
+    "run",
+    "matrix",
+    "spec",
+    "usage",
+    "record",
+    "profiles",
+    "agents",
+}
 
 
 # --- Task 1: the registry ------------------------------------------------
@@ -91,6 +101,7 @@ def _seed_repo(root: Path) -> dict[str, Path]:
         "docs/superpowers/runs/2026-01-01-live.records/deliver.yaml", "step: deliver\n"
     )
     live["profiles"] = w(".devcontainer/fr-profiles.yaml", "default: dev\n")
+    live["agents"] = w(".claude/agents/fr-spec-reviewer.md", "---\nname: fr-spec-reviewer\n---\n")
 
     return live
 
@@ -184,6 +195,15 @@ UNSTAMPED: dict[str, str] = {
         "\n"
         "# trailing comment\n"
     ),
+    "agents": (
+        "---\n"
+        "# the canonical agent, as a repo carries it\n"
+        "name: fr-spec-reviewer\n"
+        "tools: Read, Grep   # read-only\n"
+        "---\n"
+        "\n"
+        "# fr-spec-reviewer\n"
+    ),
     "spec": (
         "# A design spec\n"
         "\n"
@@ -214,6 +234,9 @@ STAMPED_3: dict[str, str] = {
     ),
     "profiles": UNSTAMPED["profiles"].replace(
         "default: dev\n", "schema_version: 3\ndefault: dev\n"
+    ),
+    "agents": UNSTAMPED["agents"].replace(
+        "name: fr-spec-reviewer\n", "name: fr-spec-reviewer\nfr_artifact_version: 3\n"
     ),
 }
 
@@ -595,6 +618,7 @@ def _seed_one(root: Path, kind: str, *, version: int) -> Path | None:
         "usage": next((root / "docs" / "superpowers" / "usage").glob("*.yaml")),
         "record": next((root / "docs" / "superpowers" / "runs").glob("*.records/*.yaml")),
         "profiles": root / ".devcontainer" / "fr-profiles.yaml",
+        "agents": root / ".claude" / "agents" / "fr-spec-reviewer.md",
     }[kind]
     artifact_kind(kind).write_version(target, version)
     return target

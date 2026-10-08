@@ -42,6 +42,7 @@ import yaml
 
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.structure import (
+    validate_agents,
     validate_journal,
     validate_matrix,
     validate_plan,
@@ -303,7 +304,8 @@ _SPEC_KEY = "fr_schema"
 _FRONT_MATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 
 
-def _read_spec_stamp(path: Path) -> int | None:
+def _read_front_matter_key(path: Path, key: str) -> int | None:
+    """The integer `key` in `path`'s leading front matter, `None` when absent."""
     _, text = read_verbatim(path)
     m = _FRONT_MATTER_RE.match(text)
     if m is None:
@@ -312,28 +314,66 @@ def _read_spec_stamp(path: Path) -> int | None:
         data: Any = yaml.safe_load(m.group(1))
     except yaml.YAMLError as e:
         raise ArtifactStampError(f"{path}: front matter is not valid YAML: {e}") from e
-    if not isinstance(data, dict) or _SPEC_KEY not in data:
+    if not isinstance(data, dict) or key not in data:
         return None
-    return _coerce_version(data[_SPEC_KEY], path, _SPEC_KEY)
+    return _coerce_version(data[key], path, key)
 
 
-def _write_spec_stamp(path: Path, version: int) -> None:
-    bom, text = read_verbatim(path)
+def set_front_matter_key(text: str, key: str, version: int, *, append: bool = False) -> str:
+    """`text` with `key: version` in its leading front matter, nothing else moved.
+
+    An existing `key` line is rewritten in place; a missing one is added at the
+    top of the block, or at its end with `append` (the `agents` kind keeps
+    `name` first, as Claude Code's agent files do). Text with no front matter
+    gains a block holding only the key. Pure, so `fr.agents.render_agent` and
+    the stamp writers share it."""
     m = _FRONT_MATTER_RE.match(text)
+    nl = _dominant_newline(text)
     if m is None:
-        nl = _dominant_newline(text)
-        write_text_atomic(path, f"{bom}---{nl}{_SPEC_KEY}: {version}{nl}---{nl}" + text)
-        return
+        return f"---{nl}{key}: {version}{nl}---{nl}" + text
     block = m.group(1)
     # `[^\r\n]*` rather than `.*$`: `.` matches `\r`, so on a CRLF spec the
     # substitution swallowed the carriage return and left ONE line of the block
     # with a bare LF (review r5-e10).
-    pattern = re.compile(rf"^{re.escape(_SPEC_KEY)}\s*:[^\r\n]*", re.MULTILINE)
+    pattern = re.compile(rf"^{re.escape(key)}\s*:[^\r\n]*", re.MULTILINE)
     if pattern.search(block):
-        new_block = pattern.sub(f"{_SPEC_KEY}: {version}", block, count=1)
+        new_block = pattern.sub(f"{key}: {version}", block, count=1)
+    elif append:
+        new_block = f"{block}{nl}{key}: {version}"
     else:
-        new_block = f"{_SPEC_KEY}: {version}{_dominant_newline(text)}{block}"
-    write_text_atomic(path, bom + text[: m.start(1)] + new_block + text[m.end(1) :])
+        new_block = f"{key}: {version}{nl}{block}"
+    return text[: m.start(1)] + new_block + text[m.end(1) :]
+
+
+def _write_front_matter_key(path: Path, key: str, version: int, *, append: bool = False) -> None:
+    bom, text = read_verbatim(path)
+    write_text_atomic(path, bom + set_front_matter_key(text, key, version, append=append))
+
+
+def _read_spec_stamp(path: Path) -> int | None:
+    return _read_front_matter_key(path, _SPEC_KEY)
+
+
+def _write_spec_stamp(path: Path, version: int) -> None:
+    _write_front_matter_key(path, _SPEC_KEY, version)
+
+
+# --- agents: the repo's copy of fr's two dispatched agents ----------------
+#
+# `.claude/agents/fr-spec-reviewer.md` and `fr-phase-executor.md` (spec
+# `2026-10-07-cloud-triage-design` §H, R19): the canonical plugin agents with
+# one added front-matter key. Rendered by `fr.agents`; the migration and the
+# repair live in `fr.artifacts.agents_kind`.
+
+AGENTS_STAMP_KEY = "fr_artifact_version"
+
+
+def _read_agents_stamp(path: Path) -> int | None:
+    return _read_front_matter_key(path, AGENTS_STAMP_KEY)
+
+
+def _write_agents_stamp(path: Path, version: int) -> None:
+    _write_front_matter_key(path, AGENTS_STAMP_KEY, version, append=True)
 
 
 # --- the registry --------------------------------------------------------
@@ -503,6 +543,21 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_profiles,
+        ),
+        ArtifactKind(
+            name="agents",
+            # The repo's own copy of fr's two dispatched agents, so a Claude Code
+            # cloud session can dispatch them from its first turn (spec
+            # `2026-10-07-cloud-triage-design` §H, R19). Born at 1. A release that
+            # changes either canonical agent moves this AND registers
+            # `fr.artifacts.agents_kind.rerender_migration` for the hop
+            # (`tests/unit/test_tripwire_agents_data.py` pins the pair).
+            current_version=1,
+            locator=".claude/agents/fr-*.md",
+            stamp=f"`{AGENTS_STAMP_KEY}` in the agent's front matter",
+            read_stamp=_read_agents_stamp,
+            write_version=_write_agents_stamp,
+            validate=validate_agents,
         ),
     )
 }

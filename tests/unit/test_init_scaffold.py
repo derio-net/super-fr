@@ -1243,3 +1243,18 @@ def test_a_quoted_profile_key_never_ends_up_duplicated(repo: Path) -> None:
 
     data = yaml.load((repo / PROFILES).read_text(), Loader=_StrictLoader)  # noqa: S506
     assert data["profiles"] == {"dev": {"purpose": "new", "secrets": []}}
+
+
+def test_scaffold_renders_and_commits_the_agents_artifact(repo: Path) -> None:
+    """The agents step (spec 2026-10-07-cloud-triage R19): scaffolding a profile
+    makes the repo fr-enabled, so it also gains fr's two dispatched agents, stamped
+    and committed with the profile."""
+    from fr.agents import AGENT_NAMES, render_agent
+
+    _initial_commit(repo)
+    res = scaffold(repo)
+    assert res.exit_code == 0, res.output
+    for name in AGENT_NAMES:
+        rel = f".claude/agents/{name}.md"
+        assert rel in _tracked(repo)
+        assert (repo / rel).read_text() == render_agent(name, 1)

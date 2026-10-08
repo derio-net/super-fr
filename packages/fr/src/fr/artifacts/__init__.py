@@ -64,6 +64,7 @@ from fr.artifacts import matrix_visual as _matrix_visual  # noqa: F401  (isort: 
 from fr.artifacts import matrix_strategies as _matrix_strategies  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_anchors as _matrix_anchors  # noqa: F401  (isort: skip)
 from fr.artifacts import profiles_services as _profiles_services  # noqa: F401  (isort: skip)
+from fr.artifacts import agents_kind as _agents_kind  # noqa: F401  (isort: skip)
 
 __all__ = [
     "ARTIFACT_KINDS",
