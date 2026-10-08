@@ -246,6 +246,25 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `fr journal add/resolve`, `fr plan edit --tick/--complete-phase` and
     `fr acceptance add/set-status` build one-entry records through the same
     engine.
+  - **Cloud triage** (2026-10-07 spec, `cloud-triage`) — the wave driver and its
+    workers in Claude Code cloud sessions. `fr.forgeapi` resolves the one host
+    setting `forge.api: rest | graphql` (`FR_FORGE_API`, else `~/.config/fr/forge.yaml`,
+    else `graphql`); under `rest`, `fr/real_ghrestclient.py` (`RealGhRestClient`) is
+    the GitHub client, REST routes only, because the cloud proxy refuses GraphQL.
+    `fr/triage/state_ref.py` keeps a scope's durable state on the ref
+    `refs/fr/triage/<scope-id>` (fetch before read, compare-and-swap push after every
+    change); `privacy.py` is the guard (`leak_risk`) that refuses a private repo's
+    issue in a scope whose state repo is public, and every push; `lease.py` the one
+    driver per scope; `driver.py` the driver adapter (`host` | `cloud`: runner,
+    refusals, `post_merge`), `fr triage drive pass|record` its cloud entry;
+    `drift.py` the pure version-drift planner (re-homes, the driver's self-update).
+    `fr.cloud` (`fr cloud doctor|setup-script`) checks a cloud session's prerequisites
+    and appends one remedy block to the failures they explain, only when
+    `CLAUDE_CODE_REMOTE=true`. `fr.agents` + `fr/artifacts/agents_kind.py` are the
+    `agents` artifact kind: `.claude/agents/fr-{spec-reviewer,phase-executor}.md`
+    rendered from the wheel copy (`scripts/sync-agents-data.py`, tripwire
+    `test_tripwire_agents_data.py`, whose sha pin makes an agent edit move the kind's
+    version) by `fr init agents`. Operator doc: `docs/cloud-setup.md`.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)
@@ -263,6 +282,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
   It never imports `fr.triage`, and `fr` never imports it
   (`test_import_direction.py`); `fr_dispatch.testing` holds the reusable
   run-unit contract it passes.
+- `fr-claude-cloud` — the `claude-cloud` runner (entry point `fr.runners:
+  claude-cloud`): a mailbox, not a backend. Every session action becomes a request
+  in the scope's state (`requests.yaml`, `sessions.yaml`) that the cloud driver's
+  agent executes with its session tools and records back (`fr triage drive record`);
+  re-homing is its restart. Like `fr-herdr`, it never imports `fr.triage`.
 - `fr-opencode-plugin` — **the one non-Python package**: TypeScript/Bun,
   ports the `fr-isolation-required` Claude Code hook to an OpenCode
   `tool.execute.before` plugin. Excluded from the uv workspace
