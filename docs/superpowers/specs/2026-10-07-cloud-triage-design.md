@@ -55,7 +55,7 @@ R15. The runner maps each cloud session's state onto fr's session statuses (work
 R16. Every run records the super-fr plugin version and the `fr` version it started with.
 R17. The driver acts on version drift only when it is incompatible: the run's recorded `fr` major differs from the current release's. It then re-homes the session at its next idle moment (the session pushes its work and stops; a fresh session continues the same branch from a resume brief built from the run cursor and journal), at most once per (run, release). A run with no recorded versions is reported, never re-homed.
 R18. The driver itself runs the current release: before each pass it compares the installed `fr` with the latest release and, when older, reinstalls and runs the pass on the new one; when the release's major differs from the one its own session started with, it re-homes itself (R17) so its skill text is current too.
-R19. A cloud worker session gets super-fr from the cloud environment's setup script. The worker brief makes the worker check `fr --version` before its first step and, only when `fr` is missing, install super-fr itself before going on.
+R19. A cloud worker session gets super-fr from the cloud environment's setup script, which runs before the session starts so the plugin's agents and hooks are loaded. The worker brief makes the worker check `fr --version` and the plugin's agents before its first step; when they are missing, it installs super-fr and asks to be re-homed, because a running session cannot load a plugin's agents (discovery `no-plugin-agents`).
 R20. The `post_merge` step is an operation of the environment the driver runs in: the host runs the repo's `post_merge` argument list as today; the cloud runs nothing, since every new session installs the current release at its start and the driver updates itself (R18).
 R21. The fr-triage skill documents the cloud driver, `forge.api`, the state ref, the state repo choice and the privacy guard, within its existing line budget.
 
@@ -288,7 +288,7 @@ to do.
 The cloud environment's setup script clones the super-fr marketplace, runs
 `scripts/install.sh`, and exports `FR_FORGE_API=rest` (documented, not shipped
 as a file: it is environment configuration). The worker brief gains a first
-step: `fr --version`; when missing, run the install itself, then continue (R19).
+step: `fr --version` and the plugin's agents; when missing, install super-fr and request a re-home, since the running session cannot load the agents (R19).
 `post_merge` becomes a driver-environment operation: `host` runs the configured
 argument list; the cloud driver runs nothing, because every session it starts
 installs the current release and the driver updates itself before each pass
