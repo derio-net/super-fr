@@ -776,3 +776,8 @@ check: consistency. evidence: run_cmd.py:1922-1934,:2984-2986.
 ### d11-cloud-remedy · decision · Operator decision, round 11: fr tells a cloud user how to fix the environment
 
 Operator, 2026-10-08, during implement: 'as a UX step, if a fr task is used on a cloud runner, it should return information on how to correctly edit the cloud environment (or create a new one containing the init script)'. Recorded as R23 and §H's remedy block: detection by CLAUDE_CODE_REMOTE=true, fr cloud doctor, fr cloud setup-script, one shared remedy block appended to cloud-caused failures. Implemented in plan phase 7.
+
+<!-- fr:journal kind=discovery scope=spec id=ci-logs-unreachable created=2026-10-08T16:25:37+00:00 -->
+### ci-logs-unreachable · discovery · A cloud session cannot read GitHub Actions job logs; failed tests now surface as check-run annotations
+
+Observed 2026-10-08: CI went red on dde24616 (the phase 3 review fixes) in test (py3.11, 3) and test (py3.14, 1), and every way to read why failed from this session: GET actions/jobs/{id}/logs redirects to an Azure blob host that the session's egress policy answers 403 (proxy status: recentRelayFailures), and the check run's annotations only said 'Process completed with exit code 1'. Local reproductions (root and a non-root user, CI's exact pytest command, a real clone with origin/main) all passed, but they used pytest-split's default algorithm while CI uses least_duration, so they ran different shards. Fix (ce8bd6a0): the test job writes a JUnit report and, on failure, scripts/junit_annotations.py prints one ::error annotation per failed test (at most 10), which the check-runs annotations API serves. Consequence for R22: a cloud orchestrator can now name the failing tests of a red gate, not just its URL.
