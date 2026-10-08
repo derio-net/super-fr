@@ -221,3 +221,87 @@ ae2e5856: three unit level refs added; status stays not-implemented until Test P
 ### p1-r11-resolved · finding [out-of-scope] · resolves p1-r11: tracker/github.py:114 passes state='closed' in lower case; both clients accept only OPEN/CLOSED (phase 1)
 
 Pre-existing on main: tracker/github.py:114's lower-case state fails on both backends; this change did not cause it and does not touch that path.
+
+<!-- fr:journal kind=decision scope=plan id=p2-commit-checks-base-sha created=2026-10-08T14:38:52+00:00 phase=2 -->
+### p2-commit-checks-base-sha · decision · commit_checks records carry base_sha beside the plan's five fields (phase 2)
+
+The witness needs the base sha "from the gate's check suite", so each record also carries
+`base_sha`: the base of the PR whose head is the sha in the check run's `pull_requests`
+(else the suite's Actions run's), "" for a status context or a run naming no PR (a merged
+PR's runs name none: the captured f1919d4 re-run). It is the PR base GitHub reports when
+the checks are READ, not provably the base at run time; verify_ci writes `unknown` when no
+gate record names one.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-gate-absent-while-running created=2026-10-08T14:38:52+00:00 phase=2 -->
+### p2-gate-absent-while-running · discovery · ci-ok has no check run until its needs finish, so a missing gate mid-run is pending, not absent (phase 2)
+
+Captured on PR 1088's head 43956047 while CI ran (tests/fixtures/github_rest/commit_checks/pending):
+seven test shards in_progress and no ci-ok check run at all — a job that `needs` others is
+created only when it starts. Read literally, §I step 5 ("absent -> exit 2") would refuse every
+resolve made while CI runs. verify_ci reads a gate missing from every same-tree commit as
+pending (75) while any check on HEAD is unfinished or HEAD has none yet, and as absent
+(exit 2) only once every check on it finished. The spec's §I step 5 should say so.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-required-checks-only-reported created=2026-10-08T14:38:52+00:00 phase=2 -->
+### p2-required-checks-only-reported · discovery · Without .fr/ci.yaml, a required gate that never reported cannot be named absent (phase 2)
+
+`pr_required_checks` (both backends) returns the required checks that RAN on the head, not
+the required names, so with no `.fr/ci.yaml` the gate set is "required checks reported so
+far": an empty answer reads as no gates declared (exit 2, naming both ways), and a required
+check that never ran is not seen. This repo ships `.fr/ci.yaml` (`gate_checks: [ci-ok]`),
+which avoids it; a repo relying on required checks would want a required-names read.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-no-commit-statuses-captured created=2026-10-08T14:38:52+00:00 phase=2 -->
+### p2-no-commit-statuses-captured · discovery · No commit in super-fr carries a commit status; the status-context test is derived (phase 2)
+
+Every captured `commits/{sha}/status` has `"statuses": []` (all CI here is check runs), so
+test_commit_checks.py's status-context case adds entries to the captured envelope and says
+so in its docstring. Failed/skipped/cancelled/in-progress gates in test_run_ci_evidence.py
+are likewise derived from the captured green head; pending-with-no-gate, the re-run and
+green are captured as they were.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-explainer-html-owed created=2026-10-08T14:38:52+00:00 phase=2 -->
+### p2-explainer-html-owed · discovery · 01-fr-goal.md describes tests ci; its .html regeneration is owed (phase 2)
+
+docs/explainers/01-fr-goal.md said delivery names a local test log only; a paragraph now
+describes CI evidence. The blog-craft renderer (`derio-net--blog-craft` marketplace) is not
+installed in this cloud container, so docs/explainers/01-fr-goal.html was NOT regenerated:
+the published page lags until someone renders it per .claude/rules/explainers-currency.md.
+The heading tripwire passes (no heading changed).
+
+<!-- fr:journal kind=decision scope=plan id=p2-scenario-fake-gh-rest created=2026-10-08T14:38:52+00:00 phase=2 -->
+### p2-scenario-fake-gh-rest · decision · The ci-evidence scenario drives the github-rest client against a fake gh of captured stdout (phase 2)
+
+tests/scenarios/cloud-triage-ci-evidence.sh sets FR_FORGE_API=rest so every forge read is a
+`gh api <route>` its fake gh (tests/scenarios/fixtures/ci-evidence/bin/gh) answers from
+captures: PR 1088 by head and by number (captured this phase), the commit_checks moments,
+and PR 852's captured files page standing in for 1088's (1.1 MB; verify_ci reads no file).
+The run is a one-step repo workflow `verify` with `evidence: [tests]`; origin is a bare
+repo at ../derio-net/super-fr.git so the slug and `git ls-remote` are real.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-ci-pending-exit-through-record created=2026-10-08T14:38:52+00:00 phase=2 -->
+### p2-ci-pending-exit-through-record · discovery · A pending gate through --record restores every byte, the record file included (phase 2)
+
+`apply_record` already restores every write on any typer.Exit, so exit 75 needed no new
+path: the cursor and the record are byte-identical afterwards (pinned in
+test_run_resolve_tests_ci.py and the scenario).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-08T14:38:52+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+commit_checks is one pure helper that reuses _rollup (workflow names) and collect._latest_runs (latest per check) plus a three-route method; RealGhClient delegates to it, so nothing was duplicated to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-08T14:38:52+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the only cleanup was folding a one-use _Pr dataclass into an int during GREEN; the six steps are already one small function each.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-08T14:38:52+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+the routing is one branch plus one helper beside the existing witness helpers; nothing to consolidate.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-10-08T14:38:52+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+prose and mirrors only; the mirrors are generated.
