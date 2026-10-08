@@ -36,7 +36,7 @@ task done and the session can still be messaged (discovery
 The operator wants triage, the runners and the driver to run in a cloud session,
 as one more scope among many: several drivers, on several hosts or on one,
 covering different repo sets and orgs, kept apart by per-issue claims (spec
-`2026-10-06-triage-claims`). The decisions are journal entries `d1`-`d9`; the
+`2026-10-06-triage-claims`). The decisions are journal entries `d1`-`d10`; the
 independent spec reviews' findings `s1`-`s30` are resolved in this text.
 
 ## Requirements
@@ -62,6 +62,7 @@ R18. The driver itself runs the current release: before each pass it compares th
 R19. A cloud session's fr agents come from the repo, not the plugin: `.claude/agents/fr-spec-reviewer.md` and `.claude/agents/fr-phase-executor.md` are a new artifact kind, `agents` (§H), written by `fr init`, stamped with the version they were rendered for, refreshed by `fr migrate artifacts --yes` and checked by `fr validate artifacts`, so a release that changes them leaves the repo's CI red until it is migrated. The cloud environment's setup script installs the `fr` CLI and the plugin into the container (rsync installed, the Claude settings files seeded), and `scripts/install.sh` fails, rather than warning and exiting 0, when it cannot register the plugin. The worker brief's first step checks `fr --version` (installing super-fr when it is missing) and that `fr-spec-reviewer` and `fr-phase-executor` are dispatchable agent types; when they are not, the worker ends BLOCKED with a `needs_action` naming the missing `agents` artifact, and is not re-homed, since a fresh session would start the same way. A worker enters fr-isolation through the CLI itself; the plugin's hooks are defence in depth there, and their presence in a worker session is an owed measurement (§H).
 R20. The `post_merge` step is an operation of the environment the driver runs in: the host runs the repo's `post_merge` argument list as today; the cloud runs nothing, since every new session installs the current release at its start and the driver updates itself (R18).
 R21. The fr-triage skill documents the cloud driver, `forge.api`, the state ref, the state repo choice and the privacy guard, within its existing line budget.
+R22. A phase unit's or `deliver`'s test evidence may be the forge's CI instead of a local suite log: `evidence: {tests: ci}`. fr accepts it only when HEAD is pushed (the remote branch points at HEAD), no code path is uncommitted, and every check run and commit status on HEAD's sha has completed with success, skipped or neutral, with at least one present. It records the same code-tree witness a local log does, so `tests: reuse` keeps working. A pending check refuses with "resolve again when CI finishes"; a failed one refuses naming it; a repo whose `fr services` CI is `none` refuses `ci` outright. A local log stays accepted everywhere (§I).
 
 ## Design
 
@@ -395,6 +396,35 @@ argument list; the cloud driver runs nothing, because every session it starts
 installs the current release and the driver updates itself before each pass
 (R18, R20).
 
+### I. CI as test evidence
+
+A cloud container is small (4 cores here, discovery `slow-suite`): this repo's
+full suite, about 2.5 minutes on a 12-core host, takes about 20 minutes there,
+while the repo's own CI runs it sharded four ways on every push to a PR. So a
+phase executor or `deliver` may name the CI run instead of a local log
+(R22). `fr.run.ci_evidence.verify_ci(repo_root, client)`:
+
+1. HEAD's sha is the remote branch's head (`git ls-remote` through `gitseam`'s
+   counterpart in `fr.git`), and `dirty_code_paths` is empty; else exit 2
+   naming what is unpushed or uncommitted.
+2. The forge client (either backend, `forge.api` R3) lists every check run and
+   commit status on that sha (`pr_checks`-shaped records from
+   `GET commits/{sha}/check-runs` and `/status` on REST). None present, or any
+   not completed → exit 2, "CI has not finished for <sha>; resolve again when it
+   does". Any conclusion other than success, skipped or neutral → exit 2 naming
+   each failed check and its URL.
+3. The witness is `ci:<sha>;tree=<code tree>` — `code_tree(HEAD)`, the same tree
+   `_verify_phase_tests_log` records — so `_latest_tests_witness` and `tests:
+   reuse` read it unchanged.
+
+`ci` is refused when `fr services` reports `ci none`, and on a forge other than
+GitHub until its adapter lists commit checks (glab and tea raise
+`UnsupportedForgeOperation`). The executor's brief says: commit, push, return
+`tests_log: ci`; the orchestrator resolves once CI finishes (a PR-activity event
+wakes it). CI only runs on a pull request, so a run using `ci` evidence opens its
+draft PR when `implement` starts rather than at `deliver`; fr-goal §8 says so.
+The local-log path is unchanged.
+
 ## Test Plan
 
 1. Unit: `github-rest` against a recorded REST fixture returns the records the
@@ -485,6 +515,11 @@ installs the current release and the driver updates itself before each pass
     unstamped or stale one; moving the kind's `current_version` makes the
     migration re-render both and every hop of the chain is asserted; the wheel's
     copy matches `plugins/super-fr/agents/` (tripwire) (R19).
+19. Unit: `tests: ci` on an implement-phase and a `deliver` record — accepted
+    with every check on HEAD's sha green, recording `ci:<sha>;tree=<tree>`, which
+    `tests: reuse` then accepts; refused when HEAD is unpushed, a code path is
+    dirty, no check exists, one is still running, one failed (named), or `fr
+    services` says `ci none`; a local log is still accepted (R22).
 
 ## Verification
 
