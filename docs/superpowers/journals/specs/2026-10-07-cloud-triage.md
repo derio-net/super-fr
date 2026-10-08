@@ -591,3 +591,8 @@ Its own ask: one driver per scope and the pass/record split of the drive loop.
 ### phase-split-2026-10-07-cloud-triage-p4 · decision · ask: the claude-cloud runner (R14-R15)
 
 Its own ask and its own package: the mailbox runner and the status mapping.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p5 created=2026-10-08T12:17:57+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p5 · decision · ask: versions and drift (R16-R18)
+
+Its own ask: the run kind's 9 -> 10 migration and re-homing on an incompatible major.
