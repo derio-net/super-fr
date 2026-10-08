@@ -5096,13 +5096,18 @@ rows:
       - super-fr:tests/unit/test_triage_privacy.py#test_push_reads_the_state_repos_visibility_live_with_get_repos
       - super-fr:tests/unit/test_triage_privacy.py#test_an_unreadable_state_repo_visibility_refuses_the_push
       - super-fr:tests/unit/test_triage_privacy.py#test_state_export_refuses_a_private_key_with_a_public_state_repo
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_key_whose_repo_the_scope_does_not_cover_has_its_visibility_read
       int:
       - super-fr:tests/integration/test_scenarios.py#test_cloud_triage_privacy_guard
     status: ci
     notes: 'phase 3: privacy.leak_risk and its two guards (batch/wave/judgement writes;
-      push_state and state export with a live GET repos/{state_repo}) in test_triage_privacy;
-      the candidate scenario tests/scenarios/cloud-triage-privacy-guard.sh runs in CI
-      through test_scenarios.py'
+      push_state and state export with a live GET repos/{state_repo}) in test_triage_privacy,
+      a key outside the scope read like any other and unreadable counting as private
+      (p3-r8); the candidate scenario tests/scenarios/cloud-triage-privacy-guard.sh
+      runs in CI through test_scenarios.py, refusing the private issue with a public
+      state repo and landing the same create once the state repo is private. OWED to
+      phase 4: Test Plan 7''s lease-push part (the lease push that opens a pass goes
+      through the same guard) is untested until the lease ships.'
     scenario: tests/scenarios/cloud-triage-privacy-guard.sh
   - id: cloud-triage-driver-lease
     capability: Backlog triage
