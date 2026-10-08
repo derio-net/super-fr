@@ -574,9 +574,7 @@ def test_close_reason_is_sent_in_githubs_spelling(reason: str, sent: str) -> Non
 def test_an_unknown_close_reason_is_refused_before_any_call() -> None:
     fake = FixtureGh(writes=_writes())
     with pytest.raises(ValueError, match="close reason.*'duplicate-ish'"):
-        RealGhRestClient(run=fake).edit_issue_state(
-            REPO, 7, state="CLOSED", reason="duplicate-ish"
-        )
+        RealGhRestClient(run=fake).edit_issue_state(REPO, 7, state="CLOSED", reason="duplicate-ish")
     assert fake.calls == []
 
 
@@ -645,3 +643,58 @@ def test_a_ghe_client_builds_closing_refs_on_its_host() -> None:
     pull = {**pull, "body": "Closes #430"}
     refs = _pr_record(REPO, pull, host="ghe.example.com")["closingIssuesReferences"]
     assert [r["url"] for r in refs] == ["https://ghe.example.com/derio-net/super-fr/issues/430"]
+
+
+# ---- p1-r4: list_linked_prs reads the timeline's own records ----
+
+_TIMELINE_430 = f"{R}/issues/430/timeline?per_page=100&page=1"
+
+
+class _TimelineWithMention(FixtureGh):
+    """The captured issue-430 timeline plus one cross-repo PR that only MENTIONS
+    #430 (no closing keyword) — derived from the captured 517 event, its repo
+    and text changed — whose `pulls/{n}` answers the captured 403."""
+
+    FORK = "example-org/fork"
+
+    def __call__(self, argv: list[str]) -> str:
+        import json
+
+        route = parse_api(argv)[2]
+        if route.startswith(f"repos/{self.FORK}/"):
+            self.calls.append(list(argv))
+            raise forbidden(argv)
+        out = super().__call__(argv)
+        if route != _TIMELINE_430:
+            return out
+        events = json.loads(out)
+        mention = json.loads(json.dumps(next(e for e in events if
+                             (e.get("source") or {}).get("issue", {}).get("number") == 517)))  # fmt: skip
+        src = mention["source"]["issue"]
+        src.update(number=9, title="Port the parser", body="see derio-net/super-fr#430 for context")
+        src["repository"]["full_name"] = self.FORK
+        src["html_url"] = f"https://github.com/{self.FORK}/pull/9"
+        return json.dumps([*events, mention])
+
+
+def test_list_linked_prs_fetches_pulls_only_for_closing_prs() -> None:
+    fake = _TimelineWithMention()
+    got = RealGhRestClient(run=fake).list_linked_prs(REPO, 430)
+    assert {p["url"] for p in got} == {
+        "https://github.com/derio-net/super-fr/pull/517",
+        "https://github.com/derio-net/super-fr/pull/508",
+    }
+    pulls = sorted(r for r in fake.routes() if "/pulls/" in r)
+    assert pulls == [f"{R}/pulls/508", f"{R}/pulls/517"]
+
+
+def test_list_linked_prs_takes_state_and_draft_from_the_timeline() -> None:
+    timeline = load(_TIMELINE_430)
+    src = {e["source"]["issue"]["html_url"]: e["source"]["issue"] for e in timeline
+           if e.get("event") == "cross-referenced"}  # fmt: skip
+    got = RealGhRestClient(run=FixtureGh()).list_linked_prs(REPO, 430)
+    for pr in got:
+        issue = src[pr["url"]]
+        assert pr["draft"] is bool(issue.get("draft"))
+        assert pr["merged"] is bool(issue["pull_request"].get("merged_at"))
+        assert pr["state"] == ("CLOSED" if issue["state"] == "closed" else "OPEN")

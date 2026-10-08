@@ -76,9 +76,7 @@ def _prose(text: str) -> Iterator[str]:
             yield prose[1]
 
 
-def _closing_refs(
-    repo: str, *texts: str | None, host: str = GITHUB_HOST
-) -> list[dict[str, Any]]:
+def _closing_refs(repo: str, *texts: str | None, host: str = GITHUB_HOST) -> list[dict[str, Any]]:
     """`closingIssuesReferences` (§A row 1): the issues a PR closes, parsed from
     its title and body as GitHub parses them — a closing keyword (`close[sd]?`,
     `fix(e[sd])?`, `resolve[sd]?`) at a word boundary, outside fenced and inline
@@ -522,31 +520,38 @@ class RealGhRestClient:
 
     def list_linked_prs(self, repo: str, issue_number: int) -> list[dict[str, Any]]:
         """PRs that close the issue: the PRs its timeline cross-references whose
-        title or body closes it (`_closing_refs`). Same sidebar gap as §A row 1."""
+        title or body closes it (`_closing_refs`). Same sidebar gap as §A row 1.
+
+        Title, body, state, draft and merged come from the timeline event's own
+        `source.issue`; `pulls/{n}` is read only for a PR that closes the issue
+        (for its head sha, which the CI rollup needs). A PR that only mentions
+        the issue is never fetched, so a cross-repo mention the token may not
+        read (403) cannot fail the call."""
         events = self._paged(f"repos/{repo}/issues/{issue_number}/timeline")
-        seen: list[tuple[str, int]] = []
+        seen: set[tuple[str, int]] = set()
+        out: list[dict[str, Any]] = []
         for e in events:
             src = (e.get("source") or {}).get("issue") or {}
             if e.get("event") != "cross-referenced" or "pull_request" not in src:
                 continue
             src_repo = str((src.get("repository") or {}).get("full_name") or repo)
-            if (src_repo, src["number"]) not in seen:
-                seen.append((src_repo, src["number"]))
-        out: list[dict[str, Any]] = []
-        for src_repo, number in seen:
-            pull = self._pull(src_repo, number)
-            closes = _closing_refs(src_repo, pull.get("title"), pull.get("body"), host=self._web_host)
+            key = (src_repo.lower(), int(src["number"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            closes = _closing_refs(src_repo, src.get("title"), src.get("body"), host=self._web_host)
             target = {(f"{r['repository']['owner']['login']}/{r['repository']['name']}".lower(),
                        r["number"]) for r in closes}  # fmt: skip
             if (repo.lower(), issue_number) not in target:
                 continue
+            head_sha = self._pull(src_repo, int(src["number"]))["head"]["sha"]
             out.append(
                 {
-                    "url": pull.get("html_url", ""),
-                    "state": "CLOSED" if pull.get("state") == "closed" else "OPEN",
-                    "merged": bool(pull.get("merged_at")),
-                    "draft": bool(pull.get("draft")),
-                    "ci": _ci(self._rollup_for(src_repo, pull["head"]["sha"])),
+                    "url": src.get("html_url", ""),
+                    "state": "CLOSED" if src.get("state") == "closed" else "OPEN",
+                    "merged": bool((src.get("pull_request") or {}).get("merged_at")),
+                    "draft": bool(src.get("draft")),
+                    "ci": _ci(self._rollup_for(src_repo, head_sha)),
                 }
             )
         return out
