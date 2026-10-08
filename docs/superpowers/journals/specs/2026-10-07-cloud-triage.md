@@ -766,3 +766,8 @@ check: consistency. evidence: fr-goal SKILL.md:88,:103; fr-phase-executor.md:125
 ### s38 · finding [open] (reviewer: in scope) · Test Plan 19 and §I leave out the forge refusal, non-done resolves and the dispatch order
 
 check: consistency. evidence: run_cmd.py:1922-1934,:2984-2986.
+
+<!-- fr:journal kind=finding scope=spec id=s38-resolved created=2026-10-08T13:54:28+00:00 state=fixed resolves=s38 -->
+### s38-resolved · finding [fixed] · resolves s38: Test Plan 19 and §I leave out the forge refusal, non-done resolves and the dispatch order
+
+§I: the token is recognised before the phase-log branch; a non-done resolve records the bare claim without a forge call; Test Plan 19 covers both and the forge refusal.
