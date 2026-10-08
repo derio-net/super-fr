@@ -24,6 +24,8 @@ phase:
   - tests/unit/test_migration_run_fr_version.py
   - tests/unit/test_triage_drift.py
   - tests/unit/test_migration_run_unit_record.py
+  - tests/scenarios/cloud-triage-version-drift.sh
+  - tests/integration/test_scenarios.py
   estimate_lines: 900
 tasks:
 - number: 1
@@ -44,6 +46,9 @@ tasks:
   - id: P5.T2.S2
     text: |-
       GREEN: packages/fr/src/fr/triage/drift.py (pure: cursors + latest release in, requests out) called from the pass; latest release read via the forge client's releases route. Run: passes.
+  - id: P5.T2.S3
+    text: |-
+      RED/GREEN: tests/scenarios/cloud-triage-version-drift.sh (row cloud-triage-version-drift's `candidate` scenario, run by tests/integration/test_scenarios.py, fake forge only): two active batches whose cursors record `fr_version` 5.x and 6.x against a latest release of 6.y; one `drive pass` writes exactly one `rehome` request (for the 5.x run) to the outbox; a second pass after `drive record` writes none; a third batch with no recorded version is reported, not re-homed. Run test_scenarios.py: passes.
 - number: 3
   title: The driver updates itself (R18)
   steps:
@@ -68,6 +73,10 @@ state:
       ticked_at: null
       note: null
     P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
       state: ' '
       ticked_at: null
       note: null

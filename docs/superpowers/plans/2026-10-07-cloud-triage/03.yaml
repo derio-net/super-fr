@@ -20,7 +20,7 @@ phase:
   - packages/fr/src/fr/commands/triage_cmd.py
   - tests/unit/test_triage_lease.py
   - tests/unit/test_triage_driver_*.py
-  - tests/scenarios/cloud-driver-pass.sh
+  - tests/scenarios/cloud-triage-driver-lease.sh
   - tests/integration/test_scenarios.py
   estimate_lines: 1400
 tasks:
@@ -53,7 +53,7 @@ tasks:
       GREEN: packages/fr/src/fr/commands/triage_drive_cmd.py registered under `fr triage drive` (keeping `fr triage batch drive` as the host adapter's entry); the pass is the host loop's body factored into one function both adapters call, so policy stays single-sourced. Run: passes.
   - id: P3.T3.S3
     text: |-
-      RED/GREEN: tests/scenarios/cloud-driver-pass.sh (`candidate` scenario, run by tests/integration/test_scenarios.py): an empty workspace restored from a bare-remote ref, one pass against the fake forge and a scripted session executor that fills results.json, then `drive record`; asserts the ref advanced and the outbox emptied. Run test_scenarios.py: passes.
+      RED/GREEN: tests/scenarios/cloud-triage-driver-lease.sh (row cloud-triage-driver-lease's `candidate` scenario, run by tests/integration/test_scenarios.py, shape of tests/scenarios/triage-claims-held.sh): an empty workspace restored from a bare-remote ref, one `drive pass` against the fake forge and a scripted session executor that fills results.json, then `drive record`; asserts the ref advanced and the outbox emptied; then a second driver with another FR_HOST_ID runs `drive pass` and exits 2 naming the holder and expiry, and `fr triage lease take` without `--yes` changes nothing. Run test_scenarios.py: passes.
   - id: P3.T3.S4
     text: |-
       REFACTOR + quality gate: the host loop now calls the shared pass function; delete any duplicated planning code; ruff, mypy, full suite `-n auto` into a log outside the repo; green.

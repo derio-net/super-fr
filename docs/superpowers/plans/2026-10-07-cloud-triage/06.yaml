@@ -36,6 +36,8 @@ phase:
   - tests/unit/test_tripwire_artifact_kinds.py
   - tests/unit/test_migration_runner.py
   - docs/explainers/**
+  - tests/scenarios/cloud-triage-repo-agents.sh
+  - tests/integration/test_scenarios.py
   estimate_lines: 1000
 tasks:
 - number: 1
@@ -50,6 +52,9 @@ tasks:
   - id: P6.T1.S3
     text: |-
       RED/GREEN: the re-render migration path — a test that registers a temporary version 2 in a monkeypatched registry and checks `fr migrate artifacts --yes` re-renders both files from the installed wheel copy, atomically, refusing (byte-identical) a file whose `name` is not one fr ships; document in agents_kind.py that the first real bump registers this migration. Replace this repo's `.claude/agents/*.md` symlinks with rendered, stamped files via `uv run fr init` (or the agents step alone) and commit. Run the agents tests and `uv run fr validate artifacts`: pass.
+  - id: P6.T1.S4
+    text: |-
+      RED/GREEN: tests/scenarios/cloud-triage-repo-agents.sh (row cloud-triage-repo-agents' `candidate` scenario, run by tests/integration/test_scenarios.py): in a fresh git fixture, the agents step of `fr init` writes `.claude/agents/fr-spec-reviewer.md` and `fr-phase-executor.md` with the stamp; `fr validate artifacts` exits 0; after deleting the stamp line from one file it exits non-zero naming that file; after `fr migrate artifacts --yes` it exits 0 again. Run test_scenarios.py: passes.
 - number: 2
   title: Setup script, install.sh and the worker brief (R19)
   steps:
@@ -82,6 +87,10 @@ state:
       ticked_at: null
       note: null
     P6.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S4:
       state: ' '
       ticked_at: null
       note: null

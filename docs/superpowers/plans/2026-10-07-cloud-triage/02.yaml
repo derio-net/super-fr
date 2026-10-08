@@ -25,6 +25,9 @@ phase:
   - tests/unit/test_triage_state_*.py
   - tests/unit/test_triage_privacy.py
   - tests/unit/test_triage_model.py
+  - tests/scenarios/cloud-triage-state-ref.sh
+  - tests/scenarios/cloud-triage-privacy-guard.sh
+  - tests/integration/test_scenarios.py
   estimate_lines: 1300
 tasks:
 - number: 1
@@ -65,6 +68,9 @@ tasks:
       GREEN: packages/fr/src/fr/triage/privacy.py (`leak_risk`, `check_or_refuse`, `live_visibility(client, repo)`); call sites in triage_batch_cmd (create/edit/wave), the judgement writer, `state_ref.push_state` and `triage_state_cmd` export. Run the privacy tests and the existing triage batch tests: pass.
   - id: P2.T4.S3
     text: |-
+      RED/GREEN: the two rows' `candidate` scenarios, run by tests/integration/test_scenarios.py (shape of tests/scenarios/triage-claims-held.sh, fake forge only): tests/scenarios/cloud-triage-state-ref.sh — a scope's state written in a workspace leaves `git status` clean, is pushed to a bare-remote `refs/fr/triage/<scope-id>`, and a second, empty workspace with the same FR_HOST_ID restores every REF_FILES entry from it; tests/scenarios/cloud-triage-privacy-guard.sh — with a public state repo, `batch create --issue <private-repo issue>` exits 2 naming the issue, its repo and the state repo, and judgements.yaml is byte-identical afterwards. Run test_scenarios.py: passes.
+  - id: P2.T4.S4
+    text: |-
       REFACTOR + quality gate: one `_refuse(issue, repo, state_repo)` message builder shared by every call site; ruff format/check, mypy, full suite `-n auto` into a log outside the repo; green.
 state:
   steps:
@@ -101,6 +107,10 @@ state:
       ticked_at: null
       note: null
     P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S4:
       state: ' '
       ticked_at: null
       note: null
