@@ -668,8 +668,10 @@ class _TimelineWithMention(FixtureGh):
         if route != _TIMELINE_430:
             return out
         events = json.loads(out)
-        mention = json.loads(json.dumps(next(e for e in events if
-                             (e.get("source") or {}).get("issue", {}).get("number") == 517)))  # fmt: skip
+        src_517 = [
+            e for e in events if (e.get("source") or {}).get("issue", {}).get("number") == 517
+        ]
+        mention = json.loads(json.dumps(src_517[0]))
         src = mention["source"]["issue"]
         src.update(number=9, title="Port the parser", body="see derio-net/super-fr#430 for context")
         src["repository"]["full_name"] = self.FORK
