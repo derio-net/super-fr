@@ -9,11 +9,11 @@
 # other kind (a `host:` driver against the `cloud:` lease), in a SEPARATE workspace C
 # restored from the ref, is refused through the ref's lease.yaml. The state remote is a
 # bare repo standing in for GitHub through git's own `url.<base>.insteadOf`; the forge is
-# fixtures/cloud-triage-driver/bin/gh. The claude-cloud runner (phase 5) is not installed
-# here and a pass without it refuses (p4-r6), so the cloud driver's commands run the
-# installed fr through fixtures/cloud-triage-driver/stub_cloud.py, which injects a stub
-# Mailbox runner; the scope has no batch, so the outbox holds no request, and the executor
-# answers each request it is given, which is none.
+# fixtures/cloud-triage-driver/bin/gh. The cloud driver runs the REAL claude-cloud runner
+# the candidate install carries (phase 5): workspace A seeds the ref with one pending
+# dispatch request, which B's pass, restored from the ref alone, re-emits in its outbox
+# (R14); the executor answers it with a session, and `drive record` moves it into the
+# ref's sessions.yaml.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 export FR_HOST_ID=0123456789abcdef FR_FORGE_API=rest
@@ -32,15 +32,6 @@ mkdir -p "$HOME"
 git init -q --bare "$world/state.git" || fail "bare remote"
 git config --global url."$world/state.git".insteadOf "https://github.com/$repo.git" \
   || fail "insteadOf"
-# The installed fr's own interpreter runs it with the stub claude-cloud runner (p4-r6).
-fr_py="$(head -1 "$(readlink -f "$(command -v fr)")" | sed 's/^#![[:space:]]*//')"
-[ -x "$fr_py" ] || fail "no interpreter for the installed fr ($fr_py)"
-run_cloud() {
-  local __var="$1"; shift
-  local __out
-  __out="$("$fr_py" "$here/fixtures/cloud-triage-driver/stub_cloud.py" "$@" 2>&1)"; RC=$?
-  printf -v "$__var" '%s' "$__out"
-}
 ref_sha() { git -C "$world/state.git" for-each-ref --format='%(objectname)' refs/fr/triage/; }
 
 # Workspace A (the fixture) seeds the ref.
@@ -49,6 +40,21 @@ seed="$a/.fr/triage-state/$scope"
 mkdir -p "$seed"
 printf 'schema: 6\ntiers: [{n: 1, title: Now}]\nissues: {}\n' > "$seed/judgements.yaml"
 printf 'state_repo: %s\n' "$repo" > "$seed/scope-durable.yaml"
+# A dispatch the agent never answered: pending in the scope's state, in the runner's format.
+item="$repo/run/batch-b1"
+cat > "$seed/requests.yaml" <<EOF2
+requests:
+- id: $item:dispatch:1
+  kind: dispatch
+  item: $item
+  tag: $item
+  repo: $repo
+  branch: feat/batch-b1
+  model: m
+  prompt: the batch brief
+issued:
+  $item:dispatch: 1
+EOF2
 run_fr out triage state push --repo "$repo"
 require_exit 0 "$out"
 seeded="$(ref_sha)"
@@ -59,11 +65,7 @@ b="$world/b"
 git init -q "$b" && git -C "$b" remote add origin "git@github.com:$repo.git" || fail "workspace B"
 cd "$b" || fail "cd B"
 state="$b/.fr/triage-state/$scope"
-run_fr out triage drive pass --repo "$repo" --state-repo "$repo" --outbox "$world/none.json"
-require_exit 2 "$out"
-expect_grep 'claude-cloud' "$out" "a pass with no cloud runner refuses, naming it (p4-r6)"
-[ ! -f "$world/none.json" ] || fail "a refused pass wrote an outbox"
-run_cloud out triage drive pass --repo "$repo" --state-repo "$repo" --outbox "$world/outbox.json"
+run_fr out triage drive pass --repo "$repo" --state-repo "$repo" --outbox "$world/outbox.json"
 require_exit 0 "$out"
 cmp -s "$seed/judgements.yaml" "$state/judgements.yaml" || fail "the pass did not restore the state"
 advanced="$(ref_sha)"
@@ -73,20 +75,26 @@ expect_grep "^holder: s-[0-9a-f]{8} cloud:$FR_HOST_ID\$" "$lease" "the pushed le
 expect_grep '^last_pass: ' "$lease" "the pushed lease records the pass"
 refuse_grep 'install.sh' "$out" "the cloud driver ran no post_merge"
 [ -f "$world/outbox.json" ] || fail "the pass wrote no outbox"
+expect_grep "\"id\": \"$item:dispatch:1\"" "$(cat "$world/outbox.json")" \
+  "the restored driver re-emits the pending request the ref carried"
+expect_grep 'create_session' "$(cat "$world/outbox.json")" "the request says what to execute"
 
 # The scripted session executor: one result per request in the outbox.
 printf '[' > "$world/results.json"
 sed -n 's/.*"id": "\([^"]*\)".*/{"id": "\1", "session": "session-for-\1"}/p' "$world/outbox.json" \
   | paste -sd, - >> "$world/results.json"
 printf ']\n' >> "$world/results.json"
-run_cloud out triage drive record --repo "$repo" --outbox "$world/outbox.json" --result "$world/results.json"
+run_fr out triage drive record --repo "$repo" --outbox "$world/outbox.json" --result "$world/results.json"
 require_exit 0 "$out"
 expect_grep '"requests": \[\]' "$(cat "$world/outbox.json")" "the record emptied the outbox"
+expect_grep "session: session-for-$item:dispatch:1" \
+  "$(git -C "$world/state.git" show "$(ref_sha):sessions.yaml")" "the ref records the session"
+refuse_grep "kind: dispatch" "$(cat "$state/requests.yaml")" "the recorded request is no longer pending"
 [ -z "$(git status --porcelain --untracked-files=all)" ] || fail "the driver's state shows in git status"
 
 # A second driver on this workspace is refused by the lease.
 before="$(cat "$state/lease.yaml")"
-FR_HOST_ID=fedcba9876543210 run_cloud out triage drive pass --repo "$repo" --outbox "$world/o2.json"
+FR_HOST_ID=fedcba9876543210 run_fr out triage drive pass --repo "$repo" --outbox "$world/o2.json"
 require_exit 2 "$out"
 flat="$(printf '%s' "$out" | tr -s '[:space:]' ' ')"
 expect_grep "held by s-[0-9a-f]{8} cloud:0123456789abcdef" "$flat" "the refusal names the holder"

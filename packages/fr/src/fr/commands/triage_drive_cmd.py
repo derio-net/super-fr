@@ -361,7 +361,7 @@ def _record(target: Path, outbox: Path, result: Path) -> None:
         runner.open_mailbox(target, None)
         try:
             applied = set(runner.record_results(results))
-        except TriageError as exc:
+        except (TriageError, ValueError) as exc:  # the runner's own refusal of a result
             _fail(str(exc))
         unknown = [str(r.get("id")) for r in results if r.get("id") not in applied]
         if unknown:
