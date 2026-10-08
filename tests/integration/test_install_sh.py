@@ -270,6 +270,7 @@ class TestMissingBinary:
         home = tmp_path / "home"
         home.mkdir()
         (home / ".claude").mkdir()
+        seed_claude_files(home)
 
         result = _run_install(home, expect_fail=True)
 
@@ -285,6 +286,7 @@ class TestMissingBinary:
         home = tmp_path / "home"
         home.mkdir()
         (home / ".claude").mkdir()
+        seed_claude_files(home)
         vk_bin = home / "bin" / "vibe-kanban-mcp"
         vk_bin.parent.mkdir(parents=True)
         vk_bin.write_text("not executable")
