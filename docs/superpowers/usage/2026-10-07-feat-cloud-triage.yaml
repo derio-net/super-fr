@@ -1,0 +1,80 @@
+schema_version: 2
+run: 2026-10-07-feat-cloud-triage
+captures:
+- host: h-d8652473
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-08T11:31:51+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 422d9058-bced-5a6c-bdcb-09e941e783d2
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 298
+        cache_write: 830175
+        cache_read: 28525814
+        output: 82671
+        usd: 13.785156599999993
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 3.416312556792617
+        turns: 40
+      other:
+        usd: 6.240020722846882
+        turns: 76
+      paperwork:
+        usd: 4.1288233203605
+        turns: 30
+    steps:
+      (outside run):
+        usd: 3.071324580533272
+        turns: 43
+        input: 86
+        cache_write: 148969
+        cache_read: 6365491
+        output: 28591
+      brainstorm:
+        usd: 10.713832019466725
+        turns: 102
+        input: 212
+        cache_write: 681206
+        cache_read: 22160323
+        output: 54080
+    steps_by_role:
+      main:
+        (outside run):
+          usd: 3.0713245805332723
+          turns: 43
+          input: 86
+          cache_write: 148969
+          cache_read: 6365491
+          output: 28591
+        brainstorm:
+          usd: 9.71306479472127
+          turns: 78
+          input: 164
+          cache_write: 560847
+          cache_read: 20169249
+          output: 53780
+      subagent:
+        brainstorm:
+          usd: 1.0007672247454529
+          turns: 24
+          input: 48
+          cache_write: 120359
+          cache_read: 1991074
+          output: 300
+    units:
+      (unattributed):
+        subagent:
+          usd: 1.0007672247454529
+          turns: 24
+          input: 48
+          cache_write: 120359
+          cache_read: 1991074
+          output: 300
+    briefs:
+      a15b0f7b743a6a0f1: 2722
