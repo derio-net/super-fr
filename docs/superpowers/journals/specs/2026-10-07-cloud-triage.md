@@ -621,3 +621,8 @@ Registers the agents kind with its stamp, validator and re-render path, and chan
 ### phase-split-2026-10-07-cloud-triage-p4-1 · decision · review-size: the claude-cloud runner is a new workspace package
 
 Supersedes phase-split-2026-10-07-cloud-triage-p4. Its requirements (R14, R15) are also cited by the broad end-to-end row that phases 3 and 6 link, so self-review counts them as shared. Folded into phase 3 it would add a whole new package (~1100 lines, with its own version surface, lockfile and CI entries) to a ~1400-line hard concurrency phase, too large for one review.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p6-1 created=2026-10-08T12:19:49+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p6-1 · decision · review-size: the agents artifact kind and the worker setup are a separate ~1000-line change
+
+Supersedes phase-split-2026-10-07-cloud-triage-p6. R19-R21 are also cited by the broad end-to-end row that phases 3 and 4 link. Folded into an earlier phase it would add a new artifact kind (registry, stamp, validator, re-render path, wheel data and tripwire), install.sh, the worker brief and the skill with its three mirrors to a phase already near 1400 lines.
