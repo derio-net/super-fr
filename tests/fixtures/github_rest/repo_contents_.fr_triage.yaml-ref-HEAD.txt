@@ -1,0 +1,23 @@
+# fr triage batches: repo config (spec 2026-09-25-triage-batches §3.I).
+# Read by `fr triage collect` from origin/main; dispatch and merge refuse a
+# collected copy that no longer matches origin/main, so re-collect after editing.
+defaults:
+  launch:
+    runner: herdr
+    harness: claude
+# Run by `fr triage batch drive` once per merged batch, before its close-out, from
+# the base clone fast-forwarded to origin/main (wave-driver spec R14), so later
+# batches run on the merged plugin, hooks and fr. An argument list, never a shell
+# string. install.sh refuses a base clone that is off main or has stray files;
+# that holds the close-out and warns each pass until the clone is clean.
+post_merge: ["./scripts/install.sh"]
+# After a pass in which post_merge succeeded, the driver restarts the idle sessions of the
+# runner once (driver-sessions spec R6), so they load the plugins, hooks and fr it installed.
+# The driver's own pane is never restarted. `none` turns it off.
+post_merge_restart: idle
+# No `version:` block, deliberately (spec 2026-09-26-version-bump-churn §3.F):
+# super-fr PRs never edit a version, so a batch reserves no number. The worker
+# adds a `.changes/` fragment per AGENTS.md and release.yml assigns the number.
+# Triage state export to docs/triage on every finished wave (spec R13).
+export:
+  path: docs/triage

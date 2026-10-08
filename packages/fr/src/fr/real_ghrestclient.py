@@ -1,0 +1,821 @@
+"""`github-rest`: a `GhClient` that reaches GitHub through REST routes only.
+
+Spec 2026-10-07-cloud-triage §A (R1, R2). Every call is `gh api <REST route>`;
+none is `gh api graphql` and none is a GraphQL-backed `gh` verb (`gh pr list
+--json`, `gh issue view --json`, `gh pr checks`, ...), because a Claude Code cloud
+session's proxy refuses GraphQL with HTTP 403 while it allows REST. Selected by
+`forge.api: rest` (`fr.forgeapi`), through `fr.hostclient.client_for_backend`.
+
+The records are the ones `fr.real_ghclient.RealGhClient` returns for the same
+forge state, field for field, except the fields REST cannot express. The field
+map lives in the pure helpers at the top of this module, each citing its §A row;
+`tests/unit/test_github_rest_contract.py` holds the two backends to it.
+
+Error contract (per method, never blanket): this client never falls back to
+GraphQL and never turns a refusal into an empty answer. The methods whose
+`GhClient` contract already answers None when the forge cannot say —
+`pr_for_branch`, `issues_enabled`, `default_branch`, `pr_status_by_url` — keep
+it; every other method raises `GhError`. A 404 on a lookup whose contract has a
+"not there" answer (`file_exists`, `list_dir`) is that answer, never a 403.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import urllib.parse
+from collections.abc import Callable, Iterable
+from pathlib import Path
+from typing import Any
+
+from fr import _hosts
+from fr import gh as _gh
+from fr.gh import GhError
+from fr.ghclient import MERGE_METHODS, CommandRunner, HostRefusedError, run_cli
+from fr.labels import LabelDef
+
+GhRun = Callable[[list[str]], str]
+"""How the client runs one `gh` command: argv without the leading `gh`, stdout
+back, `GhError` on failure. `fr.gh._run_gh` by default; tests pass a fake."""
+
+RAW_ACCEPT = "Accept: application/vnd.github.raw"
+
+# ---------------------------------------------------------------------------
+# The field map (spec §A), as pure helpers over REST records.
+# ---------------------------------------------------------------------------
+
+_CLOSING_KEYWORD = r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)"
+_CLOSING_REF = re.compile(
+    _CLOSING_KEYWORD
+    + r":?\s+(?:"
+    + r"https?://[^\s/]+/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/(?P<url_number>\d+)"
+    + r"|(?P<repo>[\w.-]+/[\w.-]+)?#(?P<number>\d+)"
+    + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _closing_refs(repo: str, *texts: str | None) -> list[dict[str, Any]]:
+    """`closingIssuesReferences` (§A row 1): the issues a PR closes, parsed from
+    its title and body with GitHub's closing keywords (`close[sd]?`,
+    `fix(e[sd])?`, `resolve[sd]?`) followed by a same-repo `#n`, an
+    `owner/repo#n` or an issue URL. In first-seen order, each once.
+
+    Gap: an issue linked by hand in the PR sidebar is invisible to REST, and the
+    GraphQL node ids (`id`, `repository.id`, `owner.id`) are not produced; collect
+    reads only owner login, repo name and number."""
+    seen: list[tuple[str, int]] = []
+    for text in texts:
+        for m in _CLOSING_REF.finditer(text or ""):
+            target = m["url_repo"] or m["repo"] or repo
+            number = int(m["url_number"] or m["number"])
+            if (target.lower(), number) not in {(r.lower(), n) for r, n in seen}:
+                seen.append((target, number))
+    out = []
+    for target, number in seen:
+        owner, name = target.split("/", 1)
+        out.append(
+            {
+                "number": number,
+                "repository": {"name": name, "owner": {"login": owner}},
+                "url": f"https://github.com/{owner}/{name}/issues/{number}",
+            }
+        )
+    return out
+
+
+def _upper(value: object) -> str:
+    return str(value).upper() if value else ""
+
+
+def _rollup(
+    check_runs: Iterable[dict[str, Any]],
+    statuses: Iterable[dict[str, Any]],
+    workflow_runs: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """`statusCheckRollup` (§A rows 2-3): `commits/{sha}/check-runs` plus
+    `commits/{sha}/status`, in the rollup's entry shape. `status` and
+    `conclusion` upper-cased; `startedAt`/`completedAt` empty for a run not yet
+    started/finished (GraphQL's `0001-` zero time is never produced, and
+    `collect._latest_runs` reads both the same). `workflowName` from the Actions
+    run whose `check_suite_id` is the check run's suite; a check run with no
+    Actions run (another app) gets the app's name."""
+    by_suite = {r.get("check_suite_id"): str(r.get("name") or "") for r in workflow_runs}
+    out: list[dict[str, Any]] = []
+    for c in check_runs:
+        suite = (c.get("check_suite") or {}).get("id")
+        workflow = by_suite.get(suite)
+        if workflow is None:
+            workflow = str((c.get("app") or {}).get("name") or "")
+        out.append(
+            {
+                "__typename": "CheckRun",
+                "completedAt": c.get("completed_at") or "",
+                "conclusion": _upper(c.get("conclusion")),
+                "detailsUrl": c.get("details_url") or "",
+                "name": c.get("name") or "",
+                "startedAt": c.get("started_at") or "",
+                "status": _upper(c.get("status")),
+                "workflowName": workflow,
+            }
+        )
+    for s in statuses:
+        out.append(
+            {
+                "__typename": "StatusContext",
+                "context": s.get("context") or "",
+                "startedAt": s.get("created_at") or "",
+                "state": _upper(s.get("state")),
+                "targetUrl": s.get("target_url") or "",
+            }
+        )
+    return out
+
+
+_MERGEABLE = {True: "MERGEABLE", False: "CONFLICTING"}
+
+
+def _merge_state(pull: dict[str, Any]) -> tuple[str, str]:
+    """`mergeable`, `mergeStateStatus` (§A row 4) from `GET pulls/{n}`, mapped
+    to the GraphQL enums; `null` while GitHub computes them → `UNKNOWN`."""
+    mergeable = _MERGEABLE.get(pull.get("mergeable"), "UNKNOWN")
+    state = _upper(pull.get("mergeable_state")) or "UNKNOWN"
+    return mergeable, state
+
+
+_DECISIVE = {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}
+
+
+def _review_decision(reviews: Iterable[dict[str, Any]]) -> str:
+    """`reviewDecision` (§A row 5) from `GET pulls/{n}/reviews`: the latest
+    decisive review per reviewer (a comment-only review neither grants nor
+    withdraws one). Any outstanding CHANGES_REQUESTED wins, else any APPROVED,
+    else "" (GraphQL's empty answer for no decision). Gap: GraphQL also answers
+    REVIEW_REQUIRED from branch protection, which REST does not combine here."""
+    latest: dict[str, str] = {}
+    for r in reviews:
+        state = _upper(r.get("state"))
+        login = str((r.get("user") or {}).get("login") or "")
+        if state in _DECISIVE:
+            latest[login] = state
+    decisions = set(latest.values())
+    if "CHANGES_REQUESTED" in decisions:
+        return "CHANGES_REQUESTED"
+    if "APPROVED" in decisions:
+        return "APPROVED"
+    return ""
+
+
+def _pr_state(pull: dict[str, Any]) -> str:
+    if pull.get("merged_at"):
+        return "MERGED"
+    return _upper(pull.get("state")) or "OPEN"
+
+
+def _author(user: dict[str, Any] | None) -> dict[str, Any] | None:
+    """`author`: login, node id and bot flag. Gap: gh's `name` is not on REST
+    list records, so it is absent."""
+    if not user:
+        return None
+    return {
+        "id": user.get("node_id") or "",
+        "is_bot": user.get("type") == "Bot",
+        "login": user.get("login") or "",
+    }
+
+
+def _cross_repo(pull: dict[str, Any]) -> bool:
+    """`isCrossRepository` (§A row 6): head and base repos differ (a deleted
+    fork's head has no repo: cross-repository)."""
+    head = ((pull.get("head") or {}).get("repo") or {}).get("full_name")
+    base = ((pull.get("base") or {}).get("repo") or {}).get("full_name")
+    return head != base
+
+
+def _pr_record(repo: str, pull: dict[str, Any]) -> dict[str, Any]:
+    """A REST pull as `fr.gh.PR_LIST_FIELDS` plus `headRefOid`."""
+    return {
+        "author": _author(pull.get("user")),
+        "closingIssuesReferences": _closing_refs(repo, pull.get("title"), pull.get("body")),
+        "createdAt": pull.get("created_at"),
+        "headRefName": (pull.get("head") or {}).get("ref") or "",
+        "headRefOid": (pull.get("head") or {}).get("sha") or "",
+        "isCrossRepository": _cross_repo(pull),
+        "isDraft": bool(pull.get("draft")),
+        "mergedAt": pull.get("merged_at"),
+        "number": pull["number"],
+        "state": _pr_state(pull),
+        "title": pull.get("title") or "",
+        "url": pull.get("html_url") or "",
+    }
+
+
+_CHANGE_TYPE = {"removed": "DELETED"}
+
+
+def _file_record(f: dict[str, Any]) -> dict[str, Any]:
+    status = str(f.get("status") or "")
+    return {
+        "path": f.get("filename") or "",
+        "additions": f.get("additions", 0),
+        "deletions": f.get("deletions", 0),
+        "changeType": _CHANGE_TYPE.get(status, status.upper()),
+    }
+
+
+def _label_record(label: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": label.get("node_id") or "",
+        "name": label.get("name") or "",
+        "description": label.get("description") or "",
+        "color": label.get("color") or "",
+    }
+
+
+def _issue_record(issue: dict[str, Any]) -> dict[str, Any]:
+    """A REST issue as every field `gh issue list/view --json` gives fr.
+    `stateReason` (§A row 7) is `state_reason` upper-cased."""
+    return {
+        "body": issue.get("body") or "",
+        "closed": issue.get("state") == "closed",
+        "closedAt": issue.get("closed_at"),
+        "createdAt": issue.get("created_at"),
+        "labels": [_label_record(lbl) for lbl in issue.get("labels") or []],
+        "number": issue["number"],
+        "state": _upper(issue.get("state")),
+        "stateReason": _upper(issue.get("state_reason")),
+        "title": issue.get("title") or "",
+        "updatedAt": issue.get("updated_at"),
+        "url": issue.get("html_url") or "",
+    }
+
+
+_COMMENT_ID = re.compile(r"#issuecomment-(\d+)$")
+
+
+def _comment_record(c: dict[str, Any]) -> dict[str, Any]:
+    """`list_issue_comments`' record; the id from `html_url` (§A row 8), the same
+    `#issuecomment-<id>` shape the GraphQL client parses."""
+    m = _COMMENT_ID.search(str(c.get("html_url") or ""))
+    return {
+        "association": c.get("author_association") or "",
+        "author": (c.get("user") or {}).get("login", ""),
+        "body": c.get("body") or "",
+        "created_at": c.get("created_at") or "",
+        "id": int(m.group(1)) if m else None,
+    }
+
+
+_BUCKET = {
+    "SUCCESS": "pass",
+    "SKIPPED": "skipping",
+    "NEUTRAL": "skipping",
+    "CANCELLED": "cancel",
+    "FAILURE": "fail",
+    "ERROR": "fail",
+    "TIMED_OUT": "fail",
+    "ACTION_REQUIRED": "fail",
+    "STARTUP_FAILURE": "fail",
+    "STALE": "fail",
+}
+
+
+def _check_row(entry: dict[str, Any]) -> dict[str, Any]:
+    """One rollup entry as `gh pr checks --json name,bucket,state` renders it."""
+    if entry.get("__typename") == "StatusContext":
+        name, state = entry.get("context") or "", entry.get("state") or ""
+    else:
+        name = entry.get("name") or ""
+        state = (
+            entry.get("conclusion") if entry.get("status") == "COMPLETED" else entry.get("status")
+        ) or ""
+    return {"name": name, "bucket": _BUCKET.get(state, "pending"), "state": state}
+
+
+def _ci(rollup: list[dict[str, Any]]) -> str:
+    """`list_linked_prs`' `ci`: PASS / FAIL / PENDING / NONE over the latest run of
+    each check (the GraphQL rollup's `state`, collapsed as `_coerce_ci_state`)."""
+    from fr.triage.collect import _latest_runs
+
+    rows = [_check_row(e)["bucket"] for e in _latest_runs(rollup)]
+    if not rows:
+        return "NONE"
+    if any(b in {"fail", "cancel"} for b in rows):
+        return "FAIL"
+    if any(b == "pending" for b in rows):
+        return "PENDING"
+    return "PASS"
+
+
+def _pr_url_parts(url: str) -> tuple[str, int] | None:
+    m = re.match(r"^https?://[^/]+/([\w.-]+/[\w.-]+)/pull/(\d+)", url.strip())
+    return (m.group(1), int(m.group(2))) if m else None
+
+
+def _q(segment: str) -> str:
+    return urllib.parse.quote(segment, safe="")
+
+
+def _is_404(exc: GhError) -> bool:
+    text = f"{exc} {exc.stderr}".lower()
+    return "http 404" in text or "not found" in text
+
+
+def _project(record: dict[str, Any], fields: str) -> dict[str, Any]:
+    return {f: record.get(f) for f in fields.split(",") if f}
+
+
+# ---------------------------------------------------------------------------
+# The client.
+# ---------------------------------------------------------------------------
+
+
+class RealGhRestClient:
+    """`GhClient` over `gh api` REST routes (spec 2026-10-07-cloud-triage §A).
+
+    `host` is a GitHub Enterprise host, threaded as `GH_HOST` through
+    `fr.gh.host_scope`, behind the same trust gate as `RealGhClient`. `run` is
+    how one `gh` command runs (`GhRun`); `fr.gh._run_gh` when None."""
+
+    PER_PAGE = 100
+
+    def __init__(self, host: str | None = None, run: GhRun | None = None) -> None:
+        self._host = host
+        self._run = run
+
+    # ---- transport ----
+
+    def _gh(self, args: list[str]) -> str:
+        with _gh.host_scope(self._host):
+            _gh.host_env()  # the trust gate, before any process starts
+            return (self._run or _gh._run_gh)(args)
+
+    def _api(
+        self,
+        route: str,
+        *,
+        method: str = "GET",
+        fields: dict[str, Any] | None = None,
+        accept: str | None = None,
+    ) -> Any:
+        """One `gh api` call; its JSON (None for an empty answer). String fields
+        go as `-f` (never read as a file), bools and ints as typed `-F`, a list
+        as repeated `-f key[]=v`."""
+        argv = ["api"]
+        if method != "GET":
+            argv += ["-X", method]
+        if accept:
+            argv += ["-H", accept]
+        argv.append(route)
+        for key, value in (fields or {}).items():
+            if isinstance(value, bool):
+                argv += ["-F", f"{key}={'true' if value else 'false'}"]
+            elif isinstance(value, int):
+                argv += ["-F", f"{key}={value}"]
+            elif isinstance(value, list):
+                for item in value:
+                    argv += ["-f", f"{key}[]={item}"]
+            else:
+                argv += ["-f", f"{key}={value}"]
+        out = self._gh(argv)
+        if accept:
+            return out
+        return json.loads(out) if out.strip() else None
+
+    def _paged(
+        self,
+        route: str,
+        *,
+        limit: int | None = None,
+        key: str | None = None,
+        keep: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Every record of a list route, `per_page=PER_PAGE`, page by page, until
+        a short page or *limit* kept records. *key* names the list inside an
+        object answer (`check_runs`); *keep* filters before counting."""
+        out: list[dict[str, Any]] = []
+        sep = "&" if "?" in route else "?"
+        page = 1
+        while limit is None or len(out) < limit:
+            answer = self._api(f"{route}{sep}per_page={self.PER_PAGE}&page={page}")
+            items = (answer or {}).get(key, []) if key else (answer or [])
+            out += [i for i in items if keep is None or keep(i)]
+            if len(items) < self.PER_PAGE:
+                break
+            page += 1
+        return out if limit is None else out[:limit]
+
+    def _repo_of(self, cwd: Path) -> str:
+        slug = _hosts.origin_slug(cwd)
+        if not slug:
+            raise GhError(f"cannot tell the GitHub repo of {cwd} (no `origin` remote)")
+        return slug
+
+    # ---- shared reads ----
+
+    def _pull(self, repo: str, number: int) -> dict[str, Any]:
+        return dict(self._api(f"repos/{repo}/pulls/{number}"))
+
+    def _rollup_for(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        runs = self._paged(f"repos/{repo}/commits/{sha}/check-runs", key="check_runs")
+        status = self._api(f"repos/{repo}/commits/{sha}/status") or {}
+        actions = (
+            self._paged(f"repos/{repo}/actions/runs?head_sha={sha}", key="workflow_runs")
+            if runs
+            else []
+        )
+        return _rollup(runs, status.get("statuses") or [], actions)
+
+    def _files(self, repo: str, number: int) -> list[dict[str, Any]]:
+        return [_file_record(f) for f in self._paged(f"repos/{repo}/pulls/{number}/files")]
+
+    def _pulls_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
+        owner = repo.split("/", 1)[0]
+        head = urllib.parse.quote(f"{owner}:{branch}", safe=":/")
+        return self._paged(f"repos/{repo}/pulls?head={head}&state=all")
+
+    # ---- GhClient: issues ----
+
+    def view_issue(self, repo: str, number: int) -> dict[str, Any]:
+        raw = self._api(f"repos/{repo}/issues/{number}")
+        return {
+            "state": _upper(raw.get("state")),
+            "labels": [lbl["name"] for lbl in raw.get("labels") or [] if "name" in lbl],
+            "assignees": [a["login"] for a in raw.get("assignees") or [] if "login" in a],
+            "body": raw.get("body") or "",
+        }
+
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        return _project(
+            _issue_record(self._api(f"repos/{repo}/issues/{number}")), _gh.ISSUE_VIEW_FIELDS
+        )
+
+    def list_issues(
+        self, repo: str, state: str, limit: int, fields: str | None = None
+    ) -> list[dict[str, Any]]:
+        raw = self._paged(
+            f"repos/{repo}/issues?state={state}",
+            limit=limit,
+            keep=lambda i: "pull_request" not in i,
+        )
+        return [_project(_issue_record(i), fields or _gh.ISSUE_LIST_FIELDS) for i in raw]
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        return [
+            _comment_record(c) for c in self._paged(f"repos/{repo}/issues/{number}/comments")
+        ]
+
+    def list_linked_prs(self, repo: str, issue_number: int) -> list[dict[str, Any]]:
+        """PRs that close the issue: the PRs its timeline cross-references whose
+        title or body closes it (`_closing_refs`). Same sidebar gap as §A row 1."""
+        events = self._paged(f"repos/{repo}/issues/{issue_number}/timeline")
+        seen: list[tuple[str, int]] = []
+        for e in events:
+            src = (e.get("source") or {}).get("issue") or {}
+            if e.get("event") != "cross-referenced" or "pull_request" not in src:
+                continue
+            src_repo = str((src.get("repository") or {}).get("full_name") or repo)
+            if (src_repo, src["number"]) not in seen:
+                seen.append((src_repo, src["number"]))
+        out: list[dict[str, Any]] = []
+        for src_repo, number in seen:
+            pull = self._pull(src_repo, number)
+            closes = _closing_refs(src_repo, pull.get("title"), pull.get("body"))
+            target = {(f"{r['repository']['owner']['login']}/{r['repository']['name']}".lower(),
+                       r["number"]) for r in closes}  # fmt: skip
+            if (repo.lower(), issue_number) not in target:
+                continue
+            out.append(
+                {
+                    "url": pull.get("html_url", ""),
+                    "state": "CLOSED" if pull.get("state") == "closed" else "OPEN",
+                    "merged": bool(pull.get("merged_at")),
+                    "draft": bool(pull.get("draft")),
+                    "ci": _ci(self._rollup_for(src_repo, pull["head"]["sha"])),
+                }
+            )
+        return out
+
+    # ---- GhClient: pull requests ----
+
+    def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+        rest_state = {"merged": "closed"}.get(state, state)
+        keep = (lambda p: bool(p.get("merged_at"))) if state == "merged" else None
+        raw = self._paged(f"repos/{repo}/pulls?state={rest_state}", limit=limit, keep=keep)
+        fields = _gh.PR_LIST_FIELDS.split(",")
+        return [{f: _pr_record(repo, p)[f] for f in fields} for p in raw]
+
+    def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
+        """`fr.gh.OPEN_PR_LIST_FIELDS`: the list fields plus files, checks,
+        merge state and review decision, read per open PR (as GraphQL's are)."""
+        out = []
+        for p in self._paged(f"repos/{repo}/pulls?state=open", limit=limit):
+            pull = self._pull(repo, p["number"])
+            mergeable, merge_state = _merge_state(pull)
+            reviews = self._paged(f"repos/{repo}/pulls/{p['number']}/reviews")
+            record = _pr_record(repo, pull)
+            record.update(
+                files=self._files(repo, p["number"]),
+                statusCheckRollup=self._rollup_for(repo, record["headRefOid"]),
+                mergeable=mergeable,
+                mergeStateStatus=merge_state,
+                reviewDecision=_review_decision(reviews),
+            )
+            out.append(record)
+        return out
+
+    def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
+        out = []
+        for p in self._pulls_by_head(repo, branch):
+            record = _pr_record(repo, p)
+            record["files"] = self._files(repo, p["number"])
+            out.append(record)
+        return out
+
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+        pull = self._pull(repo, number)
+        mergeable, merge_state = _merge_state(pull)
+        return {
+            "state": _pr_state(pull),
+            "draft": bool(pull.get("draft")),
+            "head_oid": pull["head"]["sha"],
+            "head_ref": pull["head"]["ref"],
+            "base_ref": pull["base"]["ref"],
+            "mergeable": mergeable,
+            "merge_state": merge_state,
+            # REST names a test-merge commit while a PR is open; GraphQL only a real one.
+            "merge_commit": (pull.get("merge_commit_sha") or "") if pull.get("merged_at") else "",
+            "title": pull.get("title") or "",
+            "body": pull.get("body") or "",
+        }
+
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        from fr.triage.collect import _latest_runs
+
+        pull = self._pull(repo, number)
+        return [_check_row(e) for e in _latest_runs(self._rollup_for(repo, pull["head"]["sha"]))]
+
+    def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """`gh pr checks --required` (§A): the checks whose names the base branch
+        requires — classic protection's contexts, read from `GET branches/{base}`
+        (its `protection` summary needs no admin, unlike the
+        `.../protection/required_status_checks` route, which a cloud session's
+        token is refused), plus any ruleset's `required_status_checks` rule."""
+        pull = self._pull(repo, number)
+        base = _q(pull["base"]["ref"])
+        branch = self._api(f"repos/{repo}/branches/{base}") or {}
+        required_cfg = (branch.get("protection") or {}).get("required_status_checks") or {}
+        required = set(required_cfg.get("contexts") or [])
+        required |= {c.get("context") for c in required_cfg.get("checks") or []}
+        for rule in self._api(f"repos/{repo}/rules/branches/{base}") or []:
+            if rule.get("type") == "required_status_checks":
+                params = rule.get("parameters") or {}
+                required |= {c.get("context") for c in params.get("required_status_checks") or []}
+        if not required:
+            return []
+        from fr.triage.collect import _latest_runs
+
+        rollup = _latest_runs(self._rollup_for(repo, pull["head"]["sha"]))
+        return [row for row in map(_check_row, rollup) if row["name"] in required]
+
+    def pr_status_by_url(self, url: str) -> dict[str, Any] | None:
+        """None on any failure, as the `GhClient` contract says (fr-vk holds the card)."""
+        parts = _pr_url_parts(url)
+        if parts is None:
+            return None
+        try:
+            pull = self._pull(*parts)
+        except GhError as exc:
+            if isinstance(exc, HostRefusedError):
+                raise
+            return None
+        return {"state": _pr_state(pull), "draft": bool(pull.get("draft"))}
+
+    def pr_body(self, ref: str, *, cwd: Path) -> str:
+        parts = _pr_url_parts(ref)
+        if parts is not None:
+            return str(self._pull(*parts).get("body") or "")
+        repo = self._repo_of(cwd)
+        if ref.isdigit():
+            return str(self._pull(repo, int(ref)).get("body") or "")
+        pulls = self._pulls_by_head(repo, ref)
+        if not pulls:
+            raise GhError(f"no pull requests found for branch {ref!r} in {repo}")
+        chosen = next((p for p in pulls if p.get("state") == "open"), pulls[0])
+        return str(chosen.get("body") or "")
+
+    def pr_for_branch(
+        self, branch: str, *, cwd: Path, run: CommandRunner | None = None
+    ) -> dict[str, Any] | None:
+        """None when there is no PR or the call fails (the `GhClient` contract).
+        `owner/repo` comes from the checkout's `origin` URL."""
+        slug = _hosts.origin_slug(cwd)
+        if not slug:
+            return None
+        owner = slug.split("/", 1)[0]
+        head = urllib.parse.quote(f"{owner}:{branch}", safe=":/")
+        route = f"repos/{slug}/pulls?head={head}&state=all&per_page={self.PER_PAGE}&page=1"
+        with _gh.host_scope(self._host):
+            result = (run or run_cli)(["gh", "api", route], cwd=cwd, env=_gh.host_env())
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            return None
+        try:
+            pulls = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(pulls, list) or not pulls:
+            return None
+        chosen = next((p for p in pulls if p.get("state") == "open"), pulls[0])
+        return {
+            "state": _pr_state(chosen),
+            "url": chosen.get("html_url", ""),
+            "mergedAt": chosen.get("merged_at"),
+        }
+
+    # ---- GhClient: repo and files ----
+
+    def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
+        """None when it cannot say (the `GhClient` contract)."""
+        slug = _hosts.origin_slug(cwd)
+        if not slug:
+            return None
+        with _gh.host_scope(self._host):
+            result = (run or run_cli)(
+                ["gh", "api", f"repos/{slug}", "--jq", ".default_branch"],
+                cwd=cwd,
+                env=_gh.host_env(),
+            )
+        out = (result.stdout or "").strip()
+        return out if result.returncode == 0 and out else None
+
+    def issues_enabled(self, repo: str | None = None) -> bool | None:
+        """None when it cannot say (the `GhClient` contract)."""
+        if not repo:
+            return None
+        try:
+            raw = self._api(f"repos/{repo}")
+        except GhError as exc:
+            if isinstance(exc, HostRefusedError):
+                raise
+            return None
+        value = raw.get("has_issues") if isinstance(raw, dict) else None
+        return value if isinstance(value, bool) else None
+
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        """`allowed` from the repo's `allow_*` flags. Gap: REST has no
+        `viewerDefaultMergeMethod`, so `default` is None."""
+        raw = self._api(f"repos/{repo}")
+        flags = (
+            ("merge", "allow_merge_commit"),
+            ("squash", "allow_squash_merge"),
+            ("rebase", "allow_rebase_merge"),
+        )
+        return {"default": None, "allowed": [m for m, key in flags if raw.get(key)]}
+
+    def list_repos(self, owner: str, limit: int) -> list[dict[str, Any]]:
+        try:
+            raw = self._paged(f"orgs/{owner}/repos", limit=limit)
+        except GhError as exc:
+            if not _is_404(exc):
+                raise
+            raw = self._paged(f"users/{owner}/repos", limit=limit)
+        return [{"name": r.get("name", ""), "isArchived": bool(r.get("archived"))} for r in raw]
+
+    def viewer_login(self) -> str:
+        return str(self._api("user")["login"])
+
+    def file_exists(self, repo: str, path: str) -> bool:
+        try:
+            self._api(f"repos/{repo}/contents/{path}")
+        except GhError as exc:
+            if _is_404(exc):
+                return False
+            raise
+        return True
+
+    def list_dir(self, repo: str, path: str) -> list[str]:
+        try:
+            raw = self._api(f"repos/{repo}/contents/{path}")
+        except GhError as exc:
+            if _is_404(exc):
+                return []
+            raise
+        return [str(e["name"]) for e in raw] if isinstance(raw, list) else []
+
+    def read_file(self, repo: str, path: str) -> str:
+        return str(self._api(f"repos/{repo}/contents/{path}", accept=RAW_ACCEPT))
+
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        endpoint = (
+            f"repos/{repo}/contents/{urllib.parse.quote(path, safe='/')}?ref={_q(ref)}"
+        )
+        return str(self._api(endpoint, accept=RAW_ACCEPT + "+json"))
+
+    def closing_ref(self, repo: str, number: int) -> str:
+        return f"Closes {repo}#{number}"
+
+    # ---- GhClient: writes ----
+
+    def edit_issue_labels(
+        self, repo: str, number: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None:
+        if add:
+            self._api(
+                f"repos/{repo}/issues/{number}/labels", method="POST", fields={"labels": sorted(add)}
+            )
+        for name in sorted(remove):
+            self._api(f"repos/{repo}/issues/{number}/labels/{_q(name)}", method="DELETE")
+
+    def edit_issue_state(
+        self, repo: str, number: int, *, state: str, reason: str | None = None
+    ) -> None:
+        if state not in {"OPEN", "CLOSED"}:
+            raise ValueError(f"unknown issue state: {state!r}")
+        fields: dict[str, Any] = {"state": state.lower()}
+        if state == "CLOSED" and reason:
+            fields["state_reason"] = reason.lower()
+        self._api(f"repos/{repo}/issues/{number}", method="PATCH", fields=fields)
+
+    def edit_issue_body(self, repo: str, number: int, body: str) -> None:
+        self._api(f"repos/{repo}/issues/{number}", method="PATCH", fields={"body": body})
+
+    def comment_issue(self, repo: str, number: int, body: str) -> None:
+        self._api(f"repos/{repo}/issues/{number}/comments", method="POST", fields={"body": body})
+
+    def create_issue(self, repo: str, *, title: str, body: str, labels: frozenset[str]) -> str:
+        fields: dict[str, Any] = {"title": title, "body": body}
+        if labels:
+            fields["labels"] = sorted(labels)
+        made = self._api(f"repos/{repo}/issues", method="POST", fields=fields)
+        return str(made["html_url"])
+
+    def ensure_labels(self, repo: str, labels: list[Any]) -> None:
+        """Create each label, or update it when it exists (`gh label create
+        --force`'s idempotence, spelled as REST)."""
+        for lbl in labels:
+            if isinstance(lbl, str):
+                ld = LabelDef(name=lbl, color="ededed", description="")
+            elif isinstance(lbl, LabelDef):
+                ld = lbl
+            else:
+                ld = LabelDef(
+                    name=getattr(lbl, "name", None) or lbl["name"],
+                    color=getattr(lbl, "color", None) or lbl.get("color", "ededed"),
+                    description=getattr(lbl, "description", None) or lbl.get("description", ""),
+                )
+            fields = {"color": ld.color, "description": ld.description}
+            try:
+                self._api(
+                    f"repos/{repo}/labels", method="POST", fields={"name": ld.name, **fields}
+                )
+            except GhError as exc:
+                if "already_exists" not in f"{exc} {exc.stderr} {exc.stdout}":
+                    raise
+                self._api(f"repos/{repo}/labels/{_q(ld.name)}", method="PATCH", fields=fields)
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        self._api(
+            f"repos/{repo}/issues/comments/{comment_id}", method="PATCH", fields={"body": body}
+        )
+
+    def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        """`PUT pulls/{n}/merge` with `sha`: GitHub refuses when the head moved."""
+        if method not in MERGE_METHODS:
+            raise ValueError(f"merge method must be one of {sorted(MERGE_METHODS)}, got {method!r}")
+        self._api(
+            f"repos/{repo}/pulls/{number}/merge",
+            method="PUT",
+            fields={"merge_method": method, "sha": head_sha},
+        )
+
+    def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
+        made = self.create_pr(repo, head=head, base=base, title=title, body=body, draft=False)
+        return int(made["number"])
+
+    def create_pr(
+        self, repo: str, *, head: str, base: str, title: str, body: str, draft: bool
+    ) -> dict[str, Any]:
+        made = self._api(
+            f"repos/{repo}/pulls",
+            method="POST",
+            fields={"head": head, "base": base, "title": title, "body": body, "draft": draft},
+        )
+        return {"number": int(made["number"]), "url": str(made["html_url"])}
+
+    def close_pr(self, repo: str, number: int) -> None:
+        self._api(f"repos/{repo}/pulls/{number}", method="PATCH", fields={"state": "closed"})
+
+    def delete_branch(self, repo: str, branch: str) -> None:
+        ref = urllib.parse.quote(branch, safe="/")
+        self._api(f"repos/{repo}/git/refs/heads/{ref}", method="DELETE")
+
+    def dispatch_workflow(self, repo: str, workflow: str, *, inputs: dict[str, str]) -> None:
+        """`POST actions/workflows/{file}/dispatches` on the default branch."""
+        ref = str(self._api(f"repos/{repo}")["default_branch"])
+        fields: dict[str, Any] = {"ref": ref}
+        fields.update({f"inputs[{k}]": v for k, v in inputs.items()})
+        self._api(
+            f"repos/{repo}/actions/workflows/{_q(workflow)}/dispatches",
+            method="POST",
+            fields=fields,
+        )
