@@ -16,9 +16,17 @@ import typer
 from rich.markup import escape
 
 import fr.commands.triage_cmd as triage_cmd
-from fr.commands.triage_cmd import DirOpt, OrgOpt, RepoOpt, console, err_console, triage_app
+from fr.commands.triage_cmd import (
+    DirOpt,
+    OrgOpt,
+    RepoOpt,
+    WorkspaceOpt,
+    console,
+    err_console,
+    resolve_state_dir,
+    triage_app,
+)
 from fr.triage.errors import TriageError
-from fr.triage.model import state_dir
 from fr.triage.state_sync import SyncReport, check_scope_name, export_state, import_state
 
 state_app = typer.Typer(
@@ -55,11 +63,14 @@ def export_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Copy the scope's durable state to <dir>/<scope>/. Facts and pages never travel."""
     scope = triage_cmd._scope(repo, org)
     try:
-        report = export_state(state_dir(scope, dir_override), to, check_scope_name(scope.name))
+        report = export_state(
+            resolve_state_dir(scope, dir_override, workspace), to, check_scope_name(scope.name)
+        )
     except TriageError as exc:
         _refuse(exc)
     _print(report)
@@ -77,6 +88,7 @@ def import_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Copy <dir>/<scope>/ back into the state directory. An identical file is skipped;
     a state file whose mtime is newer than its repo copy's is skipped unless --force.
@@ -85,7 +97,10 @@ def import_command(
     scope = triage_cmd._scope(repo, org)
     try:
         report = import_state(
-            from_, check_scope_name(scope.name), state_dir(scope, dir_override), force=force
+            from_,
+            check_scope_name(scope.name),
+            resolve_state_dir(scope, dir_override, workspace),
+            force=force,
         )
     except TriageError as exc:
         _refuse(exc)

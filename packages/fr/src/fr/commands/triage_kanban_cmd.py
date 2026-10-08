@@ -30,14 +30,17 @@ from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
     RepoOpt,
+    WorkspaceOpt,
     _load_state,
     _scope,
     batch_app,
     collect_into,
     console,
     err_console,
+    resolve_state_dir,
     triage_app,
 )
+from fr.triage import gitseam
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
 from fr.triage.batch_drive import (
     DEFAULT_WORKSPACE_PREFIX,
@@ -50,7 +53,7 @@ from fr.triage.errors import TriageError
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
-from fr.triage.model import Facts, Judgements, Scope, state_dir
+from fr.triage.model import Facts, Judgements, Scope
 from fr.triage.render import plural
 from fr.triage.scope_config import load_scope_config, publish_board, scope_id
 
@@ -162,9 +165,10 @@ def batch_focus_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Switch the terminal to a batch's live session, through the runner that dispatched it."""
-    _, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    _, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     wanted = batch_id.lower()
     batch = next((b for b in judgements.batches if b.id == wanted), None)
     if batch is None:
@@ -198,13 +202,19 @@ def batch_focus_command(
 # ---------------------------------------------------------------- the board
 
 
-def scope_args(repo: str | None, org: str | None, dir_override: Path | None) -> list[str]:
+def scope_args(
+    repo: str | None, org: str | None, dir_override: Path | None, workspace: Path | None = None
+) -> list[str]:
     """The options a copied command carries so it reads the same state: `--repo` or `--org`
     as the operator gave it, and `--dir` only when they did (R5), made absolute: the
-    command is pasted in another pane, whose working directory is not this one's."""
+    command is pasted in another pane, whose working directory is not this one's. With no
+    `--dir`, the state's workspace (cloud-triage R4) is named as `--workspace`, for the
+    same reason: the default workspace is the working directory's clone."""
     args = ["--repo", repo] if repo is not None else ["--org", str(org)]
     if dir_override is not None:
         args += ["--dir", str(dir_override.resolve())]
+    elif (root := gitseam.toplevel(workspace if workspace is not None else Path.cwd())) is not None:
+        args += ["--workspace", str(root)]
     return args
 
 
@@ -286,7 +296,7 @@ def write_board(
 ) -> tuple[Path, int]:
     """Render `board.html` into the state directory *target* from the facts and judgements
     on disk now, with live session statuses. Returns the path written and its card count."""
-    _, facts, judgements = _load_state(scope, target)
+    _, facts, judgements = _load_state(scope, target, None)
     statuses, notes = session_statuses(judgements, facts, prefix=prefix)
     rendered_at = datetime.now(UTC)
     # The wall clock: session status is read live above, so idle minutes must be real.
@@ -417,6 +427,7 @@ def board_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
     refresh: Annotated[
         int,
         typer.Option("--refresh", min=0, help="Reload the page every N seconds (0: never)."),
@@ -442,8 +453,8 @@ def board_command(
     """Write board.html: one card per batch in six lifecycle columns, with live session
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
     scope = _scope(repo, org)
-    target = state_dir(scope, dir_override)
-    args = scope_args(repo, org, dir_override)
+    target = resolve_state_dir(scope, dir_override, workspace)
+    args = scope_args(repo, org, dir_override, workspace)
     if watch:
         _watch(scope, target, args, refresh, interval, open_, publish_)
         return

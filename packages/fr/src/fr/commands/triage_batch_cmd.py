@@ -64,12 +64,14 @@ from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
     RepoOpt,
+    WorkspaceOpt,
     _load_state,
     _scope,
     batch_app,
     collect_into,
     console,
     err_console,
+    resolve_state_dir,
 )
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
@@ -201,7 +203,6 @@ from fr.triage.model import (
     Scope,
     load_judgements,
     load_scope_facts,
-    state_dir,
 )
 from fr.triage.render import plural
 from fr.triage.scope_config import load_scope_config, scope_id
@@ -502,10 +503,11 @@ def batch_list_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Print one line per batch in judgements.yaml, or "no batches"."""
     scope = _scope(repo, org)
-    path = state_dir(scope, dir_override) / "judgements.yaml"
+    path = resolve_state_dir(scope, dir_override, workspace) / "judgements.yaml"
     try:
         batches = load_judgements(path).batches if path.exists() else []
     except TriageError as exc:
@@ -544,9 +546,10 @@ def batch_create_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Add a proposed batch of judged issues. With --wave, its claims are owed (R3)."""
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     if not title or not issue:
         _fail("create needs --title and at least one --issue")
     doc: dict[str, object] = {"id": batch_id, "title": title, "ids": list(issue)}
@@ -599,6 +602,7 @@ def batch_edit_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Change a proposed batch; past `proposed`, only --order (and, until it merges,
     --wave and --after) may change. Claims follow the change (R3, R5, R10)."""
@@ -606,7 +610,7 @@ def batch_edit_command(
         _fail("--no-wave and --wave contradict each other")
     if no_after and after is not None:
         _fail("--no-after and --after contradict each other")
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     changes: dict[str, object] = {}
     for name, value in (
@@ -675,9 +679,10 @@ def batch_cancel_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Withdraw a batch: unlabel and comment on each member, append a cancel event."""
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     stage = derive_batch_stage(batch, facts)
     if stage in CLOSED_OUT:
@@ -792,9 +797,10 @@ def batch_suggest_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Print candidate groupings (shared file, theme, pattern). Writes nothing."""
-    _, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    _, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     found = suggest(judgements, facts)
     if not found:
         console.print("no suggestions")
@@ -1182,9 +1188,10 @@ def batch_dispatch_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Hand a batch to a runner as one fr-goal run, and mark its issues taken."""
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     try:
         dispatch_batch(
@@ -1764,6 +1771,7 @@ def batch_adopt_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Put a running session under the wave driver as an existing batch; launches nothing.
 
@@ -1776,7 +1784,7 @@ def batch_adopt_command(
         return
     if batch_id is None or tab is None or branch is None:
         _fail("give a batch, --tab and --branch (or --list)")
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     adopt_batch(
         target, facts, judgements, batch, tab=tab, branch=branch, to=to,
@@ -1804,6 +1812,7 @@ def batch_merge_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Merge pr-open batch PRs in the computed order, re-slotting versions (§3.F).
 
@@ -1813,7 +1822,7 @@ def batch_merge_command(
     """
     if method is not None and method not in MERGE_METHODS:
         _fail(f"--method must be one of {', '.join(sorted(MERGE_METHODS))}, got {method!r}")
-    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     queue = pr_open_queue(judgements.batches, facts, judgements.issues)
     if batch_ids:
         wanted = {b.lower() for b in batch_ids}
@@ -2981,7 +2990,7 @@ class _Driver:
                 f"{plural(len(keys), 'key')} this fr does not know ({', '.join(keys)}); "
                 "ignored until an fr that knows them runs",
             )
-        _, facts, judgements = _load_state(self.scope, self.target)
+        _, facts, judgements = _load_state(self.scope, self.target, None)
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._clone_unread = {}
         self._restart = {}
@@ -3883,6 +3892,7 @@ def batch_drive_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
 ) -> None:
     """Drive batches to completion: merge what is ready, close out what merged,
     dispatch what may start (wave order, then merge order, then id).
@@ -3893,7 +3903,7 @@ def batch_drive_command(
     if not workspace_prefix.strip():
         _fail("--workspace-prefix must not be blank")
     scope = _scope(repo, org)
-    target = state_dir(scope, dir_override)
+    target = resolve_state_dir(scope, dir_override, workspace)
     path = target / "judgements.yaml"
     try:
         known = load_judgements(path).batches if path.exists() else []
@@ -3911,7 +3921,7 @@ def batch_drive_command(
         yes=yes,
         workspace_prefix=workspace_prefix,
         keep_sessions=keep_sessions,
-        scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override),
+        scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override, workspace),
     )
     restart: str | None = None
     with drive_lock(target):

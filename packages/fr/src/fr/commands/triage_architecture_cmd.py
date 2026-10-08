@@ -19,7 +19,15 @@ import typer
 from rich.markup import escape
 
 import fr.commands.triage_cmd as triage_cmd
-from fr.commands.triage_cmd import DirOpt, OrgOpt, RepoOpt, console, err_console, triage_app
+from fr.commands.triage_cmd import (
+    DirOpt,
+    OrgOpt,
+    RepoOpt,
+    WorkspaceOpt,
+    console,
+    err_console,
+    triage_app,
+)
 from fr.triage.architecture import (
     ARCHITECTURE_DIR,
     GENERATED,
@@ -58,6 +66,7 @@ def render_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
     checkout: Annotated[
         Path | None,
         typer.Option("--checkout", help="Clone to measure (default: this checkout's toplevel)."),
@@ -75,7 +84,7 @@ def render_command(
     cannot be measured is an em dash.
     """
     scope = triage_cmd._scope(repo, org)
-    target, facts, judgements = triage_cmd._load_state(scope, dir_override)
+    target, facts, judgements = triage_cmd._load_state(scope, dir_override, workspace)
     try:
         subsystems = load_subsystems(target / SUBSYSTEMS_FILE)
         resolved = resolve_manifest(target / ARCHITECTURE_DIR, GENERATED, MOVED)

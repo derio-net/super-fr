@@ -85,8 +85,28 @@ RepoOpt = Annotated[
 OrgOpt = Annotated[str | None, typer.Option("--org", help="Triage every repo of OWNER.")]
 DirOpt = Annotated[
     Path | None,
-    typer.Option("--dir", help="State directory (default: $HOME/.cache/fr/triage/<scope>/)."),
+    typer.Option(
+        "--dir",
+        help="State directory, outright (default: <workspace>/.fr/triage-state/<scope>/).",
+    ),
 ]
+WorkspaceOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--workspace",
+        help="The clone that holds the state (default: the clone of the working directory); "
+        "--dir wins over it.",
+    ),
+]
+
+
+def resolve_state_dir(scope: Scope, dir_override: Path | None, workspace: Path | None) -> Path:
+    """`fr.triage.model.state_dir`, with its refusal (no clone, no `--workspace`) as exit 2."""
+    try:
+        return state_dir(scope, dir_override, workspace=workspace)
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
 
 
 def make_forge() -> Forge:
@@ -168,6 +188,7 @@ def collect_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
     pr_limit: int = typer.Option(
         PR_LIMIT, "--pr-limit", min=1, help="PRs listed per repo (the PR -> issue window)."
     ),
@@ -175,7 +196,9 @@ def collect_command(
     """Read the forge and write facts.json for the scope."""
     scope = _scope(repo, org)
     try:
-        facts, out, _ = collect_into(scope, state_dir(scope, dir_override), pr_limit=pr_limit)
+        facts, out, _ = collect_into(
+            scope, resolve_state_dir(scope, dir_override, workspace), pr_limit=pr_limit
+        )
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
@@ -255,14 +278,16 @@ def _previous_facts(path: Path, scope: Scope) -> Facts | None:
     return facts if facts.matches(scope) else None
 
 
-def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, Judgements]:
+def _load_state(
+    scope: Scope, dir_override: Path | None, workspace: Path | None
+) -> tuple[Path, Facts, Judgements]:
     """The scope's facts and judgements, through the `fr.triage.model` loaders.
 
     No facts.json is an error naming `collect`, and so are facts collected for
     another scope (a `--dir` can point anywhere, gh#886); no judgements.yaml is
     allowed — everything is then unranked.
     """
-    target_dir = state_dir(scope, dir_override)
+    target_dir = resolve_state_dir(scope, dir_override, workspace)
     facts_path = target_dir / "facts.json"
     if not facts_path.exists():
         flag = "org" if scope.kind == "org" else "repo"
@@ -291,6 +316,7 @@ def check_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
     as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
     """Report unranked issues and PRs, settled, orphaned, unreachable, stale, unplaced,
@@ -299,7 +325,7 @@ def check_command(
     Always exits 0.
     """
     scope = _scope(repo, org)
-    _, facts, judgements = _load_state(scope, dir_override)
+    _, facts, judgements = _load_state(scope, dir_override, workspace)
     try:
         me: str | None = scope_id(scope)
     except TriageError as exc:  # a broken host id: the claim sets are left out, never fatal
@@ -431,6 +457,7 @@ def render_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
     open_: bool = typer.Option(False, "--open", help="Open the board in a browser."),
     matrix: Annotated[
         Path | None,
@@ -446,7 +473,7 @@ def render_command(
     from --matrix.
     """
     scope = _scope(repo, org)
-    target_dir, facts, judgements = _load_state(scope, dir_override)
+    target_dir, facts, judgements = _load_state(scope, dir_override, workspace)
     if matrix is not None:
         if not matrix.is_file():
             err_console.print(

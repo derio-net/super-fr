@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -165,15 +166,49 @@ class Scope:
         return self.target.split("/", 1)[0]
 
 
-def state_dir(scope: Scope, override: Path | None = None) -> Path:
-    """`--dir` if given, else `$HOME/.cache/fr/triage/<scope>/` — fr's cache root.
+STATE_EXCLUDE = ".fr/triage-state/"
+"""The `info/exclude` line that keeps every scope's workspace state out of git (R4)."""
 
-    Resolved through `_home()` like every other fr cache path; `XDG_CACHE_HOME`
-    is deliberately not read (spec-review r1).
+
+def legacy_state_dir(scope: Scope) -> Path:
+    """`$HOME/.cache/fr/triage/<scope>/`: where state lived before it moved into the
+    workspace (spec 2026-10-07-cloud-triage R4). Resolved through `_home()` like every
+    other fr cache path; `XDG_CACHE_HOME` is deliberately not read (spec-review r1)."""
+    return _home() / ".cache" / "fr" / "triage" / scope.name
+
+
+def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | None = None) -> Path:
+    """`--dir` if given, else `<workspace>/.fr/triage-state/<scope>/` (spec
+    2026-10-07-cloud-triage R4, §B).
+
+    The workspace is *workspace* (`--workspace`), else the clone holding the working
+    directory, each taken at its git toplevel; neither being a clone is refused
+    (`TriageError` naming `--workspace`), for every scope kind. The directory is kept
+    out of git by one `info/exclude` line under the git common dir, so a linked
+    worktree is covered and no tracked file changes. The first time the directory is
+    asked for and does not exist, an existing `legacy_state_dir` is copied in (and
+    left where it is); once it exists, nothing is copied again.
     """
+    from fr.triage import gitseam
+
     if override is not None:
         return override
-    return _home() / ".cache" / "fr" / "triage" / scope.name
+    start = workspace if workspace is not None else Path.cwd()
+    root = gitseam.toplevel(start) if start.is_dir() else None
+    if root is None:
+        where = f"{workspace}" if workspace is not None else "the working directory"
+        raise TriageError(
+            f"{where} is in no git clone, and triage state lives in a workspace: run from a "
+            "clone, or pass --workspace PATH (a clone to hold the state; --dir names a "
+            "directory outright)"
+        )
+    gitseam.ensure_excluded(root, STATE_EXCLUDE)
+    target = root / ".fr" / "triage-state" / scope.name
+    legacy = legacy_state_dir(scope)
+    if not target.exists() and legacy.is_dir():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(legacy, target, symlinks=True)
+    return target
 
 
 def issue_key(repo: str, number: int) -> str:

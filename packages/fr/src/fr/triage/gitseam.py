@@ -119,6 +119,42 @@ def git_ok(args: list[str], cwd: Path) -> bool:
     return done.returncode == 0
 
 
+def toplevel(path: Path) -> Path | None:
+    """The git toplevel of the clone (or linked worktree) holding *path*; None when
+    *path* is in none (spec 2026-10-07-cloud-triage R4)."""
+    try:
+        out: str = _run(["git", "rev-parse", "--show-toplevel"], path, timeout=GIT_TIMEOUT_SECONDS)
+    except GitError:
+        return None
+    return Path(out.strip()) if out.strip() else None
+
+
+def common_dir(root: Path) -> Path:
+    """`git rev-parse --git-common-dir` of the clone at *root*, absolute: the main
+    repository's `.git` even from a linked worktree, where `info/exclude` lives."""
+    out = git(["rev-parse", "--git-common-dir"], root).strip()
+    path = Path(out)
+    return path if path.is_absolute() else (root / path).resolve()
+
+
+def ensure_excluded(root: Path, entry: str) -> bool:
+    """Append *entry* to `<common dir>/info/exclude` unless a line already says it;
+    whether it wrote. The exclude file is the repository's own and untracked, so no
+    tracked file changes, on any branch (R4)."""
+    exclude = common_dir(root) / "info" / "exclude"
+    try:
+        text = exclude.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        text = ""
+    if entry in text.splitlines():
+        return False
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    sep = "" if not text or text.endswith("\n") else "\n"
+    with exclude.open("a", encoding="utf-8") as fh:
+        fh.write(f"{sep}{entry}\n")
+    return True
+
+
 def run_declared(command: str, cwd: Path, **fields: str) -> None:
     """Run a command the repo declares in `.fr/triage.yaml` (`set`, `relock`).
 

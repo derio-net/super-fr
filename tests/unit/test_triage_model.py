@@ -15,6 +15,7 @@ from fr.triage.model import (
     Judgements,
     Scope,
     issue_key,
+    legacy_state_dir,
     load_facts,
     load_judgements,
     normalize_key,
@@ -147,23 +148,24 @@ def test_unreadable_yaml_is_refused_naming_the_file(tmp_path: Path) -> None:
         load_judgements(path)
 
 
-def test_default_state_dir_for_a_repo_is_under_home_cache(
+def test_the_legacy_state_dir_for_a_repo_is_under_home_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Where state lived before R4 moved it into the workspace; imported from there."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-must-be-ignored"))
 
-    got = state_dir(Scope(kind="repo", target="derio-net/super-fr"))
+    got = legacy_state_dir(Scope(kind="repo", target="derio-net/super-fr"))
 
     assert got == tmp_path / ".cache" / "fr" / "triage" / "derio-net--super-fr"
 
 
-def test_default_state_dir_for_an_org_is_under_home_cache(
+def test_the_legacy_state_dir_for_an_org_is_under_home_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    got = state_dir(Scope(kind="org", target="derio-net"))
+    got = legacy_state_dir(Scope(kind="org", target="derio-net"))
 
     assert got == tmp_path / ".cache" / "fr" / "triage" / "derio-net"
 

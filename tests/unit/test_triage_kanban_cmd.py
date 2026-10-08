@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -87,10 +88,31 @@ def _board(tmp_path: Path, *args: str) -> tuple[int, str]:
 # ----------------------------------------------------------------- scope args
 
 
-def test_scope_args_name_the_repo_or_org_and_dir_only_when_given() -> None:
+def test_scope_args_name_the_repo_or_org_and_dir_only_when_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     assert scope_args("o/r", None, None) == ["--repo", "o/r"]
     assert scope_args(None, "acme", None) == ["--org", "acme"]
     assert scope_args("o/r", None, Path("/x y")) == ["--repo", "o/r", "--dir", "/x y"]
+
+
+def test_scope_args_name_the_workspace_when_no_dir_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The default state dir follows the working directory's clone (cloud-triage R4), and a
+    copied command is pasted in another pane: the workspace travels as an absolute path."""
+    ws = tmp_path / "ws"
+    subprocess.run(["git", "init", "--quiet", str(ws)], check=True)
+    (ws / "sub").mkdir()
+    monkeypatch.chdir(ws / "sub")
+    root = str(ws.resolve())
+    assert scope_args("o/r", None, None) == ["--repo", "o/r", "--workspace", root]
+    assert scope_args("o/r", None, None, ws / "sub") == ["--repo", "o/r", "--workspace", root]
+    assert scope_args("o/r", None, Path("/d"), ws) == ["--repo", "o/r", "--dir", "/d"]
 
 
 # ------------------------------------------------------------- session_statuses

@@ -6,6 +6,7 @@ The forge is faked (`tests.unit.triage_fixtures.FakeForge`); nothing here reache
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -56,13 +57,14 @@ def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 # ----------------------------------------------------------- the scope itself
 
 
-def test_a_group_scope_name_is_the_sorted_owner_repo_slugs_joined_by_plus() -> None:
+def test_a_group_scope_name_is_the_sorted_owner_repo_slugs_joined_by_plus(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
     forward = Scope.group([BETA, ALPHA])
     backward = Scope.group([ALPHA, BETA.upper()])
     assert forward.kind == "group"
     assert forward.name == "example-org--alpha+other-org--beta"
     assert backward.name == forward.name  # order and case do not move the directory
-    assert state_dir(forward).name == forward.name
+    assert state_dir(forward, workspace=tmp_path).name == forward.name
     assert state_dir(forward, Path("/elsewhere")) == Path("/elsewhere")  # --dir overrides
 
 
@@ -89,6 +91,8 @@ def test_a_group_with_a_repeated_repo_name_is_refused_before_anything_is_written
     assert result.exit_code == 2
     assert "same" in result.output
     assert not (tmp_path / "s").exists() and forge.calls == []
+    subprocess.run(["git", "init", "--quiet", str(tmp_path / "ws")], check=True)
+    monkeypatch.chdir(tmp_path / "ws")
     default = state_dir(Scope.group(["one/same", "two/same"]))
     assert not default.exists()
 
