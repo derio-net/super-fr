@@ -676,3 +676,8 @@ Was tier-2026-10-07-cloud-triage-p3 before the renumbering.
 ### tier-2026-10-07-cloud-triage-p7 · decision · hard: a new artifact kind every fr-enabled repo will carry
 
 Was tier-2026-10-07-cloud-triage-p6 before the renumbering.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p6-2 created=2026-10-08T13:50:37+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p6-2 · decision · ask: versions and drift (R16-R18)
+
+Supersedes the earlier phase-split-2026-10-07-cloud-triage-p6 entries after the renumbering (this was phase 5).
