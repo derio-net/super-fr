@@ -5059,7 +5059,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R7
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: plan 2026-10-07-cloud-triage names the candidate scenario this row's walk
+      runs; written by the phase that implements the row
+    scenario: tests/scenarios/cloud-triage-state-ref.sh
   - id: cloud-triage-privacy-guard
     capability: Backlog triage
     acceptance: An issue from a private repo can never reach a public state repo; adding
