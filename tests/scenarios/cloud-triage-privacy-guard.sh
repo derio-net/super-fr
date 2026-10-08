@@ -4,7 +4,9 @@
 # judgements.yaml is byte-identical afterwards (spec 2026-10-07-cloud-triage R8). The
 # scope is a group of a public and a private repo; fixtures/cloud-triage-privacy-facts.json
 # is fr's own facts file (fictional example-org repos), whose visibility map answers the
-# guard, so nothing here reaches a forge. With a private state repo the same create lands.
+# guard, so nothing here reaches a forge. Then the scope's state repo is switched to the
+# PRIVATE repo, and the very same create of the private issue lands. (Test Plan 7's
+# lease-push half is phase 4's, with the lease.)
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 export FR_HOST_ID=0123456789abcdef
@@ -33,6 +35,9 @@ expect_grep 'example-org/widgets' "$flat" "the refusal names the issue's repo"
 expect_grep 'example-org/gadgets' "$flat" "the refusal names the state repo"
 [ "$(cat "$state/judgements.yaml")" = "$before" ] || fail "a refused create wrote judgements.yaml"
 
-run_fr out triage batch create b2 --title t --issue gadgets#1 --repo "$group" --dir "$state"
+printf 'state_repo: example-org/widgets\n' > "$state/scope-durable.yaml"
+run_fr out triage batch create b1 --title t --issue widgets#7 --repo "$group" --dir "$state"
 require_exit 0 "$out"
+grep -q 'widgets#7' "$state/judgements.yaml" || fail "the create into a private state repo wrote nothing"
+[ "$(cat "$state/judgements.yaml")" != "$before" ] || fail "the create into a private state repo wrote nothing"
 echo "ok: cloud-triage-privacy-guard"
