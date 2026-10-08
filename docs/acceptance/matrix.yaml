@@ -5083,7 +5083,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R9
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: plan 2026-10-07-cloud-triage names the candidate scenario this row's walk
+      runs; written by the phase that implements the row
+    scenario: tests/scenarios/cloud-triage-driver-lease.sh
   - id: cloud-triage-driver-end-to-end
     capability: Backlog triage
     acceptance: An operator can run the wave driver as a long-lived cloud session beside
