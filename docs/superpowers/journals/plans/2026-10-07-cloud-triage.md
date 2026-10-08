@@ -599,3 +599,94 @@ dde24616 + 0a39e97a: the scenario's second create really uses a private state re
 ### p3-r12-resolved · finding [fixed] · resolves p3-r12: ref files restored 0600 and committed 100644, losing executable modes (phase 3)
 
 c47c1abd: 100755 for owner-executable files; restores honour the umask; test_an_executable_keeps_its_mode_across_the_ref_and_restores_honour_the_umask.
+
+<!-- fr:journal kind=decision scope=plan id=p4-driver-adapter-is-policy created=2026-10-08T16:36:54+00:00 phase=4 -->
+### p4-driver-adapter-is-policy · decision · The Driver adapter is the environment's policy (runner, refusal, post_merge); the pass is one_pass, which both entries call (phase 4)
+
+§E sketches `Driver` as "run passes until done". The pass already lives in
+`triage_batch_cmd._Driver.run_pass`, so `fr.triage.driver.Driver` carries only what
+differs by environment: `runner_for(batch, to)` (host: `--to`, else the batch's/repo's
+default, unchanged; cloud: `claude-cloud`), `refusal(batch)` (cloud: an explicit other
+`launch.runner`, reported as a `warn` line and counted as a held dispatch) and
+`post_merge(checkout, argv)` (cloud runs nothing, so no PostMergeEvent and no
+`post_merge_restart`). `one_pass(driver)` (fetch + renew the lease, run_pass, mark the
+pass + push) is the one body: `_host_loop` (`fr triage batch drive`) and `fr triage
+drive pass` both call it, through one `build_driver`. dispatch_batch and adopt_batch
+take `driver=` (default HOST) and dispatch_batch a `load=` runner cache, so a mailbox
+runner the pass opened is the one that takes the dispatch.
+
+<!-- fr:journal kind=decision scope=plan id=p4-mailbox-protocol created=2026-10-08T16:36:54+00:00 phase=4 -->
+### p4-mailbox-protocol · decision · drive pass/record reach the cloud runner through a structural Mailbox protocol in fr.triage.driver; phase 5 implements it (phase 4)
+
+Phase 5 puts requests.yaml in fr_claude_cloud, which fr never imports, so fr speaks to
+it through `fr.triage.driver.Mailbox`: `open_mailbox(state_dir, statuses)` (called when
+the driver loads the runner, before the pass, so pending requests re-emit),
+`outbox() -> list[dict]` and `record_results(results) -> applied ids`. The outbox file
+is `{"requests": [...]}`; results are a JSON list (or `{"results": [...]}`), one object
+per request with its `id`. Until phase 5, `drive pass` warns that `claude-cloud` cannot
+be loaded and writes an empty outbox; `drive record` needs the runner only when there
+are results. `drive record` refuses a result no pending request names (exit 2, the
+rest recorded) and a lease held by another driver.
+
+<!-- fr:journal kind=decision scope=plan id=p4-scope-options-not-scope-flag created=2026-10-08T16:36:54+00:00 phase=4 -->
+### p4-scope-options-not-scope-flag · decision · drive pass and lease take --repo/--org/--dir/--workspace, not the spec's `--scope S` (phase 4)
+
+Every triage verb names its scope with --repo/--org (and --dir/--workspace); a lone
+`--scope S` would need a second scope grammar. `drive pass` also takes `--state-repo`
+(the brief's, for a fresh workspace: fetched and recorded), `--interval`/`--routine`
+(minutes, sizing the lease and the "a wake within the interval only renews" rule) and
+`--statuses` (handed to the mailbox runner). `lease take` takes `--as host|cloud`.
+
+<!-- fr:journal kind=decision scope=plan id=p4-lease-shape-and-host-use created=2026-10-08T16:36:54+00:00 phase=4 -->
+### p4-lease-shape-and-host-use · decision · lease.yaml is holder "<scope id> <identity>", started, expires and an optional last_pass; the host takes it only when the scope has a ref (phase 4)
+
+`last_pass` is how a wake within --interval of the last pass only renews (exit 3, empty
+outbox); it survives a re-home because it rides on the ref. The host loop takes the
+lease after drive.lock only with --yes, a state_repo and state in a clone (without a
+ref there is nothing cross-host to guard, and every existing drive test runs that way,
+unchanged); it renews and pushes every pass (fetch first), and releases it on any stop
+but a refusal (exit 2). The cloud pass takes drive.lock too, then the lease, and never
+releases it. The wrapper's end-of-command push now skips when the state already equals
+the ref it last pushed (`push_now` ran mid-command).
+
+<!-- fr:journal kind=discovery scope=plan id=p4-scenario-gitconfig-leak created=2026-10-08T16:36:54+00:00 phase=4 -->
+### p4-scenario-gitconfig-leak · discovery · A scenario's `git config --global` writes the operator's ~/.gitconfig under pytest, which lends GIT_CONFIG_GLOBAL (phase 4)
+
+tests/conftest.py lends `GIT_CONFIG_GLOBAL=<operator>/.gitconfig` to every test, and the
+scenario subprocess inherits it, so the first draft of cloud-triage-driver-lease.sh
+(which set HOME and then `git config --global url.<bare>.insteadOf ...`) wrote two
+`insteadOf` entries into the real /root/.gitconfig; a parallel test
+(test_acceptance_cmd's resolve_identity) then read its origin through them and failed.
+Both entries were removed and the scenario now exports its own GIT_CONFIG_GLOBAL. Any
+future scenario that writes git's global config must do the same.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-scenario-forge-and-empty-outbox created=2026-10-08T16:36:54+00:00 phase=4 -->
+### p4-scenario-forge-and-empty-outbox · discovery · The driver-lease scenario's forge answers three list routes with `[]`; its outbox stays empty until phase 5 (phase 4)
+
+fixtures/cloud-triage-driver/bin/gh replays captured `user`, `repos/derio-net/super-fr`
+and `.fr/triage.yaml` at HEAD (which names herdr and a post_merge the cloud pass must
+ignore), and answers the open-issues, all-PRs and open-PRs pages with `[]`, GitHub's
+empty page (no record shape invented). The state remote is a bare repo reached through
+git's `url.<bare>.insteadOf https://github.com/derio-net/super-fr.git`; workspace B's
+origin is the ssh spelling so `git remote get-url` is not rewritten. With no
+claude-cloud runner installed there are no requests, so the scripted executor answers
+none; phase 5 can extend the scenario with real requests.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-full-suite-left-to-ci created=2026-10-08T16:36:54+00:00 phase=4 -->
+### p4-full-suite-left-to-ci · discovery · P4.T3.S4's full local suite was not run; evidence is the PR's CI, as the dispatch directed (phase 4)
+
+The suite takes over 20 minutes in this container and the draft PR's CI runs it on every
+push, so the record's evidence is `tests: ci`. Run locally instead: every
+tests/unit/test_triage_*.py, test_cloud_triage_skeleton, test_import_direction,
+test_acceptance*.py and the cloud_triage scenarios (2389 passed), ruff check, ruff
+format and the AGENTS.md mypy command (clean).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-10-08T16:36:54+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+lease.py is a handful of pure functions over one file plus acquire's write-then-push; the in-command push the lease needed became triage_cmd.push_now, which the wrapper's close push now calls instead of repeating push_state's arguments
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-10-08T16:36:54+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+the adapter is two small frozen dataclasses; the runner choice reuses the existing _with_runner/--to path (runner_for returns the --to the host already had), so no selection code was duplicated
