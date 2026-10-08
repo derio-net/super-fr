@@ -5071,7 +5071,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-07-cloud-triage-design.md#R8
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: plan 2026-10-07-cloud-triage names the candidate scenario this row's walk
+      runs; written by the phase that implements the row
+    scenario: tests/scenarios/cloud-triage-privacy-guard.sh
   - id: cloud-triage-driver-lease
     capability: Backlog triage
     acceptance: Only one driver runs per scope across every host and cloud session;
