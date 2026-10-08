@@ -63,6 +63,7 @@ def _run_install(
     expect_fail: bool = False,
     xdg_config_home: Path | None = None,
     install_sh: Path = INSTALL_SH,
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run install.sh with fake HOME, stubbing uv so step 10 is a no-op.
 
@@ -94,6 +95,7 @@ def _run_install(
         # from the repo checkout (often detached HEAD on CI), which would
         # always fail the gate. The escape hatch is documented in install.sh.
         "VK_INSTALL_SKIP_PREFLIGHT": "1",
+        **(extra_env or {}),
     }
     result = subprocess.run(
         ["bash", str(install_sh), *extra_args],
@@ -138,6 +140,54 @@ class TestInstallRefusesWithoutRegistrationFiles:
             (fake_home / ".claude" / "plugins" / "installed_plugins.json").read_text()
         )
         assert "super-fr@derio-net--super-fr" in installed["plugins"]
+
+
+class TestOpenCodeOnlyHomeStillInstalls:
+    """p7-r2: the refusal is for homes where Claude Code is in play (`~/.claude`
+    present, `claude` on PATH, or FR_REQUIRE_PLUGIN=1, which the cloud setup script
+    sets). An OpenCode- or Hermes-only home keeps warning and skipping the plugin
+    registration — including on a re-run, after install.sh made `~/.claude/rules`."""
+
+    @pytest.fixture()
+    def opencode_home(self, tmp_path: Path) -> Path:
+        home = tmp_path / "home"
+        (home / ".config" / "opencode").mkdir(parents=True)
+        return home
+
+    def test_it_installs_and_reinstalls_without_claude_code(self, opencode_home: Path) -> None:
+        first = _run_install(opencode_home)
+        second = _run_install(opencode_home)
+
+        for result in (first, second):
+            assert "cannot register the super-fr plugin" not in result.stderr
+        assert (opencode_home / ".config" / "opencode" / "skills" / "fr-goal").is_dir()
+        assert not (opencode_home / ".claude" / "plugins" / "installed_plugins.json").exists()
+
+    def test_fr_require_plugin_refuses_there(self, opencode_home: Path) -> None:
+        result = _run_install(opencode_home, expect_fail=True, extra_env={"FR_REQUIRE_PLUGIN": "1"})
+
+        assert result.returncode != 0
+        assert "installed_plugins.json" in result.stderr
+
+    def test_claude_on_path_refuses_there(self, opencode_home: Path) -> None:
+        claude = opencode_home / "bin" / "claude"
+        claude.parent.mkdir(parents=True)
+        claude.write_text("#!/bin/sh\nexit 0\n")
+        claude.chmod(0o755)
+
+        result = _run_install(opencode_home, expect_fail=True)
+
+        assert result.returncode != 0
+        assert "installed_plugins.json" in result.stderr
+
+
+def test_the_cloud_setup_script_requires_the_plugin() -> None:
+    """p7-r2: the cloud setup script asks install.sh to refuse a missing registration."""
+    from fr import cloud
+
+    script = cloud.setup_script()
+    assert "FR_REQUIRE_PLUGIN=1" in script
+    assert script.index("FR_REQUIRE_PLUGIN=1") < script.index('scripts/install.sh"')
 
 
 # ── Rules ────────────────────────────────────────────────────────────

@@ -39,7 +39,8 @@ else
   mkdir -p "$(dirname "$src")"
   git clone --quiet --branch main {source} "$src"
 fi
-bash "$src/scripts/install.sh"
+# FR_REQUIRE_PLUGIN=1: refuse, never warn and skip, if the plugin cannot be registered.
+FR_REQUIRE_PLUGIN=1 bash "$src/scripts/install.sh"
 
 # 4. The cloud proxy refuses GitHub's GraphQL API (HTTP 403): fr talks REST.
 forge="$HOME/.config/fr/forge.yaml"

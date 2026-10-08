@@ -324,13 +324,37 @@ done
 # used to skip with a warning and exit 0, so a cloud environment's setup script
 # reported success over a session with no plugin (spec 2026-10-07-cloud-triage
 # R19). A fresh container has neither; seed them rather than guess their shape.
+#
+# Refused only when Claude Code is in play: an OpenCode- or Hermes-only install
+# (README) has neither file and keeps the old warn-and-skip (p7-r2). In play means
+# FR_REQUIRE_PLUGIN=1 (the cloud setup script sets it), `claude` on PATH, or a
+# `~/.claude` holding anything install.sh does not itself create. It makes
+# `rules/`, `.mcp.json` and `plugins/{marketplaces,cache}` on every run, so their
+# presence alone would turn an OpenCode-only home's second install into a refusal.
+claude_code_in_play() {
+  [ "${FR_REQUIRE_PLUGIN:-}" = "1" ] && return 0
+  command -v claude &>/dev/null && return 0
+  [ -f "$HOME/.claude.json" ] && return 0
+  local entry
+  for entry in "$CLAUDE_DIR"/* "$CLAUDE_DIR"/.[!.]*; do
+    [ -e "$entry" ] || continue
+    case "${entry##*/}" in rules | plugins | .mcp.json) ;; *) return 0 ;; esac
+  done
+  for entry in "$PLUGINS_DIR"/* "$PLUGINS_DIR"/.[!.]*; do
+    [ -e "$entry" ] || continue
+    case "${entry##*/}" in marketplaces | cache) ;; *) return 0 ;; esac
+  done
+  return 1
+}
 missing_registration=0
-for f in "$INSTALLED_PLUGINS" "$SETTINGS"; do
-  if [ ! -f "$f" ]; then
-    echo "ERROR: $f not found — install.sh cannot register the super-fr plugin without it." >&2
-    missing_registration=1
-  fi
-done
+if claude_code_in_play; then
+  for f in "$INSTALLED_PLUGINS" "$SETTINGS"; do
+    if [ ! -f "$f" ]; then
+      echo "ERROR: $f not found — install.sh cannot register the super-fr plugin without it." >&2
+      missing_registration=1
+    fi
+  done
+fi
 if [ "$missing_registration" -ne 0 ]; then
   echo "  Seed them (a fresh Claude Code home has neither), then re-run install.sh:" >&2
   echo "    mkdir -p \"$PLUGINS_DIR\"" >&2
