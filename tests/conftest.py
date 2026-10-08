@@ -61,6 +61,17 @@ def _no_inherited_fr_binary_pin(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FR_SKIP_IDENTITY", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _graphql_forge_api_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin `forge.api` to `graphql` (spec 2026-10-07-cloud-triage R3).
+
+    A suite run in a cloud session whose `~/.config/fr/forge.yaml` (or an
+    exported `FR_FORGE_API`) says `rest` would otherwise hand every GitHub test
+    the REST client. The env var outranks the file; the tests of the setting
+    itself delete it."""
+    monkeypatch.setenv("FR_FORGE_API", "graphql")
+
+
 WIDE_TERMINAL_COLUMNS = "200"
 """Terminal width every in-process CLI test renders at (review r5-e15).
 

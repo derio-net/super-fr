@@ -31,6 +31,9 @@ PACKAGES = Path(__file__).resolve().parents[2] / "packages"
 BACKEND = {
     "fr/src/fr/gh.py",
     "fr/src/fr/real_ghclient.py",
+    # `github-rest` (spec 2026-10-07-cloud-triage §A): the same GitHub backend
+    # over `gh api` REST routes, chosen by `forge.api` inside `hostclient`.
+    "fr/src/fr/real_ghrestclient.py",
     "fr/src/fr/hostclient.py",
 }
 

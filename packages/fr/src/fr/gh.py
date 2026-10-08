@@ -15,13 +15,34 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 from urllib.parse import quote
 
 from fr.ghclient import HostRefusedError
 from fr.labels import LabelDef
 
+if TYPE_CHECKING:
+    from fr.real_ghrestclient import RealGhRestClient
+
 T = TypeVar("T")
+
+
+def _rest() -> RealGhRestClient | None:
+    """The REST-only client when `forge.api` is `rest` (spec 2026-10-07-cloud-triage
+    §A, R3), else None: the helpers below that a GraphQL-backed `gh` verb serves
+    check it once and delegate. Built per call with the host in scope, so a
+    `host_scope` around the helper still applies."""
+    from fr import forgeapi
+
+    if forgeapi.resolve() != "rest":
+        return None
+    from fr.real_ghrestclient import RealGhRestClient
+
+    return RealGhRestClient(host=_HOST.get())
+
+
+def _records(value: Any) -> list[dict[str, object]]:
+    return list(value)
 
 
 class GhError(Exception):
@@ -177,6 +198,8 @@ def _run_gh(args: list[str]) -> str:
 def view_pr_body(ref: str, *, cwd: Path | None = None) -> str:
     """The live body of pull request `ref` (a number, URL or branch), read
     with `gh pr view` from `cwd` (its repository). Raises GhError."""
+    if (rest := _rest()) is not None:
+        return rest.pr_body(ref, cwd=cwd or Path.cwd())
     try:
         done = subprocess.run(
             ["gh", "pr", "view", ref, "--json", "body", "--jq", ".body"],
@@ -225,6 +248,8 @@ def view_issue(repo: str, number: int) -> dict[str, object]:
     """Fetch one Issue via gh issue view --json (fields: ``ISSUE_VIEW_FIELDS``)."""
     import json
 
+    if (rest := _rest()) is not None:
+        return dict(rest.view_issue_record(repo, number))
     out = _run_gh(["issue", "view", str(number), "--repo", repo, "--json", ISSUE_VIEW_FIELDS])
     result: dict[str, object] = json.loads(out)
     return result
@@ -298,6 +323,9 @@ def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
 
 def close_issue(*, repo: str, number: int) -> None:
     """Close a GitHub Issue by number."""
+    if (rest := _rest()) is not None:
+        rest.edit_issue_state(repo, number, state="CLOSED")
+        return
     _run_gh(
         [
             "issue",
@@ -316,6 +344,9 @@ def edit_issue_labels(
     add_labels: list[str],
 ) -> None:
     """Add labels to an existing issue."""
+    if (rest := _rest()) is not None:
+        rest.edit_issue_labels(repo, issue_number, add=frozenset(add_labels), remove=frozenset())
+        return
     args = ["issue", "edit", str(issue_number), "--repo", repo]
     for label in add_labels:
         args.extend(["--add-label", label])
@@ -345,6 +376,8 @@ def swap_issue_labels(
 
 def is_issue_closed(*, repo: str, number: int) -> bool:
     """Check if an issue is closed."""
+    if (rest := _rest()) is not None:
+        return rest.view_issue_record(repo, number).get("state") == "CLOSED"
     output = _run_gh(
         [
             "issue",
@@ -369,6 +402,8 @@ def list_labels(*, repo: str) -> list[dict[str, str | None]]:
     """
     import json
 
+    if (rest := _rest()) is not None:
+        return rest.list_labels(repo)
     out = _run_gh(
         [
             "label",
@@ -394,6 +429,9 @@ def list_repos(
     """
     import json
 
+    if (rest := _rest()) is not None:
+        repos = _records(rest.list_repos(owner, limit))
+        return repos if include_archived else [r for r in repos if not r.get("isArchived")]
     out = _run_gh(
         [
             "repo",
@@ -436,6 +474,8 @@ def list_issues(
     """
     import json
 
+    if (rest := _rest()) is not None:
+        return _records(rest.list_issues(repo, state, limit, fields))
     out = _run_gh(
         [
             "issue",
@@ -458,6 +498,8 @@ def list_prs(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
     """Return PRs in *repo* via one bulk ``gh pr list`` (explicit ``--limit``)."""
     import json
 
+    if (rest := _rest()) is not None:
+        return _records(rest.list_prs(repo, state, limit))
     out = _run_gh(
         [
             "pr",
@@ -479,6 +521,8 @@ def list_prs(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
 def list_open_prs(*, repo: str, limit: int) -> list[dict[str, object]]:
     import json
 
+    if (rest := _rest()) is not None:
+        return _records(rest.list_open_prs(repo, limit))
     out = _run_gh(
         [
             "pr",
@@ -501,6 +545,8 @@ def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[s
     and `files` (the wave driver attributes a merged archive PR by them)."""
     import json
 
+    if (rest := _rest()) is not None:
+        return _records(rest.list_prs_by_head(repo, branch)[:limit])
     out = _run_gh(
         [
             "pr",

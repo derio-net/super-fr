@@ -238,6 +238,7 @@ def _issue_record(issue: dict[str, Any]) -> dict[str, Any]:
     return {
         "body": issue.get("body") or "",
         "closed": issue.get("state") == "closed",
+        "author": _author(issue.get("user")),
         "closedAt": issue.get("closed_at"),
         "createdAt": issue.get("created_at"),
         "labels": [_label_record(lbl) for lbl in issue.get("labels") or []],
@@ -680,6 +681,14 @@ class RealGhRestClient:
                 raise
             raw = self._paged(f"users/{owner}/repos", limit=limit)
         return [{"name": r.get("name", ""), "isArchived": bool(r.get("archived"))} for r in raw]
+
+    def list_labels(self, repo: str) -> list[dict[str, str | None]]:
+        """`fr.gh.list_labels`' records (`name`, `color`, `description`); not a
+        `GhClient` method."""
+        return [
+            {"name": lbl.get("name"), "color": lbl.get("color"), "description": lbl.get("description")}
+            for lbl in self._paged(f"repos/{repo}/labels")
+        ]
 
     def viewer_login(self) -> str:
         return str(self._api("user")["login"])

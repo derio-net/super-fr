@@ -13,15 +13,16 @@ import re
 import sys
 from pathlib import Path
 from typing import Literal, cast, get_args
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
-from fr import _hosts
+from fr import _hosts, forgeapi
 from fr import gh as _gh
 from fr.gh import GhError
 from fr.ghclient import GhClient, HostRefusedError
 from fr.glab import GlabError
 from fr.labels import LabelDef
 from fr.real_ghclient import RealGhClient
+from fr.real_ghrestclient import RealGhRestClient
 from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
 from fr.tea import TeaError
@@ -82,7 +83,19 @@ def forge_error_kind(exc: BaseException) -> ForgeErrorKind:
 # by `label_command` and `{color}` is the 6-char hex with no `#`. Flags checked against
 # `glab label create --help` and `tea labels create --help`; only gh's `--force`
 # makes it idempotent, so on glab and tea an "already exists" refusal is harmless.
-FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
+#
+# `github-rest` (spec 2026-10-07-cloud-triage §A): the GitHub ops as `gh api`
+# calls on REST routes, named when `forge.api: rest` is selected — a cloud
+# session's proxy refuses every GraphQL-backed `gh` verb. `{repo}` is the
+# checkout's `origin` (`owner/repo`), `{number}` the PR's number, or a `gh api`
+# lookup of it by head branch. REST has no ready-for-review: `ready` is the CCR
+# route a Claude Code cloud session's proxy offers for it, which is where `rest`
+# is selected. `-f` never reads a file, so a value is passed as given; `-F
+# body=@{body}` reads the body file.
+CommandTable = Literal["github", "github-rest", "gitlab", "gitea"]
+_REST_HEAD = '-f head="$(git branch --show-current)"'
+_REST_BASE = '-f base="$(gh api repos/{repo} --jq .default_branch)"'
+FORGE_COMMANDS: dict[CommandTable, dict[str, str]] = {
     "github": {
         "create": "gh pr create --draft --body-file {body}",
         "edit": "gh pr edit {ref} --body-file {body}",
@@ -93,6 +106,22 @@ FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
         "issue-unlabel": "gh issue edit {number} --repo {repo} --remove-label {label}",
         "label-create": "gh label create {name} --color {color} --description {description}"
         " --force --repo {repo}",
+    },
+    "github-rest": {
+        "create": f"gh api repos/{{repo}}/pulls {_REST_HEAD} {_REST_BASE}"
+        ' -f title="$(git log -1 --format=%s)" -F body=@{body} -F draft=true',
+        "edit": "gh api -X PATCH repos/{repo}/pulls/{number} -F body=@{body}",
+        "ready": "gh api -X POST repos/{repo}/pulls/{number}/ccr/ready_for_review",
+        "fill": f"gh api repos/{{repo}}/pulls {_REST_HEAD} {_REST_BASE}"
+        ' -f title="$(git log -1 --format=%s)" -f body="$(git log -1 --format=%b)"',
+        "issue-close": "gh api repos/{repo}/issues/{number}/comments -f body={comment}"
+        " && gh api -X PATCH repos/{repo}/issues/{number} -f state=closed",
+        "issue-label": "gh api repos/{repo}/issues/{number}/labels -f 'labels[]='{label}",
+        "issue-unlabel": "gh api -X DELETE repos/{repo}/issues/{number}/labels/{label_path}",
+        "label-create": "gh api repos/{repo}/labels -f name={name} -f color={color}"
+        " -f description={description}"
+        " || gh api -X PATCH repos/{repo}/labels/{name_path} -f color={color}"
+        " -f description={description}",
     },
     "gitlab": {
         "create": 'glab mr create --draft --description "$(cat {body})"',
@@ -121,19 +150,19 @@ FORGE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
 _ISSUE_OPS = ("issue-close", "issue-label", "issue-unlabel")
 _LABEL_OPS = ("label-create",)
 
-PR_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
+PR_COMMANDS: dict[CommandTable, dict[str, str]] = {
     backend: {op: t for op, t in table.items() if op not in (*_ISSUE_OPS, *_LABEL_OPS)}
     for backend, table in FORGE_COMMANDS.items()
 }
 """The PR half of `FORGE_COMMANDS`."""
 
-ISSUE_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
+ISSUE_COMMANDS: dict[CommandTable, dict[str, str]] = {
     backend: {op: t for op, t in table.items() if op in _ISSUE_OPS}
     for backend, table in FORGE_COMMANDS.items()
 }
 """The issue half of `FORGE_COMMANDS`."""
 
-LABEL_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
+LABEL_COMMANDS: dict[CommandTable, dict[str, str]] = {
     backend: {op: t for op, t in table.items() if op in _LABEL_OPS}
     for backend, table in FORGE_COMMANDS.items()
 }
@@ -144,16 +173,51 @@ _TRAILING_NUMBER = re.compile(r"^https?://.*/(\d+)/?$")  # a URL only: `fix/742`
 _ISSUE_REF = re.compile(r"^(?P<repo>[\w.-]+/[\w.-]+)#(?P<number>\d+)$")
 
 
+def command_table(repo_root: Path) -> CommandTable:
+    """Which `FORGE_COMMANDS` table `repo_root`'s forge is named from: its
+    backend, or `github-rest` for GitHub when `forge.api` is `rest`."""
+    backend = _hosts.detect_backend(repo_root)
+    if backend == "github" and forgeapi.resolve() == "rest":
+        return "github-rest"
+    return backend
+
+
+def _rest_repo(repo_root: Path) -> str:
+    """`owner/repo` of the checkout's `origin`, else gh's own `{owner}/{repo}`
+    placeholders, which `gh api` fills from the repository it runs in."""
+    return _hosts.origin_slug(repo_root) or "{owner}/{repo}"
+
+
+def _rest_pr_number(ref: str, repo: str) -> str:
+    """A PR `ref` (URL, number or head branch) as the number a REST route takes:
+    a branch becomes a `gh api` lookup of its PR, run by the shell."""
+    import shlex
+
+    if ref.isdigit():
+        return ref
+    if m := _TRAILING_NUMBER.search(ref):
+        return m.group(1)
+    owner = repo.split("/", 1)[0]
+    route = shlex.quote(f"repos/{repo}/pulls?head={owner}:{ref}&state=all")
+    return f"$(gh api {route} --jq '.[0].number')"
+
+
 def pr_command(repo_root: Path, op: str, **fields: str) -> str:
     """The `op` (create | edit | ready | fill) command for `repo_root`'s forge,
     with `fields` filled in — see `PR_COMMANDS`. `glab mr update` and
     `tea pulls edit` take no URL, so there a PR URL `ref` is reduced to its
-    number, which both resolve against the checkout they run in."""
-    backend = _hosts.detect_backend(repo_root)
+    number, which both resolve against the checkout they run in. `github-rest`
+    is also given `{repo}` and the PR's `{number}`."""
+    table = command_table(repo_root)
     ref = fields.get("ref")
-    if backend != "github" and ref and (m := _TRAILING_NUMBER.search(ref)):
+    if table == "github-rest":
+        repo = _rest_repo(repo_root)
+        fields = {**fields, "repo": repo}
+        if ref:
+            fields["number"] = _rest_pr_number(ref, repo)
+    elif table != "github" and ref and (m := _TRAILING_NUMBER.search(ref)):
         fields = {**fields, "ref": m.group(1)}
-    return PR_COMMANDS[backend][op].format(**fields)
+    return PR_COMMANDS[table][op].format(**fields)
 
 
 def issue_command(repo_root: Path, op: str, *, ref: str, comment: str = "", label: str = "") -> str:
@@ -165,9 +229,13 @@ def issue_command(repo_root: Path, op: str, *, ref: str, comment: str = "", labe
     m = _ISSUE_REF.match(ref)
     if m is None:
         raise ValueError(f"issue ref {ref!r} must be owner/repo#n")
-    template = ISSUE_COMMANDS[_hosts.detect_backend(repo_root)][op]
+    template = ISSUE_COMMANDS[command_table(repo_root)][op]
     return template.format(
-        repo=m["repo"], number=m["number"], comment=shlex.quote(comment), label=shlex.quote(label)
+        repo=m["repo"],
+        number=m["number"],
+        comment=shlex.quote(comment),
+        label=shlex.quote(label),
+        label_path=shlex.quote(quote(label, safe="")),
     )
 
 
@@ -177,9 +245,10 @@ def label_command(repo_root: Path, label: LabelDef, *, repo: str) -> str:
     `LABEL_COMMANDS`. The name and description are shell-quoted."""
     import shlex
 
-    template = LABEL_COMMANDS[_hosts.detect_backend(repo_root)]["label-create"]
+    template = LABEL_COMMANDS[command_table(repo_root)]["label-create"]
     return template.format(
         name=shlex.quote(label.name),
+        name_path=shlex.quote(quote(label.name, safe="")),
         color=label.color,
         description=shlex.quote(label.description),
         repo=repo,
@@ -204,7 +273,9 @@ def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) 
     than a local checkout) both go through this.
 
     `host` names a self-hosted instance. This function is deliberately
-    PROVENANCE-BLIND: it never reads config and cannot tell a declared
+    PROVENANCE-BLIND: it never reads repo config (its one input beyond its
+    arguments is the host-level `forge.api`, which picks GitHub's REST-only
+    client) and cannot tell a declared
     `host:` from one derived from a remote or a PR URL, which is exactly
     why `client_for` — not this — owns the warning about a host fr cannot
     honour (gh-486; spec §4.D). The GitLab adapter threads it to `glab`,
@@ -218,7 +289,10 @@ def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) 
         return RealTeaClient()
     # A SaaS host (github.com) is gh's own default, never a GH_HOST: threading
     # it would demand a hosts.yml login that token-only CI does not have
-    # (review p1-r2).
+    # (review p1-r2). `forge.api: rest` (spec 2026-10-07-cloud-triage §A, R3)
+    # is this function's one config input: it picks the REST-only client.
+    if forgeapi.resolve() == "rest":
+        return RealGhRestClient(host=_hosts.self_hosted_hostname(host))
     return RealGhClient(host=_hosts.self_hosted_hostname(host))
 
 

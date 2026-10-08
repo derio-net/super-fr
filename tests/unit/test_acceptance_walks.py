@@ -270,4 +270,4 @@ def test_every_backend_declares_every_issue_operation() -> None:
 
     ops = {frozenset(table) for table in ISSUE_COMMANDS.values()}
     assert ops == {frozenset({"issue-close", "issue-label", "issue-unlabel"})}
-    assert set(ISSUE_COMMANDS) == {"github", "gitlab", "gitea"}
+    assert set(ISSUE_COMMANDS) == {"github", "github-rest", "gitlab", "gitea"}
