@@ -656,3 +656,8 @@ Supersedes phase-split-2026-10-07-cloud-triage-p4-1 after the renumbering (was p
 ### phase-split-2026-10-07-cloud-triage-p5-1 · decision · review-size: the claude-cloud runner is a new workspace package
 
 Supersedes phase-split-2026-10-07-cloud-triage-p5 after the renumbering (was phase 4; reason as phase-split-2026-10-07-cloud-triage-p4-1).
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p7 created=2026-10-08T13:50:20+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p7 · decision · review-size: the agents artifact kind and the worker setup are a separate ~1000-line change
+
+Was phase 6 before the renumbering (reason as phase-split-2026-10-07-cloud-triage-p6-1's original text).
