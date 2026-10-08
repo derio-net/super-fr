@@ -646,3 +646,8 @@ Supersedes phase-split-2026-10-07-cloud-triage-p2. Phases were renumbered on 202
 ### phase-split-2026-10-07-cloud-triage-p3-1 · decision · ask: state in the workspace, on a ref, behind the privacy guard (R4-R8)
 
 Supersedes phase-split-2026-10-07-cloud-triage-p3 after the renumbering (was phase 2).
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p4-2 created=2026-10-08T13:50:16+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p4-2 · decision · ask: the lease and the driver adapter (R9-R13)
+
+Supersedes phase-split-2026-10-07-cloud-triage-p4-1 after the renumbering (was phase 3).
