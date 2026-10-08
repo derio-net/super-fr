@@ -110,3 +110,15 @@ Operator, 2026-10-08:
 - **The driver session runs on Sonnet;** Opus would be overkill for it.
 - **Re-homing: yes.** On incompatible drift the driver has the worker push and stop, then starts a fresh session on the same branch with a resume brief. Not token-efficient, but pragmatic.
 - **Status mapping:** `completed` maps to done only if it means after a close-out (see discovery `cloud-session-status`).
+
+<!-- fr:journal kind=discovery scope=spec id=cloud-session-status created=2026-10-08T09:53:37+00:00 -->
+### cloud-session-status · discovery · What a cloud session's status_bucket means
+
+Read 2026-10-08 from the operator's own session list (15 sessions; repos and titles not recorded here).
+
+- `status_bucket` follows the platform's **post-turn summary** of the session's last turn, a model-written classification with `status_category`, `status_detail` and `needs_action`:
+  - `need_input` -> **BLOCKED**, with `needs_action` naming what the agent waits for ("express go-ahead to proceed", "confirm proceed with merge"). So BLOCKED means waiting on the operator's answer, not only a permission prompt.
+  - `completed` -> **COMPLETED**, seen on idle sessions as well as archived ones. It means the agent judged its last task finished. It says nothing about fr's batch lifecycle, and the session can still be messaged.
+  - **WORKING** while a turn runs; **REVIEW_READY** seen once, on a session with no summary recorded.
+- **Consequence for the mapping:** session status stays a per-session signal (batch session and close-out session each have their own); the batch's stage remains derived from forge facts (PR merged, archive PR merged), never from `completed`.
+- **Side finding for super-fr#1086:** BLOCKED plus `needs_action` is exactly the "agent ended its turn on a question" signal #1086 says herdr cannot give.
