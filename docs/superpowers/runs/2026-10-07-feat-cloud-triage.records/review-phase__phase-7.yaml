@@ -1,0 +1,30 @@
+schema_version: 8
+run: 2026-10-07-feat-cloud-triage
+step: review-phase
+item: phase/7
+outcome: done
+journal:
+- {kind: finding, id: p7-r1, phase: 7, review_scope: in, title: "the driver's self-update checked out a detached release tag, which install.sh's preflight always refuses", body: "triage_drive_cmd.py _install_release; reproduced against a bare remote. Same defect as the implementer's p7-self-update-install-refused-by-preflight."}
+- {kind: finding, id: p7-r2, phase: 7, review_scope: in, title: "install.sh refused every home without Claude Code's registration files, breaking OpenCode-only and Hermes-only installs", body: "scripts/install.sh:323-341; reproduced with a HOME holding only .config/opencode."}
+- {kind: finding, id: p7-r3, phase: 7, review_scope: in, title: "the remedy block was appended to every GhError, so it repeated in joined errors and was persisted into facts.json", body: "gh.py:192-213, run/model.py _refuse_a_newer_cursor; reproduced with two 403s."}
+- {kind: finding, id: p7-r4, phase: 7, review_scope: in, title: "403 detection matched any '403' in stderr", body: "gh.py:205."}
+- {kind: finding, id: p7-r5, phase: 7, review_scope: in, title: "a consumer's own fr-prefixed agent failed fr validate artifacts with no fix", body: "registry.py agents locator, structure.py validate_agents; reproduced in a scratch repo."}
+- {kind: finding, id: p7-r6, phase: 7, review_scope: in, title: "the worker brief's install one-liner failed when the clone existed and lacked rsync/jq/uv", body: "batch_dispatch.py:49-56."}
+- {kind: finding, id: p7-r7, phase: 7, review_scope: in, title: "AGENTS.md's mirror section lacked the agents-data checklist", body: "AGENTS.md 'Skills/rules: canonical source vs. generated mirrors'."}
+- {kind: finding, id: p7-o1, phase: 7, review_scope: out, title: "the org agent-worktree allowlist names only super-fr:fr-phase-executor, not the bare project-agent name fr init now writes", body: "scripts/ensure-phase-executor-allowlist.sh. Untestable here (the org hook is not in this container); only matters if a host session dispatches the bare name, which fr-goal's prose does not do. Follow-up, named in the PR body."}
+- {kind: decision, id: p7-agents-kind-is-the-two-shipped-files, phase: 7, title: "the agents kind owns only the two shipped files, reversing p7-agents-locator-owns-the-prefix", body: "Review p7-r5: owning the fr- prefix turned a consumer's own fr-*.md agent into a validation failure no fr command can fix. The spec names exactly the two files; ArtifactKind.owns filters to AGENT_NAMES."}
+- {kind: review, id: p7-review, phase: 7, title: "phase 7 code review: 7 findings in scope, 1 out", body: "Dispatched reviewer over a86b12f7..89ecc1fe against spec R19-R23/§H and plan 07.yaml; 4 findings reproduced, 424 targeted tests run. Received: each verified; spec amended for p7-r2 (e59214a2); a fix agent implemented all seven with a failing test first (2080e8dc, 59fcb8e5, 31647d54, 2a5bf22c, 7a57f8e9, 92eed33f); targeted suites, test_install_sh.py, the cloud-remedy scenario, ruff, mypy, fr validate artifacts and fr acceptance check pass."}
+resolves:
+- {id: p7-r1, state: fixed, body: "2080e8dc: fetch origin main, refuse a tag not on origin/main, checkout -B main + clean, normal preflight; test_install_release_refuses_a_tag_that_is_not_on_main."}
+- {id: p7-self-update-install-refused-by-preflight, state: fixed, body: "Same defect as p7-r1, fixed in 2080e8dc."}
+- {id: p7-r2, state: fixed, body: "7a57f8e9 + spec e59214a2: refuse only when Claude Code is in play or FR_REQUIRE_PLUGIN=1 (set by the cloud setup script); TestOpenCodeOnlyHomeStillInstalls."}
+- {id: p7-r3, state: fixed, body: "59fcb8e5: errors note cloud items, the CLI prints the block once on close; test_two_graphql_403s_print_the_block_once_after_the_error."}
+- {id: p7-r4, state: fixed, body: "59fcb8e5: HTTP 403 plus /graphql; test_a_403_that_is_not_a_graphql_http_403_is_not_explained."}
+- {id: p7-r5, state: fixed, body: "31647d54: ArtifactKind.owns filters to the shipped names; test_validate_ignores_a_consumers_own_fr_prefixed_agent."}
+- {id: p7-r6, state: fixed, body: "92eed33f: off-PATH fr found first, else the brief embeds cloud.setup_script(); test_a_missing_fr_is_installed_by_the_cloud_setup_script_itself."}
+- {id: p7-r7, state: fixed, body: "2a5bf22c: AGENTS.md bullet, names verified against the code."}
+- {id: p7-o1, state: out-of-scope, body: "Not caused by a path fr-goal takes; recorded as a follow-up in the PR body."}
+evidence:
+  review: p7-review
+  reviewer: abad996a58880e80a
+  model: claude-opus-5-5
