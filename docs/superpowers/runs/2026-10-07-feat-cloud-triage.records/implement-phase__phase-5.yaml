@@ -1,0 +1,119 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-10-07-feat-cloud-triage --step implement-phase --item phase/5 --record docs/superpowers/runs/2026-10-07-feat-cloud-triage.records/implement-phase__phase-5.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 8
+run: 2026-10-07-feat-cloud-triage
+step: implement-phase
+item: phase/5
+outcome: done
+ticks: [P5.T1.S1, P5.T1.S2, P5.T2.S1, P5.T2.S2, P5.T3.S1, P5.T3.S2, P5.T3.S3]
+refactor:
+  P5.T1: "the package is a pyproject, an __init__ and a stub runner; every obligation was a one-token edit to an existing list (workspace dependencies and sources, coverage source, the scaffold's RUNNER_PACKAGES, the mypy command) and scripts/version_surfaces.py already globs packages/*/pyproject.toml, so it needed no edit"
+  P5.T2: "the mailbox is one class over two files and the runner only delegates to it; the stub_cloud.py test double the driver-lease scenario carried became dead the moment the real runner existed, and was deleted rather than kept beside it"
+  P5.T3: "each change rides an existing seam: session_statuses became a wrapper over read_sessions (one loop, one place notes are read), the board hint and Needs-you-now each gained one optional mapping, and p4-o2 is one adapter predicate (Driver.carries) checked at the three places a runner is loaded"
+journal:
+  - kind: decision
+    id: p5-entry-point-is-the-class
+    phase: 5
+    title: The claude-cloud entry point names the class, not a from_env function as 05.yaml wrote
+    body: |
+      P5.T1.S2 said `claude-cloud = "fr_claude_cloud.runner:from_env"`, but
+      `fr_dispatch.registry.load_runner` and `runner_units` load the entry point and read
+      `from_env` and `units` off what it names; a module-level function has neither, so
+      the runner could not be built or routed. The entry point is
+      `fr_claude_cloud.runner:ClaudeCloudRunner`, as herdr's is, and `from_env` is its
+      classmethod; test_claude_cloud_contract.py pins both.
+  - kind: decision
+    id: p5-mailbox-files-and-results
+    phase: 5
+    title: requests.yaml holds pending requests and an `issued` counter; sessions.yaml the recorded sessions with their last state; status requests are never stored
+    body: |
+      A request id is `<item id>:<kind>:<n>`, n from `issued["<item>:<kind>"]`, so a retry
+      (a refused message, a busy close) is a new id and a re-emitted request the same id.
+      Results: dispatch `{id, session}` records the session, `{id, error}` keeps it pending;
+      close `{id, outcome: closed|busy|absent}`; message `{id, outcome: sent|refused}`, a
+      refused one re-queued as the next number; rehome `{id, session}` replaces the session;
+      status `{id, state, needs_action}`. Every pass emits one `<item>:status:1` per recorded
+      session (not stored; recording it updates that session's state), so a later read with
+      no `--statuses` (the board, `drive record`) still knows a blocked session's note. Each
+      outbox entry carries `execute` and `record` from `fr_claude_cloud.mailbox.REQUEST_TABLE`
+      (dispatch/message/close/rehome/status), the text phase 7's fr-triage skill can point
+      the agent at. `--statuses` accepts `{"sessions": [...]}`, a bare list, or a mapping by
+      item id; a pending dispatch whose tag a listed session carries is recorded, not created
+      again. `rehome(item, brief)` exists on the runner; phase 6 wires the driver to it.
+  - kind: decision
+    id: p5-scenario-uses-the-real-runner
+    phase: 5
+    title: The driver-lease scenario now runs the real claude-cloud runner; stub_cloud.py is deleted
+    body: |
+      The candidate install carries every runner package (its checkout derivation reads the
+      `fr.runners` entry points; the git list gained fr-claude-cloud), so the stub injection
+      was no longer needed and its "a pass with no cloud runner refuses" step could no longer
+      hold (the unit test test_a_pass_refuses_when_the_cloud_runner_cannot_be_loaded keeps
+      that refusal). Workspace A now seeds the ref with one pending dispatch request in the
+      runner's own format; B's pass, restored from the ref alone, re-emits it (with its
+      `create_session` instruction), the scripted executor answers it with a session, and
+      `drive record` moves it into the ref's sessions.yaml. No fake session executor beyond
+      that sed is needed: the scope has no batch, and a real dispatch would need an invented
+      forge issue record.
+  - kind: decision
+    id: p5-carries-and-host-board-unchanged
+    phase: 5
+    title: Driver.carries and Driver.adopt_runner; the host's board still loads runners as before
+    body: |
+      p4-o2: `Driver.carries(name)` (host: everything; cloud: only claude-cloud) is checked
+      where `_Driver` loads a runner: `runner()` raises for an uncarried name, `_try_runner`
+      returns None silently (`_sessions`, `_idle`, `_restart_sessions`), `_existing` skips a
+      close-out whose runner is not carried, and `_hand_back` leaves another runner's session
+      to its driver. The cloud driver's board reads sessions through its own runner cache
+      (`write_board(loader=...)`), so the mailbox already opened with the pass's statuses
+      answers; the host's board keeps loading through triage_kanban_cmd.load_runner, as
+      before (tests/unit/test_triage_batch_drive_idle.py counts those calls). `adopt --list`
+      without `--to` reads `driver.adopt_runner or ADOPT_LIST_RUNNER` and, when that runner
+      adopts nothing, prints that it is skipped instead of refusing.
+  - kind: discovery
+    id: p5-needs-you-now-reads-runners-on-render
+    phase: 5
+    title: fr triage render now asks the dispatched batches' runners for session notes
+    body: |
+      Needs you now is drawn by `render.render`, which loaded no runner before. To show a
+      blocked session's note there (R15), `fr triage render` calls
+      `triage_kanban_cmd.read_sessions(..., target=<state dir>)`, the board's soft reader: a
+      runner that cannot load, refuses or raises costs nothing on the page, and only a
+      runner implementing `SessionNotes` adds rows (kind `session-blocked`). With no notes the
+      page is byte-identical (pinned by a test).
+  - kind: discovery
+    id: p5-batch-cmd-import-cycle
+    phase: 5
+    title: Importing fr.commands.triage_batch_cmd before fr.cli fails on a pre-existing triage_cmd ↔ triage_kanban_cmd cycle
+    body: |
+      `python -c "from fr.commands import triage_batch_cmd"` raises ImportError (`_fail` from a
+      partially initialised triage_kanban_cmd, via triage_claim_cmd) on the base of this phase
+      too, so it is not this phase's. It shows as a collection error when an xdist worker
+      collects tests/unit/test_triage_batch_drive_idle.py first in a small file set; the test
+      modules that `import fr.cli` first are unaffected. Left as found.
+  - kind: discovery
+    id: p5-full-suite-left-to-ci
+    phase: 5
+    title: P5.T3.S3's full local suite was not run; evidence is the PR's CI, as the dispatch directed
+    body: |
+      Run locally instead: tests/unit/test_triage_*.py, test_claude_cloud_*.py,
+      test_import_direction.py, test_runner_package_lists.py, test_fr_herdr_*.py,
+      test_fr_dispatch_*.py, test_run_unit_runner_contract.py, test_tripwire_*.py,
+      test_acceptance*.py and tests/integration/test_scenarios.py (the cloud_triage
+      scenarios against a fresh candidate install); ruff check, ruff format and the AGENTS.md
+      mypy command with packages/fr-claude-cloud/src (clean). The one known failure,
+      test_validate_artifacts.py::test_an_unreadable_artifact_is_a_failure_naming_it, is the
+      container running as root.
+resolves:
+  - id: p4-o2
+    state: fixed
+    body: |
+      Driver.carries (cloud: claude-cloud only) gates every runner load in _Driver: a
+      foreign close-out is no longer probed through _existing (its preflight and
+      existing_dispatches), _try_runner/_sessions/_idle skip an uncarried runner without
+      loading it, _hand_back leaves another runner's session to its driver, runner() raises
+      rather than load, and the cloud board reads through the driver's own cache. Test:
+      tests/unit/test_claude_cloud_status.py::test_the_cloud_driver_never_loads_a_runner_it_does_not_carry
+      (fails with carries() returning True: "the cloud driver loaded herdr").
+evidence: {tests: ci}
