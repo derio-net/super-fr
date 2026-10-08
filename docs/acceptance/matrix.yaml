@@ -5047,11 +5047,25 @@ rows:
       - super-fr:tests/unit/test_github_rest_contract.py
       - super-fr:tests/unit/test_github_rest_no_graphql.py
       - super-fr:tests/unit/test_forgeapi.py
-    status: not-implemented
-    notes: phase 1 adds unit evidence (contract against captured GraphQL records, no-GraphQL
-      seams, forge.api resolution), run in CI; the row's client-live walk (Test Plan
-      16) is still owed, so the status does not move yet (review p1-r9)
+    status: skipped
+    notes: 'Walk 16 passed live in a cloud session (after #1092 moved the state ref
+      under refs/heads/). Not in CI, so skipped. Still owed: the board-matches-a-host-render
+      comparison (needs the operator''s host). Gaps found under rest: verify-merge and
+      pickup still read the PR over GraphQL, and a repo allowing several merge methods
+      needs merge_method (derio-net/super-fr#1100).'
     verify: client-live
+    walks:
+    - strategy: client-live
+      harness: claude-code
+      model: session-default
+      outcome: pass
+      at: '2026-10-08T23:24:47Z'
+      evidence: 'walk 16, 2026-10-08, Claude Code cloud session, main 07c629f2: collect/check/render
+        of derio-net/super-fr over REST with no GraphQL call (48 open issues); state
+        pushed and fetched through the cloud git proxy on refs/heads/fr-triage/<scope-id>,
+        both to the session''s own repo and to a private state repo the session did
+        not start with (derio-net/fr-triage-state, chosen at the collect prompt, restored
+        in a fresh clone). Walk 17 then merged two PRs over REST with merge_method set.'
   - id: cloud-triage-state-ref
     capability: Backlog triage
     acceptance: A scope's triage state lives in its workspace and survives the loss
