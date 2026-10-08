@@ -581,3 +581,8 @@ R16 and §G drop the plugin version: it is lockstepped with fr's and the loaded 
 ### phase-split-2026-10-07-cloud-triage-p2 · decision · ask: state in the workspace, on a ref, behind the privacy guard (R4-R8)
 
 Its own reviewable ask: where a scope's state lives and how it survives a container, independent of the forge backend beyond reading visibility.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p3 created=2026-10-08T12:17:54+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p3 · decision · ask: the lease and the driver adapter (R9-R13)
+
+Its own ask: one driver per scope and the pass/record split of the drive loop.
