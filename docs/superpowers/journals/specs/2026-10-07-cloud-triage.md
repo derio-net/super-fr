@@ -731,3 +731,8 @@ check: consistency. evidence: R22; record commits; code_tree excludes fr artifac
 ### s34-resolved · finding [fixed] · resolves s34: Binding to HEAD's exact sha forces a push and a CI wait after every fr bookkeeping commit
 
 §I step 3: the CI sha is the nearest pushed first-parent ancestor with HEAD's code tree (at most 50), recorded in the witness.
+
+<!-- fr:journal kind=finding scope=spec id=s35 created=2026-10-08T13:54:18+00:00 state=open review_scope=in -->
+### s35 · finding [open] (reviewer: in scope) · No GhClient method reads checks by sha
+
+check: codebase. evidence: ghclient.py:225-235; real_ghclient.py:402-424.
