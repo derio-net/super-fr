@@ -77,6 +77,8 @@ class FakeGhClient:
         self.required_checks: dict[tuple[str, int], list[dict[str, Any]]] = {}
         # (repo, base branch) -> `required_check_names` (spec §I, p2-r1).
         self.required_names: dict[tuple[str, str], list[str]] = {}
+        # OWNER/REPO -> visibility; a repo missing here cannot be read (GhError).
+        self.visibility: dict[str, str] = {}
 
     # ---- preload helpers (test setup) ----
 
@@ -324,6 +326,12 @@ class FakeGhClient:
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         """A repo allowing every method, squash by default."""
         return {"default": "squash", "allowed": ["merge", "rebase", "squash"]}
+
+    def repo_visibility(self, repo: str) -> str:
+        self.calls.append(("repo_visibility", {"repo": repo}))
+        if repo not in self.visibility:
+            raise GhError(f"HTTP 404: Not Found (repos/{repo})")
+        return self.visibility[repo]
 
     def create_issue(
         self,

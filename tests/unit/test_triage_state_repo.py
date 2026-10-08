@@ -17,7 +17,7 @@ from fr.cli import app
 from fr.commands import triage_cmd
 from fr.real_ghrestclient import RealGhRestClient
 from fr.triage.errors import TriageError
-from fr.triage.model import load_facts
+from fr.triage.model import Scope, load_facts
 from fr.triage.scope_config import (
     SCOPE_DURABLE_FILE,
     ScopeConfig,
@@ -34,6 +34,20 @@ from tests.unit.github_rest_support import FixtureGh
 from tests.unit.triage_fixtures import ISSUES, PRS, FakeForge
 
 SCOPE_ID = "s-0123abcd"
+
+
+class _Private:
+    """A forge that answers every repo private: the privacy guard lets every push through."""
+
+    def repo_visibility(self, repo: str) -> str:
+        return "private"
+
+
+PRIVATE: dict[str, Any] = {
+    "scope": Scope(kind="repo", target="o/r"),
+    "state_repo": "o/r",
+    "client": _Private(),
+}
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -156,7 +170,7 @@ def test_a_restore_recovers_state_repo_and_forge_api_and_writes_forge_yaml_if_ab
     state_a = a / ".fr" / "triage-state" / "scope"
     state_a.mkdir(parents=True)
     write_durable(state_a, ScopeDurable(state_repo="derio-net/super-fr", forge_api="rest"))
-    push_state(state_a, str(origin), SCOPE_ID, expected_old=None)
+    push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
     b = _clone(tmp_path, "b", origin)
     state_b = b / ".fr" / "triage-state" / "scope"
@@ -179,7 +193,7 @@ def test_a_restore_never_overwrites_an_existing_forge_yaml(tmp_path: Path, home:
     state_a = a / ".fr" / "triage-state" / "scope"
     state_a.mkdir(parents=True)
     write_durable(state_a, ScopeDurable(state_repo="derio-net/super-fr", forge_api="rest"))
-    push_state(state_a, str(origin), SCOPE_ID, expected_old=None)
+    push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
     forge_yaml = home / ".config" / "fr" / "forge.yaml"
     forge_yaml.parent.mkdir(parents=True)
     forge_yaml.write_text("api: graphql\n")

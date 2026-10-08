@@ -27,12 +27,16 @@ from fr.commands.triage_cmd import (
     triage_app,
 )
 from fr.triage.errors import TriageError
+from fr.triage.model import Scope
+from fr.triage.privacy import guard_state
+from fr.triage.scope_config import load_durable, scope_id
+from fr.triage.state_ref import fetch_state, push_state, read_base, ref_name
 from fr.triage.state_sync import SyncReport, check_scope_name, export_state, import_state
 
 state_app = typer.Typer(
     name="state",
     help="Copy a scope's durable state (judgements, origins, manifests, fragments, "
-    "snapshots) to a repo directory and back.",
+    "snapshots) to a repo directory and back, or push and fetch its state ref.",
     no_args_is_help=True,
 )
 triage_app.add_typer(state_app)
@@ -65,15 +69,102 @@ def export_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """Copy the scope's durable state to <dir>/<scope>/. Facts and pages never travel."""
+    """Copy the scope's durable state to <dir>/<scope>/. Facts and pages never travel.
+    With a state repo, the privacy guard runs first (cloud-triage R8)."""
     scope = triage_cmd._scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace)
     try:
-        report = export_state(
-            resolve_state_dir(scope, dir_override, workspace), to, check_scope_name(scope.name)
-        )
+        state_repo = load_durable(target).state_repo
+        if state_repo is not None:
+            client = triage_cmd.make_visibility_client()
+            guard_state(target, scope=scope, state_repo=state_repo, client_for=lambda _r: client)
+        report = export_state(target, to, check_scope_name(scope.name))
     except TriageError as exc:
         _refuse(exc)
     _print(report)
+
+
+RemoteOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--remote",
+        help="Where the state ref is pushed and fetched: a git URL or path (default: the "
+        "state repo on GitHub).",
+    ),
+]
+
+
+def _ref_target(scope: Scope, target: Path, remote: str | None) -> tuple[str, str, str]:
+    """(state repo, remote, scope id) for a push or fetch; exit 2 without a state repo."""
+    state_repo = load_durable(target).state_repo
+    if state_repo is None:
+        raise TriageError(
+            "this scope has no state repo (scope-durable.yaml): run `fr triage collect` at a "
+            "terminal to choose one (cloud-triage R7)"
+        )
+    return state_repo, remote or f"https://github.com/{state_repo}.git", scope_id(scope)
+
+
+@state_app.command("push")
+def push_command(
+    remote: RemoteOpt = None,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Push the scope's state to its ref, refs/fr/triage/<scope-id>, as a compare-and-swap
+    on the ref this state was last fetched from or pushed to (R5); the privacy guard runs
+    first (R8). Exit 2 on a refusal or a ref someone else moved."""
+    scope = triage_cmd._scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace)
+    try:
+        state_repo, url, sid = _ref_target(scope, target, remote)
+        sha = push_state(
+            target,
+            url,
+            sid,
+            expected_old=read_base(target),
+            scope=scope,
+            state_repo=state_repo,
+            client=triage_cmd.make_visibility_client(),
+        )
+    except TriageError as exc:
+        _refuse(exc)
+    console.print(f"pushed {ref_name(sid)} {sha}", markup=False, soft_wrap=True)
+
+
+@state_app.command("fetch")
+def fetch_command(
+    remote: RemoteOpt = None,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+    state_repo_opt: Annotated[
+        str | None,
+        typer.Option(
+            "--state-repo",
+            help="OWNER/REPO holding the ref, for a fresh workspace with no state yet.",
+        ),
+    ] = None,
+) -> None:
+    """Restore the scope's state from its ref, refs/fr/triage/<scope-id> (R5): every file the
+    ref carries is written into the state directory. Exit 2 on a refusal."""
+    scope = triage_cmd._scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace)
+    try:
+        if state_repo_opt is not None and load_durable(target).state_repo is None:
+            url, sid = remote or f"https://github.com/{state_repo_opt}.git", scope_id(scope)
+        else:
+            _, url, sid = _ref_target(scope, target, remote)
+        sha = fetch_state(target, url, sid)
+    except TriageError as exc:
+        _refuse(exc)
+    if sha is None:
+        console.print(f"no {ref_name(sid)} on {url}; nothing restored", markup=False)
+        return
+    console.print(f"restored {ref_name(sid)} {sha}", markup=False, soft_wrap=True)
 
 
 @state_app.command("import")

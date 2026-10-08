@@ -204,8 +204,9 @@ from fr.triage.model import (
     load_judgements,
     load_scope_facts,
 )
+from fr.triage.privacy import guard_write
 from fr.triage.render import plural
-from fr.triage.scope_config import load_scope_config, scope_id
+from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
 
 if TYPE_CHECKING:
@@ -463,7 +464,40 @@ def _save(
     """
     check_open_membership(batches, facts)
     check_dependencies(batches)
+    guard_write(
+        added_keys(batches, read),
+        scope=facts_scope(facts),
+        facts=facts,
+        state_repo=load_durable(target).state_repo,
+        client_for=lambda r: make_client(f"https://{_host_of(facts, r)}/{r}"),
+    )
     save_batches(target / "judgements.yaml", batches, read=read, dry_run=dry_run)
+
+
+def added_keys(batches: Sequence[Batch], read: Sequence[Batch]) -> list[str]:
+    """The keys a write adds to a batch or a wave (cloud-triage R8): every member of a new
+    batch, each new member of an existing one, and every member of a batch whose wave was
+    set or moved."""
+    before = {b.id: b for b in read}
+    added: list[str] = []
+    for batch in batches:
+        old = before.get(batch.id)
+        if old is None:
+            added += batch.ids
+            continue
+        added += [k for k in batch.ids if k not in old.ids]
+        if batch.wave is not None and batch.wave != old.wave:
+            added += [k for k in batch.ids if k in old.ids]
+    return list(dict.fromkeys(added))
+
+
+def facts_scope(facts: Facts) -> Scope:
+    """The scope *facts* were collected for (every loader checked it matches)."""
+    if facts.kind == "repo":
+        return Scope(kind="repo", target=facts.repos[0])
+    if facts.kind == "group":
+        return Scope.group(facts.repos)
+    return Scope(kind="org", target=facts.scope)
 
 
 def _write(

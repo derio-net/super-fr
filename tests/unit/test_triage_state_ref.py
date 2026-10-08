@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fr.triage import state_sync
+from fr.triage.model import Scope
 from fr.triage.state_ref import (
     REF_FILES,
     StateRefConflict,
@@ -21,6 +23,20 @@ from fr.triage.state_ref import (
 )
 
 SCOPE_ID = "s-0123abcd"
+
+
+class _Private:
+    """A forge that answers every repo private: the privacy guard lets every push through."""
+
+    def repo_visibility(self, repo: str) -> str:
+        return "private"
+
+
+PRIVATE: dict[str, Any] = {
+    "scope": Scope(kind="repo", target="o/r"),
+    "state_repo": "o/r",
+    "client": _Private(),
+}
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -125,7 +141,7 @@ def test_push_writes_exactly_the_ref_files_that_exist(tmp_path: Path, origin: Pa
     state = _state(clone)
     _fill(state, {**EVERY, **NEVER})
 
-    sha = push_state(state, str(origin), SCOPE_ID, expected_old=None)
+    sha = push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
     assert _git(origin, "rev-parse", ref_name(SCOPE_ID)).strip() == sha
     assert _tree(origin, ref_name(SCOPE_ID)) == sorted(EVERY)
@@ -138,7 +154,7 @@ def test_a_partial_state_pushes_only_what_exists(tmp_path: Path, origin: Path) -
     state = _state(clone)
     _fill(state, {"judgements.yaml": EVERY["judgements.yaml"], "facts.json": b"{}\n"})
 
-    push_state(state, str(origin), SCOPE_ID, expected_old=None)
+    push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
     assert _tree(origin, ref_name(SCOPE_ID)) == ["judgements.yaml"]
 
@@ -149,7 +165,7 @@ def test_fetch_into_a_fresh_clone_restores_every_entry_byte_for_byte(
     a = _clone(tmp_path, "a", origin)
     state_a = _state(a)
     _fill(state_a, EVERY)
-    sha = push_state(state_a, str(origin), SCOPE_ID, expected_old=None)
+    sha = push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
     b = _clone(tmp_path, "b", origin)
     state_b = b / ".fr" / "triage-state" / "scope"
@@ -172,10 +188,10 @@ def test_a_second_push_from_the_same_base_moves_the_ref(tmp_path: Path, origin: 
     a = _clone(tmp_path, "a", origin)
     state = _state(a)
     _fill(state, {"judgements.yaml": b"one\n"})
-    first = push_state(state, str(origin), SCOPE_ID, expected_old=None)
+    first = push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
     (state / "judgements.yaml").write_bytes(b"two\n")
 
-    second = push_state(state, str(origin), SCOPE_ID, expected_old=first)
+    second = push_state(state, str(origin), SCOPE_ID, expected_old=first, **PRIVATE)
 
     assert second != first
     assert _git(origin, "show", f"{ref_name(SCOPE_ID)}:judgements.yaml") == "two\n"
@@ -186,17 +202,17 @@ def test_a_stale_expected_old_fails_and_changes_nothing(tmp_path: Path, origin: 
     a = _clone(tmp_path, "a", origin)
     state_a = _state(a)
     _fill(state_a, {"judgements.yaml": b"a\n"})
-    base = push_state(state_a, str(origin), SCOPE_ID, expected_old=None)
+    base = push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
     b = _clone(tmp_path, "b", origin)
     state_b = b / ".fr" / "triage-state" / "scope"
     fetch_state(state_b, str(origin), SCOPE_ID)
     (state_b / "judgements.yaml").write_bytes(b"b\n")
-    winner = push_state(state_b, str(origin), SCOPE_ID, expected_old=base)
+    winner = push_state(state_b, str(origin), SCOPE_ID, expected_old=base, **PRIVATE)
 
     (state_a / "judgements.yaml").write_bytes(b"a2\n")
     with pytest.raises(StateRefConflict, match=ref_name(SCOPE_ID)):
-        push_state(state_a, str(origin), SCOPE_ID, expected_old=base)
+        push_state(state_a, str(origin), SCOPE_ID, expected_old=base, **PRIVATE)
 
     assert _git(origin, "rev-parse", ref_name(SCOPE_ID)).strip() == winner
     assert read_base(state_a) == base
@@ -206,20 +222,20 @@ def test_creating_a_ref_that_already_exists_is_a_conflict(tmp_path: Path, origin
     a = _clone(tmp_path, "a", origin)
     state_a = _state(a)
     _fill(state_a, {"judgements.yaml": b"a\n"})
-    push_state(state_a, str(origin), SCOPE_ID, expected_old=None)
+    push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
     b = _clone(tmp_path, "b", origin)
     state_b = _state(b)
     _fill(state_b, {"judgements.yaml": b"b\n"})
     with pytest.raises(StateRefConflict):
-        push_state(state_b, str(origin), SCOPE_ID, expected_old=None)
+        push_state(state_b, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
 
 def test_the_ref_is_no_branch(tmp_path: Path, origin: Path) -> None:
     a = _clone(tmp_path, "a", origin)
     state = _state(a)
     _fill(state, {"judgements.yaml": b"a\n"})
-    push_state(state, str(origin), SCOPE_ID, expected_old=None)
+    push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
     _git(a, "fetch", "--quiet", "origin")
 
     assert "triage" not in _git(a, "branch", "-a")
@@ -236,7 +252,7 @@ def test_a_symlink_in_the_state_is_never_pushed(tmp_path: Path, origin: Path) ->
     (state / "judgements.yaml").symlink_to(secret)
     (state / "origins.yaml").write_text("o\n")
 
-    push_state(state, str(origin), SCOPE_ID, expected_old=None)
+    push_state(state, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
 
     assert _tree(origin, ref_name(SCOPE_ID)) == ["origins.yaml"]
 

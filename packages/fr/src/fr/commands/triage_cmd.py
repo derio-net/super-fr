@@ -31,6 +31,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from fr.artifacts.trigger import is_interactive
+from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
 from fr.triage.batch import last_dispatch
 from fr.triage.check import ClaimSets, classify
@@ -117,6 +118,12 @@ def make_forge() -> Forge:
     GitHub's adapter: triage is GitHub-only by its own scope, and with no
     checkout to resolve a backend from, that is the honest default."""
     return ClientForge(client_for_backend("github"))
+
+
+def make_visibility_client() -> GhClient:
+    """The forge client the privacy guard reads a state repo's visibility with (cloud-triage
+    R8): GitHub's, as `make_forge`'s. Tests replace this factory."""
+    return client_for_backend("github")
 
 
 def _group_scope(parts: list[str]) -> Scope:

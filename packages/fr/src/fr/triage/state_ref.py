@@ -27,9 +27,11 @@ import re
 import tempfile
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from fr.triage import gitseam, state_sync
 from fr.triage.errors import TriageError
+from fr.triage.model import Scope
 
 REF_FILES: tuple[str, ...] = (
     "judgements.yaml",
@@ -185,12 +187,23 @@ def push_state(
     scope_id: str,
     *,
     expected_old: str | None,
+    scope: Scope,
+    state_repo: str,
+    client: Any,
     repo: Path | None = None,
 ) -> str:
     """Commit *state_dir*'s `REF_FILES` entries and push them to the scope's ref on
-    *remote_repo*, only if the remote's ref is still *expected_old* (None: it must not
-    exist yet). The new sha; `StateRefConflict` when the remote moved, and then nothing
-    on the remote changed."""
+    *remote_repo* (the git URL or path of *state_repo*), only if the remote's ref is still
+    *expected_old* (None: it must not exist yet). The new sha; `StateRefConflict` when the
+    remote moved, and then nothing on the remote changed.
+
+    First, the privacy guard (R8): *state_repo*'s visibility is read from the forge through
+    *client* (`GET repos/{state_repo}`), and the push is refused (`PrivacyError`, nothing
+    written) when it cannot be read, or when it is public and the state names a private
+    repo's issue."""
+    from fr.triage.privacy import guard_state
+
+    guard_state(state_dir, scope=scope, state_repo=state_repo, client_for=lambda _r: client)
     cwd = _repo(state_dir, repo)
     ref = ref_name(scope_id)
     parent = expected_old if expected_old and gitseam.has_commit(cwd, expected_old) else None
