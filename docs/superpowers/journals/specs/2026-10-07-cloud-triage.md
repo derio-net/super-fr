@@ -576,3 +576,8 @@ R16 and §G drop the plugin version: it is lockstepped with fr's and the loaded 
 ### s30-resolved · finding [fixed] · resolves s30: Two wake sources are assumed, not measured
 
 §E lists PR-activity wakes and the Routine firing into the existing session as owed measurements; R11 says so; Test Plan 17 observes each once.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p2 created=2026-10-08T12:17:53+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p2 · decision · ask: state in the workspace, on a ref, behind the privacy guard (R4-R8)
+
+Its own reviewable ask: where a scope's state lives and how it survives a container, independent of the forge backend beyond reading visibility.
