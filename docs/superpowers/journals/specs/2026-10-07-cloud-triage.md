@@ -616,3 +616,8 @@ Moves the run kind's current_version 9 -> 10 and migrates this repo's cursors; a
 ### tier-2026-10-07-cloud-triage-p6 · decision · hard: a new artifact kind every fr-enabled repo will carry
 
 Registers the agents kind with its stamp, validator and re-render path, and changes fr init and install.sh for every consumer repo.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-07-cloud-triage-p4-1 created=2026-10-08T12:19:48+00:00 -->
+### phase-split-2026-10-07-cloud-triage-p4-1 · decision · review-size: the claude-cloud runner is a new workspace package
+
+Supersedes phase-split-2026-10-07-cloud-triage-p4. Its requirements (R14, R15) are also cited by the broad end-to-end row that phases 3 and 6 link, so self-review counts them as shared. Folded into phase 3 it would add a whole new package (~1100 lines, with its own version surface, lockfile and CI entries) to a ~1400-line hard concurrency phase, too large for one review.
