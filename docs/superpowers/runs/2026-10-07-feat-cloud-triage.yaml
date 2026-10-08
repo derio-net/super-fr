@@ -3,7 +3,7 @@ run: 2026-10-07-feat-cloud-triage
 workflow: fr-goal@1
 branch: feat/cloud-triage
 started: '2026-10-07T12:57:53+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -280,7 +280,11 @@ steps:
           visual: none
           findings: p7-self-update-install-refused-by-preflight,p7-r1,p7-r2,p7-r3,p7-r4,p7-r5,p7-r6,p7-r7,p7-r8
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-08T20:32:08+00:00'
+    exit: 0
+    stdout: |
+      4 out-of-scope finding(s): p1-r11, p4-r11, p4-r12, p7-r8
   deliver:
     state: pending
 driver: standalone
