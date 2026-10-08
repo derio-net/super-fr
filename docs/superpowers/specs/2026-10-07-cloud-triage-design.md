@@ -121,8 +121,21 @@ close`, `pr merge`) use the matching REST routes.
 | `isCrossRepository` | `head.repo.full_name != base.repo.full_name`. |
 | `stateReason` | the issue's `state_reason`, upper-cased. |
 | `comments[].url` (comment id) | the REST comment's `html_url`, the same `#issuecomment-<id>` shape `_comment_id` parses. |
-| `gh pr checks --required` | the required contexts from `GET branches/{base}/protection/required_status_checks` (404: none required), joined with the check runs. |
+| `gh pr checks --required` | the required contexts from `GET branches/{base}` (`protection.required_status_checks`, readable without admin) united with `GET rules/branches/{base}` (ruleset contexts), joined with the check runs by name and by status context. `GET branches/{base}/protection/required_status_checks` is NOT used: it needs admin and answers 403 to the cloud token (discovery `p1-required-checks-route-refused`). |
 | `gh pr merge --match-head-commit` | `PUT pulls/{n}/merge` with `sha`. |
+| `viewerDefaultMergeMethod` | **Gap:** REST has none, so `repo_merge_methods` answers `default: None`. `.fr/triage.yaml` gains an optional `merge_method: merge \| squash \| rebase`, which `choose_method` uses when the forge names no default (on either backend); under `rest`, a repo allowing several methods with no such setting refuses merge and drive, naming the key. |
+| `closingIssuesReferences` node ids (`id`, `repository.id`, `owner.id`) | **Gap:** not produced; collect reads none. |
+| `author.name` on list records | **Gap:** absent from REST list records; `login` is present. |
+| `reviewDecision: REVIEW_REQUIRED` | **Gap:** derived from submitted reviews only, so it is never `REVIEW_REQUIRED`. |
+| `gh pr ready` | **Gap:** GitHub REST has no ready-for-review. The `github-rest` command uses the Claude Code cloud proxy's `POST repos/{r}/pulls/{n}/ccr/ready_for_review`, which exists only behind that proxy, where `forge.api: rest` is selected (decision `p1-ready-via-ccr-route`). |
+| `gh repo list <org>` | **Gap:** `GET orgs/{o}/repos` is refused from a cloud session (sessions are bound to their configured repositories); `list_repos` raises, and a cloud scope over an org takes its repo list from the scope itself (discovery `p1-list-repos-refused-in-cloud`). |
+
+Closing references are parsed as GitHub does: a keyword at a word boundary,
+outside code fences and inline code, followed by `#n`, `owner/repo#n` or an
+issue URL on the repo's own GitHub host; refs are built on that host, never a
+hard-coded `github.com`. Label removal treats a 404 for a label the issue does
+not carry as success, as `gh issue edit --remove-label` does; `state_reason` is
+sent in GitHub's spelling (`completed`, `not_planned`, `reopened`).
 
 A contract test feeds the same recorded forge state to both backends and
 compares their records (R2).
