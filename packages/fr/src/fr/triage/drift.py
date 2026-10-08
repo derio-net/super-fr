@@ -6,8 +6,9 @@ scope's state directory (it travels in the state ref, `fr.triage.state_ref.REF_F
 so a driver restored on a fresh container never re-homes a run twice):
 
 - `plan_drift`: each active batch's run cursor (read by the pass from the batch branch's
-  head) against the latest fr release. Equal major → nothing; another major → one
-  re-home per (run, release), asked only once the run's session is idle (R17's "next
+  head: the cursor whose `branch` is the batch's, `pick_cursor`, p6-r3) against the
+  latest fr release. Equal major → nothing; another major → one re-home per (run,
+  release MAJOR, p6-r2), asked only once the run's session is idle (R17's "next
   idle moment", the same rule the conflict hand-back keeps); no recorded version →
   reported once, never re-homed.
 - `plan_self_update`: the cloud driver before each pass (R18). A release major other
@@ -61,13 +62,31 @@ def older(installed: str, release: str) -> bool:
         return False
 
 
-def cursor_path(files: Iterable[str]) -> str | None:
-    """The run cursor among a PR's changed files: `docs/superpowers/runs/<run>.yaml`."""
-    for f in files:
-        p = PurePosixPath(f)
-        if str(p.parent) == RUNS_DIR and p.suffix == ".yaml":
-            return f
-    return None
+def cursor_paths(files: Iterable[str]) -> list[str]:
+    """The run cursors among a PR's changed files: `docs/superpowers/runs/<run>.yaml`.
+    A PR may carry several (`fr migrate artifacts` touches every live one)."""
+    return [
+        f
+        for f in files
+        if str(PurePosixPath(f).parent) == RUNS_DIR and PurePosixPath(f).suffix == ".yaml"
+    ]
+
+
+def cursor_branch(text: str) -> str | None:
+    """The `branch` a run cursor's text records; None when it records none."""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return None
+    branch = data.get("branch") if isinstance(data, Mapping) else None
+    return branch if isinstance(branch, str) and branch else None
+
+
+def pick_cursor(texts: Mapping[str, str], branch: str) -> str | None:
+    """The one cursor (path → text, as read at the PR head) whose `branch` is *branch*;
+    None when none or several are (p6-r3): another run's cursor is never lent."""
+    matching = [path for path, text in texts.items() if cursor_branch(text) == branch]
+    return matching[0] if len(matching) == 1 else None
 
 
 def read_cursor(text: str) -> tuple[str | None, str | None]:
@@ -120,21 +139,27 @@ class Drift:
 
 @dataclass(frozen=True)
 class Ledger:
-    """`rehomes.yaml`: the re-homes asked per (run, release), the runs reported with no
-    recorded version, and the driver's own session (`start`, `pending`)."""
+    """`rehomes.yaml`: the re-homes asked per (run, release major), the runs reported
+    with no recorded version, and the driver's own session (`start`, `pending`)."""
 
     rehomes: tuple[dict[str, Any], ...] = ()
     reported: tuple[str, ...] = ()
     driver: dict[str, Any] = field(default_factory=dict)
 
     def rehomed(self, run: str, release: str) -> bool:
-        return any(e.get("run") == run and e.get("release") == release for e in self.rehomes)
+        """Was *run* re-homed onto *release*'s major (p6-r2)? An entry's major is its
+        `major`, else its `release`'s (an entry written before the major was recorded)."""
+        want = major(release)
+        return want is not None and any(
+            e.get("run") == run and _entry_major(e) == want for e in self.rehomes
+        )
 
     def with_rehomes(self, rehomes: Iterable[Rehome], *, at: str) -> Ledger:
         new = tuple(
-            {"run": r.run, "release": r.release, "item": r.item, "recorded": r.recorded, "at": at}
+            {"run": r.run, "release": r.release, "major": major(r.release), "item": r.item,
+             "recorded": r.recorded, "at": at}
             for r in rehomes
-        )
+        )  # fmt: skip
         return replace(self, rehomes=self.rehomes + new)
 
     def with_reported(self, unknown: Iterable[RunVersion]) -> Ledger:
@@ -146,6 +171,13 @@ class Ledger:
     def with_driver(self, **values: Any) -> Ledger:
         driver = {**self.driver, **values}
         return replace(self, driver={k: v for k, v in driver.items() if v is not None})
+
+
+def _entry_major(entry: Mapping[str, Any]) -> int | None:
+    value = entry.get("major")
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return major(str(entry.get("release") or ""))
 
 
 def resume_brief(run: str, branch: str, release: str) -> str:
@@ -263,34 +295,72 @@ def plan_self_update(installed: str, release: str | None, ledger: Ledger) -> Sel
 
 
 def driver_brief(*, scope_args: Sequence[str], state_repo: str | None, host_id: str,
-                 release: str) -> str:  # fmt: skip
+                 release: str, generation: int) -> str:  # fmt: skip
     """The fresh driver session's brief: the same driver (host id, so the same lease
-    holder, §D), on the release it re-homes onto."""
+    holder, §D), on the release it re-homes onto, as lease *generation* (p6-r4): every
+    pass and record it runs names it, so the session it replaces stops."""
     args = " ".join(scope_args)
     state = f" --state-repo {state_repo}" if state_repo else ""
+    gen = f" --generation {generation}"
     return (
         f"You are the cloud triage driver, re-homed onto fr {release}.\n"
         f"1. Write `{host_id}` to ~/.config/fr/host-id when that file is missing: it is "
         "this driver's identity, and the drive lease it holds.\n"
-        f"2. Run the fr-triage skill's driver section: `fr triage drive pass {args}{state} "
-        "--outbox <outbox>`, execute the outbox, `fr triage drive record`, and schedule "
-        "the next wake."
+        f"2. Run the fr-triage skill's driver section: `fr triage drive pass {args}{state}"
+        f"{gen} --outbox <outbox>`, execute the outbox, `fr triage drive record {args}{gen} "
+        "--outbox <outbox> --result <results>`, and schedule the next wake. Pass "
+        f"`{gen.strip()}` to every pass and record."
     )
 
 
-def driver_request(release: str, brief: str) -> dict[str, Any]:
-    """The self-re-home request the pass writes to the outbox, and stops."""
+def driver_request(release: str, brief: str, *, generation: int) -> dict[str, Any]:
+    """The self-re-home request the pass writes to the outbox, and stops. It carries a
+    request tag like every creating request (§F), so a replay finds the session it
+    created rather than making a second; `generation` is the new session's (p6-r4)."""
+    rid = f"{DRIVER_REQUEST_PREFIX}{release}"
     return {
-        "id": f"{DRIVER_REQUEST_PREFIX}{release}",
+        "id": rid,
         "kind": "rehome",
         "item": "driver",
         "session": "self",
         "release": release,
+        "generation": generation,
+        "request_tag": rid,
         "prompt": brief,
-        "execute": "create_session(this repo, model = this session's, prompt) for a fresh "
-        "driver session; then stop this one: schedule no further wake",
+        "execute": "list_sessions and look for one tagged `request_tag`; when one exists, "
+        "create nothing and record its id; otherwise create_session(this repo, model = this "
+        "session's, tags = [request_tag], prompt) for a fresh driver session. Then stop this "
+        "one: schedule no further wake",
         "record": "{id, session: <new session id>}",
     }
+
+
+def adopt_pending(ledger: Ledger, generation: int) -> Ledger | None:
+    """The ledger with the pending self-re-home taken as done, when the session asking is
+    the one it created, or a later one (*generation* at least the request's): the agent's
+    record of it was lost, but the session exists. None when there is nothing to adopt."""
+    pending = ledger.driver.get("pending")
+    if not isinstance(pending, Mapping):
+        return None
+    made = pending.get("generation")
+    if not isinstance(made, int) or isinstance(made, bool) or generation < made:
+        return None
+    release = str(pending.get("release") or "")
+    driver = {k: v for k, v in ledger.driver.items() if k != "pending"}
+    driver["start"] = release.lstrip("vV")
+    return replace(ledger, driver=driver)
+
+
+def superseded(lease_generation: int, generation: int, ledger: Ledger) -> bool:
+    """Is a driver session of *generation* superseded by the lease's (p6-r4)? Yes when the
+    lease's is newer, except for the session whose own self-re-home moved it (the
+    pending request's generation, one past its own): it still re-emits and records that
+    request, and nothing else."""
+    if generation >= lease_generation:
+        return False
+    pending = ledger.driver.get("pending")
+    made = pending.get("generation") if isinstance(pending, Mapping) else None
+    return not (made == lease_generation and generation == lease_generation - 1)
 
 
 def record_driver_result(ledger: Ledger, result: Mapping[str, Any]) -> Ledger:

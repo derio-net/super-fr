@@ -19,12 +19,14 @@ from typing import Any
 import fr.cli  # noqa: F401 - the command modules load in the CLI's order
 import pytest
 import yaml
+from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.gh import GhError
 from fr.real_ghrestclient import RealGhRestClient
 from fr.triage import drift, state_ref
 from fr.triage.drift import Ledger, RunVersion
 from fr_claude_cloud.runner import ClaudeCloudRunner
+from typer.testing import CliRunner
 
 from tests.unit.github_rest_support import FixtureGh
 from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
@@ -74,11 +76,23 @@ def test_major_reads_a_version_or_tag(version: str | None, expected: int | None)
     assert drift.major(version) == expected
 
 
-def test_the_cursor_is_found_among_the_prs_files() -> None:
+def test_the_cursors_are_found_among_the_prs_files() -> None:
     files = ["README.md", "docs/superpowers/runs/x.records/implement.yaml", CURSOR_PATH]
-    assert drift.cursor_path(files) == CURSOR_PATH
-    assert drift.cursor_path(["docs/superpowers/runs/archive/old/y.yaml"]) is None
-    assert drift.cursor_path([]) is None
+    assert drift.cursor_paths(files) == [CURSOR_PATH]
+    assert drift.cursor_paths(["docs/superpowers/runs/archive/old/y.yaml"]) == []
+    assert drift.cursor_paths([]) == []
+
+
+def test_the_batchs_cursor_is_the_one_whose_branch_is_the_batchs() -> None:
+    """p6-r3: a PR carrying several cursors (`fr migrate artifacts` touches every live
+    one) never lends another run's; none or several matching is no cursor."""
+    other = "docs/superpowers/runs/2026-01-01-feat-other.yaml"  # sorts first
+    mine = "run: r1\nbranch: feat/batch-b3\nfr_version: 6.0.2\n"
+    texts = {other: "run: r0\nbranch: feat/other\nfr_version: 5.17.1\n", CURSOR_PATH: mine}
+
+    assert drift.pick_cursor(texts, "feat/batch-b3") == CURSOR_PATH
+    assert drift.pick_cursor({other: texts[other]}, "feat/batch-b3") is None
+    assert drift.pick_cursor({other: mine, CURSOR_PATH: mine}, "feat/batch-b3") is None
 
 
 def test_a_cursor_reads_its_run_and_fr_version() -> None:
@@ -114,6 +128,19 @@ def test_a_run_already_rehomed_for_this_release_is_never_rehomed_twice() -> None
     assert drift.plan_drift([_rv()], "v6.0.0", ledger).rehomes == ()
     # a later release is a new (run, release) pair
     assert len(drift.plan_drift([_rv()], "v7.0.0", ledger).rehomes) == 1
+
+
+def test_a_run_rehomed_onto_a_major_is_never_rehomed_for_its_later_patches_or_minors() -> None:
+    """p6-r2: the ledger keys on (run, release MAJOR); an entry written by the exact
+    release (before this keying) reads as its major."""
+    old_entry = {"run": "r1", "release": "v6.0.0", "item": ITEM, "recorded": "5.17.1", "at": "t"}
+    for ledger in (
+        Ledger(rehomes=(old_entry,)),
+        Ledger().with_rehomes(drift.plan_drift([_rv()], "v6.0.0", Ledger()).rehomes, at="t"),
+    ):
+        assert drift.plan_drift([_rv()], "v6.0.1", ledger).rehomes == ()
+        assert drift.plan_drift([_rv()], "v6.1.0", ledger).rehomes == ()
+        assert len(drift.plan_drift([_rv()], "v7.0.0", ledger).rehomes) == 1
 
 
 def test_a_run_with_no_recorded_version_is_reported_once_and_never_rehomed() -> None:
@@ -201,7 +228,10 @@ def _drifting(
         sessions.append({"item": f"{REPO}/run/batch-b{n}", "session": f"s-b{n}",
                          "state": session_state, "branch": f"feat/batch-b{n}"})  # fmt: skip
 
-    texts = {f"sha-{100 + n}": _cursor(v).replace("r-b3", f"r-b{n}") for n, v in cursors.items()}
+    texts = {
+        f"sha-{100 + n}": _cursor(v).replace("r-b3", f"r-b{n}").replace("-b3", f"-b{n}")
+        for n, v in cursors.items()
+    }
 
     def read_file_at_ref(repo: str, path: str, ref: str) -> str:
         reads.append((repo, path, ref))
@@ -314,6 +344,33 @@ def test_a_batch_whose_launch_no_longer_resolves_is_still_checked(
     assert [r["item"] for r in _requests(outbox, "rehome")] == [ITEM]
 
 
+def test_a_pr_carrying_another_runs_cursor_is_judged_by_its_own_branchs_cursor(
+    tmp_path: Path, world: World, drive: list[Any]
+) -> None:
+    """p6-r3: the other run's cursor sorts first and records another major; the batch's
+    own (its `branch` is the batch's) records the release's, so nothing is asked. A PR
+    with no cursor of its branch is reported, not judged."""
+    ws, state = _workspace(tmp_path, "ws")
+    _drifting(world, state, cursors={3: "6.0.2", 4: "6.0.2"})
+    other = "docs/superpowers/runs/2026-01-01-feat-other.yaml"
+    own = "docs/superpowers/runs/r-b3.yaml"
+    world.prs[103]["files"] = [other, own]
+    world.prs[104]["files"] = [other]
+    texts = {
+        other: "run: r-other\nbranch: feat/other\nfr_version: 5.17.1\n",
+        own: _cursor("6.0.2"),
+    }
+    world.read_file_at_ref = lambda repo, path, ref: texts[path]  # type: ignore[attr-defined]
+    outbox = tmp_path / "outbox.json"
+
+    result = _pass(state, outbox, "--workspace", str(ws), "--state-repo", REPO)
+
+    assert result.exit_code in (0, 3), result.output
+    assert _requests(outbox, "rehome") == []
+    assert drift.load_ledger(state).rehomes == ()
+    assert "b4" in result.output and "no run cursor of branch feat/batch-b4" in result.output
+
+
 # ------------------------------------------------- the driver updates itself (R18)
 
 
@@ -408,6 +465,10 @@ def test_a_failed_reinstall_is_reported_and_the_pass_runs_on_the_installed_fr(
     assert outbox.exists()
 
 
+def _driver_requests(outbox: Path) -> list[dict[str, Any]]:
+    return [r for r in json.loads(outbox.read_text())["requests"] if r["item"] == "driver"]
+
+
 def test_a_new_major_rehomes_the_driver_itself_and_its_lease_carries_over(
     tmp_path: Path,
     world: World,
@@ -424,33 +485,170 @@ def test_a_new_major_rehomes_the_driver_itself_and_its_lease_carries_over(
 
     assert first.exit_code == 0, first.output
     requests = json.loads(outbox.read_text())["requests"]
-    assert [(r["id"], r["kind"], r["session"]) for r in requests] == [
+    assert [(r["id"], r["kind"], r["session"]) for r in _driver_requests(outbox)] == [
         ("driver:rehome:v6.0.0", "rehome", "self")
-    ], "the pass stops: no batch request, no batch re-home"
-    assert HOST_ID in requests[0]["prompt"] and "fr triage drive pass" in requests[0]["prompt"]
+    ], "the pass stops: no batch re-home"
+    assert requests[-1]["item"] == "driver", "the session stops after everything else"
+    # p6-r5: the pending worker requests ride in the same outbox
+    assert [(r["kind"], r["item"]) for r in requests[:-1]] == [("status", ITEM)]
+    stop = requests[-1]
+    assert stop["request_tag"] == "driver:rehome:v6.0.0"
+    assert HOST_ID in stop["prompt"] and "fr triage drive pass" in stop["prompt"]
+    assert "--generation 1" in stop["prompt"]
     assert selfupdate["installs"] == []
     holder = load_lease(state)
     assert holder is not None and holder.holder.endswith(f"cloud:{HOST_ID}")
+    assert holder.generation == 1, "bumped before the new session is created (p6-r4)"
 
     drive[0] = drive[0] + timedelta(minutes=10)  # the old session wakes once more
     again = _pass(state, outbox, "--workspace", str(ws), "--interval", "0")
-    assert [r["id"] for r in json.loads(outbox.read_text())["requests"]] == [
-        "driver:rehome:v6.0.0"
-    ], "the same request, never a second one"
+    assert _driver_requests(outbox) == [stop], "the same request, never a second one"
     assert again.exit_code == 0, again.output
+    assert load_lease(state).generation == 1  # type: ignore[union-attr]
 
     results = tmp_path / "results.json"
     results.write_text(json.dumps([{"id": "driver:rehome:v6.0.0", "session": "s-driver-2"}]))
-    recorded = _record(state, outbox, results)
+    recorded = _record(state, outbox, results)  # the old session records what it asked
     assert recorded.exit_code == 0, recorded.output
     assert drift.load_ledger(state).driver == {"start": "6.0.0"}
 
     selfupdate["installed"] = "6.0.0"  # the fresh session installed the release
     drive[0] = drive[0] + timedelta(minutes=10)
-    resumed = _pass(state, outbox, "--workspace", str(ws), "--interval", "0")
+    resumed = _pass(state, outbox, "--workspace", str(ws), "--interval", "0",
+                    "--generation", "1")  # fmt: skip
 
     assert resumed.exit_code in (0, 3), resumed.output
-    assert all(r["kind"] != "rehome" or r["item"] == ITEM
-               for r in json.loads(outbox.read_text())["requests"])  # fmt: skip
+    assert _driver_requests(outbox) == []
     after = load_lease(state)
-    assert after is not None and after.holder == holder.holder
+    assert after is not None and after.holder == holder.holder and after.generation == 1
+
+    drive[0] = drive[0] + timedelta(minutes=10)  # the old session, should it wake again
+    stale = _pass(state, outbox, "--workspace", str(ws), "--interval", "0")
+    assert stale.exit_code == 0, stale.output
+    assert "superseded by generation 1" in stale.output
+    assert json.loads(outbox.read_text())["requests"] == []
+
+
+def test_an_old_generation_pass_or_record_drives_nothing(
+    tmp_path: Path, world: World, drive: list[Any]
+) -> None:
+    """p6-r4: a driver whose brief names an older generation than the lease's stops: no
+    collect, no request, no record, no further wake; exit 0."""
+    from fr.triage.lease import load_lease
+
+    ws, state = _workspace(tmp_path, "ws")
+    _drifting(world, state, cursors={3: "5.17.1"})
+    outbox = tmp_path / "outbox.json"
+    first = _pass(state, outbox, "--workspace", str(ws), "--state-repo", REPO,
+                  "--generation", "2")  # fmt: skip
+    assert first.exit_code in (0, 3), first.output
+    assert load_lease(state).generation == 2  # type: ignore[union-attr]
+    asked = json.loads(outbox.read_text())["requests"]
+    assert asked, "the current generation drives"
+    before = (state / "requests.yaml").read_bytes()
+
+    drive[0] = drive[0] + timedelta(minutes=10)
+    old = _pass(state, outbox, "--workspace", str(ws), "--generation", "1")
+
+    assert old.exit_code == 0, old.output
+    assert "superseded by generation 2" in old.output
+    assert "no further wake" in old.output
+    assert json.loads(outbox.read_text())["requests"] == []
+    assert (state / "requests.yaml").read_bytes() == before
+
+    results = tmp_path / "results.json"
+    results.write_text(json.dumps([{"id": asked[0]["id"], "session": "s-x"}]))
+    rec = CliRunner().invoke(
+        app,
+        ["triage", "drive", "record", "--repo", REPO, "--dir", str(state), "--outbox",
+         str(outbox), "--result", str(results), "--generation", "1"],
+    )  # fmt: skip
+    assert rec.exit_code == 0, rec.output
+    assert "superseded by generation 2" in rec.output
+    assert (state / "requests.yaml").read_bytes() == before, "nothing recorded"
+
+
+def test_a_replayed_self_rehome_creates_one_session(
+    tmp_path: Path, world: World, drive: list[Any], selfupdate: dict[str, Any]
+) -> None:
+    """p6-r4: the old session's record was lost. Its replay re-emits the same request
+    (same request tag, so the agent finds the session it created), the generation moves
+    once, and the new session adopts the re-home rather than asking for another."""
+    from fr.triage.lease import load_lease
+
+    ws, state = _workspace(tmp_path, "ws")
+    _drifting(world, state, cursors={3: "6.0.2"}, release="v6.0.0")
+    outbox = tmp_path / "outbox.json"
+
+    _pass(state, outbox, "--workspace", str(ws), "--state-repo", REPO)
+    stop = _driver_requests(outbox)
+    drive[0] = drive[0] + timedelta(minutes=10)
+    _pass(state, outbox, "--workspace", str(ws), "--interval", "0")  # the replay
+    assert _driver_requests(outbox) == stop and len(stop) == 1
+    assert stop[0]["request_tag"] == stop[0]["id"]
+    assert "list_sessions" in stop[0]["execute"] and "request_tag" in stop[0]["execute"]
+    assert load_lease(state).generation == 1  # type: ignore[union-attr]
+
+    selfupdate["installed"] = "6.0.0"  # the one session it created, never recorded
+    drive[0] = drive[0] + timedelta(minutes=10)
+    new = _pass(state, outbox, "--workspace", str(ws), "--interval", "0", "--generation", "1")
+
+    assert new.exit_code in (0, 3), new.output
+    assert _driver_requests(outbox) == [], "the new session never asks for a third"
+    assert drift.load_ledger(state).driver == {"start": "6.0.0"}
+    assert load_lease(state).generation == 1  # type: ignore[union-attr]
+
+
+def test_install_release_keeps_its_source_clone_outside_the_marketplace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p6-r1: the REAL installer, twice, against a local remote whose install.sh is a
+    stub that (like the real one) drops the marketplace dir's `.git`. HOME is a tmp dir."""
+    import subprocess
+
+    from fr.commands import triage_drive_cmd
+
+    def git(cwd: Path, *argv: str) -> None:
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
+             "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *argv],
+            cwd=cwd, check=True, capture_output=True,
+        )  # fmt: skip
+
+    marker = tmp_path / "installed.txt"
+    monkeypatch.setenv("FR_TEST_MARKER", str(marker))
+    work, bare = tmp_path / "work", tmp_path / "super-fr.git"
+    (work / "scripts").mkdir(parents=True)
+    git(tmp_path, "init", "--quiet", str(work))
+    market = Path.home() / ".claude" / "plugins" / "marketplaces" / "derio-net--super-fr"
+    stub = (
+        "#!/bin/bash\nset -e\n"
+        f'mkdir -p "{market}" && rm -rf "{market}/.git"\n'
+        'cat "$(dirname "$0")/../VERSION" >> "$FR_TEST_MARKER"\n'
+    )
+    (work / "scripts" / "install.sh").write_text(stub)
+    for version in ("6.0.0", "6.0.1"):
+        (work / "VERSION").write_text(version + "\n")
+        git(work, "add", "-A")
+        git(work, "commit", "--quiet", "-m", version)
+        git(work, "tag", f"v{version}")
+        if version == "6.0.0":
+            git(tmp_path, "clone", "--quiet", "--bare", str(work), str(bare))
+        else:
+            git(work, "push", "--quiet", "--tags", str(bare), "HEAD:refs/heads/master")
+
+    triage_drive_cmd._install_release("v6.0.0", remote=str(bare))
+    triage_drive_cmd._install_release("v6.0.1", remote=str(bare))
+
+    assert marker.read_text().split() == ["6.0.0", "6.0.1"]
+    assert (Path.home() / ".cache" / "fr" / "src" / "super-fr" / ".git").is_dir()
+    assert not (market / ".git").exists()
+
+    (work / "scripts" / "install.sh").write_text("#!/bin/bash\necho boom-on-stderr >&2\nexit 3\n")
+    (work / "VERSION").write_text("6.0.2\n")
+    git(work, "add", "-A")
+    git(work, "commit", "--quiet", "-m", "6.0.2")
+    git(work, "tag", "v6.0.2")
+    git(work, "push", "--quiet", "--tags", str(bare), "HEAD:refs/heads/master")
+    with pytest.raises(RuntimeError, match="boom-on-stderr"):
+        triage_drive_cmd._install_release("v6.0.2", remote=str(bare))

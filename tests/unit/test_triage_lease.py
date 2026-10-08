@@ -272,3 +272,31 @@ def test_lease_take_yes_takes_it_for_this_host(scoped: Path) -> None:
     result = _invoke("take", "--yes", "--as", "cloud", "--repo", "o/r", "--dir", str(scoped))
     got = load_lease(scoped)
     assert got is not None and got.holder == f"{sid} cloud:0123456789abcdef"
+
+
+# ------------------------------------------------------- the generation (§D, p6-r4)
+
+
+def test_a_lease_with_no_generation_reads_as_generation_zero_and_is_written_without_one(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / lease.LEASE_FILE).write_text(
+        f"holder: {SID} {CLOUD}\nstarted: '{NOW.isoformat()}'\nexpires: '{NOW.isoformat()}'\n"
+    )
+    assert load_lease(tmp_path).generation == 0  # type: ignore[union-attr]
+
+    take_or_renew(tmp_path, CLOUD, NOW, scope_id=SID)
+    assert "generation" not in (tmp_path / lease.LEASE_FILE).read_text()
+
+
+def test_a_bumped_generation_survives_a_renewal_and_a_newer_session_raises_it(
+    tmp_path: Path,
+) -> None:
+    take_or_renew(tmp_path, CLOUD, NOW, scope_id=SID)
+    assert lease.bump_generation(tmp_path).generation == 1
+    assert "generation: 1" in (tmp_path / lease.LEASE_FILE).read_text()
+
+    renewed = take_or_renew(tmp_path, CLOUD, NOW + timedelta(minutes=5), scope_id=SID)
+    assert renewed.generation == 1, "an older session's renewal never lowers it"
+    raised = take_or_renew(tmp_path, CLOUD, NOW, scope_id=SID, generation=3)
+    assert raised.generation == 3

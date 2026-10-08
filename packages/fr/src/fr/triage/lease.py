@@ -2,8 +2,9 @@
 2026-10-07-cloud-triage R9, §D).
 
 `<state dir>/lease.yaml` rides on the state ref (`state_ref.REF_FILES`): `holder` (the
-scope id and the driver identity), `started`, `expires`, and `last_pass` (when the holder
-last ran a whole pass, so a wake that comes too soon only renews). The identity is
+scope id and the driver identity), `generation`, `started`, `expires`, and `last_pass`
+(when the holder last ran a whole pass, so a wake that comes too soon only renews). The
+identity is
 `host:<host id>` for a host driver and `cloud:<host id>` for a cloud driver: a restart
 with a new pid, or a re-homed cloud session carrying the same host id, is the same holder.
 
@@ -14,6 +15,11 @@ holder renews its own lease, expired or not; any other driver is refused while t
 is live (`LeaseHeld`), and an expired foreign lease is reported (`LeaseExpired`), taken
 over only by `fr triage lease take --yes` (*force*). `drive_lock` stays the fast same-host
 check before it.
+
+`generation` tells a cloud driver's sessions apart, which the shared holder cannot (§D,
+p6-r4): a self-re-home bumps it (`bump_generation`) before the new session is created,
+and a renewal never lowers it. Absent reads as 0, and 0 is never written, so a lease no
+session was re-homed onto stays byte-identical to one written before it existed.
 """
 
 from __future__ import annotations
@@ -42,6 +48,7 @@ __all__ = [
     "LeaseHeld",
     "TriageError",
     "acquire",
+    "bump_generation",
     "driver_identity",
     "holder_of",
     "lease_duration",
@@ -58,6 +65,7 @@ class Lease(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     holder: str
+    generation: int = 0
     started: datetime
     expires: datetime
     last_pass: datetime | None = None
@@ -119,7 +127,7 @@ def _write(state_dir: Path, lease: Lease) -> None:
     from fr.artifacts.atomic import write_text_atomic
 
     state_dir.mkdir(parents=True, exist_ok=True)
-    body = yaml.safe_dump(lease.model_dump(mode="json", exclude_none=True), sort_keys=False)
+    body = yaml.safe_dump(lease.model_dump(mode="json", exclude_defaults=True), sort_keys=False)
     write_text_atomic(state_dir / LEASE_FILE, body)
 
 
@@ -138,18 +146,23 @@ def take_or_renew(
     scope_id: str,
     duration: timedelta | None = None,
     force: bool = False,
+    generation: int = 0,
 ) -> Lease:
     """Take the lease when it is free, renew it when this holder has it (expired or not),
     and write it; `LeaseHeld` when another holder's lease is live, `LeaseExpired` when it
     has expired (nothing written either way). *force* (the operator's `lease take --yes`)
-    takes it from anyone."""
+    takes it from anyone. *generation* is the taking session's: the lease keeps the
+    greater of it and its own (whether that session is superseded is the caller's
+    question, asked before it takes)."""
     holder = holder_of(scope_id, identity)
     until = now + (duration if duration is not None else lease_duration())
     current = load_lease(state_dir)
     if current is not None and current.holder == holder:
-        new = current.model_copy(update={"expires": until})
+        new = current.model_copy(
+            update={"expires": until, "generation": max(current.generation, generation)}
+        )
     elif current is None or force:
-        new = Lease(holder=holder, started=now, expires=until)
+        new = Lease(holder=holder, generation=generation, started=now, expires=until)
     elif current.expired(now):
         raise LeaseExpired(
             f"{_take_line(current)} and has expired; it is never taken over silently: "
@@ -175,13 +188,17 @@ def acquire(
     push: Callable[[], object] | None,
     duration: timedelta | None = None,
     force: bool = False,
+    generation: int = 0,
 ) -> Lease:
     """`take_or_renew`, then *push* (the compare-and-swap push of the state ref; None when
     the scope has no ref). When the push fails, `lease.yaml` is put back byte for byte and
     the failure raised: a driver that lost the race holds nothing."""
     path = state_dir / LEASE_FILE
     before = path.read_bytes() if path.exists() else None
-    got = take_or_renew(state_dir, identity, now, scope_id=scope_id, duration=duration, force=force)
+    got = take_or_renew(
+        state_dir, identity, now, scope_id=scope_id, duration=duration, force=force,
+        generation=generation,
+    )  # fmt: skip
     if push is None:
         return got
     try:
@@ -203,6 +220,17 @@ def mark_pass(state_dir: Path, now: datetime) -> None:
     if current is None:
         raise TriageError(f"{state_dir / LEASE_FILE}: no lease to record a pass on")
     _write(state_dir, current.model_copy(update={"last_pass": now}))
+
+
+def bump_generation(state_dir: Path) -> Lease:
+    """Move the lease to the next generation (a self-re-home, §D) and write it; the caller
+    pushes. A lease must exist."""
+    current = load_lease(state_dir)
+    if current is None:
+        raise TriageError(f"{state_dir / LEASE_FILE}: no lease to move to a new generation")
+    new = current.model_copy(update={"generation": current.generation + 1})
+    _write(state_dir, new)
+    return new
 
 
 def release(state_dir: Path, identity: str, *, scope_id: str) -> bool:

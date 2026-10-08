@@ -201,24 +201,43 @@ def _installed_version() -> str:
     return __version__
 
 
-def _install_release(release: str) -> None:
-    """Install fr *release* the way the cloud setup does (spec §H): the super-fr
-    marketplace clone at the release's tag, then its `scripts/install.sh`. Raises on any
-    failure; tests replace it."""
+def _install_release(release: str, *, remote: str | None = None) -> None:
+    """Install fr *release* the way the cloud setup does (spec §H): a super-fr source
+    clone at the release's tag, then its `scripts/install.sh`. The clone lives under
+    `~/.cache/fr/src/super-fr`, never in the marketplace directory, which install.sh
+    replaces (dropping its `.git`), so a second reinstall finds the clone it left (p6-r1).
+    *remote* defaults to the release repo. Raises `RuntimeError` naming the failed step
+    and its stderr; tests replace it."""
     import subprocess
     from pathlib import Path as _Path
 
     from fr.triage.drift import FR_RELEASE_REPO
 
-    clone = _Path.home() / ".claude" / "plugins" / "marketplaces" / "derio-net--super-fr"
+    url = remote or f"https://github.com/{FR_RELEASE_REPO}.git"
+    clone = _Path.home() / ".cache" / "fr" / "src" / "super-fr"
 
     def run(*argv: str) -> None:
-        subprocess.run(argv, check=True, capture_output=True, text=True)
+        try:
+            subprocess.run(argv, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            said = " ".join((exc.stderr or exc.stdout or "").split())
+            raise RuntimeError(
+                f"`{' '.join(argv[:3])}` exited {exc.returncode}: {said or 'no output'}"
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(f"`{argv[0]}` could not run: {exc}") from exc
 
-    if not (clone / ".git").exists():
-        run("git", "clone", "--quiet", f"https://github.com/{FR_RELEASE_REPO}.git", str(clone))
-    run("git", "-C", str(clone), "fetch", "--quiet", "--tags", "origin")
-    run("git", "-C", str(clone), "checkout", "--quiet", "--detach", release)
+    if (clone / ".git").is_dir():
+        run("git", "-C", str(clone), "remote", "set-url", "origin", url)
+        run("git", "-C", str(clone), "fetch", "--quiet", "--force", "--tags", "origin")
+    else:
+        if clone.exists():
+            import shutil
+
+            shutil.rmtree(clone)  # a half-made clone from an interrupted install
+        clone.parent.mkdir(parents=True, exist_ok=True)
+        run("git", "clone", "--quiet", url, str(clone))
+    run("git", "-C", str(clone), "checkout", "--quiet", "--force", "--detach", release)
     run("bash", str(clone / "scripts" / "install.sh"))
 
 
@@ -242,14 +261,18 @@ def _self_update(
     *,
     scope_args: list[str],
     state_repo: str | None,
+    generation: int,
 ) -> tuple[dict[str, Any] | None, bool]:
     """§E step 2 (R18): `(the self-re-home request, None to go on; re-execute?)`. The
-    driver session's start version is recorded on its first pass that knows the release;
-    a re-home is written to the ledger and pushed with the lease, so a fresh container
-    re-emits the same request rather than a second one."""
+    driver session's start version is recorded on its first pass that knows the release.
+    A re-home moves the lease to the next generation and records the request in the
+    ledger, both pushed in one compare-and-swap before the request is emitted (p6-r4); a
+    pending request is re-emitted as it is, never made twice, and a session of its
+    generation or later takes it as done (its record was lost, but it exists)."""
     import os
 
     from fr.triage import drift
+    from fr.triage.lease import LEASE_FILE, bump_generation
     from fr.triage.scope_config import load_durable
 
     if release is None:
@@ -259,20 +282,41 @@ def _self_update(
         ledger = drift.load_ledger(target)
     except TriageError as exc:
         _fail(str(exc))
+    adopted = drift.adopt_pending(ledger, generation)
+    if adopted is not None:
+        drift.save_ledger(target, adopted)
+        console.print(
+            f"this driver session (generation {generation}) is the re-home onto fr "
+            f"{ledger.driver['pending'].get('release')}: recorded as done",
+            markup=False,
+            soft_wrap=True,
+        )
+        ledger = adopted
     plan = drift.plan_self_update(installed, release, ledger)
     if plan.action == "rehome":
         pending = ledger.driver.get("pending")
-        if not isinstance(pending, dict) or pending.get("release") != release:
+        if isinstance(pending, dict):  # re-emitted as it is: one session per re-home
+            return {"request_tag": pending.get("id"), **pending}, False
+        saved = {
+            name: (target / name).read_bytes() if (target / name).exists() else None
+            for name in (LEASE_FILE, drift.REHOMES_FILE)
+        }
+        try:
+            new_generation = bump_generation(target).generation
             repo_of_state = state_repo or load_durable(target).state_repo
             brief = drift.driver_brief(
                 scope_args=scope_args, state_repo=repo_of_state, host_id=host_id(),
-                release=release,
+                release=release, generation=new_generation,
             )  # fmt: skip
-            pending = drift.driver_request(release, brief)
-        drift.save_ledger(target, ledger.with_driver(start=plan.start, pending=pending))
-        try:
+            pending = drift.driver_request(release, brief, generation=new_generation)
+            drift.save_ledger(target, ledger.with_driver(start=plan.start, pending=pending))
             triage_cmd.push_now(scope, target)
-        except TriageError as exc:
+        except TriageError as exc:  # nothing emitted: put the lease and ledger back
+            for name, body in saved.items():
+                if body is None:
+                    (target / name).unlink(missing_ok=True)
+                else:
+                    (target / name).write_bytes(body)
             _fail(str(exc))
         return pending, False
     if "start" not in ledger.driver:
@@ -319,6 +363,45 @@ def _write_outbox(path: Path, requests: list[dict[str, Any]]) -> None:
 OutboxOpt = Annotated[
     Path, typer.Option("--outbox", help="Where the session requests are written (JSON).")
 ]
+GenerationOpt = Annotated[
+    int,
+    typer.Option(
+        "--generation",
+        min=0,
+        help="This driver session's lease generation, from its brief (a self-re-homed "
+        "session's; 0 otherwise). A session older than the lease's stops (§D).",
+    ),
+]
+
+
+def _superseded_by(target: Path, holder: str, generation: int) -> int | None:
+    """The lease's generation when this driver session (*holder*, *generation*) is
+    superseded by a newer one (p6-r4), else None."""
+    from fr.triage import drift
+
+    try:
+        current = load_lease(target)
+        if current is None or current.holder != holder:
+            return None
+        ledger = drift.load_ledger(target)
+    except TriageError as exc:
+        _fail(str(exc))
+    return current.generation if drift.superseded(current.generation, generation, ledger) else None
+
+
+def _stop_superseded(outbox: Path | None, newer: int, generation: int, what: str) -> NoReturn:
+    """A superseded session stops: exit 0, nothing driven or recorded, no further wake."""
+    if outbox is not None:
+        _write_outbox(outbox, [])
+    console.print(
+        f"superseded by generation {newer}: this driver session (generation {generation}) "
+        f"stops; {what}. Schedule no further wake.",
+        markup=False,
+        soft_wrap=True,
+    )
+    raise typer.Exit(code=0)
+
+
 StateRepoOpt = Annotated[
     str | None,
     typer.Option(
@@ -337,6 +420,7 @@ def drive_pass_command(
         typer.Option("--statuses", help="The session statuses the agent read (JSON)."),
     ] = None,
     state_repo: StateRepoOpt = None,
+    generation: GenerationOpt = 0,
     interval: IntervalOpt = DEFAULT_INTERVAL_MIN,
     routine: RoutineOpt = DEFAULT_ROUTINE_MIN,
     max_inflight: Annotated[
@@ -354,9 +438,12 @@ def drive_pass_command(
     requests to --outbox for the agent to execute. A wake within half of --interval of the
     last pass only renews the lease (p4-r2: `send_later` truncates to the minute).
 
-    Exit codes: 0 acted or everything is done; 3 nothing to do but wait, or a wake that
-    only renewed the lease; 2 a refusal (another driver's lease included); 1 a forge
-    write failed."""
+    A session whose --generation is older than the lease's (another session replaced it
+    by a self-re-home) drives nothing and exits 0 (p6-r4).
+
+    Exit codes: 0 acted, everything is done, or superseded; 3 nothing to do but wait, or a
+    wake that only renewed the lease; 2 a refusal (another driver's lease included); 1 a
+    forge write failed."""
     from fr.commands import triage_batch_cmd as batch
     from fr.commands.triage_kanban_cmd import scope_args, try_load
     from fr.triage.driver import CLOUD, CLOUD_RUNNER, Mailbox
@@ -371,6 +458,9 @@ def drive_pass_command(
     identity = identity_for("cloud")
     duration = lease_duration(interval, routine)
     now, sid = _now(), scope_id(scope)
+    newer = _superseded_by(target, holder_of(sid, identity), generation)
+    if newer is not None:
+        _stop_superseded(outbox, newer, generation, "it drove nothing")
     try:
         current = load_lease(target)
     except TriageError as exc:
@@ -385,6 +475,7 @@ def drive_pass_command(
         assert current is not None and current.last_pass is not None
         try:
             acquire(target, identity, now, scope_id=sid, duration=duration,
+                    generation=generation,
                     push=lambda: triage_cmd.push_now(scope, target))  # fmt: skip
         except TriageError as exc:
             _fail(str(exc))
@@ -406,7 +497,7 @@ def drive_pass_command(
         scope_args=scope_args(repo, org, dir_override, workspace),  # p4-r9
         adapter=CLOUD,
         statuses=_read_json(statuses, "statuses"),
-        lease=batch.LeaseTerms(identity, duration),
+        lease=batch.LeaseTerms(identity, duration, generation),
     )
     # The cloud runner is opened before the pass, so a request still pending from an
     # earlier pass is re-emitted even when this pass asks nothing new of it (§F).
@@ -420,26 +511,32 @@ def drive_pass_command(
     driver.fr_release = latest_fr_release()  # R17: what each run's major is held to
     stop: dict[str, Any] | None = None  # the self-re-home request that ends this pass
     reexec = False
+    newer = None
     try:  # drive.lock: the fast same-host check, before the lease (§D)
         with batch.drive_lock(triage_cmd.drive_lock_dir(scope, dir_override)):
             driver.take_lease()  # §E step 1, before the self-update (step 2)
-            stop, reexec = _self_update(
-                scope, target, driver.fr_release,
-                scope_args=scope_args(repo, org, dir_override, workspace),
-                state_repo=state_repo,
-            )  # fmt: skip
-            if stop is None and not reexec:
+            # the lease just fetched may name a session that replaced this one meanwhile
+            newer = _superseded_by(target, holder_of(sid, identity), generation)
+            if newer is None:
+                stop, reexec = _self_update(
+                    scope, target, driver.fr_release,
+                    scope_args=scope_args(repo, org, dir_override, workspace),
+                    state_repo=state_repo, generation=generation,
+                )  # fmt: skip
+            if newer is None and stop is None and not reexec:
                 acted, summary, _ = batch.one_pass(driver, lease_taken=True)
     except batch.ForgeReadError as exc:
         _fail(str(exc), code=exc.code)
+    if newer is not None:
+        _stop_superseded(outbox, newer, generation, "it drove nothing")
     if reexec:  # outside drive.lock: the new process takes it again under this pid
         assert driver.fr_release is not None
         _reexec(driver.fr_release)
-    if stop is not None:
-        _write_outbox(outbox, [stop])
+    if stop is not None:  # the pending worker requests too, as every pass (p6-r5); stop last
+        _write_outbox(outbox, [*driver.outbox(), stop])
         console.print(
             f"re-homing this driver onto fr {stop['release']}: its session started on another "
-            "major; execute the outbox, record it, and stop this session",
+            "major; execute the outbox (the re-home last), record it, and stop this session",
             markup=False,
             soft_wrap=True,
         )
@@ -456,6 +553,7 @@ def drive_record_command(
     result: Annotated[
         Path, typer.Option("--result", help="The agent's results, one per request (JSON).")
     ],
+    generation: GenerationOpt = 0,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
@@ -464,8 +562,10 @@ def drive_record_command(
     """Apply every result the agent recorded for the outbox's requests to the scope's
     state (through the cloud runner's mailbox), empty the outbox, and push the state ref.
     Only the current, unexpired holder of the scope's lease records, under the same-host
-    `drive.lock` (p4-r5). Exit 2 on a refusal: no live lease of this driver's, a driver
-    holding the lock, a result no pending request names, or a runner that keeps no
+    `drive.lock` (p4-r5). A session whose --generation is older than the lease's records
+    nothing and exits 0 (p6-r4), except the one whose own self-re-home moved it, which
+    records that pass's results. Exit 2 on a refusal: no live lease of this driver's, a
+    driver holding the lock, a result no pending request names, or a runner that keeps no
     mailbox."""
     from fr.commands import triage_batch_cmd as batch
 
@@ -488,6 +588,9 @@ def drive_record_command(
         _fail(f"this driver's drive lease expired at {current.expires.isoformat()}: nothing "
               "recorded; run `fr triage drive pass` to renew it first")  # fmt: skip
     with batch.drive_lock(triage_cmd.drive_lock_dir(scope, dir_override)):  # §D, p4-r5
+        newer = _superseded_by(target, holder, generation)
+        if newer is not None:
+            _stop_superseded(None, newer, generation, "nothing recorded")
         _record(target, outbox, result)
 
 

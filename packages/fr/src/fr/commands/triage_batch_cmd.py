@@ -2246,11 +2246,12 @@ def _stops_train(outcome: MergeAttempt | MergeStopError | GitError) -> bool:
 
 @dataclass(frozen=True)
 class LeaseTerms:
-    """The lease a driver holds while it runs (cloud-triage R9, §D): whose, and for how
-    long each renewal lasts."""
+    """The lease a driver holds while it runs (cloud-triage R9, §D): whose, for how long
+    each renewal lasts, and the driver session's generation (p6-r4; 0 for a host)."""
 
     identity: str
     duration: timedelta
+    generation: int = 0
 
 
 class _Driver:
@@ -2383,6 +2384,7 @@ class _Driver:
                 _now(),
                 scope_id=scope_id(scope),
                 duration=terms.duration,
+                generation=terms.generation,
                 push=lambda: push_now(scope, target),
             )
         except TriageError as exc:
@@ -3414,7 +3416,7 @@ class _Driver:
 
     def _drift(self, facts: Facts, snap: Snapshot) -> None:
         """R17, §G: read each live batch's run cursor from its PR head and ask its runner
-        to re-home a run recorded under another fr major, once per (run, release) and at
+        to re-home a run recorded under another fr major, once per (run, major) and at
         the session's idle; a run with no recorded version is reported once. Only runners
         this driver carries that can re-home are asked; anything that cannot be read is
         skipped this pass, never guessed."""
@@ -3440,20 +3442,21 @@ class _Driver:
             if runner is None or not callable(getattr(runner, "rehome", None)):
                 continue
             pr = batch_pr(batch, facts)
-            path = drift.cursor_path(pr.files) if pr is not None and pr.state == "OPEN" else None
-            if pr is None or path is None:
+            paths = drift.cursor_paths(pr.files) if pr is not None and pr.state == "OPEN" else []
+            if pr is None or not paths:
                 continue  # no cursor on the branch yet
             # The batch's own launch values only: a re-home keeps the recorded session's
             # repo and branch, and drift must not refuse a batch whose launch defaults
             # the repo no longer resolves (the dispatch already happened).
             item = _probe(repo, batch, batch.launch)
-            try:
-                text = self.client(facts, repo).read_file_at_ref(
-                    repo, path, pr.head_oid or pr.head_ref
-                )
+            try:  # every cursor the PR carries: only the branch's own is the batch's (p6-r3)
+                client = self.client(facts, repo)
+                ref = pr.head_oid or pr.head_ref
+                texts = {p: client.read_file_at_ref(repo, p, ref) for p in paths}
+                path = drift.pick_cursor(texts, last.branch)
                 status = (
                     runner.session_statuses([item]).get(item.id, "unknown")
-                    if isinstance(runner, SessionInspector)
+                    if path is not None and isinstance(runner, SessionInspector)
                     else "unknown"
                 )
             except Exception as exc:  # noqa: BLE001 - retried next pass, never the drive's end
@@ -3463,7 +3466,17 @@ class _Driver:
                     "drift is checked again next pass",
                 )
                 continue
-            run, version = drift.read_cursor(text)
+            if path is None:
+                found = sum(drift.cursor_branch(t) == last.branch for t in texts.values())
+                self._report_once(
+                    f"drift\0{batch.id}\0cursor\0{found}",
+                    f"batch {batch.id}: its PR carries "
+                    + ("no run cursor" if not found else f"{found} run cursors")
+                    + f" of branch {last.branch} among {len(texts)}; version drift is not "
+                    "checked for it",
+                )
+                continue
+            run, version = drift.read_cursor(texts[path])
             runs.append(
                 drift.RunVersion(
                     batch=batch.id, item=item.id, branch=last.branch,
