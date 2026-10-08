@@ -455,7 +455,11 @@ before any write:
 5. Every gate check on the CI sha is completed with `success`; pending →
    refuse with exit **75** and "CI has not finished for <sha>; resolve again
    when it does" (the cursor unmoved); failed, cancelled, skipped or absent →
-   exit 2 naming each and its URL.
+   exit 2 naming each and its URL. A gate that is absent while any other check
+   on the sha is still running counts as pending, not absent: an aggregator
+   such as `ci-ok` gets no check run until the jobs it needs finish (discovery
+   `p2-gate-absent-while-running`). Absent with every other check completed is
+   a refusal.
 6. Witness `ci:<ci sha>+<base sha>;tree=<code_tree(HEAD)>` — the base sha is
    the PR's base head at the time of the gate's run (from the check suite's
    `pull_requests[].base.sha`). `_latest_tests_witness` and `tests: reuse` read
