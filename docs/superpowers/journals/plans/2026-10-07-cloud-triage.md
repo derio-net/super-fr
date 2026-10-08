@@ -106,3 +106,118 @@ each seam gained a single `forgeapi.resolve()` check delegating to the REST clie
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 the field map held on the contract test's first run (its discrimination shown by mutation), so no fix was made and nothing needed cleaning.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · edit_issue_labels removal DELETEs a label not on the issue -> 404 GhError; GraphQL path is idempotent (phase 1)
+
+real_ghrestclient.py ~737; callers tracker/github.py:110-112 and triage/claim_writes.py:61 break under rest.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · edit_issue_state sends reason.lower() verbatim; 'not planned' -> 422 (phase 1)
+
+real_ghrestclient.py ~746; undispatch_cmd.py:120.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · _closing_refs lacks a leading word boundary and a host check; code fences not excluded (phase 1)
+
+real_ghrestclient.py:47-55: 'prefixes #3', 'unresolved #5' and non-GitHub issue URLs became closing refs; refs hard-coded to github.com.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · list_linked_prs fetches pulls/{n} for every cross-referencing PR (phase 1)
+
+real_ghrestclient.py:470-482: the timeline carries title/body/state; extra calls, and a 403 on a non-closing cross-repo mention failed the call.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · repo_merge_methods always default None, so choose_method refuses merge/drive on multi-method repos under rest (phase 1)
+
+real_ghrestclient.py:663-672; triage/batch_merge.py:157-164; super-fr allows all three.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · spec §A not amended for the gaps phase 1 found (phase 1)
+
+required-checks 403 route still named; CCR ready, viewerDefaultMergeMethod, author.name, REVIEW_REQUIRED, node ids, org repo listing unlisted though R2 requires each.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · the shell-execution test passed edit-by-branch without its head lookup running; branch not URL-encoded (phase 1)
+
+test_github_rest_no_graphql.py:213-226; hostclient.py:205-206.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r8 · finding [open] (reviewer: in scope) · pr_required_checks matching logic untested (phase 1)
+
+only the nothing-required case was exercised (test_real_ghrestclient.py:174-181).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r9 · finding [open] (reviewer: in scope) · acceptance row cloud-triage-github-rest not updated with phase 1's unit evidence (phase 1)
+
+matrix.yaml:5045-5046 levels {}.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=in -->
+### p1-r10 · finding [open] (reviewer: in scope) · _project silently yields None for fields REST records lack (phase 1)
+
+real_ghrestclient.py:325-326; gh --json fails on an unknown field.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r11 created=2026-10-08T14:18:11+00:00 phase=1 state=open review_scope=out -->
+### p1-r11 · finding [open] (reviewer: out of scope) · tracker/github.py:114 passes state='closed' in lower case; both clients accept only OPEN/CLOSED (phase 1)
+
+Found by the fix agent while fixing p1-r1. Pre-existing on main (RealGhClient raises ValueError the same way), so moving a tracker item to done fails on either backend; not caused by this change.
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-10-08T14:18:11+00:00 phase=1 -->
+### p1-review · review · phase 1 code review: 10 findings in scope, 1 out (phase 1)
+
+Dispatched reviewer (superpowers:requesting-code-review discipline) over 2cd15337..d9a76e7b against spec R1-R3/§A and plan 01.yaml; read-only, targeted checks only (CI ran the full suite green on d9a76e7b). Raised p1-r1..p1-r10, all in scope. Received (superpowers:receiving-code-review): each verified against the code; p1-r6 fixed in the spec (0686d3ff), p1-r9 by fr acceptance set-status (ae2e5856), the rest by a fix agent with a failing test first (217df288, 6d903f73, 18e87557, 628bf447, 2e539e87, 2257ee33, 4e1571d9, ec1e980a); 2115 targeted tests pass, ruff and mypy clean. p1-r11 surfaced while fixing, out of scope. p1-r5's new .fr/triage.yaml merge_method key is documented in the fr-triage skill by phase 7 (R21).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: edit_issue_labels removal DELETEs a label not on the issue -> 404 GhError; GraphQL path is idempotent (phase 1)
+
+217df288: a 'Label does not exist' 404 is success, any other 404 raises; captured fixtures; test_removing_a_label_the_issue_does_not_carry_is_success.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: edit_issue_state sends reason.lower() verbatim; 'not planned' -> 422 (phase 1)
+
+217df288: reasons mapped to completed/not_planned/reopened, unknown refused before any call; test_close_reason_is_sent_in_githubs_spelling.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: _closing_refs lacks a leading word boundary and a host check; code fences not excluded (phase 1)
+
+6d903f73: word boundary, fenced/inline code skipped (fr.record.pr_body's reader), issue URLs on the repo's own host only, refs built on that host; test_a_non_closing_mention_is_not_a_ref.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: list_linked_prs fetches pulls/{n} for every cross-referencing PR (phase 1)
+
+18e87557: timeline fields used; pulls/{n} fetched only for closing PRs; test_list_linked_prs_fetches_pulls_only_for_closing_prs.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: repo_merge_methods always default None, so choose_method refuses merge/drive on multi-method repos under rest (phase 1)
+
+628bf447 plus spec §A (0686d3ff): optional merge_method in .fr/triage.yaml, used when the forge names no default; refusal names the key; facts.json schema 7 -> 8 with 3-7 still read.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r6 -->
+### p1-r6-resolved · finding [fixed] · resolves p1-r6: spec §A not amended for the gaps phase 1 found (phase 1)
+
+0686d3ff: §A lists every gap and the branches/{base} + rules/branches/{base} required-checks routes, plus the closing-ref, label-removal and state_reason rules.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: the shell-execution test passed edit-by-branch without its head lookup running; branch not URL-encoded (phase 1)
+
+2e539e87: the shell test uses a captured head lookup and asserts the PATCH went to pulls/852; branch URL-encoded.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r8 -->
+### p1-r8-resolved · finding [fixed] · resolves p1-r8: pr_required_checks matching logic untested (phase 1)
+
+2257ee33: test_pr_required_checks_matches_runs_by_name_and_statuses_by_context (captured JSON with required lists filled in, said in its docstring).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r9 -->
+### p1-r9-resolved · finding [fixed] · resolves p1-r9: acceptance row cloud-triage-github-rest not updated with phase 1's unit evidence (phase 1)
+
+ae2e5856: three unit level refs added; status stays not-implemented until Test Plan 16's client-live walk.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=fixed resolves=p1-r10 -->
+### p1-r10-resolved · finding [fixed] · resolves p1-r10: _project silently yields None for fields REST records lack (phase 1)
+
+4e1571d9: _project raises GhError on an unknown field; every field set fr requests is tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r11-resolved created=2026-10-08T14:18:11+00:00 phase=1 state=open resolves=p1-r11 out_of_scope=true -->
+### p1-r11-resolved · finding [out-of-scope] · resolves p1-r11: tracker/github.py:114 passes state='closed' in lower case; both clients accept only OPEN/CLOSED (phase 1)
+
+Pre-existing on main: tracker/github.py:114's lower-case state fails on both backends; this change did not cause it and does not touch that path.
