@@ -44,7 +44,7 @@ independent spec reviews' findings `s1`-`s30` are resolved in this text.
 R1. A `github-rest` forge backend implements, with GitHub's REST API only and no GraphQL call, every forge operation fr performs on the triage path (collect, check, render, batch dispatch, merge, cancel, adopt, drive, claims, export) and on the run path a worker or close-out session uses (deliver's live PR body read, close-out's PR body read, adopt's PR status, isolation's PR-for-branch, linked PRs), and every forge command fr hands an agent to run (`FORGE_COMMANDS`: PR create, edit and ready, issue close and edit, label create); with it selected, a refused GraphQL call is an error, never a silent empty answer, except for the client methods whose contract already answers `None` when the forge cannot say (§A).
 R2. `github-rest` returns the same records the GraphQL-backed backend returns for the same forge state, field for field, except where REST cannot express a field; each such field is listed, with how it is derived or why it is absent.
 R3. The backend is chosen by one host-level setting, `forge.api: rest | graphql` (default `graphql`), resolved before any forge client exists and without a scope, from `FR_FORGE_API`, else the host file `~/.config/fr/forge.yaml`, else `graphql`, and honoured by every place fr builds a GitHub client or calls `gh`; the cloud environment's setup script writes that file (an `export` there never reaches the session's shells, discovery `spare-preload`).
-R4. A scope's state lives in a state directory inside the workspace that runs the driver (the git toplevel of the driver's working directory, or `--workspace`), excluded from git through the repository's `info/exclude` (under `git rev-parse --git-common-dir`, so a linked worktree is covered) so no tracked file changes; an existing `~/.cache/fr/triage/<scope>/` is imported on first use and left in place.
+R4. A scope's state lives in a state directory inside the workspace that runs the driver (the git toplevel of the driver's working directory, or `--workspace`), excluded from git through the repository's `info/exclude` (under `git rev-parse --git-common-dir`, so a linked worktree is covered) so no tracked file changes; an existing `~/.cache/fr/triage/<scope>/` has its durable files (the `REF_FILES` set plus `facts.json` and `scope.yaml`) imported on first use and is left in place. A command run outside any clone, with no `--workspace`, keeps using `~/.cache/fr/triage/<scope>/` exactly as today, so no host invocation that works now starts refusing. Workspaces of one scope stay one state because every state write is wrapped by the ref (R5), and the same-host `drive.lock` stays keyed per scope under `~/.cache/fr/triage/<scope>/`, whatever workspace the state lives in.
 R5. A scope's durable copy is a git ref, `refs/fr/triage/<scope-id>`, whose tree holds an explicit list of files (judgements, origins, subsystems, the page fragments and their manifests, snapshots, authored sources, merge stops, the lease, the scope's durable settings, and the cloud runner's pending requests, session records and re-home ledger); fr fetches it before it reads state and pushes it, as a compare-and-swap, after every change it makes; only the scope that owns a ref writes it.
 R6. A single-repo scope keeps its ref in that repo.
 R7. A scope over several repos or an org keeps its ref in a state repo the operator names once. When at least one repo in the scope is private, fr asks the operator to choose one of the private ones. When all are public, fr asks the operator to choose between a new repo just for the refs and one of the public repos, and warns that a private repo's issue later added to a wave would then leak.
@@ -143,12 +143,39 @@ compares their records (R2).
 ### B. State in the workspace, durable on a ref
 
 **Where (R4).** `fr.triage.model.state_dir` gains a workspace input: the git
-toplevel of the driver's working directory, or `--workspace PATH` (required for
-an org or group scope run outside a clone of one of its repos). The directory is
-`<workspace>/.fr/triage-state/<scope>/`, excluded through
+toplevel of the driver's working directory, or `--workspace PATH`. The directory
+is `<workspace>/.fr/triage-state/<scope>/`, excluded through
 `<git-common-dir>/info/exclude`, so no tracked file changes, on the default
-branch or anywhere. A `~/.cache` directory found on first use is copied in and
-left alone. `triage` stays in `READ_ONLY_COMMANDS`: it still writes no
+branch or anywhere. Outside any clone and with no `--workspace`, the state
+directory is the legacy `~/.cache/fr/triage/<scope>/`, unchanged (p3-r3: a
+host command typed from `$HOME` keeps working). A legacy directory found on a
+workspace's first use has only its durable files copied in (`REF_FILES` that
+exist, `facts.json`, `scope.yaml`), never `merge/` scratch worktrees, a
+`drive.lock` or rendered pages (p3-r2), and is left alone. `drive.lock` lives in
+`~/.cache/fr/triage/<scope>/` for every workspace, so it stays the same-host
+check across clones (p3-r3).
+
+**One state across workspaces (R5, p3-r1).** Once a scope has a `state_repo`,
+every triage command that reads state fetches the ref first (adopting it when
+the local copy is not ahead) and every command that changes state pushes it
+after the change, through one wrapper in the triage CLI, not per verb; a push
+conflict refuses with the fetch-and-retry line. `fr triage state push|fetch`
+remain as the explicit verbs. `.state-ref` (the last pushed or fetched sha, kept
+out of `REF_FILES`) records the remote and ref it came from; a stored sha for a
+different remote or ref, or one the remote no longer has, is discarded rather
+than reported as another writer's push (p3-r4). A fetch that would overwrite
+local changes not yet pushed refuses, and a fetch removes files the ref no
+longer carries (p3-r4). `fetch_ref` fetches first and then reads the local ref,
+never `ls-remote` then fetch (p3-r5). Files keep their git mode across the ref:
+an executable stays 100755, restored files take the user's umask (p3-r12).
+
+**Deciding the state repo once (p3-r7).** `_settle_state_repo` runs on an
+explicit `fr triage collect` only, never inside the drive or watch loop's
+collects; an undecided scope in a loop warns once per pass and keeps state
+local. Visibility comes from the repo list where the forge already returns it
+(org listings) and from one `GET repos/{r}` per repo otherwise, cached in facts
+for the pass, never re-read per repo on every pass when the list carries it
+(p3-r9). `triage` stays in `READ_ONLY_COMMANDS`: it still writes no
 registered artifact, only its own state directory and refs, and the rationale in
 `fr.artifacts.trigger` is updated to say so.
 
@@ -203,7 +230,10 @@ recognises its own claims.
 ### C. The privacy guard
 
 One predicate, `fr.triage.privacy.leak_risk(scope, state_repo, keys)`, true when
-any key's repo is private and the state repo is public. It is called by
+any key's repo is private and the state repo is public. A key whose repo is not
+one the scope covers (hand-edited, or left from a repo removed from a group) has
+its visibility read like any other, and an unreadable one counts as private, so
+it can never ride a push to a public state repo unchecked (p3-r8). It is called by
 `batch create`/`edit` (`--issue`, `--add-issue`), by the wave setters, by every
 judgement write that adds a key, by `push_state` and by `state export`. Each
 refuses with exit 2, naming the issue, its repo and the state repo. The scope's
