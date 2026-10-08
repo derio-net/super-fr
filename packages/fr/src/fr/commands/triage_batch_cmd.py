@@ -187,10 +187,10 @@ from fr.triage.claims import held_line, held_map, held_members
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
-from fr.triage.driver import HOST, Driver, Mailbox
+from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
-from fr.triage.lease import acquire, mark_pass, release
+from fr.triage.lease import acquire, load_lease, mark_pass, release
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     Batch,
@@ -1784,6 +1784,21 @@ def adopt_batch(
     say(f"adopted tab {tab} as batch {batch.id} on {new}")
 
 
+def _scope_driver(
+    repo: str | None, org: str | None, dir_override: Path | None, workspace: Path | None
+) -> Driver:
+    """The driver of the scope `adopt --list` names: the cloud one when a cloud driver
+    holds its lease (p5-r7), else the host's; no scope named is the host's, as before."""
+    if repo is None and org is None:
+        return HOST
+    target = resolve_state_dir(_scope(repo, org), dir_override, workspace)
+    try:
+        current = load_lease(target)
+    except TriageError:
+        return HOST
+    return driver_of_holder(current.holder if current else None)
+
+
 def _list_sessions(to: str | None, driver: Driver = HOST) -> None:
     """`adopt --list` (R12): every session, with the issue refs in its label. Without
     `--to` it reads the driver's runner (cloud-triage §F), herdr on the host; a default
@@ -1845,7 +1860,7 @@ def batch_adopt_command(
     driver's `adopt` action, which records a close-out started by hand.
     """
     if list_sessions:
-        _list_sessions(to)
+        _list_sessions(to, _scope_driver(repo, org, dir_override, workspace))
         return
     if batch_id is None or tab is None or branch is None:
         _fail("give a batch, --tab and --branch (or --list)")

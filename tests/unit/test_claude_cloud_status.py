@@ -412,3 +412,67 @@ def test_render_reads_a_cloud_mailbox_without_writing_it(
     assert sessions.read_bytes() == before
     assert not (tmp_path / "requests.yaml").exists()
     assert "approve" in (tmp_path / "triage.html").read_text()
+
+
+# ------------------------------- p5-r7: adopt --list picks the scope's driver, CLI
+
+
+def _adopt_list(state: Path, monkeypatch: pytest.MonkeyPatch, lease_kind: str | None) -> Any:
+    from fr.cli import app
+    from fr.triage.lease import Lease, driver_identity, holder_of
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+    from typer.testing import CliRunner
+
+    from tests.unit.test_triage_batch_drive_cmd import NOW
+
+    state.mkdir(exist_ok=True)
+    if lease_kind is not None:
+        holder = holder_of(
+            scope_id(Scope(kind="repo", target=REPO)),
+            driver_identity(lease_kind, "0123456789abcdef"),  # type: ignore[arg-type]
+        )
+        lease = Lease(holder=holder, started=NOW, expires=NOW)
+        (state / "lease.yaml").write_text(yaml.safe_dump(lease.model_dump(mode="json")))
+    asked: list[str] = []
+
+    class _Adopter:
+        def describe(self, tab: str) -> None:
+            return None
+
+        def list_sessions(self) -> list[Any]:
+            return []
+
+        def adopt(self, item: Any, tab: str) -> str:
+            return tab
+
+    def load(name: str) -> Any:
+        asked.append(name)
+        return ClaudeCloudRunner.from_env() if name == "claude-cloud" else _Adopter()
+
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", load)
+    result = CliRunner().invoke(
+        app, ["triage", "batch", "adopt", "--list", "--repo", REPO, "--dir", str(state)]
+    )
+    return result, asked
+
+
+def test_adopt_list_in_a_cloud_scope_reads_the_cloud_runner_through_the_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, asked = _adopt_list(tmp_path / "s", monkeypatch, "cloud")
+
+    assert result.exit_code == 0, result.output
+    assert asked == ["claude-cloud"]
+    out = " ".join(result.output.split())
+    assert "claude-cloud cannot adopt sessions" in out and "skipped" in out
+
+
+@pytest.mark.parametrize("lease_kind", ["host", None])
+def test_adopt_list_in_a_host_scope_reads_herdr_through_the_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lease_kind: str | None
+) -> None:
+    result, asked = _adopt_list(tmp_path / "s", monkeypatch, lease_kind)
+
+    assert result.exit_code == 0, result.output
+    assert asked == ["herdr"]

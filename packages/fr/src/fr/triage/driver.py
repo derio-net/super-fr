@@ -137,6 +137,14 @@ HOST = HostDriver()
 CLOUD = CloudDriver()
 
 
+def driver_of_holder(holder: str | None) -> Driver:
+    """The driver a scope's lease *holder* names (`<scope id> <kind>:<host id>`, §D):
+    CLOUD for a cloud driver's identity, else HOST, unleased included. A scope a cloud
+    driver drives is a cloud scope (p5-r7)."""
+    identity = holder.rsplit(" ", 1)[-1] if holder else ""
+    return CLOUD if identity.startswith(f"{CLOUD.kind}:") else HOST
+
+
 @runtime_checkable
 class Mailbox(Protocol):
     """A runner whose session actions the driver's AGENT executes (spec §F): the pass
