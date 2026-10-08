@@ -1,0 +1,32 @@
+schema_version: 8
+run: 2026-10-07-feat-cloud-triage
+step: review-phase
+item: phase/5
+outcome: done
+journal:
+- {kind: finding, id: p5-r1, phase: 5, review_scope: in, title: "after a rehome, matching by tag let the old session overwrite the new recorded session's state (order-dependent)", body: "mailbox.py:215,381; reproduced."}
+- {kind: finding, id: p5-r2, phase: 5, review_scope: in, title: "replaying a rehome whose result was lost created a second session", body: "mailbox.py:73; R14 never-duplicated."}
+- {kind: finding, id: p5-r3, phase: 5, review_scope: in, title: "a status request for a session with a pending close made drive record exit 2", body: "mailbox.py:270,308; triage_drive_cmd.py:365-367; reproduced."}
+- {kind: finding, id: p5-r4, phase: 5, review_scope: in, title: "Mailbox.record was not atomic", body: "mailbox.py:293,267; reproduced."}
+- {kind: finding, id: p5-r5, phase: 5, review_scope: in, title: "the item-keyed statuses shape invented a session id and consumed a pending dispatch", body: "mailbox.py:131,381; reproduced."}
+- {kind: finding, id: p5-r6, phase: 5, review_scope: in, title: "archived sessions kept the item held and were re-closed every pass", body: "mailbox.py:228,37; runner.py:100; reproduced."}
+- {kind: finding, id: p5-r7, phase: 5, review_scope: in, title: "adopt --list driver selection was unreachable from the CLI", body: "triage_batch_cmd.py:1848."}
+- {kind: finding, id: p5-r8, phase: 5, review_scope: in, title: "fr triage render probed every runner and could save the mailbox from a read-only command", body: "triage_cmd.py:728; triage_kanban_cmd.py:311; mailbox.py:192."}
+- {kind: finding, id: p5-r9, phase: 5, review_scope: in, title: "HERMES.md, README.md and subsystems.yaml lists lacked fr-claude-cloud", body: "HERMES.md:67; README.md:467; docs/triage/derio-net--super-fr/subsystems.yaml:33."}
+- {kind: finding, id: p5-o1, phase: 5, review_scope: in, title: "test_version_surfaces' hand-kept lists and the committed dev/admin profiles' POST_CREATE lacked fr-claude-cloud (CI red on 6bb24bae)", body: "Raised by the orchestrator from the CI annotations on 6bb24bae (test_one_uv_lock_entry_per_workspace_member, test_committed_profiles_carry_the_scaffold_post_create) before review was dispatched."}
+- {kind: review, id: p5-review, phase: 5, title: "phase 5 code review: 9 findings in scope", body: "Dispatched reviewer (superpowers:requesting-code-review discipline) over 7bb849ab..9290737a against spec R14/R15/§E/§F/Test Plan 9-10 and plan 05.yaml; every mailbox finding reproduced with a throwaway script against the real mailbox. It judged the departures: the entry point naming the class is what the registry requires (all four runner packages do it); the scenario on the real runner is sound; render reading notes is legitimate but costly (p5-r8). Received (superpowers:receiving-code-review): each verified; no spec change needed (R14/§F already require never-duplicated and idempotent replay); a fix agent implemented all nine with a failing test first (41438b61, a571923c, 71816688, e3a5136a); 2225 targeted tests and 4 cloud-triage scenarios pass; ruff and mypy clean. p5-o1, caught by CI before review, fixed in 9290737a."}
+resolves:
+- {id: p5-r1, state: fixed, body: "41438b61: a recorded session is matched by id, the tag only finds an unrecorded one; test_after_a_rehome_the_recorded_session_is_matched_by_id_not_by_the_shared_tag."}
+- {id: p5-r2, state: fixed, body: "41438b61: dispatch and rehome carry a request_tag looked up first; test_a_replayed_rehome_whose_result_was_lost_creates_one_new_session."}
+- {id: p5-r3, state: fixed, body: "41438b61: no status asked of a session with a pending close; a status for a session closed in the same record is applied; test_record_accepts_a_status_for_a_session_it_closes_in_the_same_file."}
+- {id: p5-r4, state: fixed, body: "41438b61: validate all, apply in memory, save once, restore on any raise; test_a_refused_record_leaves_both_files_byte_identical."}
+- {id: p5-r5, state: fixed, body: "41438b61: an item-keyed status without a session id only updates a recorded session; test_an_item_keyed_status_never_invents_a_session_or_consumes_a_dispatch."}
+- {id: p5-r6, state: fixed, body: "41438b61: archived or closed sessions release the item and are never closed again (sessions.yaml closed: list); test_an_archived_session_releases_the_item_and_is_not_closed_again."}
+- {id: p5-r7, state: fixed, body: "a571923c: adopt --list follows the scope's lease holder through the CLI; test_adopt_list_in_a_cloud_scope_reads_the_cloud_runner_through_the_cli."}
+- {id: p5-r8, state: fixed, body: "41438b61 + 71816688: read_sessions(notes_only) for render; read-only mailbox open; test_render_reads_a_cloud_mailbox_without_writing_it."}
+- {id: p5-r9, state: fixed, body: "e3a5136a: HERMES.md (mypy and runner lines), README.md table, subsystems.yaml paths; a repo-wide grep found no other runner list lacking it."}
+- {id: p5-o1, state: fixed, body: "9290737a: fr-claude-cloud in test_version_surfaces' members and manifests and in both committed profiles' POST_CREATE; CI green on 9290737a."}
+evidence:
+  review: p5-review
+  reviewer: aa7f3cbfd6bb902cb
+  model: claude-opus-5-5
