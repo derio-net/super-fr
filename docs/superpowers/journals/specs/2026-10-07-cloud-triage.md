@@ -711,3 +711,8 @@ check: codebase. evidence: R22; acceptance-report.yml, pinned-clis.yml; ci.yml c
 ### s32-resolved · finding [fixed] · resolves s32: 'every check green, at least one present' accepts a sha the test workflow never ran on
 
 §I: only gate checks count (.fr/ci.yaml gate_checks, else required checks, else refused); this repo declares ci-ok; a skipped or absent gate refuses.
+
+<!-- fr:journal kind=finding scope=spec id=s33 created=2026-10-08T13:54:12+00:00 state=open review_scope=in -->
+### s33 · finding [open] (reviewer: in scope) · Requiring every check couples phase test evidence to non-test gates
+
+check: codebase. evidence: ci.yml coverage, validate-artifacts, change-fragment; acceptance-report.yml.
