@@ -666,3 +666,8 @@ Was phase 6 before the renumbering (reason as phase-split-2026-10-07-cloud-triag
 ### tier-2026-10-07-cloud-triage-p2 · decision · hard: changes the test-evidence gate every phase and delivery relies on
 
 R22 adds a second way to satisfy fr's tests evidence; a mistake would let CI vouch for a tree it did not test.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-07-cloud-triage-p4 created=2026-10-08T13:50:23+00:00 -->
+### tier-2026-10-07-cloud-triage-p4 · decision · hard: the lease is a concurrency path every driver relies on
+
+Was tier-2026-10-07-cloud-triage-p3 before the renumbering.
