@@ -474,3 +474,128 @@ state_ref is four small functions over five gitseam primitives written once; the
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 the decision is one pure function and collect's call is one helper beside collect_into; ScopeDurable and ScopeConfig share their fields by design (the mirror), not by copy
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · R5 half done: no host write path fetched before reading or pushed the ref after a change (phase 3)
+
+push_state/fetch_state reached only from state push|fetch (triage_state_cmd.py:118-166).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · legacy import copytreed the whole ~/.cache dir (merge/ worktrees, drive.lock, pages) (phase 3)
+
+model.py:211.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · state dir followed cwd's clone: per-clone forks, drive.lock no longer same-host, repo scopes outside a clone exited 2 (phase 3)
+
+model.py:181-212; triage_batch_cmd.py:2026-2037.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · .state-ref not tied to its remote; fetch overwrote unpushed edits and kept dropped files (phase 3)
+
+state_ref.py:160,215.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · fetch_ref ran ls-remote then a separate fetch (phase 3)
+
+gitseam.py:191-198.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · a test wrote the real ~/.config/fr/forge.yaml (HOME not isolated) (phase 3)
+
+test_fetch_into_a_fresh_clone_restores_every_entry_byte_for_byte via apply_durable.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · _settle_state_repo ran in every drive and watch loop collect, prompting each pass (phase 3)
+
+triage_cmd.py:271,292.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · privacy guard skipped keys naming no repo of the scope (phase 3)
+
+privacy.py:114-116.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · collect made one GET repos/{r} per repo every pass though the repo list carries visibility (phase 3)
+
+collect.py:450-460,642; real_ghrestclient.py:860.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r10 · finding [open] (reviewer: in scope) · stale ~/.cache/fr/triage paths in fr skills output, triage_cmd docstring, fr-origins/fr-audit skills, docs/triage/README.md (phase 3)
+
+skills_cmd.py:54 and others.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r11 · finding [open] (reviewer: in scope) · privacy-guard scenario claimed a private-state-repo create it did not test; row moved to ci without the owed lease-push part (phase 3)
+
+cloud-triage-privacy-guard.sh:7.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r12 created=2026-10-08T16:05:37+00:00 phase=3 state=open review_scope=in -->
+### p3-r12 · finding [open] (reviewer: in scope) · ref files restored 0600 and committed 100644, losing executable modes (phase 3)
+
+state_ref.py:135-147; gitseam commit_tree_from_paths.
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-10-08T16:05:37+00:00 phase=3 -->
+### p3-review · review · phase 3 code review: 12 findings in scope (phase 3)
+
+Dispatched reviewer (superpowers:requesting-code-review discipline) over 0c04ad8e..527f33a7 against spec R4-R8/§B/§C/Test Plan 4-7 and plan 03.yaml; 148 targeted tests run. Raised p3-r1..p3-r12, all in scope; it also judged the executor's two departures (state push|fetch verbs accepted; exit 2 outside a clone a host regression -> p3-r3). Received (superpowers:receiving-code-review): each verified; the spec decided r1-r4, r7-r9, r12 (22675eea: legacy dir outside a clone, durable-only import, one ref-wrapping wrapper, .state-ref per remote, settle only on explicit collect, foreign keys read); a fix agent implemented all twelve with a failing test first (f749bf6c, c47c1abd, b9408eec, f60ed8a5, d9290a87, dde24616, 0a39e97a); 2839 targeted tests and 3 cloud-triage scenarios pass; ruff, mypy and fr acceptance check clean.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: R5 half done: no host write path fetched before reading or pushed the ref after a change (phase 3)
+
+f749bf6c: resolve_state_dir is the one wrapper: fetch before, push after a ref-file change, conflict refuses with RETRY_LINE; test_triage_state_ref_sync.py.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: legacy import copytreed the whole ~/.cache dir (merge/ worktrees, drive.lock, pages) (phase 3)
+
+f749bf6c: import_legacy copies REF_FILES that exist plus facts.json and scope.yaml; test_the_import_copies_only_the_durable_files.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: state dir followed cwd's clone: per-clone forks, drive.lock no longer same-host, repo scopes outside a clone exited 2 (phase 3)
+
+f749bf6c: legacy ~/.cache dir outside a clone for every scope kind; drive.lock in ~/.cache per scope; test_the_drive_lock_lives_in_the_home_cache_whatever_the_workspace.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: .state-ref not tied to its remote; fetch overwrote unpushed edits and kept dropped files (phase 3)
+
+c47c1abd: .state-ref JSON with remote and ref; foreign or vanished base discarded; fetch refuses over unpushed changes and removes dropped files.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: fetch_ref ran ls-remote then a separate fetch (phase 3)
+
+c47c1abd: fetch_ref fetches then rev-parses the local ref; test_fetch_ref_fetches_first_and_never_asks_ls_remote.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: a test wrote the real ~/.config/fr/forge.yaml (HOME not isolated) (phase 3)
+
+b9408eec: autouse tmp HOME for every test; test_writing_the_forge_default_never_touches_the_operators_file.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: _settle_state_repo ran in every drive and watch loop collect, prompting each pass (phase 3)
+
+f749bf6c + f60ed8a5: collect_into(settle=False) by default, only fr triage collect settles; loops warn once per pass.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: privacy guard skipped keys naming no repo of the scope (phase 3)
+
+f60ed8a5: keys outside the scope have their repo read; unnameable or unreadable counts as private.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: collect made one GET repos/{r} per repo every pass though the repo list carries visibility (phase 3)
+
+f60ed8a5: visibility from the repo list (both backends); one GET only for repos the list omits.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r10 -->
+### p3-r10-resolved · finding [fixed] · resolves p3-r10: stale ~/.cache/fr/triage paths in fr skills output, triage_cmd docstring, fr-origins/fr-audit skills, docs/triage/README.md (phase 3)
+
+d9290a87: stale paths corrected in skills_cmd, triage_cmd, fr-origins, fr-audit, fr-triage skills, docs/triage/README.md and AGENTS.md; mirrors synced.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r11 -->
+### p3-r11-resolved · finding [fixed] · resolves p3-r11: privacy-guard scenario claimed a private-state-repo create it did not test; row moved to ci without the owed lease-push part (phase 3)
+
+dde24616 + 0a39e97a: the scenario's second create really uses a private state repo; the row's notes say the lease-push part is owed to phase 4.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r12-resolved created=2026-10-08T16:05:37+00:00 phase=3 state=fixed resolves=p3-r12 -->
+### p3-r12-resolved · finding [fixed] · resolves p3-r12: ref files restored 0600 and committed 100644, losing executable modes (phase 3)
+
+c47c1abd: 100755 for owner-executable files; restores honour the umask; test_an_executable_keeps_its_mode_across_the_ref_and_restores_honour_the_umask.
