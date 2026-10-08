@@ -368,3 +368,59 @@ def test_state_export_proceeds_with_a_private_state_repo(tmp_path: Path, gh: Fak
 
     assert code == 0, out
     assert (tmp_path / "repo" / SCOPE.name / "judgements.yaml").exists()
+
+
+# ------------------------------------------- a key outside the scope (p3-r8)
+
+
+def test_a_key_whose_repo_the_scope_does_not_cover_has_its_visibility_read(
+    gh: FakeGhClient,
+) -> None:
+    """A hand-edited key, or one left from a repo removed from the scope: its repo is read
+    like any other, and a private one is refused."""
+    from fr.triage.privacy import guard_write
+
+    gh.visibility["derio-net/hidden"] = "private"
+    scope = Scope(kind="repo", target=OPEN_REPO)
+
+    with pytest.raises(PrivacyError, match="hidden#3"):
+        guard_write(
+            ["hidden#3"], scope=scope, facts=_facts(), state_repo=OPEN_REPO,
+            client_for=lambda _r: gh,
+        )  # fmt: skip
+
+    assert ("repo_visibility", {"repo": "derio-net/hidden"}) in gh.calls
+
+
+def test_a_key_whose_repo_cannot_be_named_or_read_counts_as_private(
+    gh: FakeGhClient,
+) -> None:
+    """A group of two owners cannot name the repo of `nowhere#1`: unreadable, so private."""
+    from fr.triage.privacy import guard_write
+
+    scope = Scope.group([OPEN_REPO, "other-org/thing"])
+
+    with pytest.raises(PrivacyError, match="nowhere#1"):
+        guard_write(
+            ["nowhere#1"], scope=scope, facts=_facts(), state_repo=OPEN_REPO,
+            client_for=lambda _r: gh,
+        )  # fmt: skip
+
+
+def test_a_push_carrying_a_key_outside_the_scope_reads_its_repo(
+    tmp_path: Path, origin: Path, gh: FakeGhClient
+) -> None:
+    gh.visibility["derio-net/hidden"] = "private"
+    state = _workspace(tmp_path, origin)
+    state.mkdir(parents=True)
+    (state / "judgements.yaml").write_text(
+        'schema: 6\ntiers: [{n: 1, title: Now}]\nissues:\n  "hidden#3": {tier: 1}\n'
+    )
+
+    with pytest.raises(PrivacyError, match="hidden#3"):
+        push_state(
+            state, str(origin), SCOPE_ID, expected_old=None,
+            scope=Scope(kind="repo", target=OPEN_REPO), state_repo=OPEN_REPO, client=gh,
+        )  # fmt: skip
+
+    assert _ref(origin) == ""

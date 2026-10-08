@@ -315,3 +315,131 @@ def test_a_decided_state_repo_is_not_asked_again(
 
     assert result.exit_code == 0, result.output
     assert "no state repo" not in result.output
+
+
+# ------------------------------------- decided on an explicit collect only (p3-r7)
+
+
+def test_a_loop_collect_never_decides_and_warns_once_per_pass(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The drive and watch loops collect through `collect_into`: even a single repo, which
+    an explicit collect decides with no question, stays undecided there, warned once."""
+    forge = _forge([REPO], {REPO: "public"})
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    monkeypatch.setattr(triage_cmd, "state_repo_prompt", lambda: _never)
+    state = tmp_path / "s"
+
+    triage_cmd.collect_into(Scope(kind="repo", target=REPO), state, carry=True, lenient=True)
+
+    assert not (state / SCOPE_DURABLE_FILE).exists()
+    assert capsys.readouterr().err.count("no state repo") == 1
+
+
+@pytest.mark.parametrize("loop", ["drive", "watch"])
+def test_the_drive_and_watch_loops_never_settle_the_state_repo(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch, loop: str
+) -> None:
+    from fr.commands import triage_batch_cmd, triage_kanban_cmd
+
+    forge = _forge([REPO], {REPO: "public"})
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+
+    def refuse(*a: Any) -> None:
+        raise AssertionError("a loop's collect settled the state repo")
+
+    monkeypatch.setattr(triage_cmd, "_settle_state_repo", refuse)
+    scope, state = Scope(kind="repo", target=REPO), tmp_path / "s"
+
+    if loop == "drive":
+        triage_batch_cmd.recollect(scope, state)
+    else:
+        triage_kanban_cmd.recollect(scope, state)
+
+    assert (state / "facts.json").exists()
+
+
+# --------------------------------- visibility from the repo list (p3-r9)
+
+
+def test_an_org_collect_takes_visibility_from_the_repo_list_with_no_get(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge = FakeForge(
+        issues={"example-org/a": [], "example-org/b": []},
+        prs={"example-org/a": [], "example-org/b": []},
+        repos=[
+            {"name": "a", "isArchived": False, "visibility": "PRIVATE"},
+            {"name": "b", "isArchived": False, "visibility": "public"},
+        ],
+    )
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    monkeypatch.setattr(triage_cmd, "state_repo_prompt", lambda: None)
+    state = tmp_path / "s"
+
+    result = CliRunner().invoke(
+        app, ["triage", "collect", "--org", "example-org", "--dir", str(state)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert load_facts(state / "facts.json").visibility == {
+        "example-org/a": "private",
+        "example-org/b": "public",
+    }
+    assert forge.visibility_calls == []
+
+
+def test_a_repo_the_list_carries_no_visibility_for_is_read_once(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge = FakeForge(
+        issues={"example-org/a": [], "example-org/b": []},
+        prs={"example-org/a": [], "example-org/b": []},
+        repos=[{"name": "a", "isArchived": False}, {"name": "b", "isArchived": False,
+                                                       "visibility": "public"}],
+        visibility={"example-org/a": "internal"},
+    )  # fmt: skip
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    monkeypatch.setattr(triage_cmd, "state_repo_prompt", lambda: None)
+    state = tmp_path / "s"
+
+    result = CliRunner().invoke(
+        app, ["triage", "collect", "--org", "example-org", "--dir", str(state)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert load_facts(state / "facts.json").visibility["example-org/a"] == "internal"
+    assert forge.visibility_calls == ["example-org/a"]
+
+
+def test_the_graphql_repo_list_asks_for_visibility(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr import gh as _gh
+
+    seen: list[list[str]] = []
+
+    def fake(args: list[str]) -> str:
+        seen.append(args)
+        return json.dumps([{"name": "a", "isArchived": False, "visibility": "PRIVATE"}])
+
+    monkeypatch.setattr(_gh, "_run_gh", fake)
+
+    assert _gh.list_repos(owner="o", include_archived=True) == [
+        {"name": "a", "isArchived": False, "visibility": "private"}
+    ]
+    assert seen[0][4] == "name,isArchived,visibility"
+
+
+def test_the_rest_repo_list_keeps_visibility() -> None:
+    def run(argv: list[str]) -> str:
+        assert "orgs/o/repos" in argv[-1], argv
+        return json.dumps(
+            [
+                {"name": "a", "archived": False, "visibility": "private"},
+                {"name": "b", "archived": True, "private": False},
+            ]
+        )
+
+    assert RealGhRestClient(run=run).list_repos("o", 10) == [
+        {"name": "a", "isArchived": False, "visibility": "private"},
+        {"name": "b", "isArchived": True, "visibility": "public"},
+    ]

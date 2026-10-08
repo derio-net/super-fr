@@ -415,6 +415,17 @@ def _is_404(exc: GhError) -> bool:
     return "http 404" in text or "not found" in text
 
 
+def _visibility_of(raw: Any) -> str | None:
+    """A REST repo record's visibility, lowercased: `visibility`, else the `private`
+    flag read as public/private; None when the record carries neither."""
+    value = raw.get("visibility") if isinstance(raw, dict) else None
+    if isinstance(value, str) and value:
+        return value.lower()
+    if isinstance(raw, dict) and isinstance(raw.get("private"), bool):
+        return "private" if raw["private"] else "public"
+    return None
+
+
 def _is_absent_label(exc: GhError) -> bool:
     """The 404 GitHub answers a label removal when the issue does not carry the
     label: message "Label does not exist" (captured,
@@ -831,13 +842,10 @@ class RealGhRestClient:
 
     def repo_visibility(self, repo: str) -> str:
         """`visibility` of `GET repos/{repo}`, else `private` read as public/private."""
-        raw = self._api(f"repos/{repo}")
-        value = raw.get("visibility") if isinstance(raw, dict) else None
-        if isinstance(value, str) and value:
-            return value.lower()
-        if isinstance(raw, dict) and isinstance(raw.get("private"), bool):
-            return "private" if raw["private"] else "public"
-        raise GhError(f"GET repos/{repo}: no visibility in the answer")
+        value = _visibility_of(self._api(f"repos/{repo}"))
+        if value is None:
+            raise GhError(f"GET repos/{repo}: no visibility in the answer")
+        return value
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         """`allowed` from the repo's `allow_*` flags. Gap: REST has no
@@ -857,7 +865,18 @@ class RealGhRestClient:
             if not _is_404(exc):
                 raise
             raw = self._paged(f"users/{owner}/repos", limit=limit)
-        return [{"name": r.get("name", ""), "isArchived": bool(r.get("archived"))} for r in raw]
+        out: list[dict[str, Any]] = []
+        for r in raw:
+            record: dict[str, Any] = {
+                "name": r.get("name", ""),
+                "isArchived": bool(r.get("archived")),
+            }
+            # The list already carries each repo's visibility (p3-r9): kept, so triage
+            # collect never reads it again once per repo.
+            if (visibility := _visibility_of(r)) is not None:
+                record["visibility"] = visibility
+            out.append(record)
+        return out
 
     def list_labels(self, repo: str) -> list[dict[str, str | None]]:
         """`fr.gh.list_labels`' records (`name`, `color`, `description`); not a

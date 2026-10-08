@@ -425,7 +425,9 @@ def list_repos(
     """Return repos under *owner* — non-archived only unless *include_archived*.
 
     ``include_archived`` exists so a caller can tell whether the list returned
-    exactly ``limit`` records (and so may be cut short) before filtering.
+    exactly ``limit`` records (and so may be cut short) before filtering. Each record
+    carries ``visibility`` lowercased when the forge gave it, so triage collect reads an
+    org's visibility from the list rather than once per repo (cloud-triage §B, p3-r9).
     """
     import json
 
@@ -438,12 +440,15 @@ def list_repos(
             "list",
             owner,
             "--json",
-            "name,isArchived",
+            "name,isArchived,visibility",
             "--limit",
             str(limit),
         ]
     )
     repos: list[dict[str, object]] = json.loads(out) if out else []
+    for r in repos:
+        if isinstance(r.get("visibility"), str):
+            r["visibility"] = str(r["visibility"]).lower()
     if include_archived:
         return repos
     return [r for r in repos if not r.get("isArchived", False)]

@@ -370,7 +370,7 @@ class TestListRepos:
             "list",
             "derio-net",
             "--json",
-            "name,isArchived",
+            "name,isArchived,visibility",  # visibility: cloud-triage p3-r9
             "--limit",
             "200",
         ]

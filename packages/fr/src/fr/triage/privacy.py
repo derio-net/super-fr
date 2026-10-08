@@ -101,28 +101,39 @@ def live_visibility(client: Any, repo: str) -> str | None:
 def key_repos(keys: Iterable[str], scope: Scope, facts: Facts | None) -> dict[str, str]:
     """key -> OWNER/REPO: from the facts' issues when they hold it, else from the scope
     (an org's `owner/<name>`, a repo or group member named `<name>`). A key naming no
-    repo of the scope is left out: it is `check`'s orphan, with no repo to read."""
+    repo of the scope is kept, under the scope's owner, or `UNKNOWN_OWNER` when the scope
+    has several, so its visibility is read (or counts as private), never skipped (p3-r8)."""
     from_facts = {normalize_key(f"{i.repo.split('/', 1)[1]}#{i.number}"): i.repo
                   for i in (facts.issues if facts else [])}  # fmt: skip
     members = [scope.target] if scope.kind == "repo" else list(scope.repos)
     by_name = {r.split("/", 1)[1].lower(): r for r in members}
+    owners = {r.split("/", 1)[0] for r in members} if scope.kind != "org" else {scope.owner}
     out: dict[str, str] = {}
     for key in keys:
         canon = normalize_key(key)
         name = canon.split("#", 1)[0]
         repo = from_facts.get(canon) or by_name.get(name)
-        if repo is None and scope.kind == "org":
-            repo = f"{scope.owner}/{name}"
-        if repo is not None:
-            out[canon] = repo
+        if repo is None:
+            # A key naming no repo of the scope (hand-edited, or left from a repo removed
+            # from it) is never skipped (p3-r8): its repo is the scope's one owner's, read
+            # like any other; with several owners it cannot be named, so it is unreadable.
+            owner = next(iter(owners)) if len(owners) == 1 else UNKNOWN_OWNER
+            repo = f"{owner}/{name}"
+        out[canon] = repo
     return out
+
+
+UNKNOWN_OWNER = "<unknown owner>"
+"""The owner of a key's repo that no scope member names, in a scope of several owners:
+its visibility cannot be read, so it counts as private (p3-r8)."""
 
 
 def _fill(
     vis: dict[str, str | None], repos: Iterable[str], client_for: ClientFor
 ) -> dict[str, str | None]:
     for repo in sorted(set(repos) - vis.keys()):
-        vis[repo] = live_visibility(client_for(repo), repo)
+        unnamed = repo.startswith(f"{UNKNOWN_OWNER}/")
+        vis[repo] = None if unnamed else live_visibility(client_for(repo), repo)
     return vis
 
 

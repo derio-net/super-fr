@@ -176,18 +176,33 @@ def scope_repos(
     `list_repos` returns archived repos too, so a list that came back exactly
     at its limit is detected on the raw count (review r-p1-repo-cap).
     """
+    repos, warnings, _ = _listed_repos(forge, scope, repo_limit=repo_limit)
+    return repos, warnings
+
+
+def _listed_repos(
+    forge: Forge, scope: Scope, *, repo_limit: int
+) -> tuple[list[str], list[Truncation], dict[str, str]]:
+    """`scope_repos`, plus each listed repo's visibility where the repo list carries it
+    (an org listing does, cloud-triage §B, p3-r9), lowercased; `{}` for a repo or group."""
     if scope.kind == "repo":
-        return [scope.target], []
+        return [scope.target], [], {}
     if scope.kind == "group":
-        return list(scope.repos), []
+        return list(scope.repos), [], {}
     raw = forge.list_repos(owner=scope.owner, limit=repo_limit)
     warnings = (
         [Truncation(source="repos", target=scope.owner, limit=repo_limit)]
         if len(raw) == repo_limit
         else []
     )
-    repos = sorted(f"{scope.owner}/{r['name']}" for r in raw if not r.get("isArchived", False))
-    return repos, warnings
+    kept = [r for r in raw if not r.get("isArchived", False)]
+    repos = sorted(f"{scope.owner}/{r['name']}" for r in kept)
+    visibility = {
+        f"{scope.owner}/{r['name']}": str(r["visibility"]).lower()
+        for r in kept
+        if isinstance(r.get("visibility"), str) and r["visibility"]
+    }
+    return repos, warnings, visibility
 
 
 def _ref(owner: str, name: str, number: int) -> IssueRef:
@@ -447,11 +462,18 @@ def collect_facts(
     )[0]
 
 
-def _visibility(forge: Forge, repos: Iterable[str]) -> dict[str, str]:
-    """Each repo's visibility as the forge answers it (cloud-triage §B, §C); a repo whose
-    read fails is left out, never guessed: the privacy guard reads a missing one live."""
+def _visibility(
+    forge: Forge, repos: Iterable[str], listed: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """Each repo's visibility (cloud-triage §B, §C): from the repo list where it carried
+    it (*listed*, p3-r9), else one `repo_visibility` read per repo, once per collect. A
+    repo whose read fails is left out, never guessed: the privacy guard reads a missing
+    one live."""
     out: dict[str, str] = {}
     for repo in repos:
+        if listed and repo in listed:
+            out[repo] = listed[repo]
+            continue
         try:
             value = forge.repo_visibility(repo=repo)
         except ForgeError:
@@ -500,7 +522,7 @@ def collect_facts_counted(
     facts' `batch_prs`) is carried over instead of looked up again (review
     r2p-f3), so a finished batch costs nothing on later collects.
     """
-    repos, warnings = scope_repos(forge, scope, repo_limit=repo_limit)
+    repos, warnings, listed_visibility = _listed_repos(forge, scope, repo_limit=repo_limit)
     viewer = forge.viewer_login() or None
     skipped: list[Skipped] = []
     collected: list[str] = []
@@ -639,7 +661,7 @@ def collect_facts_counted(
         judged_prs=judged_prs,
         config=config,
         viewer=viewer,
-        visibility=_visibility(forge, collected),
+        visibility=_visibility(forge, collected, listed_visibility),
     )
     return facts, CollectStats(viewed=viewed, carried=carried_n, ignored=ignored)
 
