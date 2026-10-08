@@ -49,7 +49,6 @@ tasks:
   - id: P2.T2.S1
     text: |-
       RED: tests/unit/test_run_ci_evidence.py — over a tmp repo with a bare remote and a fake client: gate names from `.fr/ci.yaml` at HEAD, else `pr_required_checks`, else refused naming both; `ci none` or a non-GitHub forge refused before any forge call; unpushed HEAD or a dirty code path refused naming it; the CI sha is HEAD, or the nearest first-parent ancestor (≤50) with HEAD's code tree that has gate checks — a `chore(fr)` commit touching only docs/superpowers/ on top of a tested sha passes with no new run; no open PR or `mergeable == CONFLICTING` refused with that reason; a pending gate raises `CiPending` (exit 75); failed, cancelled, skipped or absent gates refused naming each with its URL; non-gate failures ignored; the witness is `ci:<ci sha>+<base sha>;tree=<code_tree(HEAD)>` with the base sha from the gate's check suite. Fails.
-    -
   - id: P2.T2.S2
     text: |-
       GREEN: packages/fr/src/fr/run/ci_evidence.py (`verify_ci`, `CiPending`, `CiEvidenceRefused`, `load_gate_checks`); remote head via `git ls-remote origin refs/heads/<branch>` through fr.git; add `.fr/ci.yaml` (`gate_checks: [ci-ok]`) to this repo. Run: passes.
