@@ -661,3 +661,8 @@ Supersedes phase-split-2026-10-07-cloud-triage-p5 after the renumbering (was pha
 ### phase-split-2026-10-07-cloud-triage-p7 · decision · review-size: the agents artifact kind and the worker setup are a separate ~1000-line change
 
 Was phase 6 before the renumbering (reason as phase-split-2026-10-07-cloud-triage-p6-1's original text).
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-07-cloud-triage-p2 created=2026-10-08T13:50:21+00:00 -->
+### tier-2026-10-07-cloud-triage-p2 · decision · hard: changes the test-evidence gate every phase and delivery relies on
+
+R22 adds a second way to satisfy fr's tests evidence; a mistake would let CI vouch for a tree it did not test.
