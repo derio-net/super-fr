@@ -36,7 +36,7 @@ task done and the session can still be messaged (discovery
 The operator wants triage, the runners and the driver to run in a cloud session,
 as one more scope among many: several drivers, on several hosts or on one,
 covering different repo sets and orgs, kept apart by per-issue claims (spec
-`2026-10-06-triage-claims`). The decisions are journal entries `d1`-`d10`; the
+`2026-10-06-triage-claims`). The decisions are journal entries `d1`-`d11`; the
 independent spec reviews' findings `s1`-`s30` are resolved in this text.
 
 ## Requirements
@@ -63,6 +63,7 @@ R19. A cloud session's fr agents come from the repo, not the plugin: `.claude/ag
 R20. The `post_merge` step is an operation of the environment the driver runs in: the host runs the repo's `post_merge` argument list as today; the cloud runs nothing, since every new session installs the current release at its start and the driver updates itself (R18).
 R21. The fr-triage skill documents the cloud driver, `forge.api`, the state ref, the state repo choice and the privacy guard, within its existing line budget.
 R22. A phase unit's or `deliver`'s test evidence may be the forge's CI instead of a local suite log: `evidence: {tests: ci}`. On a `done` resolve fr accepts it only when HEAD is pushed and no code path is uncommitted; the branch has an open, non-conflicting pull request; and the repo's **gate checks** (the names in `.fr/ci.yaml`'s `gate_checks`, else the base branch's required status checks; neither → `ci` refused) have each completed with success on the CI sha — HEAD, or the nearest pushed first-parent ancestor whose code tree equals HEAD's. Every other check is ignored. The witness records the CI sha, the base sha CI merged it with, and HEAD's code tree, so `tests: reuse` keeps working and nobody mistakes it for a test of HEAD alone. A pending gate refuses with its own exit code and "resolve again when CI finishes"; a failed or absent one refuses naming it; a repo whose `fr services` CI is `none`, or a forge other than GitHub, refuses `ci` outright. A local log stays accepted everywhere (§I).
+R23. In a Claude Code cloud session, when an fr command fails because the cloud environment lacks a prerequisite this spec relies on (the REST backend setting, the registered plugin, the repo's `agents` artifact, a current `fr`, `rsync`), fr says so and tells the operator how to fix the environment once: edit the cloud environment's setup script (or create a new environment) with the script `fr cloud setup-script` prints, and start a new session. `fr cloud doctor` lists every prerequisite and its state. Nothing of this prints on a host (§H, decision d11).
 
 ## Design
 
@@ -416,13 +417,43 @@ registered in `fr.artifacts.registry` like the others
 The plugin keeps shipping its own `super-fr:` agents for host sessions; a host
 session then sees both names, which is harmless, and the gate accepts either.
 
-**The setup script** (documented, not shipped as a file: it is environment
-configuration, measured in discovery `setup-script`) installs `rsync`, seeds
+**The setup script** (shipped as a template in the `fr` wheel and printed by
+`fr cloud setup-script`, never installed by fr: it is environment configuration
+the operator pastes, measured in discovery `setup-script`) installs `rsync`, seeds
 `~/.claude/plugins/installed_plugins.json` (`{"version":2,"plugins":{}}`) and
 `~/.claude/settings.json` (`{}`) when absent, clones the super-fr marketplace,
 runs `scripts/install.sh`, and writes `api: rest` to `~/.config/fr/forge.yaml`.
 `install.sh` itself now fails, naming the missing file, instead of warning and
 exiting 0 when it cannot register the plugin.
+
+**Telling the operator how to fix the environment (R23, d11).**
+`fr.cloud.detect()` is true when `CLAUDE_CODE_REMOTE=true` (set by the harness
+in every shell of a Claude Code cloud session) — no other signal, so a host is
+never mistaken for the cloud. `fr.cloud.check()` returns each cloud
+prerequisite that is missing, with the fix: `forge.api` not `rest`
+(`~/.config/fr/forge.yaml`), the super-fr plugin not registered in
+`installed_plugins.json`, the repo's `agents` artifact missing or stale, the
+installed `fr` older than the latest release, `rsync` absent. Three places use
+it:
+
+- `fr cloud doctor` prints every check, exits 1 when any fails;
+- `fr cloud setup-script` prints the script above, filled for this repo;
+- any fr command that fails in a cloud session for a reason `check()` explains
+  (a GraphQL 403 under `graphql`, a refusal naming the `agents` artifact, an
+  older fr than the run needs) appends one block after its own error, the
+  same wording everywhere (`fr.cloud.remedy_block`):
+
+```
+This is a Claude Code cloud session, and its environment is missing: <items>.
+Fix it once for every future session: open the cloud environment menu in the
+session's title bar → Edit → Setup script, paste the output of
+`fr cloud setup-script`, and start a new session (new sessions run the script;
+this one does not). Or create a new environment with that script.
+Docs: https://code.claude.com/docs/en/claude-code-on-the-web
+```
+
+On a host the block never prints. The worker brief's BLOCKED `needs_action`
+(R19) quotes the same block, so an operator reading the board sees the fix.
 
 **The worker brief's first step:** `fr --version` (install super-fr when it is
 missing, d7's fallback), then confirm `fr-spec-reviewer` and `fr-phase-executor`
@@ -638,6 +669,14 @@ and the `01-fr-goal` explainer if it describes local-only test evidence
     `ci none`, or the forge is not GitHub; recognised before the phase-log
     branch; on a `failed` resolve recorded as the bare claim without a forge
     call; a local log is still accepted (R22).
+20. Unit: `fr.cloud.detect()` is true only with `CLAUDE_CODE_REMOTE=true`;
+    `fr cloud doctor` reports each prerequisite (forge.api, plugin registered,
+    `agents` artifact, `fr` current, `rsync`) and exits 1 on any failure;
+    `fr cloud setup-script` prints a script that, run under a fresh tmp HOME,
+    produces the state `doctor` passes (rsync and the clone stubbed); a GraphQL
+    403 under `graphql` and an `agents`-artifact refusal in a cloud session end
+    with the remedy block, byte for byte the same text, and on a host neither
+    does (R23).
 
 ## Verification
 

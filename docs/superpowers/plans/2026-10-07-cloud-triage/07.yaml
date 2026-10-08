@@ -10,8 +10,18 @@ phase:
   acceptance:
   - cloud-triage-repo-agents
   - cloud-triage-driver-end-to-end
+  - cloud-triage-cloud-remedy
   tier: hard
   files:
+  - packages/fr/src/fr/cloud.py
+  - packages/fr/src/fr/commands/cloud_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/data/**
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - tests/unit/test_cloud_remedy.py
+  - tests/scenarios/cloud-triage-cloud-remedy.sh
+  - tests/unit/test_migration_trigger.py
   - packages/fr/src/fr/agents/**
   - packages/fr/src/fr/artifacts/registry.py
   - packages/fr/src/fr/artifacts/agents_kind.py
@@ -75,7 +85,22 @@ tasks:
       GREEN: edit plugins/super-fr/skills/fr-triage/SKILL.md within budget (move detail into docs/cloud-setup.md, linked); run `scripts/sync-opencode.py` and `scripts/sync-hermes.py` and commit the mirrors; AGENTS.md gains short entries for `fr.forgeapi`, `real_ghrestclient`, `fr/triage/{state_ref,privacy,lease,driver,drift}.py`, `fr-claude-cloud` and the `agents` kind; update the docs/explainers page that describes fr-triage if it names the driver's host-only state (regenerate the .html per .claude/rules/explainers-currency.md, or record in the PR body that it is owed). Run the skill tests, the three mirror tripwires and test_skill_validation.py: pass.
   - id: P7.T3.S3
     text: |-
-      Quality gate: ruff format/check, mypy, `uv run fr validate artifacts`, `uv run fr acceptance check`, full suite `-n auto` into a log outside the repo; all green.
+      Quality gate: ruff format/check, mypy, `uv run fr validate artifacts`, `uv run fr acceptance check`; push and let the PR's CI run the full suite (record `evidence: {tests: ci}`).
+- number: 4
+  title: 'Tell a cloud user how to fix the environment (R23, d11)'
+  steps:
+  - id: P7.T4.S1
+    text: |-
+      RED: tests/unit/test_cloud_remedy.py — `fr.cloud.detect()` true only with CLAUDE_CODE_REMOTE=true; `fr.cloud.check()` reports forge.api not rest, plugin not registered in ~/.claude/plugins/installed_plugins.json, agents artifact missing/stale, fr older than the latest release (injected), rsync absent; `fr cloud doctor` prints each and exits 1 on any failure, 0 when all pass; `fr cloud setup-script` prints the §H script from the wheel template; `fr.cloud.remedy_block(items)` is the exact §H text. Fails.
+  - id: P7.T4.S2
+    text: |-
+      GREEN: packages/fr/src/fr/cloud.py (detect, check, remedy_block), the setup-script template as wheel package data, packages/fr/src/fr/commands/cloud_cmd.py (`fr cloud doctor|setup-script`, added to READ_ONLY_COMMANDS with its rationale, since it writes nothing); docs/cloud-setup.md points at `fr cloud setup-script` instead of carrying its own copy. Run: passes.
+  - id: P7.T4.S3
+    text: |-
+      RED/GREEN: wire the block into the failures it explains, in a cloud session only: the GraphQL 403 path of the GraphQL client (RealGhClient, when `forge.api` is graphql), the worker brief's BLOCKED needs_action for a missing agents artifact (P7.T2), and `fr run`'s refusal when the installed fr is older than the run needs; each appends `remedy_block` once after its own error; on a host (no CLAUDE_CODE_REMOTE) none does. Tests in test_cloud_remedy.py drive each path with and without the env var.
+  - id: P7.T4.S4
+    text: |-
+      RED/GREEN: tests/scenarios/cloud-triage-cloud-remedy.sh (row cloud-triage-cloud-remedy's `candidate` scenario, run by tests/integration/test_scenarios.py): in a fresh HOME with CLAUDE_CODE_REMOTE=true, `fr cloud doctor` exits 1 naming forge.api and the plugin; after running the printed setup script with its network steps stubbed, `fr cloud doctor` exits 0; with CLAUDE_CODE_REMOTE unset, a forced GraphQL 403 prints no remedy block. Name the fr-triage skill's one line for `fr cloud doctor` in P7.T3's budget. Run test_scenarios.py: passes.
 state:
   steps:
     P7.T1.S1:
@@ -111,6 +136,22 @@ state:
       ticked_at: null
       note: null
     P7.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T4.S4:
       state: ' '
       ticked_at: null
       note: null
