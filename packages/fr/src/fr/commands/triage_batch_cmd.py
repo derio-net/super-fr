@@ -2602,6 +2602,7 @@ class _Driver:
             finished=done_waves,
             export_refused=export_refused,
             awaiting=frozenset(b.id for b in judgements.batches if batch_awaits_live(b, facts)),
+            refused={b.id: why for b in chosen if (why := self.adapter.refusal(b)) is not None},
             **claim_plan,
         )
 
@@ -3157,13 +3158,7 @@ class _Driver:
         try:  # a pass that aborts after a post_merge still restarts what it owes (p2-r1)
             for train in plan.trains:
                 _say(train_line(train))
-            batches = {b.id: b for b in judgements.batches}
             for action in plan.actions:
-                not_ours = self._refused(action, batches)
-                if not_ours is not None:  # a batch this driver does not dispatch (R10)
-                    self._held += 1
-                    _say(action_line(replace(action, kind="warn"), not_ours))
-                    continue
                 if not self.yes:
                     _say(action_line(action))
                     continue
@@ -3200,12 +3195,6 @@ class _Driver:
         stuck += [f"export wave {a.wave} {a.batch}" for a in plan.actions
                   if a.wave is not None and a.kind == "warn"]  # fmt: skip
         return acted, summary, stuck
-
-    def _refused(self, action: Action, batches: Mapping[str, Batch]) -> str | None:
-        """Why the driver does not start *action*'s dispatch (its adapter's `refusal`);
-        None for any other action, or one it starts."""
-        batch = batches.get(action.batch) if action.kind == "dispatch" else None
-        return self.adapter.refusal(batch) if batch is not None else None
 
     def _restart_sessions(self) -> None:
         """Restart idle sessions once per recorded runner, after every close-out this pass

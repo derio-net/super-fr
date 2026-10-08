@@ -92,13 +92,13 @@ def _merged(world: World, tmp_path: Path, checkout: DriveCheckout, runner: str) 
     checkout.released = True
 
 
-def _cloud_pass(tmp_path: Path) -> tuple[bool, Any, list[str]]:
+def _cloud_pass(tmp_path: Path, max_inflight: int = 3) -> tuple[bool, Any, list[str]]:
     driver = triage_batch_cmd._Driver(
         Scope(kind="repo", target=REPO),
         tmp_path,
         named=None,
         checkouts={},
-        max_inflight=3,
+        max_inflight=max_inflight,
         yes=True,
         driver=CLOUD,
     )
@@ -177,11 +177,27 @@ def test_a_batch_naming_another_runner_is_reported_and_not_dispatched(
 
     assert not acted and runners.dispatched() == {}
     out = capsys.readouterr().out
-    (line,) = _lines(out, "warn")
-    assert line.startswith("warn b1:") and "herdr" in line and "claude-cloud" in line
+    (line,) = _lines(out, "held")  # a hold the planner sees (p4-r1)
+    assert line.startswith("held b1:") and "herdr" in line and "claude-cloud" in line
     assert _lines(out, "dispatch") == []
     assert summary.pending == 1 and summary.in_flight == 0
     assert _events(tmp_path, "b1") == []
+
+
+def test_a_refused_batch_takes_no_in_flight_slot_from_the_next(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners
+) -> None:
+    """p4-r1: with --max-inflight 1, a refused batch first in order is a hold, not an
+    occupant, so the next batch is dispatched in the same pass."""
+    world.config = CONFIG
+    world.issues[1] = world.issues[2] = "open"
+    _state(tmp_path, world, _batch("a1", 1, launch="{runner: herdr}") + _batch("b2", 2))
+
+    acted, summary, _ = _cloud_pass(tmp_path, max_inflight=1)
+
+    assert acted
+    assert runners.dispatched() == {"claude-cloud": [f"{REPO}/run/batch-b2"]}
+    assert summary.in_flight == 1 and summary.pending == 1
 
 
 # ------------------------------------------------------------ post_merge (R20)
