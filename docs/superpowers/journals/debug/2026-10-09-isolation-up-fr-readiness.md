@@ -9,3 +9,8 @@ The scaffolded postCreateCommand ends its required uv tool install with '|| true
 ### hypothesis-two-missing-gates · hypothesis · Provisioning and readiness both fail open
 
 Confirmed by three red tests: forced uv installation failure exits zero, a scaffold without requested tools omits the uv feature required by postCreateCommand, and a successful devcontainer up is accepted when devcontainer exec fr --version fails.
+
+<!-- fr:journal kind=root-cause scope=debug id=root-cause-fr-not-postcondition created=2026-10-09T13:04:03+00:00 -->
+### root-cause-fr-not-postcondition · root-cause · fr executability is not an isolation postcondition
+
+POST_CREATE suppresses the required fr installation result and scaffold_profile does not unconditionally provide uv, while _devcontainer_up treats only the wrapper CLI exit code as readiness. Therefore both current and stale profiles can produce a recorded ready workspace without an executable fr.
