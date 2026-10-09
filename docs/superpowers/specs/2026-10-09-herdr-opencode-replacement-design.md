@@ -167,6 +167,21 @@ skip, rather than assume safe. Recheck at mutation time. Preserve all existing C
 restart rules and tests. Per-pane failures are reported and do not stop the next pane;
 driver restarts still run once per opted-in post-merge pass.
 
+The operator authorized a narrow disposable-session capture on 2026-10-09.
+OpenCode 1.18.35 with herdr 0.9.0/protocol 22 was captured live: fresh-home
+placeholder, session empty input, unsent draft, ctrl+p Commands overlay, active
+shell turn, active subagent, completed subagent echo and plain `exit` returning
+to the original base-checkout shell. Unsent drafts and the Commands overlay
+both still report idle/done and interactive_ready: true. Inspect the final
+input region and overlays separately from status; reject blank/unrendered or
+unrecognized layouts. Completed task history is not background work; active
+subagent/tool turns report working in these captures. OpenCode's graceful exit
+is plain `exit`, corroborated by its version-matched Prompt.submitInner source;
+Claude retains `/exit`. Capture provenance must state that permission/question
+dialogs and independently detached children were not live-proven, and such
+unsupported observations fail closed. The capture is grounding, not completion
+of the operator's client-live acceptance walk.
+
 ### Documentation and verification (R12)
 
 Update the runner README, triage operator documentation and the canonical fr-triage
