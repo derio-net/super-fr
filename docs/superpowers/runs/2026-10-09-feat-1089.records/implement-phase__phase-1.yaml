@@ -1,0 +1,51 @@
+schema_version: 8
+run: 2026-10-09-feat-1089
+step: implement-phase
+item: phase/1
+outcome: blocked
+ticks:
+  - P1.T1.S1
+refactor: {}
+journal:
+  - kind: discovery
+    id: p1-resume-baseline
+    phase: 1
+    title: Resumed executor found no implementation changes
+    body: |
+      The shared feat/1089 worktree was clean on resume; no phase record existed.
+      The exec-bridge smoke command passed: tests/unit/test_fr_herdr_runner.py,
+      70 passed. Container dependency setup succeeded. No source, acceptance,
+      scenario or release-fragment changes have been made.
+  - kind: finding
+    id: p1-opencode-input-grounding
+    phase: 1
+    state: open
+    review_scope: in
+    title: Safe OpenCode input observation needs grounded layout evidence
+    body: |
+      R10 and spec lines 162–168 require harness-specific observation grounded
+      in actual OpenCode surfaces, including unsent input and background work;
+      P1.T3.S2 must not invent a safe input layout. The supplied handoff gives
+      the phase split but no OpenCode idle/draft/background/dialog observation
+      contract. Existing tests/fixtures/herdr/restart captures describe Claude,
+      not OpenCode. Read-only installed CLI help confirms OpenCode --model
+      provider/model and herdr's ready-start semantics, but does not expose
+      a structured draft/background-work safety observation.
+
+      Read-only inspection of the inherited caller pane found OpenCode 1.18.35
+      working while the orchestrator awaited this executor. That is not an
+      idle safety capture and cannot establish the empty-input, draft,
+      background-work or dialog distinctions. No keys were sent and no agent
+      was started. This leaf cannot dispatch a disposable observation agent or
+      interrupt the caller to obtain those states.
+
+      Supply a curated grounding handoff: real redacted captures of the
+      supported idle/draft/background/dialog layouts (with version), or a
+      reviewed authoritative source/API observation contract distinguishing
+      those states and the graceful-exit behavior. Synthetic tests can then
+      be explicitly labelled and unknown layouts skipped. This is separate
+      from the operator-owned client-live Ready obligation: no full live
+      acceptance walk is requested here. Remaining steps are unticked, and
+      neither the phase nor the orchestrator cursor has been resolved.
+resolves: []
+evidence: {}
