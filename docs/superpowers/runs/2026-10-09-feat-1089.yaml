@@ -69,7 +69,8 @@ steps:
           returned: '2026-10-09T20:57:09+00:00'
           outcome: failed
         - dispatched: '2026-10-09T21:06:49+00:00'
-          agent_type: super-fr:fr-phase-executor
+          agent: ses_edd9f9edfffeA1W9yqB3hjX518
+          agent_type: fr-phase-executor-hard
           harness: opencode
           tier: hard
           bound: openai/gpt-6.1-sol
