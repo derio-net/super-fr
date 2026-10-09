@@ -18,8 +18,10 @@ steps:
       step/spec-review:
         attempts:
         - dispatched: '2026-10-09T04:36:13+00:00'
-          agent_type: super-fr:fr-spec-reviewer
+          agent: ses_ee10d4f00ffeKZW9tQa1cwIKA4
+          agent_type: fr-spec-reviewer-hard
           harness: opencode
+          model: openai/gpt-5.6-sol
           tier: hard
           bound: openai/gpt-6.1-sol
           session: ses_ee3aef49fffe0vcDJoiJKdwRsT
