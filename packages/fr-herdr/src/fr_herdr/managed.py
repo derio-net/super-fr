@@ -12,6 +12,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -117,6 +118,27 @@ def pane_lock(pane: str) -> Iterator[None]:
         except BlockingIOError as exc:
             raise ManagedError(f"pane {pane} is locked") from exc
         try:
+            # Virtual/shared filesystems can acknowledge flock without excluding
+            # another process. Verify that OS contract before allowing any input.
+            probe = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    "import fcntl,sys\n"
+                    "with open(sys.argv[1], 'a') as f:\n"
+                    " try: fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+                    " except BlockingIOError: sys.exit(3)\n"
+                    " sys.exit(0)\n",
+                    str(path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if probe.returncode != 3:
+                raise ManagedError(
+                    "filesystem does not enforce pane lock; use a reliable local cache"
+                )
             yield
         finally:
             fcntl.flock(handle, fcntl.LOCK_UN)

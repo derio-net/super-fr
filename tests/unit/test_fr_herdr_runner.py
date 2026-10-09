@@ -62,14 +62,13 @@ class _Herdr:
 
 
 @pytest.fixture
-def herdr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Herdr:
+def herdr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, native_herdr_cache: Path) -> _Herdr:
     fake = _Herdr()
     monkeypatch.setattr(herdr_runner, "_run_herdr", fake)
     monkeypatch.setattr(herdr_runner.shutil, "which", lambda name: "/usr/local/bin/herdr")
     monkeypatch.setenv("HERDR_ENV", "1")
     monkeypatch.setenv("HERDR_WORKSPACE_ID", "w2")
     monkeypatch.setenv("HERDR_SOCKET_PATH", str(tmp_path / "server.sock"))
-    monkeypatch.setenv("FR_HERDR_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(herdr_runner, "stable_checkout", lambda path: path)
     return fake
 

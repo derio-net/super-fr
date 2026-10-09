@@ -52,10 +52,9 @@ def test_synthetic_transcript_box_is_not_current_input():
 
 
 @pytest.fixture
-def operation(tmp_path, monkeypatch):
+def operation(tmp_path, monkeypatch, native_herdr_cache):
     """Explicitly synthetic state machine; no session or repo is controlled."""
     monkeypatch.setenv("HERDR_SOCKET_PATH", str(tmp_path / "herdr.sock"))
-    monkeypatch.setenv("FR_HERDR_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.delenv("HERDR_PANE_ID", raising=False)
     d = managed.Descriptor(
         server=managed.server_identity(),

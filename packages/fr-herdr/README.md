@@ -20,8 +20,10 @@ busy/self/excluded panes, drafts, overlays, unknown processes/models and unsuppo
 input layouts are skipped without input. Observation supports the captured OpenCode
 1.18.35 default-theme full TUI, not arbitrary versions/themes/mini mode.
 
-An OS-backed nonblocking pane lock excludes concurrent mutations. OpenCode uses
-plain `exit` (Claude uses `/exit`), verifies a foreground shell and its cwd, confirms
+An OS-backed nonblocking pane lock excludes concurrent mutations.
+Before input, an independent process verifies that the filesystem actually
+enforces the lock. Unsupported shared filesystems refuse; choose a reliable local cache.
+OpenCode uses plain `exit` (Claude uses `/exit`), verifies a foreground shell and its cwd, confirms
 the target model, then submits recovery with observed uptake. Failures never close
 the tab or destroy transcripts/worktrees. Inspect the surviving source, target or
 shell using the report's checkpoint and recovery instructions. A non-active

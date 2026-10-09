@@ -6,7 +6,6 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 export FR_HERDR_CACHE_DIR="$work/cache" HERDR_SOCKET_PATH="$work/server.sock"
-IFS= read -r shebang < "$(command -v fr)"
-py="${shebang#\#!}"
+py="$(candidate_python)"
 "$py" "$here/fixtures/herdr-opencode.py" scenario-launch
 echo "ok: herdr-opencode"

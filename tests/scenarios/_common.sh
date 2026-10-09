@@ -33,3 +33,18 @@ run_fr() {
 require_exit() { [ "$RC" -eq "$1" ] || fail "expected exit $1, got $RC: $2"; }
 
 command -v fr >/dev/null || fail "no fr on PATH"
+
+# Long-prefix uv entrypoints may have a /bin/sh trampoline, not a Python shebang.
+# Resolve the installed tool's symlink, then use its own sibling interpreter.
+candidate_python() {
+  local exe target i
+  exe="$(command -v fr)"
+  for i in 1 2 3 4 5 6 7 8; do
+    [ -L "$exe" ] || break
+    target="$(readlink "$exe")"
+    case "$target" in /*) exe="$target" ;; *) exe="$(dirname "$exe")/$target" ;; esac
+  done
+  [ ! -L "$exe" ] || fail "candidate fr symlink loop"
+  [ -x "$(dirname "$exe")/python" ] || fail "no candidate tool interpreter beside fr"
+  printf '%s\n' "$(dirname "$exe")/python"
+}

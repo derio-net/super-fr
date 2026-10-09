@@ -1,14 +1,15 @@
 """Synthetic durable-state tests; herdr wire captures are tested separately."""
 
 import json
+import subprocess
+import sys
 
 import pytest
 from fr_herdr import managed
 
 
 @pytest.fixture
-def descriptor(tmp_path, monkeypatch):
-    monkeypatch.setenv("FR_HERDR_CACHE_DIR", str(tmp_path / "cache"))
+def descriptor(tmp_path, monkeypatch, native_herdr_cache):
     monkeypatch.setenv("HERDR_SOCKET_PATH", str(tmp_path / "herdr.sock"))
     return managed.Descriptor(
         server=managed.server_identity(),
@@ -54,6 +55,30 @@ def test_pane_lock_is_exclusive_and_released(descriptor):
                 pytest.fail("loser entered")
     with managed.pane_lock(descriptor.pane):
         pass
+
+
+def test_pane_lock_excludes_an_independent_process(descriptor):
+    script = (
+        "import sys; from fr_herdr import managed\n"
+        "try:\n"
+        " with managed.pane_lock(sys.argv[1]): sys.exit(0)\n"
+        "except managed.ManagedError: sys.exit(3)\n"
+    )
+    with managed.pane_lock(descriptor.pane):
+        result = subprocess.run([sys.executable, "-c", script, descriptor.pane], timeout=20)
+        assert result.returncode == 3
+    result = subprocess.run([sys.executable, "-c", script, descriptor.pane], timeout=20)
+    assert result.returncode == 0
+
+
+def test_unenforced_os_lock_is_refused_before_entering(descriptor, monkeypatch):
+    """Synthetic probe result models the actually observed host-share flock defect."""
+    monkeypatch.setattr(
+        managed.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0)
+    )
+    with pytest.raises(managed.ManagedError, match="does not enforce"):
+        with managed.pane_lock(descriptor.pane):
+            pytest.fail("unsafe filesystem admitted an owner")
 
 
 def test_delivered_hold_and_unfinished_cursor(descriptor, monkeypatch, tmp_path):

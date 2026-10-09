@@ -412,6 +412,11 @@ def test_a_failure_before_exit_was_sent_has_no_resume_line(
 # --- restart_idle ----------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _native_pane_locks(native_herdr_cache):
+    """Keep descriptor/lock fixtures off filesystems that silently ignore flock."""
+
+
 def _world(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, panes: dict[str, str], **script: Any
 ) -> FakeHerdr:
@@ -431,7 +436,6 @@ def _world(
     # OpenCode now has its own managed restart path; codex remains unrelated.
     agents.append({"agent": "codex", "agent_status": "idle", "pane_id": "w9:p1"})
     monkeypatch.setenv("HERDR_SOCKET_PATH", str(tmp_path / "server.sock"))
-    monkeypatch.setenv("FR_HERDR_CACHE_DIR", str(tmp_path / "managed-cache"))
     state: dict[str, set[str]] = {"left": set(), "back": set()}  # claude exited / relaunched
 
     def process_info(args: list[str]) -> dict[str, Any]:

@@ -47,6 +47,17 @@ def repo_root() -> Path:
     return REPO_ROOT
 
 
+@pytest.fixture
+def native_herdr_cache(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """Isolated real advisory-lock storage; host-share FUSE may silently ignore flock."""
+    import tempfile
+
+    parent = "/dev/shm" if Path("/dev/shm").is_dir() else None
+    with tempfile.TemporaryDirectory(prefix="fr-herdr-test-", dir=parent) as cache:
+        monkeypatch.setenv("FR_HERDR_CACHE_DIR", cache)
+        yield Path(cache)
+
+
 @pytest.fixture(autouse=True)
 def _default_vk_project_id(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default `VK_DERIO_OPS_PROJECT` for the suite.

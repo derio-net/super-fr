@@ -4,12 +4,15 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
-export FR_HERDR_CACHE_DIR="$work/cache" HERDR_SOCKET_PATH="$work/server.sock"
+cache="$work/cache"
+# A host-shared TMPDIR can silently ignore flock. Keep the synthetic runner cache
+# on a native lock-capable filesystem while other scenario state stays in TMPDIR.
+if [ -d /dev/shm ] && [ -w /dev/shm ]; then cache="$(mktemp -d /dev/shm/fr-herdr-scenario.XXXXXX)"; fi
+trap 'rm -rf "$work" "$cache"' EXIT
+export FR_HERDR_CACHE_DIR="$cache" HERDR_SOCKET_PATH="$work/server.sock"
 export HERDR_ENV=1 HERDR_PANE_ID=w0:p0 HERDR_FAKE_STATE="$work/state"
 export HERDR_FAKE_LOG="$work/log"
-IFS= read -r shebang < "$(command -v fr)"
-export SCENARIO_PY="${shebang#\#!}" SCENARIO_HELPER="$here/fixtures/herdr-opencode.py"
+export SCENARIO_PY="$(candidate_python)" SCENARIO_HELPER="$here/fixtures/herdr-opencode.py"
 mkdir -p "$work/bin"
 printf '#!/bin/sh\nexec "$SCENARIO_PY" "$SCENARIO_HELPER" "$@"\n' > "$work/bin/herdr"
 chmod +x "$work/bin/herdr"
