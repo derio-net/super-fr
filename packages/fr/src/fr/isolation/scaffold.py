@@ -435,10 +435,9 @@ RUNNER_PACKAGES = ("fr-claude-cloud", "fr-cncd", "fr-herdr", "fr-vk")
 # branch at create time.
 POST_CREATE = (
     'git config --global --add safe.directory "$PWD" || true; '
-    "pipx install uv 2>/dev/null || true; "
     "uv tool install "
     + "".join(f"--with '{_SUPER_FR_GIT}#subdirectory=packages/{p}' " for p in RUNNER_PACKAGES)
-    + f"'{_SUPER_FR_GIT}#subdirectory=packages/fr' || true"
+    + f"'{_SUPER_FR_GIT}#subdirectory=packages/fr'"
 )
 
 
@@ -511,14 +510,18 @@ def scaffold_profile(
     if tool_names & {"java", "maven"} and java_opts is not None and "version" not in java_opts:
         _apply_detected_java_version(repo_root, java_opts)
 
+    # uv is infrastructure for the required fr install below, not an optional
+    # project tool. Every generated profile must provide it.
+    feature_map: dict[str, dict[str, object]] = {KNOWN_TOOLS["uv"].feature: {}}
     host_feature = HOST_CLI_FEATURE.get(feature_backend)
-    feature_map: dict[str, dict[str, object]] = {host_feature: {}} if host_feature else {}
+    if host_feature:
+        feature_map[host_feature] = {}
     feature_map.update(resolved)
 
     post_create = POST_CREATE
     host_pin = HOST_CLI_PINS.get(feature_backend)
     if host_pin is not None:
-        post_create = f"{POST_CREATE}; {render_host_cli_post_create(host_pin)}"
+        post_create = f"{POST_CREATE} && {render_host_cli_post_create(host_pin)}"
 
     env_file = env_file_path(repo_root, profile)
     config = {

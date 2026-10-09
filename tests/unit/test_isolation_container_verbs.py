@@ -294,8 +294,10 @@ class TestExecEnsureRunning:
         st, runner, target = _exec_setup(tmp_path, monkeypatch, ps)
         assert target.exec(st, ["echo", "hi"]) == 0
         (up,) = _dc(runner, "up")
-        (ex,) = _dc(runner, "exec")
-        assert runner.calls.index(up) < runner.calls.index(ex)
+        probe, ex = _dc(runner, "exec")
+        assert probe[-2:] == ["fr", "--version"]
+        assert ex[-2:] == ["echo", "hi"]
+        assert runner.calls.index(up) < runner.calls.index(probe) < runner.calls.index(ex)
         assert "--remove-existing-container" not in up
         err = capsys.readouterr().err
         assert f"container for {st.branch} was stopped — resuming (devcontainer up)" in err

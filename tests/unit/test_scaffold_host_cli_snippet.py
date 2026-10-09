@@ -41,8 +41,7 @@ _STUBS = {
     "mkdir": 'echo "mkdir $*" >> "$LOG"\n',
     "find": 'echo "find $*" >> "$LOG"\n',
     # POST_CREATE's own commands, for executing the whole postCreateCommand.
-    "pipx": 'echo "pipx $*" >> "$LOG"\n',
-    "uv": 'echo "uv $*" >> "$LOG"\n',
+    "uv": 'echo "uv $*" >> "$LOG"\nexit "${STUB_UV_RC:-0}"\n',
 }
 
 
@@ -162,7 +161,7 @@ def test_the_snippet_is_the_last_command_of_post_create(
     )  # type: ignore[arg-type]
     config = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())
     snippet = render_host_cli_post_create(HOST_CLI_PINS[backend])
-    assert config["postCreateCommand"] == f"{POST_CREATE}; {snippet}"
+    assert config["postCreateCommand"] == f"{POST_CREATE} && {snippet}"
 
 
 def test_the_amd64_pins_are_unchanged_from_the_previous_release() -> None:
@@ -222,7 +221,7 @@ def test_the_whole_post_create_command_carries_the_snippets_status(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Executed, not string-compared: POST_CREATE's `|| true`s must not swallow it (p5r-f3)."""
+    """Executed, not string-compared: POST_CREATE must carry the snippet's status (p5r-f3)."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -243,13 +242,34 @@ def test_the_whole_post_create_command_carries_the_snippets_status(
 
     res, log = _run(command, stubdir, tmp_path, STUB_ARCH=arch)
 
-    assert [line.split()[0] for line in log][:2] == ["pipx", "uv"], log
+    assert log[0].split()[0] == "uv", log
     if ok:
         assert res.returncode == 0, res.stderr
     else:
         assert res.returncode != 0
         assert "glab 1.107.0: unsupported architecture 's390x'" in res.stderr
         assert _curl_lines(log) == [], log
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_a_failing_fr_install_stops_before_the_host_cli_snippet(
+    backend: str, stubdir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    scaffold_profile(
+        repo, "dev", "purpose", tools=[], secrets=[], backend=backend, commit=False, tracking="none"
+    )  # type: ignore[arg-type]
+    command = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())[
+        "postCreateCommand"
+    ]
+
+    res, log = _run(command, stubdir, tmp_path, STUB_UV_RC="42")
+
+    assert res.returncode == 42
+    assert _curl_lines(log) == []
 
 
 @pytest.mark.parametrize(("kind", "member"), [("tarball", ""), ("binary", "bin/x")])

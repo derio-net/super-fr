@@ -1238,6 +1238,18 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(_missing_binary(err, "cannot run `devcontainer up`")) from err
         if result.returncode != 0:
             raise IsolationError(f"devcontainer up failed: {result.stderr or result.stdout}")
+        probe = self.run(
+            [*self._devcontainer_argv(worktree, profile, "exec"), "fr", "--version"],
+            cwd=worktree,
+        )
+        if probe.returncode != 0:
+            detail = (probe.stderr or probe.stdout or "fr is not executable").strip()
+            raise IsolationError(
+                "devcontainer is missing the required `fr` runtime: "
+                f"`fr --version` failed: {detail}\n"
+                f"Update {self._config_path(worktree, profile)} so postCreateCommand installs "
+                "fr without suppressing failures, then run `fr isolation rebuild`."
+            )
 
     def exec(self, state: IsolationState, argv: list[str]) -> int:
         """Run `argv` in the workspace's container, resuming a stopped one first

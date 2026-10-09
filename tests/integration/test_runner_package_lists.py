@@ -138,3 +138,18 @@ def test_post_create_installs_fr_with_every_runner_package(
     withs = _with_args(stub_env)
     expected = [f"{SUPER_FR_GIT}#subdirectory=packages/{p}" for p in runner_packages()]
     assert sorted(withs) == sorted(expected)
+
+
+def test_post_create_fails_when_fr_install_fails(stub_env: dict[str, str], tmp_path: Path) -> None:
+    uv = Path(stub_env["HOME"]) / "bin" / "uv"
+    uv.write_text("#!/bin/sh\nexit 42\n")
+
+    result = subprocess.run(
+        ["sh", "-c", scaffold.POST_CREATE],
+        capture_output=True,
+        text=True,
+        env=stub_env,
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 42

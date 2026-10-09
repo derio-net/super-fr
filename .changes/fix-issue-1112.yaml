@@ -1,0 +1,2 @@
+bump: patch
+summary: Fail isolation startup when the container cannot execute fr
