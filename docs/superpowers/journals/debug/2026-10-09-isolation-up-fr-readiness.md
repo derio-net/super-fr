@@ -14,3 +14,8 @@ Confirmed by three red tests: forced uv installation failure exits zero, a scaff
 ### root-cause-fr-not-postcondition · root-cause · fr executability is not an isolation postcondition
 
 POST_CREATE suppresses the required fr installation result and scaffold_profile does not unconditionally provide uv, while _devcontainer_up treats only the wrapper CLI exit code as readiness. Therefore both current and stale profiles can produce a recorded ready workspace without an executable fr.
+
+<!-- fr:journal kind=finding scope=debug id=fix-readiness-postcondition created=2026-10-09T14:06:13+00:00 state=fixed -->
+### fix-readiness-postcondition · finding [fixed] · Provisioning and startup now fail closed
+
+Scaffolded profiles always declare the uv feature, required fr installation and host-CLI installation propagate failure, and every devcontainer up or rebuild probes fr --version before returning success. Regression coverage forced each original failure mode; 500 focused tests pass, with repository-wide Ruff, mypy, acceptance, version, and change-fragment gates green. The full suite could not complete because the container overlay had insufficient free space for its temporary trees; the failures after the two corrected isolation assertions were ENOSPC setup errors.
