@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-10-09-feat-1089
+captures:
+- host: h-c0caf711
+  harness: opencode
+  mode: devcontainer
+  captured_at: '2026-10-09T20:26:47+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: ses_eddafdc25ffeb6158xsOd5pUHA
+    role: main
+    models:
+      gpt-6.1-sol:
+        input: 200684
+        cache_write: 0
+        cache_read: 2229120
+        output: 10016
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 9
+      other:
+        usd: null
+        turns: 15
+      paperwork:
+        usd: null
+        turns: 5
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 49482
+        cache_write: 0
+        cache_read: 39040
+        output: 74
+      brainstorm:
+        usd: null
+        turns: 18
+        input: 151202
+        cache_write: 0
+        cache_read: 2190080
+        output: 9942
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 49482
+          cache_write: 0
+          cache_read: 39040
+          output: 74
+        brainstorm:
+          usd: null
+          turns: 18
+          input: 151202
+          cache_write: 0
+          cache_read: 2190080
+          output: 9942

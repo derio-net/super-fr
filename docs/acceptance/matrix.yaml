@@ -8015,3 +8015,48 @@ rows:
     status: ci
     notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
       is still owed'
+  - id: herdr-opencode-launch
+    capability: herdr OpenCode batch lifecycle
+    acceptance: OpenCode batches launch with the selected model from the stable checkout
+      and retain status, messaging, focus, conflict and close-out identity.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/herdr-opencode.sh
+  - id: herdr-batch-replace
+    capability: audited batch harness replacement
+    acceptance: An operator replaces an idle unmerged batch harness/model without a
+      second dispatch, preserving identity and obtaining recoverable audited failure
+      or repair.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/herdr-batch-replace.sh
+  - id: herdr-opencode-restart
+    capability: OpenCode session upkeep
+    acceptance: Managed idle OpenCode sessions restart fresh from durable branch state
+      with their identity/model and delivered-draft HOLD preserved.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/herdr-opencode-restart.sh
+  - id: herdr-opencode-live
+    capability: interactive herdr OpenCode migration
+    acceptance: Real herdr sessions demonstrate replacement, restart, conflict hand-back
+      and close-out with stable checkout and recoverable failure.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: client-live
+    scenario: tests/scenarios/herdr-opencode-live.sh
