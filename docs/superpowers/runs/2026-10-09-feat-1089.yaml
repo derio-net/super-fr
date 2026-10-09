@@ -50,14 +50,14 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-09T20:34:16+00:00'
+    state: failed
+    at: '2026-10-09T20:57:09+00:00'
     members:
     - implement-phase
     - review-phase
     units:
       phase/1/implement-phase:
-        state: running
+        state: failed
         attempts:
         - dispatched: '2026-10-09T20:34:16+00:00'
           agent: ses_edd9f9edfffeA1W9yqB3hjX518
@@ -66,6 +66,8 @@ steps:
           tier: hard
           bound: openai/gpt-6.1-sol
           session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-09T20:57:09+00:00'
+          outcome: failed
   journal-check:
     state: pending
   deliver:
