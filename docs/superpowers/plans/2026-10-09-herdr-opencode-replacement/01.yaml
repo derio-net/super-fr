@@ -73,7 +73,7 @@ tasks:
       GREEN: make scenarios and integration checks pass. Update herdr-opencode-launch and herdr-opencode-restart acceptance rows through the phase record with named test refs, scenario and evidence notes. Complete phase ticks in the same record.
   - id: P1.T4.S3
     text: |-
-      REFACTOR scenario setup to reuse existing conventions. Commit code before the final full suite; run uv run pytest -q --no-cov -n auto LAST into a host-visible external log and put it in evidence.tests. Record refactor reasons per task.
+      REFACTOR scenario setup to reuse existing conventions. Operator directed targeted local verification after the full suite hung on host-backed installer rsync I/O. Run the phase regression group and previously failing record-review assertion with bounded timeouts; commit code and push the draft PR, then use evidence.tests: ci for the ci-ok full-suite gate. Preserve failed/hung local logs as infrastructure evidence, never as passing suite evidence. Record refactor reasons per task.
 state:
   steps:
     P1.T1.S1:

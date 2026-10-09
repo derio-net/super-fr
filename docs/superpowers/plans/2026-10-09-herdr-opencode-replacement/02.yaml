@@ -78,7 +78,7 @@ tasks:
       GREEN: update runner README, triage docs, AGENTS schema/runner notes, canonical fr-triage skill and both generated mirrors via scripts/sync-opencode.py and scripts/sync-hermes.py. Update herdr-batch-replace to ci with named evidence refs and herdr-opencode-live to skipped with client-live scenario/evidence owed, using the phase record. Defend why published explainers need no update or update relevant prose/HTML according to its rule.
   - id: P2.T4.S3
     text: |-
-      REFACTOR docs/scenario duplication; run format/check, all affected tripwires, mypy and acceptance checks. Commit final code, then full uv run pytest -q --no-cov -n auto LAST into a host-visible external log; include evidence.tests and all ticks/refactor reasons in the phase record.
+      REFACTOR docs/scenario duplication; run format/check, affected tripwires, mypy, acceptance and targeted lifecycle/replacement tests with bounded timeouts. Operator directed no further local full-suite attempts after infrastructure exhaustion and host-backed I/O stall. Commit and push final code to the existing draft PR; use evidence.tests: ci for the ci-ok full-suite gate and include all ticks/refactor reasons in the phase record.
 state:
   steps:
     P2.T1.S1:
