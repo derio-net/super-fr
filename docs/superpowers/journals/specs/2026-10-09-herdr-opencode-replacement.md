@@ -63,3 +63,58 @@ Operator chose preservation and explicit recovery, without automatic source rest
 ### verification-strategy · decision · Candidate plus client-live verification
 
 Operator chose candidate scenarios/CI plus an operator pre-merge herdr walk using the PR build before Ready.
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-10-09T20:31:33+00:00 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · Compare-before-write is not an exclusive transaction claim
+
+Spec lines 66-82 and batch.py:446-466: competing callers can mutate the same pane; require exclusive locking.
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-10-09T20:31:33+00:00 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · Repair lacks confirmed reconstruction uptake
+
+Spec lines 71-80 and 106-115: kind/model alone cannot prove a fresh target received its context.
+
+<!-- fr:journal kind=finding scope=spec id=s3 created=2026-10-09T20:31:33+00:00 state=open review_scope=in -->
+### s3 · finding [open] (reviewer: in scope) · Descriptor and batch writes need coordinated recovery
+
+Spec lines 75-82 and 102-126: restart must skip unresolved replacement and repair both stores.
+
+<!-- fr:journal kind=finding scope=spec id=s4 created=2026-10-09T20:31:33+00:00 state=open review_scope=in -->
+### s4 · finding [open] (reviewer: in scope) · Replacement needs draft and background-work checks
+
+restart.py:257-262 and captured fixture README:48-50: idle/done alone does not prove safe exit input.
+
+<!-- fr:journal kind=finding scope=spec id=s5 created=2026-10-09T20:31:33+00:00 state=open review_scope=in -->
+### s5 · finding [open] (reviewer: in scope) · Delivered HOLD can lose original-batch conflict hand-back
+
+triage_batch_cmd.py:3695-3714: conflict messages may target the original batch agent without changing its role.
+
+<!-- fr:journal kind=review scope=spec id=spec-review created=2026-10-09T20:31:33+00:00 -->
+### spec-review · review · Independent spec review: five findings
+
+Reviewer checked all four operator decisions and named runner, protocol, lifecycle, schema, isolation, pickup, and verification helpers against actual code. Five in-scope transaction/recovery defects identified; no operator-decision contradiction. Candidate versus client-live evidence remains correctly distinguished. File:line evidence accompanies each finding.
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-10-09T20:31:33+00:00 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: Compare-before-write is not an exclusive transaction claim
+
+Specified scope then server/pane exclusive OS locks, ownership and contention/crash tests; restart shares pane lock.
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-10-09T20:31:33+00:00 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: Repair lacks confirmed reconstruction uptake
+
+Specified durable submission checkpoints; repair requires persisted confirmed uptake and refuses uncertain submission without blind replay.
+
+<!-- fr:journal kind=finding scope=spec id=s3-resolved created=2026-10-09T20:31:33+00:00 state=fixed resolves=s3 -->
+### s3-resolved · finding [fixed] · resolves s3: Descriptor and batch writes need coordinated recovery
+
+Specified cross-store authority/write order, repair of both stores and unresolved-descriptor restart exclusion.
+
+<!-- fr:journal kind=finding scope=spec id=s4-resolved created=2026-10-09T20:31:33+00:00 state=fixed resolves=s4 -->
+### s4-resolved · finding [fixed] · resolves s4: Replacement needs draft and background-work checks
+
+Replacement now requires and rechecks the same prompt/draft/background/dialog checks as restart for both harnesses.
+
+<!-- fr:journal kind=finding scope=spec id=s5-resolved created=2026-10-09T20:31:33+00:00 state=fixed resolves=s5 -->
+### s5-resolved · finding [fixed] · resolves s5: Delivered HOLD can lose original-batch conflict hand-back
+
+Original-batch conflict message updates reconstruction metadata; outstanding current hand-back precedes HOLD and obsolete work is not replayed.
