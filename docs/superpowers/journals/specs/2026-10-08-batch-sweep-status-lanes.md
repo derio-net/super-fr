@@ -99,3 +99,8 @@ Automated verification now names every missing state and preserved behavior, and
 ### s5-resolved · finding [fixed] · resolves s5: The delivery boundary from the operator brief is absent
 
 The front matter and Delivery Boundary now require one draft PR, no ready transition, and no merge by this run.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-08-batch-sweep-status-lanes-p2 created=2026-10-09T04:43:51+00:00 -->
+### phase-split-2026-10-08-batch-sweep-status-lanes-p2 · decision · ask: isolate merge automation and session relay
+
+Phase 2 owns R7-R9 as an independently reviewable ask: merge eligibility and runner messaging can regress automation even when the board UI is correct, so they receive their own executor and review after the board/run-signal phase.
