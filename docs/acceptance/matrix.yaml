@@ -8051,9 +8051,18 @@ rows:
       with their identity/model and delivered-draft HOLD preserved.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_captured_input_contract
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_fresh_restart_preserves_pane_name_model_and_hold
+      - super-fr:tests/unit/test_herdr_managed.py#test_current_handback_precedes_hold_but_obsolete_does_not
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_restart
+    status: ci
+    notes: 'Installed candidate tests/scenarios/herdr-opencode-restart.sh proves managed
+      fresh restart and delivered HOLD with preserved pane/name/model. Captured OpenCode
+      1.18.35 input observations ground eligibility; synthetic failure/lock tests are
+      not the operator-owned client-live Ready walk (Refs #1089).'
     verify: candidate
     scenario: tests/scenarios/herdr-opencode-restart.sh
   - id: herdr-opencode-live
