@@ -65,6 +65,20 @@ no-PR dispatched batch is allowed if live branch PR lookup confirms that conditi
 
 Write an attempt event BEFORE sending input, using compare-before-write and the
 existing one batch writer. Re-inspect status and identity immediately before exit.
+Before inspecting/writing the attempt, acquire an exclusive OS-backed lock keyed by
+herdr server identity and pane; hold it through runner operations and final batch
+and descriptor writes. A scope-state lock also serializes the batch writer's
+read/compare/write sequence against other replacements in that scope. Contention
+refuses rather than waits indefinitely. Acquire scope then pane, consistently;
+restart acquires the same pane lock. A process crash releases OS locks but leaves
+the durable pending marker for repair. Only the current owner may send input;
+interleaved-caller tests must prove that a loser writes/sends nothing. Read/compare
+alone is not a transaction claim.
+
+Replacement applies the same harness-specific prompt/draft/background/dialog
+eligibility checks as restart, and rechecks them immediately before exit. Idle/done
+alone is insufficient. Unknown input layouts or unreadable observations refuse
+replacement and skip restart, before any key is sent.
 Use the source harness's graceful exit, bounded foreground-process polling and
 confirmed interactive shell, change that shell to the stable checkout and confirm
 its cwd before starting the target under the original name. Never answer an approval
@@ -80,6 +94,26 @@ confirm the requested live target and finalize metadata, or confirm the original
 source/shell and record the failed/aborted attempt. An unknown/working/blocked or
 ambiguous observation refuses reconciliation. Preview sends no input and writes no
 cache or batch state. Ordinary replace refuses an unreconciled attempt.
+
+The runner's pending descriptor records durable checkpoints: prepared, source-exited,
+target-ready, submission-started, uptake-confirmed, batch-committed and active. Write
+submission-started before submitting and uptake-confirmed only after observed
+working/blocked activity; a failed confirmation is submission-uncertain, never
+success. Repair finalizes success ONLY with a persisted uptake-confirmed checkpoint
+and matching live target. A pre-submission or uncertain target cannot be finalized
+by its kind/model alone: refuse with instructions to inspect/recover it, without
+blindly re-sending the brief. Once the operator returns it to the original source
+or a confirmed shell, repair can close the failed attempt. Test each crash boundary.
+
+The batch event/launch is authoritative for effective configuration; the descriptor
+is authoritative only for observed runner-operation checkpoints. Order the writes:
+pending descriptor, batch attempt, runner checkpoints, batch success plus launch,
+descriptor active. Restart skips every unresolved/non-active descriptor, including
+uptake-confirmed or batch-committed. Repair reconciles BOTH stores: if batch success
+already landed, promote the matching confirmed descriptor without appending another
+success or launching; if only uptake-confirmed landed, save success/launch then
+promote it. Descriptor failure after a batch commit remains explicitly repair-owed.
+No startup/submission error is converted to success by repair.
 
 ### Audit schema and readers (R7)
 
@@ -116,6 +150,14 @@ the dead session before redispatch. If deliver is done, HOLD; never invoke fr-go
 the original issue text. Conflict recovery reuses the engine's conflict brief; close-out
 reuses `fr pickup --run`/`--branch` and its merge checks. Do not resume OpenCode's old
 session id. Names and descriptor roles distinguish batch/conflict/close-out items.
+Conflict messages delivered to the ORIGINAL batch agent retain its batch identity:
+`HerdrRunner.message` must update its managed reconstruction descriptor with the
+hand-back head and brief, rather than relying on a separately named conflict item.
+On recovery, compare that head with the current branch and live merge/conflict
+state. An outstanding current hand-back takes precedence over delivered-draft HOLD;
+reconstruct its existing six-step brief. A completed or obsolete conflict is not
+replayed; inspect the current run/PR and HOLD or resume as appropriate. Test original
+batch hand-back as well as separately launched conflict sessions.
 
 OpenCode restart eligibility requires a validated managed descriptor matching live
 pane/name/kind/model, fresh idle/done status, known foreground process, no unsent input

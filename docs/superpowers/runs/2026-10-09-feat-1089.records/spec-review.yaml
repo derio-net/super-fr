@@ -1,0 +1,24 @@
+schema_version: 8
+run: 2026-10-09-feat-1089
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s1, review_scope: in, title: Compare-before-write is not an exclusive transaction claim, body: 'Spec lines 66-82 and batch.py:446-466: competing callers can mutate the same pane; require exclusive locking.'}
+  - {kind: finding, id: s2, review_scope: in, title: Repair lacks confirmed reconstruction uptake, body: 'Spec lines 71-80 and 106-115: kind/model alone cannot prove a fresh target received its context.'}
+  - {kind: finding, id: s3, review_scope: in, title: Descriptor and batch writes need coordinated recovery, body: 'Spec lines 75-82 and 102-126: restart must skip unresolved replacement and repair both stores.'}
+  - {kind: finding, id: s4, review_scope: in, title: Replacement needs draft and background-work checks, body: 'restart.py:257-262 and captured fixture README:48-50: idle/done alone does not prove safe exit input.'}
+  - {kind: finding, id: s5, review_scope: in, title: Delivered HOLD can lose original-batch conflict hand-back, body: 'triage_batch_cmd.py:3695-3714: conflict messages may target the original batch agent without changing its role.'}
+  - kind: review
+    id: spec-review
+    title: 'Independent spec review: five findings'
+    body: 'Reviewer checked all four operator decisions and named runner, protocol, lifecycle, schema, isolation, pickup, and verification helpers against actual code. Five in-scope transaction/recovery defects identified; no operator-decision contradiction. Candidate versus client-live evidence remains correctly distinguished. File:line evidence accompanies each finding.'
+resolves:
+  - {id: s1, state: fixed, body: 'Specified scope then server/pane exclusive OS locks, ownership and contention/crash tests; restart shares pane lock.'}
+  - {id: s2, state: fixed, body: 'Specified durable submission checkpoints; repair requires persisted confirmed uptake and refuses uncertain submission without blind replay.'}
+  - {id: s3, state: fixed, body: 'Specified cross-store authority/write order, repair of both stores and unresolved-descriptor restart exclusion.'}
+  - {id: s4, state: fixed, body: 'Replacement now requires and rechecks the same prompt/draft/background/dialog checks as restart for both harnesses.'}
+  - {id: s5, state: fixed, body: 'Original-batch conflict message updates reconstruction metadata; outstanding current hand-back precedes HOLD and obsolete work is not replayed.'}
+acceptance: []
+evidence:
+  review: spec-review
+  reviewer: ses_edda6f4c3ffejVnke8cnPxLCk1
