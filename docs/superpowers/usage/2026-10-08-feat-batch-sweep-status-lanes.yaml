@@ -1,0 +1,112 @@
+schema_version: 2
+run: 2026-10-08-feat-batch-sweep-status-lanes
+captures:
+- host: h-6f82f4b7
+  harness: opencode
+  mode: host-worktree
+  captured_at: '2026-10-09T04:36:12+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: ses_ee4116e61ffe08ZeP95JKDbvWv
+    role: main
+    models:
+      gpt-5.6-sol:
+        input: 231807
+        cache_write: 0
+        cache_read: 23449984
+        output: 43895
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 14
+      other:
+        usd: null
+        turns: 148
+      paperwork:
+        usd: null
+        turns: 3
+    steps:
+      (outside run):
+        usd: null
+        turns: 153
+        input: 227666
+        cache_write: 0
+        cache_read: 22204672
+        output: 42786
+      brainstorm:
+        usd: null
+        turns: 6
+        input: 4141
+        cache_write: 0
+        cache_read: 1245312
+        output: 1109
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 153
+          input: 227666
+          cache_write: 0
+          cache_read: 22204672
+          output: 42786
+        brainstorm:
+          usd: null
+          turns: 6
+          input: 4141
+          cache_write: 0
+          cache_read: 1245312
+          output: 1109
+  - session: ses_ee3aef49fffe0vcDJoiJKdwRsT
+    role: main
+    models:
+      gpt-5.6-sol:
+        input: 649558
+        cache_write: 0
+        cache_read: 5807744
+        output: 20443
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 17
+      other:
+        usd: null
+        turns: 29
+      paperwork:
+        usd: null
+        turns: 17
+    steps:
+      (outside run):
+        usd: null
+        turns: 7
+        input: 60553
+        cache_write: 0
+        cache_read: 267008
+        output: 1660
+      brainstorm:
+        usd: null
+        turns: 44
+        input: 589005
+        cache_write: 0
+        cache_read: 5540736
+        output: 18783
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 7
+          input: 60553
+          cache_write: 0
+          cache_read: 267008
+          output: 1660
+        brainstorm:
+          usd: null
+          turns: 44
+          input: 589005
+          cache_write: 0
+          cache_read: 5540736
+          output: 18783

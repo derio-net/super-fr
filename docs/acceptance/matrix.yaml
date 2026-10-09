@@ -6909,6 +6909,43 @@ rows:
       reloads keeping expansion, jump switching the tab, two blocked sessions shown
       as needs-you). Manual and post-merge only, so not in CI.'
     verify: live
+  - id: triage-board-human-status-lanes
+    capability: triage-batch-board
+    acceptance: The batch board places an unfinished pre-PR operator gate or idle unfinished
+      run in Needs you · start, places a completed draft delivery or late manual operator
+      action in Needs you · review, and leaves an in-progress draft in PR open.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    visual:
+      states:
+      - Needs you start with an early operator gate
+      - PR open with delivery still in progress
+      - Needs you review with completed draft delivery
+      - phone width with both human lanes populated
+    scenario: tests/scenarios/triage-batch-status-lanes.sh
+    issues:
+    - derio-net/super-fr#1086
+  - id: triage-board-pr-head-run-signal
+    capability: triage-batch-board
+    acceptance: Human-lane status is derived from a matching run cursor committed at
+      the batch PR head; missing, malformed, or branch-mismatched cursors fail soft
+      without reading host cache state or breaking the board.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/triage-batch-status-lanes.sh
+    issues:
+    - derio-net/super-fr#1086
   - id: triage-dedupe-candidates
     capability: triage-dedupe
     acceptance: fr triage check lists candidate duplicate groups among open issues,
@@ -7730,3 +7767,33 @@ rows:
     status: ci
     notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
       is still owed'
+  - id: triage-drive-clean-merge-ready
+    capability: triage-wave-driver
+    acceptance: A batch PR is merge ready only with green required checks and a clean
+      mergeable forge state; CONFLICTING, DIRTY, or unknown mergeability never emits
+      a merge action or renders merge ready.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/triage-batch-status-lanes.sh
+    issues:
+    - derio-net/super-fr#1086
+  - id: triage-drive-session-failure-relay
+    capability: triage-wave-driver
+    acceptance: A drive pass relays a conflicting or red-CI batch to its existing session
+      through SessionMessenger exactly once per head OID, including the failure, PR
+      link, branch/push instruction, and never-merge boundary; failed or unavailable
+      sends remain retryable.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/triage-batch-status-lanes.sh
+    issues:
+    - derio-net/super-fr#1086
