@@ -8021,9 +8021,16 @@ rows:
       and retain status, messaging, focus, conflict and close-out identity.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it
+      - super-fr:tests/unit/test_herdr_stable_checkout.py#test_linked_worktree_uses_primary_checkout
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
+    status: ci
+    notes: 'Installed candidate scenario tests/scenarios/herdr-opencode.sh proves OpenCode
+      model launch, primary checkout normalization and failed-start cleanup using explicitly
+      synthetic herdr responses; live interactive Ready walk remains owed (Refs #1089).'
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace
