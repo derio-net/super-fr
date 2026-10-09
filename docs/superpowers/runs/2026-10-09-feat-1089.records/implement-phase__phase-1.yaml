@@ -2,7 +2,7 @@ schema_version: 8
 run: 2026-10-09-feat-1089
 step: implement-phase
 item: phase/1
-outcome: failed
+outcome: blocked
 ticks:
   - P1.T1.S2
   - P1.T1.S3
@@ -64,8 +64,49 @@ journal:
       their pipeline/CLI wording is unaffected. Runner/operator/skill docs and both
       generated skill mirrors were updated. The separate replacement phase and
       operator-owned client-live Ready obligation remain untouched.
+  - kind: discovery
+    id: p1-full-suite-followup-fixes
+    phase: 1
+    title: Full-suite-only guards fixed before the final code commit
+    body: |
+      The first full-suite run exposed missing scenario allowlist entries, a
+      skill line-budget overrun, the legacy scenario's newly reported unrelated
+      OpenCode skip, and a direct forge read outside the adapter. c05b8243 fixes
+      all four: conflict recovery uses hostclient/GhClient, both new scenarios
+      are pinned, the skill remains within 120 lines with both mirrors regenerated,
+      and the legacy scenario counts the explicit skip. Relevant guards and
+      installed scenarios passed (168 passed, 104 skipped); forge/managed tests
+      then passed 14 tests. Ruff and mypy remained green. The first run also
+      exhausted storage; its log is preserved as 1089-phase1-suite.log beside
+      the final log. Pytest cleared this executor's own prior pytest-13 sandbox
+      via --basetemp before the targeted retry; no unowned storage was removed.
+  - kind: finding
+    id: p1-full-suite-storage
+    phase: 1
+    state: open
+    review_scope: in
+    title: Container overlay storage blocks a green final full suite
+    body: |
+      Final code commit c05b8243 was clean before the required full exec-bridge
+      suite. The host-visible final log ends exit=1: 6 failed, 10041 passed,
+      122 skipped, 1018 errors in 612.71 seconds. Failures/errors show ENOSPC
+      creating sandbox git objects, rsync files and pytest home directories;
+      this is not a green gate despite the targeted implementation tests passing.
+      Five failures explicitly show exhausted storage; the record-review
+      tree-equals-HEAD assertion also failed during this run but its exact cause
+      is not established. Do not assume it is fixed: rerun it with adequate
+      capacity and investigate if it persists.
+      Before retry, clearing this executor's earlier pytest sandbox recovered
+      only 2.8 GiB on the 59 GiB container overlay (53 GiB already used). The
+      full suite's own sandbox growth exhausted it again. No repo-under-test
+      mutation or unowned-storage cleanup is claimed. Provide more container
+      overlay capacity or a genuinely external, container-visible test temp
+      filesystem, then rerun the complete suite on the committed code tree.
+      P1.T4.S3 remains unticked and phase completion is not claimed. The detached
+      suite finished; polling was bounded and no process remains running.
 resolves:
   - id: p1-opencode-input-grounding
     state: fixed
     body: Captured OpenCode input/process/shell contract is implemented and pinned by named tests; unknown observations fail closed without sending input.
-evidence: {}
+evidence:
+  tests: /var/folders/28/d4n60x_92gbgh3rtf4vstb0h0000gn/T/opencode/1089-phase1-suite-final.log
