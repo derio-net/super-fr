@@ -8056,13 +8056,17 @@ rows:
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_captured_input_contract
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_fresh_restart_preserves_pane_name_model_and_hold
       - super-fr:tests/unit/test_herdr_managed.py#test_current_handback_precedes_hold_but_obsolete_does_not
+      - super-fr:tests/unit/test_herdr_managed.py#test_pane_lock_excludes_an_independent_process
+      - super-fr:tests/unit/test_herdr_managed.py#test_unenforced_os_lock_is_refused_before_entering
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_restart
     status: ci
-    notes: 'Installed candidate tests/scenarios/herdr-opencode-restart.sh proves managed
-      fresh restart and delivered HOLD with preserved pane/name/model. Captured OpenCode
-      1.18.35 input observations ground eligibility; synthetic failure/lock tests are
-      not the operator-owned client-live Ready walk (Refs #1089).'
+    notes: 'Installed candidate scenario tests/scenarios/herdr-opencode-restart.sh and
+      named regressions prove fresh recovery/HOLD and preserved identity. Independent-process
+      lock exclusion is verified before input; unenforced virtual-filesystem locks refuse.
+      Captured OpenCode 1.18.35 input observations ground eligibility; synthetic failures/native
+      lock fixtures are not the operator-owned client-live Ready walk (Refs #1089).
+      Operator directs ci-ok as full-suite evidence after local infrastructure failures.'
     verify: candidate
     scenario: tests/scenarios/herdr-opencode-restart.sh
   - id: herdr-opencode-live
