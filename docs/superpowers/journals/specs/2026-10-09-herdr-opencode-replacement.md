@@ -118,3 +118,8 @@ Replacement now requires and rechecks the same prompt/draft/background/dialog ch
 ### s5-resolved · finding [fixed] · resolves s5: Delivered HOLD can lose original-batch conflict hand-back
 
 Original-batch conflict message updates reconstruction metadata; outstanding current hand-back precedes HOLD and obsolete work is not replayed.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-09-herdr-opencode-replacement-p1 created=2026-10-09T20:33:28+00:00 -->
+### tier-2026-10-09-herdr-opencode-replacement-p1 · decision · tier: process lifecycle and crash-safe managed restart require hard
+
+Phase 1 changes a live-process eligibility gate and durable descriptor recovery; hard tier is justified by the safety and concurrency paths.
