@@ -13,7 +13,7 @@ from pathlib import Path
 
 from fr.triage import kanban_render
 from fr.triage.components import GUTTER_CSS, TOKENS_CSS
-from fr.triage.kanban import Board, build_board
+from fr.triage.kanban import Board, RunSignal, build_board
 from fr.triage.kanban_render import CSS, SCRIPT, render_board
 
 from tests.unit.triage_board_fixtures import batch, facts, issue, j, judgements
@@ -25,8 +25,9 @@ SCOPE = ["--repo", "example-org/widgets"]
 
 
 def _board(**kw: object) -> tuple[Board, list[str]]:
+    run_signals = kw.pop("run_signals", {})
     f, jd, statuses, notes = world(**kw)  # type: ignore[arg-type]
-    return build_board(f, jd, statuses), notes
+    return build_board(f, jd, statuses, run_signals=run_signals), notes  # type: ignore[arg-type]
 
 
 def _page(*, scope: list[str] | None = None, refresh: int = 30, **kw: object) -> str:
@@ -56,14 +57,31 @@ def test_a_board_with_no_batches_says_so() -> None:
     assert "<!DOCTYPE html>" in page and "<title>" in page
 
 
-def test_seven_columns_with_their_counts_in_order() -> None:
+def test_nine_columns_with_their_counts_in_order() -> None:
     page = _page()
-    heads = re.findall(r'<h2>(\w[\w ]*) <span class="count">(\d+)</span></h2>', page)
+    heads = re.findall(r'<h2>([^<]+) <span class="count">(\d+)</span></h2>', page)
     # The fixture's partial batch is owed its close-out: Partial, not Done (gh#985).
     assert heads == [
-        ("Proposed", "2"), ("Waiting", "2"), ("Running", "3"),
-        ("PR open", "3"), ("Closing out", "3"), ("Partial", "1"), ("Done", "3"),
+        ("Proposed", "2"), ("Waiting", "2"), ("Running", "2"),
+        ("Needs you · start", "1"), ("PR open", "3"), ("Needs you · review", "1"),
+        ("Closing out", "2"), ("Partial", "1"), ("Done", "3"),
     ]  # fmt: skip
+
+
+def test_both_human_columns_render_counts_classes_reasons_and_existing_controls() -> None:
+    page = _page(
+        run_signals={
+            "r-run": RunSignal("start", "needs you: operator gate"),
+            "o-draft": RunSignal("review", "needs you: completed draft awaiting review"),
+        }
+    )
+    assert 'class="col attention start" data-column="needs-you-start"' in page
+    assert 'class="col attention review" data-column="needs-you-review"' in page
+    early = _card(page, "r-run")
+    review = _card(page, "o-draft")
+    assert "operator gate" in early and "completed draft" in review
+    assert "<details" in early and 'class="jump"' in early and "data-command=" in early
+    assert "&lt;" not in _script(page)
 
 
 def test_the_wide_grid_has_one_track_per_column() -> None:
@@ -201,6 +219,13 @@ def test_hostile_titles_are_escaped_and_never_reach_the_script() -> None:
     assert "<img" not in page
 
 
+def test_a_hostile_human_lane_reason_and_title_are_escaped() -> None:
+    page = _page(hostile=True, run_signals={"r-run": RunSignal("start", HOSTILE)})
+    assert HOSTILE not in page and html.escape(HOSTILE, quote=True) in page
+    assert "alert" not in _script(page)
+    assert '<details class="card needs-you" id="card-r-run"' in page
+
+
 def test_non_https_urls_are_not_linked() -> None:
     board, _ = _board()
     card = next(c for col in board.columns for c in col.cards if c.batch.id == "r-run")
@@ -240,6 +265,7 @@ def test_the_look_is_shared_and_stacks_at_phone_width() -> None:
     assert TOKENS_CSS in CSS and GUTTER_CSS in CSS
     assert "max-width: 720px" in CSS
     assert "overflow-wrap" in CSS
+    assert ".col.attention" in CSS
 
 
 def test_the_script_keeps_expanded_cards_and_scroll_in_guarded_local_storage() -> None:

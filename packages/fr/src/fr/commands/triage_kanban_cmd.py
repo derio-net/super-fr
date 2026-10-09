@@ -16,16 +16,18 @@ from __future__ import annotations
 import importlib.util
 import time
 import webbrowser
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn, get_args
 
 import typer
+import yaml
 from rich.markup import escape
 from rich.text import Text
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.commands.triage_checkout import checkout_map
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
@@ -38,16 +40,25 @@ from fr.commands.triage_cmd import (
     err_console,
     triage_app,
 )
-from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
+from fr.triage.batch import (
+    batch_item_id,
+    batch_pr,
+    batch_repo,
+    batch_workflow,
+    derive_batch_stage,
+    last_dispatch,
+)
 from fr.triage.batch_drive import (
     DEFAULT_WORKSPACE_PREFIX,
     closeout_event,
     closeout_item_id,
+    idle_session,
     wave_group,
 )
 from fr.triage.drive_lock import live_driver
 from fr.triage.errors import TriageError
-from fr.triage.kanban import BoardStatus, build_board
+from fr.triage.gitseam import Checkout
+from fr.triage.kanban import BoardStatus, RunSignal, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Judgements, Scope, state_dir
@@ -64,6 +75,7 @@ BOARD_FILE = "board.html"
 DEFAULT_REFRESH = 30
 DEFAULT_WATCH_INTERVAL = 60
 _STATUSES = frozenset(get_args(BoardStatus))
+_RUNS_DIR = "docs/superpowers/runs"
 
 DISPATCH_INSTALL_HINT = (
     "this requires fr-dispatch — install it "
@@ -276,6 +288,138 @@ def session_statuses(
     return statuses, notes
 
 
+def _run_path(path: str) -> bool:
+    """Whether *path* is one cursor immediately below the tracked runs directory."""
+    prefix = f"{_RUNS_DIR}/"
+    rest = path.removeprefix(prefix)
+    return path.startswith(prefix) and "/" not in rest and rest.endswith(".yaml")
+
+
+def _mapping(value: object) -> Mapping[str, object] | None:
+    return value if isinstance(value, Mapping) else None
+
+
+def _manual_phase(step: Mapping[str, object]) -> int | None:
+    units = _mapping(step.get("units"))
+    if units is None:
+        return None
+    for name, value in units.items():
+        unit = _mapping(value)
+        if unit is None or unit.get("state") != "manual":
+            continue
+        parts = str(name).split("/")
+        if len(parts) >= 2 and parts[0] == "phase" and parts[1].isdigit():
+            return int(parts[1])
+    return None
+
+
+def _signal_from_cursor(
+    cursor: Mapping[str, object], *, has_pr: bool, draft: bool, idle: bool
+) -> RunSignal | None:
+    """Derive the board's small signal from an untrusted, version-independent mapping."""
+    steps = _mapping(cursor.get("steps"))
+    current = cursor.get("cursor")
+    if steps is None or not isinstance(current, str):
+        raise ValueError("cursor and steps must be present")
+    current_step = _mapping(steps.get(current))
+    if current_step is None:
+        raise ValueError(f"current step {current!r} is missing")
+    if current_step.get("state") not in ("pending", "running", "done", "failed", "blocked"):
+        raise ValueError("unknown current step state")
+    if phase := _manual_phase(current_step):
+        return RunSignal("review", f"needs you: manual phase {phase}")
+    deliver = _mapping(steps.get("deliver"))
+    deliver_done = deliver is not None and deliver.get("state") == "done"
+    if has_pr and draft and deliver_done:
+        return RunSignal("review", "needs you: completed draft awaiting review")
+    if not has_pr and current != "deliver" and current_step.get("state") == "blocked":
+        return RunSignal("start", "needs you: operator gate")
+    if not has_pr and idle and not deliver_done and current != "deliver":
+        return RunSignal("start", "needs you: idle unfinished run")
+    return None
+
+
+def run_signals(
+    judgements: Judgements,
+    facts: Facts,
+    statuses: Mapping[str, BoardStatus],
+    checkout_paths: Mapping[str, Path | None],
+    *,
+    checkout_factory: Callable[[Path | None], Checkout] | None = None,
+    now: datetime | None = None,
+) -> tuple[dict[str, RunSignal], list[str]]:
+    """Read each batch cursor from its freshly fetched remote head, failing per repo."""
+    grouped: dict[str, list[Batch]] = {}
+    for batch in judgements.batches:
+        if (repo := batch_repo(batch, facts)) is not None and last_dispatch(batch) is not None:
+            grouped.setdefault(repo, []).append(batch)
+    signals: dict[str, RunSignal] = {}
+    notes: list[str] = []
+    make_checkout = checkout_factory or Checkout.at
+    observed_at = now or datetime.now(UTC)
+    for repo, batches in sorted(grouped.items()):
+        failed: str | None = None
+        try:
+            checkout = make_checkout(checkout_paths[repo.lower()])
+            checkout.fetch()
+            for batch in batches:
+                dispatch = last_dispatch(batch)
+                assert dispatch is not None
+                if not dispatch.branch:
+                    raise ValueError(f"batch {batch.id}: recorded branch is missing")
+                pull = batch_pr(batch, facts)
+                if pull is not None:
+                    ref = pull.head_oid
+                    if not ref:
+                        raise ValueError(f"batch {batch.id}: PR head is missing")
+                    paths = tuple(path for path in pull.files if _run_path(path))
+                else:
+                    ref = f"origin/{dispatch.branch}"
+                    paths = tuple(
+                        path for path in checkout.tree_paths(ref, _RUNS_DIR) if _run_path(path)
+                    )
+                matched = False
+                for path in paths:
+                    try:
+                        raw = checkout.show(ref, path)
+                        data = yaml.safe_load(raw) if raw is not None else None
+                        cursor = _mapping(data)
+                        if cursor is None:
+                            raise ValueError(f"{path} is not a mapping")
+                        if cursor.get("branch") != dispatch.branch:
+                            continue
+                        matched = True
+                        item = batch_item_id(repo, batch.id)
+                        signal = _signal_from_cursor(
+                            cursor,
+                            has_pr=pull is not None,
+                            draft=bool(pull and pull.is_draft),
+                            idle=idle_session(
+                                batch,
+                                repo=repo,
+                                closeout=False,
+                                status=statuses.get(item),
+                                stage=derive_batch_stage(batch, facts),
+                                archives=(),
+                                now=observed_at,
+                                threshold=facts.config_for(repo).idle_session_minutes,
+                            )
+                            is not None,
+                        )
+                        if signal is not None:
+                            signals[batch.id] = signal
+                        break
+                    except Exception as exc:  # noqa: BLE001 - remote cursor is untrusted view input
+                        failed = one_line(exc)
+                if not matched and failed is None:
+                    failed = f"no cursor matched branch {dispatch.branch}"
+        except Exception as exc:  # noqa: BLE001 - one unreadable clone never breaks the page
+            failed = one_line(exc)
+        if failed is not None:
+            notes.append(f"{repo}: run status unavailable ({failed})")
+    return signals, notes
+
+
 def write_board(
     scope: Scope,
     target: Path,
@@ -283,12 +427,18 @@ def write_board(
     scope_args: Sequence[str],
     refresh: int = DEFAULT_REFRESH,
     prefix: str = DEFAULT_WORKSPACE_PREFIX,
+    checkout_paths: Mapping[str, Path | None] | None = None,
 ) -> tuple[Path, int]:
     """Render `board.html` into the state directory *target* from the facts and judgements
     on disk now, with live session statuses. Returns the path written and its card count."""
     _, facts, judgements = _load_state(scope, target)
     statuses, notes = session_statuses(judgements, facts, prefix=prefix)
     rendered_at = datetime.now(UTC)
+    paths = checkout_paths
+    if paths is None:
+        paths = {scope.target.lower(): None} if scope.kind == "repo" else {}
+    signals, signal_notes = run_signals(judgements, facts, statuses, paths, now=rendered_at)
+    notes.extend(signal_notes)
     # The wall clock: session status is read live above, so idle minutes must be real.
     try:
         me: str | None = scope_id(facts.scope)
@@ -296,7 +446,13 @@ def write_board(
         me = None
         notes.append(f"claims are not shown: {one_line(exc)}")
     board = build_board(
-        facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at
+        facts,
+        judgements,
+        statuses,
+        run_signals=signals,
+        stops=load_stops(target),
+        me=me,
+        now=rendered_at,
     )
     page = render_board(
         board,
@@ -346,6 +502,7 @@ def _watch(
     interval: int,
     open_: bool,
     publish_: bool = False,
+    checkout_paths: Mapping[str, Path | None] | None = None,
 ) -> None:
     """Re-collect and re-render every *interval* seconds until interrupted (R12). A live
     drive keeps the board fresh itself, so an iteration that finds its lock held skips."""
@@ -391,7 +548,13 @@ def _watch(
                 recovered("collect")
             try:
                 with err_console.capture() as said:
-                    out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
+                    out, cards = write_board(
+                        scope,
+                        target,
+                        scope_args=args,
+                        refresh=refresh,
+                        checkout_paths=checkout_paths,
+                    )
             except typer.Exit:
                 text = Text.from_ansi(said.get()).plain.strip().removeprefix("error:").strip()
                 warn_once("render", RuntimeError(text or "refused"))
@@ -438,16 +601,30 @@ def board_command(
             help="After each render, run the scope's `publish` command from scope.yaml.",
         ),
     ] = False,
+    checkout: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--checkout",
+            help="REPO=PATH: local clone for remote run status; repeat for org/group scopes.",
+        ),
+    ] = None,
 ) -> None:
-    """Write board.html: one card per batch in six lifecycle columns, with live session
+    """Write board.html: one card per batch in nine columns, with live session
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
     scope = _scope(repo, org)
     target = state_dir(scope, dir_override)
     args = scope_args(repo, org, dir_override)
+    _, facts, _ = _load_state(scope, target)
+    try:
+        checkouts = checkout_map(checkout, scope, set(facts.repos))
+    except TriageError as exc:
+        _fail(str(exc))
     if watch:
-        _watch(scope, target, args, refresh, interval, open_, publish_)
+        _watch(scope, target, args, refresh, interval, open_, publish_, checkouts)
         return
-    out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
+    out, cards = write_board(
+        scope, target, scope_args=args, refresh=refresh, checkout_paths=checkouts
+    )
     console.print(f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True)
     if publish_:
         publish(scope, target, out, set())

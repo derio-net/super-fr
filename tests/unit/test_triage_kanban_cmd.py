@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import time
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,10 +18,11 @@ import pytest
 import yaml
 from fr.cli import app
 from fr.commands import triage_kanban_cmd
-from fr.commands.triage_kanban_cmd import scope_args, session_statuses, write_board
+from fr.commands.triage_kanban_cmd import run_signals, scope_args, session_statuses, write_board
 from fr.triage import scope_config
 from fr.triage.drive_lock import LOCK_GRACE
 from fr.triage.errors import ForgeError
+from fr.triage.gitseam import Checkout, git
 from fr.triage.model import Scope, load_facts, load_judgements
 from fr.triage.scope_config import ScopeConfig, publish_board
 from typer.testing import CliRunner
@@ -37,6 +39,216 @@ from tests.unit.test_triage_batch_drive_cmd import (
 CLOSEOUT = f"      - {{kind: closeout, at: {DISPATCHED}, runner: fake, handle: c}}\n"
 HAND = f"      - {{kind: closeout, at: {DISPATCHED}, runner: hand, handle: c}}\n"
 SCOPE = Scope(kind="repo", target=REPO)
+RUN = "docs/superpowers/runs/batch.yaml"
+
+
+class _Checkout:
+    def __init__(self, files: dict[tuple[str, str], str] | None = None) -> None:
+        self.files = files or {}
+        self.calls: list[tuple[str, ...]] = []
+
+    def fetch(self) -> None:
+        self.calls.append(("fetch",))
+
+    def show(self, ref: str, path: str) -> str | None:
+        self.calls.append(("show", ref, path))
+        return self.files.get((ref, path))
+
+    def tree_paths(self, ref: str, directory: str) -> tuple[str, ...]:
+        self.calls.append(("tree", ref, directory))
+        return tuple(path for candidate, path in self.files if candidate == ref)
+
+
+@pytest.fixture(autouse=True)
+def _no_live_checkout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(triage_kanban_cmd.Checkout, "at", lambda _: _Checkout())
+
+
+def _cursor(branch: str = "feat/batch-b1", **steps: Any) -> str:
+    current = steps.pop("cursor", "implement")
+    return yaml.safe_dump({"branch": branch, "cursor": current, "steps": steps})
+
+
+def _signal_world(tmp_path: Path, *, draft: bool = False, files: list[str] | None = None) -> Any:
+    _setup(tmp_path, _dispatch_event("b1"))
+    facts, judgements = _loaded(tmp_path)
+    if files is None:
+        return facts, judgements
+    pull = {
+        "repo": REPO,
+        "number": 11,
+        "title": "batch",
+        "state": "OPEN",
+        "is_draft": draft,
+        "url": f"https://github.com/{REPO}/pull/11",
+        "head_ref": "feat/batch-b1",
+        "head_oid": "head-11",
+        "created_at": DISPATCHED,
+        "checks": {"pass": 0, "fail": 0, "pending": 1},
+        "author": "operator",
+        "cross_repo": False,
+        "files": files,
+    }
+    data = facts.model_dump(mode="json")
+    data["issues"][0]["prs"] = [pull]
+    data["prs"] = [pull]
+    return facts.__class__.model_validate(data), judgements
+
+
+def test_pr_cursor_is_read_only_from_changed_run_files_at_the_immutable_head(
+    tmp_path: Path,
+) -> None:
+    facts, judgements = _signal_world(tmp_path, draft=True, files=[RUN, "README.md"])
+    checkout = _Checkout(
+        {("head-11", RUN): _cursor(implement={"state": "done"}, deliver={"state": "done"})}
+    )
+    signals, notes = run_signals(
+        judgements, facts, {}, {REPO.lower(): Path("/clone")}, checkout_factory=lambda _: checkout
+    )
+    assert signals["b1"].lane == "review" and "completed draft" in signals["b1"].reason
+    assert notes == []
+    assert checkout.calls == [("fetch",), ("show", "head-11", RUN)]
+
+
+def test_pre_pr_cursor_is_listed_and_read_at_the_fetched_remote_branch(tmp_path: Path) -> None:
+    facts, judgements = _signal_world(tmp_path)
+    ref = "origin/feat/batch-b1"
+    checkout = _Checkout({(ref, RUN): _cursor(implement={"state": "blocked"})})
+    signals, notes = run_signals(
+        judgements, facts, {}, {REPO.lower(): None}, checkout_factory=lambda _: checkout
+    )
+    assert signals["b1"].lane == "start" and "operator gate" in signals["b1"].reason
+    assert notes == []
+    assert checkout.calls == [
+        ("fetch",),
+        ("tree", ref, "docs/superpowers/runs"),
+        ("show", ref, RUN),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("body", "statuses", "lane", "needle"),
+    [
+        (
+            _cursor(implement={"state": "running"}),
+            {f"{REPO}/run/batch-b1": "idle"},
+            "start",
+            "idle unfinished",
+        ),
+        (
+            _cursor(
+                cursor="implement",
+                implement={
+                    "state": "running",
+                    "units": {"phase/2/implement-phase": {"state": "manual"}},
+                },
+            ),
+            {},
+            "review",
+            "manual phase 2",
+        ),
+    ],
+)
+def test_cursor_states_become_specific_signals(
+    tmp_path: Path, body: str, statuses: dict[str, str], lane: str, needle: str
+) -> None:
+    facts, judgements = _signal_world(tmp_path)
+    ref = "origin/feat/batch-b1"
+    signals, _ = run_signals(
+        judgements,
+        facts,
+        statuses,
+        {REPO.lower(): None},
+        checkout_factory=lambda _: _Checkout({(ref, RUN): body}),
+    )
+    assert signals["b1"].lane == lane and needle in signals["b1"].reason
+
+
+@pytest.mark.parametrize(
+    "body", ["not: [yaml", _cursor(branch="feat/other", implement={"state": "blocked"})]
+)
+def test_bad_or_mismatched_cursors_fail_soft_with_one_repo_note(tmp_path: Path, body: str) -> None:
+    facts, judgements = _signal_world(tmp_path)
+    ref = "origin/feat/batch-b1"
+    signals, notes = run_signals(
+        judgements,
+        facts,
+        {},
+        {REPO.lower(): None},
+        checkout_factory=lambda _: _Checkout({(ref, RUN): body}),
+    )
+    assert signals == {} and len(notes) == 1 and REPO in notes[0]
+
+
+@pytest.mark.parametrize("minutes,expected", [(0, False), (59, False), (60, True)])
+def test_idle_run_uses_the_existing_threshold_at_its_boundary(
+    tmp_path: Path, minutes: int, expected: bool
+) -> None:
+    facts, judgements = _signal_world(tmp_path)
+    facts = facts.model_copy(update={"config": {}})
+    dispatch = judgements.batches[0].events[0]
+    signals, _ = run_signals(
+        judgements,
+        facts,
+        {f"{REPO}/run/batch-b1": "idle"},
+        {REPO: None},
+        checkout_factory=lambda _: _Checkout(
+            {("origin/feat/batch-b1", RUN): _cursor(implement={"state": "running"})}
+        ),
+        now=dispatch.at + timedelta(minutes=minutes),
+    )
+    assert bool(signals) == expected
+
+
+def test_remote_tree_reads_committed_cursor_not_dirty_checkout(tmp_path: Path) -> None:
+    repo = tmp_path / "clone"
+    repo.mkdir()
+    git(["init", "--quiet"], repo)
+    path = repo / RUN
+    path.parent.mkdir(parents=True)
+    path.write_text(_cursor(implement={"state": "blocked"}))
+    git(["add", RUN], repo)
+    git(
+        ["-c", "user.name=Test", "-c", "user.email=test@example.org", "commit", "-qm", "cursor"],
+        repo,
+    )
+    checkout = Checkout(repo)
+    head = checkout.rev_parse("HEAD")
+    path.write_text("not the committed cursor")
+    assert checkout.tree_paths(head, "docs/superpowers/runs") == (RUN,)
+    assert "blocked" in str(checkout.show(head, RUN))
+    with pytest.raises(Exception):
+        checkout.tree_paths("origin/missing", "docs/superpowers/runs")
+
+
+def test_checkout_mapping_is_shared_and_validates_repo_group_and_org() -> None:
+    from fr.commands.triage_checkout import checkout_map
+    from fr.triage.errors import TriageError
+
+    assert checkout_map(None, SCOPE, {REPO}) == {REPO.lower(): None}
+    org = Scope(kind="org", target="example-org")
+    group = Scope(kind="group", target="group", repos=["example-org/a", "example-org/b"])
+    values = ["EXAMPLE-ORG/a=/a", "example-org/b=/b"]
+    expected = {"example-org/a": Path("/a"), "example-org/b": Path("/b")}
+    assert checkout_map(values, org, set(expected)) == expected
+    assert checkout_map(values, group, set()) == expected
+    for scope, values in [(SCOPE, ["bad"]), (SCOPE, ["other/repo=/x"]), (group, [])]:
+        with pytest.raises(TriageError):
+            checkout_map(values, scope, set())
+
+
+def test_missing_ref_and_repo_failure_make_one_note(tmp_path: Path) -> None:
+    facts, judgements = _signal_world(tmp_path)
+
+    def broken(_: Any) -> Any:
+        raise OSError("unreadable repo")
+
+    signals, notes = run_signals(judgements, facts, {}, {REPO: None}, checkout_factory=broken)
+    assert not signals and len(notes) == 1 and "unreadable repo" in notes[0]
+    signals, notes = run_signals(
+        judgements, facts, {}, {REPO: None}, checkout_factory=lambda _: _Checkout()
+    )
+    assert not signals and len(notes) == 1 and "matched branch" in notes[0]
 
 
 class _Inspector:

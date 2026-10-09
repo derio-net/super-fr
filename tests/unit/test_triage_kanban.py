@@ -17,6 +17,7 @@ from fr.triage.batch_drive import Action, ActionKind, closeout_item_id
 from fr.triage.kanban import (
     COLUMNS,
     Board,
+    RunSignal,
     action_phrase,
     build_board,
     column_of,
@@ -64,11 +65,23 @@ def _merged_issues() -> list[dict[str, Any]]:
 # ------------------------------------------------------------------ columns (R2)
 
 
-def test_the_columns_are_seven_in_r2_order() -> None:
+def test_the_columns_are_ordered_once() -> None:
     assert COLUMNS == (
-        "proposed", "waiting", "running", "pr-open", "closing-out", "partial", "done"
+        "proposed", "waiting", "running", "needs-you-start", "pr-open",
+        "needs-you-review", "closing-out", "partial", "done"
     )  # fmt: skip
     assert set(get_args(kanban.Column)) == set(COLUMNS)
+    assert list(kanban.COLUMN_TITLES.values()) == [
+        "Proposed",
+        "Waiting",
+        "Running",
+        "Needs you · start",
+        "PR open",
+        "Needs you · review",
+        "Closing out",
+        "Partial",
+        "Done",
+    ]
 
 
 def test_a_batch_never_dispatched_with_no_after_is_proposed() -> None:
@@ -102,6 +115,62 @@ def test_a_batch_after_an_unknown_dependency_is_blocked() -> None:
 def test_a_dispatched_batch_without_a_pr_is_running() -> None:
     f, jd = _world([batch("a", [1], events=[dispatch("a")])], [issue(1)])
     assert _col("a", f, jd) == "running"
+
+
+@pytest.mark.parametrize(
+    ("signal", "column", "reason"),
+    [
+        (RunSignal("start", "needs you: operator gate"), "needs-you-start", "operator gate"),
+        (
+            RunSignal("start", "needs you: idle unfinished run"),
+            "needs-you-start",
+            "idle unfinished",
+        ),
+        (
+            RunSignal("review", "needs you: completed draft awaiting review"),
+            "needs-you-review",
+            "completed draft",
+        ),
+        (RunSignal("review", "needs you: manual phase 2"), "needs-you-review", "manual phase 2"),
+    ],
+)
+def test_run_signals_select_a_human_lane_with_their_specific_hint(
+    signal: RunSignal, column: str, reason: str
+) -> None:
+    f, jd = _world([batch("a", [1], events=[dispatch("a")])], [issue(1)])
+    card = build_board(f, jd, {}, run_signals={"a": signal}).card("a")
+    assert card.column == column and card.needs_you and reason in card.hint
+
+
+def test_a_draft_without_a_review_signal_stays_pr_open() -> None:
+    draft = pr(11, "feat/batch-a", is_draft=True)
+    f, jd = _world([batch("a", [1], events=[dispatch("a")])], [issue(1, prs=[draft])])
+    assert build_board(f, jd, {}).card("a").column == "pr-open"
+
+
+def test_terminal_state_wins_over_a_stale_run_signal() -> None:
+    cancel = {"kind": "cancel", "at": "2026-10-01T12:00:00Z"}
+    f, jd = _world([batch("a", [1], events=[dispatch("a"), cancel])], [issue(1)])
+    card = build_board(f, jd, {}, run_signals={"a": RunSignal("review", "stale")}).card("a")
+    assert (card.column, card.needs_you) == ("done", False)
+
+
+def test_live_merge_stop_is_a_review_lane() -> None:
+    f, jd = _world(
+        [batch("a", [1], events=[dispatch("a")])], [issue(1, prs=[pr(11, "feat/batch-a")])]
+    )
+    card = build_board(f, jd, {}, stops=_stopped("sha-11")).card("a")
+    assert card.column == "needs-you-review" and "merge stopped" in card.hint
+
+
+def test_unarchived_hand_closeout_is_review_and_archived_is_terminal() -> None:
+    f, jd = _world([batch("m", [1], events=[dispatch("m"), HAND])], _merged_issues())
+    card = build_board(f, jd, {}).card("m")
+    assert card.column == "needs-you-review" and card.hint == "needs you: hand close-out pending"
+    f, jd = _world(
+        [batch("m", [1], events=[dispatch("m"), {**HAND, "archived": 42}])], _merged_issues()
+    )
+    assert build_board(f, jd, {}).card("m").column == "done"
 
 
 def test_a_batch_with_an_open_pr_is_pr_open() -> None:
@@ -406,7 +475,7 @@ def test_first_actions_keeps_the_first_action_per_batch() -> None:
 # ------------------------------------------------------------------ cards and board
 
 
-def test_the_board_has_seven_columns_with_counts_in_order() -> None:
+def test_the_board_has_nine_columns_with_counts_in_order() -> None:
     f, jd = busy()
     board = build_board(f, jd, {})
     assert [c.key for c in board.columns] == list(COLUMNS)
@@ -415,7 +484,9 @@ def test_the_board_has_seven_columns_with_counts_in_order() -> None:
         "proposed": 1,
         "waiting": 1,
         "running": 0,
+        "needs-you-start": 0,
         "pr-open": 2,
+        "needs-you-review": 0,
         "closing-out": 1,
         "partial": 0,
         "done": 1,

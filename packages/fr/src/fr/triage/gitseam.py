@@ -198,6 +198,11 @@ class Checkout:
         """*file*'s exact content at *ref*, or None when it does not exist there."""
         return show_bytes(self.path, ref, file)
 
+    def tree_paths(self, ref: str, directory: str) -> tuple[str, ...]:
+        """Regular file paths below *directory* in *ref*, in git's stable order."""
+        raw = git_bytes(["ls-tree", "-r", "-z", "--name-only", ref, "--", directory], self.path)
+        return tuple(os.fsdecode(path) for path in raw.split(b"\0") if path)
+
     def remote_branch_exists(self, branch: str) -> bool:
         out = git(["ls-remote", "--heads", "origin", f"refs/heads/{branch}"], self.path)
         return bool(out.strip())

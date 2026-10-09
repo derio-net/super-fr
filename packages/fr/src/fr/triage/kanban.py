@@ -57,13 +57,34 @@ from fr.triage.views import drive_snapshot
 BoardStatus = Literal["working", "blocked", "idle", "done", "unknown", "absent"]
 """One session's live state as the board shows it; `absent` when the runner holds none."""
 
-Column = Literal["proposed", "waiting", "running", "pr-open", "closing-out", "partial", "done"]
+HumanLane = Literal["start", "review"]
+
+
+@dataclass(frozen=True)
+class RunSignal:
+    lane: HumanLane
+    reason: str
+
+
+Column = Literal[
+    "proposed",
+    "waiting",
+    "running",
+    "needs-you-start",
+    "pr-open",
+    "needs-you-review",
+    "closing-out",
+    "partial",
+    "done",
+]
 
 COLUMN_TITLES: Mapping[Column, str] = {
     "proposed": "Proposed",
     "waiting": "Waiting",
     "running": "Running",
+    "needs-you-start": "Needs you · start",
     "pr-open": "PR open",
+    "needs-you-review": "Needs you · review",
     "closing-out": "Closing out",
     # A merged batch with a member still open, owed its close-out (gh#985): the driver
     # still acts on it, so it is not Done until that close-out is archived.
@@ -108,6 +129,7 @@ _ACTION_PHRASES: Mapping[str, str] = {
 }
 NEEDS_YOU = "needs you: session blocked"
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason
+NEEDS_YOU_HAND_CLOSEOUT = "needs you: hand close-out pending"
 # R6's per-column fallbacks.
 HINT_QUEUED = "queued"
 HINT_NOT_DRIVEN = "not driven"
@@ -396,6 +418,25 @@ def _idle_of(
     )  # fmt: skip
 
 
+def _attention_column(
+    lifecycle: Column,
+    signal: RunSignal | None,
+    *,
+    review: bool,
+    blocked_session: bool,
+) -> Column:
+    """Terminal wins; review beats start; start only replaces pre-PR running."""
+    if lifecycle == "done":
+        return lifecycle
+    if review or (signal is not None and signal.lane == "review"):
+        return "needs-you-review"
+    if lifecycle == "running" and (
+        blocked_session or (signal is not None and signal.lane == "start")
+    ):
+        return "needs-you-start"
+    return lifecycle
+
+
 def _card(
     batch: Batch,
     facts: Facts,
@@ -404,10 +445,11 @@ def _card(
     actions: Mapping[str, Action],
     selected: frozenset[str],
     stops: Mapping[str, MergeStop],
+    run_signals: Mapping[str, RunSignal],
     claim_expiry: ClaimExpiry | None = None,
     now: datetime | None = None,
 ) -> Card:
-    column = column_of(batch, facts, batches)
+    lifecycle_column = column_of(batch, facts, batches)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
     repo = batch_repo(batch, facts)
     dispatch, closeout = last_dispatch(batch), closeout_event(batch)
@@ -419,12 +461,35 @@ def _card(
         key = closeout_item_id(repo, batch.id) if repo else ""
         closeout_status = statuses.get(key, "unknown")
     stop = stops.get(batch.id)
+    signal = run_signals.get(batch.id)
+    hand_pending = closeout is not None and closeout.runner == "hand" and closeout.archived is None
+    column = _attention_column(
+        lifecycle_column,
+        signal,
+        review=hand_pending or stop is not None,
+        blocked_session=status == "blocked",
+    )
     idle = _idle_of(batch, facts, repo, status, closeout_status, now)
-    needs_you = "blocked" in (status, closeout_status) or stop is not None or idle is not None
-    if "blocked" in (status, closeout_status):
-        hint = NEEDS_YOU
+    needs_you = (
+        column in ("needs-you-start", "needs-you-review")
+        or "blocked"
+        in (
+            status,
+            closeout_status,
+        )
+        or idle is not None
+    )
+    if lifecycle_column == "done":
+        needs_you = False
+        hint = fallback_hint(batch, column, facts, batches, selected=batch.id in selected)
+    elif hand_pending:
+        hint = NEEDS_YOU_HAND_CLOSEOUT
+    elif signal is not None and column == f"needs-you-{signal.lane}":
+        hint = signal.reason
     elif stop is not None:
         hint = f"{NEEDS_YOU_MERGE_STOPPED}: {stop.reason}"
+    elif "blocked" in (status, closeout_status):
+        hint = NEEDS_YOU
     elif idle is not None:
         hint = _idle_hint(idle, facts.collected_at)
     elif held := [d for d in batch.after if d in stops]:
@@ -515,11 +580,12 @@ def build_board(
     judgements: Judgements,
     statuses: Mapping[str, BoardStatus],
     *,
+    run_signals: Mapping[str, RunSignal] | None = None,
     stops: Mapping[str, MergeStop] | None = None,
     me: str | None = None,
     now: datetime | None = None,
 ) -> Board:
-    """One card per batch in seven columns, sorted by wave (none last) then id (R2).
+    """One card per batch in nine columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
     batch's PR is open at the head it was recorded at. *now* is the wall clock (passed in):
     with it a card whose session sat idle past the repo's `idle_session_minutes` with no PR is
@@ -542,6 +608,7 @@ def build_board(
             actions,
             selected,
             live,
+            run_signals or {},
             claim_expiry=expiries.get(b.id),
             now=now,
         )

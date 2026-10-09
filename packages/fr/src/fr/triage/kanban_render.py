@@ -44,10 +44,13 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .meta, .hint, .notes { color: var(--muted); font-size: .85rem; }
 .notes { margin: 8px 0; padding-left: 18px; }
 .empty { margin: 32px 0; color: var(--muted); }
-.board { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px;
-  align-items: start; margin-top: 16px; }
+.board { display: grid; grid-template-columns: repeat(9, minmax(220px, 1fr)); gap: 12px;
+  align-items: start; margin-top: 16px; overflow-x: auto; }
 .col { background: color-mix(in srgb, var(--line) 35%, transparent); border-radius: 8px;
   padding: 10px; min-width: 0; }
+.col.attention { border-top: 3px solid var(--sev-1); }
+.col.attention.start { background: color-mix(in srgb, var(--sev-2) 10%, var(--surface)); }
+.col.attention.review { background: color-mix(in srgb, var(--sev-1) 9%, var(--surface)); }
 .held { margin-top: 16px; background: color-mix(in srgb, var(--line) 35%, transparent);
   border-radius: 8px; padding: 10px; }
 .held ul { margin: 0; padding-left: 18px; }
@@ -80,8 +83,9 @@ button.jump { font: inherit; font-size: .78rem; color: var(--accent); background
 code.cmd { display: block; margin: 4px 0; padding: 4px 6px; background: var(--ground);
   border: 1px solid var(--line); border-radius: 4px; white-space: pre-wrap;
   overflow-wrap: break-word; user-select: all; }
-@media (max-width: 1100px) { .board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 720px) { .board { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) {
+  .board { grid-template-columns: minmax(0, 1fr); overflow-x: visible; }
+}
 """
     + GUTTER_CSS
 )
@@ -343,8 +347,13 @@ def _held(held: Sequence[HeldIssue]) -> str:
 
 def _column(column: ColumnView, scope_args: Sequence[str]) -> str:
     cards = "".join(_card(c, scope_args) for c in column.cards)
+    classes = "col"
+    if column.key == "needs-you-start":
+        classes += " attention start"
+    elif column.key == "needs-you-review":
+        classes += " attention review"
     return (
-        f'<section class="col" data-column="{esc(column.key)}">'
+        f'<section class="{classes}" data-column="{esc(column.key)}">'
         f'<h2>{esc(column.title)} <span class="count">{len(column.cards)}</span></h2>'
         f"{cards}</section>"
     )

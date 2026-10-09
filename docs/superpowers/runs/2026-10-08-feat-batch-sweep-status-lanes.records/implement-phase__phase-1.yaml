@@ -1,0 +1,94 @@
+# Step record. Applied by `fr run resolve --record`; do not resolve it here.
+schema_version: 8
+run: 2026-10-08-feat-batch-sweep-status-lanes
+step: implement-phase
+item: phase/1
+outcome: done
+ticks:
+  - P1.T1.S1
+  - P1.T1.S2
+  - P1.T1.S3
+  - P1.T2.S1
+  - P1.T2.S2
+  - P1.T2.S3
+  - P1.T3.S1
+  - P1.T3.S2
+  - P1.T3.S3
+  - P1.T4.S1
+  - P1.T4.S2
+refactor:
+  P1.T1: smoke and first red assertion only
+  P1.T4: Attention columns share one base selector; existing card, detail, copy and reload markup needed no cleanup.
+journal:
+  - kind: discovery
+    id: p1-remote-cursor-board
+    title: Remote run signals are derived views, not a persisted shape change
+    phase: 1
+    body: |
+      Added nine-column classification, immutable RunSignal, remote-head cursor reads,
+      shared checkout-map validation, and drive-to-board checkout plumbing. Cursor
+      input is mapping-checked, not parsed with the live RunState model. Idle signals
+      use the driver's canonical threshold predicate, including the exact boundary.
+      Temporary git tests read committed blobs rather than dirty checkout bytes.
+      Acceptance statement and deterministic reports now name nine columns; the new
+      rows' status/evidence transitions remain in phase 2 as the plan explicitly assigns.
+  - kind: discovery
+    id: p1-smoke-and-red-context
+    title: The planned smoke node needed its existing name; initial RED was collection failure
+    phase: 1
+    body: |
+      The planned test_the_columns_are_ordered_once did not exist. Ran the existing
+      test_the_columns_are_seven_in_r2_order green (1 passed), then renamed it and
+      added the nine-column assertion. Initial new model and command tests failed
+      collection on missing RunSignal and run_signals, respectively, rather than an
+      assertion diff. Render RED was four behavior failures; subsequent model,
+      command, render and import-direction checks passed. No reset or constructed
+      external-system fixture was used.
+  - kind: discovery
+    id: p1-visual-resume
+    title: Bounded headless capture completed; no surviving capture process was found
+    phase: 1
+    body: |
+      On resume, process inspection found no capture_board.py or headless Chrome
+      process. The earlier capture had completed, so a hang could not be reproduced.
+      Reused triage_kanban_fixtures.world and the existing headless-browser approach;
+      the capture script stays in the gitignored .fr-deliver directory. Every attempt
+      used a 120000ms tool timeout, with 10000ms browser action timeouts on resume.
+      Opened all seven final screenshots at 2300px and 375px; phone width has no
+      horizontal overflow. Clipboard capture now uses the real browser clipboard,
+      permissions granted on an intercepted reserved-domain page, and asserts the
+      exact copied focus command. No real forge, runner, or operator browser was used.
+resolves: []
+evidence: {}
+visual:
+  - row: triage-board-columns
+    script: .fr-deliver/batch-sweep-p1/capture_board.py
+    shots:
+      - path: .fr-deliver/batch-sweep-p1/empty-board.png
+        shows: [empty board]
+      - path: .fr-deliver/batch-sweep-p1/light-wide.png
+        shows: [every column populated, waiting card blocked, done card with cancelled pill]
+      - path: .fr-deliver/batch-sweep-p1/dark-wide.png
+        shows: [dark theme]
+      - path: .fr-deliver/batch-sweep-p1/phone-stacked.png
+        shows: [phone width stacked columns]
+  - row: triage-board-human-status-lanes
+    script: .fr-deliver/batch-sweep-p1/capture_board.py
+    shots:
+      - path: .fr-deliver/batch-sweep-p1/light-wide.png
+        shows: [Needs you start with an early operator gate, Needs you review with completed draft delivery]
+      - path: .fr-deliver/batch-sweep-p1/draft-in-progress.png
+        shows: [PR open with delivery still in progress]
+      - path: .fr-deliver/batch-sweep-p1/phone-stacked.png
+        shows: [phone width with both human lanes populated]
+  - row: triage-board-human-status-hints
+    script: .fr-deliver/batch-sweep-p1/capture_board.py
+    shots:
+      - path: .fr-deliver/batch-sweep-p1/light-wide.png
+        shows: [early gate reason, completed draft review reason, unarchived hand close-out reason]
+      - path: .fr-deliver/batch-sweep-p1/dark-wide.png
+        shows: [nine-column board in dark mode]
+      - path: .fr-deliver/batch-sweep-p1/expanded-detail.png
+        shows: [expand card detail in a human lane]
+      - path: .fr-deliver/batch-sweep-p1/copied-jump.png
+        shows: [copy the existing jump command from a human lane]

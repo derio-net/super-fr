@@ -60,6 +60,7 @@ from rich.markup import escape
 from fr import __version__
 from fr.acceptance.ci import CI_CONFIG_PATHS
 from fr.commands import triage_kanban_cmd
+from fr.commands.triage_checkout import checkout_map
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
@@ -2045,32 +2046,10 @@ def _checkout_map(
     A single-repo scope defaults to the current git toplevel (None), as `batch
     dispatch` does; any other scope needs a mapping for every repo with a batch to
     drive, refused before anything runs."""
-    out: dict[str, Path | None] = {}
-    for value in values or []:
-        name, sep, where = value.partition("=")
-        if not sep or name.count("/") != 1 or not where:
-            _fail(f"--checkout takes REPO=PATH (OWNER/REPO=/path/to/clone), got {value!r}")
-        out[name.lower()] = Path(where).expanduser()
-    if scope.kind == "repo":
-        stray = sorted(set(out) - {scope.target.lower()})
-        if stray:
-            _fail(
-                f"--checkout names {', '.join(stray)}, which is not this scope's repo "
-                f"{scope.target}"
-            )
-        out.setdefault(scope.target.lower(), None)
-        return out
-    if scope.kind == "group":
-        stray = sorted(set(out) - {r.lower() for r in scope.repos})
-        if stray:
-            _fail(f"--checkout names {', '.join(stray)}, which is not in this scope's group")
-        repos = set(
-            scope.repos
-        )  # a group needs a clone for EVERY repo, not only those with batches
-    missing = sorted(r for r in repos if r.lower() not in out)
-    if missing:
-        _fail(f"give --checkout REPO=PATH for {', '.join(missing)}: no clone is known for it")
-    return out
+    try:
+        return checkout_map(values, scope, repos)
+    except TriageError as exc:
+        _fail(str(exc))
 
 
 def _chosen(batches: list[Batch], named: list[str] | None) -> list[Batch]:
@@ -3087,6 +3066,7 @@ class _Driver:
                 self.target,
                 scope_args=self.scope_args,
                 prefix=self.workspace_prefix,
+                checkout_paths=self.checkout_paths,
             )
         except Exception as exc:  # noqa: BLE001 - the board is a view; it never fails a pass
             cause = triage_kanban_cmd.one_line(exc)

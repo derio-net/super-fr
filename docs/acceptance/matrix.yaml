@@ -6758,9 +6758,9 @@ rows:
       the live PR) are unit-tested in CI.
   - id: triage-board-columns
     capability: triage-batch-board
-    acceptance: '`fr triage board` writes board.html showing one card per batch in seven
-      lifecycle columns (Proposed, Waiting, Running, PR open, Closing out, Partial,
-      Done) with counts, a partial batch in Partial until its close-out is archived,
+    acceptance: '`fr triage board` writes board.html showing one card per batch in nine
+      columns (Proposed, Waiting, Running, Needs you · start, PR open, Needs you · review,
+      Closing out, Partial, Done) with counts, a partial batch in Partial until its close-out is archived,
       a blocked mark for unsatisfiable dependencies and a pill for cancelled/abandoned/partial,
       linked from triage.html, readable in light and dark and at phone width.'
     origin:
