@@ -123,3 +123,8 @@ Original-batch conflict message updates reconstruction metadata; outstanding cur
 ### tier-2026-10-09-herdr-opencode-replacement-p1 · decision · tier: process lifecycle and crash-safe managed restart require hard
 
 Phase 1 changes a live-process eligibility gate and durable descriptor recovery; hard tier is justified by the safety and concurrency paths.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-09-herdr-opencode-replacement-p2 created=2026-10-09T20:33:32+00:00 -->
+### phase-split-2026-10-09-herdr-opencode-replacement-p2 · decision · ask: audited batch replacement is independently reviewable
+
+Phase 2 serves R4-R9 and R12: a new replacement command and batch transaction, separate from phase 1's OpenCode lifecycle. Hard tier because pane locks, uncertain submission and cross-store repair form a concurrency gate.
