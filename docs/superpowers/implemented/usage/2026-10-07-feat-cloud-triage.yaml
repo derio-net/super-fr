@@ -4,10 +4,11 @@ captures:
 - host: h-d8652473
   harness: claude-code
   mode: host-worktree
-  captured_at: '2026-10-08T20:40:06+00:00'
+  captured_at: '2026-10-08T23:25:20+00:00'
   at:
   - resolve:brainstorm
   - deliver
+  - closeout
   sessions:
   - session: 422d9058-bced-5a6c-bdcb-09e941e783d2
     role: main
