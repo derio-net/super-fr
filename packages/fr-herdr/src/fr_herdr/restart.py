@@ -25,7 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from fr_herdr._herdr import HerdrError, _run_herdr, start_agent
+from fr_herdr import managed, opencode
+from fr_herdr._herdr import HerdrError, _run_herdr, poll, start_agent
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection
@@ -316,14 +317,7 @@ _T = TypeVar("_T")
 def _poll(check: Callable[[], _T | None], *, timeout: float) -> _T | None:
     """Call *check* until it answers something other than None, or *timeout* runs out.
     The one wait both the exit and the resume use."""
-    deadline = _clock() + timeout
-    while True:
-        answer = check()
-        if answer is not None:
-            return answer
-        if _clock() >= deadline:
-            return None
-        _sleep(POLL_INTERVAL)
+    return poll(check, timeout=timeout, clock=_clock, sleep=_sleep, interval=POLL_INTERVAL)
 
 
 def _claude_process(info: dict[str, Any]) -> dict[str, Any] | None:
@@ -455,6 +449,15 @@ def restart_idle(*, yes: bool, exclude: Collection[str] = ()) -> RestartReport:
     self_pane = os.environ.get("HERDR_PANE_ID") or None
     report = RestartReport(dry_run=not yes)
     for listed in agents:
+        if listed.get("agent") == "opencode":
+            pane = str(listed["pane_id"])
+            oc_verdict, detail, recovery = opencode.restart_pane(
+                pane, yes=yes, exclude=set(exclude)
+            )
+            report.lines.append(
+                PaneLine(pane, tabs.get(listed.get("tab_id"), ""), oc_verdict, detail, recovery)
+            )
+            continue
         if listed.get("agent") != "claude":
             continue
         pane = str(listed["pane_id"])
@@ -475,7 +478,19 @@ def restart_idle(*, yes: bool, exclude: Collection[str] = ()) -> RestartReport:
         elif not yes:
             report.lines.append(PaneLine(pane, tab, "ok", "would restart"))
         else:
-            outcome = restart(verdict)
+            try:
+                with managed.pane_lock(pane):
+                    current = _fresh(pane)
+                    if (
+                        current is None
+                        or classify(**_inputs(current, self_pane, exclude)) != verdict
+                    ):
+                        report.lines.append(PaneLine(pane, tab, "skip", "changed before mutation"))
+                        continue
+                    outcome = restart(verdict)
+            except Exception as exc:  # noqa: BLE001 - lock losers/unknown observations send nothing
+                report.lines.append(PaneLine(pane, tab, "skip", str(exc)))
+                continue
             if outcome.ok:
                 report.lines.append(PaneLine(pane, tab, "ok", ""))
             else:

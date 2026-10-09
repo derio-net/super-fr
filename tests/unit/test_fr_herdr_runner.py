@@ -62,12 +62,15 @@ class _Herdr:
 
 
 @pytest.fixture
-def herdr(monkeypatch: pytest.MonkeyPatch) -> _Herdr:
+def herdr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Herdr:
     fake = _Herdr()
     monkeypatch.setattr(herdr_runner, "_run_herdr", fake)
     monkeypatch.setattr(herdr_runner.shutil, "which", lambda name: "/usr/local/bin/herdr")
     monkeypatch.setenv("HERDR_ENV", "1")
     monkeypatch.setenv("HERDR_WORKSPACE_ID", "w2")
+    monkeypatch.setenv("HERDR_SOCKET_PATH", str(tmp_path / "server.sock"))
+    monkeypatch.setenv("FR_HERDR_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(herdr_runner, "stable_checkout", lambda path: path)
     return fake
 
 
@@ -139,6 +142,27 @@ def test_can_dispatch_takes_a_run_item_for_a_known_harness(herdr: _Herdr) -> Non
     assert not runner.can_dispatch(_item(harness="nonesuch"))
 
 
+def test_opencode_refuses_an_unqualified_model_before_opening_a_tab(herdr: _Herdr) -> None:
+    with pytest.raises(herdr_runner.HerdrError, match="provider/model"):
+        HerdrRunner.from_env().dispatch(_item(harness="opencode", model="unqualified"))
+    assert herdr.calls == []
+
+
+def test_original_opencode_batch_message_persists_conflict_identity(herdr: _Herdr) -> None:
+    from fr_herdr import managed
+
+    item = _item(harness="opencode", model="openai/gpt-6.1-sol")
+    pane = HerdrRunner.from_env().dispatch(item)
+    # Synthetic listing joins the captured create identity to this test item.
+    herdr.listing = {"result": {"tabs": [{"tab_id": "w2:t1H", "label": item.id}]}}
+    herdr.agents = {"result": {"agents": [{"tab_id": "w2:t1H", "pane_id": pane}]}}
+    brief = "Merge conflict on batch lifecycle: PR #1, at head abc, conflicts with main. six steps"
+    HerdrRunner.from_env().message(item, brief)
+    d = managed.load(pane)
+    assert d.item == item.id and d.role == "batch"
+    assert d.conflict_head == "abc" and d.conflict_brief == brief
+
+
 def test_can_dispatch_refuses_a_phase_item(herdr: _Herdr) -> None:
     from fr_dispatch.work_item import WorkItem
 
@@ -157,8 +181,13 @@ def test_can_dispatch_refuses_a_phase_item(herdr: _Herdr) -> None:
 # ------------------------------------------------------------------ dispatch
 
 
-def test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it(herdr: _Herdr) -> None:
-    item = _item(model="claude-opus-5-5", brief="/fr-goal Separate lifecycles")
+@pytest.mark.parametrize(
+    "harness,model", [("claude", "claude-opus-5-5"), ("opencode", "openai/gpt-6.1-sol")]
+)
+def test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it(
+    herdr: _Herdr, harness: str, model: str
+) -> None:
+    item = _item(harness=harness, model=model, brief="/fr-goal Separate lifecycles")
 
     handle = HerdrRunner.from_env().dispatch(item)
 
@@ -169,8 +198,8 @@ def test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it(herdr: _Herdr
     ]  # fmt: skip
     name = agent_name(item.id)
     assert start == [
-        "agent", "start", name, "--kind", "claude", "--pane", "w2:p1K",
-        "--", "--model", "claude-opus-5-5",
+        "agent", "start", name, "--kind", harness, "--pane", "w2:p1K",
+        "--", "--model", model,
     ]  # fmt: skip
     assert prompt == [
         "agent", "prompt", name, "/fr-goal Separate lifecycles",
@@ -231,6 +260,16 @@ def test_a_failure_without_an_envelope_has_no_code(monkeypatch: pytest.MonkeyPat
     with pytest.raises(herdr_runner.HerdrError) as caught:
         herdr_runner._run_herdr(["agent", "start", "x"])
     assert caught.value.code is None
+
+
+def test_a_hung_herdr_observation_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    def hung(argv, **kwargs):
+        assert kwargs.get("timeout") == 60
+        raise subprocess.TimeoutExpired(argv, 60)
+
+    monkeypatch.setattr(herdr_runner.subprocess, "run", hung)
+    with pytest.raises(herdr_runner.HerdrError, match="timed out"):
+        herdr_runner._run_herdr(["pane", "process-info", "--pane", "synthetic"])
 
 
 def test_a_pane_whose_shell_is_not_up_yet_is_retried(

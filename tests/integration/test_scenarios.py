@@ -84,6 +84,14 @@ def test_the_install_exposes_the_fr_herdr_console_script(installed: Path) -> Non
     assert done.returncode == 0 and "--exclude" in done.stdout, done.stderr
 
 
+def test_herdr_opencode_launch(installed: Path, tmp_path: Path) -> None:
+    _scenario("herdr-opencode", installed, tmp_path)
+
+
+def test_herdr_opencode_restart(installed: Path, tmp_path: Path) -> None:
+    _scenario("herdr-opencode-restart", installed, tmp_path)
+
+
 def test_the_install_carries_every_runner_package(installed: Path) -> None:
     """The `--with` set mirrors install.sh's: every `fr.runners` package imports."""
     py = installed / "uv-tools" / "fr" / "bin" / "python"

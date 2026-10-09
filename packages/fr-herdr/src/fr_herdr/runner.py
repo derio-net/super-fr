@@ -19,8 +19,8 @@ agent has taken the prompt up (it left `idle`), not merely once it was typed.
   parses herdr's JSON envelope and raises `HerdrError` on failure; tests
   replace it.
 - **One harness table.** `HARNESSES` maps a harness to herdr's agent kind and
-  the argv that selects a model. Only `claude` is verified; others are added
-  as they are verified live.
+  the argv that selects a model. Claude resumes; managed OpenCode recovers fresh
+  from durable state (input grounding: tests/fixtures/herdr/opencode).
 - **Identity.** The tab label is the full item id (`<repo>/run/batch-<id>`,
   unique across repos), so `existing_dispatches` matches live tabs by label.
   The agent name only has to satisfy herdr's `[a-z][a-z0-9_-]{0,31}`:
@@ -57,11 +57,12 @@ import shutil
 import subprocess  # noqa: F401  (tests patch `fr_herdr.runner.subprocess.run`)
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fr_dispatch.protocols import AdoptTarget
 
-from fr_herdr import restart  # noqa: F401  (imported at module top level, never lazily: spec sr-13)
+from fr_herdr import managed, restart
 from fr_herdr._herdr import (
     PANE_BUSY_TRIES,
     PANE_BUSY_WAIT,
@@ -99,7 +100,22 @@ class Harness:
 
 HARNESSES: dict[str, Harness] = {
     "claude": Harness(kind="claude", model_flag="--model"),
+    "opencode": Harness(kind="opencode", model_flag="--model"),
 }
+
+
+def stable_checkout(path: str) -> str:
+    """Normalize through fr's isolation seam; never launch in a disposable checkout."""
+    from fr.isolation.local import _main_worktree_root
+
+    root = Path(path).resolve()
+    if not root.is_dir() or not (root / ".git").exists():
+        raise HerdrError(f"checkout is not an available git toplevel: {root}")
+    primary = _main_worktree_root(root)
+    if not primary.is_dir() or not (primary / ".git").is_dir():
+        raise HerdrError(f"stable primary checkout is unavailable: {primary}")
+    return str(primary)
+
 
 _NAME_UNSAFE = re.compile(r"[^a-z0-9_-]")
 
@@ -199,6 +215,19 @@ class HerdrRunner:
     def message(self, item: WorkItem, text: str) -> None:
         """Prompt the item's agent with *text* (spec 2026-10-06-verification-strategies
         §G, R23): `herdr agent prompt <agent_name(item.id)> <text>`."""
+        # Save before sending: a crash after prompt uptake must not lose the handback.
+        if text.startswith("Merge conflict on batch ") and os.environ.get("HERDR_SOCKET_PATH"):
+            for tab in _tabs_labelled(_list_tabs(), item.id):
+                for agent in _list_agents():
+                    if agent.get("tab_id") == tab.get("tab_id"):
+                        d = managed.load(str(agent["pane_id"]))
+                        if d and d.item == item.id:
+                            with managed.pane_lock(d.pane):
+                                if d.checkpoint != "active" or managed.load(d.pane) != d:
+                                    raise HerdrError("managed handback has an unresolved operation")
+                                managed.save(managed.handback(d, text))
+                                _run_herdr(["agent", "prompt", agent_name(item.id), text])
+                                return
         _run_herdr(["agent", "prompt", agent_name(item.id), text])
 
     def restart_idle(self, *, exclude: Sequence[str] = ()) -> RestartSummary:
@@ -277,10 +306,32 @@ class HerdrRunner:
         """
         payload = item.payload
         harness = HARNESSES[str(payload["harness"])]
-        checkout = str(payload.get("checkout") or os.getcwd())
+        if harness.kind == "opencode" and not re.fullmatch(
+            r"[^/\s]+/[^\s]+", str(payload["model"])
+        ):
+            raise HerdrError("OpenCode requires an explicit provider/model")
+        checkout = stable_checkout(str(payload.get("checkout") or os.getcwd()))
         pane, cleanup = self._open_tab(item, checkout)
+        descriptor = None
         try:
             name = agent_name(item.id)
+            if harness.kind == "opencode":
+                descriptor = managed.Descriptor.model_validate(
+                    {
+                        "server": managed.server_identity(),
+                        "pane": pane,
+                        "name": name,
+                        "item": item.id,
+                        "role": payload.get("kind", "batch"),
+                        "branch": str(payload["branch"]),
+                        "checkout": checkout,
+                        "model": str(payload["model"]),
+                        "brief": str(payload["brief"]),
+                        "checkpoint": "prepared",
+                    }
+                )
+                descriptor = managed.handback(descriptor, descriptor.brief)
+                managed.save(descriptor)
             _start_agent(
                 [
                     "agent",
@@ -294,7 +345,12 @@ class HerdrRunner:
                     *harness.model_args(str(payload["model"])),
                 ]
             )
+            if descriptor:
+                descriptor = descriptor.model_copy(update={"checkpoint": "submission-started"})
+                managed.save(descriptor)
             _submit(name, str(payload["brief"]))
+            if descriptor:
+                managed.save(descriptor.model_copy(update={"checkpoint": "active"}))
         except BaseException:
             cleanup()
             raise

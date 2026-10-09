@@ -1348,7 +1348,7 @@ def dispatch_batch(
         runner=runner_name,
         remedy=worker_remedy() if runner_name in CLOUD_PREFLIGHT_RUNNERS else None,
     )
-    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path, group)  # step 4
+    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.main_worktree(), group)
     branch = batch_branch(batch)
     console.print(f"dispatch batch {batch.id} as {item.id}", markup=False)
     console.print(f"  runner: {runner_name}", markup=False)
@@ -3757,7 +3757,7 @@ class _Driver:
                 "model": launch.model,
                 "branch": branch,
                 "issues": list(batch.ids),
-                "checkout": str(self.checkout(repo).path),
+                "checkout": str(self.checkout(repo).main_worktree()),
                 "group": self.group_of(batch),
             },
             tracking=None,
@@ -3832,7 +3832,12 @@ class _Driver:
             )  # fmt: skip
             return f"recorded the live {item_id}", True
         item = _closeout_item(
-            repo, batch, launch, run=run, checkout=checkout.path, group=self.group_of(batch)
+            repo,
+            batch,
+            launch,
+            run=run,
+            checkout=checkout.main_worktree(),
+            group=self.group_of(batch),
         )
         runner = self.runner(str(launch.runner))
         if not runner.can_dispatch(item):

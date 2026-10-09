@@ -277,8 +277,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
   protocol. `fr-cncd` is real but predates its own README/CLAUDE mentions —
   don't assume tables in `README.md` are exhaustive; check `packages/*/pyproject.toml`
   and `plugins/super-fr/skills/` against prose before trusting a list.
-- `fr-herdr` — the `herdr` runner (entry point `fr.runners: herdr`), the
-  first that takes `unit="run"` work: `fr triage batch dispatch` builds it
+- `fr-herdr` — the `herdr` runner (entry point `fr.runners: herdr`),
+  managed OpenCode lifecycle/restart adapter as well as Claude resume. Host-local
+  descriptors/locks live in `fr_herdr.managed`, safe input in `fr_herdr.opencode`.
+  Operator notes: `docs/herdr-control-sessions.md`, `packages/fr-herdr/README.md`.
+  It was the first to take `unit="run"` work: `fr triage batch dispatch` builds it
   through `fr_dispatch.registry.load_runner`'s `from_env()` and it opens a
   herdr tab, starts the harness on the batch's model and submits the brief.
   It never imports `fr.triage`, and `fr` never imports it

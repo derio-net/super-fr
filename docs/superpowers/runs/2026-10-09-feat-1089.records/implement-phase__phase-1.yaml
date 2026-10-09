@@ -1,0 +1,71 @@
+schema_version: 8
+run: 2026-10-09-feat-1089
+step: implement-phase
+item: phase/1
+outcome: failed
+ticks:
+  - P1.T1.S2
+  - P1.T1.S3
+  - P1.T1.S4
+  - P1.T2.S1
+  - P1.T2.S2
+  - P1.T2.S3
+  - P1.T3.S1
+  - P1.T3.S2
+  - P1.T3.S3
+  - P1.T4.S1
+  - P1.T4.S2
+refactor:
+  P1.T1: Shared stable checkout validation uses fr's existing isolation seam.
+  P1.T2: One role-discriminated descriptor and reconstruction path; no initial-goal replay.
+  P1.T3: Shared bounded polling preserves Claude clock/sleep seams and resume behavior.
+  P1.T4: Scenarios reuse the common harness and one explicitly synthetic response helper.
+journal:
+  - kind: discovery
+    id: p1-grounded-input-contract
+    phase: 1
+    title: OpenCode input safety is separate from idle status
+    body: |
+      Redacted capture excerpts now live in tests/fixtures/herdr/opencode with
+      provenance, original final-border ANSI and the original placeholder ANSI
+      line. Border lines were checked byte-for-byte against the supplied captures.
+      The final focused bounded textarea, muted placeholder styling, current
+      version/footer and single foreground model-selected process establish known
+      eligibility. Drafts, overlays, blank startup, unknown versions/themes,
+      active tool/subagent observations and unrecognized layouts fail closed.
+      Completed task history is not active background work. Plain exit returns to
+      a shell only when foreground pid matches shell_pid and cwd is observed.
+      Synthetic refusal/failure tests are labelled; no live Ready walk is claimed.
+  - kind: decision
+    id: p1-recovery-state-ownership
+    phase: 1
+    title: Recovery checkpoints stay local and unfinished work is not redispatched blindly
+    body: |
+      managed.py is host-local runner state, not a registered repo artifact or a
+      triage import. Atomic descriptors and OS-backed socket/pane locks support
+      both restart and the later replacement seam. Non-active checkpoints skip
+      automatic restart, including uptake-confirmed after a final metadata failure.
+      Recovery reads the existing branch workspace and durable cursor; unfinished
+      units require explicit dead-holder reconciliation before redispatch. Delivered
+      cursors HOLD. Current original-batch handbacks retain batch identity and
+      precede HOLD only with matching branch head and live conflicting PR; obsolete
+      handbacks are suppressed. Close-out reuses pickup and its delivery/merge gates.
+  - kind: discovery
+    id: p1-candidate-evidence
+    phase: 1
+    title: Installed candidate scenarios and existing Claude regressions pass
+    body: |
+      Both installed OpenCode scenarios passed after RED missing-helper failures.
+      The targeted lifecycle/restart/dispatch/driver regression group passed 431
+      tests. Ruff passed across packages/tests; mypy passed 284 source files.
+      Acceptance launch/restart rows were transitioned with the acceptance CLI,
+      named unit/integration refs and their declared scenarios, not record sections.
+      Published explainers do not describe herdr/restart-idle/post_merge_restart;
+      their pipeline/CLI wording is unaffected. Runner/operator/skill docs and both
+      generated skill mirrors were updated. The separate replacement phase and
+      operator-owned client-live Ready obligation remain untouched.
+resolves:
+  - id: p1-opencode-input-grounding
+    state: fixed
+    body: Captured OpenCode input/process/shell contract is implemented and pinned by named tests; unknown observations fail closed without sending input.
+evidence: {}

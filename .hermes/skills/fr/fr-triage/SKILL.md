@@ -102,6 +102,17 @@ file. Set `ranked_at` to today whenever you change a judgement. Keys are case-in
 
 ## The shape of a judgement
 
+**Managed OpenCode control sessions:** herdr also accepts `opencode` with an
+explicit provider/model. Control sessions start from the stable primary checkout;
+branch work uses fr isolation. Restart previews/acts on managed idle OpenCode
+sessions as fresh sessions in the same pane/name/model, reconstructing durable
+state rather than replaying the goal. Delivered drafts HOLD for operator review;
+current conflict handbacks take precedence and close-out uses pickup's merge gates.
+Drafts, overlays, caller/excluded panes, unsupported layouts and non-active recovery
+checkpoints are skipped without input. Never clear a draft or blindly resend an
+uncertain brief. Claude retains its existing resume behavior. Observation limits
+and manual recovery: `docs/herdr-control-sessions.md`.
+
 1. **Tier by what the failure costs**: lost work, then a failure that looks like success, then friction. Never by age, label, reporter or how loud the issue is.
 2. **Verify against current main, at scale too.** Before `verified: true`, re-read the cited `file:line` at current main — snippets go stale, and at forty issues a fixed bug stays ranked as live. If you did not re-read it, write `verified: false`.
 3. **Record line drift** in `detail` (`was :1013, now :1312`); a bug already fixed on main is a close recommendation, not a ranking.

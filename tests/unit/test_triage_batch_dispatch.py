@@ -153,6 +153,9 @@ class FakeCheckout:
     def origin_repo(self) -> str | None:
         return self.origin
 
+    def main_worktree(self) -> Path:
+        return self.path
+
     def default_branch(self) -> str:
         return self.default
 
@@ -540,6 +543,22 @@ def test_a_dispatched_debug_batch_uses_the_fix_branch_and_fr_debugging(
     (event,) = batch.events
     assert isinstance(event, DispatchEvent)
     assert event.branch == "fix/batch-lifecycle"
+
+
+def test_dispatch_payload_uses_primary_checkout(
+    tmp_path: Path,
+    gh: FakeGhClient,
+    runner: FakeRunner,
+    checkout: FakeCheckout,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = tmp_path / "primary"
+    monkeypatch.setattr(checkout, "main_worktree", lambda: primary)
+    _state(tmp_path, _facts(config=VERSION_CONFIG))
+    checkout.serve(VERSION_CONFIG)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    assert runner.dispatched[0].payload["checkout"] == str(primary)
 
 
 def test_repairs_missing_dispatch_probe_carries_the_batch_workflow(

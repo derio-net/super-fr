@@ -428,7 +428,10 @@ def _world(
                 pane_id=pane, agent_session={"value": f"s-{pane}"}, tab_id=f"t-{pane}", name=None
             )
         )
-    agents.append({"agent": "opencode", "agent_status": "idle", "pane_id": "w9:p1"})
+    # OpenCode now has its own managed restart path; codex remains unrelated.
+    agents.append({"agent": "codex", "agent_status": "idle", "pane_id": "w9:p1"})
+    monkeypatch.setenv("HERDR_SOCKET_PATH", str(tmp_path / "server.sock"))
+    monkeypatch.setenv("FR_HERDR_CACHE_DIR", str(tmp_path / "managed-cache"))
     state: dict[str, set[str]] = {"left": set(), "back": set()}  # claude exited / relaunched
 
     def process_info(args: list[str]) -> dict[str, Any]:

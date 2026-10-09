@@ -1,0 +1,21 @@
+{
+  "id": "cli:pane:process_info",
+  "result": {
+    "process_info": {
+      "foreground_process_group_id": 3896,
+      "foreground_processes": [
+        {
+          "argv": ["opencode", "--model", "openai/gpt-6.1-sol"],
+          "argv0": "opencode",
+          "cmdline": "opencode --model openai/gpt-6.1-sol",
+          "cwd": "/Users/example/projects/super-fr",
+          "name": "opencode",
+          "pid": 3896
+        }
+      ],
+      "pane_id": "wCAP:p1",
+      "shell_pid": 2095
+    },
+    "type": "pane_process_info"
+  }
+}
