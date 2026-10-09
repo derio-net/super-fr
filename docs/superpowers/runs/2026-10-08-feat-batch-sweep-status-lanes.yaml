@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-10-09T04:36:13+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-09T04:36:13+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: opencode
+          tier: hard
+          bound: openai/gpt-6.1-sol
+          session: ses_ee3aef49fffe0vcDJoiJKdwRsT
   plan:
     state: pending
   plan-review:
