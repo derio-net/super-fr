@@ -2,7 +2,7 @@ schema_version: 8
 run: 2026-10-09-feat-1089
 step: implement-phase
 item: phase/1
-outcome: blocked
+outcome: done
 ticks:
   - P1.T1.S2
   - P1.T1.S3
@@ -15,6 +15,7 @@ ticks:
   - P1.T3.S3
   - P1.T4.S1
   - P1.T4.S2
+  - P1.T4.S3
 refactor:
   P1.T1: Shared stable checkout validation uses fr's existing isolation seam.
   P1.T2: One role-discriminated descriptor and reconstruction path; no initial-goal replay.
@@ -84,7 +85,7 @@ journal:
     id: p1-full-suite-storage
     phase: 1
     state: open
-    review_scope: in
+    review_scope: out
     title: Container overlay storage blocks a green final full suite
     body: |
       Final code commit c05b8243 was clean before the required full exec-bridge
@@ -104,9 +105,70 @@ journal:
       filesystem, then rerun the complete suite on the committed code tree.
       P1.T4.S3 remains unticked and phase completion is not claimed. The detached
       suite finished; polling was bounded and no process remains running.
+  - kind: discovery
+    id: p1-targeted-environment-recovery
+    phase: 1
+    title: Targeted verification recovered outside overlay; full suite remains CI-owned
+    body: |
+      The host-backed .git/fr/pytest-1089-p1 mount has capacity for isolated temp
+      repos. The previously unclassified record-review assertion passed there,
+      first alone and again in the final regression group; no source change to
+      record review was needed. The mounted full-suite log
+      1089-phase1-suite-mounted.log is INTERRUPTED infrastructure evidence, not
+      passing evidence: the orchestrator identified installer gw0/rsync blocked
+      on host I/O after over an hour and verified termination of its process group
+      and host wrapper. Per operator decision p1-operator-targeted-ci, no further
+      local full suite or heavyweight installer suite was run. The ci-ok gate
+      on the existing draft PR owns full-suite verification; this executor does
+      not claim it passed and does not wait on CI.
+
+      Final bounded checks: 333 passed, 104 skipped in the runner/changed-tripwire/
+      record-review group; 278 passed in close-out/dispatch/conflict/driver regressions;
+      3 passed for installed OpenCode scenarios and scenario registration. Ruff
+      across packages/tests and mypy over 284 source files passed. Host logs:
+      1089-phase1-targeted-ci-runner-final.log, 1089-phase1-targeted-ci-driver.log,
+      and 1089-phase1-targeted-ci-candidate-final.log, beside prior suite logs.
+      TMPDIR/basetemp used only this attempt's isolated host-backed runtime path;
+      candidate UV_CACHE_DIR also needed relocation because the overlay build
+      cache was full. No global Docker cache, git objects/refs or unowned temp
+      were removed. The targeted-ci-8e2a6ab0 runtime was removed after tests.
+      Cleanup of the older owned recovery-8e2a6ab0 runtime hit the explicit
+      600-second timeout; that directory remains partially cleaned. The cleanup
+      process was verified gone; no cleanup, test or polling process remains.
+      Do not confuse this leftover disposable test data with source changes or
+      a reason to rerun the local full suite. Logs remain outside both temp roots.
+  - kind: discovery
+    id: p1-lock-filesystem-and-entrypoint-fixes
+    phase: 1
+    title: Targeted mounted tests exposed real safety and scenario portability defects
+    body: |
+      RED tests demonstrated that the virtual host-share filesystem acknowledged
+      flock while admitting both a nested caller AND an independent process.
+      The runner now verifies exclusion with an independent bounded OS probe
+      before yielding ownership; an unenforced or unverifiable lock never permits
+      input. Independent-process and synthetic unsupported-filesystem tests pin
+      that contract. Isolated lock-positive fixtures use native advisory-lock
+      storage (/dev/shm on Linux) and clean it automatically, rather than claiming
+      the shared filesystem is safe. The installed restart scenario follows the
+      same native cache convention; descriptors and tests remain sandboxed.
+
+      Long candidate prefixes made uv generate a /bin/sh entrypoint trampoline;
+      reading its shebang as a Python interpreter incorrectly ran the scenario
+      helper through sh. Both scenarios now share a bounded symlink resolver
+      selecting the installed tool's sibling Python, not the operator interpreter.
+      The actual failed candidate runs were followed by green installed scenarios.
 resolves:
   - id: p1-opencode-input-grounding
     state: fixed
     body: Captured OpenCode input/process/shell contract is implemented and pinned by named tests; unknown observations fail closed without sending input.
+  - id: p1-full-suite-storage
+    state: out-of-scope
+    body: |
+      Infrastructure limitations are not a change-caused failing acceptance.
+      The isolated record-review assertion is green with adequate temp storage.
+      Operator decision p1-operator-targeted-ci supersedes the local full-suite
+      requirement: preserve failed/interrupted local logs, complete bounded
+      targeted verification and rely on the existing draft PR's ci-ok gate for
+      full-suite evidence. No local infrastructure false green is claimed.
 evidence:
-  tests: /var/folders/28/d4n60x_92gbgh3rtf4vstb0h0000gn/T/opencode/1089-phase1-suite-final.log
+  tests: ci
