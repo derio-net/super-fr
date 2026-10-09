@@ -51,10 +51,21 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: pending
+    state: running
+    at: '2026-10-09T04:44:30+00:00'
     members:
     - implement-phase
     - review-phase
+    units:
+      phase/1/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-10-09T04:44:30+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: opencode
+          tier: standard
+          bound: openai/gpt-6.1-sol
+          session: ses_ee3aef49fffe0vcDJoiJKdwRsT
   journal-check:
     state: pending
   deliver:
