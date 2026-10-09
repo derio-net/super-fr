@@ -20,6 +20,7 @@ from typing import Literal
 import yaml
 from fr.artifacts.atomic import write_text_atomic
 from fr.git import git_answer
+from fr.hostclient import client_for
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 
@@ -142,33 +143,23 @@ def conflict_current(d: Descriptor) -> bool:
     """A saved handback only survives a matching head AND live conflicting open PR."""
     if _git(d, "rev-parse", d.branch) != d.conflict_head:
         return False
-    done = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            d.branch,
-            "--state",
-            "all",
-            "--json",
-            "state,mergeable,headRefOid",
-        ],
-        cwd=d.checkout,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=True,
-    )
-    prs = json.loads(done.stdout)
+    repo, separator, _ = d.item.partition("/run/")
+    if not separator:
+        raise ManagedError("managed item has no repo/run identity")
+    client = client_for(Path(d.checkout))
+    prs = [
+        pr
+        for pr in client.list_prs_by_head(repo, d.branch)
+        if not pr.get("isCrossRepository", False)
+    ]
     if not isinstance(prs, list) or len(prs) != 1:
         raise ManagedError("cannot establish the handback's live PR identity")
-    pr = prs[0]
+    pr = client.pr_view(repo, int(prs[0]["number"]))
     if pr["state"] != "OPEN":
         return False
     if pr["mergeable"] not in ("MERGEABLE", "CONFLICTING"):
         raise ManagedError("live mergeability is unknown; inspect before recovery")
-    return bool(pr["headRefOid"] == d.conflict_head and pr["mergeable"] == "CONFLICTING")
+    return bool(pr["head_oid"] == d.conflict_head and pr["mergeable"] == "CONFLICTING")
 
 
 def pickup(d: Descriptor) -> str:

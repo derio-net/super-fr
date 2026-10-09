@@ -93,3 +93,28 @@ def test_closeout_reuses_pickup_gate(descriptor, monkeypatch):
     monkeypatch.setattr(managed, "pickup", refuse)
     with pytest.raises(managed.ManagedError, match="not merged"):
         managed.reconstruct(d)
+
+
+@pytest.mark.parametrize(
+    "state,mergeable,expected",
+    [
+        ("OPEN", "CONFLICTING", True),
+        ("OPEN", "MERGEABLE", False),
+        ("MERGED", "CONFLICTING", False),
+    ],
+)
+def test_live_conflict_reads_the_forge_adapter(descriptor, monkeypatch, state, mergeable, expected):
+    """Synthetic GhClient protocol answers, not fabricated wire captures."""
+    d = descriptor.model_copy(update={"conflict_head": "abc"})
+    monkeypatch.setattr(managed, "_git", lambda d, *args: "abc")
+
+    class Client:
+        def list_prs_by_head(self, repo, branch):
+            assert repo == "example/alpha" and branch == "feat/test"
+            return [{"number": 1}]
+
+        def pr_view(self, repo, number):
+            return {"state": state, "mergeable": mergeable, "head_oid": "abc"}
+
+    monkeypatch.setattr(managed, "client_for", lambda root: Client())
+    assert managed.conflict_current(d) is expected

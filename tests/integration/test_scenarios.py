@@ -159,6 +159,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "triage-claims-held",
         "triage-claims-expired",
         "herdr-restart-idle",
+        "herdr-opencode",
+        "herdr-opencode-restart",
         "model-binding-set-probe",
         "model-binding-replacement",
         "model-binding-check",
