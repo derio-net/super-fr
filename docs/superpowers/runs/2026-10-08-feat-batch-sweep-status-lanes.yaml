@@ -3,7 +3,7 @@ run: 2026-10-08-feat-batch-sweep-status-lanes
 workflow: fr-goal@1
 branch: feat/batch-sweep-status-lanes
 started: '2026-10-08T16:23:01+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md
   spec-review:
-    state: running
-    at: '2026-10-09T04:36:13+00:00'
+    state: done
+    at: '2026-10-09T04:41:08+00:00'
     units:
       step/spec-review:
         attempts:
@@ -25,6 +25,12 @@ steps:
           tier: hard
           bound: openai/gpt-6.1-sol
           session: ses_ee3aef49fffe0vcDJoiJKdwRsT
+          returned: '2026-10-09T04:41:08+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: ses_ee10d4f00ffeKZW9tQa1cwIKA4
+          findings: s1,s2,s3,s4,s5
   plan:
     state: pending
   plan-review:

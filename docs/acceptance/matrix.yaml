@@ -6946,6 +6946,32 @@ rows:
     scenario: tests/scenarios/triage-batch-status-lanes.sh
     issues:
     - derio-net/super-fr#1086
+  - id: triage-board-human-status-hints
+    capability: triage-batch-board
+    acceptance: Each human-attention card names the reason that needs the operator—early
+      gate, idle unfinished run, completed draft, manual phase, exhausted merge stop,
+      or unarchived hand close-out—while relayable conflict/red CI stays agent work;
+      all prior card detail, escaping, jump controls, sorting, dark mode, and responsive
+      behavior remain intact across the nine-column board.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-08-batch-sweep-status-lanes-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    visual:
+      states:
+      - early gate reason
+      - completed draft review reason
+      - unarchived hand close-out reason
+      - nine-column board in dark mode
+      interactions:
+      - expand card detail in a human lane
+      - copy the existing jump command from a human lane
+    scenario: tests/scenarios/triage-batch-status-lanes.sh
+    issues:
+    - derio-net/super-fr#1086
   - id: triage-dedupe-candidates
     capability: triage-dedupe
     acceptance: fr triage check lists candidate duplicate groups among open issues,
