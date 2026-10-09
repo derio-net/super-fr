@@ -1,0 +1,129 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Board human lanes and remote-head run signals (R1-R6, R10)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-board-human-status-lanes
+  - triage-board-pr-head-run-signal
+  - triage-board-human-status-hints
+  - triage-board-columns
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_kanban.py
+  - tests/unit/test_triage_kanban_render.py
+  - tests/unit/test_triage_kanban_cmd.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - docs/acceptance/*
+  estimate_lines: 750
+tasks:
+- number: 1
+  title: Smoke — existing board model remains green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Run `uv run pytest tests/unit/test_triage_kanban.py::test_the_columns_are_ordered_once -q --no-cov` and confirm the existing seven-column smoke is green before changing it; commit no constructed fixture or unrelated output.
+  - id: P1.T1.S2
+    text: |-
+      Add a temporary first RED assertion in that test for the exact nine-column order from R1, run the same node, and confirm it fails because the two human lanes are absent.
+  - id: P1.T1.S3
+    text: |-
+      Keep the failing assertion as the first behavior test for Task 2; record `refactor: {P1.T1: "smoke and first red assertion only"}`.
+- number: 2
+  title: RED/GREEN — pure nine-column board classification and hints
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED in `tests/unit/test_triage_kanban.py`: cover exact column order/titles; a `RunSignal(start, operator gate)` and an idle unfinished signal in Needs you start; draft deliver-in-progress in PR open; draft deliver-done, manual phase, exhausted merge stop, and unarchived `runner: hand` close-out in Needs you review; archived/terminal state wins; each specific hint; sorting/counts unchanged. Run `uv run pytest tests/unit/test_triage_kanban.py -q --no-cov` and confirm the new cases fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN in `fr.triage.kanban`: add `HumanLane`, immutable `RunSignal`, the two columns/titles and pure `run_signals` input; implement terminal/review/start/lifecycle precedence and the unarchived hand-closeout rule without importing `fr_dispatch`, YAML, git, or command modules. Keep `needs_you` true for both human columns and make the reason the hint. Re-run the file green.
+  - id: P1.T2.S3
+    text: |-
+      Refactor column selection into one readable pure decision with no duplicated stage derivation; run `uv run ruff check packages/fr/src/fr/triage/kanban.py tests/unit/test_triage_kanban.py`.
+- number: 3
+  title: RED/GREEN — remote-head cursor discovery and checkout plumbing
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED in `tests/unit/test_triage_kanban_cmd.py` using fake `Checkout` objects and temporary git repos: PRs read only changed `docs/superpowers/runs/*.yaml` at immutable `head_oid`; pre-PR batches fetch then list/read run files at `origin/<recorded branch>`; only a matching cursor `branch` counts; deliver done, blocked gate, unfinished idle, and manual phase produce the specified signals; malformed YAML, missing branch/ref, mismatched branch, and one repo failure fail soft with one note. Cover repo default checkout and repeatable org/group `OWNER/REPO=PATH` validation. Run the file and confirm red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add the minimum gitseam tree-list helper needed to enumerate run YAML at a ref; put checkout-option parsing in a cycle-free command helper shared by board and drive; extend `board_command`, `_watch`, and `write_board` to carry mappings; fetch before reads; derive signals from closed-world mapping checks without the live RunState parser. Pass the driver's existing `self.checkout_paths` from `_write_board`. Re-run command and drive-command board tests green.
+  - id: P1.T3.S3
+    text: |-
+      Refactor cursor parsing/source selection into pure helpers while preserving one note per repo and no host-cache reads; run `uv run pytest tests/unit/test_triage_kanban_cmd.py tests/unit/test_triage_batch_drive_cmd.py -q --no-cov` and ruff the touched files.
+- number: 4
+  title: RED/GREEN — render and preserve the board contract
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED in `tests/unit/test_triage_kanban_render.py`: both human columns render with counts/classes and reason hints; a human-lane card still expands, escapes hostile data, exposes the existing jump/copy command, supports dark theme, and stacks at phone width. Update the existing browser capture script/fixture path used by this file rather than inventing a second visual harness. Run the render tests red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN in `kanban_render.py`: extend only the column styling/grid and retain existing card/detail/JS markup. Update the `triage-board-columns` matrix statement from seven to nine columns and regenerate all three deterministic reports. Run render/model/command board tests green.
+  - id: P1.T4.S3
+    text: |-
+      Refactor repeated attention-lane CSS selectors if useful; otherwise record why. Capture and open fresh screenshots for every visual state/interation linked to this phase (light/dark, phone, early gate, PR open, completed-draft review, hand close-out, expanded detail, copied jump), and record them in the phase step record. Run `uv run pytest tests/unit/test_triage_kanban.py tests/unit/test_triage_kanban_render.py tests/unit/test_triage_kanban_cmd.py -q --no-cov` after the last code commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

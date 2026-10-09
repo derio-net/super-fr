@@ -1,0 +1,106 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Mergeability gate, session failure relay, and candidate proof (R7-R9)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-drive-clean-merge-ready
+  - triage-drive-session-failure-relay
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - tests/unit/test_triage_batch_drive.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - tests/unit/test_triage_board_views.py
+  - tests/unit/test_import_direction.py
+  - tests/scenarios/triage-batch-status-lanes.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/*
+  - .changes/feat-batch-sweep-status-lanes.yaml
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: RED/GREEN — clean mergeability is required for merge ready
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED in `tests/unit/test_triage_batch_drive.py`: extend `LivePr` fixtures with URL/mergeability; `CONFLICTING` or `DIRTY` yields an agent-relay action and no merge, unknown/unclean holds without `merge ready`, failing required checks relays and does not merge, and only open/non-draft/same-head/green/clean emits merge. In `test_triage_kanban.py`, prove the driver-derived hint for conflicting/dirty/unknown is never `merge ready`. Run both files red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: extend `LivePr` with `url`, `mergeable`, and `merge_state`; populate all constructors in command and views; add one pure merge-verdict helper and explicit `relay` ActionKind; gate `_walk_train` before candidates while retaining train ordering and current pending/head checks. Re-run both files green.
+  - id: P2.T1.S3
+    text: |-
+      Refactor all mergeability vocabulary into the one helper so board and driver cannot diverge; run ruff and `uv run pytest tests/unit/test_triage_batch_drive.py tests/unit/test_triage_kanban.py tests/unit/test_triage_board_views.py -q --no-cov`.
+- number: 2
+  title: RED/GREEN — conflict and red-CI relay through SessionMessenger
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED in `tests/unit/test_triage_batch_drive_cmd.py` with the existing fake-runner seam: idle `SessionInspector` + `SessionMessenger` receives exactly one prompt at a head for conflicting/dirty and failing required checks; prompt names PR URL/number, state or check names, batch branch, fix-and-push, and never merge; a changed head sends again; absent/done/busy/blocked, missing messenger, and raising message stay retryable and report why. Prove unrelated warn actions never message. Run focused nodes red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: construct the canonical batch WorkItem through the existing command soft point, factor a pure failure prompt, and execute only `relay` via optional SessionInspector/SessionMessenger. Add the head to `warned` only after successful send. Reuse conflict hand-back helpers where behavior is identical, preserve its fresh-session budget, and add no protocol or `fr_herdr` import. Re-run focused tests green.
+  - id: P2.T2.S3
+    text: |-
+      Refactor duplicate batch target/launch resolution between relay and conflict hand-back without moving `fr_dispatch` into a pure module. Run `uv run pytest tests/unit/test_triage_batch_drive.py tests/unit/test_triage_batch_drive_cmd.py tests/unit/test_triage_batch_conflict.py tests/unit/test_import_direction.py -q --no-cov`.
+- number: 3
+  title: RED/GREEN — decision views and candidate scenario
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: update `tests/unit/test_triage_board_views.py` so relayable red CI/forge conflict is not operator work but exhausted held conflict remains; add `tests/scenarios/triage-batch-status-lanes.sh` and its parametrized entry in `tests/integration/test_scenarios.py` to install/run the candidate over fixture state and a temporary remote/clone, asserting both human lanes, in-progress draft PR-open, no merge-ready for conflict, and once-per-head relay through a deterministic fake runner. Run unit plus scenario node red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: update `views.needs_you` and its module contract; complete the scenario using only the installed candidate binary and repository-supported fixtures. Add `.changes/feat-batch-sweep-status-lanes.yaml` with `bump: minor` and a one-line user-visible summary. Move all five new acceptance rows to `ci` with named unit/integration evidence via `uv run fr acceptance set-status`, update the existing `triage-board-columns` evidence/note, and regenerate deterministic reports. Run the scenario node green.
+  - id: P2.T3.S3
+    text: |-
+      Refactor scenario setup into shell functions only where reused; keep `set -euo pipefail`, no host triage cache, and print final verification. Run `uv run ruff check packages/ tests/`, targeted tests, then the full suite `uv run pytest -q --no-cov -n auto` as the last command after the final code commit; save its host-visible log in the step record.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
