@@ -40,3 +40,8 @@ be explicitly labelled and unknown layouts skipped. This is separate
 from the operator-owned client-live Ready obligation: no full live
 acceptance walk is requested here. Remaining steps are unticked, and
 neither the phase nor the orchestrator cursor has been resolved.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-opencode-live-grounding created=2026-10-09T21:06:45+00:00 phase=1 -->
+### p1-opencode-live-grounding · discovery · Operator-authorized disposable OpenCode grounding captured (phase 1)
+
+Operator answered yes to a narrow disposable-session capture. OpenCode 1.18.35/herdr 0.9.0 protocol 22 captured home/session empty prompt, unsent draft, Commands overlay, active shell/subagent, completed task history and plain exit back to shell. Redacted artifacts and capture provenance are in approved host scratch, 1089-capture-provenance.md. Scratch workspace closed. Implementer must copy redacted evidence through edit tools and close p1-opencode-input-grounding once its safe observer is implemented; full client-live walk remains owed.
