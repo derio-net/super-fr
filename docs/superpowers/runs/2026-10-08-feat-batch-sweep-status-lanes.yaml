@@ -64,7 +64,7 @@ steps:
           agent: ses_ee105ace5ffej2C8qLgZcTWeXZ
           agent_type: fr-phase-executor-standard
           harness: opencode
-          model: openai/gpt-5.6-sol
+          model: openai/gpt-6.1-sol
           tier: standard
           bound: openai/gpt-6.1-sol
           session: ses_ee3aef49fffe0vcDJoiJKdwRsT
