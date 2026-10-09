@@ -319,6 +319,14 @@ def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) ->
     assert "# GH_TOKEN=" in env.read_text()
 
 
+def test_scaffold_always_provides_uv_for_the_required_fr_install(repo: Path) -> None:
+    res = scaffold(repo)
+    assert res.exit_code == 0, res.output
+
+    cfg = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())
+    assert KNOWN_TOOLS["uv"].feature in cfg["features"]
+
+
 def test_scaffold_refuses_overwrite_without_force(repo: Path) -> None:
     assert scaffold(repo).exit_code == 0
     res = scaffold(repo)

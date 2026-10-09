@@ -120,7 +120,7 @@ def test_up_exec_status_down_happy_path(repo: Path, fake_run: list) -> None:
     )
     assert res.exit_code == 0, res.output
     execs = [c for c in fake_run if c[:2] == ["devcontainer", "exec"]]
-    assert execs and execs[0][-2:] == ["echo", "hi"]
+    assert [call[-2:] for call in execs] == [["fr", "--version"], ["echo", "hi"]]
 
     res = runner.invoke(app, ["isolation", "status", "--repo", str(repo), "--format", "json"])
     assert res.exit_code == 0, res.output
@@ -585,7 +585,7 @@ def test_exec_resolves_single_workspace_when_no_branch(repo: Path, fake_run: lis
     res = runner.invoke(app, ["isolation", "exec", "--repo", str(repo), "--", "echo", "hi"])
     assert res.exit_code == 0, res.output
     execs = [c for c in fake_run if c[:2] == ["devcontainer", "exec"]]
-    assert execs and execs[0][-2:] == ["echo", "hi"]
+    assert [call[-2:] for call in execs] == [["fr", "--version"], ["echo", "hi"]]
 
 
 def test_exec_no_branch_zero_workspaces_exits_2(repo: Path, fake_run: list) -> None:

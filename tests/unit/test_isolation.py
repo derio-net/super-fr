@@ -494,7 +494,7 @@ def test_up_creates_worktree_envfile_and_devcontainer(
     env = tmp_path / "home" / ".config" / "fr" / "secrets" / "repo" / "dev.env"
     assert env.is_file()  # mount-followed: created when missing
 
-    (up,) = runner.argv_for("devcontainer")
+    (up,) = [call for call in runner.argv_for("devcontainer") if call[1] == "up"]
     assert up[1] == "up"
     assert f"--workspace-folder={st.worktree}" in up or str(st.worktree) in up
     joined = " ".join(up)
@@ -502,6 +502,20 @@ def test_up_creates_worktree_envfile_and_devcontainer(
     # base .git mounted rw at the same absolute path
     assert f"source={repo / '.git'},target={repo / '.git'}" in joined
     assert load_state(repo, "vk-iso/test") == st
+
+
+def test_up_refuses_a_container_without_fr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    runner = FakeRunner(fail_on="exec")
+
+    with pytest.raises(IsolationError, match="required `fr` runtime"):
+        LocalWorktreeDevcontainerTarget(repo, runner=runner).up(None, "fix/missing-fr")
+
+    assert any(
+        call[1] == "exec" and call[-2:] == ["fr", "--version"]
+        for call in runner.argv_for("devcontainer")
+    )
 
 
 def test_up_uncommitted_profile_raises_actionable_error(
@@ -575,7 +589,7 @@ def test_up_from_worktree_mounts_main_git_and_keys_main(
     runner = FakeRunner()
     target = LocalWorktreeDevcontainerTarget(wt, runner=runner)
     st = target.up(profile=None, branch="iso/work")
-    (up,) = runner.argv_for("devcontainer")
+    (up,) = [call for call in runner.argv_for("devcontainer") if call[1] == "up"]
     main_git = repo.resolve() / ".git"
     assert f"source={main_git},target={main_git}" in " ".join(up)
     assert st.repo_root == repo.resolve()
@@ -597,7 +611,7 @@ def test_up_mount_resolves_common_git_even_without_normalization(
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     target.repo_root = wt.resolve()  # bypass __init__ normalization
     target.up(profile=None, branch="iso/work")
-    (up,) = runner.argv_for("devcontainer")
+    (up,) = [call for call in runner.argv_for("devcontainer") if call[1] == "up"]
     main_git = repo.resolve() / ".git"
     assert f"source={main_git},target={main_git}" in " ".join(up)
 
@@ -2288,7 +2302,7 @@ def test_up_twice_is_idempotent_on_worktree(
     assert st2.worktree == st1.worktree
     assert st2.worktree.is_dir()
     # second up still (re)starts the devcontainer but adds no second worktree
-    (up_call,) = runner.argv_for("devcontainer")
+    (up_call,) = [call for call in runner.argv_for("devcontainer") if call[1] == "up"]
     assert up_call[1] == "up"
 
 

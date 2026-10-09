@@ -5,7 +5,7 @@
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/jsburckhardt/devcontainer-features/uv:1": {}
   },
-  "postCreateCommand": "git config --global --add safe.directory \"$PWD\" || true; pipx install uv 2>/dev/null || true; uv tool install --with 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr-claude-cloud' --with 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr-cncd' --with 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr-herdr' --with 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr-vk' 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr' || true",
+  "postCreateCommand": "git config --global --add safe.directory \"$PWD\" || true; uv tool install --with 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr-claude-cloud' --with 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr-cncd' --with 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr-herdr' --with 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr-vk' 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr'",
   "runArgs": [
     "--env-file",
     "${localEnv:HOME}/.config/fr/secrets/super-fr/admin.env"

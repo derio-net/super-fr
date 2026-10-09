@@ -304,7 +304,8 @@ strong{font-weight:600;color:#f2ecdd}.lead-in{color:var(--paper-dim)}
             <span class="tagband t">environment isolation</span>
             <div class="sch-row"><h4 class="sch-h">Sealed devcontainer</h4><span class="chip t">scoped credentials only</span></div>
             <p class="sch-p">Started from a committed profile. No SSH identity, no git-host tokens unless the
-              profile grants them — so a push can't originate here.</p>
+              profile grants them — so a push can't originate here. Before <code>up</code> reports it ready,
+              fr also runs <code>fr --version</code> inside it; a failed tool install stops startup here.</p>
           </div>
 
           <div class="bridge"><span>fr isolation exec</span><span class="arr"></span><span>build · test · lint · run →</span></div>
