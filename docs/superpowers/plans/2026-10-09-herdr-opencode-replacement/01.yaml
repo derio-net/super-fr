@@ -1,0 +1,134 @@
+schema_version: 2
+phase:
+  number: 1
+  title: OpenCode herdr lifecycle and managed fresh restart (R1–R3, R10–R11)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - herdr-opencode-launch
+  - herdr-opencode-restart
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr-herdr/src/fr_herdr/*
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr-dispatch/src/fr_dispatch/*
+  - tests/unit/test_fr_herdr*
+  - tests/unit/test_triage_batch*
+  - tests/fixtures/herdr/*
+  - tests/scenarios/herdr-opencode*
+  - docs/acceptance/*
+  - .changes/feat-1089.yaml
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Walking skeleton and OpenCode model launch
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Smoke the existing runner contract with uv run pytest tests/unit/test_fr_herdr_runner.py -q --no-cov through fr isolation exec. Reuse captured herdr envelopes, never fabricate a purported live fixture. Record actual tool/environment failures; a passing minimal runner test establishes the skeleton.
+  - id: P1.T1.S2
+    text: |-
+      RED: parameterize run-unit lifecycle tests for OpenCode provider/model: correct --kind opencode --model, ready/uptake confirmation, status/message/focus/close and failed-start cleanup. Prove linked-worktree checkout resolves to primary checkout for ordinary dispatch, driver conflict and close-out payloads.
+  - id: P1.T1.S3
+    text: |-
+      GREEN: extend the single Harness table and normalize stable checkout using existing fr git/isolation seams; retain bounded start and confirmed submission. Run new tests to green. Add the minor .changes/feat-1089.yaml fragment.
+  - id: P1.T1.S4
+    text: |-
+      REFACTOR shared checkout and launch construction only where duplicated; preserve import direction and existing runner contracts. Record rationale if no cleanup is needed.
+- number: 2
+  title: Durable managed descriptors and conflict-aware reconstruction
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: new managed-descriptor tests cover atomic read/write, corrupt or missing state, server/pane identity, item role, base cwd/model, batch unfinished cursor reconciliation, delivered HOLD, original-batch conflict precedence and obsolete conflict suppression, close-out pickup with merge gates.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: introduce small fr-herdr managed-state module under overrideable cache. Store recovery metadata for managed OpenCode launches. Batch reconstruction reads durable cursor/records, not initial goal. Message hand-back records head/brief under original batch identity; conflict recovery checks current durable/live state. All herdr calls stay in the shared seam.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR descriptor validation/reconstruction and launch callers into one path with explicit role handling; do not grow a second initial-goal replay path.
+- number: 3
+  title: Safe fresh OpenCode restart and shared pane exclusion
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: restart-idle tests for managed OpenCode fresh base-cwd launch, preserved name/model, caller/exclude/busy/unknown/draft/background/dialog checks, unsupported layout skips, graceful exit/shell-cwd verification, timeout and startup failures, missing descriptor and unresolved transaction skips, per-pane continuation. Retain all Claude resume tests.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement harness-specific safe input observations and bounded fresh restart, OS-backed server/pane locking shared with the later replacement seam, checkpoints permitting unresolved-attempt exclusion, and driver RestartSummary integration. Read-only CLI help is authoritative; interactive live walk is operator-owned. Synthetic test inputs must be labelled synthetic, not captured evidence.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR common polling and eligibility without weakening Claude safeguards or replacing its legacy --resume behavior. Run ruff formatting/check and relevant mypy.
+- number: 4
+  title: Installed candidate lifecycle scenarios and acceptance evidence
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: add tests/scenarios/herdr-opencode.sh and herdr-opencode-restart.sh exercising installed CLI/runner against scripted herdr responses; assert model/base cwd, HOLD/conflict reconstruction, refusal/failure and existing identity. Pin scenario execution in integration tests as surrounding scenarios do.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: make scenarios and integration checks pass. Update herdr-opencode-launch and herdr-opencode-restart acceptance rows through the phase record with named test refs, scenario and evidence notes. Complete phase ticks in the same record.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR scenario setup to reuse existing conventions. Commit code before the final full suite; run uv run pytest -q --no-cov -n auto LAST into a host-visible external log and put it in evidence.tests. Record refactor reasons per task.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
