@@ -128,3 +128,8 @@ Phase 1 changes a live-process eligibility gate and durable descriptor recovery;
 ### phase-split-2026-10-09-herdr-opencode-replacement-p2 · decision · ask: audited batch replacement is independently reviewable
 
 Phase 2 serves R4-R9 and R12: a new replacement command and batch transaction, separate from phase 1's OpenCode lifecycle. Hard tier because pane locks, uncertain submission and cross-store repair form a concurrency gate.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-09-herdr-opencode-replacement-p2 created=2026-10-09T20:33:36+00:00 -->
+### tier-2026-10-09-herdr-opencode-replacement-p2 · decision · tier: serialized replacement and cross-store repair require hard
+
+Phase 2 changes audited batch state and live sessions under crash/concurrency; hard tier for the replacement gate.
