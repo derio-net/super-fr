@@ -19,3 +19,8 @@ POST_CREATE suppresses the required fr installation result and scaffold_profile 
 ### fix-readiness-postcondition · finding [fixed] · Provisioning and startup now fail closed
 
 Scaffolded profiles always declare the uv feature, required fr installation and host-CLI installation propagate failure, and every devcontainer up or rebuild probes fr --version before returning success. Regression coverage forced each original failure mode; 500 focused tests pass, with repository-wide Ruff, mypy, acceptance, version, and change-fragment gates green. The full suite could not complete because the container overlay had insufficient free space for its temporary trees; the failures after the two corrected isolation assertions were ENOSPC setup errors.
+
+<!-- fr:journal kind=review scope=debug id=review-pr-1113 created=2026-10-09T14:08:22+00:00 -->
+### review-pr-1113 · review · Milestone review found no remaining issues
+
+Reviewed PR #1113 against issue #1112 and the two-layer failure model. No in-scope or out-of-scope findings remain. The readiness probe covers stale profiles; generated profiles provide uv and propagate required install failures; GitLab/Gitea host-CLI installation cannot mask fr installation failure.
