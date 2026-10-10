@@ -44,5 +44,20 @@ journal:
       Host scratch logs: 1089-phase2-targeted-final.log (861 passed, 104 skipped; ruff/format check and mypy over 305 source files passed; exit=0) and 1089-phase2-candidate-fresh-final.log (5 installed launch/restart/replacement/instruction/registration checks passed; exit=0).
       The earlier 1089-phase2-candidate-final.log is failed evidence (one import failure, four passed; exit=1): this executor reused its own uv wheel cache after adding ReplacementInspection. A new owned unique cache rebuilt all packages and the installed candidate passed. No shared cache or unowned data was removed.
       Logs are in the approved host opencode temp directory, outside the repository and step records. Own isolated host-mounted test/runtime directories remain; no test, installer or polling process is still running. No local full suite was attempted. evidence.tests is ci; the orchestrator owns ci-ok and the operator owns the still-skipped client-live Ready walk. Acceptance transitions were committed with CLI verbs, not record sections.
+  - kind: finding
+    id: p2-ci-38010048095-regressions
+    phase: 2
+    state: fixed
+    review_scope: in
+    title: CI exposed omitted skill/schema and triage architecture guards
+    body: |
+      All four unique CI failures were reproduced RED locally with their exact test nodes, without a full-suite attempt. Canonical skill compression had removed the literal batch cancel command; it now spells out dispatch/merge/cancel and both mirrors were regenerated, retaining the 120-line limit.
+      The skill example test now checks the actual current writer schema and matching documentation, parses real batches and rejects authored events. A separate historical schema-3 example test verifies unchanged batch/issue compatibility. The CLI refusal fixture uses a schema above every supported reader stamp and still asserts exit 2, judgements.yaml and the unsupported schema diagnostic.
+      The real architectural defect was subprocess enforcement probing inside triage/operation_lock.py. The unchanged forge/subprocess guard now passes because verified nonblocking flock ownership and its bounded independent Python probe live in fr/file_lock.py, a shared infrastructure helper with no triage or forge imports. The scope adapter only derives its key/cache path and translates FileLockError. Native independent-process scope exclusion, nested ownership and unenforced-filesystem refusal remain tested; no guard allowlist was weakened. Acceptance CLI added the two new infrastructure test refs to the existing replacement row.
+  - kind: discovery
+    id: p2-ci-fixes-red-green
+    phase: 2
+    title: CI regression follow-up is bounded and leaves full verification to ci-ok
+    body: All four exact CI failures reproduced locally; the new shared-helper tests also failed RED before implementation. After fixes, affected skill/CLI/collector/lock/replacement/schema/managed/mirror checks passed 350 tests with 104 intentional skips. No local full suite, second worktree, cursor resolve, Ready transition or CI wait was attempted; evidence.tests remains ci for the existing draft PR 1115.
 evidence:
   tests: ci
