@@ -8161,3 +8161,78 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: pocock-shapes-valid
+    capability: pocock-workflows
+    acceptance: super-fr ships pocock and pocock-bugs shapes that pass fr workflow check
+      and gate exactly Matt's operator checkpoints
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: pocock-skill-resolution
+    capability: pocock-workflows
+    acceptance: fr skills resolve maps <plugin>:<skill> to its installed SKILL.md and
+      invocability per harness, and fails naming the install command when absent; super-fr
+      never installs or vendors Matt's skills
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: pocock-brief-skill-sources
+    capability: pocock-workflows
+    acceptance: a step's dispatch brief tells the agent to read the resolved SKILL.md
+      of every non-invocable skill it names and invoke the rest by name
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: pocock-preflight-refusal
+    capability: pocock-workflows
+    acceptance: a pocock run refuses to start without the skills it names or without
+      setup-matt-pocock-skills' outputs, naming the remedy
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: pocock-run-walk
+    capability: pocock-workflows
+    acceptance: /fr-pocock and /fr-pocock-bugs drive their shape through fr-flow in
+      isolation, landing the spec and tickets as fr files, implementing each ticket
+      in a fresh context, and refusing the PR while a review is missing or a finding
+      open
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R12
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R14
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: pocock-live-flow
+    capability: pocock-workflows
+    acceptance: with Matt's plugin installed, a real /fr-pocock run goes from grilling
+      to a PR shaped by Matt's pr skill, with each gate answered by the operator
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live

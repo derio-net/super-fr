@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-10-10-claude-intelligent-mendel-98jjtr
+captures:
+- host: h-2cd9a61b
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-10T20:32:36+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 955de3c0-be03-5f09-8fe1-96e6d2d394f0
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 58
+        cache_write: 274393
+        cache_read: 4376363
+        output: 27515
+        usd: 2.7553663999999998
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 0.38518139463921386
+        turns: 6
+      other:
+        usd: 1.6184370606307354
+        turns: 14
+      paperwork:
+        usd: 0.7517479447300501
+        turns: 11
+    steps:
+      (outside run):
+        usd: 0.4517323533377049
+        turns: 4
+        input: 8
+        cache_write: 69909
+        cache_read: 387088
+        output: 1150
+      brainstorm:
+        usd: 2.3036340466622947
+        turns: 25
+        input: 50
+        cache_write: 204484
+        cache_read: 3989275
+        output: 26365
+    steps_by_role:
+      main:
+        (outside run):
+          usd: 0.4517323533377049
+          turns: 4
+          input: 8
+          cache_write: 69909
+          cache_read: 387088
+          output: 1150
+        brainstorm:
+          usd: 2.3036340466622947
+          turns: 25
+          input: 50
+          cache_write: 204484
+          cache_read: 3989275
+          output: 26365
