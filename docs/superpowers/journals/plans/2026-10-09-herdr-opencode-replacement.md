@@ -361,3 +361,8 @@ Independent final review found draft provisional wording insufficient: positive 
 ### live-r2-resolved · finding [fixed] · resolves live-r2: Draft delivery must disclose incomplete live evidence
 
 Acceptance notes now enumerate actual observed subset, unproven cases, native model limitation, cleanup and no-PASS verdict. Delivery body includes the same disclosure and operator checklist stays unchecked; this resolution closes disclosure, not the live walk.
+
+<!-- fr:journal kind=finding scope=plan id=live-r1-resolved-2 created=2026-10-10T04:39:55+00:00 state=open resolves=live-r1 tracked_by=https://github.com/derio-net/super-fr/issues/1116 -->
+### live-r1-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1116] · resolves live-r1: Native unsupported-provider request can display a fallback UI model
+
+External native effective-model boundary is explicitly tracked in #1116; investigate supported-model preflight/effective-model observation in that follow-up, no false fixed claim.
