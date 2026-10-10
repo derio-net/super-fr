@@ -2,9 +2,11 @@ schema_version: 8
 run: 2026-10-09-feat-1089
 step: implement-phase
 item: phase/2
-outcome: blocked
-ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T4.S1, P2.T4.S2]
-refactor: {}
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T4.S1, P2.T4.S2, P2.T4.S3]
+refactor:
+  P2.T2: Reused reviewed restart prompt/background classifiers, shell observation, bounded polling and shared agent-start seam; ownership/checkpoints live in one operation object. Further rewriting phase-1 retry paths would add risk without reducing a second decision owner.
+  P2.T4: Installed scenarios share the existing candidate-interpreter helper and captured screens. The replacement helper deliberately owns separate labelled synthetic transaction state; a broader fake-client abstraction would obscure its failure/repair evidence.
 journal:
   - kind: decision
     id: p2-targeted-ci
@@ -33,4 +35,14 @@ journal:
     phase: 2
     title: Bounded local checks cover replacement and neighbouring lifecycle contracts
     body: The broad targeted group ran 1228 tests; 1224 passed and four stale schema-number assertions failed, then those expectations were upgraded to schema 7 (future schema 8) without weakening backwards reads. Final affected checks passed 324 tests with 104 intentional skill skips; ruff passed and mypy passed 305 source files. The installed replacement/instruction/scenario-registration group passed three checks. Acceptance check passed 457 rows with existing debt warnings; replacement is CI-wired, live walk remains skipped with issue 1089. CI alone owns the full-suite gate.
-evidence: {}
+  - kind: discovery
+    id: p2-postcommit-ci-evidence
+    phase: 2
+    title: Final committed tree passes bounded targeted checks; full suite remains CI-owned
+    body: |
+      Code b6f757de was committed and pushed to the existing draft before final checks; no code changed afterwards.
+      Host scratch logs: 1089-phase2-targeted-final.log (861 passed, 104 skipped; ruff/format check and mypy over 305 source files passed; exit=0) and 1089-phase2-candidate-fresh-final.log (5 installed launch/restart/replacement/instruction/registration checks passed; exit=0).
+      The earlier 1089-phase2-candidate-final.log is failed evidence (one import failure, four passed; exit=1): this executor reused its own uv wheel cache after adding ReplacementInspection. A new owned unique cache rebuilt all packages and the installed candidate passed. No shared cache or unowned data was removed.
+      Logs are in the approved host opencode temp directory, outside the repository and step records. Own isolated host-mounted test/runtime directories remain; no test, installer or polling process is still running. No local full suite was attempted. evidence.tests is ci; the orchestrator owns ci-ok and the operator owns the still-skipped client-live Ready walk. Acceptance transitions were committed with CLI verbs, not record sections.
+evidence:
+  tests: ci
