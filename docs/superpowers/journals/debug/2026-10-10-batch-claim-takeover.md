@@ -39,3 +39,8 @@ take --stale needs the issue in a batch of this scope, exactly as take did; admi
 ### 3e5eb21923d8 · decision · Staleness is judged from the marker alone
 
 stale(c) = expired, or now - heartbeat > (expires - heartbeat)/4, using the expiry window the marker states. R8 already says every reader judges expiry from the marker; this extends that to staleness, so a scope with a different claim_expiry_hours is judged by its own window. The released marker's human line now says expired / gone stale / retired by the operator, from the marker's own timestamps (no JSON change).
+
+<!-- fr:journal kind=finding scope=debug id=5287f428e9b7 created=2026-10-10T19:10:04+00:00 state=fixed -->
+### 5287f428e9b7 · finding [fixed] · Takeover reachable, taken claims owed, stale override and scope retire
+
+claims.py (taken_keys, stale, held_line hint), claim_writes.py (allow=expired|stale|any via may_displace), triage_batch_cmd.py (_admit_held, _say_takes), triage_claim_cmd.py (take/release --stale, claim_taken event, scope retire), model.py (ClaimTakenEvent, judgements schema 8). Pinned by the gh#1120/gh#1123 tests in test_triage_claim_cmd.py, test_triage_claim_writes.py, test_triage_claims.py and the rewritten triage-claims-expired scenario. Full suite NOT run locally (operator instruction: host overloaded); PR CI is the evidence.
