@@ -366,3 +366,8 @@ Acceptance notes now enumerate actual observed subset, unproven cases, native mo
 ### live-r1-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1116] · resolves live-r1: Native unsupported-provider request can display a fallback UI model
 
 External native effective-model boundary is explicitly tracked in #1116; investigate supported-model preflight/effective-model observation in that follow-up, no false fixed claim.
+
+<!-- fr:journal kind=decision scope=plan id=operator-ready-verification-split created=2026-10-10T05:11:44+00:00 phase=2 -->
+### operator-ready-verification-split · decision · Operator authorized Ready/merge with real close-out owed immediately post-merge (phase 2)
+
+Operator directed safe read-only current-conflict check using existing PR1107 and reclassified actual merged-PR closeout as post-merge evidence; explicitly authorized Ready/merge followed immediately by closeout. Real GhClient saw OPEN/draft/CONFLICTING current head matching local branch; candidate selected original-batch handback before delivered HOLD, obsolete head HOLD and repeated-head skip. In-memory toy cursor identity projection disclosed, no instruction sent/executed and no PR1107 mutation. Scoped pre-merge walk covers observed live sessions plus this read-only selection, not conflict resolution or closeout. Added herdr-opencode-closeout-live and spec Test Plan; Refs1089 stays open, native effective-model boundary tracked1116.
