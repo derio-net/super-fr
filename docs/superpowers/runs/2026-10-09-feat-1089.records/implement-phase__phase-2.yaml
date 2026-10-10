@@ -59,5 +59,11 @@ journal:
     phase: 2
     title: CI regression follow-up is bounded and leaves full verification to ci-ok
     body: All four exact CI failures reproduced locally; the new shared-helper tests also failed RED before implementation. After fixes, affected skill/CLI/collector/lock/replacement/schema/managed/mirror checks passed 350 tests with 104 intentional skips. No local full suite, second worktree, cursor resolve, Ready transition or CI wait was attempted; evidence.tests remains ci for the existing draft PR 1115.
+  - kind: discovery
+    id: p2-ci-fixes-postcommit-evidence
+    phase: 2
+    title: Final CI-fix code tree passes targeted regressions and unchanged architecture guards
+    body: |
+      Code 40f5f300 was committed and pushed to the same draft before final checks; no code changed afterwards. Host log 1089-phase2-ci-fixes-final.log in the approved opencode temp directory ends exit=0: 369 passed, 104 intentional skips; ruff and format checks passed, mypy passed 306 source files. Coverage includes all four reported regression surfaces (the skill schema test now names current-schema semantics), separate schema-3 compatibility, native independent-process scope exclusion, nested/unverified shared locks, replacement checkpoints/repair, both mirror tripwires, skill line budgets, import direction and forge/subprocess guards. The original collector guard and its forbidden-import non-vacuity cases are unchanged. No local full suite was run, no subprocess/polling job remains, and the ci-ok full gate remains orchestrator-owned with evidence.tests ci.
 evidence:
   tests: ci
