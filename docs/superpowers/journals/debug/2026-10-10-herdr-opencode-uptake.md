@@ -104,3 +104,8 @@ After the final code commit aa48026f, 1089-uptake-final-targeted.log ends exit=0
 ### unknown-model-falls-back-native-client-resolved · finding [out-of-scope] · resolves unknown-model-falls-back-native-client: Native OpenCode accepted unknown requested model but displayed a different model
 
 Independent reviewer ses_edbee50d9ffe1QT0LNLg3ZdZ6S verified the spec contracts exact requested model argv, not provider availability/effective UI selection. Native unsupported-provider fallback predates this change; its internal semantics remain unverified. Preserve the observation and unpassed bad-model subcase in draft evidence, never label it fixed.
+
+<!-- fr:journal kind=review scope=debug id=independent-live-fix-review created=2026-10-10T04:30:14+00:00 -->
+### independent-live-fix-review · review · Independent live-debug correction review
+
+Read-only reviewer ses_edbee50d9ffe1QT0LNLg3ZdZ6S found no blocking code defect in 045ab9f0..aa48026f. Bounded rendered-input readiness, narrow Claude/MCP safe-source recognition, broad read-only post-uptake identity and persisted uncertainty validated against code/tests. Native unsupported-model UI fallback classified external/out-of-scope under process-argv contract. Live verification remains incomplete; draft delivery supportable only with explicit partial disclosure and unchecked Ready/client-live guard.
