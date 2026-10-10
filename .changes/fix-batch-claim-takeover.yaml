@@ -1,0 +1,2 @@
+bump: minor
+summary: "triage claims: batch create/edit admit a member whose foreign claim is expired or stale so `claim take` can take it over, a taken claim stays owed and refreshed (judgements schema 8, `claim_taken`), and `claim take|release --stale` plus `fr triage scope retire` retire a dead scope's claims before they expire"

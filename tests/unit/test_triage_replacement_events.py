@@ -59,7 +59,7 @@ def test_replacement_schema_roundtrip_and_original_dispatch(tmp_path, result):
     path.write_text("schema: 2\ntiers: [{n: 1, title: Now}]\nissues:\n  repo#1: {tier: 1}\n")
     save_batches(path, [b], read=[])
     loaded = load_judgements(path)
-    assert loaded.schema_ == 7
+    assert loaded.schema_ == 8
     assert loaded.batches == [b]
     assert last_dispatch(b) == original
     assert (

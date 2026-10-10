@@ -7650,12 +7650,21 @@ rows:
       - super-fr:tests/unit/test_triage_claim_writes.py#test_release_of_another_scopes_expired_claim_names_the_releaser
       - super-fr:tests/unit/test_triage_claim_cmd.py#test_claim_take_previews_then_takes_an_expired_claim
       - super-fr:tests/unit/test_triage_claim_cmd.py#test_claim_release_own_any_time_foreign_only_expired
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_take_on_a_waveless_batch_records_the_take_and_sync_keeps_the_claim
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_batch_create_accepts_an_expired_held_member_and_names_the_take
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_batch_create_still_refuses_a_live_held_member
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_take_stale_refuses_a_fresh_claim_and_takes_a_stale_one
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_scope_retire_previews_then_releases_every_stale_claim
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_scope_retire_refuses_while_one_claim_is_fresh_and_names_it
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_take_stale_takes_a_live_stale_claim_and_says_so
+      - super-fr:tests/unit/test_triage_claims.py#test_stale_is_judged_from_the_markers_own_window
       int:
       - super-fr:tests/integration/test_scenarios.py#test_triage_claims_expired
     status: ci
-    notes: 'phase 1: scenario covers check''s expired_claims and the refusal naming
-      claim take; unit tests cover own-expired refresh, take and release against a fake
-      GhClient (R7, R8, R9)'
+    notes: 'gh#1120/gh#1123: batch create/edit admit an expired or stale foreign-held
+      member so claim take is reachable; a take makes the member owed (claim_taken);
+      take/release --stale and scope retire act on a stale claim before expiry, never
+      a fresh one without --force'
     verify: candidate
     scenario: tests/scenarios/triage-claims-expired.sh
   - id: triage-claims-writes
