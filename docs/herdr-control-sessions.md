@@ -18,6 +18,37 @@ recovery instructions. Inspect the pane before manually recovering it; never
 blindly resend a brief with uncertain uptake. See
 [`fr-herdr`](../packages/fr-herdr/README.md) for cache/observation limits.
 
-Audited replacement is the separate implementation phase; no replacement CLI is
-claimed here. The operator-owned client-live walk remains required before Ready,
-independently of scripted installed-candidate evidence (Refs #1089).
+## Audited replacement
+
+`fr triage batch replace <id> --model <model> --reason <why>` previews a model-only
+change. Add `--harness claude|opencode` to change clients, always with an explicit
+target model. Add `--yes` after inspection; scope/checkout options work as in dispatch.
+Ordinary batch edit remains frozen after dispatch.
+
+Only an unmerged dispatched/pr-open herdr batch with one matching idle/done agent
+can be replaced. A fresh forge branch-PR lookup is mandatory, not cached facts alone.
+Replacement keeps original dispatch time, reservation, branch, workspace, PR,
+tab, pane and fr-derived name. It launches fresh from the primary checkout and
+reconstructs durable state, never the source transcript or initial goal.
+
+Scope ownership precedes shared server/pane ownership; contention refuses without
+input. Both OS locks are independently verified. Use reliable local
+`FR_TRIAGE_LOCK_DIR` and `FR_HERDR_CACHE_DIR` when shared storage cannot enforce locks.
+Judgements writers stamp schema 7 (read 1–7); engine-owned replacement
+attempt/success/failure events are audit only, not dispatch/cancel transitions.
+
+Partial failures return nonzero with pending descriptor/attempt and inspection
+instructions. They never close the tab, delete transcripts/worktrees or restore the
+source automatically. Inspect the surviving source, target or shell, then preview
+`replace <id> --repair --reason <inspection>` and act with `--yes`. Repair sends no
+prompt and launches nothing. Persisted uptake confirmation AND matching live target
+are required to finalize success. An uncertain/pre-submission target must be
+inspected/recovered, not blindly re-sent; returning it manually to the original
+source or confirmed shell permits a failed/aborted attempt to be reconciled.
+Repair promotes the descriptor after an already-saved batch success without a
+duplicate success event. Restart skips unresolved descriptors.
+
+Run `bash tests/scenarios/herdr-opencode-live.sh` for the disposable-session walk;
+use `--record-verdict` only after every check was observed and logged. Client-live
+evidence remains owed before Ready, independently of installed-candidate evidence
+(Refs #1089). Automated instruction tests do not claim a live pass.

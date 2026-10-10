@@ -92,6 +92,23 @@ def test_herdr_opencode_restart(installed: Path, tmp_path: Path) -> None:
     _scenario("herdr-opencode-restart", installed, tmp_path)
 
 
+def test_herdr_batch_replace(installed: Path, tmp_path: Path) -> None:
+    _scenario("herdr-batch-replace", installed, tmp_path)
+
+
+def test_herdr_opencode_live_instructions(tmp_path: Path) -> None:
+    """Only the walk's honest instruction/verdict contract; never a live pass."""
+    done = subprocess.run(
+        ["bash", str(SCENARIOS / "herdr-opencode-live.sh")],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert done.returncode == 3, done.stderr
+    assert "OWED" in done.stdout and "disposable" in done.stdout
+    assert "ok: herdr-opencode-live" not in done.stdout
+
+
 def test_the_install_carries_every_runner_package(installed: Path) -> None:
     """The `--with` set mirrors install.sh's: every `fr.runners` package imports."""
     py = installed / "uv-tools" / "fr" / "bin" / "python"
@@ -161,6 +178,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "herdr-restart-idle",
         "herdr-opencode",
         "herdr-opencode-restart",
+        "herdr-batch-replace",
+        "herdr-opencode-live",
         "model-binding-set-probe",
         "model-binding-replacement",
         "model-binding-check",

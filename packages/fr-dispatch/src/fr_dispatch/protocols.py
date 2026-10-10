@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
+    from contextlib import AbstractContextManager
 
     from fr_dispatch.work_item import WorkItem
 
@@ -247,6 +248,60 @@ class SessionAdopter(Protocol):
     def adopt(self, item: WorkItem, tab: str) -> str:
         """Label *tab* and its agent as *item*'s session; return the handle."""
         ...
+
+
+@dataclass(frozen=True)
+class ReplacementRequest:
+    """Identity and explicit launch intent; triage and runner exchange no batch models."""
+
+    item: str
+    pane: str
+    name: str
+    branch: str
+    checkout: str
+    old_harness: str
+    old_model: str
+    harness: str
+    model: str
+    attempt: str
+
+
+@dataclass(frozen=True)
+class ReplacementResult:
+    ok: bool
+    phase: str
+    survivor: str
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class ReplacementInspection:
+    pane: str
+    name: str
+    harness: str
+    model: str
+    status: str
+
+
+class ReplacementOperation(Protocol):
+    """Read-only inspection; ownership must span preparation through both store writes."""
+
+    @property
+    def name(self) -> str: ...
+    def ownership(self) -> AbstractContextManager[None]: ...
+    def inspect(self) -> ReplacementInspection: ...
+    def prepare(self) -> None: ...
+    def execute(self) -> ReplacementResult: ...
+    def reconcile(self) -> ReplacementResult: ...
+    def activate(self, *, success: bool) -> None: ...
+
+
+@runtime_checkable
+class SessionReplacer(Protocol):
+    """Optional in-place replacement, not dispatch and not a mandatory Runner method."""
+
+    def replacement_session(self, request: ReplacementRequest) -> ReplacementOperation: ...
+    def replacement_pending(self, item: str, pane: str) -> ReplacementRequest | None: ...
 
 
 class Source(Protocol):

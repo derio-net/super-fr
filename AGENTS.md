@@ -165,7 +165,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
-    engine-appended `events` (fr reads schemas 1, 2 and 3 and writes 3, see
+    engine-appended `events` (fr reads schemas 1–7 and writes 7, see
     the waves paragraph below) and `facts.json` schema 3
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
@@ -190,7 +190,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `ls-tree`/`show` at each `subsystems.yaml` ref), then authored `architecture/` fragments in manifest order.
     **Waves and the driver** (2026-10-02 spec, `wave-driver`): judgements
     schema 3 adds `wave`/`after` per batch and the `post_merge`/`closeout`
-    events; `fr triage batch drive` runs the waves to completion.
+    events; current writers stamp 7 (read 1–7), adding audited `replacement`
+    attempt/success/failure events that never change dispatch age or lifecycle.
+    `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
+    repair, never replaying uncertain submission; `drive` runs waves to completion.
     `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `merge`,
     `closeout`, `archive`, `dispatch`, `blocked`, `warn` actions out; no
     `fr_dispatch`, no git, no process, the clock passed in); the command
@@ -281,6 +284,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
   managed OpenCode lifecycle/restart adapter as well as Claude resume. Host-local
   descriptors/locks live in `fr_herdr.managed`, safe input in `fr_herdr.opencode`.
   Operator notes: `docs/herdr-control-sessions.md`, `packages/fr-herdr/README.md`.
+  Optional `SessionReplacer` supports in-place Claude/OpenCode and model-only
+  fresh replacement. Pending checkpoints exclude restart until explicit repair;
+  installed synthetic scenarios are not evidence of the operator-owned live walk.
   It was the first to take `unit="run"` work: `fr triage batch dispatch` builds it
   through `fr_dispatch.registry.load_runner`'s `from_env()` and it opens a
   herdr tab, starts the harness on the batch's model and submits the brief.

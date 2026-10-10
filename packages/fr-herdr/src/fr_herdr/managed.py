@@ -43,6 +43,9 @@ class Descriptor(BaseModel):
     brief: str = ""
     conflict_head: str | None = None
     conflict_brief: str | None = None
+    attempt: str | None = None
+    old_harness: Literal["opencode", "claude"] | None = None
+    old_model: str | None = None
     checkpoint: Literal[
         "prepared",
         "source-exited",
@@ -52,6 +55,7 @@ class Descriptor(BaseModel):
         "uptake-confirmed",
         "batch-committed",
         "active",
+        "aborted",
     ] = "active"
 
 

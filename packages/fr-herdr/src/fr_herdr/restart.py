@@ -465,6 +465,12 @@ def restart_idle(*, yes: bool, exclude: Collection[str] = ()) -> RestartReport:
         try:
             # The listing above is only the roster: a pane that turned `working` while
             # an earlier pane was being restarted is judged on its status now.
+            descriptor = managed.load(pane) if os.environ.get("HERDR_SOCKET_PATH") else None
+            if descriptor and descriptor.checkpoint != "active":
+                report.lines.append(
+                    PaneLine(pane, tab, "skip", "pending managed operation; repair owed")
+                )
+                continue
             agent = _fresh(pane)
             if agent is None:
                 report.lines.append(PaneLine(pane, tab, "skip", "gone"))
@@ -480,6 +486,12 @@ def restart_idle(*, yes: bool, exclude: Collection[str] = ()) -> RestartReport:
         else:
             try:
                 with managed.pane_lock(pane):
+                    descriptor = managed.load(pane)
+                    if descriptor and descriptor.checkpoint != "active":
+                        report.lines.append(
+                            PaneLine(pane, tab, "skip", "pending managed operation; repair owed")
+                        )
+                        continue
                     current = _fresh(pane)
                     if (
                         current is None

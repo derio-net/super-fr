@@ -74,7 +74,13 @@ from fr_herdr._herdr import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from fr_dispatch.protocols import CloseOutcome, RestartSummary, SessionStatus
+    from fr_dispatch.protocols import (
+        CloseOutcome,
+        ReplacementOperation,
+        ReplacementRequest,
+        RestartSummary,
+        SessionStatus,
+    )
     from fr_dispatch.work_item import WorkItem
 
 
@@ -238,6 +244,32 @@ class HerdrRunner:
                                 _run_herdr(["agent", "prompt", agent_name(item.id), text])
                                 return
         _run_herdr(["agent", "prompt", agent_name(item.id), text])
+
+    def replacement_session(self, request: ReplacementRequest) -> ReplacementOperation:
+        from fr_herdr.replacement import Operation
+
+        return Operation(request)
+
+    def replacement_pending(self, item: str, pane: str) -> ReplacementRequest | None:
+        from fr_dispatch.protocols import ReplacementRequest
+
+        d = managed.load(pane)
+        if d is None or d.attempt is None:
+            return None
+        if d.item != item or d.name != agent_name(item) or not d.old_harness or not d.old_model:
+            raise managed.ManagedError("pending descriptor identity is not the batch's")
+        return ReplacementRequest(
+            d.item,
+            d.pane,
+            d.name,
+            d.branch,
+            d.checkout,
+            d.old_harness,
+            d.old_model,
+            d.harness,
+            d.model,
+            d.attempt,
+        )
 
     def restart_idle(self, *, exclude: Sequence[str] = ()) -> RestartSummary:
         """Restart every idle claude pane via the engine, `yes=True` (spec

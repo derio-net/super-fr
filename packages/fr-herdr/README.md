@@ -29,3 +29,15 @@ the tab or destroy transcripts/worktrees. Inspect the surviving source, target o
 shell using the report's checkpoint and recovery instructions. A non-active
 descriptor prevents automatic retry and blind resubmission. Scripted candidate
 tests do not discharge the operator-owned live Ready walk (Refs #1089).
+
+`fr triage batch replace <id> --harness opencode --model provider/model --reason
+<why>` previews audited fresh replacement in either direction (omit harness for
+model-only). `--yes` acts; an explicit model is required on harness change.
+It preserves dispatch/branch/PR/reservation and pane/name. Scope then pane
+ownership spans pending descriptor, batch attempt, runner checkpoints, batch
+success/launch and descriptor activation. Ordinary edits stay frozen.
+
+On partial failure inspect the surviving source/target/shell; `replace <id>
+--repair --reason <inspection> --yes` reconciles both stores without exit, launch
+or duplicate prompt. Target kind/model alone never proves uncertain submission.
+Details and the disposable operator walk: `docs/herdr-control-sessions.md`.

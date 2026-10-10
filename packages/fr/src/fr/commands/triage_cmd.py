@@ -35,7 +35,7 @@ from rich.markup import escape
 from fr.artifacts.trigger import is_interactive
 from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
-from fr.triage.batch import last_dispatch
+from fr.triage.batch import last_dispatch, lifecycle_events
 from fr.triage.check import ClaimSets, classify
 from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
 from fr.triage.errors import TriageError
@@ -436,7 +436,9 @@ def collect_into(
     branches = [
         (b.repo_name, event.branch, event.at)
         for b in (loaded.batches if loaded else [])
-        if b.events and b.events[-1].kind != "cancel" and (event := last_dispatch(b)) is not None
+        if (events := lifecycle_events(b))
+        and events[-1].kind != "cancel"
+        and (event := last_dispatch(b)) is not None
     ]
     previous = _previous_facts(target_dir / "facts.json", scope)
     facts, stats = collect_facts_counted(

@@ -59,10 +59,10 @@ def test_schema_2_lists_each_batch_with_its_member_count(tmp_path: Path) -> None
     assert "2 issues" in line
 
 
-def test_schema_6_is_refused_naming_the_schema(tmp_path: Path) -> None:
-    code, out = _list(tmp_path, "schema: 7\n" + _JUDGED)
+def test_schema_8_is_refused_naming_the_schema(tmp_path: Path) -> None:
+    code, out = _list(tmp_path, "schema: 8\n" + _JUDGED)
     assert code == 2, out
-    assert "unsupported schema 7" in " ".join(out.split())
+    assert "unsupported schema 8" in " ".join(out.split())
 
 
 def test_schema_1_carrying_batches_is_refused(tmp_path: Path) -> None:

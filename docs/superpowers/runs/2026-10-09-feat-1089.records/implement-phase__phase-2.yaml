@@ -1,0 +1,36 @@
+schema_version: 8
+run: 2026-10-09-feat-1089
+step: implement-phase
+item: phase/2
+outcome: blocked
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T4.S1, P2.T4.S2]
+refactor: {}
+journal:
+  - kind: decision
+    id: p2-targeted-ci
+    phase: 2
+    title: Phase 2 uses bounded local checks and CI full-suite evidence
+    body: Operator explicitly forbids another local full suite after phase-1 storage and installer I/O failures. Targeted tests use this attempt's host-mounted sandboxes; the existing draft PR's ci-ok gate owns full verification. No client-live walk is claimed.
+  - kind: discovery
+    id: p2-audit-and-repair-contract
+    phase: 2
+    title: Replacement audit is separate from dispatch and runner uptake
+    body: Schema-7 events retain the original dispatch; lifecycle selectors ignore audit rows, including dispatch repair and cancellation/collection. Scope then independently verified pane ownership spans descriptor preparation, compare-write attempt, fresh source checks, uptake, batch launch/success and activation. Prepared-before-attempt and committed-before-activation windows have explicit input-free repair. Pre-submission/uncertain target kind/model never certifies uptake. Installed synthetic scenario passed both directions/model-only, startup failure and shell repair.
+  - kind: decision
+    id: p2-explainers-unaffected
+    phase: 2
+    title: Published explainers do not describe herdr replacement
+    body: As established in the phase-1 handoff, published explainers describe neither herdr lifecycle nor restart-idle; the new operator verb does not change their pipeline or named CLI surfaces. Runner README, control-session operator notes, AGENTS schema/runner notes and canonical fr-triage with both generated mirrors document replacement and the owed client-live walk instead.
+  - kind: finding
+    id: p2-live-instructions-not-evidence
+    phase: 2
+    state: fixed
+    review_scope: in
+    title: Printed client-live instructions must not certify a walk
+    body: The operator script now exits 3 while the walk is owed; only an interactive explicit verdict backed by a nonempty redacted observation log can report PASS. The instruction-contract test asserts owed/nonpassing output. No client-live walk or Ready completion is claimed.
+  - kind: discovery
+    id: p2-verification-scope
+    phase: 2
+    title: Bounded local checks cover replacement and neighbouring lifecycle contracts
+    body: The broad targeted group ran 1228 tests; 1224 passed and four stale schema-number assertions failed, then those expectations were upgraded to schema 7 (future schema 8) without weakening backwards reads. Final affected checks passed 324 tests with 104 intentional skill skips; ruff passed and mypy passed 305 source files. The installed replacement/instruction/scenario-registration group passed three checks. Acceptance check passed 457 rows with existing debt warnings; replacement is CI-wired, live walk remains skipped with issue 1089. CI alone owns the full-suite gate.
+evidence: {}
