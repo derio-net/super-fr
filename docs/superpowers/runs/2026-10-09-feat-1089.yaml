@@ -81,11 +81,19 @@ steps:
           tests: ci:8f7f7692eeac3521963fdb64986e3d232aef715c+unknown;tree=7845010e91255f9109fce89e58efed855c09395ffda8f5bfec1b029169fffafc
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-09T23:58:24+00:00'
           harness: opencode
+          model: openai/gpt-6.1-sol
           session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-10T00:04:24+00:00'
+          outcome: done
+        evidence:
+          review: phase1-independent-review
+          reviewer: ses_edce53464ffeEI7Li5A1QpLRPO
+          visual: none
+          findings: p1-opencode-input-grounding,p1-full-suite-storage,p1-r1,p1-r2
   journal-check:
     state: pending
   deliver:

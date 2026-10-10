@@ -211,3 +211,28 @@ Shared bounded polling preserves Claude clock/sleep seams and resume behavior.
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 Scenarios reuse the common harness and one explicitly synthetic response helper.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-10T00:04:22+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · OpenCode stalled prompt retries Enter without safe-input proof (phase 1)
+
+runner.py:430-442: new OpenCode dispatch inherited a Claude retry assumption contradicted by the live Commands overlay. A stalled submission cannot prove the expected brief remains in a focused textarea.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-10T00:04:22+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · Ordinary messaging bypasses exclusive managed restart ownership (phase 1)
+
+runner.py:215-231 and opencode.py:170-189: only conflict handbacks acquired the pane lock. An ordinary message could start work between restart eligibility and exit.
+
+<!-- fr:journal kind=review scope=plan id=phase1-independent-review created=2026-10-10T00:04:22+00:00 phase=1 -->
+### phase1-independent-review · review · Independent lifecycle review and verified findings (phase 1)
+
+Separate reviewer inspected spec, phase1 plan/journal and code; 162 targeted checks passed in its context. Two in-scope safety findings independently reproduced. Orchestrator verified both, fixed them and ran 122 targeted managed/runner/restart checks, ruff and mypy green. No live pane mutation or full-suite green is claimed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-10T00:04:22+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: OpenCode stalled prompt retries Enter without safe-input proof (phase 1)
+
+Submission is harness-aware. OpenCode refuses an unverified Enter retry on stalled uptake, preserving the ambiguous error rather than sending keys into overlays; Claude keeps its existing retry. Regression proves no Enter is sent for the grounded overlay case.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-10T00:04:22+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: Ordinary messaging bypasses exclusive managed restart ownership (phase 1)
+
+Every managed message acquires the shared server/pane lock, rechecks checkpoint and live name/kind identity under it, and only then sends. Lock-contention and unresolved-checkpoint tests prove the losing caller sends no prompt.
