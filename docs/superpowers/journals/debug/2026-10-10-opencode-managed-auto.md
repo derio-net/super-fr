@@ -14,3 +14,8 @@ The defect is in fr-herdr's launch contract, not in OpenCode's permission engine
 ### replacement-observer · finding [open] · Replacement observer rejected the corrected launch argv
 
 Retrospective audit finding against PR commit 5219322b: launch_target correctly appended --auto and opencode.wait_ready accepted it, but replacement.observe independently required argv[1:] == [--model, model]. A real replacement would therefore launch successfully, fail its post-launch observation, and report an operation failure. The installed batch-replacement scenario masked this by reconstructing the old argv instead of replaying agent start's actual arguments. Direct reproduction against 5219322b raised ManagedError: foreground process/model/cwd is unknown or changed for [opencode, --model, openai/new, --auto].
+
+<!-- fr:journal kind=finding scope=debug id=replacement-observer-resolved created=2026-10-10T09:38:14+00:00 state=fixed resolves=replacement-observer answered_by=agent -->
+### replacement-observer-resolved · finding [fixed] · resolves replacement-observer: Replacement observer rejected the corrected launch argv
+
+replacement.observe now delegates OpenCode argv validation to opencode.model_matches, preserving old managed sessions while accepting --auto. The unit timeline and installed batch-replacement scenario replay actual launch argv. The previous candidate reproducer now succeeds; 205 focused unit tests and all three installed OpenCode lifecycle scenarios pass.
