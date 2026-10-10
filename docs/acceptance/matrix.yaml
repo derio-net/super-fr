@@ -8026,14 +8026,15 @@ rows:
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it
       - super-fr:tests/unit/test_herdr_stable_checkout.py#test_linked_worktree_uses_primary_checkout
       - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_initial_dispatch_waits_for_rendered_prompt_before_single_submission
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_managed_handback_rechecks_idle_snapshot_under_lock_before_prompt
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
     status: ci
-    notes: Candidate launch now waits for grounded rendered empty input under exact
-      name/pane/model/base-cwd identity before one confirmed-uptake prompt. Real title
-      readiness preceded the usable textarea in the authorized diagnostic; no ambiguous
-      Enter retry is added. Named synthetic readiness tests and installed launch scenario
-      pass; the complete operator client-live walk remains separately owed.
+    notes: Installed candidate lifecycle plus runner/stable-checkout/managed tests remain
+      CI-covered. Late independent review added an under-lock idle/done and explicit
+      readiness recheck for managed messages; deterministic stale-snapshot cases prove
+      no prompt or descriptor write on busy/unknown/unready target. 166 targeted tests,
+      lint and fr-herdr typecheck passed.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace
