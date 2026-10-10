@@ -28,6 +28,7 @@ from fr.triage.model import (
     JUDGEMENTS_READS,
     JUDGEMENTS_SCHEMA,
     Batch,
+    CancelEvent,
     DispatchEvent,
     Export,
     Facts,
@@ -250,11 +251,17 @@ def foreign_batch_prs(batch: Batch, facts: Facts) -> list[ForeignPr]:
     ]
 
 
+def lifecycle_events(batch: Batch) -> list[DispatchEvent | CancelEvent]:
+    """Only real dispatch/cancel events change ownership; operation audits do not."""
+    return [e for e in batch.events if isinstance(e, (DispatchEvent, CancelEvent))]
+
+
 def derive_batch_stage(batch: Batch, facts: Facts) -> BatchStage:
     """The spec §3.A stage table, from the last event and the facts. Never stored."""
-    if not batch.events:
+    events = lifecycle_events(batch)
+    if not events:
         return "proposed"
-    if batch.events[-1].kind == "cancel":
+    if events[-1].kind == "cancel":
         return "cancelled"
     pr = batch_pr(batch, facts)
     if pr is None:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -36,9 +37,13 @@ class _Herdr:
         self.workspaces: dict[str, Any] = {}
         self.listing: dict[str, Any] = {}
         self.agents: dict[str, Any] = {}
+        self.launch: dict[str, Any] = {}
+        self.cwd = "/work/alpha"
 
     def __call__(self, args: list[str]) -> dict[str, Any]:
         self.calls.append(list(args))
+        if args[:2] in (["tab", "create"], ["workspace", "create"]) and "--cwd" in args:
+            self.cwd = args[args.index("--cwd") + 1]
         if args[:2] == ["tab", "create"]:
             return _fixture("tab-create.json")
         if args[:2] == ["tab", "list"]:
@@ -52,7 +57,39 @@ class _Herdr:
         if args[:2] == ["tab", "rename"]:
             return _fixture("tab-rename.json")
         if args[:2] == ["agent", "list"]:
+            if self.launch.get("agent") == "opencode" and not self.agents:
+                # Labelled synthetic live identity; screen parsing still uses the capture.
+                return {
+                    "result": {
+                        "agents": [
+                            {**self.launch, "agent_status": "idle", "interactive_ready": True}
+                        ]
+                    }
+                }
             return self.agents or _fixture("agent-list.json")
+        if args[:2] == ["agent", "start"]:
+            self.launch = {
+                "name": args[2],
+                "agent": args[args.index("--kind") + 1],
+                "pane_id": args[args.index("--pane") + 1],
+                "model": args[-1],
+            }
+        if args[:2] == ["pane", "process-info"] and self.launch:
+            return {
+                "result": {
+                    "process_info": {
+                        "foreground_processes": [
+                            {
+                                "pid": 2,
+                                "argv": [self.launch["agent"], "--model", self.launch["model"]],
+                                "cwd": self.cwd,
+                            }
+                        ]
+                    }
+                }
+            }
+        if args[:2] == ["pane", "read"]:
+            return _fixture("opencode/final-idle.json")
         if args[:2] == ["agent", "rename"]:
             return _fixture("agent-rename.json")
         return {}
@@ -62,12 +99,14 @@ class _Herdr:
 
 
 @pytest.fixture
-def herdr(monkeypatch: pytest.MonkeyPatch) -> _Herdr:
+def herdr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, native_herdr_cache: Path) -> _Herdr:
     fake = _Herdr()
     monkeypatch.setattr(herdr_runner, "_run_herdr", fake)
     monkeypatch.setattr(herdr_runner.shutil, "which", lambda name: "/usr/local/bin/herdr")
     monkeypatch.setenv("HERDR_ENV", "1")
     monkeypatch.setenv("HERDR_WORKSPACE_ID", "w2")
+    monkeypatch.setenv("HERDR_SOCKET_PATH", str(tmp_path / "server.sock"))
+    monkeypatch.setattr(herdr_runner, "stable_checkout", lambda path: path)
     return fake
 
 
@@ -139,6 +178,151 @@ def test_can_dispatch_takes_a_run_item_for_a_known_harness(herdr: _Herdr) -> Non
     assert not runner.can_dispatch(_item(harness="nonesuch"))
 
 
+def test_opencode_refuses_an_unqualified_model_before_opening_a_tab(herdr: _Herdr) -> None:
+    with pytest.raises(herdr_runner.HerdrError, match="provider/model"):
+        HerdrRunner.from_env().dispatch(_item(harness="opencode", model="unqualified"))
+    assert herdr.calls == []
+
+
+@pytest.mark.parametrize("status", ["idle", "done"])
+def test_original_opencode_batch_message_persists_conflict_identity(
+    herdr: _Herdr, status: str
+) -> None:
+    from fr_herdr import managed
+
+    item = _item(harness="opencode", model="openai/gpt-6.1-sol")
+    pane = HerdrRunner.from_env().dispatch(item)
+    # Synthetic listing joins the captured create identity to this test item.
+    herdr.listing = {"result": {"tabs": [{"tab_id": "w2:t1H", "label": item.id}]}}
+    herdr.agents = {
+        "result": {
+            "agents": [
+                {
+                    "tab_id": "w2:t1H",
+                    "pane_id": pane,
+                    "name": agent_name(item.id),
+                    "agent": "opencode",
+                    "agent_status": status,
+                    "interactive_ready": True,
+                }
+            ]
+        }
+    }
+    brief = "Merge conflict on batch lifecycle: PR #1, at head abc, conflicts with main. six steps"
+    HerdrRunner.from_env().message(item, brief)
+    d = managed.load(pane)
+    assert d.item == item.id and d.role == "batch"
+    assert d.conflict_head == "abc" and d.conflict_brief == brief
+
+
+@pytest.mark.parametrize(
+    "status,ready",
+    [("working", True), ("blocked", True), ("unknown", True), ("idle", False), ("done", None)],
+)
+def test_managed_handback_rechecks_idle_snapshot_under_lock_before_prompt(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch, status: str, ready: bool | None
+) -> None:
+    from fr_herdr import managed
+
+    item = _item(harness="opencode", model="openai/gpt-6.1-sol")
+    runner = HerdrRunner.from_env()
+    pane = runner.dispatch(item)
+    herdr.listing = {
+        "result": {"tabs": [{"tab_id": "w2:t1H", "label": item.id, "agent_status": "idle"}]}
+    }
+    agent = {
+        "tab_id": "w2:t1H",
+        "pane_id": pane,
+        "name": agent_name(item.id),
+        "agent": "opencode",
+        "agent_status": "idle",
+        "interactive_ready": True,
+    }
+    herdr.agents = {"result": {"agents": [agent]}}
+    assert runner.session_statuses([item])[item.id] == "idle"
+    original_lock = managed.pane_lock
+    original_descriptor = managed.load(pane)
+
+    @contextmanager
+    def lock_after_status_changed(target: str):
+        with original_lock(target):
+            agent.update(agent_status=status, interactive_ready=ready)
+            yield
+
+    monkeypatch.setattr(managed, "pane_lock", lock_after_status_changed)
+    before = len(herdr.calls)
+    with pytest.raises(herdr_runner.HerdrError, match="not idle and ready"):
+        runner.message(item, "Merge conflict on batch lifecycle: at head abc, conflicts with main.")
+    assert not any(c[:2] == ["agent", "prompt"] for c in herdr.calls[before:])
+    assert managed.load(pane) == original_descriptor
+
+
+def test_opencode_stalled_prompt_never_retries_enter_into_captured_overlay(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+
+    def stalled(args: list[str]) -> dict[str, Any]:
+        calls.append(args)
+        if args[:2] == ["agent", "prompt"]:
+            raise herdr_runner.HerdrError("stalled with Commands open", code="agent_prompt_stalled")
+        if args[:2] == ["pane", "read"]:
+            return _fixture("opencode/dialog.json")
+        return {}
+
+    monkeypatch.setattr(herdr_runner, "_run_herdr", stalled)
+    with pytest.raises(herdr_runner.HerdrError, match="unverified Enter"):
+        herdr_runner._submit("fixture", "brief", harness="opencode")
+    assert not any(c[:2] == ["agent", "send-keys"] for c in calls)
+
+
+def test_ordinary_managed_message_cannot_bypass_restart_lock(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr_herdr import managed
+
+    item = _item(harness="opencode", model="openai/gpt-6.1-sol")
+    pane = HerdrRunner.from_env().dispatch(item)
+    herdr.listing = {"result": {"tabs": [{"tab_id": "w2:t1H", "label": item.id}]}}
+    herdr.agents = {
+        "result": {
+            "agents": [
+                {
+                    "tab_id": "w2:t1H",
+                    "pane_id": pane,
+                    "name": agent_name(item.id),
+                    "agent": "opencode",
+                }
+            ]
+        }
+    }
+    before = len(herdr.calls)
+
+    def held(_pane: str) -> Any:
+        raise managed.ManagedError("pane held by restart")
+
+    monkeypatch.setattr(managed, "pane_lock", held)
+    with pytest.raises(managed.ManagedError, match="held by restart"):
+        HerdrRunner.from_env().message(item, "ordinary follow-up")
+    assert not any(c[:2] == ["agent", "prompt"] for c in herdr.calls[before:])
+
+
+def test_ordinary_managed_message_refuses_unresolved_checkpoint(herdr: _Herdr) -> None:
+    from fr_herdr import managed
+
+    item = _item(harness="opencode", model="openai/gpt-6.1-sol")
+    pane = HerdrRunner.from_env().dispatch(item)
+    herdr.listing = {"result": {"tabs": [{"tab_id": "w2:t1H", "label": item.id}]}}
+    herdr.agents = {"result": {"agents": [{"tab_id": "w2:t1H", "pane_id": pane}]}}
+    d = managed.load(pane)
+    assert d is not None
+    managed.save(d.model_copy(update={"checkpoint": "prepared"}))
+    before = len(herdr.calls)
+    with pytest.raises(herdr_runner.HerdrError, match="unresolved"):
+        HerdrRunner.from_env().message(item, "ordinary follow-up")
+    assert not any(c[:2] == ["agent", "prompt"] for c in herdr.calls[before:])
+
+
 def test_can_dispatch_refuses_a_phase_item(herdr: _Herdr) -> None:
     from fr_dispatch.work_item import WorkItem
 
@@ -157,20 +341,30 @@ def test_can_dispatch_refuses_a_phase_item(herdr: _Herdr) -> None:
 # ------------------------------------------------------------------ dispatch
 
 
-def test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it(herdr: _Herdr) -> None:
-    item = _item(model="claude-opus-5-5", brief="/fr-goal Separate lifecycles")
+@pytest.mark.parametrize(
+    "harness,model", [("claude", "claude-opus-5-5"), ("opencode", "openai/gpt-6.1-sol")]
+)
+def test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it(
+    herdr: _Herdr, harness: str, model: str
+) -> None:
+    item = _item(harness=harness, model=model, brief="/fr-goal Separate lifecycles")
 
     handle = HerdrRunner.from_env().dispatch(item)
 
-    create, start, prompt = herdr.calls
+    create, start, *observations, prompt = herdr.calls
+    assert [c[:2] for c in observations] == (
+        [["agent", "list"], ["pane", "process-info"], ["pane", "read"]]
+        if harness == "opencode"
+        else []
+    )
     assert create == [
         "tab", "create", "--workspace", "w2", "--cwd", "/work/alpha",
         "--label", item.id, "--no-focus",
     ]  # fmt: skip
     name = agent_name(item.id)
     assert start == [
-        "agent", "start", name, "--kind", "claude", "--pane", "w2:p1K",
-        "--", "--model", "claude-opus-5-5",
+        "agent", "start", name, "--kind", harness, "--pane", "w2:p1K",
+        "--", "--model", model,
     ]  # fmt: skip
     assert prompt == [
         "agent", "prompt", name, "/fr-goal Separate lifecycles",
@@ -231,6 +425,16 @@ def test_a_failure_without_an_envelope_has_no_code(monkeypatch: pytest.MonkeyPat
     with pytest.raises(herdr_runner.HerdrError) as caught:
         herdr_runner._run_herdr(["agent", "start", "x"])
     assert caught.value.code is None
+
+
+def test_a_hung_herdr_observation_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    def hung(argv, **kwargs):
+        assert kwargs.get("timeout") == 60
+        raise subprocess.TimeoutExpired(argv, 60)
+
+    monkeypatch.setattr(herdr_runner.subprocess, "run", hung)
+    with pytest.raises(herdr_runner.HerdrError, match="timed out"):
+        herdr_runner._run_herdr(["pane", "process-info", "--pane", "synthetic"])
 
 
 def test_a_pane_whose_shell_is_not_up_yet_is_retried(
@@ -651,7 +855,8 @@ def test_message_prompts_the_items_agent_with_the_text(herdr: _Herdr) -> None:
     runner = HerdrRunner.from_env()
     assert isinstance(runner, SessionMessenger)
     assert runner.message(item, "resolve the conflict") is None
-    assert herdr.calls == [["agent", "prompt", agent_name(item.id), "resolve the conflict"]]
+    assert herdr.calls[-1] == ["agent", "prompt", agent_name(item.id), "resolve the conflict"]
+    assert sum(c[:2] == ["agent", "prompt"] for c in herdr.calls) == 1
 
 
 # ------------------------------------------------- idle-session restart (driver-sessions §B)

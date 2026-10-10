@@ -1,0 +1,35 @@
+{
+  "id": "cli:pane:process_info",
+  "result": {
+    "process_info": {
+      "foreground_process_group_id": 100,
+      "foreground_processes": [
+        {
+          "argv": [
+            "node",
+            "/redacted-config/mcp-server.cjs"
+          ],
+          "argv0": "node",
+          "cwd": "/disposable/base",
+          "name": "node",
+          "pid": 103
+        },
+        {
+          "argv": [
+            "claude",
+            "--model",
+            "haiku"
+          ],
+          "argv0": "claude",
+          "cwd": "/disposable/base",
+          "name": "2.1.296",
+          "pid": 100
+        }
+      ],
+      "pane_id": "<OWN_PANE>",
+      "shell_pid": 99
+    },
+    "type": "pane_process_info"
+  },
+  "provenance": "REAL Herdr 0.9.0 Claude 2.1.296 startup capture, owned fixture before any Claude prompt. Paths/IDs redacted; pid/group identity relations retained. Node MCP child was initialized by existing global client config, not work or a subagent. Original capture moved unchanged apart from this provenance note."
+}

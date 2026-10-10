@@ -118,8 +118,8 @@ def _judgements(schema: int, *events: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_the_writer_writes_schema_5_and_the_reader_reads_1_to_5() -> None:
-    assert JUDGEMENTS_SCHEMA == 6
-    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6)
+    assert JUDGEMENTS_SCHEMA == 7
+    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7)
     assert Judgements.model_validate({"schema": 5}).schema_ == 5
 
 

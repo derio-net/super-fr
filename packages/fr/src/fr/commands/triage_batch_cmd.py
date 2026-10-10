@@ -45,7 +45,7 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -67,6 +67,7 @@ from fr.commands.triage_cmd import (
     WorkspaceOpt,
     _load_state,
     _scope,
+    _sync_with_ref,
     batch_app,
     collect_into,
     console,
@@ -102,6 +103,7 @@ from fr.triage.batch import (
     foreign_batch_prs,
     label_refs,
     last_dispatch,
+    lifecycle_events,
     mixed_themes,
     pr_open_queue,
     resolve_launch,
@@ -207,10 +209,12 @@ from fr.triage.model import (
     Launch,
     PostMergeEvent,
     PullRequest,
+    ReplacementEvent,
     Scope,
     load_judgements,
     load_scope_facts,
 )
+from fr.triage.operation_lock import replacement_scope_lock
 from fr.triage.privacy import guard_write
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
@@ -1069,8 +1073,8 @@ def _repair(
     batch's members are closed or released, and re-labelling them would mark
     them taken again (review r3-f9).
     """
-    event = batch.events[-1]
-    assert isinstance(event, DispatchEvent)
+    event = last_dispatch(batch)
+    assert event is not None
     stage = derive_batch_stage(batch, facts)
     if stage not in LIVE_STAGES:
         _fail(
@@ -1199,6 +1203,264 @@ def _recovery(
     return " ".join(parts)
 
 
+def _replacement_live_gate(batch: Batch, facts: Facts, repo: str, client: GhClient) -> None:
+    """Fresh forge reads are mandatory even with no cached PR; unknown is refusal."""
+    event = last_dispatch(batch)
+    assert event is not None
+    try:
+        records = client.list_prs_by_head(repo, event.branch)
+        if not isinstance(records, list) or any(
+            not isinstance(r, dict) or not isinstance(r.get("number"), int) for r in records
+        ):
+            raise ValueError("unreadable branch PR lookup")
+        cached = batch_pr(batch, facts)
+        numbers = {r["number"] for r in records}
+        if cached:
+            numbers.add(cached.number)
+        if len(numbers) > 1:
+            raise ValueError("ambiguous branch PR identity")
+        for number in numbers:
+            live = client.pr_view(repo, number)
+            if live.get("state") != "OPEN" or live.get("head_ref") != event.branch:
+                raise ValueError("live PR is merged/closed/unknown or its branch changed")
+        if any(r.get("isCrossRepository") is not False for r in records):
+            raise ValueError("PR origin is foreign or unreadable")
+    except Exception as exc:  # noqa: BLE001 - unknown forge state is never permission to stop
+        _fail(f"replacement live forge gate refused: {exc}")
+
+
+def _replacement_transaction(
+    target: Path,
+    facts: Facts,
+    batch_id: str,
+    *,
+    checkout_path: Path | None,
+    harness: str | None,
+    model: str | None,
+    reason: str,
+    yes: bool,
+    repair: bool,
+) -> None:
+    if importlib.util.find_spec("fr_dispatch") is None:
+        _fail(DISPATCH_INSTALL_HINT)
+    from fr_dispatch.launch import validate_model
+    from fr_dispatch.protocols import ReplacementRequest, SessionReplacer
+
+    path = target / "judgements.yaml"
+    j = load_judgements(path)
+    batch = _find(j.batches, batch_id)
+    original = last_dispatch(batch)
+    if original is None or derive_batch_stage(batch, facts) not in LIVE_STAGES:
+        _fail("replacement requires a dispatched or pr-open unmerged batch")
+    repo = batch_repo(batch, facts)
+    if repo is None:
+        _fail("batch repo is absent from scope facts")
+    checkout = _open_checkout(checkout_path, repo)
+    audits = [e for e in batch.events if isinstance(e, ReplacementEvent)]
+    latest = audits[-1] if audits else None
+    if original.runner != "herdr":
+        _fail("replacement requires the original herdr runner")
+    runner = load_runner(original.runner)
+    if not isinstance(runner, SessionReplacer):
+        _fail("runner does not implement SessionReplacer")
+    pending = None
+    if repair:
+        if harness is not None or model is not None:
+            _fail("--repair uses the persisted target; do not supply --harness/--model")
+        pending = runner.replacement_pending(batch_item_id(repo, batch.id), original.handle)
+        if pending and (latest is None or pending.attempt != latest.attempt):
+            if pending.branch != original.branch or pending.checkout != str(
+                checkout.main_worktree()
+            ):
+                _fail("pending descriptor does not match original branch/checkout")
+            old = Launch(runner="herdr", harness=pending.old_harness, model=pending.old_model)
+            new = Launch(runner="herdr", harness=pending.harness, model=pending.model)
+            attempt = pending.attempt
+            latest = None  # prepared before the attempt write; still no input replay
+        elif latest:
+            old, new, attempt = latest.old, latest.new, latest.attempt
+        else:
+            _fail("no replacement attempt or pending descriptor to repair")
+    else:
+        if latest and latest.result != "success" and not latest.reconciled:
+            _fail("unreconciled replacement; use --repair --reason <inspection> --yes")
+        old = resolve_launch(
+            batch, facts.config_for(repo), orchestrator=_orchestrator(checkout.path)
+        ).launch
+        if harness is not None and harness != old.harness and model is None:
+            _fail("harness change requires an explicit --model")
+        new = old.model_copy(
+            update={
+                "harness": harness if harness is not None else old.harness,
+                "model": model if model is not None else old.model,
+            }
+        )
+        if new == old:
+            _fail("replacement is a no-op")
+        attempt = uuid.uuid4().hex
+    if original.runner != "herdr" or old.runner != "herdr" or new.runner != "herdr":
+        _fail("replacement requires the original herdr runner; runner changes are unsupported")
+    if new.harness not in {"claude", "opencode"} or not new.model or not new.model.strip():
+        _fail("unsupported harness or empty model")
+    validate_model(str(new.harness), new.model)
+    op = runner.replacement_session(
+        ReplacementRequest(
+            batch_item_id(repo, batch.id),
+            original.handle,
+            latest.name if repair and latest else pending.name if pending else "",
+            original.branch,
+            str(checkout.main_worktree()),
+            str(old.harness),
+            str(old.model),
+            str(new.harness),
+            str(new.model),
+            attempt,
+        )
+    )
+    repair_line = (
+        f"fr triage batch replace {batch.id} --repair --reason <inspection> --yes "
+        f"--dir {shlex.quote(str(target))} "
+        f"--checkout {shlex.quote(str(checkout.path))} --repo {repo}"
+    )
+    with op.ownership() if yes else nullcontext():
+        _replacement_live_gate(
+            batch, facts, repo, make_client(f"https://{_host_of(facts, repo)}/{repo}")
+        )
+        if repair:
+            result = op.reconcile()
+            if latest and latest.result == "success" and not result.ok:
+                _fail("committed batch success no longer matches live target; inspect both stores")
+            if latest and latest.result == "failure" and latest.reconciled and result.ok:
+                _fail("committed batch failure disagrees with live target; inspect both stores")
+        else:
+            op.inspect()
+        console.print(
+            f"{'repair' if repair else 'replace'} batch {batch.id}: "
+            f"{old.harness}/{old.model} → {new.harness}/{new.model}; "
+            f"pane {original.handle}; branch {original.branch}",
+            markup=False,
+        )
+        if not yes:
+            console.print("nothing written or sent; re-run with --yes", markup=False)
+            return
+
+        def write(event: ReplacementEvent, success: bool = False) -> None:
+            nonlocal j, batch
+            changed = batch.model_copy(
+                update={
+                    "events": [*batch.events, event],
+                    "launch": new if success else batch.launch,
+                }
+            )
+            j = save_batches(path, _replace(j.batches, changed), read=j.batches)
+            batch = _find(j.batches, batch.id)
+
+        def audit(result: str, detail: str = "", reconciled: bool = False) -> ReplacementEvent:
+            return ReplacementEvent.model_validate(
+                {
+                    "kind": "replacement",
+                    "at": _now_after(batch),
+                    "attempt": attempt,
+                    "result": result,
+                    "reason": reason,
+                    "old": old,
+                    "new": new,
+                    "handle": original.handle,
+                    "pane": original.handle,
+                    "name": op.name,
+                    "branch": original.branch,
+                    "detail": detail,
+                    "reconciled": reconciled,
+                }
+            )
+
+        try:
+            if not repair:
+                # Validate compare-write BEFORE descriptor preparation; prepared alone can
+                # be reconciled manually but no pane input has occurred at that boundary.
+                save_batches(path, j.batches, read=j.batches, dry_run=True)
+                op.prepare()
+                write(audit("attempt"))
+                result = op.execute()
+            if not (
+                repair
+                and latest
+                and (
+                    latest.result == "success" or (latest.result == "failure" and latest.reconciled)
+                )
+            ):
+                write(
+                    audit("success" if result.ok else "failure", result.detail, reconciled=repair),
+                    success=result.ok,
+                )
+            if result.ok or repair:
+                op.activate(success=result.ok)
+        except Exception as exc:  # noqa: BLE001 - pending stores remain the reconciliation point
+            _fail(
+                f"replacement metadata/operation failure: {exc}; inspect source/target/shell; "
+                f"repair: {repair_line}",
+                code=1,
+            )
+        if not result.ok and not repair:
+            _fail(
+                f"replacement failed at {result.phase}; survivor {result.survivor}: "
+                f"{result.detail}; repair: {repair_line}",
+                code=1,
+            )
+        console.print(f"replacement {'reconciled' if repair else 'completed'}", markup=False)
+
+
+@batch_app.command("replace")
+def batch_replace_command(
+    batch_id: Annotated[str, typer.Argument()],
+    reason: Annotated[str, typer.Option("--reason", help="Required audit reason.")],
+    harness: Annotated[str | None, typer.Option("--harness")] = None,
+    model: Annotated[str | None, typer.Option("--model")] = None,
+    repair: Annotated[bool, typer.Option("--repair")] = False,
+    yes: Annotated[bool, typer.Option("--yes")] = False,
+    checkout_path: CheckoutOpt = None,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Replace a managed batch harness/model in place, or reconcile without replay."""
+    if (
+        not reason.strip()
+        or (harness is not None and not harness.strip())
+        or (model is not None and not model.strip())
+    ):
+        _fail("--reason, --harness and --model cannot be empty")
+    scope = _scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace, sync=False, prepare=False)
+    try:
+        with replacement_scope_lock(target) if yes else nullcontext():
+            finish = None
+            if yes:
+                resolve_state_dir(scope, dir_override, workspace, sync=False)
+                finish = _sync_with_ref(scope, target, defer_push=False)
+            try:
+                _, facts, _ = _load_state(scope, target, None, read_only=True)
+                _replacement_transaction(
+                    target,
+                    facts,
+                    batch_id,
+                    checkout_path=checkout_path,
+                    harness=harness,
+                    model=model,
+                    reason=reason,
+                    yes=yes,
+                    repair=repair,
+                )
+            finally:
+                if finish is not None:
+                    finish()
+    except typer.Exit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - read/lock/identity refusals send no input
+        _fail(f"replacement refused: {exc}")
+
+
 @batch_app.command("dispatch")
 def batch_dispatch_command(
     batch_id: Annotated[str, typer.Argument(help="The batch to dispatch.")],
@@ -1296,7 +1558,7 @@ def dispatch_batch(
     if (handle or reserved_version) and not repair:
         _fail("--handle and --reserved-version go with --repair only")
     if repair:
-        if batch.events and isinstance(batch.events[-1], DispatchEvent):
+        if last_dispatch(batch) is not None:
             _repair(batch, owner_repo, client, facts, yes=yes)
         else:
             _record_missing(
@@ -1348,7 +1610,7 @@ def dispatch_batch(
         runner=runner_name,
         remedy=worker_remedy() if runner_name in CLOUD_PREFLIGHT_RUNNERS else None,
     )
-    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path, group)  # step 4
+    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.main_worktree(), group)
     branch = batch_branch(batch)
     console.print(f"dispatch batch {batch.id} as {item.id}", markup=False)
     console.print(f"  runner: {runner_name}", markup=False)
@@ -1529,7 +1791,8 @@ def adopt_batch(
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
     new = batch_branch(batch)
     old = branch
-    last = batch.events[-1] if batch.events else None
+    lifecycle = lifecycle_events(batch)
+    last = lifecycle[-1] if lifecycle else None
     recorded = isinstance(last, DispatchEvent) and last.handle == tab and last.branch == new
     if not recorded:
         stage = derive_batch_stage(batch, facts)
@@ -2194,7 +2457,8 @@ def _settled(batch: Batch) -> bool:
     """Whether *batch* is finished on its events alone, with no forge read: cancelled,
     or its archive PR merged by a driver."""
     event = closeout_event(batch)
-    cancelled = bool(batch.events) and isinstance(batch.events[-1], CancelEvent)
+    lifecycle = lifecycle_events(batch)
+    cancelled = bool(lifecycle) and isinstance(lifecycle[-1], CancelEvent)
     return cancelled or (event is not None and event.archived is not None)
 
 
@@ -3757,7 +4021,7 @@ class _Driver:
                 "model": launch.model,
                 "branch": branch,
                 "issues": list(batch.ids),
-                "checkout": str(self.checkout(repo).path),
+                "checkout": str(self.checkout(repo).main_worktree()),
                 "group": self.group_of(batch),
             },
             tracking=None,
@@ -3832,7 +4096,12 @@ class _Driver:
             )  # fmt: skip
             return f"recorded the live {item_id}", True
         item = _closeout_item(
-            repo, batch, launch, run=run, checkout=checkout.path, group=self.group_of(batch)
+            repo,
+            batch,
+            launch,
+            run=run,
+            checkout=checkout.main_worktree(),
+            group=self.group_of(batch),
         )
         runner = self.runner(str(launch.runner))
         if not runner.can_dispatch(item):

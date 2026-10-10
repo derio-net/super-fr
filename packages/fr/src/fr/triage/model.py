@@ -54,14 +54,15 @@ from fr.triage.stage import Stage, derive_stage
 # still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
 FACTS_SCHEMA: Literal[8] = 8
 FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8)
-# The version this fr WRITES: every engine write stamps 6 (spec 2026-10-06-triage-claims
+# The version this fr WRITES: every engine write stamps 7 (audited replacement;
+# 6 was spec 2026-10-06-triage-claims
 # §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
 # `conflict` event; 4 was
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[6] = 6
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6)
+JUDGEMENTS_SCHEMA: Literal[7] = 7
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -178,7 +179,13 @@ def legacy_state_dir(scope: Scope) -> Path:
     return _home() / ".cache" / "fr" / "triage" / scope.name
 
 
-def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | None = None) -> Path:
+def state_dir(
+    scope: Scope,
+    override: Path | None = None,
+    *,
+    workspace: Path | None = None,
+    prepare: bool = True,
+) -> Path:
     """`--dir` if given, else `<workspace>/.fr/triage-state/<scope>/` (spec
     2026-10-07-cloud-triage R4, §B).
 
@@ -192,6 +199,8 @@ def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | N
     for and does not exist, an existing `legacy_state_dir`'s durable files are copied in
     (`import_legacy`) and the legacy directory is left where it is; once it exists,
     nothing is copied again.
+    With `prepare=False`, only resolve the path: neither exclusion nor legacy import
+    occurs. Replacement previews use this without changing other commands' defaults.
     """
     from fr.triage import gitseam
 
@@ -206,8 +215,10 @@ def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | N
             f"{workspace} is in no git clone, and --workspace names the clone that holds the "
             "state: pass a clone, or --dir to name a directory outright"
         )
-    gitseam.ensure_excluded(root, STATE_EXCLUDE)
     target = root / ".fr" / "triage-state" / scope.name
+    if not prepare:
+        return target  # pure resolution: no exclude update or legacy import
+    gitseam.ensure_excluded(root, STATE_EXCLUDE)
     legacy = legacy_state_dir(scope)
     if not target.exists() and legacy.is_dir():
         import_legacy(legacy, target)
@@ -719,6 +730,24 @@ class ClaimsReleasedEvent(_Strict):
         return _keys(v, "claims_released keys")
 
 
+class ReplacementEvent(_Strict):
+    """Runner-operation audit, never a new dispatch or lifecycle transition (schema 7)."""
+
+    kind: Literal["replacement"]
+    at: AwareDatetime
+    attempt: str = Field(min_length=1)
+    result: Literal["attempt", "success", "failure"]
+    reason: str = Field(min_length=1)
+    old: Launch
+    new: Launch
+    handle: str = Field(min_length=1)
+    pane: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    branch: str = Field(min_length=1)
+    detail: str = ""
+    reconciled: bool = False
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -733,7 +762,8 @@ BatchEvent = Annotated[
     | CloseoutEvent
     | PostMergeEvent
     | ConflictEvent
-    | ClaimsReleasedEvent,
+    | ClaimsReleasedEvent
+    | ReplacementEvent,
     Field(discriminator="kind"),
 ]
 
@@ -797,9 +827,7 @@ class Batch(_Strict):
 
     @field_validator("events")
     @classmethod
-    def _events_are_time_ordered(
-        cls, v: list[DispatchEvent | CancelEvent | CloseoutEvent | PostMergeEvent]
-    ) -> list[Any]:
+    def _events_are_time_ordered(cls, v: list[BatchEvent]) -> list[Any]:
         for earlier, later in zip(v, v[1:], strict=False):
             if later.at < earlier.at:
                 raise ValueError(
@@ -843,7 +871,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -963,6 +991,10 @@ class Judgements(_Strict):
                 f"`{'`, `'.join(latest)}` events need schema 6, but this file is stamped "
                 f"schema {self.schema_}"
             )
+        if self.schema_ < 7 and any(
+            isinstance(e, ReplacementEvent) for b in self.batches for e in b.events
+        ):
+            raise ValueError("replacement events need schema 7")
         return self
 
 

@@ -206,6 +206,28 @@ class World:
                     c["body"] = body
 
 
+def test_closeout_payload_uses_primary_checkout(tmp_path, world, checkout, runner, monkeypatch):
+    primary = tmp_path / "primary"
+    monkeypatch.setattr(checkout, "main_worktree", lambda: primary)
+    _merged(world, tmp_path)
+    checkout.released = True
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert runner.dispatched[0].payload["checkout"] == str(primary)
+
+
+def test_conflict_payload_uses_primary_checkout(
+    tmp_path, world, checkout, runner, train, monkeypatch
+):
+    primary = tmp_path / "primary"
+    monkeypatch.setattr(checkout, "main_worktree", lambda: primary)
+    _one_conflicted(world, tmp_path)
+    train.script[101] = _conflict_error()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert runner.dispatched, out
+    assert runner.dispatched[0].payload["checkout"] == str(primary)
+
+
 class DriveCheckout:
     """The clone: origin is REPO, on main, fast-forwardable."""
 
@@ -224,6 +246,9 @@ class DriveCheckout:
 
     def origin_repo(self) -> str | None:
         return REPO
+
+    def main_worktree(self) -> Path:
+        return self.path
 
     def default_branch(self) -> str:
         return "main"
@@ -3357,7 +3382,7 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     assert messenger.dispatched == []
     (line,) = _lines(out, "merge")
     assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
-    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 6
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 7
 
 
 @pytest.mark.parametrize("status", ["absent", "done"])

@@ -1,0 +1,150 @@
+schema_version: 10
+run: 2026-10-09-feat-1089
+workflow: fr-goal@1
+branch: feat/1089
+started: '2026-10-09T20:18:18+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-10-09T20:26:47+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md
+  spec-review:
+    state: done
+    at: '2026-10-09T20:31:33+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-09T20:26:49+00:00'
+          agent: ses_edda6f4c3ffejVnke8cnPxLCk1
+          agent_type: super-fr:fr-spec-reviewer
+          harness: opencode
+          tier: hard
+          bound: openai/gpt-6.1-sol
+          session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-09T20:31:33+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: ses_edda6f4c3ffejVnke8cnPxLCk1
+          findings: s1,s2,s3,s4,s5
+  plan:
+    state: done
+    at: '2026-10-09T20:34:09+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-10-09-herdr-opencode-replacement
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-10-09T20:31:35+00:00'
+          harness: opencode
+          session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-09T20:34:09+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-10-09T20:34:15+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-10-10T01:24:17+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-09T20:34:16+00:00'
+          agent: ses_edd9f9edfffeA1W9yqB3hjX518
+          agent_type: fr-phase-executor-hard
+          harness: opencode
+          tier: hard
+          bound: openai/gpt-6.1-sol
+          session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-09T20:57:09+00:00'
+          outcome: failed
+        - dispatched: '2026-10-09T21:06:49+00:00'
+          agent: ses_edd9f9edfffeA1W9yqB3hjX518
+          agent_type: fr-phase-executor-hard
+          harness: opencode
+          tier: hard
+          bound: openai/gpt-6.1-sol
+          session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-09T23:58:23+00:00'
+          outcome: done
+        evidence:
+          tests: ci:8f7f7692eeac3521963fdb64986e3d232aef715c+unknown;tree=7845010e91255f9109fce89e58efed855c09395ffda8f5bfec1b029169fffafc
+          visual: none
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-09T23:58:24+00:00'
+          harness: opencode
+          model: openai/gpt-6.1-sol
+          session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-10T00:04:24+00:00'
+          outcome: done
+        evidence:
+          review: phase1-independent-review
+          reviewer: ses_edce53464ffeEI7Li5A1QpLRPO
+          visual: none
+          findings: p1-opencode-input-grounding,p1-full-suite-storage,p1-r1,p1-r2
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-10T00:04:25+00:00'
+          agent: ses_edcdf9d4cffeEboyL4PWD2YSyq
+          agent_type: fr-phase-executor-hard
+          harness: opencode
+          tier: hard
+          bound: openai/gpt-6.1-sol
+          session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-10T01:03:14+00:00'
+          outcome: done
+        evidence:
+          tests: ci:40f5f30054c87aa4adc2c6e62ef83fdc8d7bbd32+unknown;tree=d450e4b7f25430e9e8ac288de1475beb913891baac6c82716460bdfe92117626
+          visual: none
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-10T01:03:15+00:00'
+          harness: opencode
+          model: openai/gpt-6.1-sol
+          session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-10T01:24:17+00:00'
+          outcome: done
+        evidence:
+          review: phase2-independent-review
+          reviewer: ses_edca9d3a5ffeEM3J2NNga0EQ5N
+          visual: none
+          findings: p2-live-instructions-not-evidence,p2-ci-38010048095-regressions,p2-r1,p2-r2,p2-r3
+  journal-check:
+    state: done
+    at: '2026-10-10T01:24:21+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-full-suite-storage
+  deliver:
+    state: done
+    at: '2026-10-10T05:26:55+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1115
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-10T01:24:23+00:00'
+          harness: opencode
+          session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-10T05:26:42+00:00'
+          outcome: done
+        evidence:
+          tests: ci:3f1833a38dfa8ad277bbe012243ec49dfe4996cf+0ae8b9de7d071a67885d86479b351f0641168ba7;tree=201f864f0400f2439b281f78f926a7f6f03c192e7cd7dd30a1fcc04d0be38cfd
+          walk: 20261010T051627Z.log@465c77c3ba61
+          proportionality: 0ae8b9de7d071a67885d86479b351f0641168ba7:760478a68b4f1f36174a63bf27f5d4c4b3c5c97a465ce5079f49efea4d4cce02
+          visual: none
+fr_version: 5.18.2

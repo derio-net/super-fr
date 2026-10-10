@@ -134,9 +134,9 @@ def test_every_schema_this_fr_reads_loads(tmp_path: Path, schema: int) -> None:
 
 
 def test_a_future_schema_is_refused(tmp_path: Path) -> None:
-    _state(tmp_path, schema=7)
+    _state(tmp_path, schema=8)
     code, out = _run(tmp_path, "list")
-    assert code == 2 and "unsupported schema 7" in out
+    assert code == 2 and "unsupported schema 8" in out
 
 
 def test_wave_and_after_need_schema_3(tmp_path: Path) -> None:
@@ -150,7 +150,7 @@ def test_the_first_write_stamps_5_and_keeps_the_rest(tmp_path: Path) -> None:
     _state(tmp_path, schema=1)
     code, out = _run(tmp_path, "create", "a", "--title", "t", "--issue", "super-fr#1")
     assert code == 0, out
-    assert (tmp_path / "judgements.yaml").read_text("utf-8").startswith("schema: 6\n")
+    assert (tmp_path / "judgements.yaml").read_text("utf-8").startswith("schema: 7\n")
 
 
 # ------------------------------------------------------------ create / edit
@@ -165,7 +165,7 @@ def test_create_takes_wave_and_repeatable_after(tmp_path: Path) -> None:
     assert code == 0, out
     new = next(b for b in _batches(tmp_path) if b.id == "c")
     assert (new.wave, new.after) == (2, ["a", "b"])
-    assert _raw(tmp_path)["schema"] == 6
+    assert _raw(tmp_path)["schema"] == 7
 
 
 def test_edit_changes_wave_and_after_of_a_proposed_batch(tmp_path: Path) -> None:

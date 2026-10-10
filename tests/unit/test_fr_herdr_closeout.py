@@ -34,6 +34,7 @@ def herdr(monkeypatch: pytest.MonkeyPatch) -> _Herdr:
     monkeypatch.setattr(herdr_runner.shutil, "which", lambda name: "/usr/local/bin/herdr")
     monkeypatch.setenv("HERDR_ENV", "1")
     monkeypatch.setenv("HERDR_WORKSPACE_ID", "w2")
+    monkeypatch.setattr(herdr_runner, "stable_checkout", lambda path: path)
     return fake
 
 

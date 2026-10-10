@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -19,6 +19,27 @@ PANE_BUSY_TRIES = 15
 """How often `agent start` is tried while the pane's shell is not up yet (gh#931)."""
 PANE_BUSY_WAIT = 2.0
 """Seconds between those tries."""
+
+_T = TypeVar("_T")
+
+
+def poll(
+    check: Callable[[], _T | None],
+    *,
+    timeout: float,
+    clock: Callable[[], float],
+    sleep: Callable[[float], None],
+    interval: float = 1.0,
+) -> _T | None:
+    """Bounded foreground/startup observation shared by both harnesses."""
+    deadline = clock() + timeout
+    while True:
+        answer = check()
+        if answer is not None:
+            return answer
+        if clock() >= deadline:
+            return None
+        sleep(interval)
 
 
 class HerdrError(Exception):
@@ -33,9 +54,13 @@ class HerdrError(Exception):
 def _run_herdr(args: list[str]) -> dict[str, Any]:
     """Run `herdr <args>` and return its parsed JSON (`{}` for empty output)."""
     try:
-        done = subprocess.run(["herdr", *args], capture_output=True, text=True, check=True)
+        done = subprocess.run(
+            ["herdr", *args], capture_output=True, text=True, check=True, timeout=60
+        )
     except FileNotFoundError as exc:
         raise HerdrError("herdr is not on PATH") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HerdrError(f"herdr {' '.join(args[:2])} timed out; inspect before retry") from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
         raise HerdrError(

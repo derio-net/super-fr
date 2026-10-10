@@ -19,8 +19,8 @@ agent has taken the prompt up (it left `idle`), not merely once it was typed.
   parses herdr's JSON envelope and raises `HerdrError` on failure; tests
   replace it.
 - **One harness table.** `HARNESSES` maps a harness to herdr's agent kind and
-  the argv that selects a model. Only `claude` is verified; others are added
-  as they are verified live.
+  the argv that selects a model. Claude resumes; managed OpenCode recovers fresh
+  from durable state (input grounding: tests/fixtures/herdr/opencode).
 - **Identity.** The tab label is the full item id (`<repo>/run/batch-<id>`,
   unique across repos), so `existing_dispatches` matches live tabs by label.
   The agent name only has to satisfy herdr's `[a-z][a-z0-9_-]{0,31}`:
@@ -57,11 +57,13 @@ import shutil
 import subprocess  # noqa: F401  (tests patch `fr_herdr.runner.subprocess.run`)
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from fr_dispatch.launch import validate_model
 from fr_dispatch.protocols import AdoptTarget
 
-from fr_herdr import restart  # noqa: F401  (imported at module top level, never lazily: spec sr-13)
+from fr_herdr import managed, opencode, restart
 from fr_herdr._herdr import (
     PANE_BUSY_TRIES,
     PANE_BUSY_WAIT,
@@ -73,7 +75,13 @@ from fr_herdr._herdr import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from fr_dispatch.protocols import CloseOutcome, RestartSummary, SessionStatus
+    from fr_dispatch.protocols import (
+        CloseOutcome,
+        ReplacementOperation,
+        ReplacementRequest,
+        RestartSummary,
+        SessionStatus,
+    )
     from fr_dispatch.work_item import WorkItem
 
 
@@ -99,7 +107,22 @@ class Harness:
 
 HARNESSES: dict[str, Harness] = {
     "claude": Harness(kind="claude", model_flag="--model"),
+    "opencode": Harness(kind="opencode", model_flag="--model"),
 }
+
+
+def stable_checkout(path: str) -> str:
+    """Normalize through fr's isolation seam; never launch in a disposable checkout."""
+    from fr.isolation.local import _main_worktree_root
+
+    root = Path(path).resolve()
+    if not root.is_dir() or not (root / ".git").exists():
+        raise HerdrError(f"checkout is not an available git toplevel: {root}")
+    primary = _main_worktree_root(root)
+    if not primary.is_dir() or not (primary / ".git").is_dir():
+        raise HerdrError(f"stable primary checkout is unavailable: {primary}")
+    return str(primary)
+
 
 _NAME_UNSAFE = re.compile(r"[^a-z0-9_-]")
 
@@ -199,7 +222,60 @@ class HerdrRunner:
     def message(self, item: WorkItem, text: str) -> None:
         """Prompt the item's agent with *text* (spec 2026-10-06-verification-strategies
         §G, R23): `herdr agent prompt <agent_name(item.id)> <text>`."""
+        # Every managed message shares restart's exclusive input ownership, not
+        # only conflict handbacks. Save a handback before sending it.
+        if os.environ.get("HERDR_SOCKET_PATH"):
+            for tab in _tabs_labelled(_list_tabs(), item.id):
+                for agent in _list_agents():
+                    if agent.get("tab_id") == tab.get("tab_id"):
+                        d = managed.load(str(agent["pane_id"]))
+                        if d and d.item == item.id:
+                            with managed.pane_lock(d.pane):
+                                if d.checkpoint != "active" or managed.load(d.pane) != d:
+                                    raise HerdrError("managed message has an unresolved operation")
+                                fresh = [a for a in _list_agents() if a.get("pane_id") == d.pane]
+                                if (
+                                    len(fresh) != 1
+                                    or fresh[0].get("name") != d.name
+                                    or fresh[0].get("agent") != d.harness
+                                ):
+                                    raise HerdrError("managed message identity changed")
+                                if (
+                                    fresh[0].get("agent_status") not in {"idle", "done"}
+                                    or fresh[0].get("interactive_ready") is not True
+                                ):
+                                    raise HerdrError("managed message target is not idle and ready")
+                                if text.startswith("Merge conflict on batch "):
+                                    managed.save(managed.handback(d, text))
+                                _run_herdr(["agent", "prompt", agent_name(item.id), text])
+                                return
         _run_herdr(["agent", "prompt", agent_name(item.id), text])
+
+    def replacement_session(self, request: ReplacementRequest) -> ReplacementOperation:
+        from fr_herdr.replacement import Operation
+
+        return Operation(request)
+
+    def replacement_pending(self, item: str, pane: str) -> ReplacementRequest | None:
+        from fr_dispatch.protocols import ReplacementRequest
+
+        d = managed.load(pane)
+        if d is None or d.attempt is None:
+            return None
+        if d.item != item or d.name != agent_name(item) or not d.old_harness or not d.old_model:
+            raise managed.ManagedError("pending descriptor identity is not the batch's")
+        return ReplacementRequest(
+            d.item,
+            d.pane,
+            d.name,
+            d.branch,
+            d.checkout,
+            d.old_harness,
+            d.old_model,
+            d.harness,
+            d.model,
+            d.attempt,
+        )
 
     def restart_idle(self, *, exclude: Sequence[str] = ()) -> RestartSummary:
         """Restart every idle claude pane via the engine, `yes=True` (spec
@@ -277,10 +353,32 @@ class HerdrRunner:
         """
         payload = item.payload
         harness = HARNESSES[str(payload["harness"])]
-        checkout = str(payload.get("checkout") or os.getcwd())
+        try:
+            validate_model(harness.kind, str(payload["model"]))
+        except ValueError as exc:
+            raise HerdrError(str(exc)) from exc
+        checkout = stable_checkout(str(payload.get("checkout") or os.getcwd()))
         pane, cleanup = self._open_tab(item, checkout)
+        descriptor = None
         try:
             name = agent_name(item.id)
+            if harness.kind == "opencode":
+                descriptor = managed.Descriptor.model_validate(
+                    {
+                        "server": managed.server_identity(),
+                        "pane": pane,
+                        "name": name,
+                        "item": item.id,
+                        "role": payload.get("kind", "batch"),
+                        "branch": str(payload["branch"]),
+                        "checkout": checkout,
+                        "model": str(payload["model"]),
+                        "brief": str(payload["brief"]),
+                        "checkpoint": "prepared",
+                    }
+                )
+                descriptor = managed.handback(descriptor, descriptor.brief)
+                managed.save(descriptor)
             _start_agent(
                 [
                     "agent",
@@ -294,7 +392,13 @@ class HerdrRunner:
                     *harness.model_args(str(payload["model"])),
                 ]
             )
-            _submit(name, str(payload["brief"]))
+            if descriptor:
+                opencode.wait_ready(descriptor, run=_run_herdr)
+                descriptor = descriptor.model_copy(update={"checkpoint": "submission-started"})
+                managed.save(descriptor)
+            _submit(name, str(payload["brief"]), harness=harness.kind)
+            if descriptor:
+                managed.save(descriptor.model_copy(update={"checkpoint": "active"}))
         except BaseException:
             cleanup()
             raise
@@ -363,7 +467,7 @@ def _start_agent(argv: list[str]) -> None:
     start_agent(argv, run=_run_herdr, sleep=_sleep, tries=PANE_BUSY_TRIES, wait=PANE_BUSY_WAIT)
 
 
-def _submit(name: str, brief: str) -> None:
+def _submit(name: str, brief: str, *, harness: str = "claude") -> None:
     """Submit *brief* and confirm the agent took it up (gh#956).
 
     Without `--wait`, `agent prompt` reports success once the text and Enter are
@@ -378,6 +482,14 @@ def _submit(name: str, brief: str) -> None:
     except HerdrError as exc:
         if exc.code != "agent_prompt_stalled":
             raise
+        if harness == "opencode":
+            # Live Commands overlays can still report idle/done/readiness. A
+            # stalled prompt does not prove a focused textarea holds our brief;
+            # never send Enter into an unknown interactive state.
+            raise HerdrError(
+                "OpenCode prompt uptake stalled; refusing an unverified Enter retry",
+                code=exc.code,
+            ) from exc
     # Enter cannot answer a dialog here: `agent start` returned only once the agent
     # was ready for input, and a dialog since would have read `blocked`, which the
     # wait above accepts, so a stall means an input box that holds the brief.

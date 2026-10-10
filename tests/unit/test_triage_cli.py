@@ -171,12 +171,16 @@ def test_collect_views_the_judged_issues_that_are_no_longer_open(
 def test_a_bad_judgements_file_exits_2_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "judgements.yaml").write_text("schema: 7\n", encoding="utf-8")
+    from fr.triage.model import JUDGEMENTS_READS
+
+    unsupported = max(JUDGEMENTS_READS) + 1
+    (tmp_path / "judgements.yaml").write_text(f"schema: {unsupported}\n", encoding="utf-8")
 
     result = _run(monkeypatch, _Forge(), "--repo", "derio-net/super-fr", "--dir", str(tmp_path))
 
     assert result.exit_code == 2
     assert "judgements.yaml" in result.output
+    assert f"unsupported schema {unsupported}" in result.output
 
 
 def test_an_unviewed_judgement_is_reported_verbatim_and_still_writes(

@@ -1,0 +1,135 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Audited batch harness replacement, repair and operator handoff (R4–R9, R12)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - herdr-batch-replace
+  - herdr-opencode-live
+  tier: hard
+  files:
+  - packages/fr-dispatch/src/fr_dispatch/*
+  - packages/fr-herdr/src/fr_herdr/*
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/*
+  - tests/unit/test_fr_herdr*
+  - tests/unit/test_triage*
+  - tests/unit/test_import_direction.py
+  - tests/scenarios/herdr-batch-replace.sh
+  - tests/scenarios/herdr-opencode-live.sh
+  - tests/integration/test_scenarios.py
+  - packages/fr-herdr/README.md
+  - docs/*
+  - AGENTS.md
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/*
+  - .hermes/skills/fr/fr-triage/*
+  - docs/acceptance/*
+  - .changes/feat-1089.yaml
+  estimate_lines: 1400
+tasks:
+- number: 1
+  title: Audit schema and lifecycle-safe event folding
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: schema-7 replacement attempt/result round trips, schemas 1–6 still load, older stamps reject replacement; preserve original dispatch time/handle/branch/PR attribution and cancellation across audit events. dispatch --repair must find last real dispatch, never assume final event type.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add replacement events and schema-7 gates/read/write stamps in triage model; use save_batches as sole batch writer; ignore audit events when deriving lifecycle. This cache schema is not an artifact kind: do not bump registry or package versions.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR lifecycle selector reuse and type annotations; preserve last_dispatch original event and existing cancellation/claims semantics.
+- number: 2
+  title: Serialized runner replacement with durable checkpoints
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: SessionReplacer tests for both harness directions/model-only, identity preservation, prompt/draft/background/self refusals and fresh rechecks; interleaved callers allow exactly one owner to send input; inject crashes at prepared, exit, ready, submission-started, uptake-confirmed, batch commit and descriptor activation.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement optional replacement protocol and herdr operations using phase-1 managed metadata/pane locks. No new tab, no transcript deletion, no automatic source restart. Persist checkpoints before side effects and confirmed uptake before success; uncertain submission never becomes success by observing model alone.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR shared launch/exit/inspection with restart. Prove pending descriptors exclude ordinary restart and repair reconciles both stores without sending a duplicate prompt or launching twice.
+- number: 3
+  title: Replacement preview, act and repair CLI
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: command tests with FakeRunner/FakeCheckout/FakeGhClient cover required reason, explicit model for harness change, no-op/unsupported/merged/closed/busy/unknown/ambiguous/unreadable refusal, preview no writes/keys, scope then pane lock, original event preservation, successful launch metadata, failures and compare-write repair. Live PR state overrides stale cached facts.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: add batch replace --harness --model --reason --yes --repair with scope/checkout options via existing guarded soft-import seam. Prepare descriptor, save attempt, perform runner replacement, save success/launch, activate descriptor. Repair requires persisted uptake evidence or explicitly records source/shell failure; metadata save failures print concrete repair instructions. Keep ordinary edit frozen and do not write forge markers/labels/claims.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR transaction orchestration and refusal output while retaining one batch writer and no fr_herdr imports from fr. Run import-direction tripwire, targeted tests, lint and typecheck.
+- number: 4
+  title: Installed replacement scenario, client-live walk and documentation
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests/scenarios/herdr-batch-replace.sh exercises the installed CLI with isolated synthetic state and fake herdr, including failure and repair; herdr-opencode-live.sh supplies explicit disposable-session operator instructions and requires honest observed verdict, never automatic mutation of production sessions.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: update runner README, triage docs, AGENTS schema/runner notes, canonical fr-triage skill and both generated mirrors via scripts/sync-opencode.py and scripts/sync-hermes.py. Update herdr-batch-replace to ci with named evidence refs and herdr-opencode-live to skipped with client-live scenario/evidence owed, using the phase record. Defend why published explainers need no update or update relevant prose/HTML according to its rule.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR docs/scenario duplication; run format/check, affected tripwires, mypy, acceptance and targeted lifecycle/replacement tests with bounded timeouts. Operator directed no further local full-suite attempts after infrastructure exhaustion and host-backed I/O stall. Commit and push final code to the existing draft PR; use evidence.tests: ci for the ci-ok full-suite gate and include all ticks/refactor reasons in the phase record.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-10-10T01:03:02+00:00'
+      note: null
+  completion:
+    at: '2026-10-10T01:03:02+00:00'
+    note: null
+    observed_prs: []

@@ -1,6 +1,6 @@
 """`fr-herdr` — the herdr adapter's console script (spec 2026-10-06 §A, R1/R4/R5).
 
-One subcommand, `restart-idle`: restart every idle Claude pane in place on `--resume`,
+One subcommand, `restart-idle`: resume idle Claude or freshly recover managed OpenCode,
 so the sessions pick up the plugins `post_merge` just installed. argparse, no Typer:
 `fr-herdr` depends only on `fr` and `fr-dispatch`.
 
@@ -23,7 +23,7 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     idle = sub.add_parser(
         "restart-idle",
-        help="restart idle Claude panes in place on --resume (a dry run without --yes)",
+        help="resume idle Claude or recover managed OpenCode fresh (dry run without --yes)",
     )
     idle.add_argument("--yes", action="store_true", help="restart; without it, print the plan")
     idle.add_argument(

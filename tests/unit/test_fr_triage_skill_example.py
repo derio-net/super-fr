@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from fr.triage.model import Cx, load_judgements
+from fr.triage.model import JUDGEMENTS_SCHEMA, Cx, load_judgements
 
 SKILL = Path(__file__).resolve().parents[2] / "plugins/super-fr/skills/fr-triage/SKILL.md"
 
@@ -85,17 +85,32 @@ def test_the_tier_shape_the_example_teaches_survives_hostile_free_text(
     assert all(t.description == free_text for t in judgements.tiers)
 
 
-def test_the_skill_teaches_schema_3_and_batches(tmp_path: Path) -> None:
+def test_the_skill_teaches_current_schema_and_batches(tmp_path: Path) -> None:
     """Review r2p-f14: agents copy the skill, so it must never say `schema: 1`,
     and its example must show a batch that loads through the real model."""
     text = SKILL.read_text()
     assert "schema: 1" not in text
-    assert re.search(r"^schema: 3$", _example(), re.M)
+    assert re.search(rf"^schema: {JUDGEMENTS_SCHEMA}$", _example(), re.M)
+    assert f"**Schema {JUDGEMENTS_SCHEMA}:**" in text
     path = tmp_path / "judgements.yaml"
     path.write_text(_example())
     judgements = load_judgements(path)
+    assert judgements.schema_ == JUDGEMENTS_SCHEMA
     assert judgements.batches, "the example should show a batch"
     assert all(not b.events for b in judgements.batches), "events are engine-written"
+
+
+def test_historical_schema_3_example_still_loads_unchanged_batches(tmp_path: Path) -> None:
+    """Current documentation does not retire already-authored schema-3 state."""
+    path = tmp_path / "judgements.yaml"
+    path.write_text(_example())
+    current = load_judgements(path)
+    historical = yaml.safe_load(_example())
+    historical["schema"] = 3
+    path.write_text(yaml.safe_dump(historical))
+    loaded = load_judgements(path)
+    assert loaded.schema_ == 3
+    assert loaded.batches == current.batches and loaded.issues == current.issues
 
 
 def test_the_skill_names_the_batch_verbs_and_the_yes_rule() -> None:
