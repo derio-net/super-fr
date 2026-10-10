@@ -74,3 +74,8 @@ The fresh candidate now qualified the Claude target, submitted the recovery brie
 ### activation-versus-input-safety · discovery · Keep strict input readiness separate from read-only post-uptake identity
 
 A failing regression pins the actual post-uptake task-worker case. Read-only identity observation now selects a unique expected harness root only when its pid is the foreground group leader; full model/name/pane/cwd/status checks still apply. Safe input observation remains unchanged and refuses those workers, duplicate roots and unknown source states. This is used only for existing non-input activation/diagnostic observations; repair still requires persisted uptake. 141 targeted tests, ruff and mypy passed. Real combined candidate replacement will be rerun before claiming completion.
+
+<!-- fr:journal kind=finding scope=debug id=captured-wide-sidebar-input-resolved created=2026-10-10T03:35:24+00:00 state=fixed resolves=captured-wide-sidebar-input -->
+### captured-wide-sidebar-input-resolved · finding [fixed] · resolves captured-wide-sidebar-input: Captured wide-session textarea geometry fix awaits installed live preview
+
+Fresh installed 039b07d3 real wide-session replacement preview now passes with byte-identical fixture batch state and no keys; the old 82d755cf preview had refused the same idle sidebar. Real captured draft/palette negative cases remain unit-pinned; actual final-candidate refusal cases will be repeated. No arbitrary layout/theme was accepted.
