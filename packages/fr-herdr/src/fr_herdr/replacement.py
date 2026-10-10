@@ -11,6 +11,7 @@ import shlex
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from fr_dispatch.launch import validate_model
@@ -19,6 +20,31 @@ from fr_dispatch.protocols import ReplacementInspection, ReplacementRequest, Rep
 from fr_herdr import managed, opencode, restart
 from fr_herdr._herdr import HerdrError, _run_herdr, start_agent
 from fr_herdr.runner import agent_name, stable_checkout
+
+
+def _foreground_process(info: dict[str, Any], harness: str) -> dict[str, Any]:
+    group = info.get("result", {}).get("process_info", {})
+    procs = group.get("foreground_processes", [])
+    if len(procs) == 1:
+        return dict(procs[0])
+    # Real Claude startup includes one configured node MCP server in its own
+    # foreground group, before any prompt. This is not another agent or a job.
+    roots = [p for p in procs if Path(str((p.get("argv") or [""])[0])).name == "claude"]
+    if harness == "claude" and len(procs) == 2 and len(roots) == 1:
+        root = roots[0]
+        child = next(p for p in procs if p is not root)
+        argv = child.get("argv", [])
+        if (
+            root.get("pid")
+            and group.get("foreground_process_group_id") == root["pid"]
+            and child.get("pid")
+            and child.get("cwd") == root.get("cwd")
+            and len(argv) == 2
+            and Path(str(argv[0])).name == "node"
+            and Path(str(argv[1])).name == "mcp-server.cjs"
+        ):
+            return dict(root)
+    raise managed.ManagedError("ambiguous foreground process")
 
 
 def observe(d: managed.Descriptor, safe: bool = True, source: bool = False) -> dict[str, Any]:
@@ -38,10 +64,7 @@ def observe(d: managed.Descriptor, safe: bool = True, source: bool = False) -> d
     ):
         raise managed.ManagedError("live identity/status/readiness mismatch")
     info = _run_herdr(["pane", "process-info", "--pane", d.pane])
-    procs = info.get("result", {}).get("process_info", {}).get("foreground_processes", [])
-    if len(procs) != 1:
-        raise managed.ManagedError("ambiguous foreground process")
-    proc = procs[0]
+    proc = _foreground_process(info, d.harness)
     argv = proc.get("argv", [])
     cwd_matches = proc.get("cwd") == d.checkout
     if source and not cwd_matches and proc.get("cwd"):
@@ -49,8 +72,6 @@ def observe(d: managed.Descriptor, safe: bool = True, source: bool = False) -> d
             cwd_matches = stable_checkout(str(proc["cwd"])) == d.checkout
         except HerdrError:
             pass
-    from pathlib import Path
-
     if (
         not argv
         or Path(str(argv[0])).name != d.harness
