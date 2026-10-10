@@ -24,3 +24,8 @@ replacement.observe now delegates OpenCode argv validation to opencode.model_mat
 ### local-config · hypothesis · The prompt came from local OpenCode configuration
 
 If a deny or prompt rule in the operator's OpenCode configuration caused the stop, changing fr-herdr launch argv would not be the correct system fix. Check the native CLI contract and every fr-owned process launch before changing behavior.
+
+<!-- fr:journal kind=ruled-out scope=debug id=local-config-ruled-out created=2026-10-10T10:26:07+00:00 -->
+### local-config-ruled-out · ruled-out · Native default prompting, not an anomalous local configuration
+
+The installed OpenCode help defines --auto as auto-approve permissions not explicitly denied and defaults it to false. origin/main omitted that flag from all three managed launch paths. The live stop was therefore the expected native default for unattended sessions; explicit denies remain denies under --auto.
