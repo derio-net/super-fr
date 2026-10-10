@@ -54,3 +54,8 @@ candidate-install now passes --refresh with --force, and its integration contrac
 ### recovery-auto-resolved · finding [fixed] · resolves recovery-auto: Restart recovery recreated a prompting OpenCode process
 
 The generated recovery command now preserves --auto; every injected restart failure unit asserts the recovered command remains autonomous.
+
+<!-- fr:journal kind=finding scope=debug id=scenario-argv-resolved created=2026-10-10T10:39:39+00:00 state=fixed resolves=scenario-argv answered_by=agent -->
+### scenario-argv-resolved · finding [fixed] · resolves scenario-argv: Launch and restart scenarios replayed legacy argv
+
+Initial launch and restart fixtures now retain agent start's harness argv and return it from process-info. Installed launch, restart and replacement scenarios all pass while observing --auto.
