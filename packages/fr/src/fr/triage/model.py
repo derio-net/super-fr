@@ -179,7 +179,13 @@ def legacy_state_dir(scope: Scope) -> Path:
     return _home() / ".cache" / "fr" / "triage" / scope.name
 
 
-def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | None = None) -> Path:
+def state_dir(
+    scope: Scope,
+    override: Path | None = None,
+    *,
+    workspace: Path | None = None,
+    prepare: bool = True,
+) -> Path:
     """`--dir` if given, else `<workspace>/.fr/triage-state/<scope>/` (spec
     2026-10-07-cloud-triage R4, §B).
 
@@ -193,6 +199,8 @@ def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | N
     for and does not exist, an existing `legacy_state_dir`'s durable files are copied in
     (`import_legacy`) and the legacy directory is left where it is; once it exists,
     nothing is copied again.
+    With `prepare=False`, only resolve the path: neither exclusion nor legacy import
+    occurs. Replacement previews use this without changing other commands' defaults.
     """
     from fr.triage import gitseam
 
@@ -207,8 +215,10 @@ def state_dir(scope: Scope, override: Path | None = None, *, workspace: Path | N
             f"{workspace} is in no git clone, and --workspace names the clone that holds the "
             "state: pass a clone, or --dir to name a directory outright"
         )
-    gitseam.ensure_excluded(root, STATE_EXCLUDE)
     target = root / ".fr" / "triage-state" / scope.name
+    if not prepare:
+        return target  # pure resolution: no exclude update or legacy import
+    gitseam.ensure_excluded(root, STATE_EXCLUDE)
     legacy = legacy_state_dir(scope)
     if not target.exists() and legacy.is_dir():
         import_legacy(legacy, target)

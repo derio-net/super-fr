@@ -60,6 +60,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from fr_dispatch.launch import validate_model
 from fr_dispatch.protocols import AdoptTarget
 
 from fr_herdr import managed, restart
@@ -347,10 +348,10 @@ class HerdrRunner:
         """
         payload = item.payload
         harness = HARNESSES[str(payload["harness"])]
-        if harness.kind == "opencode" and not re.fullmatch(
-            r"[^/\s]+/[^\s]+", str(payload["model"])
-        ):
-            raise HerdrError("OpenCode requires an explicit provider/model")
+        try:
+            validate_model(harness.kind, str(payload["model"]))
+        except ValueError as exc:
+            raise HerdrError(str(exc)) from exc
         checkout = stable_checkout(str(payload.get("checkout") or os.getcwd()))
         pane, cleanup = self._open_tab(item, checkout)
         descriptor = None

@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from typing import Any
 
+from fr_dispatch.launch import validate_model
 from fr_dispatch.protocols import ReplacementInspection, ReplacementRequest, ReplacementResult
 
 from fr_herdr import managed, opencode, restart
@@ -163,6 +164,10 @@ def submit(d: managed.Descriptor, brief: str) -> None:
 
 class Operation:
     def __init__(self, request: ReplacementRequest):
+        try:
+            validate_model(request.harness, request.model)
+        except ValueError as exc:
+            raise managed.ManagedError(str(exc)) from exc
         if os.environ.get("HERDR_ENV") != "1" or not os.environ.get("HERDR_PANE_ID"):
             raise managed.ManagedError("replacement requires a known caller pane inside herdr")
         if not request.name:
@@ -328,7 +333,28 @@ class Operation:
         self.target = d
         return d
 
+    def _restored_source(self) -> managed.Descriptor | None:
+        """A completed failure restoration is distinct from a pending target descriptor."""
+        d = managed.load(self.source.pane)
+        if (
+            d
+            and d.checkpoint == "active"
+            and d.attempt is None
+            and all(
+                getattr(d, field) == getattr(self.source, field)
+                for field in ("item", "name", "branch", "checkout", "harness", "model")
+            )
+            and d.old_harness is None
+            and d.old_model is None
+        ):
+            return d
+        return None
+
     def reconcile(self) -> ReplacementResult:
+        restored = self._restored_source()
+        if restored:
+            source_eligible(restored)
+            return ReplacementResult(False, "active", "source", "original source already restored")
         d = self._pending()
         if d.pane == os.environ.get("HERDR_PANE_ID"):
             raise managed.ManagedError("caller-self session")
@@ -356,8 +382,8 @@ class Operation:
 
     def activate(self, *, success: bool) -> None:
         self._owner()
-        self._pending()
         if success:
+            self._pending()
             if self.target.checkpoint not in {"uptake-confirmed", "batch-committed", "active"}:
                 raise managed.ManagedError("activation requires persisted uptake")
             observe(self.target, safe=False)
@@ -367,6 +393,9 @@ class Operation:
             result = self.reconcile()
             if result.ok:
                 raise managed.ManagedError("live reconciliation disagrees with batch failure")
+            if self._restored_source() is not None:
+                return  # both stores may already be finalized; still rechecked live above
+            self._pending()
             if result.survivor == "source":
                 restored = self.target.model_copy(
                     update={
@@ -379,5 +408,5 @@ class Operation:
                     }
                 )
                 managed.save(restored)
-            else:
+            elif self.target.checkpoint != "aborted":
                 self._checkpoint("aborted")

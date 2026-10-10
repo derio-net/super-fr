@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import webbrowser
+from collections.abc import Callable
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
@@ -124,15 +125,24 @@ WorkspaceOpt = Annotated[
 
 
 def resolve_state_dir(
-    scope: Scope, dir_override: Path | None, workspace: Path | None, *, sync: bool = True
+    scope: Scope,
+    dir_override: Path | None,
+    workspace: Path | None,
+    *,
+    sync: bool = True,
+    prepare: bool = True,
 ) -> Path:
     """`fr.triage.model.state_dir`, with its refusal (a `--workspace` that is no clone) as
     exit 2, and THE state-ref wrapper (cloud-triage R5, §B, p3-r1): every triage command
-    reaches its state directory here, so with *sync* (every verb but the explicit `state
-    push|fetch`) the scope's ref is fetched first and pushed after a change, for every verb
-    alike (`_sync_with_ref`)."""
+    reaches its state directory here. With *sync*, the scope's ref is fetched first and
+    pushed after a change (`_sync_with_ref`). Replacement previews disable both *sync*
+    and *prepare*; acts prepare/sync only inside exclusive scope ownership."""
     try:
-        target = state_dir(scope, dir_override, workspace=workspace)
+        target = (
+            state_dir(scope, dir_override, workspace=workspace)
+            if prepare
+            else state_dir(scope, dir_override, workspace=workspace, prepare=False)
+        )
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
@@ -154,7 +164,9 @@ def state_remote(state_repo: str) -> str:
     return f"https://github.com/{state_repo}.git"
 
 
-def _sync_with_ref(scope: Scope, target: Path) -> None:
+def _sync_with_ref(
+    scope: Scope, target: Path, *, defer_push: bool = True
+) -> Callable[[], None] | None:
     """Fetch the scope's state ref into *target* now, and push it when the command that
     asked for *target* has changed it (cloud-triage R5, §B "One state across workspaces").
 
@@ -173,10 +185,10 @@ def _sync_with_ref(scope: Scope, target: Path) -> None:
 
     command = _COMMAND.get()
     if command is None:
-        return
+        return None
     ctx, synced = command
     if target in synced:
-        return
+        return None
     synced.add(target)
     try:
         state_repo = load_durable(target).state_repo
@@ -189,7 +201,7 @@ def _sync_with_ref(scope: Scope, target: Path) -> None:
                     markup=False,
                     soft_wrap=True,
                 )
-            return
+            return None
         before = None  # no state repo yet: one decided by this command is a change
         if state_repo is not None:
             fetch_state(target, state_remote(state_repo), scope_id(scope), repo=clone)
@@ -197,7 +209,14 @@ def _sync_with_ref(scope: Scope, target: Path) -> None:
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
-    ctx.call_on_close(lambda: _push_if_changed(scope, target, clone, before))
+
+    def finish() -> None:
+        _push_if_changed(scope, target, clone, before)
+
+    if defer_push:
+        ctx.call_on_close(finish)
+        return None
+    return finish  # replacement executes this while it still owns the scope lock
 
 
 def _push_if_changed(scope: Scope, target: Path, clone: Path, before: object) -> None:
@@ -529,15 +548,21 @@ def _previous_facts(path: Path, scope: Scope) -> Facts | None:
 
 
 def _load_state(
-    scope: Scope, dir_override: Path | None, workspace: Path | None
+    scope: Scope, dir_override: Path | None, workspace: Path | None, *, read_only: bool = False
 ) -> tuple[Path, Facts, Judgements]:
     """The scope's facts and judgements, through the `fr.triage.model` loaders.
 
     No facts.json is an error naming `collect`, and so are facts collected for
     another scope (a `--dir` can point anywhere, gh#886); no judgements.yaml is
     allowed — everything is then unranked.
+    `read_only` disables ref synchronization, exclusion writes and legacy import; all
+    other callers keep their original preparation and sync behavior by default.
     """
-    target_dir = resolve_state_dir(scope, dir_override, workspace)
+    target_dir = (
+        resolve_state_dir(scope, dir_override, workspace, sync=False, prepare=False)
+        if read_only
+        else resolve_state_dir(scope, dir_override, workspace)
+    )
     facts_path = target_dir / "facts.json"
     if not facts_path.exists():
         flag = "org" if scope.kind == "org" else "repo"

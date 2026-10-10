@@ -301,3 +301,58 @@ def test_dispatch_repair_selects_real_dispatch_after_audit(env, monkeypatch):
 
     cmd.dispatch_batch(env[0], _facts(), j, j.batches[0], repair=True)
     assert seen == [last_dispatch(j.batches[0])]
+
+
+@pytest.mark.parametrize("model", ["gpt-model", "/model", "provider/", "provider/a model"])
+@pytest.mark.parametrize("yes", [False, True])
+def test_malformed_opencode_model_refuses_before_operation_or_audit(env, model, yes):
+    before = (env[0] / "judgements.yaml").read_bytes()
+    result = invoke(
+        env,
+        "--harness",
+        "opencode",
+        "--model",
+        model,
+        "--reason",
+        "change",
+        *(["--yes"] if yes else []),
+    )
+    assert result.exit_code == 2, result.output
+    assert "provider/model" in result.output
+    assert (env[0] / "judgements.yaml").read_bytes() == before
+    assert not hasattr(env[2], "request"), "runner operation/descriptor construction was reached"
+    assert env[3].calls == (["scope-lock"] if yes else [])
+
+
+def test_failure_activation_retry_finishes_both_stores_without_duplicate_event(env, monkeypatch):
+    op = env[3]
+    op.result = ReplacementResult(False, "source-exited", "shell", "startup failure")
+    assert invoke(env, "--model", "new", "--reason", "change", "--yes").exit_code == 1
+    request = env[2].request
+    monkeypatch.setattr(env[2], "replacement_pending", lambda *a: request)
+    writes = []
+
+    def fail(*, success):
+        assert not success
+        writes.append("failed descriptor activation")
+        raise OSError("descriptor write failed")
+
+    monkeypatch.setattr(op, "activate", fail)
+    args = ["--repair", "--reason", "inspected shell", "--yes"]
+    first = invoke(env, *args)
+    assert first.exit_code == 1 and "--repair" in first.output
+    path = env[0] / "judgements.yaml"
+    committed = path.read_bytes()
+    assert load_judgements(path).batches[0].events[-1].reconciled
+
+    def activate(*, success):
+        assert not success
+        writes.append("descriptor aborted")
+        monkeypatch.setattr(env[2], "replacement_pending", lambda *a: None)
+
+    monkeypatch.setattr(op, "activate", activate)
+    retry = invoke(env, *args)
+    assert retry.exit_code == 0, retry.output
+    assert writes == ["failed descriptor activation", "descriptor aborted"]
+    assert path.read_bytes() == committed
+    assert op.calls.count("execute") == 1

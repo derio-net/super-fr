@@ -290,3 +290,47 @@ def test_pending_descriptor_excludes_ordinary_claude_restart(operation, monkeypa
     report = restart.restart_idle(yes=True)
     assert report.lines[0].verdict == "skip" and "pending" in report.lines[0].detail
     assert reads == [["agent", "list"], ["tab", "list"]]
+
+
+@pytest.mark.parametrize("model", ["plain-model", "/model", "provider/", "provider/a model"])
+def test_direct_replacement_malformed_model_never_creates_descriptor_or_sends(operation, model):
+    from dataclasses import replace
+
+    op, calls, _ = operation
+    with pytest.raises(managed.ManagedError, match="provider/model"):
+        replacement.Operation(replace(op.request, model=model))
+    assert managed.load("p") is None
+    assert not calls
+
+
+def test_source_restoration_write_fault_remains_repairable_and_idempotent(operation, monkeypatch):
+    op, calls, _ = operation
+    save = managed.save
+
+    def not_target(*args, **kwargs):
+        raise managed.ManagedError("source remains")
+
+    monkeypatch.setattr(replacement, "observe", not_target)
+    with op.ownership():
+        op.prepare()
+
+        def fault(d):
+            if d.checkpoint == "active" and d.attempt is None:
+                raise OSError("source descriptor restoration failed")
+            save(d)
+
+        monkeypatch.setattr(managed, "save", fault)
+        with pytest.raises(OSError):
+            op.activate(success=False)
+    assert managed.load("p").checkpoint == "prepared"
+    monkeypatch.setattr(managed, "save", save)
+    retry = replacement.Operation(op.request)
+    with retry.ownership():
+        assert not retry.reconcile().ok
+        retry.activate(success=False)
+        restored = managed.load("p")
+        assert restored.checkpoint == "active" and restored.attempt is None
+        assert not retry.reconcile().ok
+        retry.activate(success=False)
+        assert managed.load("p") == restored
+    assert all(c[0] == "lock" for c in calls), "repair launched or replayed input"

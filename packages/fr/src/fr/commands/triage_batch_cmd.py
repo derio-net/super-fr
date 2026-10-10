@@ -67,6 +67,7 @@ from fr.commands.triage_cmd import (
     WorkspaceOpt,
     _load_state,
     _scope,
+    _sync_with_ref,
     batch_app,
     collect_into,
     console,
@@ -1242,6 +1243,7 @@ def _replacement_transaction(
 ) -> None:
     if importlib.util.find_spec("fr_dispatch") is None:
         _fail(DISPATCH_INSTALL_HINT)
+    from fr_dispatch.launch import validate_model
     from fr_dispatch.protocols import ReplacementRequest, SessionReplacer
 
     path = target / "judgements.yaml"
@@ -1276,11 +1278,6 @@ def _replacement_transaction(
             attempt = pending.attempt
             latest = None  # prepared before the attempt write; still no input replay
         elif latest:
-            if latest.result == "failure" and latest.reconciled:
-                console.print(
-                    "replacement already reconciled; nothing written or sent", markup=False
-                )
-                return
             old, new, attempt = latest.old, latest.new, latest.attempt
         else:
             _fail("no replacement attempt or pending descriptor to repair")
@@ -1305,6 +1302,7 @@ def _replacement_transaction(
         _fail("replacement requires the original herdr runner; runner changes are unsupported")
     if new.harness not in {"claude", "opencode"} or not new.model or not new.model.strip():
         _fail("unsupported harness or empty model")
+    validate_model(str(new.harness), new.model)
     op = runner.replacement_session(
         ReplacementRequest(
             batch_item_id(repo, batch.id),
@@ -1332,6 +1330,8 @@ def _replacement_transaction(
             result = op.reconcile()
             if latest and latest.result == "success" and not result.ok:
                 _fail("committed batch success no longer matches live target; inspect both stores")
+            if latest and latest.result == "failure" and latest.reconciled and result.ok:
+                _fail("committed batch failure disagrees with live target; inspect both stores")
         else:
             op.inspect()
         console.print(
@@ -1382,7 +1382,13 @@ def _replacement_transaction(
                 op.prepare()
                 write(audit("attempt"))
                 result = op.execute()
-            if not (repair and latest and latest.result == "success"):
+            if not (
+                repair
+                and latest
+                and (
+                    latest.result == "success" or (latest.result == "failure" and latest.reconciled)
+                )
+            ):
                 write(
                     audit("success" if result.ok else "failure", result.detail, reconciled=repair),
                     success=result.ok,
@@ -1425,20 +1431,30 @@ def batch_replace_command(
         or (model is not None and not model.strip())
     ):
         _fail("--reason, --harness and --model cannot be empty")
-    target, facts, _ = _load_state(_scope(repo, org), dir_override, workspace)
+    scope = _scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace, sync=False, prepare=False)
     try:
         with replacement_scope_lock(target) if yes else nullcontext():
-            _replacement_transaction(
-                target,
-                facts,
-                batch_id,
-                checkout_path=checkout_path,
-                harness=harness,
-                model=model,
-                reason=reason,
-                yes=yes,
-                repair=repair,
-            )
+            finish = None
+            if yes:
+                resolve_state_dir(scope, dir_override, workspace, sync=False)
+                finish = _sync_with_ref(scope, target, defer_push=False)
+            try:
+                _, facts, _ = _load_state(scope, target, None, read_only=True)
+                _replacement_transaction(
+                    target,
+                    facts,
+                    batch_id,
+                    checkout_path=checkout_path,
+                    harness=harness,
+                    model=model,
+                    reason=reason,
+                    yes=yes,
+                    repair=repair,
+                )
+            finally:
+                if finish is not None:
+                    finish()
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - read/lock/identity refusals send no input
