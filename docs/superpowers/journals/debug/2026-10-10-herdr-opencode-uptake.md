@@ -29,3 +29,8 @@ TDD reproduced all three unsafe pre-render prompt paths: initial dispatch stalle
 ### bounded-rendered-readiness-wait-resolved · finding [fixed] · resolves bounded-rendered-readiness-wait: Shared startup render readiness fix awaits fresh installed live confirmation
 
 Fresh host candidate 82d755cf installed into its own prefix and real first OpenCode dispatch now passes without focus or native-key changes: agent start at 04:18:06, grounded render gate before prompt at 04:18:15, confirmed prompt activity and active managed descriptor at 04:18:17. Name/pane/model and stable base identity are preserved. Root-cause fix is verified live; the remaining six-item client-live behaviors are still being exercised, not accepted by this resolution.
+
+<!-- fr:journal kind=repro scope=debug id=idle-sidebar-layout-refusal created=2026-10-10T02:27:34+00:00 -->
+### idle-sidebar-layout-refusal · repro · Fresh launch now succeeds but idle wide-session replacement preview is refused
+
+After the verified render-readiness fix, the real owned OpenCode session completed the read-only sleep/HOLD turn. Real name/model/base process identity and done/interactive-ready state match. Candidate replacement preview correctly sends no keys but returns unknown-layout. Actual wide-session screen has a focused empty textarea whose closing border shares its row with the right sidebar cwd text; the old closing-border regex requires the entire row to be only border/whitespace. Raw capture and plain nonblank row excerpt are in the redacted host evidence log. Investigate this captured geometry before widening recognition.
