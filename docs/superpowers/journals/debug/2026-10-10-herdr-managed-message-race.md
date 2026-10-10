@@ -14,3 +14,8 @@ Five deterministic race cases failed before the fix with DID NOT RAISE: working/
 ### managed-message-fresh-eligibility · finding [fixed] · Fail closed on fresh busy or unready managed target
 
 Five-line runner predicate fixed the independent finding. 166 targeted runner/managed/restart/replacement tests passed, including stale idle snapshot transitioning working under the lock and no side effects. Ruff passed; mypy passed all eight fr-herdr source files. No native session mutations or broader source changes.
+
+<!-- fr:journal kind=review scope=debug id=reviewed-finding-and-regression created=2026-10-10T05:45:55+00:00 -->
+### reviewed-finding-and-regression · review · Independent finding verified with fail-first regression and narrow fix
+
+Operator independently identified the stale-idle race. Source review confirmed fresh identity lacked current eligibility; five new cases failed before the fix, then the five-line under-lock predicate and positive idle/done cases passed. 166 targeted checks plus ruff/mypy passed; final installed candidate walk 20261010T054519Z.log passed all three scenarios. This records verification of the reported finding, not an invented additional human code-review approval.
