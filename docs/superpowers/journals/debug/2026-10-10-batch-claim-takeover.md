@@ -29,3 +29,8 @@ batch create/edit refused every foreign-held member (live or expired), while cla
 ### ad29fa5ddc7b · root-cause · gh#1123: R9 accepts only expiry as evidence a holder is gone
 
 claim take/release judged a foreign claim displaceable only once expired; R8's staleness (heartbeat older than a quarter of the marker's own expiry window) was never consulted, and no verb released a whole scope.
+
+<!-- fr:journal kind=decision scope=debug id=d7906d30ed08 created=2026-10-10T18:45:07+00:00 -->
+### d7906d30ed08 · decision · create/edit admit a STALE-held member, not only an expired one
+
+take --stale needs the issue in a batch of this scope, exactly as take did; admitting only expired members would rebuild gh#1120's deadlock for --stale. Admission writes no claim and R6 still blocks dispatch/merge/drive until the take, so a holder that is merely slow loses nothing it can act on. A FRESH foreign claim is still refused (R5).
