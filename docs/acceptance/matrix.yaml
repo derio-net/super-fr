@@ -8040,11 +8040,25 @@ rows:
       or repair.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_replace.py#test_success_preserves_dispatch_identity_and_lock_order
+      - super-fr:tests/unit/test_herdr_replacement.py#test_repair_never_replays_or_certifies_uncertain_submission
+      - super-fr:tests/unit/test_herdr_replacement.py#test_interleaved_pane_owner_loser_sends_and_writes_nothing
+      - super-fr:tests/unit/test_herdr_replacement_observer.py#test_scope_lock_excludes_independent_writer_and_releases
+      - super-fr:tests/unit/test_triage_batch_replace.py#test_activation_failure_repairs_both_stores_without_second_success
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_batch_replace
+    status: ci
+    notes: Installed candidate exercises both directions/model-only, preserved original
+      dispatch identity, preview without input, startup failure and input-free shell
+      repair. Named synthetic unit tests pin exclusive scope/pane ownership, crash checkpoints
+      and cross-store repair; client-live evidence remains independently owed. Full
+      suite is CI-owned per operator, not locally claimed green.
     verify: candidate
     scenario: tests/scenarios/herdr-batch-replace.sh
+    issues:
+    - derio-net/super-fr#1089
   - id: herdr-opencode-restart
     capability: OpenCode session upkeep
     acceptance: Managed idle OpenCode sessions restart fresh from durable branch state
