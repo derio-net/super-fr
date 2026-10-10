@@ -9,3 +9,8 @@ Read, not run (no second-host export has happened; gh#1101). `triage_state_cmd.e
 ### h-branch · hypothesis · The export BRANCH collides too, not only the directory
 
 `export_branch(wave)` = `chore/triage-state-wave-<N>`, no scope in it. `_export_reads` treats any open PR on such a head that THIS scope's judgements do not record as an orphan and `export_target` reuses it; `_export` then force-pushes its own commit onto that branch. So a second scope's driver would hijack and overwrite the first scope's open export PR even if the directory were keyed by scope id. Same-user drivers pass the author trust check.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc created=2026-10-10T18:21:46+00:00 -->
+### rc · root-cause · Export identity is the scope name and wave, which every host's scope of a repo shares
+
+Both the export directory (`<path>/<scope.name>`) and the export head (`chore/triage-state-wave-<N>`) derive from values that are identical across hosts; only `scope_id` (sha256(name, host_id)) tells scopes apart. One cause, two surfaces (h-branch confirmed by reading `_export_reads`/`export_target`/`_export`). Operator chose the owner guard over keying the directory by the per-host scope id, because docs/triage is the repo's single reviewed copy and import must keep working on any host.
