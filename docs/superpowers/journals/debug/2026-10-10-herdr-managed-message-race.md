@@ -9,3 +9,8 @@ Independent review identified runner.message under-lock recheck validating name/
 ### identity-without-current-eligibility · root-cause · Under-lock identity check omitted current eligibility
 
 Five deterministic race cases failed before the fix with DID NOT RAISE: working/blocked/unknown and false/missing readiness after earlier idle snapshot. The existing pane lock prevents cooperating writers, but fresh agent identity alone did not prove current idle input eligibility. Added only fresh agent_status in idle/done and interactive_ready is True before descriptor handback save/prompt. Regression also proves no prompt and unchanged descriptor; both idle/done positive paths remain accepted.
+
+<!-- fr:journal kind=finding scope=debug id=managed-message-fresh-eligibility created=2026-10-10T05:42:32+00:00 state=fixed -->
+### managed-message-fresh-eligibility · finding [fixed] · Fail closed on fresh busy or unready managed target
+
+Five-line runner predicate fixed the independent finding. 166 targeted runner/managed/restart/replacement tests passed, including stale idle snapshot transitioning working under the lock and no side effects. Ruff passed; mypy passed all eight fr-herdr source files. No native session mutations or broader source changes.
