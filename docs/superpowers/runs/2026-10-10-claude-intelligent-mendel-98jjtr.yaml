@@ -12,7 +12,16 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-10-pocock-workflows-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-10-10T20:32:36+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-10T20:32:36+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          session: 955de3c0-be03-5f09-8fe1-96e6d2d394f0
   plan:
     state: pending
   plan-review:
