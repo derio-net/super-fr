@@ -63,7 +63,7 @@ from typing import TYPE_CHECKING, Any
 from fr_dispatch.launch import validate_model
 from fr_dispatch.protocols import AdoptTarget
 
-from fr_herdr import managed, restart
+from fr_herdr import managed, opencode, restart
 from fr_herdr._herdr import (
     PANE_BUSY_TRIES,
     PANE_BUSY_WAIT,
@@ -388,6 +388,7 @@ class HerdrRunner:
                 ]
             )
             if descriptor:
+                opencode.wait_ready(descriptor, run=_run_herdr)
                 descriptor = descriptor.model_copy(update={"checkpoint": "submission-started"})
                 managed.save(descriptor)
             _submit(name, str(payload["brief"]), harness=harness.kind)

@@ -67,6 +67,36 @@ def launch() -> None:
         calls.append(args)
         if args[:2] == ["tab", "create"]:
             return json.loads((FIXTURES / "tab-create.json").read_text())
+        if args[:2] == ["agent", "list"]:
+            return {
+                "result": {
+                    "agents": [
+                        {
+                            "pane_id": "w2:p1K",
+                            "name": runner.agent_name(item.id),
+                            "agent": "opencode",
+                            "agent_status": "idle",
+                            "interactive_ready": True,
+                        }
+                    ]
+                }
+            }
+        if args[:2] == ["pane", "process-info"]:
+            return {
+                "result": {
+                    "process_info": {
+                        "foreground_processes": [
+                            {
+                                "pid": 2,
+                                "argv": ["opencode", "--model", MODEL],
+                                "cwd": str(Path.cwd()),
+                            }
+                        ]
+                    }
+                }
+            }
+        if args[:2] == ["pane", "read"]:
+            return json.loads((FIXTURES / "opencode/final-idle.json").read_text())
         return {}
 
     runner._run_herdr = fake
@@ -76,7 +106,7 @@ def launch() -> None:
     assert calls[0][calls[0].index("--cwd") + 1] == str(Path.cwd())
     assert ["--kind", "opencode"] == calls[1][3:5]
     assert calls[1][-2:] == ["--model", MODEL]
-    assert "--wait" in calls[2]
+    assert "--wait" in next(c for c in calls if c[:2] == ["agent", "prompt"])
     assert managed.load(handle).item == item.id
     assert managed.load(handle).checkpoint == "active"
     d = managed.load(handle)

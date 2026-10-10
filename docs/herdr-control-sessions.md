@@ -12,6 +12,10 @@ Delivered drafts HOLD; current handbacks require matching branch head and live
 mergeability. Close-out pickup retains delivery/merge gates.
 
 Drafts and command overlays can report idle, so status alone is insufficient.
+OpenCode title-based readiness can precede its usable textarea. Initial dispatch,
+restart and replacement wait boundedly for a rendered focused empty input region
+under the expected foreground process/name/model/base-cwd identity before one prompt.
+An ambiguous stalled submission is still never replayed or given an unverified Enter.
 Caller/excluded panes and unknown layouts/processes are skipped; the runner never
 clears drafts or answers dialogs. Failed restarts leave non-active descriptors and
 recovery instructions. Inspect the pane before manually recovering it; never

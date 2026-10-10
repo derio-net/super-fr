@@ -106,8 +106,10 @@ def shell_cwd(info: dict[str, Any]) -> str | None:
     return str(proc["cwd"]) if proc.get("cwd") else None
 
 
-def _fresh(pane: str) -> dict[str, Any]:
-    agents = _run_herdr(["agent", "list"]).get("result", {}).get("agents", [])
+def _fresh(
+    pane: str, *, run: Callable[[list[str]], dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    agents = (run or _run_herdr)(["agent", "list"]).get("result", {}).get("agents", [])
     found = [a for a in agents if a.get("pane_id") == pane]
     if len(found) != 1:
         raise managed.ManagedError("missing or ambiguous live agent")
@@ -115,12 +117,18 @@ def _fresh(pane: str) -> dict[str, Any]:
     return agent
 
 
-def eligible(d: managed.Descriptor, exclude: set[str]) -> dict[str, Any]:
+def eligible(
+    d: managed.Descriptor,
+    exclude: set[str],
+    *,
+    run: Callable[[list[str]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    observe = run or _run_herdr
     if d.checkpoint != "active":
         raise managed.ManagedError(f"unresolved managed checkpoint {d.checkpoint}; repair owed")
     if d.pane == os.environ.get("HERDR_PANE_ID") or d.pane in exclude:
         raise managed.ManagedError("self or excluded")
-    agent = _fresh(d.pane)
+    agent = _fresh(d.pane, run=observe)
     if (
         agent.get("agent") != "opencode"
         or agent.get("name") != d.name
@@ -128,7 +136,7 @@ def eligible(d: managed.Descriptor, exclude: set[str]) -> dict[str, Any]:
         or agent.get("interactive_ready") is not True
     ):
         raise managed.ManagedError("live identity/status/readiness mismatch")
-    proc = process(_run_herdr(["pane", "process-info", "--pane", d.pane]))
+    proc = process(observe(["pane", "process-info", "--pane", d.pane]))
     if (
         not proc
         or not proc.get("pid")
@@ -136,9 +144,7 @@ def eligible(d: managed.Descriptor, exclude: set[str]) -> dict[str, Any]:
         or proc.get("cwd") != d.checkout
     ):
         raise managed.ManagedError("foreground process/model is unknown or changed")
-    screen = str(
-        _run_herdr(["pane", "read", d.pane, "--source", "visible", "--ansi"]).get("raw", "")
-    )
+    screen = str(observe(["pane", "read", d.pane, "--source", "visible", "--ansi"]).get("raw", ""))
     reason = input_reason(screen)
     if reason:
         raise managed.ManagedError(reason)
@@ -150,6 +156,31 @@ _T = TypeVar("_T")
 
 def _poll(check: Callable[[], _T | None]) -> _T | None:
     return poll(check, timeout=TIMEOUT, clock=_clock, sleep=_sleep)
+
+
+def wait_ready(
+    d: managed.Descriptor, *, run: Callable[[list[str]], dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Title readiness precedes rendered input. Wait boundedly, before ONE prompt.
+
+    Only unknown startup layout is retried. Drafts/dialogs, status or exact live
+    identity/model/cwd mismatches refuse. The active projection is read-only: pending
+    durable checkpoints are never promoted before submission/uptake confirmation.
+    """
+    observation = d.model_copy(update={"checkpoint": "active"})
+
+    def ready() -> dict[str, Any] | None:
+        try:
+            return eligible(observation, set(), run=run)
+        except managed.ManagedError as exc:
+            if str(exc) == "unknown-layout":
+                return None
+            raise
+
+    proc = _poll(ready)
+    if proc is None:
+        raise HerdrError("rendered-input-timeout; no prompt sent; inspect the target")
+    return proc
 
 
 def restart_pane(pane: str, *, yes: bool, exclude: set[str]) -> tuple[str, str, str | None]:
@@ -237,16 +268,7 @@ def restart_pane(pane: str, *, yes: bool, exclude: set[str]) -> tuple[str, str, 
                     run=_run_herdr,
                     sleep=_sleep,
                 )
-                proc = process(_run_herdr(["pane", "process-info", "--pane", pane]))
-                live = _fresh(pane)
-                if (
-                    not proc
-                    or not model_matches(proc, d)
-                    or live.get("name") != d.name
-                    or live.get("agent") != "opencode"
-                    or proc.get("cwd") != d.checkout
-                ):
-                    raise HerdrError("target identity/model not confirmed")
+                wait_ready(d)
                 checkpoint("target-ready")
                 checkpoint("submission-started")
                 try:

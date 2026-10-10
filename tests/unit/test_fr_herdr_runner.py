@@ -36,9 +36,13 @@ class _Herdr:
         self.workspaces: dict[str, Any] = {}
         self.listing: dict[str, Any] = {}
         self.agents: dict[str, Any] = {}
+        self.launch: dict[str, Any] = {}
+        self.cwd = "/work/alpha"
 
     def __call__(self, args: list[str]) -> dict[str, Any]:
         self.calls.append(list(args))
+        if args[:2] in (["tab", "create"], ["workspace", "create"]) and "--cwd" in args:
+            self.cwd = args[args.index("--cwd") + 1]
         if args[:2] == ["tab", "create"]:
             return _fixture("tab-create.json")
         if args[:2] == ["tab", "list"]:
@@ -52,7 +56,39 @@ class _Herdr:
         if args[:2] == ["tab", "rename"]:
             return _fixture("tab-rename.json")
         if args[:2] == ["agent", "list"]:
+            if self.launch.get("agent") == "opencode" and not self.agents:
+                # Labelled synthetic live identity; screen parsing still uses the capture.
+                return {
+                    "result": {
+                        "agents": [
+                            {**self.launch, "agent_status": "idle", "interactive_ready": True}
+                        ]
+                    }
+                }
             return self.agents or _fixture("agent-list.json")
+        if args[:2] == ["agent", "start"]:
+            self.launch = {
+                "name": args[2],
+                "agent": args[args.index("--kind") + 1],
+                "pane_id": args[args.index("--pane") + 1],
+                "model": args[-1],
+            }
+        if args[:2] == ["pane", "process-info"] and self.launch:
+            return {
+                "result": {
+                    "process_info": {
+                        "foreground_processes": [
+                            {
+                                "pid": 2,
+                                "argv": [self.launch["agent"], "--model", self.launch["model"]],
+                                "cwd": self.cwd,
+                            }
+                        ]
+                    }
+                }
+            }
+        if args[:2] == ["pane", "read"]:
+            return _fixture("opencode/final-idle.json")
         if args[:2] == ["agent", "rename"]:
             return _fixture("agent-rename.json")
         return {}
@@ -267,7 +303,12 @@ def test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it(
 
     handle = HerdrRunner.from_env().dispatch(item)
 
-    create, start, prompt = herdr.calls
+    create, start, *observations, prompt = herdr.calls
+    assert [c[:2] for c in observations] == (
+        [["agent", "list"], ["pane", "process-info"], ["pane", "read"]]
+        if harness == "opencode"
+        else []
+    )
     assert create == [
         "tab", "create", "--workspace", "w2", "--cwd", "/work/alpha",
         "--label", item.id, "--no-focus",

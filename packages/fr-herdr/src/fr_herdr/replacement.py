@@ -139,7 +139,10 @@ def launch_target(d: managed.Descriptor) -> None:
         run=_run_herdr,
         sleep=opencode._sleep,
     )
-    observe(d)
+    if d.harness == "opencode":
+        opencode.wait_ready(d, run=_run_herdr)
+    else:
+        observe(d)
 
 
 def submit(d: managed.Descriptor, brief: str) -> None:
