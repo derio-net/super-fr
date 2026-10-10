@@ -59,3 +59,8 @@ The generated recovery command now preserves --auto; every injected restart fail
 ### scenario-argv-resolved · finding [fixed] · resolves scenario-argv: Launch and restart scenarios replayed legacy argv
 
 Initial launch and restart fixtures now retain agent start's harness argv and return it from process-info. Installed launch, restart and replacement scenarios all pass while observing --auto.
+
+<!-- fr:journal kind=review scope=debug id=final-review created=2026-10-10T10:42:28+00:00 -->
+### final-review · review · Independent re-review found no remaining issues
+
+The reviewer confirmed all four audit findings are fixed: replacement observation accepts autonomous argv, candidate installation refreshes same-version local wheels, restart recovery preserves --auto, and every installed lifecycle scenario replays actual launch argv. Claude behavior and legacy OpenCode compatibility remain unchanged. Residual risk: lifecycle scenarios are synthetic; no second native Herdr/OpenCode walk was run. Targeted reviewer suite: 73 passed; acceptance: 458 rows OK.
