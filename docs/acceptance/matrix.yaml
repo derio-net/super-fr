@@ -4869,10 +4869,14 @@ rows:
       - super-fr:tests/unit/test_triage_state_sync.py#test_export_copies_the_durable_state_and_nothing_else
       - super-fr:tests/unit/test_triage_state_sync.py#test_import_skips_a_state_file_newer_than_the_repo_copy
       - super-fr:tests/unit/test_triage_state_sync.py#test_the_import_verb_prints_copied_and_skipped
+      - super-fr:tests/unit/test_triage_state_sync.py#test_an_export_refuses_a_directory_another_scope_exported
+      - super-fr:tests/unit/test_triage_state_sync.py#test_the_export_verb_refuses_another_scopes_directory_until_take_over
     status: ci
-    notes: Unit tests pin the durable file set, facts and pages never copied, import
+    notes: 'Unit tests pin the durable file set, facts and pages never copied, import
       skipping newer files unless --force, symlinks never followed or written through,
-      and the CLI's copied/skipped lists.
+      the CLI''s copied/skipped lists, and (gh#1101) the exported-by scope-id stamp:
+      another scope id''s directory is refused unless --take-over, and import never
+      carries the stamp.'
   - id: triage-pages-skills-documented
     capability: Backlog triage
     acceptance: The fr-triage, fr-origins and fr-audit skills document the page goals,
