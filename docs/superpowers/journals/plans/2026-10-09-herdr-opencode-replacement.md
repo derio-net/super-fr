@@ -381,3 +381,8 @@ Operator independent review identified a stale driver idle snapshot race. Fresh 
 ### late-review-managed-message-state-resolved · finding [fixed] · resolves late-review-managed-message-state: Managed message must recheck idle/readiness under its lock
 
 Added the smallest fail-closed fresh status/readiness predicate under existing pane lock. Race regression proves working/blocked/unknown/unready targets receive no prompt and descriptor stays unchanged; idle/done ready positive paths still pass. 166 targeted tests, lint and fr-herdr typecheck green.
+
+<!-- fr:journal kind=discovery scope=plan id=late-review-message-delivery-evidence created=2026-10-10T05:45:58+00:00 phase=2 -->
+### late-review-message-delivery-evidence · discovery · Fresh evidence after the narrow managed-message review correction (phase 2)
+
+Source correction5f4a3d78 adds only under-lock idle/done and explicit readiness recheck; regression proves no prompt or descriptor write when earlier idle status changes to busy/unready. 166 targeted checks, lint and eight-file typecheck green. Fresh installed candidate walk20261010T054519Z.log passed installation/smoke and all three declared candidate rows on corrected code. Closed delivery cursor remains historical; PR follow-up evidence and current CI certify this late correction. Existing scoped native observations and post-merge closeout split are not expanded or falsely re-attested.
