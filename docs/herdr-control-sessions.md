@@ -52,7 +52,13 @@ source or confirmed shell permits a failed/aborted attempt to be reconciled.
 Repair promotes the descriptor after an already-saved batch success without a
 duplicate success event. Restart skips unresolved descriptors.
 
-Run `bash tests/scenarios/herdr-opencode-live.sh` for the disposable-session walk;
+Run `bash tests/scenarios/herdr-opencode-live.sh` for the scoped pre-merge disposable-session walk;
 use `--record-verdict` only after every check was observed and logged. Client-live
 evidence remains owed before Ready, independently of installed-candidate evidence
 (Refs #1089). Automated instruction tests do not claim a live pass.
+Current-conflict selection/reconstruction may be checked read-only against an
+existing conflicting PR: match its real head, inspect handback-before-HOLD and
+obsolete-head suppression, without sending or executing its conflict instructions.
+Actual merged-PR pickup/verify-merge/archive and session cleanup belong to
+`herdr-opencode-closeout-live`, immediately post-merge. This split does not claim
+conflict resolution or close-out was observed before merge.

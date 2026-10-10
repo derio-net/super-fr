@@ -30,7 +30,7 @@ R8. Partial replacement is a visible nonzero result. It never closes the tab or 
 R9. An interrupted replacement or a successful target whose metadata save failed has an explicit repair path: confirm live target kind/model, pane and name before recording success, without exiting or launching another process. Failed or still-pending attempts remain visible and block an ordinary replacement until explicitly reconciled.
 R10. `fr-herdr restart-idle` and the driver's post-install restart support fr-owned OpenCode batch, conflict and close-out sessions as fresh base-checkout sessions, preserving pane/name/model and reconstructing durable state. Unrelated OpenCode sessions are skipped. Existing Claude resume behavior remains as shipped.
 R11. Fresh recovery never advances a delivered draft into merge or close-out: it instructs a finished deliver cursor to HOLD for operator review/ready/merge; a close-out item runs its existing pickup brief only after the delivery and merge gates permit it. A running unit from a dead source session is explicitly reconciled before redispatch, rather than dispatched twice.
-R12. Operator documentation explains supported harnesses, replacement preview/act/repair, base-checkout control sessions, restart eligibility and failure recovery. Candidate scenarios verify the installed build; a real operator herdr walk is owed before Ready.
+R12. Operator documentation explains supported harnesses, replacement preview/act/repair, base-checkout control sessions, restart eligibility and failure recovery. Candidate scenarios and the scoped real herdr/read-only current-conflict walk verify before Ready; close-out against an actually merged PR is explicitly verified immediately post-merge.
 
 ## Design
 
@@ -214,19 +214,39 @@ strategy: candidate
 - herdr-batch-replace: candidate
 - herdr-opencode-restart: candidate
 - herdr-opencode-live: client-live
+- herdr-opencode-closeout-live: live — requires an actually merged PR; the operator authorized merge followed immediately by real close-out rather than inventing a pre-merge merge prerequisite.
 
 Candidate rows use `tests/scenarios/herdr-opencode.sh`,
 `tests/scenarios/herdr-batch-replace.sh` and `tests/scenarios/herdr-opencode-restart.sh`.
 The client-live row uses `tests/scenarios/herdr-opencode-live.sh`, an operator-led
 walk against disposable named sessions in the real client, covering dispatch,
 Claude→OpenCode replacement, reverse/model-only change, restart, messaging/focus,
-conflict hand-back, close-out, HOLD, busy refusal and startup failure recovery.
+read-only current-conflict hand-back selection/reconstruction, HOLD, busy refusal
+and startup failure recovery. The current-conflict check may read existing
+conflicting PR #1107 through the real forge adapter, match its actual head with
+the local branch and inspect recovery selection. Never send its instructions to
+the existing agent or mutate that PR; this proves selection/reconstruction, not
+conflict resolution or a push. Native unsupported-provider/effective-UI-model
+fallback is separately tracked in #1116; process-argv verification is the current
+contract, and that native negative case is not a claimed startup-failure pass.
 It prints instructions/verification checks and requires the operator's observed
 verdict; it does not automatically mutate existing production batches.
 
-No post-merge-only Test Plan is owed: the candidate build can exercise these surfaces
-in herdr before merge. The live Ready-checklist stays unchecked until the operator
-walks it; cite `Refs #1089` while that evidence is owed.
+The operator authorized Ready and merge with this honest split on 2026-10-10.
+The pre-merge verdict covers exactly the checks above and the observed real
+target-startup refusal/source-or-shell repair; it does not claim merged-PR
+close-out or conflict resolution. Cite `Refs #1089` until the post-merge row is
+walk-verified; the issue remains open for that obligation.
+
+## Test Plan
+
+- post-merge — operator-driven: in a new session immediately after #1115 merges,
+  run `fr pickup --run 2026-10-09-feat-1089`, follow its real verify-merge and
+  close-out brief, and observe the OpenCode control session remains in the stable
+  primary checkout while the delivered workspace is archived/reaped. Verify
+  pickup delivery/merge gates, archive PR and final session/tab cleanup; record
+  the redacted live evidence on `herdr-opencode-closeout-live` before closing
+  #1089. This requires an actually merged PR and is not pre-merge proof.
 
 ## Implementation Plans
 

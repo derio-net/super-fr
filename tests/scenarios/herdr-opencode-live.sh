@@ -15,17 +15,26 @@ Record installed fr/herdr/OpenCode versions and redacted pane/name/branch eviden
    Verify original dispatch time, reservation, branch/workspace, PR, pane and name.
 3. Observe working/blocked refusal, unsent draft and command-overlay refusal.
    Do not clear a draft or answer any approval/exit dialog to make the test pass.
-4. Preview/act fr-herdr restart-idle. Observe fresh managed OpenCode recovery,
-   current conflict hand-back, close-out pickup gates and delivered-draft HOLD.
+4. Preview/act fr-herdr restart-idle. Observe fresh managed OpenCode recovery
+   and delivered-draft HOLD. Check current-conflict selection/reconstruction
+   read-only against a real conflicting PR (for this run, #1107): match the live
+   head, select handback before HOLD, suppress obsolete heads/repeated delivery.
+   Do not message or change that PR; conflict resolution/push is NOT this check.
    Verify status, messaging, focus and deduplication still address the same item.
-5. Induce target startup failure ONLY in disposable state. Observe source/target/
+5. Observe target startup refusal/failure ONLY in disposable state, including
+   native trust/initialization failure. Observe source/target/
    shell diagnostics, unchanged launch metadata and a visible pending attempt.
    Inspect and use replace --repair --reason <inspection> --yes; confirm no launch
-   or prompt replay. Uncertain submission cannot be certified from model alone.
+    or prompt replay. Uncertain submission cannot be certified from model alone.
+   Native unsupported-provider fallback is separately tracked in #1116; a
+   different UI model despite requested argv is NOT a passing failure subcase.
 6. Save a redacted observation log for EVERY check. Leave Ready unchecked on any
    failure/missing observation. Restore/close only the disposable sessions you own.
 
 Passing instruction tests are NOT live evidence; only the operator records a verdict.
+POST-MERGE OWED: actual merged-PR close-out/pickup/archive and session cleanup
+are herdr-opencode-closeout-live, exercised immediately after #1115 merges.
+They are excluded from this pre-merge verdict; never claim they were observed here.
 WALK
 }
 case "${1:-}" in
