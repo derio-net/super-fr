@@ -8089,8 +8089,14 @@ rows:
       and close-out with stable checkout and recoverable failure.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_live_instructions
+    status: skipped
+    notes: 'Operator-led disposable-session walk script is implemented; instruction/verdict
+      tests do not prove live TUI safety. Real launch/replacement/reverse/model-only/restart/message/focus/conflict/close-out/HOLD/busy/failure
+      observations remain owed before Ready. Refs #1089; no live walk is recorded.'
     verify: client-live
     scenario: tests/scenarios/herdr-opencode-live.sh
+    issues:
+    - derio-net/super-fr#1089
