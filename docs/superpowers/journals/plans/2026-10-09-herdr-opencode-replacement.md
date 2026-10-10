@@ -296,3 +296,38 @@ Reused reviewed restart prompt/background classifiers, shell observation, bounde
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 Installed scenarios share the existing candidate-interpreter helper and captured screens. The replacement helper deliberately owns separate labelled synthetic transaction state; a broader fake-client abstraction would obscure its failure/repair evidence.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-10T01:24:16+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · Validate target OpenCode model before source exit (phase 2)
+
+CLI and replacement prepare accepted any nonempty model; malformed target requests could exit the source before startup rejected the model. New path lacked dispatch provider/model validation.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-10T01:24:16+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Failed descriptor activation can conceal unfinished repair (phase 2)
+
+CLI saved reconciled failure before restoring source/aborted descriptor. A failed descriptor write followed by another repair returned already reconciled, leaving pending state.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-10T01:24:16+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Preview used mutating state loader (phase 2)
+
+State loading performed synchronization, exclusion updates or legacy import before ownership/no-write guards, contradicting write-free preview.
+
+<!-- fr:journal kind=review scope=plan id=phase2-independent-review created=2026-10-10T01:24:16+00:00 phase=2 -->
+### phase2-independent-review · review · Independent replacement review and correction verification (phase 2)
+
+Separate read-only reviewer checked spec, phase2 plan/journal, source and tests. Three in-scope findings verified, then independently checked corrected code at 6c0fd51d and confirmed all three fixed with no new actionable finding. Implementer ran 441 targeted checks and installed replacement scenario, ruff/format/mypy green. CI owns full-suite proof; operator client-live remains owed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-10T01:24:16+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: Validate target OpenCode model before source exit (phase 2)
+
+Shared launch validation in fr_dispatch/launch.py is enforced by CLI before operation construction and runner prepare independently. Preview/act and direct runner regressions assert no descriptor/attempt/source input for malformed target models.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-10T01:24:16+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Failed descriptor activation can conceal unfinished repair (phase 2)
+
+Repair rechecks both stores and retries unfinished failure activation without appending another audit event, launching or prompting. Already-restored source is validated idempotently; injected descriptor-write failure/retry tests preserve audit bytes and forbid replay.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-10T01:24:16+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Preview used mutating state loader (phase 2)
+
+Preview resolves/loads state read-only with sync/preparation disabled; act acquires scope ownership before preparation/fetch and performs final push before unlocking. Tests cover unchanged files, synchronization metadata, exclusions, legacy state and lock-loser behavior.

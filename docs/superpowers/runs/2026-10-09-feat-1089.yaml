@@ -3,7 +3,7 @@ run: 2026-10-09-feat-1089
 workflow: fr-goal@1
 branch: feat/1089
 started: '2026-10-09T20:18:18+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -50,8 +50,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-10T01:03:15+00:00'
+    state: done
+    at: '2026-10-10T01:24:17+00:00'
     members:
     - implement-phase
     - review-phase
@@ -110,11 +110,19 @@ steps:
           tests: ci:40f5f30054c87aa4adc2c6e62ef83fdc8d7bbd32+unknown;tree=d450e4b7f25430e9e8ac288de1475beb913891baac6c82716460bdfe92117626
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-10T01:03:15+00:00'
           harness: opencode
+          model: openai/gpt-6.1-sol
           session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-10T01:24:17+00:00'
+          outcome: done
+        evidence:
+          review: phase2-independent-review
+          reviewer: ses_edca9d3a5ffeEM3J2NNga0EQ5N
+          visual: none
+          findings: p2-live-instructions-not-evidence,p2-ci-38010048095-regressions,p2-r1,p2-r2,p2-r3
   journal-check:
     state: pending
   deliver:
