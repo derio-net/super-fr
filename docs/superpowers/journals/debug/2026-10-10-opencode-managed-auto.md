@@ -19,3 +19,8 @@ Retrospective audit finding against PR commit 5219322b: launch_target correctly 
 ### replacement-observer-resolved · finding [fixed] · resolves replacement-observer: Replacement observer rejected the corrected launch argv
 
 replacement.observe now delegates OpenCode argv validation to opencode.model_matches, preserving old managed sessions while accepting --auto. The unit timeline and installed batch-replacement scenario replay actual launch argv. The previous candidate reproducer now succeeds; 205 focused unit tests and all three installed OpenCode lifecycle scenarios pass.
+
+<!-- fr:journal kind=hypothesis scope=debug id=local-config created=2026-10-10T10:26:00+00:00 -->
+### local-config · hypothesis · The prompt came from local OpenCode configuration
+
+If a deny or prompt rule in the operator's OpenCode configuration caused the stop, changing fr-herdr launch argv would not be the correct system fix. Check the native CLI contract and every fr-owned process launch before changing behavior.
