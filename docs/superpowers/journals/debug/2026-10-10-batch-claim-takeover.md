@@ -34,3 +34,8 @@ claim take/release judged a foreign claim displaceable only once expired; R8's s
 ### d7906d30ed08 · decision · create/edit admit a STALE-held member, not only an expired one
 
 take --stale needs the issue in a batch of this scope, exactly as take did; admitting only expired members would rebuild gh#1120's deadlock for --stale. Admission writes no claim and R6 still blocks dispatch/merge/drive until the take, so a holder that is merely slow loses nothing it can act on. A FRESH foreign claim is still refused (R5).
+
+<!-- fr:journal kind=decision scope=debug id=3e5eb21923d8 created=2026-10-10T18:45:37+00:00 -->
+### 3e5eb21923d8 · decision · Staleness is judged from the marker alone
+
+stale(c) = expired, or now - heartbeat > (expires - heartbeat)/4, using the expiry window the marker states. R8 already says every reader judges expiry from the marker; this extends that to staleness, so a scope with a different claim_expiry_hours is judged by its own window. The released marker's human line now says expired / gone stale / retired by the operator, from the marker's own timestamps (no JSON change).
