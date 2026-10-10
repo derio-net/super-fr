@@ -24,3 +24,8 @@ The successful controlled trial kept workspace/tab creation --no-focus, used the
 ### bounded-rendered-readiness-wait · finding [open] · Shared startup render readiness fix awaits fresh installed live confirmation
 
 TDD reproduced all three unsafe pre-render prompt paths: initial dispatch stalled, managed restart failed submission, replacement failed target observation. Added one bounded opencode.wait_ready predicate shared by dispatch/restart/replacement; it reuses grounded eligibility under exact foreground/name/model/base cwd, retries only unknown startup layout, rejects drafts/dialogs/identity drift, and never promotes pending descriptors or retries Enter. Eight readiness regressions now pass; affected managed/replacement/runner group is 216 passed, ruff green. Next verify freshly installed candidate real first launch/uptake, then continue six-item client-live walk. No full local suite or delivery cursor mutation.
+
+<!-- fr:journal kind=finding scope=debug id=bounded-rendered-readiness-wait-resolved created=2026-10-10T02:19:29+00:00 state=fixed resolves=bounded-rendered-readiness-wait -->
+### bounded-rendered-readiness-wait-resolved · finding [fixed] · resolves bounded-rendered-readiness-wait: Shared startup render readiness fix awaits fresh installed live confirmation
+
+Fresh host candidate 82d755cf installed into its own prefix and real first OpenCode dispatch now passes without focus or native-key changes: agent start at 04:18:06, grounded render gate before prompt at 04:18:15, confirmed prompt activity and active managed descriptor at 04:18:17. Name/pane/model and stable base identity are preserved. Root-cause fix is verified live; the remaining six-item client-live behaviors are still being exercised, not accepted by this resolution.
