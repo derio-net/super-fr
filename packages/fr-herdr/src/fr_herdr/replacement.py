@@ -163,7 +163,20 @@ def launch_target(d: managed.Descriptor) -> None:
     if d.harness == "opencode":
         opencode.wait_ready(d, run=_run_herdr)
     else:
-        observe(d)
+
+        def ready() -> dict[str, Any] | None:
+            try:
+                return observe(d)
+            except managed.ManagedError as exc:
+                # Captured cold Claude startup runs short-lived initialization
+                # workers after Herdr reports ready. Do not accept those workers;
+                # wait boundedly until the unchanged safe predicate qualifies.
+                if str(exc) in {"ambiguous foreground process", "no-prompt"}:
+                    return None
+                raise
+
+        if opencode._poll(ready) is None:
+            raise HerdrError("Claude target readiness timeout; no prompt sent")
 
 
 def submit(d: managed.Descriptor, brief: str) -> None:

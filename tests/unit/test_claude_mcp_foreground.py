@@ -1,11 +1,12 @@
 """Actual initialized Claude/MCP process capture; synthetic negative perturbations."""
 
 import copy
+import itertools
 import json
 from pathlib import Path
 
 import pytest
-from fr_herdr import managed, replacement
+from fr_herdr import managed, opencode, replacement
 
 FIXTURES = Path(__file__).parents[1] / "fixtures/herdr/restart"
 
@@ -88,3 +89,52 @@ def test_synthetic_unrecognized_or_ambiguous_foreground_children_still_refuse(
         group["foreground_processes"].append(copy.deepcopy(root))
     with pytest.raises(managed.ManagedError):
         replacement.observe(d)
+
+
+def test_claude_target_waits_until_unknown_startup_workers_are_gone(captured_source, monkeypatch):
+    d, info, calls = captured_source
+    original = replacement._run_herdr
+    reads = 0
+
+    def startup(args):
+        nonlocal reads
+        if args[:2] == ["agent", "start"]:
+            calls.append(args)
+            return {}
+        result = original(args)
+        if args[:2] == ["pane", "process-info"]:
+            reads += 1
+            if reads < 3:
+                result = copy.deepcopy(info)
+                result["result"]["process_info"]["foreground_processes"].append(
+                    {"pid": 999, "argv": [], "cwd": d.checkout}
+                )
+        return result
+
+    monkeypatch.setattr(replacement, "_run_herdr", startup)
+    monkeypatch.setattr(opencode, "_sleep", lambda _: None)
+    monkeypatch.setattr(opencode, "_clock", lambda c=itertools.count(): next(c))
+    replacement.launch_target(d)
+    assert reads == 3
+    assert not any(c[:2] == ["agent", "prompt"] for c in calls)
+
+
+def test_unknown_claude_startup_workers_time_out_without_input(captured_source, monkeypatch):
+    d, info, calls = captured_source
+    info["result"]["process_info"]["foreground_processes"].append(
+        {"pid": 999, "argv": [], "cwd": d.checkout}
+    )
+    original = replacement._run_herdr
+
+    def startup(args):
+        if args[:2] == ["agent", "start"]:
+            calls.append(args)
+            return {}
+        return original(args)
+
+    monkeypatch.setattr(replacement, "_run_herdr", startup)
+    monkeypatch.setattr(opencode, "_sleep", lambda _: None)
+    monkeypatch.setattr(opencode, "_clock", lambda c=itertools.count(): next(c))
+    with pytest.raises(replacement.HerdrError, match="readiness timeout"):
+        replacement.launch_target(d)
+    assert not any(c[:2] in (["agent", "prompt"], ["agent", "send-keys"]) for c in calls)
