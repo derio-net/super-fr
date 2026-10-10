@@ -34,3 +34,8 @@ Fresh host candidate 82d755cf installed into its own prefix and real first OpenC
 ### idle-sidebar-layout-refusal · repro · Fresh launch now succeeds but idle wide-session replacement preview is refused
 
 After the verified render-readiness fix, the real owned OpenCode session completed the read-only sleep/HOLD turn. Real name/model/base process identity and done/interactive-ready state match. Candidate replacement preview correctly sends no keys but returns unknown-layout. Actual wide-session screen has a focused empty textarea whose closing border shares its row with the right sidebar cwd text; the old closing-border regex requires the entire row to be only border/whitespace. Raw capture and plain nonblank row excerpt are in the redacted host evidence log. Investigate this captured geometry before widening recognition.
+
+<!-- fr:journal kind=root-cause scope=debug id=sidebar-outside-input-boundary created=2026-10-10T02:27:38+00:00 -->
+### sidebar-outside-input-boundary · root-cause · Closing-border recognition and draft width incorrectly include the session sidebar
+
+Source-traced against the real captured wide idle screen: input_reason uses the full-row ^whitespace+closing-border+whitespace$ predicate, so actual cwd text outside the closing border prevents locating the focused input at all. The process/name/model and focused blue border are correct. The fix must derive the input width from the captured border span, not the full sidebar-bearing row, and require the captured wide-session version footer; preserve draft/palette refusal using real negative captures. This is a separate grounded geometry defect, not a failed iteration of the confirmed startup timing fix.
