@@ -1,2 +1,0 @@
-bump: patch
-summary: Launch managed OpenCode sessions with autonomous permissions, test current candidate builds, and keep live evidence in its evidence directory.
