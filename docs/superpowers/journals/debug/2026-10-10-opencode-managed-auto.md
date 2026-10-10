@@ -49,3 +49,8 @@ The scenarios asserted --auto on agent start but returned [opencode, --model, mo
 ### candidate-cache-resolved · finding [fixed] · resolves candidate-cache: Candidate install reused stale same-version local wheels
 
 candidate-install now passes --refresh with --force, and its integration contract asserts the flag. All three installed scenarios pass with the normal cache after the change.
+
+<!-- fr:journal kind=finding scope=debug id=recovery-auto-resolved created=2026-10-10T10:39:33+00:00 state=fixed resolves=recovery-auto answered_by=agent -->
+### recovery-auto-resolved · finding [fixed] · resolves recovery-auto: Restart recovery recreated a prompting OpenCode process
+
+The generated recovery command now preserves --auto; every injected restart failure unit asserts the recovered command remains autonomous.
