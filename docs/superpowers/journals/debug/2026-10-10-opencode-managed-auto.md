@@ -34,3 +34,8 @@ The installed OpenCode help defines --auto as auto-approve permissions not expli
 ### candidate-cache · finding [open] · Candidate install reused stale same-version local wheels
 
 Independent review reproduced the installed replacement scenario loading current opencode.py with the pre-fix replacement.py from uv's cache. --force replaces the tool environment but does not guarantee a rebuild when branch packages retain the released version.
+
+<!-- fr:journal kind=finding scope=debug id=recovery-auto created=2026-10-10T10:39:05+00:00 state=open -->
+### recovery-auto · finding [open] · Restart recovery recreated a prompting OpenCode process
+
+The restart failure recovery command named opencode --model <id> without --auto, so following the prescribed recovery would restore the unattended permission-prompt defect.
