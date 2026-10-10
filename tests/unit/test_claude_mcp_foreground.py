@@ -138,3 +138,26 @@ def test_unknown_claude_startup_workers_time_out_without_input(captured_source, 
     with pytest.raises(replacement.HerdrError, match="readiness timeout"):
         replacement.launch_target(d)
     assert not any(c[:2] in (["agent", "prompt"], ["agent", "send-keys"]) for c in calls)
+
+
+def test_read_only_post_uptake_identity_allows_target_task_workers_but_not_input(captured_source):
+    d, info, calls = captured_source
+    info["result"]["process_info"]["foreground_processes"].append(
+        {"pid": 999, "argv": ["sh", "-c", "read-only recovery"], "cwd": "/disposable/branch"}
+    )
+    assert replacement.observe(d, safe=False)["process"]["pid"] == 100
+    with pytest.raises(managed.ManagedError):
+        replacement.observe(d)
+    assert not any(c[:2] in (["agent", "prompt"], ["agent", "send-keys"]) for c in calls)
+
+
+def test_post_uptake_confirmation_still_refuses_duplicate_root(captured_source):
+    d, info, _ = captured_source
+    root = next(
+        p
+        for p in info["result"]["process_info"]["foreground_processes"]
+        if p["argv"][0] == "claude"
+    )
+    info["result"]["process_info"]["foreground_processes"].append(copy.deepcopy(root))
+    with pytest.raises(managed.ManagedError):
+        replacement.observe(d, safe=False)

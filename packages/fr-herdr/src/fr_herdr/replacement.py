@@ -22,11 +22,20 @@ from fr_herdr._herdr import HerdrError, _run_herdr, start_agent
 from fr_herdr.runner import agent_name, stable_checkout
 
 
-def _foreground_process(info: dict[str, Any], harness: str) -> dict[str, Any]:
+def _foreground_process(
+    info: dict[str, Any], harness: str, *, allow_workers: bool = False
+) -> dict[str, Any]:
     group = info.get("result", {}).get("process_info", {})
     procs = group.get("foreground_processes", [])
     if len(procs) == 1:
         return dict(procs[0])
+    expected = [p for p in procs if Path(str((p.get("argv") or [""])[0])).name == harness]
+    if allow_workers and len(expected) == 1:
+        root = expected[0]
+        if root.get("pid") and group.get("foreground_process_group_id") == root["pid"]:
+            # Read-only post-uptake identity confirmation explicitly allows a
+            # working target. Its task children are not input eligibility.
+            return dict(root)
     # Real Claude startup includes one configured node MCP server in its own
     # foreground group, before any prompt. This is not another agent or a job.
     roots = [p for p in procs if Path(str((p.get("argv") or [""])[0])).name == "claude"]
@@ -64,7 +73,7 @@ def observe(d: managed.Descriptor, safe: bool = True, source: bool = False) -> d
     ):
         raise managed.ManagedError("live identity/status/readiness mismatch")
     info = _run_herdr(["pane", "process-info", "--pane", d.pane])
-    proc = _foreground_process(info, d.harness)
+    proc = _foreground_process(info, d.harness, allow_workers=not safe)
     argv = proc.get("argv", [])
     cwd_matches = proc.get("cwd") == d.checkout
     if source and not cwd_matches and proc.get("cwd"):
