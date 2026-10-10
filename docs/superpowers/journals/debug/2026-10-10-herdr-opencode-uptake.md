@@ -19,3 +19,8 @@ Confirmed with a REAL disposable OpenCode 1.18.35 pane, Herdr 0.9.0, unchanged c
 ### focus-or-forwarding-not-required · ruled-out · No focus change, payload transport change or extra Enter was needed
 
 The successful controlled trial kept workspace/tab creation --no-focus, used the identical installed candidate runner._submit agent prompt flags and real Herdr forwarding, and sent no native Enter retry. Exact process/name/model/cwd plus grounded rendered textarea readiness was the only precondition added. This rules out required focus switching or an unconditional extra Enter as the remedy for this reproduced startup failure; unknown submissions still must never be replayed.
+
+<!-- fr:journal kind=finding scope=debug id=bounded-rendered-readiness-wait created=2026-10-10T02:09:23+00:00 state=open -->
+### bounded-rendered-readiness-wait · finding [open] · Shared startup render readiness fix awaits fresh installed live confirmation
+
+TDD reproduced all three unsafe pre-render prompt paths: initial dispatch stalled, managed restart failed submission, replacement failed target observation. Added one bounded opencode.wait_ready predicate shared by dispatch/restart/replacement; it reuses grounded eligibility under exact foreground/name/model/base cwd, retries only unknown startup layout, rejects drafts/dialogs/identity drift, and never promotes pending descriptors or retries Enter. Eight readiness regressions now pass; affected managed/replacement/runner group is 216 passed, ruff green. Next verify freshly installed candidate real first launch/uptake, then continue six-item client-live walk. No full local suite or delivery cursor mutation.
