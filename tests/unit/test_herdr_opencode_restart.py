@@ -1,5 +1,8 @@
 """Captured input grounding plus explicitly synthetic operation/failure tests."""
 
+import base64
+import gzip
+import hashlib
 import json
 from pathlib import Path
 
@@ -36,6 +39,33 @@ def test_captured_input_contract(name, reason):
             original if "Ask anything" in line else line for line in screen.splitlines()
         )
     assert opencode.input_reason(screen) == reason
+
+
+def wide_capture(kind):
+    data = json.loads((FIXTURES / f"wide-{kind}.json").read_text())
+    raw = gzip.decompress(base64.b64decode(data["raw_gzip_base64"]))
+    assert hashlib.sha256(raw).hexdigest() == data["sha256"]
+    return raw.decode()
+
+
+def test_real_wide_session_sidebar_is_outside_empty_input():
+    assert opencode.input_reason(wide_capture("idle")) is None
+
+
+def test_real_wide_session_draft_remains_a_refusal():
+    assert opencode.input_reason(wide_capture("draft")) == "draft"
+
+
+def test_real_wide_session_palette_remains_a_refusal():
+    assert opencode.input_reason(wide_capture("palette")) is not None
+
+
+def test_synthetic_unknown_wide_footer_is_not_accepted():
+    # Deliberate negative mutation of a capture, never a claimed live observation.
+    raw = wide_capture("idle")
+    changed = raw.replace("•", "?")  # unknown wide-session footer marker
+    assert changed != raw
+    assert opencode.input_reason(changed) is not None
 
 
 @pytest.mark.parametrize(

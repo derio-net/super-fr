@@ -23,3 +23,15 @@ full client-live Ready walk. Source corroboration: OpenCode v1.18.35 commit
 53d1eabb61e21162157817bf677da0a4ad3332e3,
 packages/tui/src/component/prompt/index.tsx: dialog.stack blurs the prompt,
 and submitInner handles exact trimmed exit/quit/:q before model submission.
+# Wide session captures (2026-10-10)
+
+`wide-idle.json`, `wide-draft.json` and `wide-palette.json` are **real** Herdr
+0.9.0/OpenCode 1.18.35 captures from user-authorized disposable sessions, after a
+read-only sleep/HOLD turn. The wide default layout puts sidebar cwd text beside
+the focused closing border and uses a `• OpenCode 1.18.35` footer. Runtime path
+identifiers were masked at capture with same-width replacements, preserving
+columns and every ANSI sequence. The full viewport is losslessly gzip/base64
+encoded; the loader checks its decompressed SHA-256. These are captures, not
+layouts constructed alongside the parser. Deliberate draft/palette inputs were
+refused by the real replacement CLI before being manually cleaned up as fixture
+inputs. They do not discharge the complete client-live walk.

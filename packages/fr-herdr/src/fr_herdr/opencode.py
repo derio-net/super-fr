@@ -32,10 +32,14 @@ def input_reason(screen: str) -> str | None:
         return "unknown-layout"
     if any("esc interrupt" in line for line in lines):
         return "background-work"
-    borders = [i for i, line in enumerate(lines) if re.match(r"^\s*╹▀+\s*$", line)]
+    borders = [
+        (i, match)
+        for i, line in enumerate(lines)
+        if (match := re.fullmatch(r"(\s*)╹(▀+)(?:\s+(.*))?", line))
+    ]
     if not borders:
         return "unknown-layout"
-    end = borders[-1]
+    end, border = borders[-1]
     if not _FOCUSED.search(raw[end]):
         return "dialog-or-unfocused"
     # Footer must be current: a prior transcript box is not evidence of today's input.
@@ -46,8 +50,12 @@ def input_reason(screen: str) -> str | None:
         or not any("ctrl+p commands" in line for line in below)
     ):
         return "unknown-layout"
-    x = lines[end].index("╹")
-    width = len(lines[end].strip())
+    # Captured wide-session sidebar text can share the closing-border row. It is
+    # outside the textarea, but only the captured wide-session footer permits it.
+    if border.group(3) and not re.search(r"• OpenCode 1\.18\.35\s*$", below[-1]):
+        return "unknown-layout"
+    x = len(border.group(1))
+    width = 1 + len(border.group(2))
     if end < 2 or not re.match(r"^\s*┃  (Build|Plan) · .+", lines[end - 1]):
         return "unknown-layout"
     begin = end - 2
