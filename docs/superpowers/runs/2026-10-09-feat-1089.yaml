@@ -51,7 +51,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-10-10T00:04:25+00:00'
+    at: '2026-10-10T01:03:15+00:00'
     members:
     - implement-phase
     - review-phase
@@ -109,6 +109,12 @@ steps:
         evidence:
           tests: ci:40f5f30054c87aa4adc2c6e62ef83fdc8d7bbd32+unknown;tree=d450e4b7f25430e9e8ac288de1475beb913891baac6c82716460bdfe92117626
           visual: none
+      phase/2/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-10-10T01:03:15+00:00'
+          harness: opencode
+          session: ses_eddafdc25ffeb6158xsOd5pUHA
   journal-check:
     state: pending
   deliver:
