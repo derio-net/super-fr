@@ -1,6 +1,6 @@
 [project]
 name = "fr-claude-cloud"
-version = "5.18.2"
+version = "5.19.0"
 description = "super-fr claude-cloud adapter: a run-unit runner whose session actions the cloud driver's agent executes with its session tools (a mailbox)"
 requires-python = ">=3.11"
 dependencies = ["fr", "fr-dispatch", "pyyaml>=6"]
