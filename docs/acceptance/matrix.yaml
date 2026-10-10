@@ -8059,14 +8059,20 @@ rows:
       - super-fr:tests/unit/test_triage_replace_state.py#test_act_fetches_fresh_state_and_pushes_only_while_scope_owned
       - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_replacement_target_waits_for_rendered_prompt
       - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_startup_readiness_refuses_unsafe_or_unrendered_target_without_prompt
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_real_wide_session_sidebar_is_outside_empty_input
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_real_wide_session_draft_remains_a_refusal
+      - super-fr:tests/unit/test_claude_mcp_foreground.py#test_captured_native_mcp_sidecar_does_not_hide_the_unique_claude_root
+      - super-fr:tests/unit/test_claude_mcp_foreground.py#test_claude_target_waits_until_unknown_startup_workers_are_gone
+      - super-fr:tests/unit/test_claude_mcp_foreground.py#test_read_only_post_uptake_identity_allows_target_task_workers_but_not_input
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_batch_replace
     status: ci
-    notes: Audited replacement preserves identity and cross-store repair, now waiting
-      for grounded rendered OpenCode target input before submission. Draft/dialog/identity
-      errors refuse without input; unknown startup rendering is bounded. Existing replacement
-      regressions and installed candidate scenario pass. Full suite remains CI-owned
-      and complete client-live behavior remains owed.
+    notes: Installed candidate and live disposable sessions exposed and fixed rendered
+      readiness, captured wide sidebar geometry, native Claude MCP root recognition,
+      cold startup settling and busy post-uptake identity confirmation. Named regressions
+      preserve strict unsafe source checks and no replay; complete client-live acceptance
+      is withheld because a native unknown-model fallback and positive conflict/closeout
+      fixture prerequisites remain unproven.
     verify: candidate
     scenario: tests/scenarios/herdr-batch-replace.sh
     issues:
