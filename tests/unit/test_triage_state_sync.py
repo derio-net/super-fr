@@ -18,6 +18,7 @@ from fr.triage.errors import TriageError
 from fr.triage.state_sync import (
     DURABLE_DIRS,
     DURABLE_FILES,
+    OWNER_FILE,
     SYMLINK,
     SYMLINK_DEST,
     SyncReport,
@@ -543,3 +544,77 @@ def test_a_source_directory_swapped_for_a_symlink_is_not_followed(
 
     assert not (dest / "board" / "manifest.yaml").exists()
     assert _skipped(report)["board/manifest.yaml"] == SYMLINK
+
+
+# ------------------------------------------------ one exporting scope per directory (gh#1101)
+
+HOST, CLOUD = "s-11111111", "s-22222222"
+
+
+def test_an_export_stamps_the_directory_with_its_scope_id(tmp_path: Path) -> None:
+    """gh#1101: the directory is `<path>/<scope name>/`, the same for every host's scope
+    of one repo, so the export records which scope id wrote it."""
+    dest = tmp_path / "dest"
+
+    report = export_state(_state(tmp_path / "state"), *_at(dest), owner=HOST)
+
+    assert (dest / OWNER_FILE).read_text(encoding="utf-8") == f"{HOST}\n"
+    assert OWNER_FILE in report.copied
+
+
+def test_an_export_refuses_a_directory_another_scope_exported(tmp_path: Path) -> None:
+    """gh#1101: a second scope's export would replace the first's judgements, origins and
+    snapshots. Refused before a byte moves."""
+    dest = tmp_path / "dest"
+    export_state(_state(tmp_path / "host"), *_at(dest), owner=HOST)
+    (dest / "judgements.yaml").write_text("host's\n", encoding="utf-8")
+
+    with pytest.raises(TriageError, match=f"{HOST}.*{CLOUD}|{CLOUD}.*{HOST}"):
+        export_state(_state(tmp_path / "cloud"), *_at(dest), owner=CLOUD)
+
+    assert (dest / "judgements.yaml").read_text(encoding="utf-8") == "host's\n"
+    assert (dest / OWNER_FILE).read_text(encoding="utf-8") == f"{HOST}\n"
+
+
+def test_take_over_hands_the_directory_to_another_scope(tmp_path: Path) -> None:
+    dest = tmp_path / "dest"
+    export_state(_state(tmp_path / "host"), *_at(dest), owner=HOST)
+
+    export_state(_state(tmp_path / "cloud"), *_at(dest), owner=CLOUD, take_over=True)
+
+    assert (dest / OWNER_FILE).read_text(encoding="utf-8") == f"{CLOUD}\n"
+
+
+def test_the_same_scope_exports_again_and_an_unstamped_directory_is_claimed(
+    tmp_path: Path,
+) -> None:
+    dest = tmp_path / "dest"
+    (dest / "board").mkdir(parents=True)  # exported before the stamp existed
+    export_state(_state(tmp_path / "state"), *_at(dest), owner=HOST)
+
+    again = export_state(_state(tmp_path / "state"), *_at(dest), owner=HOST)
+
+    assert OWNER_FILE not in again.copied  # unchanged stamp: nothing to commit
+    assert (dest / OWNER_FILE).read_text(encoding="utf-8") == f"{HOST}\n"
+
+
+def test_a_symlinked_stamp_is_refused_and_never_followed(tmp_path: Path) -> None:
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    outside = tmp_path / "outside"
+    outside.write_text(f"{HOST}\n", encoding="utf-8")
+    (dest / OWNER_FILE).symlink_to(outside)
+
+    with pytest.raises(TriageError, match="symlink"):
+        export_state(_state(tmp_path / "state"), *_at(dest), owner=HOST)
+    assert outside.read_text(encoding="utf-8") == f"{HOST}\n"
+
+
+def test_import_never_carries_the_stamp_into_the_state_directory(tmp_path: Path) -> None:
+    src = tmp_path / "repo-copy"
+    export_state(_state(tmp_path / "old"), *_at(src), owner=HOST)
+    state = tmp_path / "new"
+
+    import_state(*_at(src), state, force=False)
+
+    assert not (state / OWNER_FILE).exists()
