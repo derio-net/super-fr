@@ -14,3 +14,8 @@ owed_claims owes a claim only with a wave or from dispatched on (_owes). plan_sy
 ### e0d071fe3810 · hypothesis · gh#1123 is a separate root cause from gh#1120
 
 gh#1120 (both halves) is one cause: claim take writes a claim outside R3's owed-claims model, and R5 has no expired-holder path into a batch. gh#1123 is a different gap: R9 accepts only expiry as evidence a holder is gone, with no operator override for a stale (R8) claim. Fixing gh#1120 does not touch R9's liveness test, and gh#1123 needs new verbs (scope retire, take/release --stale). Per the batch's debugging rules, stopping to ask before fixing either.
+
+<!-- fr:journal kind=decision scope=debug id=c6e9f7ad26a4 created=2026-10-10T18:29:49+00:00 -->
+### c6e9f7ad26a4 · decision · Operator: fix both in one PR; a take records a claim_taken event
+
+Operator answered 2026-10-10: fix gh#1120 and gh#1123 in the one PR, as separate commits. A taken claim on a wave-less batch stays owed through a new claim_taken batch event (auditable, matches the events model), accepting the judgements schema bump.
