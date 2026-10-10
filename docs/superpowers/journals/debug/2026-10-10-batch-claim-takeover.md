@@ -24,3 +24,8 @@ Operator answered 2026-10-10: fix gh#1120 and gh#1123 in the one PR, as separate
 ### 9c77dc8ecc39 · root-cause · gh#1120: R5 admits no held member, and R3 owes no claim the operator took
 
 batch create/edit refused every foreign-held member (live or expired), while claim take needs batch membership; and owed_claims (R3) owed a claim only by wave or dispatch, so plan_sync's owed_releases(own=...) released a claim taken onto a wave-less proposed batch at the next sync.
+
+<!-- fr:journal kind=root-cause scope=debug id=ad29fa5ddc7b created=2026-10-10T18:44:39+00:00 -->
+### ad29fa5ddc7b · root-cause · gh#1123: R9 accepts only expiry as evidence a holder is gone
+
+claim take/release judged a foreign claim displaceable only once expired; R8's staleness (heartbeat older than a quarter of the marker's own expiry window) was never consulted, and no verb released a whole scope.
