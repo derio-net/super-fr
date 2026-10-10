@@ -187,7 +187,7 @@ from fr.triage.claim_sync import (
     plan_sync,
     record_releases,
 )
-from fr.triage.claims import Claim, expired, held_line, held_map, held_members
+from fr.triage.claims import Claim, expired, held_line, held_map, held_members, taken_keys
 from fr.triage.claims import stale as claim_stale
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
@@ -743,7 +743,8 @@ def batch_edit_command(
     dropped = [k for k in batch.ids if k not in new.ids]
     ops = [ClaimOp("release", k, batch.id) for k in dropped] if owed_before else []
     if owed_before and not owed_after:  # --no-wave on a proposed batch
-        ops += [ClaimOp("release", k, batch.id) for k in new.ids]
+        kept = set(taken_keys(new))  # a member the operator took stays owed (gh#1120)
+        ops += [ClaimOp("release", k, batch.id) for k in new.ids if k not in kept]
     elif owed_after:
         ops += _claim_ops(new, [k for k in new.ids if k not in admitted], facts, env.me)
     if set_wave or add_issue or remove_issue:

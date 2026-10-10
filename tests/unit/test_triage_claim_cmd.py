@@ -466,3 +466,20 @@ def test_scope_retire_refuses_this_scope_and_an_unknown_one(
     code, out = _run(tmp_path, "scope", "retire", "nonsense", "--yes")
     assert code == 2
     assert _writes(client) == []
+
+
+def test_no_wave_keeps_a_taken_members_claim(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch, me: str
+) -> None:
+    """gh#1120: dropping the wave releases the batch's claims, never the operator's take."""
+    tmp_path, client = world
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    code, out = _run(tmp_path, "batch", "create", "revive", "--title", "t", "--issue", "super-fr#6")
+    assert code == 0, out
+    code, out = _run(tmp_path, "claim", "take", "super-fr#6", "--batch", "revive", "--yes")
+    assert code == 0, out
+    code, out = _run(tmp_path, "batch", "edit", "revive", "--wave", "3")
+    assert code == 0, out
+    code, out = _run(tmp_path, "batch", "edit", "revive", "--no-wave")
+    assert code == 0, out
+    assert "release super-fr#6" not in out
