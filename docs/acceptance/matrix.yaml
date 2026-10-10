@@ -8047,14 +8047,17 @@ rows:
       - super-fr:tests/unit/test_herdr_replacement.py#test_interleaved_pane_owner_loser_sends_and_writes_nothing
       - super-fr:tests/unit/test_herdr_replacement_observer.py#test_scope_lock_excludes_independent_writer_and_releases
       - super-fr:tests/unit/test_triage_batch_replace.py#test_activation_failure_repairs_both_stores_without_second_success
+      - super-fr:tests/unit/test_file_lock.py#test_exclusive_file_lock_refuses_nested_owner_and_releases
+      - super-fr:tests/unit/test_file_lock.py#test_acknowledged_but_unenforced_lock_never_yields
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_batch_replace
     status: ci
-    notes: Installed candidate exercises both directions/model-only, preserved original
-      dispatch identity, preview without input, startup failure and input-free shell
-      repair. Named synthetic unit tests pin exclusive scope/pane ownership, crash checkpoints
-      and cross-store repair; client-live evidence remains independently owed. Full
-      suite is CI-owned per operator, not locally claimed green.
+    notes: Installed candidate exercises both directions/model-only, preserved dispatch
+      identity, preview without input, startup failure and input-free shell repair.
+      Named tests pin exclusive scope/pane ownership, checkpoints and cross-store repair.
+      CI follow-up moves verified OS-lock machinery into shared infrastructure, preserving
+      the triage subprocess/forge guard and fail-closed unenforced-filesystem behavior.
+      Client-live remains independently owed; full suite is CI-owned per operator.
     verify: candidate
     scenario: tests/scenarios/herdr-batch-replace.sh
     issues:
