@@ -20,6 +20,24 @@ def test_captured_process_identity_and_exited_shell():
     assert opencode.shell_cwd(exited) == "/Users/example/projects/super-fr"
 
 
+@pytest.mark.parametrize("auto", [False, True])
+def test_managed_model_identity_accepts_sessions_from_before_and_after_auto(auto):
+    d = managed.Descriptor(
+        server="server",
+        pane="w1:p1",
+        name="b-test",
+        item="example/alpha/run/batch-test",
+        role="batch",
+        branch="feat/test",
+        checkout="/work/alpha",
+        model="openai/test",
+    )
+    argv = ["opencode", "--model", d.model]
+    if auto:
+        argv.append("--auto")
+    assert opencode.model_matches({"argv": argv}, d)
+
+
 @pytest.mark.parametrize(
     "name,reason",
     [
@@ -165,6 +183,7 @@ def test_fresh_restart_preserves_pane_name_model_and_hold(operation):
         "--",
         "--model",
         d.model,
+        "--auto",
     ]
     assert "--resume" not in str(fake.calls)
     assert "HOLD for operator review" in str(fake.calls)

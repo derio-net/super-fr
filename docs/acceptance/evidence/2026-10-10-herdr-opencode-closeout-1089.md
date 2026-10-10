@@ -1,4 +1,4 @@
-# Live post-merge close-out: #1089
+# Live post-merge close-out: #1089 (2026-10-10)
 
 Observed 2026-10-10 in a new OpenCode 1.18.35 session, model
 `openai/gpt-6.1-sol`, inside Herdr 0.9.0 (client/server protocol 22).

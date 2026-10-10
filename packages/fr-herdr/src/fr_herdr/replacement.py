@@ -165,7 +165,17 @@ def exit_to_shell(d: managed.Descriptor) -> None:
 
 def launch_target(d: managed.Descriptor) -> None:
     start_agent(
-        ["agent", "start", d.name, "--kind", d.harness, "--pane", d.pane, "--", "--model", d.model],
+        [
+            "agent",
+            "start",
+            d.name,
+            "--kind",
+            d.harness,
+            "--pane",
+            d.pane,
+            "--",
+            *(opencode.launch_args(d.model) if d.harness == "opencode" else ["--model", d.model]),
+        ],
         run=_run_herdr,
         sleep=opencode._sleep,
     )

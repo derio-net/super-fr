@@ -76,7 +76,11 @@ def pane(args):
             sys.exit(1)
         assert args[2] == NAME and args[args.index("--pane") + 1] == PANE
         assert "--resume" not in args
-        data.update(shell=False, harness=args[args.index("--kind") + 1], model=args[-1])
+        data.update(
+            shell=False,
+            harness=args[args.index("--kind") + 1],
+            model=args[args.index("--model") + 1],
+        )
     if args[:2] == ["agent", "prompt"]:
         assert "HOLD" in args[3] and "/fr-goal" not in args[3]
         assert "--wait" in args

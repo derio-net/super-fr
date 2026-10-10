@@ -105,7 +105,7 @@ def launch() -> None:
     assert handle == "w2:p1K"
     assert calls[0][calls[0].index("--cwd") + 1] == str(Path.cwd())
     assert ["--kind", "opencode"] == calls[1][3:5]
-    assert calls[1][-2:] == ["--model", MODEL]
+    assert calls[1][-3:] == ["--model", MODEL, "--auto"]
     assert "--wait" in next(c for c in calls if c[:2] == ["agent", "prompt"])
     assert managed.load(handle).item == item.id
     assert managed.load(handle).checkpoint == "active"
@@ -184,6 +184,7 @@ def herdr(args: list[str]) -> dict:
             "--",
             "--model",
             MODEL,
+            "--auto",
         ]
         state.write_text("target")
     return {}

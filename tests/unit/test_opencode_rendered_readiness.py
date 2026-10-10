@@ -100,7 +100,9 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
             if args[:2] == ["pane", "send-keys"]:
                 self.phase = "shell"
             if args[:2] == ["agent", "start"]:
-                self.name, self.model, self.phase = args[2], args[-1], "startup"
+                self.name = args[2]
+                self.model = args[args.index("--model") + 1]
+                self.phase = "startup"
             if args[:2] == ["agent", "prompt"] and self.reads < 3:
                 raise runner.HerdrError(
                     "title ready but input not rendered", code="agent_prompt_stalled"
@@ -159,6 +161,8 @@ def test_replacement_target_waits_for_rendered_prompt(timeline):
         assert op.execute().ok
     assert fake.reads >= 3
     assert sum(c[:2] == ["agent", "prompt"] for c in fake.calls) == 1
+    start = next(c for c in fake.calls if c[:2] == ["agent", "start"])
+    assert start[start.index("--") + 1 :] == ["--model", request.model, "--auto"]
 
 
 @pytest.mark.parametrize("failure", ["timeout", "draft", "dialog", "model", "name"])

@@ -68,11 +68,13 @@ class _Herdr:
                 }
             return self.agents or _fixture("agent-list.json")
         if args[:2] == ["agent", "start"]:
+            harness_args = args[args.index("--") + 1 :]
             self.launch = {
                 "name": args[2],
                 "agent": args[args.index("--kind") + 1],
                 "pane_id": args[args.index("--pane") + 1],
-                "model": args[-1],
+                "model": harness_args[harness_args.index("--model") + 1],
+                "args": harness_args,
             }
         if args[:2] == ["pane", "process-info"] and self.launch:
             return {
@@ -81,7 +83,7 @@ class _Herdr:
                         "foreground_processes": [
                             {
                                 "pid": 2,
-                                "argv": [self.launch["agent"], "--model", self.launch["model"]],
+                                "argv": [self.launch["agent"], *self.launch["args"]],
                                 "cwd": self.cwd,
                             }
                         ]
@@ -362,9 +364,10 @@ def test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it(
         "--label", item.id, "--no-focus",
     ]  # fmt: skip
     name = agent_name(item.id)
+    harness_args = ["--model", model, "--auto"] if harness == "opencode" else ["--model", model]
     assert start == [
         "agent", "start", name, "--kind", harness, "--pane", "w2:p1K",
-        "--", "--model", model,
+        "--", *harness_args,
     ]  # fmt: skip
     assert prompt == [
         "agent", "prompt", name, "/fr-goal Separate lifecycles",
