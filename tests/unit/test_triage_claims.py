@@ -342,4 +342,24 @@ def test_held_line_names_the_holder_and_hints_the_takeover_only_once_expired() -
     assert "claimed by triage scope s-22222222 for batch b1" in live
     assert "expired" not in live
     late = held_line("r#1", c, T0 + DAY)
-    assert "expired: only the operator takes it over with `fr triage claim take r#1" in late
+    assert "expired: only the operator takes it over" in late
+    assert "`fr triage batch edit <id> --add-issue r#1`" in late  # gh#1120: a reachable path
+    assert "`fr triage claim take r#1 --batch <id> --yes`" in late
+
+
+def test_stale_is_judged_from_the_markers_own_window() -> None:
+    """gh#1123: stale once the heartbeat is older than a quarter of `expires - heartbeat`."""
+    from fr.triage.claims import stale
+
+    day = _claim(OTHER, 1)  # a 24 h window: stale after 6 h
+    assert not stale(day, T0 + timedelta(hours=6))
+    assert stale(day, T0 + timedelta(hours=6, seconds=1))
+    week = _claim(OTHER, 2, expires=T0 + 7 * DAY)  # a scope with a longer expiry
+    assert not stale(week, T0 + timedelta(hours=7))
+    assert stale(_claim(OTHER, 3), T0 + DAY)  # expired is stale
+
+
+def test_held_line_hints_the_stale_take_before_expiry() -> None:
+    line = held_line("r#1", _claim(OTHER, 1), T0 + timedelta(hours=7))
+    assert "(stale: only the operator takes it over" in line
+    assert "`fr triage claim take r#1 --batch <id> --stale --yes`" in line

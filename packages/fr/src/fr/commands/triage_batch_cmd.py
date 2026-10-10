@@ -187,7 +187,8 @@ from fr.triage.claim_sync import (
     plan_sync,
     record_releases,
 )
-from fr.triage.claims import held_line, held_map, held_members
+from fr.triage.claims import Claim, expired, held_line, held_map, held_members
+from fr.triage.claims import stale as claim_stale
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
@@ -279,6 +280,37 @@ def _refuse_held(env: ClaimEnv, keys: Iterable[str], what: str) -> None:
         _fail(
             f"{what}: another triage scope holds "
             + "; ".join(held_line(k, h, now) for k, h in found)
+        )
+
+
+def _admit_held(env: ClaimEnv, keys: Iterable[str], what: str) -> list[tuple[str, Claim]]:
+    """R5 for `batch create` / `batch edit`: exit 2, nothing written, when another scope
+    holds any of *keys* with a FRESH claim. A member whose foreign claim is stale (R8;
+    expired included) is admitted (gh#1120, gh#1123): `claim take` needs it in one of this
+    scope's batches, and the take stays the operator's explicit step. Admitting writes no
+    claim, and R6 still keeps every action off the batch until the take. Returns the
+    admitted held members."""
+    found = held_members(keys, held_map(env.facts, env.me))
+    now = _now()
+    fresh = [(k, h) for k, h in found if not claim_stale(h, now)]
+    if fresh:
+        _fail(
+            f"{what}: another triage scope holds "
+            + "; ".join(held_line(k, h, now) for k, h in fresh)
+        )
+    return found
+
+
+def _say_takes(batch_id: str, held: Iterable[tuple[str, Claim]]) -> None:
+    """The take each admitted held member is waiting for (gh#1120, gh#1123)."""
+    now = _now()
+    for k, h in held:
+        state, flag = ("an expired", "") if expired(h, now) else ("a stale", " --stale")
+        console.print(
+            f"  {k} is held by {state} claim of {h.signer}; take it over with "
+            f"`fr triage claim take {k} --batch {batch_id}{flag} --yes`",
+            markup=False,
+            soft_wrap=True,
         )
 
 
@@ -612,12 +644,14 @@ def batch_create_command(
     if any(b.id == new.id for b in judgements.batches):
         _fail(f"batch {new.id!r} already exists; use `fr triage batch edit`")
     env = claim_env(target, facts)
-    _refuse_held(env, new.ids, f"batch {new.id!r} cannot be created")
+    admitted = _admit_held(env, new.ids, f"batch {new.id!r} cannot be created")
     _write(target, [*judgements.batches, new], facts, read=judgements.batches)
     console.print(f"created batch {new.id} ({plural(len(new.ids), 'issue')})", markup=False)
+    _say_takes(new.id, admitted)
     _warn_mixed_themes(new, judgements)
     if new.wave is not None:  # a wave makes claims owed from now (R3)
-        _settle_claims(env, _claim_ops(new, new.ids, facts, env.me), yes=yes)
+        free = [k for k in new.ids if k not in dict(admitted)]
+        _settle_claims(env, _claim_ops(new, free, facts, env.me), yes=yes)
 
 
 @batch_app.command("edit")
@@ -699,9 +733,10 @@ def batch_edit_command(
     env = claim_env(target, facts)
     added = [k for k in new.ids if k not in batch.ids]
     checked = new.ids if wave is not None else added
-    _refuse_held(env, checked, f"batch {new.id!r} cannot take these members")
+    admitted = dict(_admit_held(env, checked, f"batch {new.id!r} cannot take these members"))
     _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
     console.print(f"edited batch {new.id}", markup=False)
+    _say_takes(new.id, [(k, h) for k, h in admitted.items() if k in added])
     _warn_mixed_themes(new, judgements)
     owed_before = batch.wave is not None or stage != "proposed"
     owed_after = new.wave is not None or stage != "proposed"
@@ -710,7 +745,7 @@ def batch_edit_command(
     if owed_before and not owed_after:  # --no-wave on a proposed batch
         ops += [ClaimOp("release", k, batch.id) for k in new.ids]
     elif owed_after:
-        ops += _claim_ops(new, new.ids, facts, env.me)
+        ops += _claim_ops(new, [k for k in new.ids if k not in admitted], facts, env.me)
     if set_wave or add_issue or remove_issue:
         _settle_claims(env, ops, yes=yes)
 

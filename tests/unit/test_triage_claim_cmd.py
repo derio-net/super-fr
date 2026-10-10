@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,7 @@ REPO = "derio-net/super-fr"
 NOW = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
 HOST = "0123456789abcdef"
 LIVE, OLD = "s-aaaaaaaa", "s-bbbbbbbb"
+DEAD, ZOMBIE = "s-cccccccc", "s-dddddddd"  # gh#1123: stopped refreshing; one still fresh
 LONG_AGO = datetime(2026, 9, 1, tzinfo=UTC)
 FAR = datetime(2999, 1, 1, tzinfo=UTC)
 
@@ -34,6 +35,9 @@ issues:
   "super-fr#4": {tier: 1}
   "super-fr#5": {tier: 1}
   "super-fr#6": {tier: 1}
+  "super-fr#7": {tier: 1}
+  "super-fr#8": {tier: 1}
+  "super-fr#9": {tier: 1}
 batches:
   - {id: mine, title: mine, ids: ["super-fr#2", "super-fr#3", "super-fr#4"], wave: 1}
   - {id: spare, title: spare, ids: ["super-fr#1"]}
@@ -81,11 +85,14 @@ def world(tmp_path: Path, me: str, monkeypatch: pytest.MonkeyPatch) -> tuple[Pat
         3: _marker(me, "mine", at=LONG_AGO, expires=FAR),
         5: _marker(me, "gone", at=LONG_AGO, expires=FAR),
         6: _marker(OLD, "dead", at=LONG_AGO, expires=datetime(2026, 9, 2, tzinfo=UTC)),
+        7: _marker(DEAD, "dead", at=NOW - timedelta(hours=10), expires=NOW + timedelta(hours=14)),
+        8: _marker(ZOMBIE, "z", at=NOW - timedelta(hours=10), expires=NOW + timedelta(hours=14)),
+        9: _marker(ZOMBIE, "z", at=NOW - timedelta(hours=1), expires=NOW + timedelta(hours=23)),
     }
     client = FakeGhClient()
     client.comment_author = "operator"
     issues = []
-    for n in range(1, 7):
+    for n in range(1, 10):
         claimed = n in markers
         client.add_issue(REPO, n, labels={"fr:claimed"} if claimed else set())
         claims = []
@@ -361,3 +368,101 @@ def test_held_line_names_a_take_sequence_that_works() -> None:
     assert "batch create" in line and "--add-issue" in line
     assert "fr triage claim take super-fr#6 --batch <id> --yes" in line
     assert "claim take" not in held_line("super-fr#6", h, LONG_AGO)
+
+
+# gh#1123: retiring a dead scope's claims before they expire.
+
+
+def test_take_stale_refuses_a_fresh_claim_and_takes_a_stale_one(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch, me: str
+) -> None:
+    tmp_path, client = world
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    # a stale (not yet expired) foreign claim is admitted into a batch, never claimed by it
+    code, out = _run(
+        tmp_path,
+        "batch",
+        "create",
+        "revive",
+        "--title",
+        "t",
+        "--issue",
+        "super-fr#7",
+        "--issue",
+        "super-fr#9",
+    )
+    assert code == 2 and "super-fr#9" in out  # #9 is fresh: refused like any live claim
+    code, out = _run(tmp_path, "batch", "create", "revive", "--title", "t", "--issue", "super-fr#7")
+    assert code == 0, out
+    assert "fr triage claim take super-fr#7 --batch revive --stale --yes" in " ".join(out.split())
+    code, out = _run(tmp_path, "claim", "take", "super-fr#7", "--batch", "revive", "--yes")
+    assert code == 2 and "--stale" in out
+    code, out = _run(
+        tmp_path, "claim", "take", "super-fr#7", "--batch", "revive", "--stale", "--yes"
+    )
+    assert code == 0, out
+    theirs, mine = _markers(client, 7)
+    assert (theirs.released, theirs.released_by) == (NOW, me)
+    assert mine.signer == me
+
+
+def test_take_stale_on_a_fresh_claim_is_refused(world: tuple[Path, FakeGhClient]) -> None:
+    tmp_path, client = world
+    code, out = _run(
+        tmp_path, "claim", "take", "super-fr#1", "--batch", "spare", "--stale", "--yes"
+    )
+    assert code == 2 and "fresh" in out
+    assert _writes(client) == []
+
+
+def test_release_stale_releases_a_stale_foreign_claim(
+    world: tuple[Path, FakeGhClient], me: str
+) -> None:
+    tmp_path, client = world
+    code, out = _run(tmp_path, "claim", "release", "super-fr#7", "--yes")
+    assert code == 2 and "--stale" in out
+    code, out = _run(tmp_path, "claim", "release", "super-fr#7", "--stale", "--yes")
+    assert code == 0, out
+    (m,) = _markers(client, 7)
+    assert (m.released, m.released_by) == (NOW, me)
+
+
+def test_scope_retire_previews_then_releases_every_stale_claim(
+    world: tuple[Path, FakeGhClient], me: str
+) -> None:
+    tmp_path, client = world
+    code, out = _run(tmp_path, "scope", "retire", DEAD)
+    assert code == 0, out
+    assert "super-fr#7" in out and "--yes" in out
+    assert client.calls == []
+    code, out = _run(tmp_path, "scope", "retire", DEAD, "--yes")
+    assert code == 0, out
+    (m,) = _markers(client, 7)
+    assert (m.released, m.released_by) == (NOW, me)
+    assert "fr:claimed" not in client.issues[(REPO, 7)].labels
+
+
+def test_scope_retire_refuses_while_one_claim_is_fresh_and_names_it(
+    world: tuple[Path, FakeGhClient], me: str
+) -> None:
+    tmp_path, client = world
+    code, out = _run(tmp_path, "scope", "retire", ZOMBIE, "--yes")
+    assert code == 2
+    assert "super-fr#9" in out and "--force" in out
+    assert _writes(client) == []
+    code, out = _run(tmp_path, "scope", "retire", ZOMBIE, "--force", "--yes")
+    assert code == 0, out
+    assert all(_markers(client, n)[0].released == NOW for n in (8, 9))
+
+
+def test_scope_retire_refuses_this_scope_and_an_unknown_one(
+    world: tuple[Path, FakeGhClient], me: str
+) -> None:
+    tmp_path, client = world
+    code, out = _run(tmp_path, "scope", "retire", me, "--yes")
+    assert code == 2 and "claim release" in out
+    code, out = _run(tmp_path, "scope", "retire", "s-eeeeeeee", "--yes")
+    assert code == 0 and "no claim" in out
+    code, out = _run(tmp_path, "scope", "retire", "nonsense", "--yes")
+    assert code == 2
+    assert _writes(client) == []

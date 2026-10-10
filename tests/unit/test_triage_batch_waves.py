@@ -150,7 +150,7 @@ def test_the_first_write_stamps_5_and_keeps_the_rest(tmp_path: Path) -> None:
     _state(tmp_path, schema=1)
     code, out = _run(tmp_path, "create", "a", "--title", "t", "--issue", "super-fr#1")
     assert code == 0, out
-    assert (tmp_path / "judgements.yaml").read_text("utf-8").startswith("schema: 7\n")
+    assert (tmp_path / "judgements.yaml").read_text("utf-8").startswith("schema: 8\n")
 
 
 # ------------------------------------------------------------ create / edit

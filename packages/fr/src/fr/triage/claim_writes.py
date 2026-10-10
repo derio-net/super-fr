@@ -15,7 +15,16 @@ from typing import Any, Literal
 
 from fr.ghclient import GhClient
 from fr.labels import FR_CLAIMED
-from fr.triage.claims import Claim, Marker, holder, needs_refresh, read_claims, render_marker
+from fr.triage.claims import (
+    Claim,
+    Marker,
+    expired,
+    holder,
+    needs_refresh,
+    read_claims,
+    render_marker,
+    stale,
+)
 from fr.triage.errors import TriageError
 
 
@@ -191,6 +200,7 @@ def release(
     trusted: Collection[str],
     of: str | None = None,
     batch: str | None = None,
+    allow: Allow = "expired",
 ) -> Outcome:
     """Edit the claim of *of* (default: this scope) to its released form; remove
     `fr:claimed` once no un-released claim, live or expired, remains (R10). Open or
@@ -202,11 +212,8 @@ def release(
     target = _own(claims, signer)
     if target is not None and batch is not None and target.batch != batch:
         return Done("none")
-    if target is not None and signer != me and now < target.expires:
-        raise ClaimError(
-            f"{repo}#{number}: the claim of {signer} (batch {target.batch}) is live until "
-            f"{target.expires.isoformat()}; only an expired claim of another scope can be released"
-        )
+    if target is not None and signer != me:
+        may_displace(target, now, allow, f"{repo}#{number}", "released")
     if target is None:
         return Done("none")  # nothing of *signer*'s stands here: nothing is written
     by = me if signer != me else None
@@ -214,6 +221,29 @@ def release(
     if not [c for c in claims if c.signer != signer]:
         _remove_label(client, repo, number, trusted)
     return Done("released", target.comment_id)
+
+
+Allow = Literal["expired", "stale", "any"]
+"""Which foreign claims an operator verb may displace: `expired` (R9), `stale` (R8, the
+`--stale` override, gh#1123), or `any` (`scope retire --force`)."""
+
+
+def may_displace(c: Claim, now: datetime, allow: Allow, where: str, verb: str) -> None:
+    """Raise ClaimError unless *allow* lets this scope displace *c*. Judged on the claim
+    just re-read from the forge, so a holder that refreshed since facts wins."""
+    if allow == "any" or expired(c, now):
+        return
+    head = (
+        f"{where}: the claim of {c.signer} (batch {c.batch}) is live until {c.expires.isoformat()}"
+    )
+    if allow == "expired":
+        hint = " (stale: the operator may use --stale)" if stale(c, now) else ""
+        raise ClaimError(f"{head}; only an expired claim can be {verb}{hint}")
+    if not stale(c, now):
+        raise ClaimError(
+            f"{head} and its heartbeat ({c.heartbeat.isoformat()}) is fresh; only a stale "
+            f"claim can be {verb} with --stale"
+        )
 
 
 def take(
@@ -226,17 +256,15 @@ def take(
     expiry: timedelta,
     now: datetime,
     trusted: Collection[str],
+    allow: Allow = "expired",
 ) -> Outcome:
-    """Replace another scope's EXPIRED claim with this scope's claim for *batch* (R9).
-    Refused while the claim is live; the operator's decision, never automatic."""
+    """Replace another scope's EXPIRED claim with this scope's claim for *batch* (R9), or
+    a STALE one under `allow="stale"` (gh#1123). Refused otherwise; the operator's
+    decision, never automatic."""
     _, claims = _read(client, repo, number, trusted)
     rival = holder(claims, me)
     if rival is None:
         raise ClaimError(f"{repo}#{number}: no other scope holds it; nothing to take")
-    if now < rival.expires:
-        raise ClaimError(
-            f"{repo}#{number}: the claim of {rival.signer} (batch {rival.batch}) is live "
-            f"until {rival.expires.isoformat()}; only an expired claim can be taken"
-        )
+    may_displace(rival, now, allow, f"{repo}#{number}", "taken")
     client.edit_issue_comment(repo, rival.comment_id, _released(rival.marker, now, by=me))
     return claim(client, repo, number, me=me, batch=batch, expiry=expiry, now=now, trusted=trusted)
