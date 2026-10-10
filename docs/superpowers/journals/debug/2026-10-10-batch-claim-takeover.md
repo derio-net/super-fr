@@ -9,3 +9,8 @@ batch create/edit refuse a member held by another scope, expired or live (_refus
 ### 37ffd5bd3353 · repro · A taken claim on a wave-less proposed batch is not owed, so claim sync releases it
 
 owed_claims owes a claim only with a wave or from dispatched on (_owes). plan_sync passes this scope's own open-issue claims to owed_releases(own=...), which lists every own claim no batch owes for release. A claim from claim take on a wave-less proposed batch is therefore neither refreshed nor kept: the next claim sync --yes / drive --yes releases it. Worse than gh#1120's guess (lapse in 24h).
+
+<!-- fr:journal kind=hypothesis scope=debug id=e0d071fe3810 created=2026-10-10T18:11:05+00:00 -->
+### e0d071fe3810 · hypothesis · gh#1123 is a separate root cause from gh#1120
+
+gh#1120 (both halves) is one cause: claim take writes a claim outside R3's owed-claims model, and R5 has no expired-holder path into a batch. gh#1123 is a different gap: R9 accepts only expiry as evidence a holder is gone, with no operator override for a stale (R8) claim. Fixing gh#1120 does not touch R9's liveness test, and gh#1123 needs new verbs (scope retire, take/release --stale). Per the batch's debugging rules, stopping to ask before fixing either.
