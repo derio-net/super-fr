@@ -8103,8 +8103,9 @@ rows:
     scenario: tests/scenarios/herdr-opencode-restart.sh
   - id: herdr-opencode-live
     capability: interactive herdr OpenCode migration
-    acceptance: Real herdr sessions demonstrate replacement, restart, conflict hand-back
-      and close-out with stable checkout and recoverable failure.
+    acceptance: Real herdr sessions demonstrate replacement, restart, stable-checkout
+      HOLD and recoverable failure, with read-only current-conflict hand-back selection
+      against an actual conflicting PR.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
     levels:
@@ -8113,13 +8114,14 @@ rows:
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_documented_no_argument_walk_and_explicit_mode_use_tty_with_captured_output
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_noninteractive_default_still_reports_owed_and_never_passes
     status: skipped
-    notes: 'Authorized real disposable Herdr walk partially completed: launch/uptake,
-      both harness directions, model-only changes, draft/palette/working/blocked refusals,
-      fresh restart, messaging/focus/dedup and delivered HOLD observed. Positive conflict/closeout
-      prerequisites and intended invalid-model failure subcase remain unproven; native
-      missing-provider request retained argv but displayed a fallback UI model. All
-      owned sessions/processes cleaned; redacted evidence retained. No accepted all-live
-      PASS. Full client-live walk remains required before Ready.'
+    notes: 'Operator authorized scoped pre-merge verification and Ready/merge with actual
+      merged-PR close-out immediately afterward. Real disposable sessions observed launch/uptake,
+      both replacement directions/model-only, unsafe-source refusals, fresh restart,
+      messaging/focus/dedup, HOLD and native trust/startup refusal with no-replay source/shell
+      repair. Read-only real #1107 forge/head checks selected current original-batch
+      handback before HOLD, suppressed obsolete head and repeated delivery; no conflict
+      instruction was sent or executed. Native unsupported-provider UI fallback tracked
+      #1116 is not a claimed failure-case pass. Close-out is separate post-merge row.'
     verify: client-live
     scenario: tests/scenarios/herdr-opencode-live.sh
     issues:
