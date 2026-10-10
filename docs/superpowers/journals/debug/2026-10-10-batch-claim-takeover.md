@@ -19,3 +19,8 @@ gh#1120 (both halves) is one cause: claim take writes a claim outside R3's owed-
 ### c6e9f7ad26a4 · decision · Operator: fix both in one PR; a take records a claim_taken event
 
 Operator answered 2026-10-10: fix gh#1120 and gh#1123 in the one PR, as separate commits. A taken claim on a wave-less batch stays owed through a new claim_taken batch event (auditable, matches the events model), accepting the judgements schema bump.
+
+<!-- fr:journal kind=root-cause scope=debug id=9c77dc8ecc39 created=2026-10-10T18:44:09+00:00 -->
+### 9c77dc8ecc39 · root-cause · gh#1120: R5 admits no held member, and R3 owes no claim the operator took
+
+batch create/edit refused every foreign-held member (live or expired), while claim take needs batch membership; and owed_claims (R3) owed a claim only by wave or dispatch, so plan_sync's owed_releases(own=...) released a claim taken onto a wave-less proposed batch at the next sync.
