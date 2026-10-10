@@ -130,12 +130,21 @@ steps:
     stdout: |
       1 out-of-scope finding(s): p1-full-suite-storage
   deliver:
-    state: running
-    at: '2026-10-10T01:24:23+00:00'
+    state: done
+    at: '2026-10-10T05:26:55+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1115
     units:
       step/deliver:
         attempts:
         - dispatched: '2026-10-10T01:24:23+00:00'
           harness: opencode
           session: ses_eddafdc25ffeb6158xsOd5pUHA
+          returned: '2026-10-10T05:26:42+00:00'
+          outcome: done
+        evidence:
+          tests: ci:3f1833a38dfa8ad277bbe012243ec49dfe4996cf+0ae8b9de7d071a67885d86479b351f0641168ba7;tree=201f864f0400f2439b281f78f926a7f6f03c192e7cd7dd30a1fcc04d0be38cfd
+          walk: 20261010T051627Z.log@465c77c3ba61
+          proportionality: 0ae8b9de7d071a67885d86479b351f0641168ba7:760478a68b4f1f36174a63bf27f5d4c4b3c5c97a465ce5079f49efea4d4cce02
+          visual: none
 fr_version: 5.18.2
