@@ -386,3 +386,8 @@ Added the smallest fail-closed fresh status/readiness predicate under existing p
 ### late-review-message-delivery-evidence · discovery · Fresh evidence after the narrow managed-message review correction (phase 2)
 
 Source correction5f4a3d78 adds only under-lock idle/done and explicit readiness recheck; regression proves no prompt or descriptor write when earlier idle status changes to busy/unready. 166 targeted checks, lint and eight-file typecheck green. Fresh installed candidate walk20261010T054519Z.log passed installation/smoke and all three declared candidate rows on corrected code. Closed delivery cursor remains historical; PR follow-up evidence and current CI certify this late correction. Existing scoped native observations and post-merge closeout split are not expanded or falsely re-attested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-full-suite-storage-resolved-2 created=2026-10-10T06:14:28+00:00 state=open resolves=p1-full-suite-storage tracked_by=https://github.com/derio-net/super-fr/issues/1117 -->
+### p1-full-suite-storage-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1117] · resolves p1-full-suite-storage: Container overlay storage blocks a green final full suite
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1117.
