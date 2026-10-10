@@ -6739,10 +6739,14 @@ rows:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_a_finished_wave_with_no_export_and_no_pr_is_exported
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_export_commits_only_the_scope_dir_force_pushes_and_records_the_pr
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_drive_loop_is_not_done_while_its_export_pr_is_open
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_another_scopes_export_pr_is_never_reused
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_directory_another_scope_exported_is_refused_and_nothing_is_pushed
     status: ci
     notes: 'The pure step-3b table and the driver''s execution against a temporary git
       repo and a fake forge: one export PR per finished wave, adopted after a crash,
-      merged at its live head once green, recorded so it never repeats.'
+      merged at its live head once green, recorded so it never repeats. Since gh#1101
+      the export head names the scope id, another scope''s export PR is never reused,
+      and a directory another scope exported is refused with nothing pushed.'
   - id: drive-exports-finished-wave-live
     capability: triage-batch-drive
     acceptance: On a real finished wave, the repo copy of the triage state matches the
