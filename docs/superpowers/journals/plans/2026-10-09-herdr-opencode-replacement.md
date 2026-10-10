@@ -376,3 +376,8 @@ Operator directed safe read-only current-conflict check using existing PR1107 an
 ### late-review-managed-message-state · finding [open] (reviewer: in scope) · Managed message must recheck idle/readiness under its lock (phase 2)
 
 Operator independent review identified a stale driver idle snapshot race. Fresh name/harness under pane ownership was insufficient once target became working/blocked. Reproduced in deterministic regression; require current idle/done and interactive_ready True before any handback save/input.
+
+<!-- fr:journal kind=finding scope=plan id=late-review-managed-message-state-resolved created=2026-10-10T05:42:40+00:00 state=fixed resolves=late-review-managed-message-state -->
+### late-review-managed-message-state-resolved · finding [fixed] · resolves late-review-managed-message-state: Managed message must recheck idle/readiness under its lock
+
+Added the smallest fail-closed fresh status/readiness predicate under existing pane lock. Race regression proves working/blocked/unknown/unready targets receive no prompt and descriptor stays unchanged; idle/done ready positive paths still pass. 166 targeted tests, lint and fr-herdr typecheck green.
