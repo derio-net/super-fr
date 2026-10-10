@@ -351,3 +351,8 @@ Observed real OpenCode retaining syntactically valid missing-provider request in
 ### live-r1-resolved · finding [out-of-scope] · resolves live-r1: Native unsupported-provider request can display a fallback UI model
 
 Pre-existing native provider resolution/fallback outside the explicit process-argv verification boundary, independently reviewed; preserve evidence, do not claim fixed.
+
+<!-- fr:journal kind=finding scope=plan id=live-r2 created=2026-10-10T04:30:48+00:00 phase=2 state=open review_scope=in -->
+### live-r2 · finding [open] (reviewer: in scope) · Draft delivery must disclose incomplete live evidence (phase 2)
+
+Independent final review found draft provisional wording insufficient: positive conflict/closeout prerequisites and intended bad-model failure case are not all-live proven. Record observed subset, native model boundary and unchecked client-live/Ready requirement; do not certify a PASS.
