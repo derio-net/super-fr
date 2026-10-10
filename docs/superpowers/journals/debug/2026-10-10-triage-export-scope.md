@@ -19,3 +19,8 @@ Both the export directory (`<path>/<scope.name>`) and the export head (`chore/tr
 ### fix · finding [fixed] · Owner stamp on the export directory, scope id in the export head
 
 state_sync.export_state(owner=, take_over=) checks/writes `exported-by` before any copy; CLI `--take-over`; driver never takes over (refusal path: nothing committed or pushed). export_branch/export_wave_of take the scope id (keyword-required in the pure drive functions). Failing tests first (commit 'test(triage): ... failing'): test_an_export_refuses_a_directory_another_scope_exported, test_another_scopes_export_pr_is_never_reused, test_a_directory_another_scope_exported_is_refused_and_nothing_is_pushed, test_the_export_verb_refuses_another_scopes_directory_until_take_over. Full suite: CI (operator instruction, tests: ci).
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-10-10T19:13:51+00:00 -->
+### review · review · Self-review of the fix diff: no blocking findings, two accepted edges
+
+(1) An export PR recorded before this change sits on the old head chore/triage-state-wave-<N>; the recorded-PR read now looks for the new head, misses it, and the row warns (untrusted) until the operator merges or closes it by hand, after which export-reconcile/export-closed handle it. Fail-closed; super-fr has no open export PR (gh pr list, 2026-10-10). (2) A repo with no committed stamp is claimed by the first export: two scopes exporting their first wave at once both add exported-by on separate heads, and the second PR conflicts rather than overwrites. super-fr's own directory is stamped in this PR, closing that window here.
