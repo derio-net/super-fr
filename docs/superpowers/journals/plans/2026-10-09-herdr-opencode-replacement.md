@@ -346,3 +346,8 @@ Fixed at 045ab9f0 with PTY and negative-evidence regressions; actual observed cl
 ### live-r1 · finding [open] (reviewer: out of scope) · Native unsupported-provider request can display a fallback UI model (phase 2)
 
 Observed real OpenCode retaining syntactically valid missing-provider request in process argv while displaying another default model. Independent reviewer verified current spec/model contract checks native requested argv, not provider availability/effective selected UI model. This native limitation predates changes; intentional bad-model failure test did not pass. Keep explicit in PR and follow-up list.
+
+<!-- fr:journal kind=finding scope=plan id=live-r1-resolved created=2026-10-10T04:30:21+00:00 state=open resolves=live-r1 out_of_scope=true -->
+### live-r1-resolved · finding [out-of-scope] · resolves live-r1: Native unsupported-provider request can display a fallback UI model
+
+Pre-existing native provider resolution/fallback outside the explicit process-argv verification boundary, independently reviewed; preserve evidence, do not claim fixed.
