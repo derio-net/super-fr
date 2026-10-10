@@ -79,3 +79,8 @@ A failing regression pins the actual post-uptake task-worker case. Read-only ide
 ### captured-wide-sidebar-input-resolved · finding [fixed] · resolves captured-wide-sidebar-input: Captured wide-session textarea geometry fix awaits installed live preview
 
 Fresh installed 039b07d3 real wide-session replacement preview now passes with byte-identical fixture batch state and no keys; the old 82d755cf preview had refused the same idle sidebar. Real captured draft/palette negative cases remain unit-pinned; actual final-candidate refusal cases will be repeated. No arbitrary layout/theme was accepted.
+
+<!-- fr:journal kind=finding scope=debug id=captured-claude-mcp-root-resolved created=2026-10-10T03:35:27+00:00 state=fixed resolves=captured-claude-mcp-root -->
+### captured-claude-mcp-root-resolved · finding [fixed] · resolves captured-claude-mcp-root: Narrow captured Claude/MCP foreground recognition awaits installed live confirmation
+
+Fresh combined candidate aa48026f confirmed real Claude target startup, prompt uptake, active descriptor and model-only haiku-to-sonnet replacement with original pane/name/dispatch/branch/reservation unchanged. The captured native MCP sidecar is recognized; cold initialization workers are waited out and working-target activation now checks identity rather than input safety. Unknown/duplicate source roots still refuse. No MCP configuration/permissions changed.
