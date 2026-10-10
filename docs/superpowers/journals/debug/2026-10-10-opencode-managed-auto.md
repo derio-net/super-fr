@@ -39,3 +39,8 @@ Independent review reproduced the installed replacement scenario loading current
 ### recovery-auto · finding [open] · Restart recovery recreated a prompting OpenCode process
 
 The restart failure recovery command named opencode --model <id> without --auto, so following the prescribed recovery would restore the unattended permission-prompt defect.
+
+<!-- fr:journal kind=finding scope=debug id=scenario-argv created=2026-10-10T10:39:11+00:00 state=open -->
+### scenario-argv · finding [open] · Launch and restart scenarios replayed legacy argv
+
+The scenarios asserted --auto on agent start but returned [opencode, --model, model] from process-info. Backward compatibility made them pass without exercising readiness against the actual autonomous process.
