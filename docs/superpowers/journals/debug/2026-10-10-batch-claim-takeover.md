@@ -4,3 +4,8 @@
 ### 46a39cd2aaa9 · repro · Expired foreign claim cannot be taken over through the CLI (gh#1120)
 
 batch create/edit refuse a member held by another scope, expired or live (_refuse_held -> held_map/holder, R5). claim take requires the key to already be a member of one of this scope's batches (triage_claim_cmd.py claim_take_command). held_line's expired-hint names claim take, which cannot succeed. Read from code at aaeea750; matches the live repro in gh#1120.
+
+<!-- fr:journal kind=repro scope=debug id=37ffd5bd3353 created=2026-10-10T18:10:55+00:00 -->
+### 37ffd5bd3353 · repro · A taken claim on a wave-less proposed batch is not owed, so claim sync releases it
+
+owed_claims owes a claim only with a wave or from dispatched on (_owes). plan_sync passes this scope's own open-issue claims to owed_releases(own=...), which lists every own claim no batch owes for release. A claim from claim take on a wave-less proposed batch is therefore neither refreshed nor kept: the next claim sync --yes / drive --yes releases it. Worse than gh#1120's guess (lapse in 24h).
