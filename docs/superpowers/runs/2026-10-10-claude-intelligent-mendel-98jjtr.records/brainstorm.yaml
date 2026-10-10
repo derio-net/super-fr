@@ -1,0 +1,78 @@
+schema_version: 8
+run: 2026-10-10-claude-intelligent-mendel-98jjtr
+step: brainstorm
+outcome: done
+journal:
+  - kind: discovery
+    input: true
+    id: brief
+    title: Operator brief
+    body: "I want to create new workflows that wrap Matt Pocock's skills in github mattpocock/skills."
+  - kind: decision
+    id: d1-wrap-depth
+    title: Matt's flow owns the run, tracked by fr
+    body: Steps mirror Matt's flow (grill-with-docs → to-spec → to-tickets → implement → pr → retro) rather than swapping disciplines into the fr-goal skeleton. Operator asked how superpowers is wrapped/installed; answered — a self-updating prerequisite named by fr skills and manifests, never installed or copied by super-fr.
+  - kind: decision
+    id: d2-source
+    title: Prerequisite plus read-the-installed-SKILL.md
+    body: Operator installs mattpocock-skills (self-updating); fr resolves each named skill's installed SKILL.md per harness and the agent reads the non-invocable ones. No vendoring, no install.sh wiring.
+  - kind: decision
+    id: d3-flows
+    title: Main flow plus diagnosing-bugs
+    body: Two shapes, pocock and pocock-bugs. triage, wayfinder, implement-spec deferred.
+  - kind: decision
+    id: d4-artifacts
+    title: fr files are the record
+    body: to-spec writes an fr spec (Matt's template + ## Requirements); to-tickets writes an fr plan folder, one phase per ticket, blocking edges → depends_on. No tracker publish, no .scratch/.
+  - kind: decision
+    id: d5-gates
+    title: New workflows with Matt's own gates, fr-enforced
+    body: Not fr-goal shapes. Matt's operator checkpoints (grill, to-spec seam check, to-tickets quiz, diagnosing-bugs no-loop stop, retro) become gate:operator steps; fr adds evidence/journal gates where needed.
+  - kind: decision
+    id: d6-entry
+    title: Generic fr-flow driver plus fr-pocock / fr-pocock-bugs aliases
+    body: Operator asked whether this exists; answered — the fr run verbs drive any shape, but no driver skill without fr-goal's contract exists. Build both.
+  - kind: decision
+    id: d7-verification
+    title: candidate pre-merge, live row post-merge
+    body: Candidate scenarios against a stub mattpocock-skills install; the real end-to-end flow is a post-merge live row.
+acceptance:
+  - id: pocock-shapes-valid
+    capability: pocock-workflows
+    acceptance: super-fr ships pocock and pocock-bugs shapes that pass fr workflow check and gate exactly Matt's operator checkpoints
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R1", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R6"]
+    status: not-implemented
+    verify: candidate
+  - id: pocock-skill-resolution
+    capability: pocock-workflows
+    acceptance: fr skills resolve maps <plugin>:<skill> to its installed SKILL.md and invocability per harness, and fails naming the install command when absent; super-fr never installs or vendors Matt's skills
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R2", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R3"]
+    status: not-implemented
+    verify: candidate
+  - id: pocock-brief-skill-sources
+    capability: pocock-workflows
+    acceptance: a step's dispatch brief tells the agent to read the resolved SKILL.md of every non-invocable skill it names and invoke the rest by name
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R4"]
+    status: not-implemented
+    verify: candidate
+  - id: pocock-preflight-refusal
+    capability: pocock-workflows
+    acceptance: a pocock run refuses to start without the skills it names or without setup-matt-pocock-skills' outputs, naming the remedy
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R5"]
+    status: not-implemented
+    verify: candidate
+  - id: pocock-run-walk
+    capability: pocock-workflows
+    acceptance: /fr-pocock and /fr-pocock-bugs drive their shape through fr-flow in isolation, landing the spec and tickets as fr files, implementing each ticket in a fresh context, and refusing the PR while a review is missing or a finding open
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R7", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R8", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R9", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R10", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R11", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R12", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R13", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R14", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R15"]
+    status: not-implemented
+    verify: candidate
+  - id: pocock-live-flow
+    capability: pocock-workflows
+    acceptance: with Matt's plugin installed, a real /fr-pocock run goes from grilling to a PR shaped by Matt's pr skill, with each gate answered by the operator
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R6", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R9", "derio-net/super-fr:docs/superpowers/specs/2026-10-10-pocock-workflows-design.md#R12"]
+    status: not-implemented
+    verify: live
+emitted:
+  spec: docs/superpowers/specs/2026-10-10-pocock-workflows-design.md
+evidence: {}
