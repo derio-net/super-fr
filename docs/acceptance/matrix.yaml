@@ -8114,18 +8114,24 @@ rows:
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_documented_no_argument_walk_and_explicit_mode_use_tty_with_captured_output
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_noninteractive_default_still_reports_owed_and_never_passes
     status: skipped
-    notes: 'Operator authorized scoped pre-merge verification and Ready/merge with actual
-      merged-PR close-out immediately afterward. Real disposable sessions observed launch/uptake,
-      both replacement directions/model-only, unsafe-source refusals, fresh restart,
-      messaging/focus/dedup, HOLD and native trust/startup refusal with no-replay source/shell
-      repair. Read-only real #1107 forge/head checks selected current original-batch
-      handback before HOLD, suppressed obsolete head and repeated delivery; no conflict
-      instruction was sent or executed. Native unsupported-provider UI fallback tracked
-      #1116 is not a claimed failure-case pass. Close-out is separate post-merge row.'
+    notes: 'Scoped pre-merge walk recorded under explicit operator proxy-verdict and
+      Ready authorization. Actual native candidate observations and real read-only #1107
+      current-head/conflict recovery proof supplied; runtime packages unchanged from
+      observed candidate aa48026f. PASS covers revised pre-merge statement only: no
+      conflict instructions sent/executed, no resolution/push or merged-PR closeout
+      claimed. Actual merged-PR closeout remains herdr-opencode-closeout-live immediately
+      post-merge; external effective-model limitation tracked #1116.'
     verify: client-live
     scenario: tests/scenarios/herdr-opencode-live.sh
     issues:
     - derio-net/super-fr#1089
+    walks:
+    - strategy: client-live
+      harness: opencode
+      model: openai/gpt-6.1-sol
+      outcome: pass
+      at: '2026-10-10T05:14:05Z'
+      evidence: /Users/derio/.cache/fr/walks/2026-10-09-feat-1089/20261010T051349Z.log
   - id: herdr-opencode-closeout-live
     capability: interactive herdr OpenCode migration
     acceptance: After its PR actually merges, an OpenCode-backed batch completes the
