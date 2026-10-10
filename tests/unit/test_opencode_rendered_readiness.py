@@ -52,6 +52,7 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
 
         def __init__(self):
             self.calls = []
+            self.argv = ["--model", self.model]
 
         def __call__(self, args):
             self.calls.append(args)
@@ -72,13 +73,12 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
                     }
                 }
             if args[:2] == ["pane", "process-info"]:
+                argv = ["opencode", *self.argv]
+                if self.wrong_model:
+                    argv[argv.index("--model") + 1] = "other/model"
                 proc = {
                     "pid": 2,
-                    "argv": [
-                        "opencode",
-                        "--model",
-                        "other/model" if self.wrong_model else self.model,
-                    ],
+                    "argv": argv,
                     "cwd": d.checkout,
                 }
                 if self.phase == "shell":
@@ -101,7 +101,8 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
                 self.phase = "shell"
             if args[:2] == ["agent", "start"]:
                 self.name = args[2]
-                self.model = args[args.index("--model") + 1]
+                self.argv = args[args.index("--") + 1 :]
+                self.model = self.argv[self.argv.index("--model") + 1]
                 self.phase = "startup"
             if args[:2] == ["agent", "prompt"] and self.reads < 3:
                 raise runner.HerdrError(

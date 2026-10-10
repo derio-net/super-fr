@@ -76,6 +76,11 @@ def observe(d: managed.Descriptor, safe: bool = True, source: bool = False) -> d
     proc = _foreground_process(info, d.harness, allow_workers=not safe)
     argv = proc.get("argv", [])
     cwd_matches = proc.get("cwd") == d.checkout
+    model_matches = (
+        opencode.model_matches(proc, d)
+        if d.harness == "opencode"
+        else argv[1:] == ["--model", d.model]
+    )
     if source and not cwd_matches and proc.get("cwd"):
         try:
             cwd_matches = stable_checkout(str(proc["cwd"])) == d.checkout
@@ -86,7 +91,7 @@ def observe(d: managed.Descriptor, safe: bool = True, source: bool = False) -> d
         or Path(str(argv[0])).name != d.harness
         or not proc.get("pid")
         or not cwd_matches
-        or argv[1:] != ["--model", d.model]
+        or not model_matches
     ):
         # Claude may have approved launch flags; no positional/resume input is accepted.
         kept = restart.kept_args(argv) if argv and d.harness == "claude" else None
