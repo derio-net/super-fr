@@ -109,3 +109,8 @@ Independent reviewer ses_edbee50d9ffe1QT0LNLg3ZdZ6S verified the spec contracts 
 ### independent-live-fix-review · review · Independent live-debug correction review
 
 Read-only reviewer ses_edbee50d9ffe1QT0LNLg3ZdZ6S found no blocking code defect in 045ab9f0..aa48026f. Bounded rendered-input readiness, narrow Claude/MCP safe-source recognition, broad read-only post-uptake identity and persisted uncertainty validated against code/tests. Native unsupported-model UI fallback classified external/out-of-scope under process-argv contract. Live verification remains incomplete; draft delivery supportable only with explicit partial disclosure and unchecked Ready/client-live guard.
+
+<!-- fr:journal kind=finding scope=debug id=unknown-model-falls-back-native-client-resolved-2 created=2026-10-10T04:39:59+00:00 state=open resolves=unknown-model-falls-back-native-client tracked_by=https://github.com/derio-net/super-fr/issues/1116 -->
+### unknown-model-falls-back-native-client-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1116] · resolves unknown-model-falls-back-native-client: Native OpenCode accepted unknown requested model but displayed a different model
+
+Observed native fallback tracked by #1116; current reviewed process-argv contract and incomplete live-walk evidence remain disclosed.
