@@ -1,0 +1,2 @@
+bump: patch
+summary: "triage export: a second scope of the same repo (another host's driver) no longer overwrites the first scope's export; the directory is stamped with its scope id (exported-by), another scope is refused unless `fr triage state export --take-over`, and the export head names the scope id (gh#1101)"

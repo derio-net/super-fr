@@ -64,13 +64,22 @@ def export_command(
     to: Annotated[
         Path, typer.Option("--to", help="Repo directory; the state lands in <dir>/<scope>/.")
     ],
+    take_over: Annotated[
+        bool,
+        typer.Option(
+            "--take-over",
+            help="Export even though another scope id (another host's scope of this repo) "
+            "exported <dir>/<scope>/, and stamp it as this scope's from now on.",
+        ),
+    ] = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
     """Copy the scope's durable state to <dir>/<scope>/. Facts and pages never travel.
-    With a state repo, the privacy guard runs first (cloud-triage R8)."""
+    With a state repo, the privacy guard runs first (cloud-triage R8). Refused when
+    another scope id exported that directory, unless --take-over (gh#1101)."""
     scope = triage_cmd._scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)
     try:
@@ -78,7 +87,9 @@ def export_command(
         if state_repo is not None:
             client = triage_cmd.make_visibility_client()
             guard_state(target, scope=scope, state_repo=state_repo, client_for=lambda _r: client)
-        report = export_state(target, to, check_scope_name(scope.name))
+        report = export_state(
+            target, to, check_scope_name(scope.name), owner=scope_id(scope), take_over=take_over
+        )
     except TriageError as exc:
         _refuse(exc)
     _print(report)

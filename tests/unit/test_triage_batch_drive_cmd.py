@@ -2556,7 +2556,23 @@ def test_a_dedupe_action_is_reported_under_yes_and_acts_on_nothing(
 
 EXPORT_CONFIG = {"export": {"path": "docs/triage"}}
 SCOPE_DIR = "docs/triage/derio-net--super-fr"
-EXPORT_HEAD = "chore/triage-state-wave-1"
+
+
+def _sid() -> str:
+    """This scope's id under the suite's fixed host id."""
+    from fr.triage.scope_config import scope_id
+
+    return scope_id(REPO.replace("/", "--"))
+
+
+def _head(wave: str = "1") -> str:
+    """This scope's export head for *wave*: it names the scope id (gh#1101), which the
+    suite's fixed host id makes stable."""
+    from fr.triage.batch_drive import export_branch
+
+    return export_branch(wave, _sid())
+
+
 ARCHIVED = (
     "      - {kind: closeout, at: '2026-10-01T12:00:00Z', runner: fake, handle: h, archived: 7}\n"
 )
@@ -2671,9 +2687,9 @@ def _export_pr(
     _git(clone, "add", "--all")
     _git(clone, "commit", "--quiet", "-m", "export pr")
     sha = _git(clone, "rev-parse", "HEAD").strip()
-    _git(clone, "push", "--quiet", "--force", "origin", f"export-pr:{EXPORT_HEAD}")
+    _git(clone, "push", "--quiet", "--force", "origin", f"export-pr:{_head()}")
     _git(clone, "checkout", "--quiet", "main")
-    world.pr(40, EXPORT_HEAD, [], **{"head_oid": sha, "files": [f"{SCOPE_DIR}/j.yaml"], **kw})
+    world.pr(40, _head(), [], **{"head_oid": sha, "files": [f"{SCOPE_DIR}/j.yaml"], **kw})
     return sha
 
 
@@ -2687,7 +2703,7 @@ def test_plan_mode_prints_the_export_and_writes_nothing(
     state = _finished_wave(tmp_path, world)
     code, out = _export_drive(state)
     assert code == 0, out
-    assert f"export wave 1 {REPO}: to {SCOPE_DIR} on {EXPORT_HEAD}" in out
+    assert f"export wave 1 {REPO}: to {SCOPE_DIR} on {_head()}" in out
     assert _exports(state) == []
     assert not any(c.startswith("pr_create") for c in world.calls)
 
@@ -2701,24 +2717,54 @@ def test_export_commits_only_the_scope_dir_force_pushes_and_records_the_pr(
     (clone / "stale.txt").write_text("old\n", encoding="utf-8")
     _git(clone, "add", ".")
     _git(clone, "commit", "--quiet", "-m", "stale")
-    _git(clone, "push", "--quiet", "origin", f"stale:{EXPORT_HEAD}")
+    _git(clone, "push", "--quiet", "origin", f"stale:{_head()}")
     _git(clone, "checkout", "--quiet", "main")
     state = _finished_wave(tmp_path, world)
 
     code, out = _export_drive(state, "--once", "--yes")
 
     assert code == 0, out
-    (number,) = [n for n, p in world.prs.items() if p["head_ref"] == EXPORT_HEAD]
+    (number,) = [n for n, p in world.prs.items() if p["head_ref"] == _head()]
     assert f"export wave 1 {REPO}: opened PR #{number}" in out
-    assert f"pr_create {EXPORT_HEAD} -> main" in world.calls
+    assert f"pr_create {_head()} -> main" in world.calls
     assert _exports(state) == [("1", number, False)]
     _git(clone, "fetch", "--quiet", "origin")
-    tip = f"origin/{EXPORT_HEAD}"
+    tip = f"origin/{_head()}"
     assert _heads(state) == [_git(clone, "rev-parse", tip).strip()]  # the SHA it pushed
     assert _git(clone, "rev-parse", f"{tip}^") == _git(clone, "rev-parse", "origin/main")
     changed = _git(clone, "diff", "--name-only", "origin/main", tip).split()
-    assert sorted(changed) == [f"{SCOPE_DIR}/board/manifest.yaml", f"{SCOPE_DIR}/judgements.yaml"]
+    assert sorted(changed) == [
+        f"{SCOPE_DIR}/board/manifest.yaml",
+        f"{SCOPE_DIR}/exported-by",  # the scope id that exported it (gh#1101)
+        f"{SCOPE_DIR}/judgements.yaml",
+    ]
     assert not (state / "export" / "1").exists()  # the scratch worktree is gone
+
+
+def test_a_directory_another_scope_exported_is_refused_and_nothing_is_pushed(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    """gh#1101: another host's scope of this repo (same scope name, another scope id)
+    exported the directory. This driver neither replaces it nor opens a PR, and records
+    no export, so the wave stays owed until the operator decides."""
+    from fr.triage.state_sync import OWNER_FILE, export_state
+
+    state = _finished_wave(tmp_path, world)
+    clone = git_checkout.path
+    export_state(state, clone, SCOPE_DIR, owner="s-ffffffff")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "exported by another host's scope")
+    _git(clone, "push", "--quiet", "origin", "main")
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert "refused, nothing committed or pushed" in out
+    assert "s-ffffffff" in out and _sid() in out
+    assert _exports(state) == []
+    assert not any(c.startswith("pr_create") for c in world.calls)
+    _git(clone, "fetch", "--quiet", "origin")
+    assert _head() not in _git(clone, "branch", "-r")
+    assert _git(clone, "show", f"origin/main:{SCOPE_DIR}/{OWNER_FILE}") == "s-ffffffff\n"
 
 
 def test_an_export_that_changes_nothing_records_no_pr_and_opens_none(
@@ -2728,7 +2774,7 @@ def test_an_export_that_changes_nothing_records_no_pr_and_opens_none(
 
     state = _finished_wave(tmp_path, world)
     clone = git_checkout.path
-    export_state(state, clone, SCOPE_DIR)
+    export_state(state, clone, SCOPE_DIR, owner=_sid())
     _git(clone, "add", ".")
     _git(clone, "commit", "--quiet", "-m", "already exported")
     _git(clone, "push", "--quiet", "origin", "main")
@@ -2740,7 +2786,7 @@ def test_an_export_that_changes_nothing_records_no_pr_and_opens_none(
     assert _exports(state) == [("1", None, False)]
     assert not any(c.startswith("pr_create") for c in world.calls)
     _git(clone, "fetch", "--quiet", "origin")
-    assert EXPORT_HEAD not in _git(clone, "branch", "-r")
+    assert _head() not in _git(clone, "branch", "-r")
 
 
 def test_an_orphan_is_reused_with_the_drivers_own_commit_never_its_foreign_one(
@@ -2759,7 +2805,7 @@ def test_an_orphan_is_reused_with_the_drivers_own_commit_never_its_foreign_one(
     assert f"export wave 1 {REPO}: pushed" in out and "reused PR #40" in out
     assert not any(c.startswith("pr_create") for c in world.calls)
     _git(clone, "fetch", "--quiet", "origin")
-    tip = _git(clone, "rev-parse", f"origin/{EXPORT_HEAD}").strip()
+    tip = _git(clone, "rev-parse", f"origin/{_head()}").strip()
     assert tip != foreign and _heads(state) == [tip]
     assert _exports(state) == [("1", 40, False)]
     assert "planted" not in _git(clone, "show", f"{tip}:{SCOPE_DIR}/judgements.yaml")
@@ -2854,7 +2900,7 @@ def test_an_unreadable_export_head_is_never_merged(
 ) -> None:
     ghost = "0123456789abcdef0123456789abcdef01234567"
     state = _finished_wave(tmp_path, world, exports=_recorded(ghost))
-    world.pr(40, EXPORT_HEAD, [], head_oid=ghost, files=[f"{SCOPE_DIR}/j.yaml"])
+    world.pr(40, _head(), [], head_oid=ghost, files=[f"{SCOPE_DIR}/j.yaml"])
 
     code, out = _export_drive(state, "--once", "--yes")
 
@@ -2908,7 +2954,7 @@ def test_a_closed_unmerged_export_pr_is_recorded_once_then_re_exported(
 
     assert code == 0, out
     assert "closed without a merge" not in out  # said once
-    (new,) = [n for n, p in world.prs.items() if p["head_ref"] == EXPORT_HEAD and n != 40]
+    (new,) = [n for n, p in world.prs.items() if p["head_ref"] == _head() and n != 40]
     assert _exports(state) == [("1", new, False)]  # force-pushed onto the same branch
 
 
@@ -2943,7 +2989,7 @@ def test_a_drive_loop_is_not_done_while_its_export_pr_is_open(
         naps.append(seconds)
         if len(naps) == 2:
             for n, p in world.prs.items():
-                if p["head_ref"] == EXPORT_HEAD:
+                if p["head_ref"] == _head():
                     world.checks[n] = [{"name": "test", "bucket": "pass"}]
         if len(naps) > 6:
             raise AssertionError("the loop did not end")
@@ -2962,7 +3008,7 @@ def test_a_drive_loop_is_not_done_while_its_export_pr_is_open(
 
     assert code == 0, out
     assert len(naps) >= 2  # it kept passing while the PR's checks were pending
-    (number,) = [n for n, p in world.prs.items() if p["head_ref"] == EXPORT_HEAD]
+    (number,) = [n for n, p in world.prs.items() if p["head_ref"] == _head()]
     assert world.merged == [(number, _heads(state)[0], "squash")]
     assert _exports(state) == [("1", number, True)]
 
@@ -2987,7 +3033,7 @@ def test_a_symlinked_export_path_in_the_repo_is_refused_as_a_warn_with_nothing_w
     assert list(outside.iterdir()) == []
     assert _exports(state) == []
     assert not any(c.startswith("pr_create") for c in world.calls)
-    assert EXPORT_HEAD not in _git(clone, "ls-remote", "origin")
+    assert _head() not in _git(clone, "ls-remote", "origin")
 
 
 def test_a_group_scope_that_opts_in_is_warned_to_use_repo(
@@ -3030,9 +3076,9 @@ def test_one_pr_covers_three_finished_waves_and_its_merge_marks_all_three(
 
     assert code == 0, out
     prs = [n for n, p in world.prs.items() if p["head_ref"].startswith("chore/triage-state-")]
-    assert len(prs) == 1 and world.prs[prs[0]]["head_ref"] == "chore/triage-state-wave-3"
+    assert len(prs) == 1 and world.prs[prs[0]]["head_ref"] == _head("3")
     assert _lines(out, "export") == [
-        f"export wave 3 {REPO}: opened PR #{prs[0]} from chore/triage-state-wave-3 at "
+        f"export wave 3 {REPO}: opened PR #{prs[0]} from {_head('3')} at "
         + world.prs[prs[0]]["head_oid"][:12]
     ]
     assert _exports(state) == [("1", prs[0], False), ("2", prs[0], False), ("3", prs[0], False)]
@@ -3058,13 +3104,13 @@ def test_a_wave_finishing_while_the_export_pr_is_open_waits_then_exports_alone(
 
     monkeypatch.setattr(world, "pr_create", _pending)
     assert _export_drive(state, "--once", "--yes")[0] == 0
-    (first,) = [n for n, p in world.prs.items() if p["head_ref"] == "chore/triage-state-wave-2"]
+    (first,) = [n for n, p in world.prs.items() if p["head_ref"] == _head("2")]
     _finish(state, 3)  # wave 3 finishes while PR `first` is open
 
     code, out = _export_drive(state, "--once", "--yes")
 
     assert _lines(out, "export") == [] and _lines(out, "export-merge") == []
-    assert not [p for p in world.prs.values() if p["head_ref"] == "chore/triage-state-wave-3"]
+    assert not [p for p in world.prs.values() if p["head_ref"] == _head("3")]
     assert _exports(state) == [("1", first, False), ("2", first, False)]
 
     world.checks[first] = [{"name": "test", "bucket": "pass"}]
@@ -3073,7 +3119,7 @@ def test_a_wave_finishing_while_the_export_pr_is_open_waits_then_exports_alone(
     code, out = _export_drive(state, "--once", "--yes")  # then wave 3, alone
 
     assert code == 0, out
-    (second,) = [n for n, p in world.prs.items() if p["head_ref"] == "chore/triage-state-wave-3"]
+    (second,) = [n for n, p in world.prs.items() if p["head_ref"] == _head("3")]
     assert _exports(state) == [("1", first, True), ("2", first, True), ("3", second, False)]
 
 
@@ -3104,7 +3150,7 @@ def test_files_the_target_repo_ignores_are_reported_never_force_added(
 
     assert code == 0, out
     _git(clone, "fetch", "--quiet", "origin")
-    changed = _git(clone, "diff", "--name-only", "origin/main", f"origin/{EXPORT_HEAD}").split()
+    changed = _git(clone, "diff", "--name-only", "origin/main", f"origin/{_head()}").split()
     assert f"{SCOPE_DIR}/snapshots/s.json" not in changed
     assert f"{SCOPE_DIR}/judgements.yaml" in changed
     snap = f"{SCOPE_DIR}/snapshots/s.json"
@@ -3190,13 +3236,13 @@ def test_a_fork_pr_on_the_export_branch_name_is_ignored(
 ) -> None:
     """p4-r7: never adopted, never warned on; the driver exports as if it were not there."""
     state = _finished_wave(tmp_path, world)
-    world.pr(40, EXPORT_HEAD, [], cross_repo=True, author="someone", head_oid="f" * 40)
+    world.pr(40, _head(), [], cross_repo=True, author="someone", head_oid="f" * 40)
 
     code, out = _export_drive(state, "--once", "--yes")
 
     assert code == 0, out
     assert _lines(out, "warn") == []
-    (mine,) = [n for n, p in world.prs.items() if p["head_ref"] == EXPORT_HEAD and n != 40]
+    (mine,) = [n for n, p in world.prs.items() if p["head_ref"] == _head() and n != 40]
     assert _exports(state) == [("1", mine, False)]
 
 
@@ -3228,7 +3274,7 @@ def test_a_reused_pr_with_nothing_to_export_is_left_open_with_one_stale_warn(
     _export_pr(world, git_checkout.path)
     state = _finished_wave(tmp_path, world)
     clone = git_checkout.path
-    export_state(state, clone, SCOPE_DIR)
+    export_state(state, clone, SCOPE_DIR, owner=_sid())
     _git(clone, "add", ".")
     _git(clone, "commit", "--quiet", "-m", "already exported")
     _git(clone, "push", "--quiet", "origin", "main")
@@ -3273,7 +3319,7 @@ def test_an_orphan_based_on_another_branch_is_not_reused_and_nothing_is_pushed(
 
     assert code == 3, out
     assert "is based on release/1.x, not main" in out
-    remote = _git(clone, "ls-remote", "origin", f"refs/heads/{EXPORT_HEAD}")
+    remote = _git(clone, "ls-remote", "origin", f"refs/heads/{_head()}")
     assert remote.split()[0] == sha  # nothing pushed over it
     assert _exports(state) == []
     assert not any(c.startswith("pr_create") for c in world.calls)
@@ -3284,7 +3330,7 @@ def test_extra_orphans_are_warned_stale_once_each(
 ) -> None:
     """p4-r16: PR #40 (wave 1) is reused; #45 on another wave's branch is named stale."""
     _export_pr(world, git_checkout.path)
-    world.pr(45, "chore/triage-state-wave-0", [], head_oid="e" * 40)
+    world.pr(45, _head("0"), [], head_oid="e" * 40)
     state = _finished_wave(tmp_path, world)
 
     code, out = _export_drive(state, "--once", "--yes")

@@ -59,3 +59,9 @@ The state directory stays the working copy because `fr triage batch drive` write
 on every pass. `.fr/triage.yaml` sets `export: {path: docs/triage}`, so the driver exports
 the state as a PR once a wave finishes and merges it when green; export by hand after a
 triage session.
+
+`derio-net--super-fr/exported-by` names the scope id that exports here. Every host's scope
+of this repo shares the directory name, so an export from another scope id (a cloud driver,
+another machine) is refused rather than replace this copy; `fr triage state export
+--take-over` moves the directory to that scope on purpose. Import ignores the stamp, so
+`fr triage state import` works from any host.
