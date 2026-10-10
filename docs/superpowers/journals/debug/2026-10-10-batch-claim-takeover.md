@@ -44,3 +44,8 @@ stale(c) = expired, or now - heartbeat > (expires - heartbeat)/4, using the expi
 ### 5287f428e9b7 · finding [fixed] · Takeover reachable, taken claims owed, stale override and scope retire
 
 claims.py (taken_keys, stale, held_line hint), claim_writes.py (allow=expired|stale|any via may_displace), triage_batch_cmd.py (_admit_held, _say_takes), triage_claim_cmd.py (take/release --stale, claim_taken event, scope retire), model.py (ClaimTakenEvent, judgements schema 8). Pinned by the gh#1120/gh#1123 tests in test_triage_claim_cmd.py, test_triage_claim_writes.py, test_triage_claims.py and the rewritten triage-claims-expired scenario. Full suite NOT run locally (operator instruction: host overloaded); PR CI is the evidence.
+
+<!-- fr:journal kind=review scope=debug id=f1b2a36c6770 created=2026-10-10T19:11:02+00:00 -->
+### f1b2a36c6770 · review · Self-review of the diff: one finding fixed, one noted
+
+Fixed: batch edit --no-wave on a proposed batch released every member's claim, including a taken one, which the next sync would re-claim (churn). It now keeps taken keys (test_no_wave_keeps_a_taken_members_claim). Noted, not changed: claim take writes the forge before appending claim_taken; if that judgements write fails, the claim stands without the event and the next sync releases it. Same ordering as claim sync's claims_released record; the take can be re-run. No independent reviewer subagent was dispatched.
