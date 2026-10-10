@@ -331,3 +331,8 @@ Repair rechecks both stores and retries unfinished failure activation without ap
 ### p2-r3-resolved · finding [fixed] · resolves p2-r3: Preview used mutating state loader (phase 2)
 
 Preview resolves/loads state read-only with sync/preparation disabled; act acquires scope ownership before preparation/fetch and performs final push before unlocking. Tests cover unchanged files, synchronization metadata, exclusions, legacy state and lock-loser behavior.
+
+<!-- fr:journal kind=finding scope=plan id=p2-client-live-tty created=2026-10-10T01:35:34+00:00 phase=2 state=open review_scope=in -->
+### p2-client-live-tty · finding [open] (reviewer: in scope) · Documented client-live walk could not invoke its verdict flow (phase 2)
+
+Generated operator walk invoked scenario without arguments, making default exit3 an impossible success path; captured stdout/stderr also hid verdict prompts. Corrected no-argument interactive invocation uses /dev/tty, requires actual observations and evidence, preserves noninteractive exit3. Targeted PTY checks passed, actual operator-authorized walk now being performed.
