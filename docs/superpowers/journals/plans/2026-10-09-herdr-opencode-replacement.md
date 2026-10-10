@@ -356,3 +356,8 @@ Pre-existing native provider resolution/fallback outside the explicit process-ar
 ### live-r2 · finding [open] (reviewer: in scope) · Draft delivery must disclose incomplete live evidence (phase 2)
 
 Independent final review found draft provisional wording insufficient: positive conflict/closeout prerequisites and intended bad-model failure case are not all-live proven. Record observed subset, native model boundary and unchecked client-live/Ready requirement; do not certify a PASS.
+
+<!-- fr:journal kind=finding scope=plan id=live-r2-resolved created=2026-10-10T04:30:52+00:00 state=fixed resolves=live-r2 -->
+### live-r2-resolved · finding [fixed] · resolves live-r2: Draft delivery must disclose incomplete live evidence
+
+Acceptance notes now enumerate actual observed subset, unproven cases, native model limitation, cleanup and no-PASS verdict. Delivery body includes the same disclosure and operator checklist stays unchecked; this resolution closes disclosure, not the live walk.
