@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Operator-led client-live walk. Never sends input or mutates production state.
 set -euo pipefail
+instructions() {
 cat <<'WALK'
 OWED: operator-led herdr client-live walk (Refs #1089).
 Use a disposable repository, scope and named sessions inside the real herdr client.
@@ -24,17 +25,29 @@ Record installed fr/herdr/OpenCode versions and redacted pane/name/branch eviden
 6. Save a redacted observation log for EVERY check. Leave Ready unchecked on any
    failure/missing observation. Restore/close only the disposable sessions you own.
 
-This script only prints the walk; passing instruction tests are NOT live evidence.
+Passing instruction tests are NOT live evidence; only the operator records a verdict.
 WALK
+}
 case "${1:-}" in
-  "") exit 3 ;; # printing instructions is not a passing client-live walk
-  --record-verdict)
-    [ -t 0 ] || { echo 'Operator verdict requires an interactive terminal.' >&2; exit 2; }
-    read -r -p 'Observed EVERY check? Type PASS or FAIL: ' verdict
-    read -r -p 'Path to the redacted observation log: ' log
-    [ -f "$log" ] && [ -s "$log" ] || { echo 'Nonempty observation log required.' >&2; exit 2; }
-    [ "$verdict" = PASS ] || { echo 'Live walk failed or remains owed.' >&2; exit 1; }
-    echo "operator verdict: PASS; evidence: $log (record via acceptance CLI)"
-    ;;
+  ""|--record-verdict) ;;
   *) echo 'Usage: herdr-opencode-live.sh [--record-verdict]' >&2; exit 2 ;;
 esac
+# verification walk captures stdout/stderr and supplies no scenario arguments.
+# Use the actual controlling terminal, never captured stderr or inherited stdin.
+if { exec 3<>/dev/tty; } 2>/dev/null && [ -t 3 ]; then
+  instructions >&3
+  printf 'Observed EVERY check? Type PASS or FAIL: ' >&3
+  IFS= read -r verdict <&3 || { echo 'Operator verdict unavailable; walk remains owed.' >&2; exit 2; }
+  printf 'Path to the redacted observation log: ' >&3
+  IFS= read -r log <&3 || { echo 'Observation log unavailable; walk remains owed.' >&2; exit 2; }
+  [ -f "$log" ] && [ -s "$log" ] || { echo 'Nonempty observation log required.' >&2; exit 2; }
+  [ "$verdict" = PASS ] || { echo 'Live walk failed or remains owed.' >&2; exit 1; }
+  echo "operator verdict: PASS; evidence: $log (record via acceptance CLI)"
+else
+  instructions
+  if [ "${1:-}" = --record-verdict ]; then
+    echo 'Operator verdict requires an interactive terminal.' >&2
+    exit 2
+  fi
+  exit 3 # printing instructions is never a passing client-live walk
+fi

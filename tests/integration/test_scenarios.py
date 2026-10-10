@@ -100,6 +100,8 @@ def test_herdr_opencode_live_instructions(tmp_path: Path) -> None:
     """Only the walk's honest instruction/verdict contract; never a live pass."""
     done = subprocess.run(
         ["bash", str(SCENARIOS / "herdr-opencode-live.sh")],
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
         capture_output=True,
         text=True,
         timeout=10,
