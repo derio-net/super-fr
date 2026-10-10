@@ -14,3 +14,8 @@ Read, not run (no second-host export has happened; gh#1101). `triage_state_cmd.e
 ### rc · root-cause · Export identity is the scope name and wave, which every host's scope of a repo shares
 
 Both the export directory (`<path>/<scope.name>`) and the export head (`chore/triage-state-wave-<N>`) derive from values that are identical across hosts; only `scope_id` (sha256(name, host_id)) tells scopes apart. One cause, two surfaces (h-branch confirmed by reading `_export_reads`/`export_target`/`_export`). Operator chose the owner guard over keying the directory by the per-host scope id, because docs/triage is the repo's single reviewed copy and import must keep working on any host.
+
+<!-- fr:journal kind=finding scope=debug id=fix created=2026-10-10T19:13:27+00:00 state=fixed -->
+### fix · finding [fixed] · Owner stamp on the export directory, scope id in the export head
+
+state_sync.export_state(owner=, take_over=) checks/writes `exported-by` before any copy; CLI `--take-over`; driver never takes over (refusal path: nothing committed or pushed). export_branch/export_wave_of take the scope id (keyword-required in the pure drive functions). Failing tests first (commit 'test(triage): ... failing'): test_an_export_refuses_a_directory_another_scope_exported, test_another_scopes_export_pr_is_never_reused, test_a_directory_another_scope_exported_is_refused_and_nothing_is_pushed, test_the_export_verb_refuses_another_scopes_directory_until_take_over. Full suite: CI (operator instruction, tests: ci).
