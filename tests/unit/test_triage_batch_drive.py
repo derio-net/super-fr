@@ -1161,7 +1161,7 @@ def test_one_export_covers_every_unexported_finished_wave_named_for_the_highest(
     got = drive_pass(_three_waves())
     (export,) = [a for a in got.actions if a.wave is not None]
     assert (export.kind, export.wave, export.covers) == ("export", "10", ("1", "2", "10"))
-    assert "chore/triage-state-wave-10" in export.detail
+    assert export_branch("10", SID) in export.detail
     base = drive_pass(_three_waves(finished=frozenset())).summary
     assert got.summary.closing == base.closing + 1  # one owed export per PR, not per wave
 
@@ -1217,7 +1217,7 @@ def test_export_target_names_the_newest_unmerged_pr_and_its_waves() -> None:
     snap = _three_waves(
         exports=[*_covering(39, merged=True, waves=("1",)), *_covering(40, waves=("2", "10"))]
     )
-    target = export_target(REPO, snap.batches, snap.repos, snap.finished, snap.exports)
+    target = export_target(REPO, snap.batches, snap.repos, snap.finished, snap.exports, scope=SID)
     assert target is not None
     assert (target.wave, target.covers, target.recorded and target.recorded.pr) == (
         "10",
