@@ -1,0 +1,26 @@
+schema_version: 10
+run: 2026-10-10-claude-intelligent-mendel-98jjtr
+workflow: fr-goal@1
+branch: claude/intelligent-mendel-98jjtr
+started: '2026-10-10T18:56:22+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
+driver: standalone
+fr_version: 5.19.1
