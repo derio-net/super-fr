@@ -237,6 +237,7 @@ def test_synthetic_failure_leaves_nonactive_checkpoint_without_cleanup(operation
     fake.failure = failure
     verdict, detail, recovery = opencode.restart_pane(d.pane, yes=True, exclude=set())
     assert verdict == "fail" and "synthetic failure" in detail and recovery
+    assert " --auto;" in recovery
     assert managed.load(d.pane).checkpoint != "active"
     assert "close" not in str(fake.calls)
     count = len(fake.calls)

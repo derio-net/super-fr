@@ -60,7 +60,9 @@ exe=()
 case "$(uv tool install --help 2>&1 || true)" in
   *--with-executables-from*) exe=(--with-executables-from fr-herdr) ;;
 esac
-uv tool install --force "${with[@]}" ${exe[@]+"${exe[@]}"} "$from" >&2
+# A branch keeps the released package version, so force uv to rebuild local wheels
+# instead of reusing an earlier build of the same version from its cache.
+uv tool install --force --refresh "${with[@]}" ${exe[@]+"${exe[@]}"} "$from" >&2
 if [ ! -e "$prefix/bin/fr-herdr" ] && [ -x "$UV_TOOL_DIR/fr/bin/fr-herdr" ]; then
   ln -s "$UV_TOOL_DIR/fr/bin/fr-herdr" "$prefix/bin/fr-herdr"
 fi

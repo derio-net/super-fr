@@ -223,7 +223,7 @@ def restart_pane(pane: str, *, yes: bool, exclude: set[str]) -> tuple[str, str, 
             recovery = (
                 f"Inspect {pane} and {d.name}; do not blindly resubmit. "
                 f"From a confirmed shell: cd {shlex.quote(d.checkout)} && "
-                f"opencode --model {shlex.quote(d.model)}; reconstruct {d.item} "
+                f"opencode --model {shlex.quote(d.model)} --auto; reconstruct {d.item} "
                 "from durable fr state and explicitly reconcile the descriptor."
             )
 
