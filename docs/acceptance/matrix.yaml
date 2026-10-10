@@ -8020,7 +8020,7 @@ rows:
     acceptance: OpenCode batches launch with the selected model from the stable checkout
       and retain status, messaging, focus, conflict and close-out identity.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-09-herdr-opencode-replacement-design.md#R1
     levels:
       unit:
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it
@@ -8043,7 +8043,7 @@ rows:
       second dispatch, preserving identity and obtaining recoverable audited failure
       or repair.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-09-herdr-opencode-replacement-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_replace.py#test_success_preserves_dispatch_identity_and_lock_order
@@ -8083,7 +8083,7 @@ rows:
     acceptance: Managed idle OpenCode sessions restart fresh from durable branch state
       with their identity/model and delivered-draft HOLD preserved.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-09-herdr-opencode-replacement-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_captured_input_contract
@@ -8108,7 +8108,7 @@ rows:
       HOLD and recoverable failure, with read-only current-conflict hand-back selection
       against an actual conflicting PR.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
     levels:
       unit:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_live_instructions
@@ -8139,15 +8139,26 @@ rows:
       real pickup/verify-merge/archive flow from the stable primary checkout and its
       disposable workspace/session are safely cleaned up.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
     levels: {}
-    status: not-implemented
-    notes: 'Operator explicitly authorized merging #1115 then immediately completing
-      real close-out in a new session. Requires an actually merged PR; no pre-merge
-      scenario can manufacture that evidence. Follow the spec Test Plan and fr pickup
-      --run 2026-10-09-feat-1089, then record redacted live walk.'
+    status: skipped
+    notes: 'Live post-merge walk on 2026-10-10: new OpenCode 1.18.35 / openai/gpt-6.1-sol
+      control session stayed in stable primary checkout through real pickup, merge verification,
+      scoped archive and delivered feature-session/tab cleanup. Initial stale-record
+      failure stopped the walk; after operator reconciliation the reaped-workspace merge
+      gate passed. Feature isolation state, container and session index absent; old
+      named agent absent after exact-tab closure. Evidence: docs/acceptance/herdr-opencode-closeout-1089.md.
+      Real walk, not CI automation; #1116 remains deferred and unchanged. Archive storage
+      finding tracked separately as #1117.'
     verify: live
     issues:
     - derio-net/super-fr#1089
     harnesses:
     - opencode
+    walks:
+    - strategy: live
+      harness: opencode
+      model: openai/gpt-6.1-sol
+      outcome: pass
+      at: '2026-10-10T08:32:43Z'
+      evidence: super-fr:docs/acceptance/herdr-opencode-closeout-1089.md
