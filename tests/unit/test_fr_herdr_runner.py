@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -183,7 +184,10 @@ def test_opencode_refuses_an_unqualified_model_before_opening_a_tab(herdr: _Herd
     assert herdr.calls == []
 
 
-def test_original_opencode_batch_message_persists_conflict_identity(herdr: _Herdr) -> None:
+@pytest.mark.parametrize("status", ["idle", "done"])
+def test_original_opencode_batch_message_persists_conflict_identity(
+    herdr: _Herdr, status: str
+) -> None:
     from fr_herdr import managed
 
     item = _item(harness="opencode", model="openai/gpt-6.1-sol")
@@ -198,6 +202,8 @@ def test_original_opencode_batch_message_persists_conflict_identity(herdr: _Herd
                     "pane_id": pane,
                     "name": agent_name(item.id),
                     "agent": "opencode",
+                    "agent_status": status,
+                    "interactive_ready": True,
                 }
             ]
         }
@@ -207,6 +213,48 @@ def test_original_opencode_batch_message_persists_conflict_identity(herdr: _Herd
     d = managed.load(pane)
     assert d.item == item.id and d.role == "batch"
     assert d.conflict_head == "abc" and d.conflict_brief == brief
+
+
+@pytest.mark.parametrize(
+    "status,ready",
+    [("working", True), ("blocked", True), ("unknown", True), ("idle", False), ("done", None)],
+)
+def test_managed_handback_rechecks_idle_snapshot_under_lock_before_prompt(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch, status: str, ready: bool | None
+) -> None:
+    from fr_herdr import managed
+
+    item = _item(harness="opencode", model="openai/gpt-6.1-sol")
+    runner = HerdrRunner.from_env()
+    pane = runner.dispatch(item)
+    herdr.listing = {
+        "result": {"tabs": [{"tab_id": "w2:t1H", "label": item.id, "agent_status": "idle"}]}
+    }
+    agent = {
+        "tab_id": "w2:t1H",
+        "pane_id": pane,
+        "name": agent_name(item.id),
+        "agent": "opencode",
+        "agent_status": "idle",
+        "interactive_ready": True,
+    }
+    herdr.agents = {"result": {"agents": [agent]}}
+    assert runner.session_statuses([item])[item.id] == "idle"
+    original_lock = managed.pane_lock
+    original_descriptor = managed.load(pane)
+
+    @contextmanager
+    def lock_after_status_changed(target: str):
+        with original_lock(target):
+            agent.update(agent_status=status, interactive_ready=ready)
+            yield
+
+    monkeypatch.setattr(managed, "pane_lock", lock_after_status_changed)
+    before = len(herdr.calls)
+    with pytest.raises(herdr_runner.HerdrError, match="not idle and ready"):
+        runner.message(item, "Merge conflict on batch lifecycle: at head abc, conflicts with main.")
+    assert not any(c[:2] == ["agent", "prompt"] for c in herdr.calls[before:])
+    assert managed.load(pane) == original_descriptor
 
 
 def test_opencode_stalled_prompt_never_retries_enter_into_captured_overlay(

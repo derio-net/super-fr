@@ -240,6 +240,11 @@ class HerdrRunner:
                                     or fresh[0].get("agent") != d.harness
                                 ):
                                     raise HerdrError("managed message identity changed")
+                                if (
+                                    fresh[0].get("agent_status") not in {"idle", "done"}
+                                    or fresh[0].get("interactive_ready") is not True
+                                ):
+                                    raise HerdrError("managed message target is not idle and ready")
                                 if text.startswith("Merge conflict on batch "):
                                     managed.save(managed.handback(d, text))
                                 _run_herdr(["agent", "prompt", agent_name(item.id), text])
