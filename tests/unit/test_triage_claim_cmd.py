@@ -33,6 +33,7 @@ issues:
   "super-fr#3": {tier: 1}
   "super-fr#4": {tier: 1}
   "super-fr#5": {tier: 1}
+  "super-fr#6": {tier: 1}
 batches:
   - {id: mine, title: mine, ids: ["super-fr#2", "super-fr#3", "super-fr#4"], wave: 1}
   - {id: spare, title: spare, ids: ["super-fr#1"]}
@@ -79,11 +80,12 @@ def world(tmp_path: Path, me: str, monkeypatch: pytest.MonkeyPatch) -> tuple[Pat
         2: _marker(OLD, "old", at=LONG_AGO, expires=datetime(2026, 9, 2, tzinfo=UTC)),
         3: _marker(me, "mine", at=LONG_AGO, expires=FAR),
         5: _marker(me, "gone", at=LONG_AGO, expires=FAR),
+        6: _marker(OLD, "dead", at=LONG_AGO, expires=datetime(2026, 9, 2, tzinfo=UTC)),
     }
     client = FakeGhClient()
     client.comment_author = "operator"
     issues = []
-    for n in range(1, 6):
+    for n in range(1, 7):
         claimed = n in markers
         client.add_issue(REPO, n, labels={"fr:claimed"} if claimed else set())
         claims = []
@@ -240,3 +242,122 @@ def test_claim_release_without_yes_writes_nothing(world: tuple[Path, FakeGhClien
     code, out = _run(tmp_path, "claim", "release", "super-fr#3")
     assert code == 0 and "--yes" in out
     assert client.calls == []
+
+
+# gh#1120: taking over an expired foreign claim, end to end through the CLI.
+
+
+def _batch(tmp_path: Path, batch_id: str) -> Any:
+    return next(
+        b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == batch_id
+    )
+
+
+def test_batch_create_accepts_an_expired_held_member_and_names_the_take(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tmp_path, client = world
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    code, out = _run(tmp_path, "batch", "create", "revive", "--title", "t", "--issue", "super-fr#6")
+    assert code == 0, out
+    assert _batch(tmp_path, "revive").ids == ["super-fr#6"]
+    # the take is the operator's: create writes no claim over the expired one
+    assert _writes(client) == []
+    assert "fr triage claim take super-fr#6 --batch revive --yes" in " ".join(out.split())
+
+
+def test_batch_create_still_refuses_a_live_held_member(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tmp_path, client = world
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    text = (tmp_path / "judgements.yaml").read_text("utf-8")
+    (tmp_path / "judgements.yaml").write_text(
+        text.replace('ids: ["super-fr#1"]', 'ids: ["super-fr#5"]')
+    )
+    code, out = _run(tmp_path, "batch", "create", "grab", "--title", "t", "--issue", "super-fr#1")
+    assert code == 2, out
+    assert "claim take" not in out  # a live claim gets no take hint
+    assert all(b.id != "grab" for b in load_judgements(tmp_path / "judgements.yaml").batches)
+
+
+def test_batch_create_with_a_wave_claims_the_free_members_and_leaves_the_expired_one(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch, me: str
+) -> None:
+    tmp_path, client = world
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    text = (tmp_path / "judgements.yaml").read_text("utf-8")
+    (tmp_path / "judgements.yaml").write_text(
+        text.replace('ids: ["super-fr#1"]', 'ids: ["super-fr#5"]')
+    )
+    code, out = _run(
+        tmp_path,
+        "batch",
+        "create",
+        "revive",
+        "--title",
+        "t",
+        "--issue",
+        "super-fr#6",
+        "--wave",
+        "2",
+        "--yes",
+    )
+    assert code == 0, out
+    assert _batch(tmp_path, "revive").wave == 2
+    assert [m.signer for m in _markers(client, 6)] == [OLD]
+
+
+def test_batch_edit_add_issue_accepts_an_expired_held_member(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tmp_path, client = world
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    code, out = _run(tmp_path, "batch", "edit", "spare", "--add-issue", "super-fr#6")
+    assert code == 0, out
+    assert _batch(tmp_path, "spare").ids == ["super-fr#1", "super-fr#6"]
+    assert "fr triage claim take super-fr#6 --batch spare --yes" in " ".join(out.split())
+
+
+def test_take_on_a_waveless_batch_records_the_take_and_sync_keeps_the_claim(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch, me: str
+) -> None:
+    tmp_path, client = world
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    code, out = _run(tmp_path, "batch", "create", "revive", "--title", "t", "--issue", "super-fr#6")
+    assert code == 0, out
+    code, out = _run(tmp_path, "claim", "take", "super-fr#6", "--batch", "revive", "--yes")
+    assert code == 0, out
+    event = _batch(tmp_path, "revive").events[-1]
+    assert event.kind == "claim_taken" and event.keys == ["super-fr#6"]
+    # facts as the next collect would show them: our claim, a day later
+    later = datetime(2026, 9, 27, 6, 0, tzinfo=UTC)
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    ours = next(m for m in _markers(client, 6) if m.signer == me)
+    cid = next(c["id"] for c in client.issue_comments[(REPO, 6)] if parse_marker(c["body"]) == ours)
+    six = next(i for i in facts["issues"] if i["number"] == 6)
+    six["claims"] = [_facts_claim(ours, cid, NOW)]
+    (tmp_path / "facts.json").write_text(json.dumps(facts), "utf-8")
+    monkeypatch.setattr(triage_claim_cmd, "_now", lambda: later)
+    code, out = _run(tmp_path, "claim", "sync")
+    assert code == 0, out
+    assert "release super-fr#6" not in out
+    assert "refresh super-fr#6" in out
+
+
+def test_held_line_names_a_take_sequence_that_works() -> None:
+    from fr.triage.claims import Claim, held_line
+
+    h = Claim(
+        signer=OLD,
+        batch="dead",
+        claimed=LONG_AGO,
+        heartbeat=LONG_AGO,
+        expires=datetime(2026, 9, 2, tzinfo=UTC),
+        comment_id=1,
+        created_at=LONG_AGO,
+    )
+    line = " ".join(held_line("super-fr#6", h, NOW).split())
+    assert "batch create" in line and "--add-issue" in line
+    assert "fr triage claim take super-fr#6 --batch <id> --yes" in line
+    assert "claim take" not in held_line("super-fr#6", h, LONG_AGO)
