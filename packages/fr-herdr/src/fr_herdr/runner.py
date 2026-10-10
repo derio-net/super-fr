@@ -215,8 +215,9 @@ class HerdrRunner:
     def message(self, item: WorkItem, text: str) -> None:
         """Prompt the item's agent with *text* (spec 2026-10-06-verification-strategies
         §G, R23): `herdr agent prompt <agent_name(item.id)> <text>`."""
-        # Save before sending: a crash after prompt uptake must not lose the handback.
-        if text.startswith("Merge conflict on batch ") and os.environ.get("HERDR_SOCKET_PATH"):
+        # Every managed message shares restart's exclusive input ownership, not
+        # only conflict handbacks. Save a handback before sending it.
+        if os.environ.get("HERDR_SOCKET_PATH"):
             for tab in _tabs_labelled(_list_tabs(), item.id):
                 for agent in _list_agents():
                     if agent.get("tab_id") == tab.get("tab_id"):
@@ -224,8 +225,16 @@ class HerdrRunner:
                         if d and d.item == item.id:
                             with managed.pane_lock(d.pane):
                                 if d.checkpoint != "active" or managed.load(d.pane) != d:
-                                    raise HerdrError("managed handback has an unresolved operation")
-                                managed.save(managed.handback(d, text))
+                                    raise HerdrError("managed message has an unresolved operation")
+                                fresh = [a for a in _list_agents() if a.get("pane_id") == d.pane]
+                                if (
+                                    len(fresh) != 1
+                                    or fresh[0].get("name") != d.name
+                                    or fresh[0].get("agent") != d.harness
+                                ):
+                                    raise HerdrError("managed message identity changed")
+                                if text.startswith("Merge conflict on batch "):
+                                    managed.save(managed.handback(d, text))
                                 _run_herdr(["agent", "prompt", agent_name(item.id), text])
                                 return
         _run_herdr(["agent", "prompt", agent_name(item.id), text])
@@ -348,7 +357,7 @@ class HerdrRunner:
             if descriptor:
                 descriptor = descriptor.model_copy(update={"checkpoint": "submission-started"})
                 managed.save(descriptor)
-            _submit(name, str(payload["brief"]))
+            _submit(name, str(payload["brief"]), harness=harness.kind)
             if descriptor:
                 managed.save(descriptor.model_copy(update={"checkpoint": "active"}))
         except BaseException:
@@ -419,7 +428,7 @@ def _start_agent(argv: list[str]) -> None:
     start_agent(argv, run=_run_herdr, sleep=_sleep, tries=PANE_BUSY_TRIES, wait=PANE_BUSY_WAIT)
 
 
-def _submit(name: str, brief: str) -> None:
+def _submit(name: str, brief: str, *, harness: str = "claude") -> None:
     """Submit *brief* and confirm the agent took it up (gh#956).
 
     Without `--wait`, `agent prompt` reports success once the text and Enter are
@@ -434,6 +443,14 @@ def _submit(name: str, brief: str) -> None:
     except HerdrError as exc:
         if exc.code != "agent_prompt_stalled":
             raise
+        if harness == "opencode":
+            # Live Commands overlays can still report idle/done/readiness. A
+            # stalled prompt does not prove a focused textarea holds our brief;
+            # never send Enter into an unknown interactive state.
+            raise HerdrError(
+                "OpenCode prompt uptake stalled; refusing an unverified Enter retry",
+                code=exc.code,
+            ) from exc
     # Enter cannot answer a dialog here: `agent start` returned only once the agent
     # was ready for input, and a dialog since would have read `blocked`, which the
     # wait above accepts, so a stall means an input box that holds the brief.

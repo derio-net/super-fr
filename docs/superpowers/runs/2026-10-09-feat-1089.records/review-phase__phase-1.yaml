@@ -1,0 +1,34 @@
+schema_version: 8
+run: 2026-10-09-feat-1089
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-r1
+    phase: 1
+    review_scope: in
+    title: OpenCode stalled prompt retries Enter without safe-input proof
+    body: 'runner.py:430-442: new OpenCode dispatch inherited a Claude retry assumption contradicted by the live Commands overlay. A stalled submission cannot prove the expected brief remains in a focused textarea.'
+  - kind: finding
+    id: p1-r2
+    phase: 1
+    review_scope: in
+    title: Ordinary messaging bypasses exclusive managed restart ownership
+    body: 'runner.py:215-231 and opencode.py:170-189: only conflict handbacks acquired the pane lock. An ordinary message could start work between restart eligibility and exit.'
+  - kind: review
+    id: phase1-independent-review
+    phase: 1
+    title: Independent lifecycle review and verified findings
+    body: 'Separate reviewer inspected spec, phase1 plan/journal and code; 162 targeted checks passed in its context. Two in-scope safety findings independently reproduced. Orchestrator verified both, fixed them and ran 122 targeted managed/runner/restart checks, ruff and mypy green. No live pane mutation or full-suite green is claimed.'
+resolves:
+  - id: p1-r1
+    state: fixed
+    body: 'Submission is harness-aware. OpenCode refuses an unverified Enter retry on stalled uptake, preserving the ambiguous error rather than sending keys into overlays; Claude keeps its existing retry. Regression proves no Enter is sent for the grounded overlay case.'
+  - id: p1-r2
+    state: fixed
+    body: 'Every managed message acquires the shared server/pane lock, rechecks checkpoint and live name/kind identity under it, and only then sends. Lock-contention and unresolved-checkpoint tests prove the losing caller sends no prompt.'
+evidence:
+  review: phase1-independent-review
+  reviewer: ses_edce53464ffeEI7Li5A1QpLRPO
+  model: openai/gpt-6.1-sol

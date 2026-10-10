@@ -154,12 +154,89 @@ def test_original_opencode_batch_message_persists_conflict_identity(herdr: _Herd
     pane = HerdrRunner.from_env().dispatch(item)
     # Synthetic listing joins the captured create identity to this test item.
     herdr.listing = {"result": {"tabs": [{"tab_id": "w2:t1H", "label": item.id}]}}
-    herdr.agents = {"result": {"agents": [{"tab_id": "w2:t1H", "pane_id": pane}]}}
+    herdr.agents = {
+        "result": {
+            "agents": [
+                {
+                    "tab_id": "w2:t1H",
+                    "pane_id": pane,
+                    "name": agent_name(item.id),
+                    "agent": "opencode",
+                }
+            ]
+        }
+    }
     brief = "Merge conflict on batch lifecycle: PR #1, at head abc, conflicts with main. six steps"
     HerdrRunner.from_env().message(item, brief)
     d = managed.load(pane)
     assert d.item == item.id and d.role == "batch"
     assert d.conflict_head == "abc" and d.conflict_brief == brief
+
+
+def test_opencode_stalled_prompt_never_retries_enter_into_captured_overlay(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+
+    def stalled(args: list[str]) -> dict[str, Any]:
+        calls.append(args)
+        if args[:2] == ["agent", "prompt"]:
+            raise herdr_runner.HerdrError("stalled with Commands open", code="agent_prompt_stalled")
+        if args[:2] == ["pane", "read"]:
+            return _fixture("opencode/dialog.json")
+        return {}
+
+    monkeypatch.setattr(herdr_runner, "_run_herdr", stalled)
+    with pytest.raises(herdr_runner.HerdrError, match="unverified Enter"):
+        herdr_runner._submit("fixture", "brief", harness="opencode")
+    assert not any(c[:2] == ["agent", "send-keys"] for c in calls)
+
+
+def test_ordinary_managed_message_cannot_bypass_restart_lock(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr_herdr import managed
+
+    item = _item(harness="opencode", model="openai/gpt-6.1-sol")
+    pane = HerdrRunner.from_env().dispatch(item)
+    herdr.listing = {"result": {"tabs": [{"tab_id": "w2:t1H", "label": item.id}]}}
+    herdr.agents = {
+        "result": {
+            "agents": [
+                {
+                    "tab_id": "w2:t1H",
+                    "pane_id": pane,
+                    "name": agent_name(item.id),
+                    "agent": "opencode",
+                }
+            ]
+        }
+    }
+    before = len(herdr.calls)
+
+    def held(_pane: str) -> Any:
+        raise managed.ManagedError("pane held by restart")
+
+    monkeypatch.setattr(managed, "pane_lock", held)
+    with pytest.raises(managed.ManagedError, match="held by restart"):
+        HerdrRunner.from_env().message(item, "ordinary follow-up")
+    assert not any(c[:2] == ["agent", "prompt"] for c in herdr.calls[before:])
+
+
+def test_ordinary_managed_message_refuses_unresolved_checkpoint(herdr: _Herdr) -> None:
+    from fr_herdr import managed
+
+    item = _item(harness="opencode", model="openai/gpt-6.1-sol")
+    pane = HerdrRunner.from_env().dispatch(item)
+    herdr.listing = {"result": {"tabs": [{"tab_id": "w2:t1H", "label": item.id}]}}
+    herdr.agents = {"result": {"agents": [{"tab_id": "w2:t1H", "pane_id": pane}]}}
+    d = managed.load(pane)
+    assert d is not None
+    managed.save(d.model_copy(update={"checkpoint": "prepared"}))
+    before = len(herdr.calls)
+    with pytest.raises(herdr_runner.HerdrError, match="unresolved"):
+        HerdrRunner.from_env().message(item, "ordinary follow-up")
+    assert not any(c[:2] == ["agent", "prompt"] for c in herdr.calls[before:])
 
 
 def test_can_dispatch_refuses_a_phase_item(herdr: _Herdr) -> None:
@@ -689,7 +766,8 @@ def test_message_prompts_the_items_agent_with_the_text(herdr: _Herdr) -> None:
     runner = HerdrRunner.from_env()
     assert isinstance(runner, SessionMessenger)
     assert runner.message(item, "resolve the conflict") is None
-    assert herdr.calls == [["agent", "prompt", agent_name(item.id), "resolve the conflict"]]
+    assert herdr.calls[-1] == ["agent", "prompt", agent_name(item.id), "resolve the conflict"]
+    assert sum(c[:2] == ["agent", "prompt"] for c in herdr.calls) == 1
 
 
 # ------------------------------------------------- idle-session restart (driver-sessions §B)
