@@ -8049,15 +8049,20 @@ rows:
       - super-fr:tests/unit/test_triage_batch_replace.py#test_activation_failure_repairs_both_stores_without_second_success
       - super-fr:tests/unit/test_file_lock.py#test_exclusive_file_lock_refuses_nested_owner_and_releases
       - super-fr:tests/unit/test_file_lock.py#test_acknowledged_but_unenforced_lock_never_yields
+      - super-fr:tests/unit/test_triage_batch_replace.py#test_malformed_opencode_model_refuses_before_operation_or_audit
+      - super-fr:tests/unit/test_triage_batch_replace.py#test_failure_activation_retry_finishes_both_stores_without_duplicate_event
+      - super-fr:tests/unit/test_herdr_replacement.py#test_source_restoration_write_fault_remains_repairable_and_idempotent
+      - super-fr:tests/unit/test_triage_replace_state.py#test_preview_and_lock_loser_leave_remote_updated_state_and_exclude_untouched
+      - super-fr:tests/unit/test_triage_replace_state.py#test_act_fetches_fresh_state_and_pushes_only_while_scope_owned
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_batch_replace
     status: ci
-    notes: Installed candidate exercises both directions/model-only, preserved dispatch
-      identity, preview without input, startup failure and input-free shell repair.
-      Named tests pin exclusive scope/pane ownership, checkpoints and cross-store repair.
-      CI follow-up moves verified OS-lock machinery into shared infrastructure, preserving
-      the triage subprocess/forge guard and fail-closed unenforced-filesystem behavior.
-      Client-live remains independently owed; full suite is CI-owned per operator.
+    notes: Installed candidate exercises both directions/model-only, preserved identity,
+      preview, startup failure and input-free repair. Review regressions now additionally
+      pin shared provider/model refusal before preparation, failure-side two-store activation
+      retry without duplicate events/input, and read-only preview versus scope-owned
+      fetch/push on disposable updated state refs. Full suite remains CI-owned; the
+      separate operator client-live walk remains owed.
     verify: candidate
     scenario: tests/scenarios/herdr-batch-replace.sh
     issues:
