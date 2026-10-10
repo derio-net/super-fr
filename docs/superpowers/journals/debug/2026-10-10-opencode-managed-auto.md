@@ -29,3 +29,8 @@ If a deny or prompt rule in the operator's OpenCode configuration caused the sto
 ### local-config-ruled-out · ruled-out · Native default prompting, not an anomalous local configuration
 
 The installed OpenCode help defines --auto as auto-approve permissions not explicitly denied and defaults it to false. origin/main omitted that flag from all three managed launch paths. The live stop was therefore the expected native default for unattended sessions; explicit denies remain denies under --auto.
+
+<!-- fr:journal kind=finding scope=debug id=candidate-cache created=2026-10-10T10:38:53+00:00 state=open -->
+### candidate-cache · finding [open] · Candidate install reused stale same-version local wheels
+
+Independent review reproduced the installed replacement scenario loading current opencode.py with the pre-fix replacement.py from uv's cache. --force replaces the tool environment but does not guarantee a rebuild when branch packages retain the released version.
