@@ -62,6 +62,7 @@ def launch() -> None:
     linked = Path(os.environ["FR_HERDR_CACHE_DIR"]).parent / "linked"
     git("worktree", "add", "-b", "feat/linked", str(linked))
     calls = []
+    process = {"args": ["--model", MODEL]}
 
     def fake(args):
         calls.append(args)
@@ -88,7 +89,7 @@ def launch() -> None:
                         "foreground_processes": [
                             {
                                 "pid": 2,
-                                "argv": ["opencode", "--model", MODEL],
+                                "argv": ["opencode", *process["args"]],
                                 "cwd": str(Path.cwd()),
                             }
                         ]
@@ -97,6 +98,8 @@ def launch() -> None:
             }
         if args[:2] == ["pane", "read"]:
             return json.loads((FIXTURES / "opencode/final-idle.json").read_text())
+        if args[:2] == ["agent", "start"]:
+            process["args"] = args[args.index("--") + 1 :]
         return {}
 
     runner._run_herdr = fake
@@ -105,7 +108,7 @@ def launch() -> None:
     assert handle == "w2:p1K"
     assert calls[0][calls[0].index("--cwd") + 1] == str(Path.cwd())
     assert ["--kind", "opencode"] == calls[1][3:5]
-    assert calls[1][-2:] == ["--model", MODEL]
+    assert calls[1][-3:] == ["--model", MODEL, "--auto"]
     assert "--wait" in next(c for c in calls if c[:2] == ["agent", "prompt"])
     assert managed.load(handle).item == item.id
     assert managed.load(handle).checkpoint == "active"
@@ -141,6 +144,7 @@ def launch() -> None:
 
 def herdr(args: list[str]) -> dict:
     state = Path(os.environ["HERDR_FAKE_STATE"])
+    args_state = state.with_suffix(".args")
     phase = state.read_text() if state.exists() else "source"
     with Path(os.environ["HERDR_FAKE_LOG"]).open("a") as log:
         log.write(json.dumps(args) + "\n")
@@ -166,7 +170,10 @@ def herdr(args: list[str]) -> dict:
     if args[:2] == ["pane", "read"]:
         return json.loads((FIXTURES / "opencode/final-idle.json").read_text())
     if args[:2] == ["pane", "process-info"]:
-        proc = {"argv": ["opencode", "--model", MODEL], "pid": 2, "cwd": str(Path.cwd())}
+        launch_args = (
+            json.loads(args_state.read_text()) if args_state.exists() else ["--model", MODEL]
+        )
+        proc = {"argv": ["opencode", *launch_args], "pid": 2, "cwd": str(Path.cwd())}
         if phase == "shell":
             proc = {"argv": ["-zsh"], "pid": 1, "cwd": str(Path.cwd())}
         return {"result": {"process_info": {"shell_pid": 1, "foreground_processes": [proc]}}}
@@ -184,7 +191,9 @@ def herdr(args: list[str]) -> dict:
             "--",
             "--model",
             MODEL,
+            "--auto",
         ]
+        args_state.write_text(json.dumps(args[args.index("--") + 1 :]))
         state.write_text("target")
     return {}
 

@@ -8017,8 +8017,8 @@ rows:
       is still owed'
   - id: herdr-opencode-launch
     capability: herdr OpenCode batch lifecycle
-    acceptance: OpenCode batches launch with the selected model from the stable checkout
-      and retain status, messaging, focus, conflict and close-out identity.
+    acceptance: OpenCode batches launch autonomously with the selected model from the
+      stable checkout and retain status, messaging, focus, conflict and close-out identity.
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-09-herdr-opencode-replacement-design.md#R1
     levels:
@@ -8030,11 +8030,10 @@ rows:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
     status: ci
-    notes: Installed candidate lifecycle plus runner/stable-checkout/managed tests remain
-      CI-covered. Late independent review added an under-lock idle/done and explicit
-      readiness recheck for managed messages; deterministic stale-snapshot cases prove
-      no prompt or descriptor write on busy/unknown/unready target. 166 targeted tests,
-      lint and fr-herdr typecheck passed.
+    notes: Managed OpenCode dispatch, restart and replacement pass --auto so autonomous
+      work does not stop on permission prompts; pre-change managed sessions remain observable.
+      Runner/stable-checkout/readiness tests remain CI-covered, including fail-closed
+      message eligibility under the pane lock.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace
@@ -8147,7 +8146,7 @@ rows:
       scoped archive and delivered feature-session/tab cleanup. Initial stale-record
       failure stopped the walk; after operator reconciliation the reaped-workspace merge
       gate passed. Feature isolation state, container and session index absent; old
-      named agent absent after exact-tab closure. Evidence: docs/acceptance/herdr-opencode-closeout-1089.md.
+      named agent absent after exact-tab closure. Evidence: docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md.
       Real walk, not CI automation; #1116 remains deferred and unchanged. Archive storage
       finding tracked separately as #1117.'
     verify: live
@@ -8161,4 +8160,4 @@ rows:
       model: openai/gpt-6.1-sol
       outcome: pass
       at: '2026-10-10T08:32:43Z'
-      evidence: super-fr:docs/acceptance/herdr-opencode-closeout-1089.md
+      evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md

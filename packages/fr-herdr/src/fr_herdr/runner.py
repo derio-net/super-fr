@@ -389,7 +389,11 @@ class HerdrRunner:
                     "--pane",
                     pane,
                     "--",
-                    *harness.model_args(str(payload["model"])),
+                    *(
+                        opencode.launch_args(str(payload["model"]))
+                        if harness.kind == "opencode"
+                        else harness.model_args(str(payload["model"]))
+                    ),
                 ]
             )
             if descriptor:

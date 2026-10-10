@@ -93,9 +93,19 @@ def process(info: dict[str, Any]) -> dict[str, Any] | None:
     return proc if argv and Path(str(argv[0])).name == "opencode" else None
 
 
+def launch_args(model: str) -> list[str]:
+    """Arguments for an autonomous managed OpenCode session."""
+    return ["--model", model, "--auto"]
+
+
 def model_matches(proc: dict[str, Any], d: managed.Descriptor) -> bool:
     argv = proc.get("argv", [])
-    return argv[1:] in (["--model", d.model], ["-m", d.model])
+    return argv[1:] in (
+        ["--model", d.model],
+        ["-m", d.model],
+        ["--model", d.model, "--auto"],
+        ["-m", d.model, "--auto"],
+    )
 
 
 def shell_cwd(info: dict[str, Any]) -> str | None:
@@ -213,7 +223,7 @@ def restart_pane(pane: str, *, yes: bool, exclude: set[str]) -> tuple[str, str, 
             recovery = (
                 f"Inspect {pane} and {d.name}; do not blindly resubmit. "
                 f"From a confirmed shell: cd {shlex.quote(d.checkout)} && "
-                f"opencode --model {shlex.quote(d.model)}; reconstruct {d.item} "
+                f"opencode --model {shlex.quote(d.model)} --auto; reconstruct {d.item} "
                 "from durable fr state and explicitly reconcile the descriptor."
             )
 
@@ -270,8 +280,7 @@ def restart_pane(pane: str, *, yes: bool, exclude: set[str]) -> tuple[str, str, 
                         "--pane",
                         pane,
                         "--",
-                        "--model",
-                        d.model,
+                        *launch_args(d.model),
                     ],
                     run=_run_herdr,
                     sleep=_sleep,

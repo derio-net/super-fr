@@ -973,3 +973,4 @@ def test_candidate_install_asks_for_fr_herdrs_executables(tmp_path: Path) -> Non
     the flag alone puts `fr-herdr` there (when this uv has the flag)."""
     _, argv = _candidate_install(tmp_path, old_uv=False)
     assert argv[argv.index("--with-executables-from") + 1] == "fr-herdr"
+    assert "--refresh" in argv

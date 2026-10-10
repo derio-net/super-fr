@@ -44,7 +44,7 @@ def pane(args):
         }
     if args[:2] == ["pane", "process-info"]:
         proc = {
-            "argv": [data["harness"], "--model", data["model"]],
+            "argv": [data["harness"], *data.get("args", ["--model", data["model"]])],
             "pid": 2,
             "cwd": str(Path.cwd()),
         }
@@ -76,7 +76,15 @@ def pane(args):
             sys.exit(1)
         assert args[2] == NAME and args[args.index("--pane") + 1] == PANE
         assert "--resume" not in args
-        data.update(shell=False, harness=args[args.index("--kind") + 1], model=args[-1])
+        harness = args[args.index("--kind") + 1]
+        harness_args = args[args.index("--") + 1 :]
+        assert ("--auto" in harness_args) == (harness == "opencode")
+        data.update(
+            shell=False,
+            harness=harness,
+            model=harness_args[harness_args.index("--model") + 1],
+            args=harness_args,
+        )
     if args[:2] == ["agent", "prompt"]:
         assert "HOLD" in args[3] and "/fr-goal" not in args[3]
         assert "--wait" in args
