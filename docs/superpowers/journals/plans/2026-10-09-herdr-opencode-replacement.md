@@ -336,3 +336,8 @@ Preview resolves/loads state read-only with sync/preparation disabled; act acqui
 ### p2-client-live-tty · finding [open] (reviewer: in scope) · Documented client-live walk could not invoke its verdict flow (phase 2)
 
 Generated operator walk invoked scenario without arguments, making default exit3 an impossible success path; captured stdout/stderr also hid verdict prompts. Corrected no-argument interactive invocation uses /dev/tty, requires actual observations and evidence, preserves noninteractive exit3. Targeted PTY checks passed, actual operator-authorized walk now being performed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-client-live-tty-resolved created=2026-10-10T01:36:09+00:00 state=fixed resolves=p2-client-live-tty -->
+### p2-client-live-tty-resolved · finding [fixed] · resolves p2-client-live-tty: Documented client-live walk could not invoke its verdict flow
+
+Fixed at 045ab9f0 with PTY and negative-evidence regressions; actual observed client-live verdict is separate from this code fix.
