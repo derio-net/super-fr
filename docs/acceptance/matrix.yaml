@@ -8126,3 +8126,21 @@ rows:
     scenario: tests/scenarios/herdr-opencode-live.sh
     issues:
     - derio-net/super-fr#1089
+  - id: herdr-opencode-closeout-live
+    capability: interactive herdr OpenCode migration
+    acceptance: After its PR actually merges, an OpenCode-backed batch completes the
+      real pickup/verify-merge/archive flow from the stable primary checkout and its
+      disposable workspace/session are safely cleaned up.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: 'Operator explicitly authorized merging #1115 then immediately completing
+      real close-out in a new session. Requires an actually merged PR; no pre-merge
+      scenario can manufacture that evidence. Follow the spec Test Plan and fr pickup
+      --run 2026-10-09-feat-1089, then record redacted live walk.'
+    verify: live
+    issues:
+    - derio-net/super-fr#1089
+    harnesses:
+    - opencode
