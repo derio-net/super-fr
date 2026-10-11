@@ -19,3 +19,8 @@ VisibilityUnreadable is the skip signal, but (1) privacy.check_or_refuse raises 
 ### fix · finding [fixed] · Unreadable member/mid-pass visibility skips the pass; a certain leak still ends the driver
 
 privacy.check_or_refuse: a certain leak (known non-public repo, or one no scope member names) is PrivacyError; otherwise a None member read with a public state repo is VisibilityUnreadable (unreadable_members). triage_batch_cmd._write(read_errors=...): dispatch_batch passes its read_errors, the driver's close-out writes pass True, so VisibilityUnreadable becomes ForgeReadError(code=2) and _host_loop skips the pass. Failing tests first (a94352cc): test_triage_privacy (member unreadable via guard_state and guard_write; certain leak outranks unreadable) and test_triage_drive_visibility_retry (loop skips on a member read failure; loop skips on a mid-pass guard_write VisibilityUnreadable). 2265 triage/drive tests pass, mypy clean.
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-10-11T23:17:13+00:00 -->
+### review · review · Self-review of the fix diff: no defects; one accepted trade-off noted
+
+Reviewed inline (no subagent dispatched). Checked: the pre-launch dry-run checks fire before claims and the launch, so a skipped pass leaves nothing behind; the post-launch dispatch-event _save keeps its _fail with the recovery command (unchanged: its dry-run twin passed moments before); a certain leak still outranks an unreadable repo and ends the driver (R10); non-driver CLI callers still exit 2 on VisibilityUnreadable. Trade-off, same as #1134 accepted for the state repo: a member repo that is permanently unreadable (deleted, token lost access) now retries each pass with one warning instead of ending the driver as a leak.
