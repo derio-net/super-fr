@@ -5345,9 +5345,16 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): live-verified
-      2026-09-26 (Test Plan 15, #628 phase 4) in devcontainer mode, PR #635. Caveat:
-      subagent transcripts omitted (#637).'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      2026-09-26 (Test Plan 15). Caveat: subagent transcripts omitted (#637).'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-26T00:00:00Z'
+      evidence: 'Test Plan 15 (#628 phase 4): /fr-goal on #624 in devcontainer mode,
+        PR #635, captured a readable session'
   - id: step-record-one-resolve
     capability: Lean cost-aware pipeline
     acceptance: 'Each agent step''s bookkeeping is one fr run resolve --record: one
