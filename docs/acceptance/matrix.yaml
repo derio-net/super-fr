@@ -8250,9 +8250,24 @@ rows:
       that cannot.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; the phase that builds it writes the file.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_missing_label_is_created_once_per_repo_and_said
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_forge_that_cannot_check_labels_warns_and_never_fails
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_collect_creates_the_label_on_each_collected_repo
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_init_scaffold_creates_the_label_on_a_github_origin
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_creates_the_missing_approval_label_once_and_says_so
+      - super-fr:tests/unit/test_merge_train_commands.py#test_merge_creates_the_missing_label_under_yes_only
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_each_drive_pass_checks_the_label_once_per_repo_and_creates_it
+      - super-fr:tests/unit/test_merge_train_forge_seams.py#test_rest_label_exists_from_the_captured_200_and_404
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_label_gate
+    status: ci
+    notes: 'phase 1: ensure_approval_label creates a missing approved-fr label once
+      per repo per pass or command and warns; a forge that cannot is a warning. Called
+      by collect, batch dispatch, batch merge (under --yes), every drive pass and fr
+      init scaffold on a GitHub origin. Scenario: the label-gate scenario''s first pass
+      creates it.'
     verify: candidate
     scenario: tests/scenarios/merge-train-label-gate.sh
   - id: batch-merge-skip-held
