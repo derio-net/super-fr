@@ -419,9 +419,16 @@ rows:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): Test
-      Plan steps 1-2 walked live post-merge 2026-07-08 (generated commands resolved,
-      opencode run --command invoked one); mirror drift guarded in CI.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      steps 1-2 walked live post-merge 2026-07-08; mirror drift guarded in CI.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: opencode/north-mini-code-free
+      outcome: pass
+      at: '2026-07-08T00:00:00Z'
+      evidence: 'Test Plan steps 1-2 post-merge walk: opencode debug config resolved
+        the generated commands; opencode run --command fr-progress invoked one'
   - id: opencode-commands-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get /fr-goal etc. available
