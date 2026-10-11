@@ -16,3 +16,8 @@ The batch rule says stop if investigation finds more than one root cause. The ba
 ### 01276c66ed28 · root-cause · #1124: agent-* path of fr-worktree-create.sh is unserialised
 
 The hook's per-repo+branch mkdir lock wraps only the `fr isolation up` path. `case agent-*) mimic_default` runs before the lock, so two concurrent copies both see no dir and both run `git worktree add --detach` on the same path: index.lock collision + disturbed checkout. Exactly the paths in the issue's error. The double registration is deliberate (CC 2.1.281 skipped the plugin WorktreeCreate for `claude --worktree`); the defect is that one branch of the hook is not safe under it.
+
+<!-- fr:journal kind=root-cause scope=debug id=d6fd32c98720 created=2026-10-11T23:07:47+00:00 -->
+### d6fd32c98720 · root-cause · #1105: allowlist script treats the bare name as stale
+
+ensure-phase-executor-allowlist.sh was written when only the plugin-qualified id was ever dispatched; it strips the bare name. Since cloud-triage §H, `fr init agents` renders .claude/agents/fr-{phase-executor,spec-reviewer}.md, which Claude Code dispatches by the BARE name, so both spellings are legitimate.
