@@ -5,7 +5,8 @@
 # it; `fr closeout outcome` records one step n/a and the other owed; `fr
 # archive` then moves the plan and files the owed step as one `fr:owed` issue
 # even under --no-issues; and `fr debt` lists it. The fixture is a fresh `git
-# init` with a bare local origin (so the plan is merged), a v5 matrix naming the
+# init` with a bare local origin (so the plan is merged; reached through
+# `insteadOf` from a github.com url naming the repo), a v5 matrix naming the
 # repo, and a recording `gh` (fixtures/closeout-owed/bin/gh) — no real forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
@@ -25,7 +26,10 @@ git init -q -b main . || fail "git init"
 # and a re-init ignores -b: point HEAD at main explicitly (CI defaults to master).
 git symbolic-ref HEAD refs/heads/main || fail "HEAD to main"
 git init -q --bare -b main "$world/origin.git" || fail "bare origin"
-git remote add origin "$world/origin.git"
+# Owed filing trusts only the origin remote's configured url, so it names the
+# repo (github.com/example-org/widgets); `insteadOf` serves it from the bare repo.
+git remote add origin https://github.com/example-org/widgets.git
+git config url."$world/origin.git".insteadOf https://github.com/example-org/widgets.git
 mkdir -p docs/acceptance "docs/superpowers/plans/$plan" docs/superpowers/specs
 cat > docs/acceptance/matrix.yaml <<'YAML'
 schema_version: 5
@@ -125,4 +129,16 @@ run_fr out debt --offline
 require_exit 0 "$out"
 expect_grep "$key \(journal\)" "$out" "fr debt lists the owed step"
 [ "$(printf '%s\n' "$out" | grep -c "$key")" -eq 1 ] || fail "the owed step is listed more than once"
+# 5. Discharge it: the evidence closes the filed issue through the forge.
+run_fr out journal resolve --scope spec --slug 2026-10-11-widget --id test-plan-step-2 \
+  --state fixed --note "walked live after merge: green"
+require_exit 0 "$out"
+expect_grep 'closed example-org/widgets#1' "$out" "the discharge closes the issue"
+log="$(tr '\n' ' ' < "$FAKE_GH_LOG")"
+expect_grep 'issue comment 1 --repo example-org/widgets --body Discharged: walked live after merge: green' \
+  "$log" "the evidence is the closing comment"
+expect_grep 'issue close --repo example-org/widgets 1' "$log" "the recording gh saw the close"
+run_fr out debt --offline
+require_exit 0 "$out"
+refuse_grep "$key" "$out" "a discharged step is no longer owed"
 echo "ok: closeout-owed"

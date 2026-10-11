@@ -62,8 +62,33 @@ def _journal(root: Path, entries: list[JournalEntry], *, archived: bool = False)
     return path
 
 
+class OwnedGh(FakeGhClient):
+    """A forge double that lists its open issues, authored by `me`."""
+
+    def viewer_login(self) -> str:
+        return "me"
+
+    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
+        self.calls.append(("list_issues", {"repo": repo}))
+        return [
+            {
+                "number": n,
+                "body": i.body,
+                "labels": [{"name": x} for x in sorted(i.labels)],
+                "author": {"login": "me"},
+            }
+            for (r, n), i in self.issues.items()
+            if r == repo and i.state == "OPEN"
+        ]
+
+
 def _repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", f"https://github.com/{OWN}.git"],
+        cwd=tmp_path,
+        check=True,
+    )
     (tmp_path / "docs/acceptance").mkdir(parents=True)
     (tmp_path / "docs/acceptance/matrix.yaml").write_text(
         "schema_version: 5\norg: acme\nrepo: widgets\nrows: []\n"
@@ -119,7 +144,7 @@ def test_resolve_discharges_an_owed_entry_and_closes_its_issue(
     root = _repo(tmp_path)
     owed = _owed()
     path = _journal(root, [owed, _filed(owed, f"{OWN}#12")], archived=archived)
-    gh = FakeGhClient()
+    gh = OwnedGh()
     _owned_issue(gh)
     res = _resolve(monkeypatch, root, gh)
     assert res.exit_code == 0, res.output
@@ -140,7 +165,7 @@ def test_an_unreachable_forge_prints_the_close_command(
     owed = _owed()
     path = _journal(root, [owed, _filed(owed, f"{OWN}#12")])
 
-    class Down(FakeGhClient):
+    class Down(OwnedGh):
         def comment_issue(self, repo: str, number: int, body: str) -> None:
             raise FakeGhError("network down")
 
@@ -163,7 +188,7 @@ def test_tracking_none_prints_the_close_command_and_asks_no_forge(
     )
     owed = _owed()
     _journal(root, [owed, _filed(owed, f"{OWN}#12")])
-    gh = FakeGhClient()
+    gh = OwnedGh()
     res = _resolve(monkeypatch, root, gh)
     assert res.exit_code == 0, res.output
     assert gh.calls == []
@@ -175,7 +200,7 @@ def test_an_unfiled_owed_entry_discharges_without_the_forge(
 ) -> None:
     root = _repo(tmp_path)
     path = _journal(root, [_owed()])
-    gh = FakeGhClient()
+    gh = OwnedGh()
     res = _resolve(monkeypatch, root, gh)
     assert res.exit_code == 0, res.output
     assert gh.calls == []
@@ -284,7 +309,7 @@ def test_a_foreign_filed_as_is_never_closed(
     root = _repo(tmp_path)
     owed = _owed()
     path = _journal(root, [owed, _filed(owed, ref)])
-    gh = FakeGhClient()
+    gh = OwnedGh()
     gh.add_issue("mallory/elsewhere", 12, labels={"fr:owed"}, body=f"<!-- fr-owed:{KEY} -->")
     res = _resolve(monkeypatch, root, gh)
     assert res.exit_code == 0, res.output
@@ -308,7 +333,7 @@ def test_a_same_repo_issue_without_the_entry_marker_or_label_is_not_closed(
     root = _repo(tmp_path)
     owed = _owed()
     _journal(root, [owed, _filed(owed, f"{OWN}#12")])
-    gh = FakeGhClient()
+    gh = OwnedGh()
     _owned_issue(gh, labels=labels, body=body)
     res = _resolve(monkeypatch, root, gh)
     assert res.exit_code == 0, res.output
@@ -323,8 +348,58 @@ def test_a_short_ref_resolves_against_this_repo_and_closes(
     root = _repo(tmp_path)
     owed = _owed()
     _journal(root, [owed, _filed(owed, "#12")])
-    gh = FakeGhClient()
+    gh = OwnedGh()
     _owned_issue(gh)
     res = _resolve(monkeypatch, root, gh)
     assert res.exit_code == 0, res.output
     assert gh.issues[(OWN, 12)].state == "CLOSED"
+
+
+def test_a_matrix_naming_another_repo_closes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path)
+    (root / "docs/acceptance/matrix.yaml").write_text(
+        "schema_version: 5\norg: mallory\nrepo: x\nrows: []\n"
+    )
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, "#12")])
+    gh = OwnedGh()
+    _owned_issue(gh)
+    gh.add_issue("mallory/x", 12, labels={"fr:owed"}, body=f"<!-- fr-owed:{KEY} -->")
+    res = _resolve(monkeypatch, root, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "comment_issue") == [] and _calls(gh, "edit_issue_state") == []
+    assert "mallory/x" in res.output and "not closing" in res.output
+
+
+def test_an_issue_another_account_wrote_is_not_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Theirs(OwnedGh):
+        def viewer_login(self) -> str:
+            return "someone-else"
+
+    root = _repo(tmp_path)
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    gh = Theirs()
+    _owned_issue(gh)
+    res = _resolve(monkeypatch, root, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "edit_issue_state") == []
+
+
+def test_a_step_record_resolves_cannot_discharge_an_owed_entry(tmp_path: Path) -> None:
+    from fr.record import apply as engine
+    from fr.record.model import Resolution, StepRecord
+
+    root = _repo(tmp_path)
+    path = _journal(root, [_owed()])
+    with pytest.raises(engine.RecordRefusedError, match="fr journal resolve"):
+        engine.apply_record(
+            root,
+            None,
+            StepRecord(resolves=(Resolution(id="test-plan-step-4", state="fixed", body="x"),)),
+            target=engine.RecordTarget(journal_scope="spec", journal_slug=SLUG, journal_file=path),
+        )

@@ -193,7 +193,11 @@ class JournalEntry(BaseModel):
                     "`filed_as` is only valid on an `open` resolution record: it says "
                     "the owed action it names is still owed, and where it was filed"
                 )
-            if not TRACKED_BY_RE.match(self.filed_as):
+            if not (
+                self.filed_as.isascii()
+                and self.filed_as.isprintable()
+                and TRACKED_BY_RE.match(self.filed_as)
+            ):
                 raise ValueError(
                     "`filed_as` must name an issue — `#N`, `owner/repo#N` or an "
                     f"http(s) URL — got {self.filed_as!r}"
@@ -711,8 +715,30 @@ def appended_journal_text(prior: str | None, slug: str, entry: JournalEntry) -> 
     block = serialize_entry(entry)
     if prior is None:
         return f"{journal_header(slug)}\n{block}"
+    if entry.kind == "owed":
+        prior = _at_owed_stamp(prior)
     sep = "" if prior.endswith("\n\n") else ("\n" if prior.endswith("\n") else "\n\n")
     return prior + sep + block
+
+
+def _at_owed_stamp(text: str) -> str:
+    """`text` stamped at the journal kind's current version when it is stamped
+    below it (review p3-r7): an `owed` entry needs journal schema 2, and an
+    archived journal is never migrated, so the write that adds one stamps it —
+    in the same write, never a second one."""
+    from fr.artifacts.registry import (
+        _journal_stamp_line,
+        _journal_stamp_match,
+        artifact_kind,
+    )
+
+    current = artifact_kind("journal").current_version
+    m = _journal_stamp_match(text)
+    if m is not None:
+        if int(m.group(1)) >= current:
+            return text
+        return text[: m.start()] + _journal_stamp_line(current) + text[m.end() :]
+    return _journal_stamp_line(current) + "\n" + text
 
 
 def journal_header(slug: str) -> str:

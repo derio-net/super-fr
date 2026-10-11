@@ -257,7 +257,9 @@ def branch_closeout_brief(
             )
             for n, text in run_extras.test_plan_steps:
                 lines.append(f"    step {n}: {text}")
-                lines.append(f"      {outcome_command(f'--run {run_extras.run_id}', n)}")
+                lines.extend(
+                    f"      {cmd}" for cmd in outcome_command(f"--run {run_extras.run_id}", n)
+                )
 
     if run_extras is not None:
         lines.extend(run_extras.awaiting_live)

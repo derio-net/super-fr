@@ -204,3 +204,68 @@ def test_a_spec_with_no_test_plan_is_refused(tmp_path: Path, monkeypatch) -> Non
     res = _outcome("--step", "1", "--na", "--reason", "r")
     assert res.exit_code == 2, res.output
     assert "Test Plan" in res.output
+
+
+# --- review p3-r2 / p3-r9 -------------------------------------------------
+
+
+def test_a_fenced_heading_neither_ends_nor_starts_the_test_plan() -> None:
+    text = (
+        "# X\n\n```\n## Test Plan\n- fenced, not the section\n```\n\n"
+        "## Test Plan\n\n1. first\n\n   ```bash\n# set up\n   ```\n2. second\n\n"
+        "## Next\n\n1. not a step\n"
+    )
+    assert [s.text for s in plan_steps(text)] == ["first ```bash # set up ```", "second"]
+
+
+def test_an_empty_test_plan_is_one_step_that_says_so() -> None:
+    assert [(s.n, s.text) for s in plan_steps("## Test Plan\n\n## Next\n")] == [
+        (1, "(Test Plan section has no steps)")
+    ]
+
+
+def test_outcome_command_prints_one_pasteable_line_per_alternative() -> None:
+    from fr.archive import outcome_command
+
+    lines = outcome_command("--run r1", 3)
+    assert lines == [
+        "fr closeout outcome --run r1 --step 3 --ran --evidence '<what it showed>'",
+        "fr closeout outcome --run r1 --step 3 --owed --why '<why not now>'",
+        "fr closeout outcome --run r1 --step 3 --na --reason '<why it does not apply>'",
+    ]
+
+
+# --- review p3-r3(b) / p3-r7 ----------------------------------------------
+
+
+def test_an_outcome_on_the_default_branch_says_the_journal_is_uncommitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path)
+    subprocess.run(["git", "checkout", "-q", "-b", "main"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-qm", "seed"],
+        cwd=root,
+        check=True,
+    )
+    monkeypatch.chdir(root)
+    res = _outcome("--step", "1", "--na", "--reason", "r")
+    assert res.exit_code == 0, res.output
+    assert "uncommitted" in res.output and "fr archive" in res.output
+
+
+def test_an_owed_entry_written_to_an_old_stamp_journal_restamps_it(repo: Path) -> None:
+    from fr.artifacts import ARTIFACT_KINDS
+
+    path = journal_path(repo, "spec", SLUG)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "# Journal: x\n\n"
+        "<!-- fr:journal kind=discovery scope=spec id=d1 created=2026-01-01T00:00:00 -->\n"
+        "### d1 · discovery · t\n"
+    )
+    res = _outcome("--step", "4", "--owed", "--why", "later")
+    assert res.exit_code == 0, res.output
+    assert ARTIFACT_KINDS["journal"].read_version(path) == 2
+    assert [e.id for e in _entries(repo)] == ["d1", "test-plan-step-4"]

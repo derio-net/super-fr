@@ -698,8 +698,11 @@ def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:
             # `<slug>-design` filename stem; strip the suffix so the move
             # resolves the real file and follows the spec into
             # implemented/journals/specs/ (2026-07-22 spec §A; #417).
-            _archive_journal(repo_root, "spec", spec_journal_slug(spec_path.stem))
             moves.append(DirsMove(src=src_rel, dst=dst_rel, kind="spec"))
+            try:
+                _archive_journal(repo_root, "spec", spec_journal_slug(spec_path.stem))
+            except ArchiveError as e:  # review p3-r3(c): a note, never a traceback
+                notes.append(f"{spec_path.name}: its journal stayed live — {e}")
         elif note and "no Implementation Plans rows" not in note:
             notes.append(f"{spec_path.name}: {note}")
     return SpecSweepResult(moves=tuple(moves), notes=tuple(notes))
@@ -787,14 +790,15 @@ def missing_outcomes(repo_root: Path, spec_path: Path) -> list[Step]:
     return [s for s in steps if outcome_id(s.n) not in done]
 
 
-def outcome_command(selector: str, n: int) -> str:
-    """The command that records step `n`'s outcome; `selector` is `--run <id>`
-    or `--spec <path>`."""
-    return (
-        f"fr closeout outcome {selector} --step {n} "
-        "--ran --evidence '<what it showed>' | --owed --why '<why not now>' "
-        "| --na --reason '<why it does not apply>'"
-    )
+def outcome_command(selector: str, n: int) -> list[str]:
+    """The commands that record step `n`'s outcome — one pasteable line per
+    alternative (ran, owed, n/a); `selector` is `--run <id>` or `--spec <path>`."""
+    base = f"fr closeout outcome {selector} --step {n}"
+    return [
+        f"{base} --ran --evidence '<what it showed>'",
+        f"{base} --owed --why '<why not now>'",
+        f"{base} --na --reason '<why it does not apply>'",
+    ]
 
 
 def outcome_selector(repo_root: Path, plan_rel: Path, spec_path: Path) -> str:
@@ -817,17 +821,27 @@ def outcome_hold(repo_root: Path, plan: Plan, plan_rel: Path) -> list[str]:
     if spec is None:
         return []
     missing = missing_outcomes(repo_root, spec)
-    if not missing:
-        return []
-    selector = outcome_selector(repo_root, plan_rel, spec)
-    lines = [
-        f"{spec.name}: Test Plan step(s) {', '.join(str(s.n) for s in missing)} have no "
-        "recorded outcome"
-    ]
-    for s in missing:
-        lines.append(f"    step {s.n}: {s.text}")
-        lines.append(f"      {outcome_command(selector, s.n)}")
-    return lines
+    if missing:
+        selector = outcome_selector(repo_root, plan_rel, spec)
+        lines = [
+            f"{spec.name}: Test Plan step(s) {', '.join(str(s.n) for s in missing)} have no "
+            "recorded outcome"
+        ]
+        for s in missing:
+            lines.append(f"    step {s.n}: {s.text}")
+            lines.extend(f"      {cmd}" for cmd in outcome_command(selector, s.n))
+        return lines
+    # Review p3-r3(a): the outcomes are recorded, but a spec journal git does not
+    # hold yet (an outcome written on the default branch, where fr never commits)
+    # would break the spec sweep's `git mv` half-way. Refuse before any move.
+    journal = journal_path(repo_root, "spec", spec_slug_of(spec))
+    if journal.exists() and paths_dirty(repo_root, journal):
+        rel = journal.relative_to(repo_root).as_posix()
+        return [
+            f"{rel} holds uncommitted Test Plan outcomes — commit it on a branch "
+            "(not the default branch), then re-run fr archive"
+        ]
+    return []
 
 
 def unticked_manual_phases(plan: Plan, blockers: tuple[str, ...]) -> list[int]:

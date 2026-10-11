@@ -284,3 +284,27 @@ def test_journal_add_refuses_an_owed_entry_without_a_key(
     assert res.exit_code == 2, res.output
     assert "owed_key" in res.output
     assert not journal_path(root, "spec", "2026-10-11-x").exists()
+
+
+# --- review p3-r5 / p3-r7 -------------------------------------------------
+
+
+@pytest.mark.parametrize("bad", ["https://x.example/\x1b[2J", "https://x.example/é"])
+def test_filed_as_must_be_printable_ascii(bad: str) -> None:
+    owed = _owed()
+    with pytest.raises(ValueError):
+        _record(owed, {owed.id}, state="open", filed_as=bad)
+
+
+def test_appending_an_owed_entry_to_an_archived_unstamped_journal_stamps_it(
+    tmp_path: Path,
+) -> None:
+    from fr.journal.model import archived_journal_path
+
+    path = archived_journal_path(tmp_path, "spec", "2026-10-11-x")
+    path.parent.mkdir(parents=True)
+    path.write_text("<!-- fr:journal-schema=1 -->\n# Journal: x\n")
+    append_journal_entry(path, "2026-10-11-x", _owed())
+    assert ARTIFACT_KINDS["journal"].read_version(path) == 2
+    assert path.read_text().count("fr:journal-schema=") == 1
+    assert validate_journal(path) == []

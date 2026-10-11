@@ -630,7 +630,16 @@ def _owed_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
             "owed actions left in the journal"
         )
         return
-    for filed in af.file_owed_ends(repo_root, ends, _make_gh_client(), _repo_slug(repo_root)):
+    repo, why = af.owed_identity(repo_root)
+    if repo is None:
+        err_console.print(
+            f"[yellow]warning:[/yellow] owed actions not filed — {escape(why)}; they stay "
+            "in the journal (file each as an fr:owed issue carrying its "
+            "`<!-- fr-owed:<key> -->` marker yourself)",
+            soft_wrap=True,
+        )
+        return
+    for filed in af.file_owed_ends(repo_root, ends, _make_gh_client(), repo):
         if filed.ref is None:
             err_console.print(
                 f"[yellow]warning:[/yellow] could not file owed {filed.end.key} — "
@@ -706,7 +715,9 @@ def archive_command(
     force: bool = typer.Option(
         False,
         "--force",
-        help="Archive even when the gate reports incomplete phases (single plan only).",
+        help="Archive even when the gate reports incomplete phases (single plan only). "
+        "It does not lift the Test Plan hold: record a step that does not apply with "
+        "`fr closeout outcome --na`.",
     ),
     no_spec_sweep: bool = typer.Option(
         False,

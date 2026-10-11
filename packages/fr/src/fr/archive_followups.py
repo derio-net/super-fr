@@ -50,7 +50,9 @@ __all__ = [
     "OwedEnd",
     "file_owed_ends",
     "owed_ends",
+    "owed_identity",
     "owed_marker",
+    "owned_owed_key",
     "write_manual_owed",
     "write_owed_back",
 ]
@@ -373,39 +375,96 @@ def _issue_ref(repo: str, number: object, url: object) -> str | None:
 _OWED_MARKER_LINE = re.compile(r"^<!-- fr-owed:(\S+) -->$")
 
 
-def _existing_owed(gh: GhClient, repo: str) -> dict[str, str]:
-    """`owed key -> owner/repo#n` of the open issues in THIS repo (`repo`, the
-    identity archive files under) that this account filed, that carry the
-    `fr:owed` label and whose last line is an owed marker — the trust rule of
-    `_existing_markers`, plus the label. A reused ref is later CLOSED by
-    `fr journal resolve`, so nothing anyone else wrote is ever reused."""
-    from fr.labels import FR_OWED
+def owed_identity(repo_root: Path) -> tuple[str | None, str]:
+    """`(owner/repo, "")` — the repo every owed forge write acts on — or
+    `(None, why)` when it cannot be trusted (review p3-r1).
+
+    Taken from the origin remote's CONFIGURED url only (`git config
+    remote.origin.url`, never the matrix): a committed `org:`/`repo:` must not
+    be able to redirect owed filing, reuse or closing to another repo. When the
+    matrix names a different repo than the remote, that disagreement is itself
+    a refusal. The configured url, not `git remote get-url`, so a local
+    `insteadOf` mirror never changes whose tracker this is."""
+    import subprocess
+
+    from fr import _hosts
 
     try:
+        done = subprocess.run(
+            ["git", "-C", str(repo_root), "config", "--get", "remote.origin.url"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as e:
+        return None, f"cannot read the origin remote ({e})"
+    url = done.stdout.strip() if done.returncode == 0 else ""
+    slug = _hosts.slug_from_url(url) if url else None
+    if not slug or not _SAFE_REPO.match(slug) or slug.count("/") != 1:
+        return None, f"the origin remote {url!r} does not name an owner/repo"
+    matrix = _matrix_identity(repo_root)
+    if matrix is not None and matrix.lower() != slug.lower():
+        return None, f"the matrix names {matrix} but the origin remote is {slug}"
+    return slug, ""
+
+
+def _matrix_identity(repo_root: Path) -> str | None:
+    import yaml
+
+    path = repo_root / "docs/acceptance/matrix.yaml"
+    try:
+        data = yaml.safe_load(path.read_text()) if path.is_file() else None
+    except (OSError, yaml.YAMLError):
+        return None
+    if isinstance(data, dict) and data.get("org") and data.get("repo"):
+        return f"{data['org']}/{data['repo']}"
+    return None
+
+
+def owned_owed_key(issue: dict[str, object], me: str) -> str | None:
+    """The owed key an open issue stands for, when it is one fr may act on —
+    THE predicate reuse (`fr archive`) and closing (`fr journal resolve`) share
+    (review p3-r4): written by this account, labelled `fr:owed`, a numeric
+    `number`, and its LAST line exactly an owed marker. `None` otherwise."""
+    from fr.labels import FR_OWED
+
+    author = issue.get("author")
+    login = author.get("login") if isinstance(author, dict) else author
+    number = issue.get("number")
+    body = str(issue.get("body") or "").rstrip()
+    raw_labels = issue.get("labels")
+    labels = {
+        str(lab.get("name", "")) if isinstance(lab, dict) else str(lab)
+        for lab in (raw_labels if isinstance(raw_labels, list) else [])
+    }
+    if not me or login != me or not body:
+        return None
+    if not isinstance(number, int) or isinstance(number, bool):
+        return None
+    if FR_OWED.name not in labels:
+        return None
+    m = _OWED_MARKER_LINE.match(body.splitlines()[-1].strip())
+    return m.group(1) if m else None
+
+
+OWED_ISSUE_FIELDS = "number,url,body,author,labels"
+
+
+def _existing_owed(gh: GhClient, repo: str) -> dict[str, str]:
+    """`owed key -> owner/repo#n` of the open issues in THIS repo (`repo`, from
+    `owed_identity`) that `owned_owed_key` accepts. A reused ref is later
+    CLOSED by `fr journal resolve`, so nothing anyone else wrote is reused."""
+    try:
         me = gh.viewer_login()
-        issues = gh.list_issues(repo, "open", 200, fields="number,url,body,author,labels")
+        issues = gh.list_issues(repo, "open", 200, fields=OWED_ISSUE_FIELDS)
     except Exception:  # noqa: BLE001 — dedup is best-effort, as for open ends
-        return {}
-    if not me:
         return {}
     found: dict[str, str] = {}
     for issue in issues:
-        author = issue.get("author")
-        login = author.get("login") if isinstance(author, dict) else author
-        body = str(issue.get("body") or "").rstrip()
-        number = issue.get("number")
-        labels = {
-            str(lab.get("name", "")) if isinstance(lab, dict) else str(lab)
-            for lab in (issue.get("labels") or [])
-        }
-        if login != me or not body or not isinstance(number, int) or isinstance(number, bool):
-            continue
-        if FR_OWED.name not in labels:
-            continue
-        m = _OWED_MARKER_LINE.match(body.splitlines()[-1].strip())
-        ref = f"{repo}#{number}"
-        if m and TRACKED_BY_RE.match(ref):
-            found.setdefault(m.group(1), ref)
+        key = owned_owed_key(issue, me)
+        ref = f"{repo}#{issue.get('number')}"
+        if key and TRACKED_BY_RE.match(ref):
+            found.setdefault(key, ref)
     return found
 
 

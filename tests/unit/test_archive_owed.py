@@ -30,6 +30,23 @@ MATRIX = "schema_version: 5\norg: acme\nrepo: widgets\nrows: []\n"
 TEST_PLAN = "\n## Test Plan\n\n1. Walk the widget live.\n2. Dispatch the weekly job.\n"
 
 
+def _as_github(repo: Path, slug: str = OWN) -> None:
+    """Point `origin`'s configured url at github.com/<slug>, served by the local
+    bare repo through `insteadOf` — owed filing takes its identity from the
+    configured url only (review p3-r1)."""
+    import subprocess
+
+    def git(*a: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    bare = git("remote", "get-url", "origin")
+    url = f"https://github.com/{slug}.git"
+    git("config", f"url.{bare}.insteadOf", url)
+    git("remote", "set-url", "origin", url)
+
+
 class ListingGh(FakeGhClient):
     """A forge double that lists the open issues it holds."""
 
@@ -87,6 +104,7 @@ def _plan_repo(tmp_path: Path, *, outcomes: list[JournalEntry], test_plan: str =
     for e in outcomes:
         append_journal_entry(path, SPEC_SLUG, e)
     _seed(repo)
+    _as_github(repo)
     return repo
 
 
@@ -156,6 +174,7 @@ def test_branch_archive_holds_a_step_with_no_outcome(
 
     tb._merged(repo, build)
     result = tb._invoke(monkeypatch, repo, ["archive", "--branch", tb.BRANCH])
+    # exit 0 by --branch's "held:" convention — coordinator decision on review p3-r8.
     assert result.exit_code == 0, result.output
     assert f"held: docs/superpowers/plans/{PLAN}" in result.output
     assert "no recorded outcome" in result.output
@@ -304,6 +323,7 @@ def _manual_repo(tmp_path: Path) -> Path:
     (repo / "docs/acceptance").mkdir(parents=True)
     (repo / "docs/acceptance/matrix.yaml").write_text(MATRIX)
     _seed(repo)
+    _as_github(repo)
     return repo
 
 
@@ -353,3 +373,77 @@ def test_the_closeout_brief_lists_each_step_with_its_command(tmp_path: Path) -> 
     )
     assert "step 2: Dispatch the weekly job." in brief
     assert "fr closeout outcome --run 2026-10-11-feat-widget --step 2" in brief
+
+
+# --- review p3-r1 / p3-r3 -------------------------------------------------
+
+
+def test_a_matrix_naming_another_repo_files_nothing_anywhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _plan_repo(tmp_path, outcomes=[_outcome(1), _outcome(2, "owed")])
+    (repo / "docs/acceptance/matrix.yaml").write_text(
+        "schema_version: 5\norg: mallory\nrepo: x\nrows: []\n"
+    )
+    import subprocess
+
+    subprocess.run(["git", "-C", str(repo), "commit", "-qam", "retarget"], check=True)
+    gh = ListingGh()
+    result = _archive(monkeypatch, repo, gh)
+    assert result.exit_code == 0, result.output
+    assert [n for n, _ in gh.calls if n in ("create_issue", "ensure_labels")] == []
+    assert "mallory/x" in result.output and OWN in result.output
+    entries = parse_journal(archived_journal_path(repo, "spec", SPEC_SLUG).read_text())
+    assert owed_filed_as(entries) == {} and open_owed_ids(entries) == ["test-plan-step-2"]
+
+
+def test_an_outcome_left_uncommitted_on_the_default_branch_is_a_clean_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    repo = _plan_repo(tmp_path, outcomes=[])
+    monkeypatch.chdir(repo)
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    spec = f"docs/superpowers/specs/{SPEC_NAME}"
+    for step, flag, text in (("1", "--na", "--reason"), ("2", "--na", "--reason")):
+        res = CliRunner().invoke(
+            app, ["closeout", "outcome", "--spec", spec, "--step", step, flag, text, "in CI"]
+        )
+        assert res.exit_code == 0, res.output
+        assert "uncommitted" in res.output
+    before = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, text=True
+    ).stdout
+    result = _archive(monkeypatch, repo, FakeGhClient())
+    assert result.exit_code == 2, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert f"docs/superpowers/journals/specs/{SPEC_SLUG}.md holds uncommitted" in result.output
+    assert (repo / "docs/superpowers/plans" / PLAN).is_dir()
+    assert (repo / "docs/superpowers/specs" / SPEC_NAME).is_file()
+    after = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, text=True
+    ).stdout
+    assert after == before, "nothing moved"
+
+
+def test_the_spec_sweep_reports_a_journal_it_cannot_move_as_a_note(tmp_path: Path) -> None:
+    from fr.archive import spec_archive_sweep
+
+    repo = _plan_repo(tmp_path, outcomes=[_outcome(1), _outcome(2)])
+    import shutil
+
+    shutil.move(
+        str(repo / "docs/superpowers/plans" / PLAN),
+        str(repo / "docs/superpowers/implemented/plans" / PLAN),
+    )
+    journal = journal_path(repo, "spec", SPEC_SLUG)
+    import subprocess
+
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "rm", "-q", "--cached", str(journal)], check=True)
+    sweep = spec_archive_sweep(repo, None)
+    assert [m.dst.name for m in sweep.moves] == [SPEC_NAME]
+    assert any("journal stayed live" in n for n in sweep.notes), sweep.notes

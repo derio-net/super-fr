@@ -150,7 +150,7 @@ def outcome(
                 )
             )
     try:
-        engine.apply_record(
+        applied = engine.apply_record(
             root,
             None,
             StepRecord(journal=tuple(items)),
@@ -165,3 +165,11 @@ def outcome(
         raise _refuse(str(e)) from e
     for n in numbers:
         typer.echo(f"{outcome_id(n)}: {'n/a' if kind == 'na' else kind}")
+    if not applied.committed:
+        # Review p3-r3(b): the outcome is written but git does not hold it, and
+        # `fr archive` refuses to move a spec journal with uncommitted outcomes.
+        rel = journal.relative_to(root).as_posix() if journal.is_relative_to(root) else journal
+        typer.echo(
+            f"warning: {rel} is uncommitted — fr archive will hold the plan until it is "
+            "committed (commit it on a branch, not the default branch)"
+        )

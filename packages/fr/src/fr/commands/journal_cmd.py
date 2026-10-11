@@ -323,7 +323,16 @@ def add(
     typer.echo(f"added {entry.kind} {entry.id} to {scope}/{slug}")
 
 
-def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, message: str) -> None:
+def _apply(
+    root: Path,
+    record: object,
+    *,
+    scope: str,
+    slug: str,
+    path: Path,
+    message: str,
+    discharges_owed: bool = False,
+) -> None:
     """Hand a one-entry record to the engine; a refusal is exit 2, as before."""
     from fr.record import apply as engine
 
@@ -333,7 +342,11 @@ def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, mes
             None,
             record,  # type: ignore[arg-type]
             target=engine.RecordTarget(
-                journal_scope=scope, journal_slug=slug, journal_file=path, message=message
+                journal_scope=scope,
+                journal_slug=slug,
+                journal_file=path,
+                message=message,
+                discharges_owed=discharges_owed,
             ),
         )
     except engine.RecordRefusedError as e:
@@ -482,6 +495,7 @@ def resolve(
         slug=slug,
         path=path,
         message=f"chore(fr): journal {scope}/{slug} — finding {record_id}",
+        discharges_owed=target.kind == "owed",
     )
     shown = f"deferred → {tracked_by}" if tracked_by else state
     typer.echo(f"{entry_id} → {shown} (record {record_id})")
@@ -506,26 +520,21 @@ _URL_PATH = re.compile(
 )
 
 
-def _own_issue(root: Path, ref: str) -> tuple[str, int] | str:
-    """`(owner/repo, number)` when `filed_as` names an issue in THIS repo's own
-    tracker — the identity `fr archive` filed it under (`_repo_slug`: the
-    matrix's keys, else the origin remote) — else the reason it does not.
+def _shown(ref: str) -> str:
+    """`ref` safe to echo (review p3-r5): printable ASCII as is, else its repr."""
+    return ref if ref.isascii() and ref.isprintable() else repr(ref)
 
-    `filed_as` comes from a committed journal, so it is untrusted: a ref
-    naming another owner/repo, or a URL on another host or repo, is never
-    acted on. The repo reaches the forge CLI's argv, so it must be a plain
-    `owner/repo` path with no leading `-`; the number is ASCII digits."""
+
+def _own_issue(root: Path, ref: str, own: str) -> tuple[str, int] | str:
+    """`(owner/repo, number)` when `filed_as` names an issue in `own` — THIS
+    repo, from `owed_identity` (the origin remote) — else the reason it does
+    not. `filed_as` comes from a committed journal, so it is untrusted: a ref
+    naming another owner/repo, or a URL on another host or repo, is never acted
+    on. The number is ASCII digits."""
     from urllib.parse import urlparse
 
     from fr import _hosts
-    from fr.commands.archive_cmd import _repo_slug
 
-    try:
-        own = _repo_slug(root)
-    except Exception as e:  # noqa: BLE001 — no identity, no action
-        return f"this repo's identity is unknown ({type(e).__name__}: {e})"
-    if not _SAFE_REPO.match(own):
-        return f"this repo's identity {own!r} is not owner/repo"
     if (m := _SHORT_REF.match(ref)) is not None:
         repo, number = own, int(m.group(1))
     elif (m := _LONG_REF.match(ref)) is not None:
@@ -535,39 +544,36 @@ def _own_issue(root: Path, ref: str) -> tuple[str, int] | str:
         origin = _hosts.origin_hostname(root)
         host = (url.hostname or "").lower()
         if not origin or host != origin.lower():
-            return f"{ref} is on {host or 'no host'}, not this repo's forge ({origin or 'unknown'})"
+            return (
+                f"{_shown(ref)} is on {_shown(host) or 'no host'}, not this repo's forge "
+                f"({origin or 'unknown'})"
+            )
         if (m := _URL_PATH.match(url.path)) is None:
-            return f"{ref} is not an issue URL"
+            return f"{_shown(ref)} is not an issue URL"
         repo, number = m.group(1), int(m.group(2))
     else:
-        return f"{ref!r} is not an issue reference"
+        return f"{_shown(ref)} is not an issue reference"
     if repo.lower() != own.lower():
-        return f"{ref} names {repo}, not this repo ({own})"
+        return f"{_shown(ref)} names {_shown(repo)}, not this repo ({own})"
     return own, number
-
-
-def _label_names(labels: object) -> set[str]:
-    names: set[str] = set()
-    for lab in labels if isinstance(labels, list) else []:
-        names.add(str(lab.get("name", "")) if isinstance(lab, dict) else str(lab))
-    return names
 
 
 def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
     """R24: close a discharged owed action's issue through the forge, the
-    note as its comment — only when it is THIS repo's issue, labelled
-    `fr:owed` and carrying the entry's own `<!-- fr-owed:<key> -->` marker.
-    Otherwise, or when the forge cannot be reached or the repo declares
-    `tracking: none`, print the command for the operator. The discharge is
-    already recorded; this never changes the exit code."""
-    from fr.archive_followups import owed_marker
+    note as its comment — only when it is an open issue in THIS repo (the
+    origin remote, review p3-r1) that `owned_owed_key` accepts for this very
+    entry's key (review p3-r4). Otherwise, or when the forge cannot be reached
+    or the repo declares `tracking: none`, print the command for the operator.
+    The discharge is already recorded; this never changes the exit code."""
+    from fr.archive_followups import OWED_ISSUE_FIELDS, owed_identity, owned_owed_key
     from fr.hostclient import issue_command
-    from fr.labels import FR_OWED
     from fr.services import ServicesError, TrackerRequiredError, require_tracker
 
-    target = _own_issue(root, ref)
+    shown = _shown(ref)
     comment = f"Discharged: {note}"
-    command = f"close {ref} with the note as its comment"
+    command = f"close {shown} with the note as its comment"
+    own, why = owed_identity(root)
+    target: tuple[str, int] | str = why if own is None else _own_issue(root, ref, own)
     if isinstance(target, tuple):
         try:
             command = issue_command(
@@ -581,26 +587,24 @@ def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
         typer.echo(f"no tracker configured — close it yourself: {command}")
         return
     if isinstance(target, str):
-        typer.echo(f"warning: not closing {ref} — {target}; close it yourself if it is yours")
+        typer.echo(f"warning: not closing {shown} — {target}; close it yourself if it is yours")
         return
     repo, number = target
     try:
         gh = _make_gh_client()
-        issue = gh.view_issue(repo, number)
+        me = gh.viewer_login()
+        issues = gh.list_issues(repo, "open", 200, fields=OWED_ISSUE_FIELDS)
     except Exception as e:  # noqa: BLE001 — the forge is unreachable: say what to run
-        typer.echo(f"could not read {ref} ({type(e).__name__}: {e}) — close it yourself: {command}")
-        return
-    body_lines = {line.strip() for line in str(issue.get("body") or "").splitlines()}
-    if key is None or owed_marker(key) not in body_lines:
         typer.echo(
-            f"warning: not closing {ref} — it does not carry this entry's marker "
-            f"{owed_marker(key or '<key>')}; close it yourself if it is yours: {command}"
+            f"could not read {shown} ({type(e).__name__}: {e}) — close it yourself: {command}"
         )
         return
-    if FR_OWED.name not in _label_names(issue.get("labels")):
+    issue = next((i for i in issues if i.get("number") == number), None)
+    found = owned_owed_key(issue, me) if issue is not None else None
+    if key is None or found != key:
         typer.echo(
-            f"warning: not closing {ref} — it is not labelled {FR_OWED.name}; close it "
-            f"yourself if it is yours: {command}"
+            f"warning: not closing {shown} — it is not an open fr:owed issue this account "
+            f"filed ending in this entry's marker; close it yourself if it is yours: {command}"
         )
         return
     try:
@@ -608,10 +612,10 @@ def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
         gh.edit_issue_state(repo, number, state="CLOSED")
     except Exception as e:  # noqa: BLE001 — the forge is unreachable: say what to run
         typer.echo(
-            f"could not close {ref} ({type(e).__name__}: {e}) — close it yourself: {command}"
+            f"could not close {shown} ({type(e).__name__}: {e}) — close it yourself: {command}"
         )
         return
-    typer.echo(f"closed {ref}")
+    typer.echo(f"closed {shown}")
 
 
 def _deferrals(entries: list[JournalEntry]) -> list[tuple[str, str]]:

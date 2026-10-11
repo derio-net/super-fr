@@ -473,6 +473,7 @@ def render_status_md(status: SpecStatus) -> str:
 # --- Test Plan steps (spec 2026-10-11-debt-engine §E, R17) -----------------
 
 TEST_PLAN_HEADING = "## Test Plan"
+EMPTY_TEST_PLAN = "(Test Plan section has no steps)"
 _SECTION_RE = re.compile(r"^## Test Plan\s*$", re.MULTILINE)
 _NEXT_SECTION_RE = re.compile(r"^#{1,2} ", re.MULTILINE)
 _ITEM_RE = re.compile(r"^(?:\d+[.)]|[-*])\s+(.*)$")
@@ -488,13 +489,26 @@ class Step:
 
 
 def test_plan_section(text: str) -> str | None:
-    """The body of a spec's `## Test Plan` section, or `None` when it has none."""
-    m = _SECTION_RE.search(text)
-    if m is None:
-        return None
-    rest = text[m.end() :]
-    end = _NEXT_SECTION_RE.search(rest)
-    return rest[: end.start()] if end else rest
+    """The body of a spec's `## Test Plan` section, or `None` when it has none.
+
+    Scanned line by line with code fences tracked (review p3-r2): a `## Test
+    Plan` inside a fence never starts the section, and a `# comment` inside a
+    fence never ends it — only a real `#`/`##` heading does."""
+    lines = text.splitlines(keepends=True)
+    fenced = False
+    start: int | None = None
+    for i, line in enumerate(lines):
+        if _FENCE_RE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        if start is None:
+            if _SECTION_RE.match(line.rstrip("\r\n")):
+                start = i + 1
+        elif _NEXT_SECTION_RE.match(line):
+            return "".join(lines[start:i])
+    return None if start is None else "".join(lines[start:])
 
 
 def test_plan_steps(text: str) -> list[Step]:
@@ -533,7 +547,7 @@ def test_plan_steps(text: str) -> list[Step]:
             prose.append(stripped)
         blank = False
     if not items:
-        return [Step(1, " ".join(" ".join(prose).split()))]
+        return [Step(1, " ".join(" ".join(prose).split()) or EMPTY_TEST_PLAN)]
     return [Step(i, " ".join(" ".join(parts).split())) for i, parts in enumerate(items, 1)]
 
 

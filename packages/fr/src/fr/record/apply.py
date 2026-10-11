@@ -87,6 +87,9 @@ class RecordTarget:
     phase: int | None = None
     message: str | None = None
     """The commit subject a verb record commits under."""
+    discharges_owed: bool = False
+    """`fr journal resolve`'s target: a `fixed` resolution may name an `owed`
+    entry (review p3-r6). Every other caller is refused one."""
     acceptance_drops: Mapping[str, Mapping[str, tuple[str, ...]]] = field(default_factory=dict)
     """Refs to remove from existing rows before the record's `levels` are
     merged in: row id → level → refs (gh#624). Verb-only — fed by
@@ -162,6 +165,9 @@ class _Context:
     phase: int | None
     completes_phase: bool
     emits_ticks: bool
+    discharges_owed: bool = False
+    """Only `fr journal resolve` discharges an owed entry: it closes the issue
+    the entry was filed as, which a step record's `resolves:` never does."""
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -308,12 +314,14 @@ def _journal_writes(
         hit = next((e for e in [*existing, *new] if e.id == fid), None)
         if hit is None:
             raise RecordRefusedError(f"no journal entry {fid!r} in {path.name} — nothing resolved")
-        if hit.kind == "owed" and discharge:
+        if hit.kind == "owed" and discharge and ctx.discharges_owed:
             return hit  # discharging an owed action (spec 2026-10-11 §E, R24)
         if hit.kind == "owed":
             raise RecordRefusedError(
-                f"entry {fid!r} is an owed action — it is discharged with state fixed and the "
-                "evidence as its note, never refuted, deferred or scoped out"
+                f"entry {fid!r} is an owed action — discharge it with `fr journal resolve "
+                f"--scope <s> --slug <slug> --id {fid} --state fixed --note <evidence>`, "
+                "which also closes the issue it was filed as; a step record's `resolves:` "
+                "cannot"
             )
         if hit.kind != "finding":
             raise RecordRefusedError(f"entry {fid!r} is a {hit.kind!r}, not a finding")
@@ -919,6 +927,7 @@ def apply_record(
             phase=target.phase,
             completes_phase=False,
             emits_ticks=target.plan_dir is not None,
+            discharges_owed=target.discharges_owed,
         )
 
     overlay = _Overlay()
