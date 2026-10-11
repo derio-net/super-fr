@@ -1,0 +1,127 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Unrunnable verification strategies — no default walk the repo cannot run,
+    flagged early (#1091)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - verification-unrunnable-strategy
+  tier: standard
+  files:
+  - packages/fr/src/fr/verification/effective.py
+  - packages/fr/src/fr/verification/rows.py
+  - packages/fr/src/fr/verification/walk.py
+  - packages/fr/src/fr/verification/spec_section.py
+  - packages/fr/src/fr/run/visual.py
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - tests/unit/test_verification_unrunnable.py
+  - docs/acceptance/*
+  estimate_lines: 400
+tasks:
+- number: 1
+  title: RED — install_problem, effective_shape_default, walk_owed
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: create tests/unit/test_verification_unrunnable.py. (a)
+      `install_problem(manifest, root)` from fr.verification.effective: None for
+      no install, a bare command (`sh`), an absolute path; a message naming the
+      program for a missing `.fr/candidate-install` and for a non-executable
+      one. (b) `effective_shape_default("candidate", root)` is None in a repo
+      without `.fr/candidate-install`, "candidate" with an executable one,
+      and an unresolvable name ("no-such-strategy") is returned unchanged;
+      None stays None. (c) `fr.verification.rows.shape_default(root, state)`
+      applies the filter (build a RunState for workflow fr-goal the way
+      existing rows/walk tests do — grep tests/ for `shape_default(`). (d)
+      `walk_owed` for a spec whose `## Verification` has only `- row: none —
+      reason` lines and no `strategy:` owes nothing in a repo without
+      `.fr/candidate-install`, and owes `candidate` (run_strategy) in one with
+      it. (e) `walk._contract` on a missing program raises WalkError with the
+      same text as before (pin the current message). Run, confirm red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `install_problem` and `effective_shape_default` to
+      fr/verification/effective.py per spec §B (StrategyError -> return the
+      name unfiltered). Make walk.py `_contract` keep its no-install refusal
+      and raise WalkError(install_problem(...)) for the program check, the
+      message text unchanged. Call effective_shape_default in
+      rows.shape_default (rows.py:78), plan_ops._verification_issues
+      (plan_ops.py:1679) and run/visual.py:344. Tests green.
+- number: 2
+  title: RED → GREEN — explicit unrunnable strategies flagged at self-review and brainstorm
+    resolve
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in the same test file: (a) `unrunnable_strategies(root, section,
+      rows)` in fr.verification.rows returns one message per distinct
+      explicitly-named strategy (section `strategy: candidate`, a per-row
+      `- r: candidate`, a row `verify: candidate`) with an install problem,
+      each naming the strategy, the problem and both fixes; nothing for `none`
+      or the shape default. (b) `fr plan self-review` on a plan whose spec
+      says `strategy: candidate` in a repo without `.fr/candidate-install`
+      reports a `spec ## Verification:` error (mirror the existing
+      _verification_issues tests — grep tests/ for "_verification_issues" or
+      "spec ## Verification"). (c) a `fr run resolve --step brainstorm
+      --record` that emits such a spec prints a `warning:` line and still
+      resolves done (mirror an existing brainstorm-record resolve test).
+      Confirm red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement unrunnable_strategies; call it from
+      _verification_issues (errors) and from the brainstorm resolve in
+      commands/run_cmd.py after the record applies when `emitted.spec` is set
+      (warnings; swallow SectionError/AcceptanceError/OSError there — find
+      where the brainstorm record's emitted spec is handled, e.g. grep
+      run_cmd.py and record/apply.py for "emitted"). Tests green.
+- number: 3
+  title: 'RED → GREEN — malformed strategy: message; gate'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED then GREEN: a test that `parse_section` on `strategy: none — nothing
+      deploys` raises SectionError whose message contains `strategy: <name>`
+      and `- <row-id>: <strategy|none> — <reason>`; then change
+      spec_section.py:101's message per spec §B R6. Update any existing test
+      pinning the old text.
+  - id: P2.T3.S2
+    text: |-
+      REFACTOR + gate: ruff format/check, mypy packages/fr/src, run
+      `uv run pytest tests/unit -q --no-cov -k "verification or walk or self_review or visual"`.
+      Move the verification-unrunnable-strategy row to `ci` with `fr acceptance
+      set-status ... --level unit=super-fr:tests/unit/test_verification_unrunnable.py#<test>`.
+      Commit, push, record suite evidence per the brief.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

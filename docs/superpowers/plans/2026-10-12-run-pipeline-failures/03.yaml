@@ -1,0 +1,84 @@
+schema_version: 2
+phase:
+  number: 3
+  title: First claim wins — a re-claim never rewrites an open attempt (#1110)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - run-claim-first-wins
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - tests/unit/test_run_claim_first_wins.py
+  - docs/acceptance/*
+  estimate_lines: 350
+tasks:
+- number: 1
+  title: RED — the R8 sequences
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: create tests/unit/test_run_claim_first_wins.py, mirroring the
+      existing claim tests' run fixture (grep tests/ for "def test_.*claim" and
+      "--open-unit"). On a run with implement-phase phase/1 advanced (attempt
+      open), claimed by agent A with --harness claude-code --model X:
+      (a) identical re-claim -> exit 0, "(no change)", cursor bytes unchanged,
+      no new commit; (b) re-claim --model with the same model_family
+      (X + "-20260101") -> no-op, model stays X; (c) different-family model Y
+      -> exit 0, stderr warning naming X and Y, model stays X, no commit;
+      (d) OpenCode sequence: `claim --open-unit --agent A --agent-type
+      fr-phase-executor-standard --harness opencode --model M1`, then
+      `claim --step implement-phase --item phase/1 --agent A --model M2` (M2 a
+      different family) -> model stays M1, warning, agent_type stays the tier
+      variant; (e) `fr run resolve --step implement-phase --item phase/1
+      --state done --model Y` without --agent on the claimed attempt keeps
+      model X (observed-model override aside — stub telemetry to None);
+      (f) first claim with --harness/--model on an attempt advance pre-filled
+      sets them (unchanged behaviour); (g) agent B -> exit 2 "already claimed";
+      (h) after an interruption (claim, then a fresh load of the cursor as a
+      restarted orchestrator would) `fr run advance` refuses to re-brief
+      phase/1 naming A. Count commits with `git rev-list --count HEAD`.
+      Confirm (a)-(e) red where behaviour changes.
+- number: 2
+  title: GREEN — one merge function
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      GREEN: in commands/run_cmd.py add one merge helper (e.g.
+      `_merge_claim(open_record, key, *, agent, harness, model, agent_type)`)
+      implementing spec §C: unclaimed attempt -> set as today; claimed ->
+      fill empty fields, keep equal / same model_family silently, keep and
+      warn on anything else (exact warning text from spec §C). Route
+      `_claimed_identity` (run_cmd.py:3985), `_claim_identity`'s agent_type
+      handling (run_cmd.py:6814) and `_close_on_resolve`'s no-agent branch
+      (run_cmd.py:4049-4057) through it. In `_claim_identity`, when the merged
+      attempt equals the open one, print "<key>: already claimed by <agent>
+      (no change)" and return before `_save_run_state`. Tests green.
+  - id: P3.T2.S2
+    text: |-
+      REFACTOR + gate: ruff format/check, mypy packages/fr/src, run
+      `uv run pytest tests/unit -q --no-cov -k "claim or resolve or dispatch or liveness"`
+      and `bun test` is NOT needed (no plugin change). Move run-claim-first-wins
+      to `ci` with `fr acceptance set-status ... --level
+      unit=super-fr:tests/unit/test_run_claim_first_wins.py#<test>`. Commit,
+      push, record suite evidence per the brief.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -275,3 +275,9 @@ the spec journal and open to revision at PR review.
 - A config knob declaring reports CI-built (detection by `.gitignore` only).
 - Filtering ignored paths generically inside `commit_paths`.
 - An audited attempt-replacement transition in the run cursor (a schema change).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-12-run-pipeline-failures | `derio-net/super-fr` | `2026-10-12-run-pipeline-failures` | — |
