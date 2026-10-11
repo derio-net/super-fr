@@ -456,3 +456,8 @@ Its own ask: the report every surface renders.
 ### phase-split-2026-10-11-debt-engine-p3 · decision · ask: owed actions — closeout outcomes, archive hold, owed kind (R16–R24)
 
 Its own ask: D.1/D.2 of #1121.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-11-debt-engine-p4 created=2026-10-11T17:40:02+00:00 -->
+### phase-split-2026-10-11-debt-engine-p4 · decision · ask: weekly Technical debt issue, archive PR, forge adapters, scaffolds (R9–R13, R26)
+
+Its own ask: B of #1121.
