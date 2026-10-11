@@ -1,0 +1,15 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-adopt-safety-2
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - {kind: finding, id: p1-r1, phase: 1, review_scope: in, title: "stop-report re-run command interpolates --checkout (and ids) unquoted", body: "triage_batch_cmd.py stop report: a path with spaces gives a broken copy-paste command. Fix: shlex.quote."}
+  - {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "stop-report test lacks a negative case", body: "Only the both-flags case was tested; an always-echoed --no-hold would silently un-hold a re-run."}
+  - {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "herdr _agent_cwd/_agent_session duplicate restart.py's reads; P1.T4.S3 outcome unrecorded", body: "runner.py's helpers repeat restart.py:532/537."}
+  - {kind: review, id: p1-review-1, phase: 1, title: "Phase 1 code review", body: "Dispatched read-only reviewer checked R1-R4, R10 and the R9 flag echo against spec §A/§C, ran the adopt and herdr tests and the hold scenario. Raised p1-r1..p1-r3, all in scope; all fixed (shlex-quoted re-run args, negative stop-report test, agent_cwd/agent_session moved to fr_herdr._herdr and shared by runner and restart)."}
+resolves:
+  - {id: p1-r1, state: fixed, body: "Stop report quotes batch id, tab, branch and --checkout with shlex.quote."}
+  - {id: p1-r2, state: fixed, body: "Added test_the_stop_report_echoes_neither_flag_when_not_given."}
+  - {id: p1-r3, state: fixed, body: "agent_cwd/agent_session now live in fr_herdr._herdr, used by both runner.list_sessions and restart; this is P1.T4.S3's refactor."}
+evidence: {review: p1-review-1, reviewer: a5d8388d2812a256f, model: claude-opus-5-5}
