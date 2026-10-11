@@ -88,9 +88,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_status_add.py
-    status: unwired
-    notes: 'CLI diff ci-pinned; the PR-body defense is process — demonstrated in PR
-      #352, not automated.'
+    status: manual
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      PR-body defense is a review process (demonstrated in PR #352), never automatable;
+      the CLI diff itself is ci-pinned.'
   - id: acceptance-nag-channels
     capability: Acceptance matrix
     acceptance: Session start surfaces open debt (capped), fr status carries the summary,
