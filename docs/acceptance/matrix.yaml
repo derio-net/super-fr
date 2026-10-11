@@ -8230,7 +8230,10 @@ rows:
       - super-fr:tests/unit/test_verification_unrunnable.py#test_self_review_errors_on_an_explicit_unrunnable_strategy
       - super-fr:tests/unit/test_verification_unrunnable.py#test_the_brainstorm_resolve_warns_and_still_resolves
       - super-fr:tests/unit/test_verification_unrunnable.py#test_a_malformed_strategy_line_shows_the_accepted_form
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_p2_r5_the_flag_form_resolve_prints_the_same_warning
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_p2_r1_a_rows_verify_alone_is_flagged_and_names_the_row_and_the_fix
+      - super-fr:tests/unit/test_verification_walk.py#test_p2_r7_a_default_the_repo_cannot_run_says_so_instead_of_naming_no_strategy
     status: ci
-    notes: 'R4-R6 tested: install_problem, effective_shape_default, walk_owed, unrunnable_strategies,
-      self-review error, brainstorm warning, R6 message'
+    notes: 'review p2: sources named per strategy, flag-form warning, never-raise, walk
+      message'
     verify: none
