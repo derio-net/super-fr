@@ -166,3 +166,8 @@ Fixed in R7 and §B: refuse when the main worktree is not on <default>; an exist
 ### sr-f11-resolved · finding [fixed] · resolves sr-f11: Resumable stop report's re-run command drops --no-hold
 
 Fixed in R9 and §B step 3: the stop report echoes --no-hold and --checkout on both paths.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-11-batch-adopt-safety-2-p2 created=2026-10-11T19:05:52+00:00 -->
+### phase-split-2026-10-11-batch-adopt-safety-2-p2 · decision · ask: #1069 adopting a session on the default branch (R5–R9) is its own independently reviewable ask
+
+Phase 2 serves only #1069's requirements and its own acceptance row.
