@@ -633,10 +633,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_journal_cmd.py
-    status: unwired
-    notes: render/check unit-pinned; the completeness bar (a fresh subagent implements
-      from journal+spec+phase alone) was met live in this feature's own run — a CI
-      integration test dispatching fr-phase-executor is owed.
+    status: walked
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      completeness bar was met live in the feature''s own run (a fresh subagent implemented
+      from journal+spec+phase); render/check unit-pinned.'
   - id: fr-goal-phase-tiering
     capability: fr-goal subagent execution
     acceptance: fr-plan annotates each phase with a tier; the orchestrator dispatches
