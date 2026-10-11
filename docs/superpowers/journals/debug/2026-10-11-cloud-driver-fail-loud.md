@@ -58,3 +58,8 @@ Operator, 2026-10-11: a cloud session's origin is https://github.com/derio-net/s
 ### deferred-1100-comment · finding [open] · #1100 comment deferred to #1142: GraphQL read despite api: rest needs a cloud repro
 
 Operator chose a follow-up (2026-10-11).
+
+<!-- fr:journal kind=finding scope=debug id=deferred-1100-comment-resolved created=2026-10-11T21:07:10+00:00 state=open resolves=deferred-1100-comment tracked_by=derio-net/super-fr#1142 -->
+### deferred-1100-comment-resolved · finding [deferred → derio-net/super-fr#1142] · resolves deferred-1100-comment: #1100 comment deferred to #1142: GraphQL read despite api: rest needs a cloud repro
+
+needs a cloud repro; operator chose a follow-up
