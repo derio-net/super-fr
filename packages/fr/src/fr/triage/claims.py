@@ -31,7 +31,7 @@ from typing import Any, Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
 from fr.triage.batch import BatchStage
-from fr.triage.model import BATCH_ID_RE, Batch, Facts, IssueClaim
+from fr.triage.model import BATCH_ID_RE, Batch, ClaimTakenEvent, Facts, IssueClaim
 
 CLAIM_PREFIX = "<!-- fr-claim:"
 RELEASED_PREFIX = "<!-- fr-claim-released:"
@@ -115,9 +115,15 @@ def render_marker(marker: Marker) -> str:
         payload["released"] = _stamp(marker.released)
         if marker.released_by:
             payload["released_by"] = marker.released_by
+            if marker.released >= marker.expires:
+                why = "had expired"
+            elif _stale_at(marker.heartbeat, marker.expires, marker.released):
+                why = f"had gone stale (last heartbeat {_human(marker.heartbeat)})"
+            else:
+                why = f"was retired by the operator (last heartbeat {_human(marker.heartbeat)})"
             line = (
                 f"Released by triage scope `{marker.released_by}` at {_human(marker.released)}: "
-                f"the claim of `{marker.signer}` for batch `{marker.batch}` had expired."
+                f"the claim of `{marker.signer}` for batch `{marker.batch}` {why}."
             )
         else:
             line = (
@@ -252,6 +258,17 @@ def expired(claim: Claim, now: datetime) -> bool:
     return now >= claim.expires
 
 
+def _stale_at(heartbeat: datetime, expires: datetime, now: datetime) -> bool:
+    return now >= expires or now - heartbeat > (expires - heartbeat) / 4
+
+
+def stale(claim: Claim, now: datetime) -> bool:
+    """R8 judged from the marker alone (gh#1123): expired, or its heartbeat is older than a
+    quarter of the expiry the marker itself states (`expires - heartbeat`). A scope that
+    still drives refreshes before this, so a stale claim is evidence its holder stopped."""
+    return _stale_at(claim.heartbeat, claim.expires, now)
+
+
 def winner(claims: Sequence[Claim]) -> Claim | None:
     """R4: the oldest marker comment wins, then the lowest comment id."""
     return min(claims, key=_order, default=None)
@@ -279,16 +296,26 @@ def _owes(batch: Batch, stage: BatchStage) -> bool:
     return batch.wave is not None or stage in _DISPATCHED_ON
 
 
+def taken_keys(batch: Batch) -> list[str]:
+    """The members `claim take` took for *batch* (its `claim_taken` events), in its order."""
+    taken = {k for e in batch.events if isinstance(e, ClaimTakenEvent) for k in e.keys}
+    return [k for k in batch.ids if k in taken]
+
+
 def owed_claims(
     batches: Sequence[Batch], stages: Mapping[str, BatchStage], archived: Collection[str]
 ) -> list[tuple[str, str]]:
     """(key, batch id) this scope owes a claim (R3, R11): every member of a batch with
-    a wave, and of a wave-less batch from `dispatched` on, while it is not releasing."""
+    a wave, and of a wave-less batch from `dispatched` on, while it is not releasing.
+    A member the operator took (`claim take`, gh#1120) is owed from the take, wave or
+    not: otherwise the next sync would release the claim the take just wrote."""
     out: list[tuple[str, str]] = []
     for b in batches:
         stage = stages[b.id]
-        if _owes(b, stage) and not releasing(b, stage, b.id in archived):
-            out.extend((k, b.id) for k in b.ids)
+        if releasing(b, stage, b.id in archived):
+            continue
+        keys = b.ids if _owes(b, stage) else taken_keys(b)
+        out.extend((k, b.id) for k in keys)
     return out
 
 
@@ -326,7 +353,7 @@ def owed_releases(
     out: list[tuple[str, str]] = []
     for b in batches:
         stage = stages[b.id]
-        ever = b.wave is not None or any(e.kind == "dispatch" for e in b.events)
+        ever = b.wave is not None or any(e.kind in ("dispatch", "claim_taken") for e in b.events)
         if ever and releasing(b, stage, b.id in archived):
             done = _released_keys(b)
             out.extend((k, b.id) for k in b.ids if k not in done and k not in owed)
@@ -344,15 +371,21 @@ def held_members(keys: Iterable[str], held: Mapping[str, Claim]) -> list[tuple[s
 
 
 def held_line(key: str, h: Claim, now: datetime) -> str:
-    """One held member in words, with the operator hint once its claim has expired (R6)."""
+    """One held member in words, with the operator hint once its claim is stale (R6, R8).
+
+    The hint is the whole sequence (gh#1120): `claim take` needs the issue in one of this
+    scope's batches, and `batch create` / `batch edit --add-issue` admit an expired-held
+    member for exactly that."""
     line = (
         f"{key} is claimed by triage scope {h.signer} for batch {h.batch}, expires "
         f"{h.expires.isoformat()}"
     )
-    if expired(h, now):
+    if stale(h, now):
+        state, flag = ("expired", "") if expired(h, now) else ("stale", " --stale")
         line += (
-            f" (expired: only the operator takes it over with `fr triage claim take {key} "
-            "--batch <id> --yes`)"
+            f" ({state}: only the operator takes it over: put it in a batch of this scope "
+            f"with `fr triage batch create <id> --issue {key}` or `fr triage batch edit <id> "
+            f"--add-issue {key}`, then `fr triage claim take {key} --batch <id>{flag} --yes`)"
         )
     return line
 

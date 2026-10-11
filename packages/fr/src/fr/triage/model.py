@@ -54,15 +54,15 @@ from fr.triage.stage import Stage, derive_stage
 # still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
 FACTS_SCHEMA: Literal[8] = 8
 FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8)
-# The version this fr WRITES: every engine write stamps 7 (audited replacement;
-# 6 was spec 2026-10-06-triage-claims
+# The version this fr WRITES: every engine write stamps 8 (the `claim_taken` event, gh#1120;
+# 7 was audited replacement; 6 was spec 2026-10-06-triage-claims
 # §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
 # `conflict` event; 4 was
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[7] = 7
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7)
+JUDGEMENTS_SCHEMA: Literal[8] = 8
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -730,6 +730,22 @@ class ClaimsReleasedEvent(_Strict):
         return _keys(v, "claims_released keys")
 
 
+class ClaimTakenEvent(_Strict):
+    """`fr triage claim take` replaced another scope's claim on *keys* with this scope's
+    claim for this batch (gh#1120). A taken member is owed its claim from then on, wave or
+    not, so `claim sync` refreshes it rather than releasing it. Needs judgements schema 8.
+    Written by the engine only."""
+
+    kind: Literal["claim_taken"]
+    at: AwareDatetime
+    keys: list[str] = Field(min_length=1)
+
+    @field_validator("keys")
+    @classmethod
+    def _keys_are_keys(cls, v: list[str]) -> list[str]:
+        return _keys(v, "claim_taken keys")
+
+
 class ReplacementEvent(_Strict):
     """Runner-operation audit, never a new dispatch or lifecycle transition (schema 7)."""
 
@@ -754,6 +770,8 @@ SCHEMA_5_EVENTS = frozenset({"conflict"})
 """The event kinds only a schema 5 `judgements.yaml` may carry (verification-strategies §G)."""
 SCHEMA_6_EVENTS = frozenset({"claims_released"})
 """The event kinds only a schema 6 `judgements.yaml` may carry (triage-claims §3.H)."""
+SCHEMA_8_EVENTS = frozenset({"claim_taken"})
+"""The event kinds only a schema 8 `judgements.yaml` may carry (gh#1120)."""
 
 
 BatchEvent = Annotated[
@@ -763,7 +781,8 @@ BatchEvent = Annotated[
     | PostMergeEvent
     | ConflictEvent
     | ClaimsReleasedEvent
-    | ReplacementEvent,
+    | ReplacementEvent
+    | ClaimTakenEvent,
     Field(discriminator="kind"),
 ]
 
@@ -871,7 +890,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -995,6 +1014,13 @@ class Judgements(_Strict):
             isinstance(e, ReplacementEvent) for b in self.batches for e in b.events
         ):
             raise ValueError("replacement events need schema 7")
+        if self.schema_ < 8 and any(
+            e.kind in SCHEMA_8_EVENTS for b in self.batches for e in b.events
+        ):
+            raise ValueError(
+                "`claim_taken` events need schema 8, but this file is stamped "
+                f"schema {self.schema_}"
+            )
         return self
 
 

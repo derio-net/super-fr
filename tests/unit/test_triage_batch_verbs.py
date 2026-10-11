@@ -151,7 +151,7 @@ def test_create_writes_the_batch_at_the_current_schema(tmp_path: Path) -> None:
         ["super-fr#577", "super-fr#575"],
         "minor",
     )
-    assert _raw(tmp_path)["schema"] == 7
+    assert _raw(tmp_path)["schema"] == 8
 
 
 def test_create_stores_only_the_launch_values_given(tmp_path: Path) -> None:
@@ -875,13 +875,15 @@ def test_create_refuses_a_member_held_elsewhere_naming_holder_batch_and_expiry(
     assert gh.calls == []
 
 
-def test_create_refusing_an_expired_claim_names_claim_take(
+def test_create_admits_an_expired_claim_and_names_claim_take(
     tmp_path: Path, gh: FakeGhClient
 ) -> None:
+    """gh#1120: create used to refuse it, while take needs it in a batch."""
     _state(tmp_path, _held_facts(live=False))
     code, out = _run(tmp_path, *_CREATE, "--issue", "super-fr#575", "--wave", "1")
-    assert code == 2
-    assert "fr triage claim take super-fr#575" in " ".join(out.split())
+    assert code == 0, out
+    assert "fr triage claim take super-fr#575 --batch lifecycle --yes" in " ".join(out.split())
+    assert "claim super-fr#575 for lifecycle" not in out
 
 
 def test_create_with_a_wave_and_no_yes_prints_the_owed_claims(

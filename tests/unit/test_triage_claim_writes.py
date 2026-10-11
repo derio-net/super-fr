@@ -337,3 +337,42 @@ def test_two_near_simultaneous_writers_the_older_marker_wins_and_the_rival_withd
     assert isinstance(
         cw.refresh(gh, REPO, 1, me=OTHER, expiry=DAY, now=NOW, trusted=TRUSTED), cw.Held
     )
+
+
+# gh#1123: the operator's override for a claim whose holder stopped refreshing (stale, R8).
+HOUR = timedelta(hours=1)
+
+
+def test_take_stale_refuses_a_fresh_claim(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - HOUR, expires=NOW + 23 * HOUR)
+    with pytest.raises(cw.ClaimError, match="fresh"):
+        cw.take(
+            gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=TRUSTED, allow="stale"
+        )
+    assert _ops(gh) == []
+
+
+def test_take_stale_takes_a_live_stale_claim_and_says_so(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - 10 * HOUR, expires=NOW + 14 * HOUR)
+    with pytest.raises(cw.ClaimError, match="live"):
+        cw.take(gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=TRUSTED)
+    cw.take(gh, REPO, 1, me=ME, batch="mine", expiry=DAY, now=NOW, trusted=TRUSTED, allow="stale")
+    theirs, mine = _markers(gh)
+    assert (theirs.released, theirs.released_by) == (NOW, ME)
+    assert mine.signer == ME
+    body = gh.issue_comments[(REPO, 1)][0]["body"]
+    assert "stale" in body and "expired" not in body
+
+
+def test_release_stale_of_another_scope(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - 10 * HOUR, expires=NOW + 14 * HOUR)
+    cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, of=OTHER, allow="stale")
+    (m,) = _markers(gh)
+    assert (m.released, m.released_by) == (NOW, ME)
+
+
+def test_release_any_retires_a_fresh_claim_and_says_the_operator_did(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - HOUR, expires=NOW + 23 * HOUR)
+    cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, of=OTHER, allow="any")
+    assert _markers(gh)[0].released == NOW
+    assert "retired by the operator" in gh.issue_comments[(REPO, 1)][0]["body"]
