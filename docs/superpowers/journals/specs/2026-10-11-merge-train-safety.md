@@ -266,3 +266,8 @@ Once per repo per pass or command (seen set); the tripwire exempts sentences nam
 ### sr-r1-17-resolved · finding [fixed] · resolves sr-r1-17: Line citations drifted
 
 Re-cited triage_batch_cmd.py:2220-2221 and views.py:182-193; §E now partitions the shared loop before the one-repo check.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-11-merge-train-safety-p2 created=2026-10-11T17:27:20+00:00 -->
+### phase-split-2026-10-11-merge-train-safety-p2 · decision · ask: red-PR recovery, strict up-to-date and skip-held (#1082, #1076) are their own asks
+
+ask: red-PR recovery, strict up-to-date and skip-held (#1082, #1076) are their own asks
