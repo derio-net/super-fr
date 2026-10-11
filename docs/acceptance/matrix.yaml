@@ -8232,7 +8232,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R25
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at planning; phase 2 writes it.
+    scenario: tests/scenarios/debt-report.sh
   - id: debt-weekly-issue-rename
     capability: debt
     acceptance: 'The weekly job keeps one `<repo>: Technical debt` issue, renaming a
