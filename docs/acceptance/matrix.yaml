@@ -6034,9 +6034,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_ci_built_reports.py#test_check_reports_no_drift_for_absent_or_stale_ignored_reports
+      int:
+      - super-fr:tests/integration/test_acceptance_ci_built_reports.py#test_acceptance_set_status_commits_without_ignored_reports
+    status: ci
+    notes: R1-R3 pinned by unit and integration tests; every commit path and both check
+      paths skip gitignored reports
     verify: none
   - id: visual-evidence-gate
     capability: fr-goal-evidence
