@@ -271,3 +271,8 @@ Re-cited triage_batch_cmd.py:2220-2221 and views.py:182-193; §E now partitions 
 ### phase-split-2026-10-11-merge-train-safety-p2 · decision · ask: red-PR recovery, strict up-to-date and skip-held (#1082, #1076) are their own asks
 
 ask: red-PR recovery, strict up-to-date and skip-held (#1082, #1076) are their own asks
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-11-merge-train-safety-p3 created=2026-10-11T17:27:29+00:00 -->
+### phase-split-2026-10-11-merge-train-safety-p3 · decision · ask: driver merge-queue support and merge_group CI (#1062 piece 3)
+
+ask: driver merge-queue support and merge_group CI (#1062 piece 3)
