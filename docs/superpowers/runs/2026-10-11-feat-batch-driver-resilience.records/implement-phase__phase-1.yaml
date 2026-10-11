@@ -1,0 +1,35 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-driver-resilience
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T2.S4, P1.T2.S5, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T3.S4, P1.T3.S5, P1.T3.S6]
+refactor: {}
+journal:
+  - kind: discovery
+    id: p1-d1-single-pass-guard-fallout
+    phase: 1
+    title: the single-pass guard changed 30 existing --once --yes tests
+    body: >-
+      Every host test whose --once --yes plan dispatches now needs --single-pass (30 tests
+      across drive_cmd, disruption, driver_adapter, driver_pass). Three asserted the last
+      output line, which is now the warning, so they read a new _summary() helper.
+      The cloud pass is untouched by construction (it never passes single_pass).
+  - kind: discovery
+    id: p1-d2-gitseam-tripwire
+    phase: 1
+    title: batch modules may not import the gitseam module whole
+    body: >-
+      The loop command needs the default checkout's toplevel; gitseam.toplevel is off
+      limits to batch modules (test_forge_adapter_batch_ops), so the command asks
+      make_checkout(None).path, and only when the scope is a single repo with no --checkout.
+  - kind: discovery
+    id: p1-d3-suite-flakes-under-load
+    phase: 1
+    title: three timing tests failed in a full local run under host load, pass alone
+    body: >-
+      With the host load average above 500, a full local run failed
+      test_fails_open_when_fr_hangs..., test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly
+      and test_a_named_script_that_was_run_passes; each passes alone. Unrelated to this change; evidence is CI per operator instruction (local full run stopped).
+resolves: []
+evidence: {tests: ci}
