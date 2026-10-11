@@ -7502,10 +7502,17 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R24
     levels: {}
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): live-verified
-      2026-10-06 at closeout: fr verification prerelease dispatched prerelease.yml (success),
-      tag and pre-release created, main unchanged.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      2026-10-06 at closeout; main and version surfaces unchanged.'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: fr verification prerelease dispatched prerelease.yml run 37498798304
+        (success); rc tag and pre-release created
   - id: super-fr-candidate-contract
     capability: verification
     acceptance: super-fr provides .fr/candidate-install and scenario scripts, exercised
