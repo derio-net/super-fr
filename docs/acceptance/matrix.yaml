@@ -2511,9 +2511,17 @@ rows:
       int:
       - super-fr:docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): driven
-      live post-merge 2026-09-21 on fr 4.12.0, one throwaway /fr-goal per harness (Claude
-      Code and OpenCode); evidence in the int ref.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): driven
+      live post-merge 2026-09-21 on fr 4.12.0, one /fr-goal per harness; this walk is
+      the Claude Code one.'
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-21T00:00:00Z'
+      evidence: docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md (Claude
+        Code run)
   - id: run-advance-refuses-running
     capability: Run state
     acceptance: An operator re-entering the loop cold is told to wait rather than handed
