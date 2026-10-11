@@ -230,3 +230,18 @@ def test_each_held_row_gets_the_walked_move_to_record_after_its_walk(
     assert len(walked) == 1
     assert walked[0].startswith("fr acceptance set-status --id held --status walked --walk ")
     assert "--strategy live" in walked[0]
+
+
+def test_a_row_held_by_the_spec_section_prints_its_effective_strategy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1-r1: a row with no `verify` of its own, held open by the spec's
+    `## Verification` section, prints the strategy that holds it, never `None`."""
+    root = _repo(tmp_path, strategy="live")
+    _matrix(root, [{"id": "spec-held", "issues": ["o/proj#5"]}])
+
+    brief = _brief(root, monkeypatch, "Refs o/proj#5\n")
+
+    (walked,) = [ln.strip() for ln in brief.splitlines() if "--status walked" in ln]
+    assert "--strategy live" in walked
+    assert "None" not in walked
