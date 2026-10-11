@@ -1,0 +1,144 @@
+schema_version: 9
+run: 2026-10-11-feat-batch-debt-engine
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+- kind: review
+  id: p2-review-r1
+  phase: 2
+  title: 'phase 2 code review (fr debt engine): 13 findings, all in scope'
+  body: 'Independent reviewer (separate context, read-only) over ed236f30 + the mirror fix: engine against
+    R2-R4, figures encoding, fold_owed, R1/R25 exemption, the automated security finding, and test quality.
+    32 targeted tests passed. Receiving: p2-r1 and p2-r3 confirmed by reading engine.py:165,207 and debt_cmd.py:40;
+    p2-r1 was reproduced by the reviewer as an arbitrary file write. All fixed in f9d21dae (193 targeted
+    tests passed; CI is the full-suite evidence).'
+- kind: finding
+  id: p2-r1
+  phase: 2
+  review_scope: in
+  title: run-cursor branch reached git log / pr_for_branch unvalidated (`--output=<f>` arbitrary file
+    write, reproduced)
+  body: run-cursor branch reached git log / pr_for_branch unvalidated (`--output=<f>` arbitrary file write,
+    reproduced)
+- kind: finding
+  id: p2-r2
+  phase: 2
+  review_scope: in
+  title: 'fr debt ignored tracking: none (R4 git-only fallback)'
+  body: 'fr debt ignored tracking: none (R4 git-only fallback)'
+- kind: finding
+  id: p2-r3
+  phase: 2
+  review_scope: in
+  title: _forge swallowed every exception and the report claimed offline; an unreadable matrix dropped
+    the forge
+  body: _forge swallowed every exception and the report claimed offline; an unreadable matrix dropped
+    the forge
+- kind: finding
+  id: p2-r4
+  phase: 2
+  review_scope: in
+  title: 'owed-issue scan capped at 200 open issues with client-side label filtering: silent undercount'
+  body: 'owed-issue scan capped at 200 open issues with client-side label filtering: silent undercount'
+- kind: finding
+  id: p2-r5
+  phase: 2
+  review_scope: in
+  title: unescaped sources[*].why plus first-match parse_figures let a forged figures comment win
+  body: unescaped sources[*].why plus first-match parse_figures let a forged figures comment win
+- kind: finding
+  id: p2-r6
+  phase: 2
+  review_scope: in
+  title: StalePlan.basis said git+forge when the forge was never consulted
+  body: StalePlan.basis said git+forge when the forge was never consulted
+- kind: finding
+  id: p2-r7
+  phase: 2
+  review_scope: in
+  title: plans with no readable activity were silently omitted
+  body: plans with no readable activity were silently omitted
+- kind: finding
+  id: p2-r8
+  phase: 2
+  review_scope: in
+  title: merge_evidence fetch_error never surfaced in sources
+  body: merge_evidence fetch_error never surfaced in sources
+- kind: finding
+  id: p2-r9
+  phase: 2
+  review_scope: in
+  title: engine hard-coded a status set beside DEBT_STATUSES (against R1)
+  body: engine hard-coded a status set beside DEBT_STATUSES (against R1)
+- kind: finding
+  id: p2-r10
+  phase: 2
+  review_scope: in
+  title: 'figures owed counted row: items while total excluded them'
+  body: 'figures owed counted row: items while total excluded them'
+- kind: finding
+  id: p2-r11
+  phase: 2
+  review_scope: in
+  title: markdown hard cut could slice the trailing marker/figures
+  body: markdown hard cut could slice the trailing marker/figures
+- kind: finding
+  id: p2-r12
+  phase: 2
+  review_scope: in
+  title: digest lost open_rows' oldest-first order
+  body: digest lost open_rows' oldest-first order
+- kind: finding
+  id: p2-r13
+  phase: 2
+  review_scope: in
+  title: 'weak/missing tests: tautological assert, no ClientDebtForge tests, updatedAt only as None'
+  body: 'weak/missing tests: tautological assert, no ClientDebtForge tests, updatedAt only as None'
+resolves:
+- id: p2-r1
+  state: fixed
+  body: 'f9d21dae: _run_branches drops a branch starting with ''-'' or failing git check-ref-format --branch;
+    --end-of-options in _last_commit; test proves no file written and forge never asked.'
+- id: p2-r2
+  state: fixed
+  body: 'f9d21dae: tracking none gives git-only with that reason; tested.'
+- id: p2-r3
+  state: fixed
+  body: 'f9d21dae: _forge returns (forge, why), compute takes forge_why; slug from the origin remote.'
+- id: p2-r4
+  state: fixed
+  body: 'f9d21dae: PartialIssuesError at the cap; the source reports read with a partial note (the adapter
+    has no label filter).'
+- id: p2-r5
+  state: fixed
+  body: 'f9d21dae: why escaped through _cell; parse_figures takes the last match; forged-why test.'
+- id: p2-r6
+  state: fixed
+  body: 'f9d21dae: basis git+forge only when pr_for_branch returned.'
+- id: p2-r7
+  state: fixed
+  body: 'f9d21dae: listed with idle_days=None; HEAD fallback when no default ref.'
+- id: p2-r8
+  state: fixed
+  body: 'f9d21dae: fetch failure shown in sources[''git''].'
+- id: p2-r9
+  state: fixed
+  body: 'f9d21dae: LISTED_STATUSES = DEBT_STATUSES | {walked, manual}.'
+- id: p2-r10
+  state: fixed
+  body: 'f9d21dae: owed = counted total, owed_items = list length.'
+- id: p2-r11
+  state: fixed
+  body: 'f9d21dae: truncate content first, append the tail once; near-limit sweep test.'
+- id: p2-r12
+  state: fixed
+  body: 'f9d21dae: debt rows sorted oldest origin first.'
+- id: p2-r13
+  state: fixed
+  body: 'f9d21dae: assert fixed; test_debt_forge.py; populated updatedAt fixtures; origin/<branch>, raising
+    pr_for_branch, complete-unmerged, --stale-days 0.'
+evidence:
+  review: p2-review-r1
+  reviewer: ae27693b0b053f14a
+  model: claude-opus-5-5
