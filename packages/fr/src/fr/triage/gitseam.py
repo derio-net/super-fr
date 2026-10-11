@@ -23,6 +23,7 @@ import re
 import shlex
 import stat
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -371,6 +372,21 @@ def repo_of_url(url: str) -> str | None:
     return "/".join(parts[-2:]) if len(parts) >= 2 else None
 
 
+@dataclass(frozen=True)
+class CheckoutFacts:
+    """What `adopt --list` reads of an agent's working directory: the worktree's
+    toplevel, `origin`'s URL and `owner/name` (None when it has none), the branch
+    checked out there (None when detached), the default branch (None when
+    `origin/HEAD` is unset) and the repository's main worktree."""
+
+    toplevel: Path
+    origin_url: str | None
+    repo: str | None
+    branch: str | None
+    default: str | None
+    main_worktree: Path
+
+
 class Checkout:
     """A local clone of a batch's repo (spec §3.I), driven through git only."""
 
@@ -392,6 +408,39 @@ class Checkout:
                 "of the batch's repo"
             ) from exc
         return cls(Path(top))
+
+    @classmethod
+    def facts(cls, cwd: Path) -> CheckoutFacts | None:
+        """The facts of the checkout *cwd* sits in; None when it is no checkout. Only
+        a missing toplevel is None: an `origin` or default branch that cannot be read
+        is that field alone None."""
+        if not cwd.is_dir():
+            return None
+        try:
+            top = Path(git(["rev-parse", "--show-toplevel"], cwd).strip())
+        except GitError:
+            return None
+        checkout = cls(top)
+        try:
+            url: str | None = checkout.origin_url()
+        except GitError:
+            url = None
+        try:
+            default: str | None = checkout.default_branch()
+        except GitError:
+            default = None
+        try:
+            main = checkout.main_worktree()
+        except GitError:
+            main = top.resolve()
+        return CheckoutFacts(
+            toplevel=top.resolve(),
+            origin_url=url,
+            repo=repo_of_url(url) if url else None,
+            branch=checkout.head_branch(),
+            default=default,
+            main_worktree=main,
+        )
 
     def origin_url(self) -> str:
         return git(["remote", "get-url", "origin"], self.path).strip()

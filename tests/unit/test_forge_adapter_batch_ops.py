@@ -398,6 +398,8 @@ _ISOLATION_ALLOWED = frozenset(
         "from fr.isolation.adopt import bind_session",
         "from fr.isolation.adopt import enter_workspace",
         "from fr.isolation.adopt import reusable_workspace",
+        "from fr.isolation.adopt import session_worktree",
+        "from fr.isolation.adopt import workspace_containing",
         "from fr.isolation.adopt import workspace_path",
     }
 )

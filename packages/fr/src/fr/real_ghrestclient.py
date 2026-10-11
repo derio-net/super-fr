@@ -27,7 +27,7 @@ import re
 import urllib.parse
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fr import _hosts
 from fr import gh as _gh
@@ -677,6 +677,12 @@ class RealGhRestClient:
             record["files"] = self._files(repo, p["number"])
             out.append(record)
         return out
+
+    def ref_kind(self, repo: str, number: int) -> Literal["issue", "pr"] | None:
+        payload = self._api(f"repos/{repo}/issues/{number}")
+        if not isinstance(payload, dict):
+            return None
+        return "pr" if "pull_request" in payload else "issue"
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         pull = self._pull(repo, number)

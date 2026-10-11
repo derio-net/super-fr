@@ -1,0 +1,16 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-adopt-safety-2
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T3.S1, P3.T3.S2, P3.T4.S1, P3.T4.S2, P3.T4.S3]
+refactor:
+  P3.T1: "pure helpers were written once, small and side-effect free; nothing duplicated to clean"
+  P3.T2: "Checkout.facts reuses origin_url, default_branch, main_worktree and _head_branch; ref_kind is one short method per client"
+  P3.T4: "scenario, skill sentence, mirrors and matrix move only; no production code to clean"
+journal:
+  - {kind: decision, id: p3-list-output-not-rich, phase: 3, title: "adopt --list writes with typer.echo, not the rich console", body: "The rich console expands tabs to spaces, which breaks the tab-separated columns (R11); typer.echo keeps them literal. The header and every row go through it."}
+  - {kind: decision, id: p3-facts-branch-is-worktree-head, phase: 3, title: "Checkout.facts branch is the HEAD of the agent's own worktree", body: "R13 says the session's current branch; an agent may sit in a linked worktree, so facts uses head_branch (the worktree at cwd), not current_branch (the main worktree). main_worktree is returned separately for the fr-workspace lookup."}
+  - {kind: discovery, id: p3-scenario-fixtures-projected, phase: 3, title: "scenario gh fixtures are projections of captured REST payloads", body: "tests/scenarios/fixtures/triage-adopt-list/ pulls-head.json and issue-N.json keep only the fields the REST client reads, projected from tests/fixtures/github_rest captures with the repo renamed to example-org/widgets; the PR-flavoured issue payload adds the pull_request key GitHub's issues route carries on a PR."}
+resolves: []
+evidence: {tests: ci}

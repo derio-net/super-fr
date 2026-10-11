@@ -38,6 +38,7 @@ import importlib
 import importlib.metadata
 import json
 import os
+import re
 import shlex
 import shutil
 import sys
@@ -85,6 +86,7 @@ from fr.isolation.adopt import (
     bind_session,
     enter_workspace,
     reusable_workspace,
+    session_worktree,
     workspace_containing,
     workspace_path,
 )
@@ -108,14 +110,16 @@ from fr.triage.batch import (
     derive_batch_stage,
     distrust,
     foreign_batch_prs,
-    label_refs,
     last_dispatch,
     lifecycle_events,
     mixed_themes,
+    parse_refs,
     pr_open_queue,
     resolve_launch,
+    resolve_ref,
     save_batches,
     save_exports,
+    session_state,
     suggest,
     withdrawal_body,
     withdrawn_already,
@@ -2410,14 +2414,127 @@ def _list_sessions(to: str | None, driver: Driver = HOST) -> None:
         sessions = runner.list_sessions()
     except Exception as exc:  # the runner's own failure
         _fail(f"runner `{name}` could not list its sessions: {exc}", code=1)
+    typer.echo(LIST_HEADER)  # not `console`: rich expands the tabs the columns are split on
+    reads = _ListReads()
     for s in sessions:
-        refs = ", ".join(label_refs(s.label)) or "-"
-        console.print(
-            f"{s.tab}\t{s.group or '-'}\t{s.status}\t{refs}\t{s.label}",
-            markup=False,
-            soft_wrap=True,
-            highlight=False,
-        )
+        typer.echo("\t".join(_session_row(s, reads)))
+
+
+LIST_HEADER = "\t".join(
+    ("TAB", "WORKSPACE", "STATUS", "STATE", "REPO", "BRANCH", "FR WORKSPACE", "PR", "REFS", "LABEL")
+)
+
+
+def _url_host(url: str) -> str:
+    m = re.match(r"^(?:[a-z+]+://(?:[^@/]+@)?|[^@/:]+@)([^/:]+)", url.strip())
+    return m[1] if m else url
+
+
+class _ListReads:
+    """What one `adopt --list` has read already: a client per host, a PR cell per
+    repo+branch and a kind per resolved ref, each failure kept as the answer too, so a
+    read that failed is not retried by the next row (R15, R16)."""
+
+    def __init__(self) -> None:
+        self._clients: dict[str, Any] = {}
+        self._prs: dict[tuple[str, str], str] = {}
+        self._kinds: dict[tuple[str, int], str] = {}
+
+    def client(self, url: str) -> Any:
+        host = _url_host(url)
+        if host not in self._clients:
+            try:
+                self._clients[host] = make_client(url)
+            except Exception as exc:  # one host's client, degrading its rows only
+                self._clients[host] = exc
+        got = self._clients[host]
+        if isinstance(got, Exception):
+            raise got
+        return got
+
+    def pr_cell(self, url: str, repo: str, branch: str) -> str:
+        if (repo, branch) not in self._prs:
+            try:
+                self._prs[(repo, branch)] = _pr_cell(
+                    self.client(url).list_prs_by_head(repo, branch)
+                )
+            except Exception:  # forge, client or shape: this pair's cell only
+                self._prs[(repo, branch)] = "-"
+        return self._prs[(repo, branch)]
+
+    def kind(self, url: str, repo: str, number: int) -> str:
+        if (repo, number) not in self._kinds:
+            try:
+                self._kinds[(repo, number)] = self.client(url).ref_kind(repo, number) or "?"
+            except Exception:  # incl. UnsupportedForgeOperation: `(?)`
+                self._kinds[(repo, number)] = "?"
+        return self._kinds[(repo, number)]
+
+
+def _pr_cell(records: list[dict[str, Any]]) -> str:
+    """`#<n> closes a#1,b#2` for the newest OPEN PR of the same repo, else `-`."""
+    own = [r for r in records if r.get("state") == "OPEN" and not r.get("isCrossRepository")]
+    if not own:
+        return "-"
+    newest = max(own, key=lambda r: str(r.get("createdAt") or ""))
+    closes = ",".join(
+        f"{c['repository']['name']}#{c['number']}"
+        for c in newest.get("closingIssuesReferences", [])
+    )
+    return f"#{newest['number']}" + (f" closes {closes}" if closes else "")
+
+
+def _tilde(path: Path) -> str:
+    text, home = str(path), str(Path.home())
+    return "~" + text[len(home) :] if text == home or text.startswith(home + os.sep) else text
+
+
+def _session_row(s: Any, reads: _ListReads) -> list[str]:
+    """One listing row (R11–R17); each read that fails leaves its own cells `-`/`(?)`."""
+    facts = None
+    if s.cwd:
+        try:
+            facts = Checkout.facts(Path(s.cwd))
+        except Exception:  # this row's git read
+            facts = None
+    state = session_state(
+        has_agent=s.agent is not None,
+        label=s.label,
+        toplevel=facts.toplevel if facts else None,
+        branch=facts.branch if facts else None,
+        default=facts.default if facts else None,
+    )
+    repo = facts.repo if facts else None
+    branch = facts.branch if facts else None
+    workspace = None
+    try:
+        workspace = session_worktree(s.session) if s.session else None
+        if workspace is None and facts is not None:
+            workspace = workspace_containing(facts.main_worktree, Path(s.cwd))
+    except Exception:  # this row's workspace lookup
+        workspace = None
+    pr = "-"
+    if state == "adoptable" and facts and facts.origin_url and repo and branch:
+        pr = reads.pr_cell(facts.origin_url, repo, branch)
+    refs = []
+    for ref in parse_refs(s.label):
+        target = resolve_ref(ref, repo)
+        kind = "?"
+        if target is not None and facts and facts.origin_url:
+            kind = reads.kind(facts.origin_url, target, ref.number)
+        refs.append(f"{ref.text()} ({kind})")
+    return [
+        s.tab,
+        s.group or "-",
+        s.status,
+        state,
+        repo or "-",
+        branch or "-",
+        _tilde(workspace) if workspace else "-",
+        pr,
+        ", ".join(refs) or "-",
+        s.label,
+    ]
 
 
 @batch_app.command("adopt")

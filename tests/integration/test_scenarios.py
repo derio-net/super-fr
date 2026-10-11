@@ -178,6 +178,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "triage-claims-held",
         "triage-claims-expired",
         "triage-adopt-hold",
+        "triage-adopt-list",
         "herdr-restart-idle",
         "herdr-opencode",
         "herdr-opencode-restart",
@@ -275,3 +276,7 @@ def test_cloud_triage_cloud_remedy(installed: Path, tmp_path: Path) -> None:
 
 def test_triage_adopt_hold(installed: Path, tmp_path: Path) -> None:
     _scenario("triage-adopt-hold", installed, tmp_path)
+
+
+def test_triage_adopt_list(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-adopt-list", installed, tmp_path)
