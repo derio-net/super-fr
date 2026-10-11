@@ -3637,9 +3637,16 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): walked
-      live post-merge 2026-09-22 (Test Plan 11) on Claude Code: repo-scope sync and
-      org scope; evidence in the plan journal.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): walked
+      live post-merge 2026-09-22 (Test Plan 11); evidence in the plan journal.'
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: Opus 5
+      outcome: pass
+      at: '2026-09-22T00:00:00Z'
+      evidence: 'Test Plan 11 post-merge walk on Claude Code 2.1.278: repo-scope sync
+        and org scope over derio-net; plan journal walk-claude-code-repo'
   - id: triage-skill-opencode
     capability: Backlog triage
     acceptance: An agent on OpenCode, which has no Artifact tool, can follow fr-triage
