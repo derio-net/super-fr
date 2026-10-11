@@ -22,7 +22,9 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from fr.triage.approval import ApprovalVerdict, approval_verdict
 from fr.triage.batch import (
+    QueueEntry,
     batch_item_id,
     batch_pr,
     batch_repo,
@@ -120,7 +122,18 @@ def drive_snapshot(
         merged_at=merged_at,
         foreign={b.id: found for b in batches if (found := tuple(foreign_batch_prs(b, facts)))},
         awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
+        approvals=fact_approvals(queue),
     )
+
+
+def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
+    """Each queued batch's approval verdict from the collected labels and its events
+    (merge-train-safety §A "The walk"): the board and `drive --plan` read no forge. A
+    PR whose labels were never read (facts before schema 9) is unlabelled."""
+    return {
+        e.batch.id: approval_verdict(e.batch.events, e.pr.number, e.pr.head_oid, e.pr.labels)
+        for e in queue
+    }
 
 
 # ------------------------------------------------------------------ needs you now

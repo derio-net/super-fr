@@ -113,7 +113,11 @@ class GitForge:
             "head_ref": branch,
             "mergeable": "MERGEABLE",
             "merge_state": "CLEAN",
+            "labels": ["approved-fr"],  # the operator's approval (merge-train-safety §A)
         }
+
+    def edit_issue_labels(self, repo: str, number: int, **kw: Any) -> None:
+        raise AssertionError("no approval is voided here")
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return [{"name": "test", "bucket": "pass", "state": "SUCCESS"}]

@@ -15,11 +15,14 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from fr.ghclient import MERGE_METHODS, GhClient
+from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
+from fr.labels import APPROVED_FR
+from fr.triage.approval import Approved, Void, approval_verdict
 from fr.triage.batch import MergeStep, QueueEntry, merge_order, with_forecast
 from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
 from fr.triage.batch_drive import ChecksVerdict, checks_verdict
@@ -33,7 +36,7 @@ from fr.triage.batch_version import (
     slot_versions,
 )
 from fr.triage.errors import TriageError
-from fr.triage.model import VersionBlock
+from fr.triage.model import BatchEvent, UpdateEvent, VersionBlock
 
 FAILING_BUCKETS = frozenset({"fail", "cancel"})
 # One commit on main as `CheckoutSeam.commits_behind` reports it: its sha and its
@@ -94,6 +97,7 @@ class CheckoutSeam(Protocol):
     def changed_paths(self, ref: str, head: str) -> frozenset[str]: ...
     def add_worktree(self, where: Path, ref: str) -> Any: ...
     def remove_worktree(self, where: Path) -> None: ...
+    def rev_parse(self, ref: str) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -122,6 +126,13 @@ class MergeContext:
     # The repo declares `ci none` on its default branch (R4): green on non-draft alone.
     ci_none: bool = False
     scratch: set[Path] = field(default_factory=set)  # worktrees this run created
+    # Called as (pr, head_before, head_after, base) after each update push, so the
+    # caller records it through the one judgements writer (merge-train-safety §B, R8).
+    on_update: Callable[[int, str, str, str], None] | None = None
+    # batch id -> the events this context recorded or was told of after the batch was
+    # read (an approval settled this run, an update pushed): the gate reads them too.
+    recorded: dict[str, list[BatchEvent]] = field(default_factory=dict)
+    now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
     @property
     def main(self) -> str:
@@ -219,10 +230,16 @@ def describe(index: int, slot: Slot) -> str:
 
 
 def run_queue(ctx: MergeContext, queue: Sequence[Slot]) -> None:
-    """Merge each slot in order; the first `MergeStopError` stops the queue."""
+    """Merge each slot in order; the first `MergeStopError` stops the queue. A PR the
+    approval gate holds stops it too: `batch merge` filters unapproved batches out
+    before it gets here, so one arriving is a label removed under the run."""
     previous: str | None = None
     for slot in queue:
-        merge_one(ctx, slot, previous)
+        held = merge_one(ctx, slot, previous)
+        if held is not None:
+            pr = slot.step.pr
+            why = held.reason or f"awaits the {APPROVED_FR.name} label"
+            raise MergeStopError(f"PR #{pr.number} (batch {slot.step.batch.id}) {why}")
         previous = slot.step.batch.id
 
 
@@ -262,20 +279,25 @@ def _checks(ctx: MergeContext, number: int) -> None:
         raise MergeStopError(f"PR #{number}: checks {verdict}: {', '.join(names)}")
 
 
-def merge_one(ctx: MergeContext, slot: Slot, previous: str | None) -> None:
-    """Steps 1-4 of spec §3.F for one PR."""
+def merge_one(ctx: MergeContext, slot: Slot, previous: str | None) -> MergeAttempt | None:
+    """Steps 1-4 of spec §3.F for one PR; the gate's `unapproved`/`unready` attempt when
+    the approval gate holds it (merge-train-safety §A), else None."""
     pr, batch = slot.step.pr, slot.step.batch
     expected = slot.head
     for _ in range(MAX_UPDATES + 1):
         view = ctx.client.pr_view(ctx.repo, pr.number)  # step 1: re-read
         if view.get("state") == "MERGED":
             ctx.say(f"{batch.id}: already merged (PR #{pr.number})")
-            return
+            return None
+        if view.get("state") == "OPEN":
+            held = _approved_and_ready(ctx, slot, view, wait=True)
+            if held is not None:
+                return held
         head = _open_head(ctx, slot, view, expected)
         _checks(ctx, pr.number)
         new = _land(ctx, slot, head, previous)
         if new is None:
-            return
+            return None
         expected = new
         _checks(ctx, pr.number)
     raise MergeStopError(
@@ -371,22 +393,63 @@ def _is_archive(changes: Sequence[tuple[str, str]]) -> bool:
     return bool(changes) and all(path.startswith(ARCHIVE_PREFIX) for _, path in changes)
 
 
-MergeReadiness = Literal["merged", "updated", "already-merged", "draft", "failing", "pending"]
+MergeReadiness = Literal[
+    "merged", "updated", "already-merged", "draft", "failing", "pending", "unapproved", "unready"
+]
 
 
 @dataclass(frozen=True)
 class MergeAttempt:
     """What one non-blocking `merge_ready` call did, and for `failing`/`pending`
-    which checks, so the caller can report them once."""
+    which checks, so the caller can report them once; for `unready`, why."""
 
     outcome: MergeReadiness
     head: str = ""
     checks: tuple[str, ...] = ()
+    reason: str = ""
+
+
+def _approved_and_ready(
+    ctx: MergeContext, slot: Slot, view: dict[str, Any], *, wait: bool
+) -> MergeAttempt | None:
+    """The one approval gate both merge paths pass (merge-train-safety §A "Merging"):
+    None when the OPEN PR in *view* carries a valid approval and is (now) ready, else
+    the attempt that holds it. A draft with a valid approval and green checks is
+    marked ready here, and *view* is updated to say so; *wait* blocks on its checks
+    as `merge_one` does, else a non-green draft returns its checks' outcome."""
+    pr, batch = slot.step.pr, slot.step.batch
+    head = str(view.get("head_oid") or "")
+    events = [*batch.events, *ctx.recorded.get(batch.id, [])]
+    verdict = approval_verdict(events, pr.number, head, view.get("labels"))
+    if isinstance(verdict, Void):
+        why = (
+            f"was approved at {verdict.approved_head[:12]}, but its head moved to {head[:12]}; "
+            f"the {APPROVED_FR.name} label is void"
+        )
+        return MergeAttempt("unapproved", head=head, reason=why)
+    if not isinstance(verdict, Approved):
+        return MergeAttempt("unapproved", head=head)
+    if not view.get("draft"):
+        return None
+    if wait:
+        _checks(ctx, pr.number)
+    else:
+        checks, names = live_checks(ctx, pr.number)
+        if checks != "green":
+            return MergeAttempt(checks, head=head, checks=names)
+    try:
+        ctx.client.pr_ready(ctx.repo, pr.number)
+    except UnsupportedForgeOperation as exc:
+        return MergeAttempt("unready", head=head, reason=f"cannot be marked ready: {exc}")
+    ctx.say(f"PR #{pr.number}: marked ready (approved at {verdict.approved_head[:12]})")
+    view["draft"] = False
+    return None
 
 
 def merge_ready(ctx: MergeContext, slot: Slot, previous: str | None) -> MergeAttempt:
-    """`merge_one` without the wait (wave-driver §B): merge the PR only if it is not a
-    draft and its checks are already green by R4 (`live_checks`), else say why not.
+    """`merge_one` without the wait (wave-driver §B): merge the PR only if it carries a
+    valid approval (marking an approved draft ready first, merge-train-safety §A) and
+    its checks are already green by R4 (`live_checks`), else say why not.
 
     A PR behind its base or off its version slot gets the same update `merge_one`
     gives it and is left for a later call: it never waits for the new head's checks.
@@ -396,8 +459,10 @@ def merge_ready(ctx: MergeContext, slot: Slot, previous: str | None) -> MergeAtt
     view = ctx.client.pr_view(ctx.repo, pr.number)
     if view.get("state") == "MERGED":
         return MergeAttempt("already-merged")
-    if view.get("state") == "OPEN" and view.get("draft"):
-        return MergeAttempt("draft", head=str(view.get("head_oid")))
+    if view.get("state") == "OPEN":
+        held = _approved_and_ready(ctx, slot, view, wait=False)
+        if held is not None:
+            return held
     head = _open_head(ctx, slot, view, slot.head)
     verdict, names = live_checks(ctx, pr.number)
     if verdict != "green":
@@ -532,5 +597,13 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
     if new is None:
         raise MergeStopError(f"PR #{pr.number}: the update produced no change to push")
     wt.push(pr.head_ref)
+    base = ctx.checkout.rev_parse(ctx.main)  # fetched by `_land` before this update
+    ctx.recorded.setdefault(slot.step.batch.id, []).append(
+        UpdateEvent(
+            kind="update", at=ctx.now(), pr=pr.number, head_before=head, head_after=new, base=base
+        )
+    )
+    if ctx.on_update is not None:
+        ctx.on_update(pr.number, head, new, base)
     ctx.say(f"PR #{pr.number}: pushed {new[:12]} ({message}); waiting for its checks")
     return new

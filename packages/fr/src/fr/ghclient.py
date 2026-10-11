@@ -218,8 +218,20 @@ class GhClient(Protocol):
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         """`{state, draft, head_oid, head_ref, base_ref, mergeable, merge_state, merge_commit,
-        title, body}` of one PR, read fresh. `state` is OPEN | CLOSED | MERGED; `merge_commit` is
-        the commit the merge made on the base ("" while unmerged)."""
+        title, body, labels}` of one PR, read fresh. `state` is OPEN | CLOSED | MERGED;
+        `merge_commit` is the commit the merge made on the base ("" while unmerged); `labels`
+        the label names (the merge paths read `approved-fr` here, live — 2026-10-11-merge-
+        train-safety §A)."""
+        ...
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        """Mark draft PR *number* ready for review: the approval gate's one write before
+        it lands an approved green draft (merge-train-safety §A "Merging", R3)."""
+        ...
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        """Whether *repo* defines label *name* (merge-train-safety §A "Label creation",
+        R4). A missing label is False; any other failure raises."""
         ...
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
@@ -399,6 +411,12 @@ class UnsupportedBatchOps:
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         raise self._unsupported("pr_view")
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        raise self._unsupported("pr_ready")
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        raise self._unsupported("label_exists")
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         raise self._unsupported("pr_required_checks")

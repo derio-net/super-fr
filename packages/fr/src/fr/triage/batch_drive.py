@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
     BatchStage,
@@ -208,6 +209,10 @@ class Snapshot:
     # paste-ready focus command.
     idle: tuple[IdleSession, ...] = ()
     scope_args: tuple[str, ...] = ()
+    # batch id -> its PR's approval verdict (merge-train-safety §A "The walk"): from the
+    # live labels in the driver, from facts on the board and `drive --plan`. A batch
+    # with no verdict here is never approved.
+    approvals: Mapping[str, ApprovalVerdict] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -287,6 +292,9 @@ class Train:
     queued: tuple[str, ...]  # the member that stopped the walk (not the head), then the rest
     stepped: tuple[str, ...]  # batches stepped over (failing)
     numbers: Mapping[str, int]  # batch id -> PR number, for train_line
+    # Members with no valid `approved-fr` approval: held, never the head, never a stop
+    # (merge-train-safety §A "The walk").
+    awaiting: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -885,11 +893,13 @@ def _walk_train(
 ) -> tuple[Train | None, list[Action]]:
     """§A: walk one repo's *entries* (already in train order). A green member becomes
     a merge candidate and the walk goes on; a failing one is stepped over, wherever it
-    sits; a moved head or a pending one stops it, and every other member after the
-    stop is queued."""
+    sits; one without a valid approval awaits it, wherever it sits; a moved head or a
+    pending one stops it, and every other member after the stop is queued. A draft is
+    a member only with a valid approval (merge-train-safety §A)."""
     merges: list[Action] = []
     candidates: list[str] = []
     stepped: list[str] = []
+    awaiting: list[str] = []
     numbers: dict[str, int] = {}
     waiting: str | None = None
     queued: list[str] = []
@@ -897,7 +907,9 @@ def _walk_train(
     for entry in entries:
         bid = entry.batch.id
         pr = snap.live.get(bid)
-        if pr is None or pr.state != "OPEN" or pr.draft:
+        verdict = snap.approvals.get(bid)
+        approved = verdict is not None and is_approved(verdict)
+        if pr is None or pr.state != "OPEN" or (pr.draft and not approved):
             continue  # not a member
         members += 1
         numbers[bid] = pr.number
@@ -908,6 +920,9 @@ def _walk_train(
                     Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
                            f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head)
                 )  # fmt: skip
+            continue
+        if not approved:  # never the head, never a stop
+            awaiting.append(bid)
             continue
         if waiting is not None or queued:
             queued.append(bid)
@@ -926,7 +941,10 @@ def _walk_train(
     if not members:
         return None, merges
     head = candidates[0] if candidates else waiting
-    return Train(repo, head, tuple(candidates), tuple(queued), tuple(stepped), numbers), merges
+    train = Train(
+        repo, head, tuple(candidates), tuple(queued), tuple(stepped), numbers, tuple(awaiting)
+    )
+    return train, merges
 
 
 def _claim_actions(snap: Snapshot) -> list[Action]:
@@ -1237,4 +1255,6 @@ def train_line(train: Train) -> str:
         parts.append("queued " + ", ".join(ref(b) for b in train.queued))
     if train.stepped:
         parts.append("stepped over " + ", ".join(ref(b) for b in train.stepped))
+    if train.awaiting:
+        parts.append("awaiting approval " + ", ".join(ref(b) for b in train.awaiting))
     return f"train {train.repo}: " + " · ".join(parts)

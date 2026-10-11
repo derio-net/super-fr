@@ -487,6 +487,8 @@ def _every_call(client: RealGhRestClient, repo_dir: Path, run: Any) -> dict[str,
             REPO, head="h", base="b", title="t", body="x", draft=True
         ),
         "close_pr": lambda: client.close_pr(REPO, 1),
+        "pr_ready": lambda: client.pr_ready(REPO, 1),
+        "label_exists": lambda: client.label_exists(REPO, "approved-fr"),
         "delete_branch": lambda: client.delete_branch(REPO, "b"),
         "dispatch_workflow": lambda: client.dispatch_workflow(REPO, "w.yml", inputs={}),
     }

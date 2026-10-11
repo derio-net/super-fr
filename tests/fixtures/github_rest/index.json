@@ -215,5 +215,12 @@
   },
   "user": {
     "file": "user.json"
+  },
+  "repos/derio-net/super-fr/labels/bug": {
+    "file": "repo_labels_bug.json"
+  },
+  "repos/derio-net/super-fr/labels/approved-fr": {
+    "file": "repo_labels_approved-fr.error.json",
+    "error": true
   }
 }

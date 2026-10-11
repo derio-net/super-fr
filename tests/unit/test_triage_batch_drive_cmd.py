@@ -77,6 +77,8 @@ class World:
             "merged_at": None,
             "author": "operator",
             "cross_repo": False,
+            # The operator's approval (merge-train-safety §A): on unless a test says not.
+            "labels": ["approved-fr"],
             **kw,
         }
 
@@ -128,6 +130,7 @@ class World:
             checks=self.all_checks.get(n, {"pass": 1, "fail": 0, "pending": 0}),
             author=p["author"],
             cross_repo=p["cross_repo"],
+            labels=list(p["labels"]) if p["state"] == "OPEN" else None,
         )
 
     # -- the GhClient adapter
@@ -136,7 +139,15 @@ class World:
         p = self.prs[number]
         view = {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
         merge = p.get("merge_commit", f"merge-{number}")
-        return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge}
+        return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge,
+                "labels": list(p["labels"])}  # fmt: skip
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        self.calls.append(f"pr_ready {number}")
+        self.prs[number]["draft"] = False
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        return True
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
@@ -190,6 +201,9 @@ class World:
 
     def edit_issue_labels(self, repo: str, number: int, **kw: Any) -> None:
         self.calls.append(f"label {number}")
+        if number in self.prs:
+            gone = kw.get("remove", frozenset())
+            self.prs[number]["labels"] = [x for x in self.prs[number]["labels"] if x not in gone]
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         # an id and a time, like the gh adapter's, and authored as the facts' viewer: a
@@ -280,6 +294,9 @@ class DriveCheckout:
 
     def remove_worktree(self, where: Path) -> None:
         pass
+
+    def rev_parse(self, ref: str) -> str:
+        return f"{ref}@fetched"
 
     def fast_forward(self) -> None:
         self.forwarded += 1
@@ -566,7 +583,7 @@ def test_nothing_to_do_while_work_remains_exits_3(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     world.issues[1] = "open"
-    world.pr(101, "feat/batch-b1", [1], draft=True)
+    world.pr(101, "feat/batch-b1", [1], draft=True, labels=[])  # an unapproved draft
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 3, out
@@ -629,7 +646,7 @@ def test_a_ready_green_pr_is_merged_without_waiting(
 @pytest.mark.parametrize(
     "setup",
     [
-        lambda w: w.prs[101].update(draft=True),
+        lambda w: w.prs[101].update(draft=True, labels=[]),  # an approved draft merges
         lambda w: w.checks.update({101: [{"name": "test", "bucket": "pending"}]}),
         lambda w: (
             w.all_checks.update({101: {"pass": 0, "fail": 0, "pending": 2}})
@@ -646,7 +663,7 @@ def test_a_pr_that_is_not_ready_and_green_is_left(
     code, _ = _drive(tmp_path, "--once", "--yes")
     assert code == 3
     assert world.merged == []
-    assert not any(c.startswith(("ready", "approve")) for c in world.calls)
+    assert not any(c.startswith(("ready", "approve", "pr_ready")) for c in world.calls)
 
 
 def test_a_ci_none_repo_merges_on_non_draft_alone(
@@ -1252,7 +1269,7 @@ def test_a_pass_that_acts_on_nothing_still_writes_the_board(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     world.issues[1] = "open"
-    world.pr(101, "feat/batch-b1", [1], draft=True)
+    world.pr(101, "feat/batch-b1", [1], draft=True, labels=[])
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
     code, _ = _drive(tmp_path, "--once", "--yes")
     assert code == 3
@@ -1565,7 +1582,7 @@ def test_a_head_that_moves_after_the_snapshot_is_not_merged(
 
     def _view(repo: str, number: int) -> dict[str, Any]:
         views.append(number)
-        if len(views) == 2:  # after the snapshot read it: someone pushes
+        if len(views) == 3:  # after the approval settle and the snapshot: someone pushes
             world.prs[101]["head_oid"] = "sha-pushed"
         return real_view(repo, number)
 
@@ -2430,7 +2447,7 @@ def test_a_head_moved_since_the_checks_were_judged_stops_the_train(
 
     def _view(repo: str, number: int) -> dict[str, Any]:
         seen.append(number)
-        if number == 101 and seen.count(101) == 2:
+        if number == 101 and seen.count(101) == 3:  # after the settle and the snapshot
             world.prs[101]["head_oid"] = "sha-pushed"
         return real_view(repo, number)
 
@@ -2444,7 +2461,7 @@ def test_a_head_moved_since_the_checks_were_judged_stops_the_train(
     ]
 
 
-@pytest.mark.parametrize("outcome", ["failing", "draft"])
+@pytest.mark.parametrize("outcome", ["failing", "draft", "unapproved", "unready"])
 def test_a_head_that_is_failing_or_draft_at_merge_time_is_stepped_over(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge,
     outcome: str,
@@ -4047,3 +4064,67 @@ def test_a_failing_publish_leaves_a_once_drive_exit_code_alone(
     (tmp_path / "scope.yaml").write_text(yaml.safe_dump({"publish": ["/no/such"]}))
     code, said = _drive(tmp_path, "--once", "--yes")
     assert code == 0 and "could not publish the board" in said
+
+
+# ------------------------------------------- the approval gate (merge-train-safety §A)
+
+
+def _approvals(tmp_path: Path, bid: str) -> list[Any]:
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == bid)
+    return [e for e in batch.events if e.kind in ("approval", "update")]
+
+
+def test_the_driver_holds_an_unlabelled_green_pr_and_says_it_awaits_approval(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path, labels=[])
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == []
+    assert "awaiting approval b1 (#101)" in out
+    assert _approvals(tmp_path, "b1") == []
+
+
+def test_the_driver_readies_and_merges_a_labelled_draft(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path, draft=True)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "pr_ready 101" in world.calls
+    assert world.merged == [(101, "sha-101", "squash")]
+    (approval,) = _approvals(tmp_path, "b1")
+    assert (approval.pr, approval.head, approval.voided_at) == (101, "sha-101", None)
+
+
+def test_a_session_push_after_labelling_voids_the_approval(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path)
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    _drive(tmp_path, "--once", "--yes")  # records the approval at sha-101; CI is red
+    world.prs[101]["head_oid"] = "sha-session"
+    world.checks[101] = [{"name": "lint", "bucket": "pass"}]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "approval of PR #101 at sha-101 voided: head moved to sha-session" in out
+    assert "label 101" in world.calls and world.prs[101]["labels"] == []
+    assert world.merged == []
+    assert _approvals(tmp_path, "b1")[-1].voided_at == "sha-session"
+
+
+def test_a_driver_update_is_recorded_and_keeps_the_approval(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path)
+    checkout.behind.add("sha-101")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "updated PR #101 to sha-updated" in out, out
+    approval, update = _approvals(tmp_path, "b1")
+    assert (update.head_before, update.head_after, update.base) == (
+        "sha-101",
+        "sha-updated",
+        "origin/main@fetched",
+    )
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [(101, "sha-updated", "squash")], out
+    assert "voided" not in out

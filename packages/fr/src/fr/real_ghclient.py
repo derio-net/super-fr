@@ -382,7 +382,7 @@ class RealGhClient:
                 repo,
                 "--json",
                 "state,isDraft,headRefOid,headRefName,baseRefName,mergeable,mergeStateStatus,"
-                "mergeCommit,title,body",
+                "mergeCommit,title,body,labels",
             ]
         )
         raw: dict[str, Any] = json.loads(out)
@@ -397,7 +397,24 @@ class RealGhClient:
             "merge_commit": (raw.get("mergeCommit") or {}).get("oid", ""),
             "title": raw.get("title", ""),
             "body": raw.get("body", ""),
+            "labels": [lb.get("name") or "" for lb in raw.get("labels") or []],
         }
+
+    @_hosted
+    def pr_ready(self, repo: str, number: int) -> None:
+        _gh._run_gh(["pr", "ready", str(number), "--repo", repo])
+
+    @_hosted
+    def label_exists(self, repo: str, name: str) -> bool:
+        from fr.real_ghrestclient import _is_404
+
+        try:
+            _gh._run_gh(["api", f"repos/{repo}/labels/{urllib.parse.quote(name, safe='')}"])
+        except _gh.GhError as exc:
+            if _is_404(exc):
+                return False
+            raise
+        return True
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
         """Spec 2026-10-07-cloud-triage §I: the same REST routes as the

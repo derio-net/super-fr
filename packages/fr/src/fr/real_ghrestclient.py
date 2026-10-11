@@ -694,7 +694,23 @@ class RealGhRestClient:
             "merge_commit": (pull.get("merge_commit_sha") or "") if pull.get("merged_at") else "",
             "title": pull.get("title") or "",
             "body": pull.get("body") or "",
+            "labels": [lb.get("name") or "" for lb in pull.get("labels") or []],
         }
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        """`POST pulls/{n}/ccr/ready_for_review`: the route `hostclient`'s github-rest
+        table names for "ready" (merge-train-safety §A "Merging")."""
+        self._api(f"repos/{repo}/pulls/{number}/ccr/ready_for_review", method="POST")
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        """`GET labels/{name}`; a 404 is a missing label (merge-train-safety §A)."""
+        try:
+            self._api(f"repos/{repo}/labels/{_q(name)}")
+        except GhError as exc:
+            if _is_404(exc):
+                return False
+            raise
+        return True
 
     def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         from fr.triage.collect import _latest_runs

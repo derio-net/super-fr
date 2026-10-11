@@ -82,10 +82,17 @@ from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.isolation.rename import IsolationError, rename_branch
-from fr.labels import FR_IN_PROGRESS
+from fr.labels import APPROVED_FR, FR_IN_PROGRESS
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.services import ServicesError, require_tracker
 from fr.services.resolve import resolve_services
+from fr.triage.approval import (
+    ApprovalVerdict,
+    EventWriter,
+    approval_verdict,
+    is_approved,
+    settle_approvals,
+)
 from fr.triage.batch import (
     CLOSED_OUT,
     allowed_authors,
@@ -199,6 +206,7 @@ from fr.triage.lease import acquire, load_lease, mark_pass, release
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     Batch,
+    BatchEvent,
     CancelEvent,
     ClaimsReleasedEvent,
     CloseoutEvent,
@@ -212,6 +220,7 @@ from fr.triage.model import (
     PullRequest,
     ReplacementEvent,
     Scope,
+    UpdateEvent,
     load_judgements,
     load_scope_facts,
 )
@@ -416,6 +425,40 @@ def load_runner(name: str) -> Runner:
     """Build runner *name* through the soft point in `triage_kanban_cmd` (§3.C step 1),
     with this module's install hint. Tests replace this."""
     return kanban_load_runner(name, DISPATCH_INSTALL_HINT)
+
+
+def event_writer(target: Path, facts: Facts) -> EventWriter:
+    """Append one event to a batch through the one judgements writer (`_write`),
+    re-reading the file each time, so a write never races an earlier one of the same
+    command (merge-train-safety §A, §B). An event older than the batch's last is
+    stamped at that time: a skewed clock never breaks the time-order rule."""
+
+    def write(batch_id: str, event: BatchEvent) -> None:
+        judgements = load_judgements(target / "judgements.yaml")
+        batch = _find(judgements.batches, batch_id)
+        if batch.events and event.at < batch.events[-1].at:
+            event = event.model_copy(update={"at": batch.events[-1].at})
+        new = batch.model_copy(update={"events": [*batch.events, event]})
+        _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
+
+    return write
+
+
+def update_recorder(
+    writer: EventWriter, batch_of: Callable[[int], str | None]
+) -> Callable[[int, str, str, str], None]:
+    """`MergeContext.on_update` for a writer: an `update` event on the PR's batch (R8)."""
+
+    def record(pr: int, before: str, after: str, base: str) -> None:
+        batch_id = batch_of(pr)
+        if batch_id is not None:
+            event = UpdateEvent(
+                kind="update", at=datetime.now(UTC), pr=pr, head_before=before,
+                head_after=after, base=base,
+            )  # fmt: skip
+            writer(batch_id, event)
+
+    return record
 
 
 def _now_after(batch: Batch) -> datetime:
@@ -2252,6 +2295,39 @@ def batch_merge_command(
         say=lambda line: console.print(line, markup=False, soft_wrap=True),
         ci_none=ci_none,
     )
+    writer = event_writer(target, facts)
+
+    def record(batch_id: str, event: BatchEvent) -> None:
+        writer(batch_id, event)
+        ctx.recorded.setdefault(batch_id, []).append(event)
+
+    by_pr = {e.pr.number: e.batch.id for e in queue}
+    ctx.on_update = update_recorder(writer, by_pr.get)
+    try:
+        # The approval gate (merge-train-safety §A, R1-R2): settle under --yes, say what
+        # would be settled otherwise, then hold every batch without a valid approval.
+        verdicts = settle_approvals(
+            client, record, owner_repo, [(e.batch, e.pr.number) for e in queue], ctx.say,
+            now=_now(), dry_run=not yes,
+        )  # fmt: skip
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    # A PR no longer open has no verdict: the plan reports it (already merged, or refused).
+    unapproved = [
+        e for e in queue if e.batch.id in verdicts and not is_approved(verdicts[e.batch.id])
+    ]
+    if unapproved and batch_ids:
+        names = ", ".join(f"{e.batch.id} (PR #{e.pr.number})" for e in unapproved)
+        _fail(
+            f"not approved: {names}: fr merges a batch PR only with the operator's "
+            f"`{APPROVED_FR.name}` label on it"
+        )
+    for e in unapproved:
+        ctx.say(f"held {e.batch.id}: PR #{e.pr.number} awaits the {APPROVED_FR.name} label")
+    queue = [e for e in queue if e not in unapproved]
+    if not queue:
+        ctx.say("nothing to merge")
+        return
     try:
         slots, merged = plan_queue(ctx, queue)
         for step in merged:
@@ -2541,7 +2617,8 @@ class _MergeOutcome(NamedTuple):
 def _stops_train(outcome: MergeAttempt | MergeStopError | GitError) -> bool:
     """Whether a merge's outcome stops its repo's train (spec §B): the head did not
     merge and is waiting on something (its new CI, its checks, a moved head); a
-    refusal, a failed git write, a failing or draft PR, a PR no longer open or one
+    refusal, a failed git write, a failing or draft PR, one the approval gate holds
+    (`unapproved`, `unready`: merge-train-safety §A), a PR no longer open or one
     already merged is stepped over or gone, and the train goes on."""
     if isinstance(outcome, (MergeStopError, GitError)):
         return isinstance(outcome, HeadMovedError)
@@ -2799,6 +2876,7 @@ class _Driver:
             if e.batch.id in ids
         )
         live: dict[str, LivePr] = {}
+        approvals: dict[str, ApprovalVerdict] = {}
         merged_at: dict[str, datetime] = {}
         released: set[str] = set()
         archived: set[str] = set()
@@ -2817,6 +2895,10 @@ class _Driver:
                     e.pr.checks or {},
                     ci_none=self._ci_none(repo),
                 )
+                approvals[e.batch.id] = approval_verdict(
+                    e.batch.events, e.pr.number, str(view.get("head_oid") or ""),
+                    view.get("labels"),
+                )  # fmt: skip
                 live[e.batch.id] = LivePr(
                     number=e.pr.number,
                     state=str(view.get("state")),
@@ -2906,6 +2988,7 @@ class _Driver:
             probed = frozenset(b.id for b in stale if closeout_item_id(repos[b.id], b.id) in asked)
         idle = self._idle(facts, chosen, repos, stages, archives, now) if self.yes else ()
         return Snapshot(
+            approvals=approvals,
             batches=tuple(judgements.batches),
             stages=stages,
             queue=queue,
@@ -3457,6 +3540,35 @@ class _Driver:
         self._observed_last = True
         return True
 
+    def _settle_approvals(self, facts: Facts, judgements: Judgements) -> bool:
+        """Record or void each selected open batch PR's approval before the walk
+        (merge-train-safety §A "Recording and voiding", R2); whether it wrote any.
+        Read-only passes never settle: the walk then reads a first label as approved."""
+        repos = {b.id: r for b in judgements.batches if (r := batch_repo(b, facts)) is not None}
+        chosen = {b.id for b in _chosen(judgements.batches, self.named)}
+        unread = {s.repo for s in facts.skipped}
+        by_repo: dict[str, list[tuple[Batch, int]]] = {}
+        for e in pr_open_queue(judgements.batches, facts, judgements.issues):
+            repo = repos.get(e.batch.id)
+            if e.batch.id in chosen and repo is not None and repo not in unread:
+                by_repo.setdefault(repo, []).append((e.batch, e.pr.number))
+        wrote = False
+        writer = event_writer(self.target, facts)
+
+        def record(batch_id: str, event: BatchEvent) -> None:
+            nonlocal wrote
+            writer(batch_id, event)
+            wrote = True
+
+        try:
+            for repo, open_prs in sorted(by_repo.items()):
+                settle_approvals(self.client(facts, repo), record, repo, open_prs, _say, now=_now())
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        return wrote
+
     def run_pass(self) -> tuple[bool, Summary, list[str]]:
         """One pass: re-collect, decide, act (with --yes) or print the plan.
         Returns whether it acted, the settled summary, and the blocked batch ids."""
@@ -3469,6 +3581,10 @@ class _Driver:
                 "ignored until an fr that knows them runs",
             )
         _, facts, judgements = _load_state(self.scope, self.target, None)
+        if self.yes and self._settle_approvals(facts, judgements):
+            _, facts, judgements = _load_state(self.scope, self.target, None)
+        for ctx in self._merge.values():
+            ctx.recorded.clear()  # what a context recorded last pass is on disk now
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._clone_unread = {}
         self._restart = {}
@@ -3871,6 +3987,10 @@ class _Driver:
                     in_flight,
                     True,
                 )
+            writer = event_writer(self.target, facts)
+            ctx.on_update = update_recorder(
+                writer, lambda pr: batch.id if pr == slots[0].step.pr.number else None
+            )
             attempt = merge_ready(ctx, slots[0], None)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
@@ -3901,6 +4021,9 @@ class _Driver:
                 in_flight,
                 stops,
             )
+        if attempt.outcome in ("unapproved", "unready"):
+            why = attempt.reason or f"awaits the {APPROVED_FR.name} label"
+            return _MergeOutcome(f"held: PR #{action.pr} {why}", False, in_flight, stops)
         held = f": {', '.join(attempt.checks)}" if attempt.checks else ""
         return _MergeOutcome(
             f"held: PR #{action.pr} is {attempt.outcome}{held}", False, in_flight, stops

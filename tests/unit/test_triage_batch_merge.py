@@ -53,6 +53,10 @@ class MergeForge:
         self.reads: list[int] = []  # each read of a PR's required checks
         self.methods: dict[str, Any] = {"default": "squash", "allowed": ["merge", "squash"]}
         self.method_reads = 0
+        self.readied: list[int] = []
+        self.label_edits: list[tuple[int, frozenset[str], frozenset[str]]] = []
+        self.labels_defined: set[str] = {"approved-fr"}
+        self.created_labels: list[str] = []
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         self.method_reads += 1
@@ -66,11 +70,33 @@ class MergeForge:
             "head_ref": kw.pop("head_ref", f"feat/batch-{number}"),
             "mergeable": "MERGEABLE",
             "merge_state": "CLEAN",
+            # The operator's approval (merge-train-safety §A): on unless a test says not.
+            "labels": kw.pop("labels", ["approved-fr"]),
             **kw,
         }
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
-        return dict(self.prs[number])
+        return {**self.prs[number], "labels": list(self.prs[number]["labels"])}
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        self.readied.append(number)
+        self.prs[number]["draft"] = False
+
+    def edit_issue_labels(
+        self, repo: str, number: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None:
+        self.label_edits.append((number, add, remove))
+        pr = self.prs[number]
+        pr["labels"] = [x for x in pr["labels"] if x not in remove] + sorted(add)
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        return name in self.labels_defined
+
+    def ensure_labels(self, repo: str, labels: list[Any]) -> None:
+        for label in labels:
+            name = getattr(label, "name", label)
+            self.created_labels.append(name)
+            self.labels_defined.add(name)
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         self.reads.append(number)
@@ -188,6 +214,9 @@ class FakeCheckout:
 
     def remove_worktree(self, where: Path) -> None:
         self.removed.append(where)
+
+    def rev_parse(self, ref: str) -> str:
+        return f"{ref}@fetched"
 
     def on_push(self, branch: str, sha: str) -> None:
         for pr in self.forge.prs.values():
@@ -471,14 +500,16 @@ def test_a_named_batch_that_is_not_pr_open_is_refused(
 @pytest.mark.parametrize(
     ("mutate", "words"),
     [
-        (lambda f: f.prs[1001].update(draft=True), "draft"),
+        # An approved draft is readied and merged now (merge-train-safety R3); a label
+        # removed under the run stops it instead.
+        (lambda f: f.prs[1001].update(labels=[]), "approved-fr"),
         (
             lambda f: f.checks.__setitem__(1001, [{"name": "lint", "bucket": "fail"}]),
             "lint",
         ),
         (lambda f: f.prs[1001].update(head_oid="someone-pushed"), "head moved"),
     ],
-    ids=["draft", "failing-check", "moved-head"],
+    ids=["label-removed", "failing-check", "moved-head"],
 )
 def test_each_refusal_stops_the_queue_with_its_message(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutate: Any, words: str
@@ -496,7 +527,8 @@ def test_each_refusal_stops_the_queue_with_its_message(
 
     def _changes_after_plan(repo: str, number: int) -> dict[str, Any]:
         views.append(number)
-        if views.count(1001) == 2:  # the step-1 re-read, after the plan was printed
+        # the step-1 re-read, after the approval settle and the plan read it
+        if views.count(1001) == 3:
             mutate(forge)
         return real_view(repo, number)
 
