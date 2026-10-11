@@ -1,0 +1,2 @@
+bump: patch
+summary: "cloud triage fails loud: workers update a stale fr and require the batch skill, close-outs start on the default branch, a session that never started reads blocked, the driver resolves origin/HEAD and switches its own detached clone, and fr cloud doctor checks the merge method"
