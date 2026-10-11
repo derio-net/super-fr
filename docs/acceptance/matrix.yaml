@@ -8155,9 +8155,13 @@ rows:
       upgrade: its `skipped` acceptance status is migrated by the same rule as the matrix.'
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R27
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_record_status_split.py#test_a_v8_skipped_entry_moves_by_the_r6_rule
+      - super-fr:tests/unit/test_migration_record_status_split.py#test_a_migrated_record_then_applies
+    status: ci
+    notes: 'phase 1: the record 8->9 hop (frozen RecordV8, R6''s rule from the entry
+      and its row) and the apply after it are unit-tested in CI'
   - id: forge-adapter-debt-ops
     capability: forge
     acceptance: Every forge adapter edits an issue's title and body, lists open issues
