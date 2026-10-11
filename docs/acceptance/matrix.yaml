@@ -8074,9 +8074,19 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R17
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R18
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R19
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at planning; phase 3 writes it.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_closeout_outcome.py#test_test_plan_steps_numbers_top_level_items_by_position
+      - super-fr:tests/unit/test_closeout_outcome.py#test_owed_writes_an_owed_entry_with_its_key
+      - super-fr:tests/unit/test_closeout_outcome.py#test_a_step_already_recorded_is_refused_and_nothing_is_written
+      - super-fr:tests/unit/test_archive_owed.py#test_plan_dir_archive_holds_a_step_with_no_outcome_and_names_its_command
+      - super-fr:tests/unit/test_archive_owed.py#test_branch_archive_holds_a_step_with_no_outcome
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: the Test Plan parser, fr closeout outcome and the archive hold
+      on --branch, plan-dir and --all (--force included) are unit-tested in CI; the
+      candidate scenario closeout-owed runs in CI via test_scenarios'
     scenario: tests/scenarios/closeout-owed.sh
   - id: owed-durable-at-archive
     capability: closeout
