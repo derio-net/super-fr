@@ -1,0 +1,11 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-debt-engine
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1]
+refactor:
+  P1.T1: "a fragment and a one-assert smoke test; nothing to clean"
+journal: []
+resolves: []
+evidence: {}
