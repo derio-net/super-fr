@@ -20,7 +20,7 @@ from fr.commands import triage_batch_cmd, triage_cmd
 from fr.real_ghrestclient import RealGhRestClient
 from fr.triage.errors import TriageError
 from fr.triage.model import Facts, Issue, Scope, load_judgements
-from fr.triage.privacy import PrivacyError, leak_risk, refusal
+from fr.triage.privacy import PrivacyError, VisibilityUnreadable, leak_risk, refusal
 from fr.triage.scope_config import ScopeDurable, write_durable
 from fr.triage.state_ref import push_state, ref_name
 from typer.testing import CliRunner
@@ -323,6 +323,24 @@ def test_an_unreadable_state_repo_visibility_refuses_the_push(
         _push(state, origin, "example-org/gone", gh)
 
     assert _ref(origin) == ""
+
+
+def test_an_unreadable_visibility_is_its_own_privacy_error(
+    tmp_path: Path, origin: Path, gh: FakeGhClient
+) -> None:
+    """Unreadable is retryable (gh#1134); a leak is not (R10)."""
+    from fr.triage.privacy import guard_state
+
+    state = _state(_workspace(tmp_path, origin), state_repo="example-org/gone")
+    with pytest.raises(VisibilityUnreadable) as caught:
+        guard_state(state, scope=SCOPE, state_repo="example-org/gone", client_for=lambda r: gh)
+    assert isinstance(caught.value, PrivacyError)
+
+    gh.visibility[REFS] = "public"
+    state = _state(tmp_path / "state2", state_repo=REFS)
+    with pytest.raises(PrivacyError) as leak:
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda r: gh)
+    assert not isinstance(leak.value, VisibilityUnreadable)
 
 
 def test_an_unreadable_judgements_file_refuses_the_push(
