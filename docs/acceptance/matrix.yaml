@@ -8222,8 +8222,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R1
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at plan time; the phase that builds it writes the file.
     verify: candidate
+    scenario: tests/scenarios/merge-train-label-gate.sh
   - id: approval-label-created
     capability: triage-batch-merge
     acceptance: fr init scaffold and the triage commands that touch a repo's PRs create
