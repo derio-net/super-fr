@@ -91,3 +91,178 @@ Operator (R2·Q4): driver, batch merge (with or without ids), and the queue enqu
 ### gate-question-rounds-brainstorm · decision · Operator gate `brainstorm` took two question rounds
 
 Trigger: design-risk. Round 1 replaced the proposed signed-approval gate with an approved-fr label; the code check (no labels in PR facts, driver updates move the head, draft refused by merge_ready, batch merge shares merge_ready, App keys are UI-only) opened five decisions only that answer created.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-1 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-1 · finding [open] (reviewer: in scope) · batch merge does not go through merge_ready, so R1/R3 are not covered on that path
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-2 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-2 · finding [open] (reviewer: in scope) · _walk_train drops every draft, so the labelled-draft merge never reaches merge_ready
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-3 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-3 · finding [open] (reviewer: in scope) · Approval recording/voiding only runs in merge_ready, so first sighting and void removal are undecided for non-candidates
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-4 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-4 · finding [open] (reviewer: in scope) · red_decision inputs are not in Snapshot; hand-back target and budget unspecified
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-5 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-5 · finding [open] (reviewer: in scope) · R11 contradicts keeping warn, which the board turns into failing-ci
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-6 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-6 · finding [open] (reviewer: in scope) · Strict up-to-date livelocks the routine-commit skip
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-7 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-7 · finding [open] (reviewer: in scope) · --stage require's pushed-by-app check reads the commit identity
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-8 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-8 · finding [open] (reviewer: in scope) · New action kinds are not in ActionKind or kanban's phrase table
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-9 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-9 · finding [open] (reviewer: in scope) · How UpdateEvent is written from _update, and what base is, is undefined
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-10 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-10 · finding [open] (reviewer: in scope) · Ejection ignores auto-merge state; isInMergeQueue is not a gh pr view field
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-11 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-11 · finding [open] (reviewer: in scope) · Queue mode is silent on version-slot reservation
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-12 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-12 · finding [open] (reviewer: in scope) · rules/branches misses a queue from classic branch protection
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-13 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-13 · finding [open] (reviewer: in scope) · change-fragment merge_group equivalent is moot and wrong as written
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-14 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-14 · finding [open] (reviewer: in scope) · Candidate scenarios claim a fake forge that does not exist
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-15 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-15 · finding [open] (reviewer: in scope) · R16's script refusal logic has no test or row
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-16 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-16 · finding [open] (reviewer: in scope) · R4 per-pass vs per-process label creation disagree; tripwire would match operator prose
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-17 created=2026-10-11T17:24:42+00:00 state=open review_scope=in -->
+### sr-r1-17 · finding [open] (reviewer: in scope) · Line citations drifted
+
+Raised by the independent spec reviewer; see the review entry spec-review-r1.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-r1 created=2026-10-11T17:24:42+00:00 -->
+### spec-review-r1 · review · independent spec review: 17 findings, all in scope
+
+fr-spec-reviewer raised sr-r1-1 … sr-r1-17, all in scope; decisions d1–d11 each restated in the requirements, none contradicted. All 17 fixed in the spec.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-1-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-1 -->
+### sr-r1-1-resolved · finding [fixed] · resolves sr-r1-1: batch merge does not go through merge_ready, so R1/R3 are not covered on that path
+
+Shared _approved_and_ready gate called by merge_ready and merge_one; batch merge filters unapproved before the plan prints, ids path exits 2; labels read live via pr_view (§A Merging).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-2-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-2 -->
+### sr-r1-2-resolved · finding [fixed] · resolves sr-r1-2: _walk_train drops every draft, so the labelled-draft merge never reaches merge_ready
+
+The walk admits a draft whose verdict is Approved/First; unapproved members go to Train.awaiting (§A The walk).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-3-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-3 -->
+### sr-r1-3-resolved · finding [fixed] · resolves sr-r1-3: Approval recording/voiding only runs in merge_ready, so first sighting and void removal are undecided for non-candidates
+
+settle_approvals runs every pass for every open batch PR whatever its checks, records First and executes Void with label removal; batch merge only under --yes; the residual one-pass window is stated in Out of scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-4-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-4 -->
+### sr-r1-4-resolved · finding [fixed] · resolves sr-r1-4: red_decision inputs are not in Snapshot; hand-back target and budget unspecified
+
+Decision moved into the command beside _conflict (pure red_decision, impure inputs); target = _hand_back's target; separate RED_HANDBACKS_PER_DISPATCH = 2; absent/done → Needs-you, with the reason (§C).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-5-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-5 -->
+### sr-r1-5-resolved · finding [fixed] · resolves sr-r1-5: R11 contradicts keeping warn, which the board turns into failing-ci
+
+needs_you suppresses failing-ci under a delivered red hand-back at the current head; red-pr raised from delivered:none; NEED_LABELS gains approve-pr, red-pr, queue-ejected.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-6-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-6 -->
+### sr-r1-6-resolved · finding [fixed] · resolves sr-r1-6: Strict up-to-date livelocks the routine-commit skip
+
+New R14 + base_rules.strict_checks (rulesets and classic protection); _land skips _behind_only_routinely when strict; new row merge-train-strict-up-to-date.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-7-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-7 -->
+### sr-r1-7-resolved · finding [fixed] · resolves sr-r1-7: --stage require's pushed-by-app check reads the commit identity
+
+The check reads the push-event Actions run on the release sha and its triggering_actor (a GITHUB_TOKEN push triggers none); Test Plan step 3 corrected.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-8-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-8 -->
+### sr-r1-8-resolved · finding [fixed] · resolves sr-r1-8: New action kinds are not in ActionKind or kanban's phrase table
+
+enqueue is a new ActionKind with a phrase; approval/void is the impure settle step, not an action; awaiting approval and in merge queue come from Train.awaiting / Train.in_merge_queue.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-9-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-9 -->
+### sr-r1-9-resolved · finding [fixed] · resolves sr-r1-9: How UpdateEvent is written from _update, and what base is, is undefined
+
+MergeContext.on_update callback; base = rev_parse(ctx.main) via a new CheckoutSeam.rev_parse; a re-slot-only update records the fetched base (§B).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-10-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-10 -->
+### sr-r1-10-resolved · finding [fixed] · resolves sr-r1-10: Ejection ignores auto-merge state; isInMergeQueue is not a gh pr view field
+
+pr_queue_state via gh api graphql (isInMergeQueue, autoMergeRequest), REST auto_merge; ejected requires auto-merge cleared (verified: gh pr view --json rejects isInMergeQueue).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-11-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-11 -->
+### sr-r1-11-resolved · finding [fixed] · resolves sr-r1-11: Queue mode is silent on version-slot reservation
+
+A queue-required repo with a version: block is held with a warning.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-12-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-12 -->
+### sr-r1-12-resolved · finding [fixed] · resolves sr-r1-12: rules/branches misses a queue from classic branch protection
+
+Stated as a limit in R12 and Out of scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-13-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-13 -->
+### sr-r1-13-resolved · finding [fixed] · resolves sr-r1-13: change-fragment merge_group equivalent is moot and wrong as written
+
+change-fragment stays pull-request-only and is skipped on merge_group; ci-ok passes a skip; a unit test pins it (R15).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-14-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-14 -->
+### sr-r1-14-resolved · finding [fixed] · resolves sr-r1-14: Candidate scenarios claim a fake forge that does not exist
+
+Named the existing shell-level pattern (tests/scenarios/fixtures/<name>/bin/gh, REST routes, FR_FORGE_API=rest, bare remote via insteadOf); the queue row's GraphQL path is unit-tested, stated in Verification.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-15-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-15 -->
+### sr-r1-15-resolved · finding [fixed] · resolves sr-r1-15: R16's script refusal logic has no test or row
+
+tests/unit/test_configure_main_protection.py with a stub gh; new row main-protection-script citing R17.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-16-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-16 -->
+### sr-r1-16-resolved · finding [fixed] · resolves sr-r1-16: R4 per-pass vs per-process label creation disagree; tripwire would match operator prose
+
+Once per repo per pass or command (seen set); the tripwire exempts sentences naming never/do not/don't/operator.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-17-resolved created=2026-10-11T17:24:42+00:00 state=fixed resolves=sr-r1-17 -->
+### sr-r1-17-resolved · finding [fixed] · resolves sr-r1-17: Line citations drifted
+
+Re-cited triage_batch_cmd.py:2220-2221 and views.py:182-193; §E now partitions the shared loop before the one-repo check.

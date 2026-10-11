@@ -6780,6 +6780,17 @@ rows:
     status: not-implemented
     notes: ''
     verify: candidate
+  - id: merge-train-strict-up-to-date
+    capability: triage-batch-drive
+    acceptance: Where the base branch requires strict up-to-date status checks, the
+      train updates a behind batch PR before merging it, even when it is behind only
+      by routine commits.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
@@ -8276,3 +8287,14 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: main-protection-script
+    capability: release
+    acceptance: configure-main-protection.sh merges the bypass actor and the strict
+      ci-ok rule into main's ruleset without overwriting it, and refuses the rule until
+      the bypass is in place and a release was pushed by the app.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R17
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
