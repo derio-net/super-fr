@@ -281,3 +281,8 @@ ask: driver merge-queue support and merge_group CI (#1062 piece 3)
 ### phase-split-2026-10-11-merge-train-safety-p4 · decision · ask: release identity, protection script and runbook (#1062 pieces 1-2)
 
 ask: release identity, protection script and runbook (#1062 pieces 1-2)
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-11-merge-train-safety-p1 created=2026-10-11T17:27:52+00:00 -->
+### tier-2026-10-11-merge-train-safety-p1 · decision · hard: changes the merge gate every fr merge path relies on and moves two schemas
+
+Phase 1 changes merge_ready/merge_one (the gate every merge path relies on), facts schema 8 to 9 and judgements schema 8 to 9.
