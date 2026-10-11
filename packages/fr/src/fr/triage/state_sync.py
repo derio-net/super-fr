@@ -26,6 +26,12 @@ The repo-side root is `<base>/<rel>`, and only *rel* (the parts fr appends: the 
 name, the configured export path) is checked by `contained`: no `..`, no symlinked
 component, nothing that resolves outside *base* (p4-sec-root-symlink-traversal). The
 base itself is trusted as given: on macOS `/var` and `/tmp` are symlinks.
+
+The repo-side root is named by the scope NAME, which every host's scope of one repo
+shares; only the scope id tells them apart. So export stamps the root with the scope id
+that wrote it (`OWNER_FILE`) and refuses a root another scope id stamped unless told to
+take it over: a second scope's export would otherwise replace the first's judgements,
+origins and snapshots (gh#1101). The stamp is not durable state; import never reads it.
 """
 
 from __future__ import annotations
@@ -51,6 +57,7 @@ SYMLINK = "symlink, not followed"
 SYMLINK_DEST = "the destination is a symlink, not written through"
 NEWER = "newer in the state directory; --force overwrites it"
 IDENTICAL = "identical"
+OWNER_FILE = "exported-by"  # the scope id that exports into this root (gh#1101)
 
 
 class Skipped(NamedTuple):
@@ -255,10 +262,56 @@ def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
     return SyncReport(copied=tuple(copied), skipped=tuple(skipped))
 
 
-def export_state(state_dir: Path, base: Path, rel: str) -> SyncReport:
+def _stamp(root: Path, owner: str, *, take_over: bool) -> bool:
+    """Check the root's `OWNER_FILE` against *owner* before anything is copied; whether
+    it must be (re)written. A root with no stamp is claimed. Refused (`TriageError`)
+    when another scope id stamped it and not *take_over*, or when the stamp is a
+    symlink or under one."""
+    if _symlinked_dest(root, OWNER_FILE):
+        raise TriageError(f"{root / OWNER_FILE} is a symlink; refusing to read or write it")
+    path = root / OWNER_FILE
+    try:
+        current = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return True
+    except OSError as exc:
+        raise TriageError(f"cannot read {path}: {exc.strerror or exc}") from exc
+    if current == owner:
+        return False
+    if not take_over:
+        raise TriageError(
+            f"{root} is exported by scope {current or '(empty stamp)'}, not this scope "
+            f"{owner}: a repo keeps one scope's export, and this one would replace it. "
+            "Export from that scope, or hand the directory to this one with "
+            "`fr triage state export --take-over`"
+        )
+    return True
+
+
+def export_state(
+    state_dir: Path, base: Path, rel: str, *, owner: str, take_over: bool = False
+) -> SyncReport:
     """Copy *state_dir*'s durable state into the repo-side root `contained(base, rel)`
-    (`<dir>/<scope>/`), overwriting what is there."""
-    return _sync(state_dir, contained(base, rel), keep_newer=False)
+    (`<dir>/<scope>/`), overwriting what is there, and stamp it with *owner*, the
+    exporting scope's id. Refused before a byte moves when another scope id stamped
+    the root, unless *take_over*."""
+    root = contained(base, rel)
+    restamp = _stamp(root, owner, take_over=take_over)
+    report = _sync(state_dir, root, keep_newer=False)
+    if not restamp:
+        return report
+    parent = _open_dir(root, (), create=True)
+    try:  # O_NOFOLLOW from the root's descriptor: a stamp swapped for a symlink is refused
+        fd = _open(OWNER_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, dir_fd=parent, mode=0o644)
+    except _SymlinkError:
+        raise TriageError(f"{root / OWNER_FILE} is a symlink; refusing to write it") from None
+    except OSError as exc:
+        raise TriageError(f"cannot write {root / OWNER_FILE}: {exc.strerror or exc}") from exc
+    finally:
+        os.close(parent)
+    with os.fdopen(fd, "w", encoding="utf-8") as writer:
+        writer.write(f"{owner}\n")
+    return SyncReport(copied=(*report.copied, OWNER_FILE), skipped=report.skipped)
 
 
 def import_state(base: Path, rel: str, state_dir: Path, *, force: bool) -> SyncReport:

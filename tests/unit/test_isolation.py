@@ -20,6 +20,7 @@ from fr.isolation.local import (
     ReapRefused,
     branch_changed_paths,
     branch_changes_present,
+    devcontainer_id,
     subprocess_runner,
 )
 from fr.isolation.types import (
@@ -247,7 +248,10 @@ class FakeRunner:
         elif argv[0:2] == ["docker", "images"]:
             out = "".join(f"{i}\t{r}\t{t}\n" for i, r, t in self.docker_images)
         elif argv[0:2] == ["docker", "inspect"]:
-            out = self.stdout.get("docker_image", "")
+            if any(".Mounts" in a for a in argv):
+                out = self.stdout.get("docker_volumes", "")
+            else:
+                out = self.stdout.get("docker_image", "")
         elif argv[0:3] == ["gh", "pr", "view"] and self.pr_by_branch is not None:
             body = self.pr_by_branch.get(argv[3], "")
             return subprocess.CompletedProcess(argv, 0 if body else 1, stdout=body, stderr="")
@@ -1237,6 +1241,77 @@ def test_down_rmi_failure_is_non_fatal(tmp_path: Path, monkeypatch: pytest.Monke
     )
     target.down(st, force=False)  # no raise
     assert load_state(repo, "vk-iso/test") is None
+
+
+def test_devcontainer_id_matches_the_cli() -> None:
+    # Vector from the devcontainer CLI's own formula (sha256 of the sorted
+    # id-label JSON, base-32, padded to 52). The same formula, run against the
+    # host's leaked volumes, reproduced their exact `dind-var-lib-docker-<id>` names.
+    folder = "/home/dev/.cache/fr/worktrees/demo/feat__x"
+    assert (
+        devcontainer_id(folder, f"{folder}/.devcontainer/dev/devcontainer.json")
+        == "1tfvnq8knufjte3fagegfvnrqrmqc13379esotndqa689d3plr71"
+    )
+
+
+def _volumes_out(st: IsolationState, *volumes: str) -> str:
+    """`docker inspect` output for the workspace-volume query: the two id
+    labels on line 1, the container's named volume mounts on line 2."""
+    config = st.worktree / ".devcontainer" / st.profile / "devcontainer.json"
+    return f"{st.worktree}\t{config}\n{' '.join(volumes)}\n"
+
+
+def test_down_removes_the_workspace_dind_volume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The leak: docker-in-docker keeps the inner dockerd's whole /var/lib/docker
+    # in the NAMED volume `dind-var-lib-docker-<devcontainerId>`. `docker rm`
+    # never removes a named volume, so every down leaked it (18.7 GB on one host).
+    # A shared named volume (no devcontainerId in its name) must survive.
+    repo, runner, target, st = _upped(tmp_path, monkeypatch)
+    config = st.worktree / ".devcontainer" / st.profile / "devcontainer.json"
+    owned = f"dind-var-lib-docker-{devcontainer_id(str(st.worktree), str(config))}"
+    runner.stdout = {
+        "docker": "abc123 running\n",
+        "docker_image": "vsc-img-sha\n",
+        "docker_volumes": _volumes_out(st, owned, "vscode"),
+        "gh": '{"state": "MERGED", "url": "u"}',
+    }
+    target.down(st, force=False)
+    calls = runner.argv_for("docker")
+    assert ["docker", "volume", "rm", owned] in calls
+    assert not any(c[0:3] == ["docker", "volume", "rm"] and "vscode" in c for c in calls)
+    # removed only after the container is gone (a mounted volume cannot be removed)
+    assert calls.index(["docker", "volume", "rm", owned]) > calls.index(["docker", "rm", "abc123"])
+
+
+def test_down_volume_rm_failure_is_non_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, runner, target, st = _upped(tmp_path, monkeypatch, fail_on="volume")
+    config = st.worktree / ".devcontainer" / st.profile / "devcontainer.json"
+    owned = f"dind-var-lib-docker-{devcontainer_id(str(st.worktree), str(config))}"
+    runner.stdout = {
+        "docker": "abc123 running\n",
+        "docker_volumes": _volumes_out(st, owned),
+        "gh": '{"state": "MERGED", "url": "u"}',
+    }
+    target.down(st, force=False)  # no raise
+    assert load_state(repo, "vk-iso/test") is None
+
+
+def test_gc_label_reap_removes_the_workspace_volume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A container found only by label (worktree already gone) leaks its volume too.
+    repo, runner, target, _up = _gc_env(tmp_path, monkeypatch)
+    gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / "other" / "gone"
+    config = gone / ".devcontainer" / "dev" / "devcontainer.json"
+    owned = f"dind-var-lib-docker-{devcontainer_id(str(gone), str(config))}"
+    runner.docker_labels = [("cOrph", str(gone))]
+    runner.stdout = {"docker_volumes": f"{gone}\t{config}\n{owned}\n"}
+    target.gc()
+    assert ["docker", "volume", "rm", owned] in runner.argv_for("docker")
 
 
 def test_down_no_container_skips_rmi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

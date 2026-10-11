@@ -136,6 +136,6 @@ def test_scope_yaml_is_not_durable_state(tmp_path: Path) -> None:
     (state / "judgements.yaml").write_text("schema: 6\n", encoding="utf-8")
     (state / "scope.yaml").write_text("publish: [echo]\n", encoding="utf-8")
     dest = tmp_path / "repo" / "docs" / "triage" / "x"
-    report = export_state(state, dest.parent, dest.name)
+    report = export_state(state, dest.parent, dest.name, owner="s-11111111")
     assert "scope.yaml" not in report.copied
     assert not (dest / "scope.yaml").exists()

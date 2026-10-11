@@ -2934,6 +2934,7 @@ class _Driver:
             exports=tuple(judgements.exports),
             export_prs=export_prs,
             export_orphans=export_orphans,
+            scope_id=scope_id(self.scope),
             default_branch=default_branch,
             unverified=frozenset(unverified),
             finished=done_waves,
@@ -3047,21 +3048,24 @@ class _Driver:
                     for pr in facts.prs
                     if pr.repo == repo
                     and pr.state == "OPEN"
-                    and export_wave_of(pr.head_ref) is not None
+                    and export_wave_of(pr.head_ref, scope_id(self.scope)) is not None
                     and pr.cross_repo is not True  # a fork never stalls the export
                     and pr.number not in recorded
                 )
                 if found:
                     orphans[repo] = found
                 target = export_target(
-                    repo, judgements.batches, repos, finished, judgements.exports, found
-                )
+                    repo, judgements.batches, repos, finished, judgements.exports, found,
+                    scope=scope_id(self.scope),
+                )  # fmt: skip
                 if target is None or target.recorded is None or target.recorded.pr is None:
                     continue
                 done, number = target.recorded, target.recorded.pr
                 client = self.client(facts, repo)
                 listed = next(
-                    (p for p in _live_head_prs(client, repo, export_branch(target.wave), allowed)
+                    (p for p in _live_head_prs(
+                        client, repo, export_branch(target.wave, scope_id(self.scope)), allowed
+                    )
                      if p.number == number),
                     None,
                 )  # fmt: skip
@@ -4283,7 +4287,7 @@ class _Driver:
         assert config is not None
         checkout = self.checkout(repo)
         where = self.target / "export" / wave
-        branch = export_branch(wave)
+        branch = export_branch(wave, scope_id(self.scope))
         try:
             checkout.fetch()
             default = checkout.default_branch()
@@ -4297,7 +4301,9 @@ class _Driver:
         try:
             rel = f"{config.path}/{check_scope_name(self.scope.name)}"
             try:
-                report = export_state(self.target, worktree.path, rel)
+                report = export_state(
+                    self.target, worktree.path, rel, owner=scope_id(self.scope)
+                )  # never takes over another scope's export (gh#1101)
             except TriageError as exc:
                 self._export_refusals += 1
                 return f"refused, nothing committed or pushed: {exc}"

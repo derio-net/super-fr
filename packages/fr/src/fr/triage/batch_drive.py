@@ -52,7 +52,7 @@ AWAITING_LIVE_HOLD = "its members await a live walk: no work to dispatch"
 IN_FLIGHT: frozenset[BatchStage] = frozenset({"dispatched", "pr-open"})
 LANDED: frozenset[BatchStage] = frozenset({"merged", "partial"})
 ARCHIVE_PREFIXES = ("chore/archive-", "chore/closeout-")
-EXPORT_PREFIX = "chore/triage-state-wave-"
+EXPORT_PREFIX = "chore/triage-state-"  # + `<scope id>-wave-<N>` (gh#1101)
 """The head of a wave's state-export PR (pages-goal R13). Not in `ARCHIVE_PREFIXES`, so
 archive attribution can never claim an export PR."""
 RUNS_DIR = "docs/superpowers/runs"
@@ -173,6 +173,9 @@ class Snapshot:
     # recording (p4-r3), or a reopened PR recorded closed. Cross-repo PRs never appear
     # here (p4-r7). The export reuses one; it never adopts its content (p4-r12).
     export_orphans: Mapping[str, tuple[LivePr, ...]] = field(default_factory=dict)
+    # This scope's id: the export heads it pushes and reuses name it, so another host's
+    # scope of the same repo never takes this one's export PR for an orphan (gh#1101).
+    scope_id: str = ""
     # repo -> its default branch: the only base an export PR (p4-r15) or an archive PR
     # (gh#1004) may have; "" or absent when the clone could not say, which matches none
     default_branch: Mapping[str, str] = field(default_factory=dict)
@@ -647,9 +650,11 @@ def finished_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> froze
     return frozenset(k for k, ok in wave_ok.items() if ok)
 
 
-def export_branch(wave: str) -> str:
-    """The head a wave's state-export PR is pushed to; the driver owns it."""
-    return f"{EXPORT_PREFIX}{wave}"
+def export_branch(wave: str, scope: str) -> str:
+    """The head a wave's state-export PR is pushed to; the driver of scope id *scope*
+    owns it. The scope id keeps two scopes of one repo (another host's driver) off each
+    other's export PRs (gh#1101)."""
+    return f"{EXPORT_PREFIX}{scope}-wave-{wave}"
 
 
 def _wave_order(wave: str) -> tuple[int, int | str]:
@@ -682,9 +687,11 @@ class ExportTarget:
     orphan: LivePr | None = None  # unrecorded: the open PR to reuse, on wave `wave`'s head
 
 
-def export_wave_of(head_ref: str) -> str | None:
-    """The wave key a `chore/triage-state-wave-<N>` head names, or None."""
-    wave = head_ref.removeprefix(EXPORT_PREFIX) if head_ref.startswith(EXPORT_PREFIX) else ""
+def export_wave_of(head_ref: str, scope: str) -> str | None:
+    """The wave key a `chore/triage-state-<scope>-wave-<N>` head of scope id *scope*
+    names, or None: another scope's export head is never this scope's."""
+    prefix = f"{EXPORT_PREFIX}{scope}-wave-"
+    wave = head_ref.removeprefix(prefix) if head_ref.startswith(prefix) else ""
     return wave if wave.isdigit() else None
 
 
@@ -695,6 +702,8 @@ def export_target(
     finished: frozenset[str],
     exports: Iterable[Export],
     orphans: Sequence[LivePr] = (),
+    *,
+    scope: str,
 ) -> ExportTarget | None:
     """One export PR per repo covers every unexported finished wave. While one is
     unmerged, it is the target and a wave that finished since waits for a later pass,
@@ -712,7 +721,7 @@ def export_target(
     owed = sorted((waves & finished) - entered, key=_wave_order)
     if not owed:
         return None
-    named = [(w, o) for o in orphans if (w := export_wave_of(o.head_ref)) is not None]
+    named = [(w, o) for o in orphans if (w := export_wave_of(o.head_ref, scope)) is not None]
     if named:
         wave, orphan = max(named, key=lambda pair: _wave_order(pair[0]))
         return ExportTarget(repo, wave, tuple(owed), None, orphan)
@@ -728,14 +737,21 @@ def _wrong_base(live: LivePr, default: str) -> str:
 
 
 def _export_row(
-    repo: str, wave: str, done: Export | None, live: LivePr | None, root: str, default: str = ""
+    repo: str,
+    wave: str,
+    done: Export | None,
+    live: LivePr | None,
+    root: str,
+    default: str = "",
+    *,
+    scope: str,
 ) -> tuple[Action | None, ExportCount]:
     """One row of §I's table: the action for *repo*'s finished *wave*, given its
     recorded export (*done*), the live PR and the export directory *root*
     (`<path>/<scope>`), and how the summary counts it. The driver auto-merges this
     PR unreviewed, so it adopts or merges one only when every file it changes is under
     *root*, and merges only at the head it recorded (p4-sec-unpinned-merge)."""
-    head = export_branch(wave)
+    head = export_branch(wave, scope)
     if done is not None and (done.merged or done.pr is None):
         return None, None  # merged, or the export changed nothing
     if done is None:
@@ -797,7 +813,7 @@ def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
     for repo in sorted(snap.export_path):
         target = export_target(
             repo, snap.batches, snap.repos, snap.finished, snap.exports,
-            snap.export_orphans.get(repo, ()),
+            snap.export_orphans.get(repo, ()), scope=snap.scope_id,
         )  # fmt: skip
         if target is None:
             continue
@@ -806,7 +822,7 @@ def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
         )
         action, count = _export_row(
             repo, target.wave, target.recorded, live, snap.export_path[repo],
-            snap.default_branch.get(repo, ""),
+            snap.default_branch.get(repo, ""), scope=snap.scope_id,
         )  # fmt: skip
         if action is not None:
             if action.kind == "export":

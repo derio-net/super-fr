@@ -28,6 +28,7 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     default_selection,
     drive_pass,
+    export_branch,
     find_run,
     housekeeping_branch,
     idle_session,
@@ -41,6 +42,7 @@ from fr.triage.batch_drive import (
 from fr.triage.model import Batch, Export, PullRequest
 
 REPO = "derio-net/super-fr"
+SID = "s-11111111"  # this scope's id: the export head names it (gh#1101)
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 DISPATCHED = "2026-10-01T10:00:00Z"
 RUNS = "docs/superpowers/runs"
@@ -96,6 +98,7 @@ def _snap(
         e.batch.id: _live(e.pr.number, e.pr.head_oid) for e in queue
     }  # fmt: skip
     kw.setdefault("default_branch", {REPO: "main"})
+    kw.setdefault("scope_id", SID)
     return Snapshot(
         batches=tuple(batches),
         stages=stages,  # type: ignore[arg-type]
@@ -1044,7 +1047,8 @@ def _trusted(n: int = 40, **kw: Any) -> LivePr:
     kw.setdefault("files", ("docs/triage/judgements.yaml",))
     kw.setdefault("base", "main")
     wave = kw.pop("wave", "1")
-    return _live(n, kw.pop("head", f"export-head-{n}"), head_ref=f"chore/triage-state-wave-{wave}",
+    head_ref = kw.pop("head_ref", export_branch(wave, SID))
+    return _live(n, kw.pop("head", f"export-head-{n}"), head_ref=head_ref,
                  trusted=kw.pop("trusted", True), **kw)  # fmt: skip
 
 
@@ -1157,7 +1161,7 @@ def test_one_export_covers_every_unexported_finished_wave_named_for_the_highest(
     got = drive_pass(_three_waves())
     (export,) = [a for a in got.actions if a.wave is not None]
     assert (export.kind, export.wave, export.covers) == ("export", "10", ("1", "2", "10"))
-    assert "chore/triage-state-wave-10" in export.detail
+    assert export_branch("10", SID) in export.detail
     base = drive_pass(_three_waves(finished=frozenset())).summary
     assert got.summary.closing == base.closing + 1  # one owed export per PR, not per wave
 
@@ -1213,7 +1217,7 @@ def test_export_target_names_the_newest_unmerged_pr_and_its_waves() -> None:
     snap = _three_waves(
         exports=[*_covering(39, merged=True, waves=("1",)), *_covering(40, waves=("2", "10"))]
     )
-    target = export_target(REPO, snap.batches, snap.repos, snap.finished, snap.exports)
+    target = export_target(REPO, snap.batches, snap.repos, snap.finished, snap.exports, scope=SID)
     assert target is not None
     assert (target.wave, target.covers, target.recorded and target.recorded.pr) == (
         "10",
@@ -1231,8 +1235,21 @@ def test_an_export_action_line_names_the_wave_and_the_repo() -> None:
 def test_the_export_branch_is_never_attributed_as_an_archive() -> None:
     from fr.triage.batch_drive import ARCHIVE_PREFIXES, export_branch
 
-    assert export_branch("3") == "chore/triage-state-wave-3"
-    assert not export_branch("3").startswith(ARCHIVE_PREFIXES)
+    assert export_branch("3", SID) == f"chore/triage-state-{SID}-wave-3"
+    assert not export_branch("3", SID).startswith(ARCHIVE_PREFIXES)
+
+
+def test_another_scopes_export_pr_is_never_reused() -> None:
+    """gh#1101: the export head names the scope id, so a second scope of the same repo
+    (another host's driver) never takes the first scope's open export PR for an orphan
+    and force-pushes over it; it exports on its own head."""
+    other = _trusted(40, checks="green", head_ref=export_branch("1", "s-22222222"))
+
+    got = drive_pass(_export_snap(orphans=(other,)))
+
+    (export,) = [a for a in got.actions if a.kind == "export"]
+    assert export.pr is None
+    assert export_branch("1", SID) in export.detail
 
 
 # ------------------------------------------------ pinned merges (p4-sec-unpinned-merge)
