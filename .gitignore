@@ -44,3 +44,4 @@ docs/acceptance/report.html
 
 # fr deliver suite logs (gh#606)
 .fr-deliver/
+.fr/scratch/
