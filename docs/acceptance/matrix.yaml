@@ -11,12 +11,15 @@
 #               (a .py fragment names a test, pytest-style: #TestX::test_y —
 #               never a #L<n> line, which rots as code moves; gh#531)
 #               ([] = level does not verify this row)
-#   status:     ci | scheduled | skipped | not-implemented | failing
+#   status:     ci | scheduled | unwired | walk-owed | walked | manual
+#               | not-implemented | failing
 #     ci               automated on every PR — cannot drift silently
 #     scheduled        automated on cron/path triggers
-#     skipped          verification exists but does not run in CI (proven
-#                      live once / manual walk) → CI warning, backfill owed
-#     not-implemented  no test or surface exists yet → CI warning
+#     unwired          a test exists but does not run in CI → debt, CI warning
+#     walk-owed        a live or post-merge walk is owed → debt, CI warning
+#     walked           proven live, dated by its latest passing walk
+#     manual           a process that is never automatable
+#     not-implemented  no test or surface exists yet → debt, CI warning
 #     failing          known red → `fr acceptance check` exits 2, CI FAILS
 #   notes:      evidence detail, drift context
 #
