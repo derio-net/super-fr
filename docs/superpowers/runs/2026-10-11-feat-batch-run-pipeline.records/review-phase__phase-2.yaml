@@ -1,0 +1,31 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-run-pipeline
+step: review-phase
+outcome: done
+journal:
+  - {kind: finding, id: p2-r1, review_scope: in, title: "R5 tests never isolate the per-row-line and row-verify: sources; self-review covers only section strategy:", body: "A section-only unrunnable_strategies passed every test."}
+  - {kind: finding, id: p2-r2, review_scope: in, title: "R5 fix advice cannot clear a row's own verify:, which outranks spec lines; message does not name the source row", body: "effective_strategy lets verify: win; 'strategy: none' would not clear it."}
+  - {kind: finding, id: p2-r3, review_scope: in, title: "effective_shape_default bindings in plan_ops._verification_issues and run/visual.py are untested", body: "Spec ## Tests asks that visual.py's binding agrees."}
+  - {kind: finding, id: p2-r4, review_scope: in, title: "brainstorm warning catches only SectionError/AcceptanceError/OSError; other errors escape after commit", body: "UnicodeDecodeError would exit non-zero after the record committed and skip the advance."}
+  - {kind: finding, id: p2-r5, review_scope: in, title: "R5 warning fires only on resolve --record, not the flag form with --emitted spec=", body: "R5 says the brainstorm resolve that emits the spec warns."}
+  - {kind: finding, id: p2-r6, review_scope: out, title: "explicit row verify: on a spec with no ## Verification section is never flagged though walk_owed still owes it", body: "Spec-mandated exemption: a spec with no section passes unchanged."}
+  - {kind: finding, id: p2-r7, review_scope: in, title: "fr verification walk without the install program says 'names no strategy' once R4 drops the default", body: "verification_cmd.py advice points the user at adding strategy: candidate, which then fails."}
+  - {kind: finding, id: p2-r8, review_scope: in, title: "fr-brainstorming SKILL.md still says strategy defaults to the shape's without the R4 drop / R5 error", body: "plugins/super-fr/skills/fr-brainstorming/SKILL.md:79."}
+  - kind: review
+    id: p2-review-1
+    title: "phase 2 independent review: 8 findings (7 in, 1 out)"
+    body: |
+      Read-only reviewer over diff b93b7896..HEAD against spec §B / R4-R6: install_problem is the one rule; effective_shape_default at all three binding sites and nowhere else; walk_owed behaviour correct; brainstorm hook only warns; R6 message exact; fixture changes sound; the two never-red tests verified red by monkeypatching. Findings p2-r1..r5, r7, r8 (in) fixed in fa06614d (+ matrix 0f0c5b6d); p2-r6 (out).
+resolves:
+  - {id: p2-r1, state: fixed, body: "fa06614d: test_p2_r1_a_per_row_line_alone_is_flagged_and_names_its_row, test_p2_r1_a_rows_verify_alone_is_flagged_and_names_the_row_and_the_fix (fail on old src), test_p2_r1_self_review_flags_a_per_row_line_with_no_strategy_line."}
+  - {id: p2-r2, state: fixed, body: "fa06614d: one message per strategy listing every source; a row verify: source names the row and gives `fr acceptance set-status ... --verify none`; spec R5/§B updated."}
+  - {id: p2-r3, state: fixed, body: "fa06614d: test_p2_r3_self_review_binds_the_shape_default_only_when_the_repo_can_run_it, test_p2_r3_visual_verification_binds_the_shape_default_like_self_review."}
+  - {id: p2-r4, state: fixed, body: "fa06614d: _unrunnable_spec_warnings catches Exception (advisory, post-commit); test_p2_r4_a_non_utf8_spec_never_fails_the_resolve and ..._still_resolves_and_advances."}
+  - {id: p2-r5, state: fixed, body: "fa06614d: shared _print_unrunnable_warnings on the flag path; test_p2_r5_the_flag_form_resolve_prints_the_same_warning."}
+  - {id: p2-r6, state: out-of-scope, body: "The spec deliberately exempts a spec with no ## Verification section (pre-strategies world passes unchanged); not caused by this change. Worth a follow-up if row-level verify: without a section should be flagged too."}
+  - {id: p2-r7, state: fixed, body: "fa06614d: walk names the filtered default's install problem and suggests per-row none / strategy: none (raw_shape_default helper); test_p2_r7_a_default_the_repo_cannot_run_says_so_instead_of_naming_no_strategy."}
+  - {id: p2-r8, state: fixed, body: "fa06614d: SKILL.md line 79 amended in place (still 119 lines); sync-opencode.py and sync-hermes.py mirrors regenerated; mirror/validation guards green."}
+evidence:
+  review: p2-review-1
+  reviewer: a272d1094f7f97d7b
+  model: claude-opus-5-5
