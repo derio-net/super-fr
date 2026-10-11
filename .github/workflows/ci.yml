@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # A merge queue builds each group on its own branch (merge-train-safety R15).
+  merge_group:
 
 # Test the floor we declare (`requires-python = ">=3.11"`), not whatever
 # Python the runner ships (#940). An env var rather than a committed

@@ -22,7 +22,7 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd, triage_kanban_cmd
 from fr.gh import GhError
-from fr.ghclient import BaseRules
+from fr.ghclient import BaseRules, QueueState
 from fr.triage import drive_lock
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.claims import claims_from_comments, to_issue_claim
@@ -65,6 +65,7 @@ class World:
         self.config: dict[str, Any] | None = None
         self.titles: dict[int, str] = {}
         self.labels_defined: set[str] = {"approved-fr"}
+        self.queue_states: dict[int, QueueState] = {}  # PR -> its merge-queue state
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -155,6 +156,21 @@ class World:
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         self.calls.append("base_rules")
         return getattr(self, "rules", BaseRules())
+
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        self.calls.append(f"pr_enqueue {number}")
+        if getattr(self, "refuse_enqueue", None):
+            raise GhError(self.refuse_enqueue, returncode=1)  # type: ignore[attr-defined]
+        assert self.prs[number]["head_oid"] == head_sha
+        self.enqueued: list[tuple[int, str, str]] = [
+            *getattr(self, "enqueued", []),
+            (number, head_sha, method),
+        ]
+        self.queue_states[number] = QueueState(in_queue=True, auto_merge=True)
+
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        self.calls.append(f"pr_queue_state {number}")
+        return self.queue_states.get(number, QueueState(in_queue=False, auto_merge=False))
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
@@ -4525,3 +4541,130 @@ def test_a_reupdate_keeps_the_approval_and_leaves_draft_and_labels_alone(
     kinds = [e.kind for b in load_judgements(tmp_path / "judgements.yaml").batches
              for e in b.events]  # fmt: skip
     assert kinds.count("approval") == 1 and kinds.count("update") == 2  # none voided or re-recorded
+
+
+# --------------------------- merge queues (merge-train-safety §D, R13)
+
+QUEUE_CONFIG = {
+    "version": {
+        "source": {"file": "pyproject.toml", "key": "project.version"},
+        "files": ["pyproject.toml"],
+        "set": "python scripts/bump.py {version}",
+    }
+}
+
+
+def _queue_repo(world: World, tmp_path: Path) -> None:
+    """PR #101 of b1 is green and approved on a repo whose base requires a merge queue."""
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    _pr_open(world, tmp_path)
+
+
+def _enqueued(tmp_path: Path, bid: str, pr: int, head: str, base: str) -> None:
+    """Record, on *bid*, the driver's earlier enqueue of *pr* at *head* with the base at *base*."""
+    path = tmp_path / "judgements.yaml"
+    text = path.read_text("utf-8").replace("schema: 3\n", "schema: 9\n", 1)
+    marker = f"branch: feat/batch-{bid}}}\n"
+    extra = (
+        f"      - {{kind: approval, at: 2026-10-01T10:30:00Z, pr: {pr}, head: {head}}}\n"
+        f"      - {{kind: enqueue, at: 2026-10-01T10:40:00Z, pr: {pr}, head: {head}, "
+        f"base: {base}}}\n"
+    )
+    assert marker in text
+    path.write_text(text.replace(marker, marker + extra, 1), "utf-8")
+
+
+def test_a_queue_repo_enqueues_an_approved_green_pr_and_records_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.enqueued == [(101, "sha-101", "squash")] and world.merged == []  # type: ignore[attr-defined]
+    assert _lines(out, "enqueue") == ["enqueue b1: enqueued PR #101 at sha-101"]
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == "b1")
+    (event,) = [e for e in batch.events if e.kind == "enqueue"]
+    assert (event.pr, event.head, event.base) == (101, "sha-101", "origin/main@fetched")
+    # the next pass finds it in the queue and writes nothing
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert len(world.enqueued) == 1 and _lines(out, "enqueue") == []  # type: ignore[attr-defined]
+
+
+def test_plan_mode_names_the_enqueue_and_writes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    code, out = _drive(tmp_path)
+    assert "enqueue b1: PR #101 at sha-101" in out and not hasattr(world, "enqueued")
+
+
+def test_a_pr_ejected_with_the_base_moved_is_enqueued_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    _enqueued(tmp_path, "b1", 101, "sha-101", "old-base")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert len(world.enqueued) == 1  # type: ignore[attr-defined]
+    assert "the base moved since it was enqueued" in out or "enqueued PR #101" in out
+
+
+def test_a_pr_ejected_with_the_base_unmoved_needs_you_and_is_not_enqueued_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    _enqueued(tmp_path, "b1", 101, "sha-101", "origin/main@fetched")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not hasattr(world, "enqueued")
+    assert "PR #101 left the merge queue unmerged" in out
+    assert world.merged == []
+
+
+def test_a_pr_waiting_to_enter_the_queue_is_left_alone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    _enqueued(tmp_path, "b1", 101, "sha-101", "old-base")
+    world.queue_states[101] = QueueState(in_queue=False, auto_merge=True)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not hasattr(world, "enqueued") and "left the merge queue" not in out
+
+
+def test_a_refused_enqueue_is_a_held_line_and_records_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    world.refuse_enqueue = "gh: Pull request is not mergeable"  # type: ignore[attr-defined]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "held: PR #101 enqueue refused" in out
+    assert "enqueue" not in _events(tmp_path, "b1")
+
+
+def test_a_version_block_holds_a_queue_repo(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.config = QUEUE_CONFIG
+    _queue_repo(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "fr does not reserve versions through one" in out
+    assert not hasattr(world, "enqueued") and world.merged == []
+
+
+def test_forge_api_rest_holds_a_queue_repo(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    monkeypatch.setenv("FR_FORGE_API", "rest")
+    _queue_repo(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "forge.api rest cannot enqueue" in out
+    assert not hasattr(world, "enqueued") and world.merged == []
+
+
+def test_a_repo_without_a_queue_merges_as_before(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [(101, "sha-101", "squash")] and not hasattr(world, "enqueued")
+    assert "pr_queue_state" not in " ".join(world.calls)

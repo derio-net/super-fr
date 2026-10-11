@@ -80,7 +80,7 @@ from fr.commands.triage_cmd import (
 )
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
-from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, UnsupportedForgeOperation
+from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, QueueState, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.isolation.rename import IsolationError, rename_branch
 from fr.labels import APPROVED_FR, FR_IN_PROGRESS
@@ -222,6 +222,7 @@ from fr.triage.model import (
     CloseoutEvent,
     ConflictEvent,
     DispatchEvent,
+    EnqueueEvent,
     Export,
     Facts,
     Judgements,
@@ -2985,14 +2986,75 @@ class _Driver:
             )
         # Read each pass, as the pass's own verdict is: the context outlives a pass.
         self._merge[repo].ci_none = self._ci_none(repo)
-        if repo not in self._rules:  # once per repo per pass (merge-train-safety §D, R12)
-            ctx = self._merge[repo]
+        self._merge[repo].rules = self._base_rules(facts, repo)
+        return self._merge[repo]
+
+    def _base_rules(self, facts: Facts, repo: str) -> BaseRules:
+        """*repo*'s base branch's rules, once per repo per pass (merge-train-safety §D, R12)."""
+        if repo not in self._rules:
             try:
-                self._rules[repo] = ctx.client.base_rules(repo, ctx.checkout.default_branch())
+                self._rules[repo] = self.client(facts, repo).base_rules(
+                    repo, self._reader(repo).default_branch()
+                )
             except FORGE_ERRORS as exc:
                 raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
-        self._merge[repo].rules = self._rules[repo]
-        return self._merge[repo]
+        return self._rules[repo]
+
+    def _queue_reads(
+        self, facts: Facts, queue: Sequence[QueueEntry], repos: Mapping[str, str]
+    ) -> dict[str, Any]:
+        """The Snapshot's merge-queue fields (§D "Queue mode", R13): the repos whose base
+        requires a queue, those held (a `version:` block, `forge.api rest`), the queue state
+        of each batch the driver enqueued before, and the base now. Reads only what a decision
+        needs: no state for a batch never enqueued, no base without one."""
+        from fr import forgeapi
+
+        try:
+            rest = forgeapi.resolve() == "rest"
+        except forgeapi.ForgeApiError as exc:
+            _fail(str(exc))
+        by_repo: dict[str, list[QueueEntry]] = {}
+        for e in queue:
+            by_repo.setdefault(repos[e.batch.id], []).append(e)
+        queued: set[str] = set()
+        versioned: set[str] = set()
+        states: dict[str, QueueState] = {}
+        bases: dict[str, str] = {}
+        for repo, entries in sorted(by_repo.items()):
+            if not self._base_rules(facts, repo).merge_queue:
+                continue
+            queued.add(repo)
+            if facts.config_for(repo).version is not None:
+                versioned.add(repo)
+                continue
+            if rest:
+                continue
+            client = self.client(facts, repo)
+            seen = {
+                e.batch.id: client.pr_queue_state(repo, e.pr.number)
+                for e in entries
+                if any(isinstance(x, EnqueueEvent) and x.pr == e.pr.number for x in e.batch.events)
+            }
+            if not seen:
+                continue
+            try:
+                bases[repo] = self._base_now(repo)
+            except (GitError, TriageError):  # unknown base: decide nothing this pass
+                continue
+            states.update(seen)
+        return {
+            "queue_repos": frozenset(queued),
+            "queue_versioned": frozenset(versioned),
+            "queue_rest": rest,
+            "queue_states": states,
+            "bases": bases,
+        }
+
+    def _base_now(self, repo: str) -> str:
+        """The base branch's sha as fetched now (the `UpdateEvent.base` the red path reads)."""
+        checkout = self._reader(repo)
+        checkout.fetch()
+        return checkout.rev_parse(f"origin/{checkout.default_branch()}")
 
     # ------------------------------------------------------------------ snapshot
 
@@ -3103,6 +3165,7 @@ class _Driver:
                 )
                 if now - event.at >= STALE_CLOSEOUT:  # is its tab still live? (gh#1025)
                     stale.append(b)
+            queue_reads = self._queue_reads(facts, queue, repos)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
@@ -3168,6 +3231,7 @@ class _Driver:
             export_refused=export_refused,
             awaiting=frozenset(b.id for b in judgements.batches if batch_awaits_live(b, facts)),
             refused={b.id: why for b in chosen if (why := self.adapter.refusal(b)) is not None},
+            **queue_reads,
             **claim_plan,
         )
 
@@ -3938,6 +4002,9 @@ class _Driver:
             if merged.stops:
                 self._stopped[action.train] = batch.id
             return merged.line, merged.acted, merged.in_flight
+        if action.kind == "enqueue":
+            line, did = self._enqueue(action, facts, judgements, batch, repo)
+            return line, did, in_flight
         if action.kind == "closeout":
             outcome, did = self._close_out(action, facts, judgements, batch, repo)
             return outcome, did, in_flight
@@ -4223,6 +4290,38 @@ class _Driver:
         return _MergeOutcome(
             f"held: PR #{action.pr} is {attempt.outcome}{held}", False, in_flight, stops
         )
+
+    def _enqueue(
+        self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
+    ) -> tuple[str, bool]:
+        """§D: put the PR in the base's merge queue, pinned to the head whose checks were
+        judged, then record an `enqueue` event with the base as fetched BEFORE the write (a
+        base that moves meanwhile reads as moved, so an ejection re-enqueues, never strands).
+        A refusal is a held line, said once per head, and records nothing."""
+        assert action.pr is not None
+        ctx = self.merge_ctx(facts, repo)
+        try:
+            base = self._base_now(repo)
+            ctx.client.pr_enqueue(repo, action.pr, head_sha=action.head, method=ctx.method)
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except (GitError, TriageError) as exc:
+            why = f"the base could not be read ({exc}): retried next pass"
+            return self._said_once(batch, action, "enqueue-base", why), False
+        except FORGE_ERRORS as exc:
+            self.failed_write = True
+            why = f"held: PR #{action.pr} enqueue refused: {exc}"
+            key = f"enqueue\0{batch.id}\0{action.head}\0{why}"
+            if key in self.reported:
+                return "", False
+            self.reported.add(key)
+            return why, False
+        self._append(
+            judgements, facts, batch,
+            EnqueueEvent(kind="enqueue", at=_now_after(batch), pr=action.pr, head=action.head,
+                         base=base),
+        )  # fmt: skip
+        return f"enqueued PR #{action.pr} at {action.head[:12]}", True
 
     def _stopped_line(self, batch: Batch, action: Action, exc: MergeStopError | GitError) -> str:
         """A refusal ends neither the loop nor the pass (rg-4): it is reported in full
