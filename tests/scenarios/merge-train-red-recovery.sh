@@ -7,7 +7,8 @@
 # a real bare remote where the driver's update pushes land. Phases:
 #   A. the PR is red at a head fr made (an `update` event, base M0) and main has moved
 #      since: the pass updates it again (a new `update` event with the fetched base), and
-#      the next pass, its head pending, does not update it a third time; no prompt is sent;
+#      the next pass, its head red again with the base unmoved, hands it back instead of
+#      updating a third time;
 #   B. a session pushes and that head is red: the pass hands it back to the idle session
 #      once (one prompt naming the sha), a second pass over the same head sends nothing,
 #      and the board's `failing-ci` need is gone while the hand-back covers the head;
@@ -126,25 +127,26 @@ expect_grep "head_before: $h1" "$y" "the second update starts from the red head"
 expect_grep "head_after: $h2" "$y" "the second update names its new head"
 expect_grep "base: $m1" "$y" "it records the base fetched at the time"
 [ "$(prompts)" = 0 ] || fail "a re-update also messaged the session"
-forge "w['pending'] = ['$h2']"
+forge "w['red'] = ['$h2']"  # fr's second update is red too, and the base has not moved
 drive
-refuse_grep "updated PR" "$out" "the new head, pending, is not updated again"
+refuse_grep "updated PR" "$out" "no third update: a later update already starts from the red head"
 [ "$(events update)" = 2 ] || fail "expected exactly two update events, got $(events update)"
+expect_grep "handed back to its session $tab" "$out" "it is handed back instead"
+[ "$(prompts)" = 1 ] || fail "expected one prompt after phase A, got $(prompts)"
 
 # B. A session pushes a red head: handed back to the idle session, once.
-forge "w['pending'] = []"
 s1="$(push_branch a.txt "session one")"
 forge "w['red'] = ['$s1']"
 drive
 expect_grep "CI failing at ${s1:0:12}" "$out" "the session's red head is reported"
 expect_grep "handed back to its session $tab" "$out" "an idle session is handed the red PR"
-[ "$(prompts)" = 1 ] || fail "expected one prompt, got $(prompts)"
+[ "$(prompts)" = 2 ] || fail "expected a second prompt, got $(prompts)"
 expect_grep "$s1" "$(cat "$HERDR_PROMPTS")" "the prompt names the failing sha"
 expect_grep "approved-fr" "$(cat "$HERDR_PROMPTS")" "the prompt tells the session not to add the label"
 drive  # the same red head again: nothing sent, nothing said
-[ "$(prompts)" = 1 ] || fail "a second pass over the same red head sent another prompt"
+[ "$(prompts)" = 2 ] || fail "a second pass over the same red head sent another prompt"
 refuse_grep "CI failing" "$out" "a second pass says nothing new about it"
-[ "$(events red_handback)" = 1 ] || fail "expected one red_handback event"
+[ "$(events red_handback)" = 2 ] || fail "expected two red_handback events"
 page="$(board)"
 refuse_grep 'data-need="failing-ci"' "$page" "a delivered hand-back is in progress, not a failing-ci need"
 
@@ -154,7 +156,7 @@ forge "w['red'] = ['$s2']"
 export HERDR_NO_TAB="$tab"
 drive
 expect_grep "no session can take it" "$out" "an unreachable session is a Needs-you"
-[ "$(prompts)" = 1 ] || fail "a gone session was messaged"
+[ "$(prompts)" = 2 ] || fail "a gone session was messaged"
 drive
 refuse_grep "CI failing" "$out" "the Needs-you is decided once per head"
 expect_grep 'data-need="red-pr"' "$(board)" "the board shows a red-pr need"

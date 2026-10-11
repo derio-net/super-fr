@@ -4425,3 +4425,103 @@ def test_the_base_rules_are_read_once_per_repo_per_pass_and_reach_the_merge_cont
     _pr_open(world, tmp_path)
     _drive(tmp_path, "--once", "--yes")
     assert seen == [True] and world.calls.count("base_rules") == 1
+
+
+# ------------------- red recovery: no I/O for a decided head, deduped lines (p2-r2..r5)
+
+
+def test_an_already_handed_back_red_head_builds_no_context_and_reads_no_base(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    _drive(tmp_path, "--once", "--yes")
+    assert len(_red_events(tmp_path)) == 1
+    built: list[str] = []
+    fetched: list[int] = []
+    real = triage_batch_cmd._Driver.merge_ctx
+
+    def _spy(self: Any, facts: Any, repo: str) -> Any:
+        built.append(repo)
+        return real(self, facts, repo)
+
+    monkeypatch.setattr(triage_batch_cmd._Driver, "merge_ctx", _spy)
+    monkeypatch.setattr(checkout, "rev_parse", lambda ref: fetched.append(1) or "x")
+    _drive(tmp_path, "--once", "--yes")
+    assert built == [] and fetched == []
+
+
+def test_a_red_pr_whose_runner_this_driver_lacks_says_so_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.driver import HOST
+
+    _red(world, tmp_path)
+    monkeypatch.setattr(type(HOST), "carries", lambda self, runner: False)
+    sleeps: list[float] = []
+
+    def _stop(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    lines = _lines(result.output, "warn")
+    assert len(lines) == 1 and "left to that runner's driver" in lines[0]
+    assert messenger.messages == [] and _red_events(tmp_path) == []
+
+
+def test_a_failing_status_read_and_a_failing_send_are_each_said_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _red(world, tmp_path)
+
+    def _boom_status(items: Any) -> dict[str, str]:
+        raise RuntimeError("socket down")
+
+    monkeypatch.setattr(messenger, "session_statuses", _boom_status)
+
+    def _two_passes() -> str:
+        sleeps: list[float] = []
+
+        def _stop(seconds: float) -> None:
+            sleeps.append(seconds)
+            if len(sleeps) == 2:
+                raise _StopError
+
+        monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop)
+        return str(_drive_named(tmp_path, "--yes", "--interval", "5").output)
+
+    out = _two_passes()
+    assert out.count("could not be read: socket down") == 1
+
+    monkeypatch.setattr(messenger, "session_statuses", lambda items: {i.id: "idle" for i in items})
+
+    def _boom_send(item: Any, text: str) -> None:
+        raise RuntimeError("pane gone")
+
+    monkeypatch.setattr(messenger, "message", _boom_send)
+    out = _two_passes()
+    assert out.count("failed, retried next pass: pane gone") == 1
+    assert _red_events(tmp_path) == []
+
+
+def test_a_reupdate_keeps_the_approval_and_leaves_draft_and_labels_alone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    world.prs[101]["draft"] = True
+    _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")
+    checkout.behind.add("sha-101")
+    labels = list(world.prs[101]["labels"])
+    _drive(tmp_path, "--once", "--yes")
+    assert world.prs[101]["head_oid"] == "sha-updated"
+    assert world.prs[101]["draft"] is True and world.prs[101]["labels"] == labels
+    assert not any(c.startswith(("pr_ready", "label 101")) for c in world.calls)
+    kinds = [e.kind for b in load_judgements(tmp_path / "judgements.yaml").batches
+             for e in b.events]  # fmt: skip
+    assert kinds.count("approval") == 1 and kinds.count("update") == 2  # none voided or re-recorded

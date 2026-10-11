@@ -4288,13 +4288,20 @@ class _Driver:
         repo = batch_repo(batch, facts)
         if repo is None or action.pr is None:
             return action.detail, False
+        if any(
+            isinstance(e, RedHandbackEvent) and (e.pr, e.head) == (action.pr, action.head)
+            for e in batch.events
+        ):
+            return "", False  # rule 1, decided with no I/O: a hand-back covers this head
         ctx = self.merge_ctx(facts, repo)
         events = [*batch.events, *ctx.recorded.get(batch.id, [])]
         try:
             ctx.checkout.fetch()
             base_now = ctx.checkout.rev_parse(ctx.main)
         except (GitError, TriageError) as exc:
-            return f"{action.detail}; the base could not be read ({exc}): retried next pass", False
+            return self._said_once(
+                batch, action, "base", f"the base could not be read ({exc}): retried next pass"
+            ), False
         checks = action.checks
         # Rules 1-3 never read the session: ask it only when they leave the decision to it.
         decision = red_decision(events, action.pr, action.head, checks, base_now, "idle")
@@ -4303,13 +4310,19 @@ class _Driver:
         if decision == "handback":
             name, target, _ = self._hand_back_target(facts, batch, repo)
             if not self.adapter.carries(name):  # another driver's session
-                return "", False
+                return self._said_once(
+                    batch, action, "carries",
+                    f"its session runs on {name}, which this driver lacks: left to that "
+                    "runner's driver",
+                ), False  # fmt: skip
             runner = self.runner(name)
             if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
                 try:
                     status = runner.session_statuses([target]).get(target.id, "unknown")
                 except Exception as exc_:  # noqa: BLE001 - retried next pass
-                    return f"{action.detail}; its session could not be read: {exc_}", False
+                    return self._said_once(
+                        batch, action, "status", f"its session could not be read: {exc_}"
+                    ), False
             else:
                 status = "absent"  # this runner cannot be messaged: no session can take it
             decision = red_decision(events, action.pr, action.head, checks, base_now, status)
@@ -4322,15 +4335,21 @@ class _Driver:
             self._append(judgements, facts, batch, event)
             return f"{action.detail}; no session can take it: it needs you", True
         if decision == "wait":
-            once = f"red-wait\0{batch.id}\0{action.head}\0{status}"
-            if once in self.reported:
-                return "", False
-            self.reported.add(once)
-            return (
-                f"{action.detail}; its session is {status}: nothing sent, retried next pass",
-                False,
-            )
+            line = self._said_once(
+                batch, action, f"wait\0{status}",
+                f"its session is {status}: nothing sent, retried next pass",
+            )  # fmt: skip
+            return line, False
         return self._red_hand_back(action, facts, judgements, batch, repo, name, target, runner)
+
+    def _said_once(self, batch: Batch, action: Action, cause: str, why: str) -> str:
+        """The red warn line with *why*, the first time this (batch, head, cause) is seen,
+        else "": a pass that decides nothing new says nothing (§C)."""
+        key = f"red\0{batch.id}\0{action.head}\0{cause}\0{why}"
+        if key in self.reported:
+            return ""
+        self.reported.add(key)
+        return f"{action.detail}; {why}"
 
     @staticmethod
     def _red_event(action: Action, batch: Batch, delivered: str) -> RedHandbackEvent:
@@ -4359,10 +4378,8 @@ class _Driver:
         try:
             runner.message(target, brief)
         except Exception as exc_:  # noqa: BLE001 - retried next pass, never the drive's end
-            return (
-                f"{action.detail}; hand-back to {target.id} failed, retried next pass: {exc_}",
-                False,
-            )
+            failed = f"hand-back to {target.id} failed, retried next pass: {exc_}"
+            return self._said_once(batch, action, "send", failed), False
         self._append(judgements, facts, batch, self._red_event(action, batch, "session"))
         if isinstance(runner, Mailbox):  # sent once the agent records it (§F)
             return f"{action.detail}; handed-back (pending) to its session {target.id}", True

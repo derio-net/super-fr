@@ -100,6 +100,8 @@ class MergeForge:
             self.labels_defined.add(name)
 
     def base_rules(self, repo: str, branch: str) -> BaseRules:
+        if getattr(self, "rules_error", None):
+            raise GhError(self.rules_error, returncode=1)  # type: ignore[attr-defined]
         return getattr(self, "rules", BaseRules())
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
@@ -908,4 +910,35 @@ def test_merge_naming_a_held_batch_still_refuses(
     _hold(tmp_path, 0)
     code, out = _merge(tmp_path, "one", "--yes")
     assert code == 2 and "cannot be merged" in out
+    assert forge.merged == []
+
+
+# ------------------------- the base rules reach batch merge's context (§D, R12, R14)
+
+
+def test_batch_merge_reads_the_base_rules_once_and_strict_checks_update_a_routinely_behind_pr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.ghclient import BaseRules
+
+    forge, checkout = _setup(tmp_path, monkeypatch, _TWO[:1], config=None)
+    forge.rules = BaseRules(merge_queue=False, strict_checks=True)  # type: ignore[attr-defined]
+    reads: list[str] = []
+    real = forge.base_rules
+    forge.base_rules = lambda repo, branch: (reads.append(branch), real(repo, branch))[1]  # type: ignore[method-assign]
+    checkout.up_to_date.discard("head-one")
+    checkout.base_commits["head-one"] = (("arc", (("A", "docs/superpowers/implemented/x.md"),)),)
+    code, out = _merge(tmp_path, "--yes")
+    assert reads == ["main"], out
+    assert forge.merged == [], out
+    assert checkout.worktrees, "strict checks must start an update, not merge as it is"
+
+
+def test_a_forge_error_reading_the_base_rules_ends_batch_merge_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, _ = _setup(tmp_path, monkeypatch, _TWO[:1], config=None)
+    forge.rules_error = "connection reset"  # type: ignore[attr-defined]
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 1 and "a forge read failed" in out and "connection reset" in out
     assert forge.merged == []

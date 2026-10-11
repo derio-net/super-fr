@@ -24,6 +24,7 @@ from __future__ import annotations
 import functools
 import json
 import re
+import sys
 import urllib.parse
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
@@ -422,6 +423,16 @@ def _plan_lacks_rulesets(exc: GhError) -> bool:
     return "HTTP 403" in text and FREE_PLAN_RULESETS_NOTICE in text
 
 
+_WARNED: set[str] = set()
+
+
+def _warn_once(message: str) -> None:
+    """Print *message* to stderr the first time this process sees it."""
+    if message not in _WARNED:
+        _WARNED.add(message)
+        print(f"warning: {message}", file=sys.stderr)
+
+
 def _is_404(exc: GhError) -> bool:
     text = f"{exc} {exc.stderr}".lower()
     return "http 404" in text or "not found" in text
@@ -774,10 +785,20 @@ class RealGhRestClient:
         `required_status_checks` rule, plus classic protection's
         `required_status_checks.strict` (a 404 is no protection: false), because
         `required_check_names` reads that protection already (merge-train-safety §D, R12).
-        `RealGhClient.base_rules` is this method."""
+        Degrades rather than raises where the forge refuses to say: a private free-plan
+        repo's 403 on the rules route (no rulesets there), and a 403 on the admin-only
+        protection route (a cloud token is refused it), read as "none", once warned.
+        GitHub still enforces the rule at merge time, and a refused merge is a
+        `MergeStopError` the driver steps over. `RealGhClient.base_rules` is this method."""
         b = _q(branch)
         queue = strict = False
-        for rule in self._api(f"repos/{repo}/rules/branches/{b}") or []:
+        try:
+            rules = self._api(f"repos/{repo}/rules/branches/{b}") or []
+        except GhError as exc:
+            if not _plan_lacks_rulesets(exc):
+                raise
+            rules = []
+        for rule in rules:
             if rule.get("type") == "merge_queue":
                 queue = True
             elif rule.get("type") == "required_status_checks":
@@ -787,9 +808,17 @@ class RealGhRestClient:
             try:
                 protection = self._api(f"repos/{repo}/branches/{b}/protection") or {}
             except GhError as exc:
-                if not _is_404(exc):
+                if _is_404(exc):
+                    protection = {}
+                elif "HTTP 403" in f"{exc} {exc.stderr}" and not isinstance(exc, HostRefusedError):
+                    _warn_once(
+                        f"{repo} {branch}: branch protection is not readable with this token "
+                        "(403); strict up-to-date checks are not detected, so a PR behind only "
+                        "routinely may be refused at merge and is then stepped over"
+                    )
+                    protection = {}
+                else:
                     raise
-                protection = {}
             strict = bool((protection.get("required_status_checks") or {}).get("strict"))
         return BaseRules(merge_queue=queue, strict_checks=strict)
 

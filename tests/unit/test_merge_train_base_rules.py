@@ -94,7 +94,54 @@ def test_classic_protection_not_strict_stays_false() -> None:
     assert RealGhRestClient(run=fake).base_rules(REPO, "main").strict_checks is False
 
 
-def test_a_protection_403_is_raised_not_read_as_not_strict() -> None:
+_FREE_PLAN = _gh.GhError(
+    "gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)",
+    stderr="gh: Upgrade to GitHub Pro or make this repository public to enable this feature. "
+    "(HTTP 403)\n",
+    returncode=1,
+)
+
+
+class _Refusing(_Gh):
+    def __init__(self, rules: Any, protection: Any) -> None:
+        super().__init__([], protection)
+        self._rules = rules
+
+    def __call__(self, args: list[str]) -> str:
+        if args[-1].endswith("/rules/branches/main") and isinstance(self._rules, Exception):
+            self.calls.append(args[-1])
+            raise self._rules
+        return super().__call__(args)
+
+
+def test_a_free_plan_403_on_the_rules_route_reads_as_no_rules() -> None:
+    got = RealGhRestClient(run=_Refusing(_FREE_PLAN, _404())).base_rules(REPO, "main")
+    assert got == BaseRules(False, False)
+
+
+def test_a_protection_403_degrades_to_not_strict_and_warns_once(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from fr import real_ghrestclient
+
+    real_ghrestclient._WARNED.clear()
+    denied = _gh.GhError(
+        "gh: Forbidden (HTTP 403)", stderr="gh: Forbidden (HTTP 403)\n", returncode=1
+    )
+    client = RealGhRestClient(run=_Gh([_LOOSE], denied))
+    assert client.base_rules(REPO, "main") == BaseRules(False, False)
+    assert client.base_rules(REPO, "main") == BaseRules(False, False)
+    err = capsys.readouterr().err
+    assert err.count("not readable with this token") == 1
+
+
+def test_a_transient_failure_on_protection_is_still_raised() -> None:
+    boom = _gh.GhError("gh: connection reset", stderr="connection reset", returncode=1)
+    with pytest.raises(_gh.GhError, match="connection"):
+        RealGhRestClient(run=_Gh([], boom)).base_rules(REPO, "main")
+
+
+def test_an_unrelated_403_on_the_rules_route_is_still_raised() -> None:
     with pytest.raises(_gh.GhError, match="403"):
         RealGhRestClient(run=FixtureGh(fail=forbidden)).base_rules(REPO, "main")
 
