@@ -663,6 +663,7 @@ def _acceptance_writes(
         parse_matrix,
         pipeline_ref_error,
         split_ref,
+        walked_error,
     )
     from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set
 
@@ -767,6 +768,9 @@ def _acceptance_writes(
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
         except ValueError as e:
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
+        # p1-r2: `walked` means proven by a passing walk, on the row or in this entry.
+        if (why := walked_error(row)) is not None:
+            raise RecordRefusedError(f"acceptance {item.id}: {why}")
         # gh#775: `ci` means a CI run is the evidence, so a row moves there only
         # in a repo with CI. A row already `ci` is left alone — refusing it
         # would block every unrelated edit to it.

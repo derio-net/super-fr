@@ -331,6 +331,27 @@ def _check_verify(root: Path, verify: str | None) -> None:
         raise typer.Exit(2)
 
 
+def _walk_at(value: str | None) -> str | None:
+    """`--walk-at` as the walk's `at`: an ISO date (midnight UTC) or an ISO
+    timestamp, for a walk recorded after the fact. None when not given; a value
+    that is neither is refused, exit 2."""
+    import datetime as _dt
+
+    if value is None:
+        return None
+    try:
+        if len(value) == 10:
+            return _dt.date.fromisoformat(value).strftime("%Y-%m-%dT00:00:00Z")
+        _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return value
+    except ValueError:
+        err_console.print(
+            f"[red]error:[/red] --walk-at {value!r} is not an ISO date or timestamp "
+            "(e.g. 2026-07-09 or 2026-07-09T12:00:00Z); nothing changed"
+        )
+        raise typer.Exit(2) from None
+
+
 def _walk_from_flags(
     root: Path,
     evidence: str | None,
@@ -338,6 +359,7 @@ def _walk_from_flags(
     model: str | None,
     strategy: str | None,
     outcome: str,
+    at: str | None = None,
 ) -> Walk | None:
     """`--walk` and its companions as a `Walk`, or `None` without `--walk`.
     Each companion is required; the strategy must resolve (spec 2026-10-06 R14)."""
@@ -348,7 +370,8 @@ def _walk_from_flags(
 
     if evidence is None:
         stray = [f for f, v in (("--harness", harness), ("--model", model),
-                                ("--strategy", strategy)) if v is not None]  # fmt: skip
+                                ("--strategy", strategy), ("--walk-at", at))
+                 if v is not None]  # fmt: skip
         if stray:
             err_console.print(f"[red]error:[/red] {', '.join(stray)} only go with --walk")
             raise typer.Exit(2)
@@ -376,7 +399,7 @@ def _walk_from_flags(
             harness=harness,  # type: ignore[arg-type]  # checked non-empty above
             model=model,  # type: ignore[arg-type]
             outcome=outcome,  # type: ignore[arg-type]  # pydantic validates the literal
-            at=_dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            at=_walk_at(at) or _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             evidence=evidence,
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
@@ -504,6 +527,12 @@ def set_status_cmd(
         None, "--strategy", help="--walk: the verification strategy the walk ran."
     ),
     walk_outcome: str = typer.Option("pass", "--walk-outcome", help="--walk: pass | fail."),
+    walk_at: str | None = typer.Option(
+        None,
+        "--walk-at",
+        help="--walk: when the walk happened (ISO date or timestamp); default now. For a "
+        "walk recorded after the fact, from the evidence's own date.",
+    ),
 ) -> None:
     """Move an existing row's status, in place, with a reason (spec §3.G.2).
 
@@ -548,7 +577,7 @@ def set_status_cmd(
         )
         raise typer.Exit(2)
     _check_verify(root, verify)
-    new_walk = _walk_from_flags(root, walk, harness, model, strategy, walk_outcome)
+    new_walk = _walk_from_flags(root, walk, harness, model, strategy, walk_outcome, walk_at)
     target = next((r for r in matrix.rows if r.id == row_id), None)
     if target is None:
         known = ", ".join(r.id for r in matrix.rows) or "none"
@@ -595,6 +624,11 @@ def set_status_cmd(
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     _validate_refs(new_row)
+    from fr.acceptance.model import walked_error
+
+    if (why := walked_error(new_row)) is not None:
+        err_console.print(f"[red]error:[/red] {escape(why)}; nothing changed")
+        raise typer.Exit(2)
 
     from fr.record.model import AcceptanceItem
 

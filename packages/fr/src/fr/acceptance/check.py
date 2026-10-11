@@ -291,6 +291,9 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
                     "run `fr acceptance report --deterministic` and commit the report set"
                 )
 
+    from fr.acceptance.model import walked_error
+
+    result.errors.extend(e for row in matrix.rows if (e := walked_error(row)) is not None)
     result.failing_ids = [r.id for r in matrix.rows if r.status == "failing"]
     result.warning_rows = open_rows(matrix)
     result.summary = (

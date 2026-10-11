@@ -279,6 +279,18 @@ def latest_passing_walk_at(row: Row) -> str | None:
     return max((w.at for w in row.walks if w.outcome == "pass"), default=None)
 
 
+def walked_error(row: Row) -> str | None:
+    """Why `row` cannot be `walked`, or None (p1-r2): `walked` means proven by a
+    passing walk, so a `walked` row must carry one."""
+    if row.status != "walked" or latest_passing_walk_at(row) is not None:
+        return None
+    return (
+        f"row {row.id}: status walked needs a passing walk on the row — record one in the "
+        "same move (`fr acceptance set-status --walk <evidence> --harness … --model … "
+        "--strategy … --walk-outcome pass`), or use walk-owed while the walk is owed"
+    )
+
+
 class Matrix(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     # The artifact stamp (`fr.artifacts.registry`, kind `matrix`). The first
