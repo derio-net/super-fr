@@ -329,3 +329,118 @@ Two one-line trigger additions to existing workflows; nothing to clean.
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 A scenario script, one fake-gh key and matrix rows; no production code.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · queue-ejected Need unreachable (facts-only needs_you) (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · _enqueue skips _approved_and_ready (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · a queue hold suppresses red recovery (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · kanban in-merge-queue never renders (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · an enqueue refusal is a held line said once (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · a just-merged PR reads as ejected (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · rule 2 applies in queue repos (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · _queue_reads swallows errors as no queue (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · removing approved-fr after enqueue is not honoured (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r10 · finding [open] (reviewer: in scope) · weak tests (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11 created=2026-10-11T23:39:00+00:00 phase=3 state=open review_scope=out -->
+### p3-r11 · finding [open] (reviewer: out of scope) · a repo without origin/HEAD and an approved green PR aborts every pass at merge_ctx (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-10-11T23:39:00+00:00 phase=3 -->
+### p3-review-1 · review · phase 3 review: 11 findings (10 in, 1 out) (phase 3)
+
+Independent reviewer raised p3-r1..p3-r11; check 4 confirmed no merge around a queue. All 10 in-scope findings fixed with tests; spec §D updated.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: queue-ejected Need unreachable (facts-only needs_you) (phase 3)
+
+Ejection with an unmoved base is recorded once per (pr, head); queue_needs reads events. Test: test_an_ejected_green_pr_with_the_base_unmoved_needs_you_and_is_not_enqueued_again
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: _enqueue skips _approved_and_ready (phase 3)
+
+Enqueue goes through the shared gate (label re-read, pr_ready, head re-check); the fake refuses drafts. Test: test_an_approved_draft_is_readied_then_enqueued
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: a queue hold suppresses red recovery (phase 3)
+
+A held queue repo still emits red warns. Test: test_a_held_queue_repo_still_reports_a_red_member_so_recovery_runs
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: kanban in-merge-queue never renders (phase 3)
+
+Facts-only views infer queue membership from the last enqueued event at the current head. Test: test_facts_only_views_show_an_enqueued_pr_in_the_merge_queue_not_merge_ready
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: an enqueue refusal is a held line said once (phase 3)
+
+Each refusal is recorded with the forge's words; a second at the same head stops retries and raises an enqueue-refused Need (a conflict cannot be told apart from the refusal text, so it is the Need, per spec). Test: test_two_refusals_at_one_head_become_a_need_and_stop_the_retries
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: a just-merged PR reads as ejected (phase 3)
+
+State/merged fetched in the queue-state read; a merged/closed PR is never ejected. Test: test_a_merged_pr_read_after_the_view_is_never_taken_for_ejected
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: rule 2 applies in queue repos (phase 3)
+
+red_decision(queue=True) skips rule 2. Test: test_a_queue_repo_red_pr_is_never_re_updated
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: _queue_reads swallows errors as no queue (phase 3)
+
+Catch narrowed to the default-branch lookup; such a repo is held with a once-said warning. Test: test_an_unknown_default_branch_holds_the_candidate_repo_and_says_so_once
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: removing approved-fr after enqueue is not honoured (phase 3)
+
+pr_dequeue added; settle_approvals dequeues an fr-enqueued PR whose label is gone or voided. Test: test_removing_the_label_after_the_enqueue_dequeues_the_pr_and_a_relabel_enqueues_it
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=fixed resolves=p3-r10 -->
+### p3-r10-resolved · finding [fixed] · resolves p3-r10: weak tests (phase 3)
+
+Specific assertions; the ejected test asserts the Need; the fake refuses drafts. Test: test_a_pr_ejected_with_the_base_moved_is_enqueued_again
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved created=2026-10-11T23:39:00+00:00 phase=3 state=open resolves=p3-r11 out_of_scope=true -->
+### p3-r11-resolved · finding [out-of-scope] · resolves p3-r11: a repo without origin/HEAD and an approved green PR aborts every pass at merge_ctx (phase 3)
+
+merge_ctx's _fresh_config default-branch lookup raising ForgeReadError on a clone with no origin/HEAD predates phase 3 (origin/main behaves the same); phase 3 only stopped its own queue read from triggering it earlier.
