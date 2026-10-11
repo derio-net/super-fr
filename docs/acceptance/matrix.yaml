@@ -6168,10 +6168,17 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R3
     levels: {}
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): proven
-      live 2026-09-29 in a fresh session: fr pickup --run named fr archive --branch,
-      which archived spec, plan, run, usage and both journals with no held line.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): proven
+      live 2026-09-29 in a fresh session; manual, not in CI.'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-29T00:00:00Z'
+      evidence: 'fresh session from the base clone: fr pickup --run 2026-09-28-feat-batch-closeout-always-2
+        named fr archive --branch, which archived everything with no held line'
   - id: every-pr-flow-relays-closeout
     capability: Branch-keyed close-out
     acceptance: Every shipped skill that ends its flow at a PR it opens relays a close-out
