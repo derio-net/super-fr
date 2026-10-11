@@ -28,3 +28,8 @@ Asked at the multi-cause stop (2026-10-11). Answer: fix everything here, one fai
 
 Ruled out: routing. Both verify-merge (isolation/local.py _pr_from) and pickup (run/closeout.py pr_body) go through hostclient.client_for -> client_for_backend, which picks RealGhRestClient under forge.api: rest, identically at v5.18.1 and HEAD.
 Candidate: _hosts.origin_slug keeps the WHOLE remote path (git/<owner>/<repo> for a proxy URL) and host_for returns the proxy host (127.0.0.1, not SaaS) so GH_HOST=127.0.0.1; triage avoids both via gitseam.repo_of_url (last two segments) + client_for_url(github URL). Unverified: no artifact records the cloud origin URL shape. Asking the operator before fixing.
+
+<!-- fr:journal kind=root-cause scope=debug id=6b5b07dd25ea created=2026-10-11T20:56:51+00:00 -->
+### 6b5b07dd25ea · root-cause · Shared class, separate causes: cloud paths assumed host preconditions
+
+#1099.1 runner dispatched payload.branch for close-outs. #1099.2 the status row never asked for last_init_error. #1099.3 _conflict built its line with _stopped_line, which always set failed_write. #1100.1 default_branch refused on unset origin/HEAD. #1100.2 fast_forward refused any non-default checkout, even the driver's own. #1100.3 the doctor never ran choose_method. #1100.4 judge warned on any same-dir upgrade. #1100.5 drive pass discarded fetch_now's result. #1098.1-3 the brief installed fr only when missing, never named the skill, and accepted agents by file. #1098.4 _target defaulted to devcontainer with no cloud check.
