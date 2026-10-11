@@ -1,0 +1,8 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-driver-resilience
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1137
+evidence: {tests: ci, walk: none}
