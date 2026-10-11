@@ -1,0 +1,11 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-run-pipeline
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3]
+refactor: {}
+journal:
+  - {kind: discovery, id: p1-render-only-param, title: "render_committed_set takes only=", body: "P1.T3.S2 done: render_committed_set(matrix, root, only=...) filters at the source, so every caller passes tracked_reports(root) rather than filtering its output. The implementation was written before the tests this phase (not strict red-first); the tests were then verified red by stashing the source changes (2 of 9 unit, 6 of 6 integration failed) and green with them."}
+resolves: []
+evidence: {tests: ci}
