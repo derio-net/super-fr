@@ -48,3 +48,8 @@ Tests (all red first): test_triage_gitseam.py (origin_head_is_unset, switch x2),
 ### fixed-1098 · finding [fixed] · #1098 fixed: worker updates stale fr, requires its skill, checks agents by type; cloud isolation defaults to host-worktree
 
 Tests (all red first): test_triage_worker_brief.py (stale fr, skill required, debug skill, agents by dispatchability), test_isolation_cmd.py#test_target_default_in_a_cloud_session_is_host.
+
+<!-- fr:journal kind=ruled-out scope=debug id=db70bccbcaeb created=2026-10-11T21:04:37+00:00 -->
+### db70bccbcaeb · ruled-out · Proxy-origin hypothesis refuted: a cloud clone's origin is https://github.com/<owner>/<repo>
+
+Operator, 2026-10-11: a cloud session's origin is https://github.com/derio-net/super-fr. origin_slug gives derio-net/super-fr and host_for gives None, so neither the slug nor GH_HOST explains the failure.
