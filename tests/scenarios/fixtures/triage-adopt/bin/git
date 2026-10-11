@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# A `git` shim for tests/scenarios/triage-adopt-hold.sh: the throwaway clone's origin is a
+# local bare repo (so fetch and ls-remote work offline), but fr insists the origin LOOK
+# like the batch's forge repo, so `remote get-url origin` alone answers with that URL.
+# Every other call is the real git.
+if [ "$1 $2 $3" = "remote get-url origin" ]; then
+  echo "https://github.com/example-org/widgets.git"
+  exit 0
+fi
+exec "$GIT_REAL" "$@"

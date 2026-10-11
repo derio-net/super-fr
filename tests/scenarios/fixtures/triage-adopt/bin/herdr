@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# A fake `herdr` for tests/scenarios/triage-adopt-hold.sh: replays the SHAPES herdr 0.9.1
+# printed live (tests/fixtures/herdr/, labels and ids redacted), logs every call to
+# $HERDR_FAKE_LOG and answers no verb that writes: a write is a failed scenario.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+echo "$*" >> "$HERDR_FAKE_LOG"
+case "$1 $2" in
+  "agent list") cat "$here/agent-list.json" ;;
+  "tab list") cat "$here/tab-list.json" ;;
+  "workspace list") cat "$here/workspace-list.json" ;;
+  *) echo "fake herdr: unscripted call: $*" >&2; exit 64 ;;
+esac

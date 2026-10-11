@@ -310,13 +310,17 @@ class HerdrRunner:
         for tab in tabs:
             tab_id = str(tab.get("tab_id"))
             held = [a for a in agents if a.get("tab_id") == tab_id]
+            one = held[0] if len(held) == 1 else None
             out.append(
                 AdoptTarget(
                     tab=tab_id,
                     label=str(tab.get("label") or ""),
                     group=groups.get(str(tab.get("workspace_id"))),
-                    agent=_agent_ref(held[0]) if len(held) == 1 else None,
+                    agent=_agent_ref(one) if one is not None else None,
                     status=str(tab.get("agent_status") or "unknown"),
+                    cwd=_agent_cwd(one) if one is not None else None,
+                    session=_agent_session(one) if one is not None else None,
+                    harness=_HARNESSES.get(str(one.get("agent"))) if one is not None else None,
                 )
             )
         return out
@@ -536,6 +540,21 @@ def _list_agents() -> list[dict[str, Any]]:
 def _agent_ref(agent: dict[str, Any]) -> str:
     """How herdr addresses *agent*: its name when it has one, else its pane id."""
     return str(agent.get("name") or agent.get("pane_id"))
+
+
+_HARNESSES = {"claude": "claude", "opencode": "opencode", "hermes": "hermes"}
+"""The herdr agent kinds `AdoptTarget.harness` names; any other kind is None."""
+
+
+def _agent_cwd(agent: dict[str, Any]) -> str | None:
+    cwd = agent.get("foreground_cwd") or agent.get("cwd")
+    return str(cwd) if cwd else None
+
+
+def _agent_session(agent: dict[str, Any]) -> str | None:
+    session = agent.get("agent_session")
+    value = session.get("value") if isinstance(session, dict) else None
+    return str(value) if value else None
 
 
 _PRECEDENCE: tuple[SessionStatus, ...] = ("blocked", "working", "idle", "done", "unknown")

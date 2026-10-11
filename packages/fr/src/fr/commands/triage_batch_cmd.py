@@ -1757,23 +1757,48 @@ def supersede_comment(new_pr: int, batch: Batch) -> str:
     return f"Superseded by #{new_pr} — this branch was adopted as batch {batch.id}"
 
 
+HOLD_LINES = (
+    "HOLD: acknowledge this message only. Make no commits, merges, rebases, artifact",
+    "migrations, pushes or PR edits, and start no skill or pipeline run. Wait for the",
+    "operator's go-ahead.",
+)
+"""The block that holds an adopted agent until the operator releases it (2026-10-11 R1)."""
+
+
 def adopt_message(
-    batch: Batch, item_id: str, old: str, new: str, pr: str | None, reserved: str | None
+    batch: Batch,
+    item_id: str,
+    old: str,
+    new: str,
+    pr: str | None,
+    reserved: str | None,
+    *,
+    hold: bool = True,
+    workspace: Path | None = None,
 ) -> str:
-    """The one message an adopted session's agent gets (R6)."""
+    """The one message an adopted session's agent gets (R6; 2026-10-11 §A). Held by
+    default: the agent acknowledges it and waits. *workspace* names the fr workspace
+    of a session adopted from the default branch."""
     lines = [
-        f"fr triage batch adopt: this session is now batch {batch.id} ({item_id}), "
-        "driven by `fr triage batch drive`.",
+        f"fr triage batch adopt: this session is now tracked as batch {batch.id} ({item_id}).",
         f"Your branch {old} was renamed to {new}; push to it from now on with "
         f"`git push origin {new}` (its upstream is set). Your push target changed: "
         f"never push {old} again.",
     ]
-    if old == new:
+    if workspace is not None:
+        lines[1] = (
+            f"Your batch branch is {new}, in the fr workspace {workspace}. Do all further "
+            f"work on this batch there, never in the base clone. Publish it only with "
+            f"`git push -u origin {new}`; never push {old}."
+        )
+    elif old == new:
         lines[1] = f"Your branch is {new}; keep pushing to it."
     if pr:
         lines.append(f"The PR is now {pr}; the earlier one was closed as superseded.")
     if reserved:
         lines.append(f"Reserved version for this batch: {reserved}.")
+    if hold:
+        lines.extend(HOLD_LINES)
     return "\n".join(lines)
 
 
@@ -1813,6 +1838,7 @@ def adopt_batch(
     checkout_path: Path | None = None,
     yes: bool = False,
     driver: Driver = HOST,
+    hold: bool = True,
 ) -> None:
     """The body of `batch adopt` (spec 2026-10-06-triage-batch-adopt §A): every read
     and refusal first, then the plan, then — with *yes* — each step not yet done.
@@ -1955,6 +1981,12 @@ def adopt_batch(
         _write(target, after, facts, read=judgements.batches, dry_run=True)
 
     # 6. The plan (R8).
+    state: dict[str, Any] = {"pr": new_pr, "event": event, "after": after}
+
+    def _pr_ref() -> str | None:
+        pr = state["pr"]
+        return f"#{pr['number']} ({pr['url']})" if pr else None
+
     def say(line: str) -> None:
         console.print(line, markup=False, soft_wrap=True, highlight=False)
 
@@ -1988,23 +2020,24 @@ def adopt_batch(
             f"reserved version {reserved or '(none)'})")  # fmt: skip
     say(f"  forge: add {FR_IN_PROGRESS.name} and the marker comment on every member")
     if callable(getattr(runner, "message", None)):
-        say("  runner: message the agent its new branch, PR and version")
+        say(f"  runner: message the agent ({'held' if hold else 'not held'})")
+        shown_pr = _pr_ref()
+        if shown_pr is None and old_pr is not None and new_pr is None:
+            shown_pr = "#<new PR>"
+        for line in adopt_message(batch, probe.id, old, new, shown_pr, reserved,
+                                  hold=hold).splitlines():  # fmt: skip
+            say(f"    | {line}")
     if not yes:
         say("nothing written; re-run with --yes to act")
         return
 
     # 7. Each step not done yet, in §A.7's order (R10).
-    state: dict[str, Any] = {"pr": new_pr, "event": event, "after": after}
     done: list[str] = []
 
     def _not_default(*names: str) -> None:  # refused above; held again at each write
         for name in names:
             if name == default:
                 raise RuntimeError(f"{name} is the default branch: refusing to touch it")
-
-    def _pr_ref() -> str | None:
-        pr = state["pr"]
-        return f"#{pr['number']} ({pr['url']})" if pr else None
 
     def _create() -> None:
         assert old_view is not None
@@ -2066,7 +2099,8 @@ def adopt_batch(
     steps.append(("mark every member on the forge", _marks))
     if callable(getattr(runner, "message", None)):
         steps.append(("message the agent", lambda: runner.message(
-            probe, adopt_message(batch, probe.id, old, new, _pr_ref(), reserved))))  # fmt: skip
+            probe, adopt_message(batch, probe.id, old, new, _pr_ref(), reserved,
+                                 hold=hold))))  # fmt: skip
     for i, (what, act) in enumerate(steps):
         try:
             act()
@@ -2080,7 +2114,9 @@ def adopt_batch(
             _fail(
                 f"adopt stopped at: {what}: {detail}. Done: {'; '.join(done) or 'nothing'}. "
                 f"Still remain: {'; '.join(remaining)}. Re-run the same command to finish: "
-                f"`fr triage batch adopt {batch.id} --tab {tab} --branch {old} --yes`",
+                f"`fr triage batch adopt {batch.id} --tab {tab} --branch {old}"
+                f"{f' --checkout {checkout_path}' if checkout_path else ''}"
+                f"{'' if hold else ' --no-hold'} --yes`",
                 code=1,
             )
         done.append(what)
@@ -2150,6 +2186,12 @@ def batch_adopt_command(
     list_sessions: Annotated[
         bool, typer.Option("--list", help="List every session and its issue refs; write nothing.")
     ] = False,
+    no_hold: Annotated[
+        bool,
+        typer.Option(
+            "--no-hold", help="Do not tell the agent to wait for the operator's go-ahead."
+        ),
+    ] = False,
     yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
@@ -2171,7 +2213,7 @@ def batch_adopt_command(
     batch = _find(judgements.batches, batch_id)
     adopt_batch(
         target, facts, judgements, batch, tab=tab, branch=branch, to=to,
-        checkout_path=checkout_path, yes=yes,
+        checkout_path=checkout_path, yes=yes, hold=not no_hold,
     )  # fmt: skip
 
 
