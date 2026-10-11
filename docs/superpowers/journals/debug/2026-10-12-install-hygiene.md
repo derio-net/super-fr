@@ -11,3 +11,8 @@
 ### 65087cb3f1f0 · decision · Three independent causes in one batch: proceed, not stop
 
 The batch rule says stop if investigation finds more than one root cause. The batch's own text already lists three independent mechanisms (hook race, preflight, allowlist) grouped by surface (install hygiene), so finding three is the stated premise, not a surprise. Proceeding with three fixes in one PR; flagged in the PR body for the operator.
+
+<!-- fr:journal kind=root-cause scope=debug id=01276c66ed28 created=2026-10-11T23:07:37+00:00 -->
+### 01276c66ed28 · root-cause · #1124: agent-* path of fr-worktree-create.sh is unserialised
+
+The hook's per-repo+branch mkdir lock wraps only the `fr isolation up` path. `case agent-*) mimic_default` runs before the lock, so two concurrent copies both see no dir and both run `git worktree add --detach` on the same path: index.lock collision + disturbed checkout. Exactly the paths in the issue's error. The double registration is deliberate (CC 2.1.281 skipped the plugin WorktreeCreate for `claude --worktree`); the defect is that one branch of the hook is not safe under it.
