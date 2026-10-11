@@ -734,9 +734,16 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_debugging_journal.py
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): a live
-      debugging walk recorded to journals/debug/2026-09-08-session-unbind-hook-cancelled.md;
-      SKILL.md wiring content-pinned per-PR.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): a live
+      debugging walk recorded to the 2026-09-08 session-unbind-hook-cancelled debug
+      journal; SKILL.md wiring content-pinned per-PR.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-08T00:00:00Z'
+      evidence: live debugging walk recorded at docs/superpowers/journals/debug/2026-09-08-session-unbind-hook-cancelled.md
   - id: fr-journal-scope-keyed
     capability: fr-goal subagent execution
     acceptance: 'The fr journal primitive is scope-keyed (spec|plan|debug) and pipeline-agnostic:
