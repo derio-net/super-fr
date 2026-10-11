@@ -410,6 +410,18 @@ def _q(segment: str) -> str:
     return urllib.parse.quote(segment, safe="")
 
 
+# GitHub's plan-upgrade message for rulesets on a private free-plan repo (super-fr#1135).
+FREE_PLAN_RULESETS_NOTICE = "Upgrade to GitHub Pro or make this repository public"
+
+
+def _plan_lacks_rulesets(exc: GhError) -> bool:
+    """True for the 403 a private free-plan repo answers the rules route with: no rulesets."""
+    if isinstance(exc, HostRefusedError):
+        return False
+    text = f"{exc} {exc.stderr}"
+    return "HTTP 403" in text and FREE_PLAN_RULESETS_NOTICE in text
+
+
 def _is_404(exc: GhError) -> bool:
     text = f"{exc} {exc.stderr}".lower()
     return "http 404" in text or "not found" in text
@@ -734,7 +746,13 @@ class RealGhRestClient:
         required_cfg = (branch.get("protection") or {}).get("required_status_checks") or {}
         required = set(required_cfg.get("contexts") or [])
         required |= {c.get("context") for c in required_cfg.get("checks") or []}
-        for rule in self._api(f"repos/{repo}/rules/branches/{b}") or []:
+        try:
+            rules = self._api(f"repos/{repo}/rules/branches/{b}") or []
+        except GhError as exc:
+            if not _plan_lacks_rulesets(exc):
+                raise
+            rules = []
+        for rule in rules:
             if rule.get("type") == "required_status_checks":
                 params = rule.get("parameters") or {}
                 required |= {c.get("context") for c in params.get("required_status_checks") or []}

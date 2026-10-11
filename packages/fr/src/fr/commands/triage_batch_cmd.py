@@ -227,7 +227,7 @@ from fr.triage.model import (
     load_scope_facts,
 )
 from fr.triage.operation_lock import replacement_scope_lock
-from fr.triage.privacy import guard_write
+from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -2708,9 +2708,78 @@ class RunnerDispatchError(Exception):
     and dispatches again on a later pass, as it does a refused merge (rg-4)."""
 
 
+@dataclass(frozen=True)
+class SinglePass:
+    """`--once --yes` on the host (gh#1127): *notice* says what one pass leaves undone and
+    carries the looping command; *allowed* is `--single-pass`, the operator's word that
+    the single pass is deliberate."""
+
+    notice: str
+    allowed: bool
+
+
+def loop_command(
+    *,
+    batch_ids: list[str] | None,
+    scope: Scope,
+    scope_args: list[str],
+    max_inflight: int,
+    interval: int,
+    workspace_prefix: str,
+    keep_sessions: bool,
+    checkout: list[str] | None,
+    toplevel: Path | None,
+) -> list[str]:
+    """The looping `fr triage batch drive` argv a caller should have run instead of one
+    pass: the same batches, scope and non-default options, every `--checkout` with an
+    absolute path (a single-repo scope's defaulted checkout is *toplevel*, named
+    explicitly), `--yes`, and neither `--once` nor `--single-pass`."""
+    argv = ["fr", "triage", "batch", "drive", *(batch_ids or []), *scope_args]
+    if max_inflight != DEFAULT_MAX_INFLIGHT:
+        argv += ["--max-inflight", str(max_inflight)]
+    if interval != DEFAULT_INTERVAL:
+        argv += ["--interval", str(interval)]
+    if workspace_prefix != DEFAULT_WORKSPACE_PREFIX:
+        argv += ["--workspace-prefix", workspace_prefix]
+    if keep_sessions:
+        argv.append("--keep-sessions")
+    named = {v.partition("=")[0].lower() for v in checkout or [] if "=" in v}
+    for value in checkout or []:
+        name, sep, where = value.partition("=")
+        argv += ["--checkout", f"{name}={Path(where).expanduser().resolve()}" if sep else value]
+    if scope.kind == "repo" and scope.target.lower() not in named and toplevel is not None:
+        argv += ["--checkout", f"{scope.target}={toplevel.resolve()}"]
+    return [*argv, "--yes"]
+
+
+def _names_repo(checkout: list[str] | None, repo: str) -> bool:
+    return repo.lower() in {v.partition("=")[0].lower() for v in checkout or []}
+
+
+def _default_toplevel() -> Path | None:
+    """The clone a single-repo scope's defaulted `--checkout` names: the working
+    directory's git toplevel, None when it is in none."""
+    try:
+        return make_checkout(None).path
+    except TriageError:
+        return None
+
+
+def single_pass_notice(command: list[str]) -> str:
+    """What `--once --yes` leaves undone, then the looping *command* (R3)."""
+    return (
+        "this pass would dispatch, and a single pass leaves no driver behind: ready PRs "
+        "stay unmerged, merged batches are not closed out, held dispatches wait for their "
+        "wave or --after to clear, and the board is not refreshed. If one pass is "
+        "deliberate, add --single-pass; to start the waves, run the looping driver: "
+        f"{shlex.join(command)}"
+    )
+
+
 class ForgeReadError(Exception):
     """A read a drive pass depends on failed or timed out (gh#910): the forge's, the
-    clone's fetch, or `.fr/triage.yaml` on the default branch (gh#921, gh#998). Loop
+    clone's fetch, `.fr/triage.yaml` on the default branch (gh#921, gh#998), or the state
+    repo's visibility, which the lease and the pass's save read (gh#1134). Loop
     mode skips the rest of the pass and reads again after `--interval`; `--once` and
     plan mode exit with *code*, as before."""
 
@@ -2988,8 +3057,12 @@ class _Driver:
         driver: Driver = HOST,
         statuses: Any = None,
         lease: LeaseTerms | None = None,
+        single_pass: SinglePass | None = None,
     ) -> None:
         self.scope, self.target, self.named = scope, target, named
+        self.single_pass = single_pass  # `--once --yes` on the host only (gh#1127)
+        self.planned_dispatch = False  # the last pass's plan held a dispatch
+        self._single_pass_warned = False
         self.adapter = driver  # the runner and post_merge of where this runs (R10, R20)
         self.statuses = statuses  # the session statuses a mailbox runner reads (§E step 4)
         self.lease, self.leased = lease, False  # R9: renewed every pass, when given
@@ -3102,6 +3175,8 @@ class _Driver:
                 generation=terms.generation,
                 push=lambda: push_now(scope, target),
             )
+        except VisibilityUnreadable as exc:  # a looping drive skips the pass (gh#1134)
+            raise ForgeReadError(str(exc), code=2) from exc
         except TriageError as exc:
             _fail(str(exc))
         self.leased = True
@@ -3114,8 +3189,23 @@ class _Driver:
         try:
             mark_pass(self.target, _now())
             push_now(self.scope, self.target)
+        except VisibilityUnreadable as exc:  # the next pass pushes what this one left
+            raise ForgeReadError(str(exc), code=2) from exc
         except TriageError as exc:
             _fail(str(exc))
+
+    def warn_single_pass(self) -> None:
+        """Once: the single-pass notice, when this pass planned a dispatch (R4). It is
+        called when the pass ends, and when a refusal inside it (a runner's preflight)
+        ends it, so the warning follows whichever way the pass exits."""
+        if self.single_pass is None or not self.single_pass.allowed:
+            return  # refused (the error carries the notice) or no guard
+        if not self.planned_dispatch or self._single_pass_warned:
+            return
+        self._single_pass_warned = True
+        err_console.print(
+            f"[yellow]warning:[/yellow] {escape(self.single_pass.notice)}", soft_wrap=True
+        )
 
     def release_lease(self) -> None:
         """On a clean stop: remove this driver's lease and push that. Soft: a failure is
@@ -3905,6 +3995,11 @@ class _Driver:
                 + (f", so no close-out is planned for {', '.join(mine)}" if mine else ""),
             )  # fmt: skip
         plan = drive_pass(snap)
+        if self.single_pass is not None:
+            self.planned_dispatch = any(a.kind == "dispatch" for a in plan.actions)
+            if self.planned_dispatch and not self.single_pass.allowed:
+                self.release_lease()
+                _fail(self.single_pass.notice, code=2)
         self.held_by = plan.held_by
         self._unfinished = unfinished_waves(snap)
         acted = False
@@ -4885,6 +4980,7 @@ def build_driver(
     adapter: Driver = HOST,
     statuses: Any = None,
     lease: LeaseTerms | None = None,
+    single_pass: SinglePass | None = None,
 ) -> _Driver:
     """The one `_Driver` both adapters run (cloud-triage R10, R13): the batches to drive,
     their clones, and the adapter, lease and statuses of where it runs."""
@@ -4908,6 +5004,7 @@ def build_driver(
         driver=adapter,
         statuses=statuses,
         lease=lease,
+        single_pass=single_pass,
     )
 
 
@@ -4997,12 +5094,15 @@ def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
                     f"retrying every {interval}s",
                     soft_wrap=True,
                 )
+            if driver.restart_to is not None:  # a skipped save_pass follows a pass whose
+                return driver.restart_to  # post_merge installed a newer fr (gh#998)
             _sleep(interval)
             continue
         driver.read_failures.clear()
         if not driver.yes:
             return None  # the plan of one pass, in loop mode too
         if once:
+            driver.warn_single_pass()
             code = pass_exit(driver, acted, summary)
             if code:
                 raise typer.Exit(code=code)
@@ -5052,6 +5152,14 @@ def batch_drive_command(
     yes: Annotated[
         bool, typer.Option("--yes", help="Act; without it, print one pass's plan and exit.")
     ] = False,
+    single_pass: Annotated[
+        bool,
+        typer.Option(
+            "--single-pass",
+            help="With --once --yes: one pass that dispatches is deliberate (it leaves no "
+            "driver behind).",
+        ),
+    ] = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
@@ -5065,8 +5173,26 @@ def batch_drive_command(
     """
     if not workspace_prefix.strip():
         _fail("--workspace-prefix must not be blank")
+    if single_pass and not once:
+        _fail("--single-pass only applies to --once: a looping driver is not a single pass")
     scope = _scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)
+    guard: SinglePass | None = None
+    if once and yes:
+        command = loop_command(
+            batch_ids=batch_ids,
+            scope=scope,
+            scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override, workspace),
+            max_inflight=max_inflight,
+            interval=interval,
+            workspace_prefix=workspace_prefix,
+            keep_sessions=keep_sessions,
+            checkout=checkout,
+            toplevel=_default_toplevel()
+            if scope.kind == "repo" and not _names_repo(checkout, scope.target)
+            else None,
+        )
+        guard = SinglePass(single_pass_notice(command), allowed=single_pass)
     driver = build_driver(
         scope,
         target,
@@ -5078,6 +5204,7 @@ def batch_drive_command(
         keep_sessions=keep_sessions,
         scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override, workspace),
         lease=_host_lease(scope, target, interval) if yes else None,
+        single_pass=guard,
     )
     restart: str | None = None
     with drive_lock(drive_lock_dir(scope, dir_override)):  # the fast same-host check first
@@ -5088,6 +5215,8 @@ def batch_drive_command(
             driver.release_lease()
             raise
         except typer.Exit as stop:
+            if once:
+                driver.warn_single_pass()
             if stop.exit_code != 2:  # a clean stop; a refusal keeps what it found
                 driver.release_lease()
             raise
