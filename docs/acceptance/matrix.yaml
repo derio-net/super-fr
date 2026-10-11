@@ -8302,9 +8302,19 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R23
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R24
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at planning; phase 3 writes it.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_owed.py#test_resolve_discharges_an_owed_entry_and_closes_its_issue
+      - super-fr:tests/unit/test_debt_owed.py#test_an_unreachable_forge_prints_the_close_command
+      - super-fr:tests/unit/test_debt_owed.py#test_debt_lists_open_owed_entries_from_live_and_archived_journals_once
+      - super-fr:tests/unit/test_debt_owed.py#test_a_discharged_owed_entry_drops_out_even_while_its_issue_is_open
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: resolving an owed entry (live or archived) closes its issue through
+      the forge double or prints the close command, and fr debt folds owed journal entries
+      once, dropping a discharged one; unit-tested in CI, and the candidate scenario
+      closeout-owed shows fr debt listing the filed step'
     scenario: tests/scenarios/closeout-owed.sh
   - id: matrix-status-split
     capability: acceptance
