@@ -6765,9 +6765,15 @@ rows:
       session puts it on Needs-you.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; the phase that builds it writes the file.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_4_the_session_status_decides
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_red_pr_is_handed_back_to_its_idle_session_once
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_red_recovery
+    status: ci
+    notes: Phase 2 shipped red_decision, the driver recovery and the board changes;
+      the scenario drives re-update, hand-back once, needs-you.
     verify: candidate
     scenario: tests/scenarios/merge-train-red-recovery.sh
   - id: merge-train-queue
