@@ -1,0 +1,10 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-merge-train-safety
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1]
+refactor: {}
+journal: []
+resolves: []
+evidence: {}
