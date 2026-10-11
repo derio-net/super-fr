@@ -63,3 +63,8 @@ Operator chose a follow-up (2026-10-11).
 ### deferred-1100-comment-resolved · finding [deferred → derio-net/super-fr#1142] · resolves deferred-1100-comment: #1100 comment deferred to #1142: GraphQL read despite api: rest needs a cloud repro
 
 needs a cloud repro; operator chose a follow-up
+
+<!-- fr:journal kind=review scope=debug id=8534907754df created=2026-10-11T21:08:23+00:00 -->
+### 8534907754df · review · Self-review of the diff: one finding, fixed
+
+Reviewed every source hunk. Finding: test_isolation_cmd.py's mode fixture did not clear CLAUDE_CODE_REMOTE, so the suite run inside a cloud session would flip test_target_default_is_local; fixed and verified with CLAUDE_CODE_REMOTE=true. Checked and accepted: a skipped or waiting conflict also no longer exits 1 (nothing failed; documented in _conflict); fast_forward(switch) leaves untracked files alone (checkout refuses itself if one would be overwritten); the init-error fold stores state failed, which the next status read overwrites. Suite evidence is CI on #1141 (operator: no local full suite).
