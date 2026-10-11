@@ -6794,9 +6794,12 @@ rows:
       checks and the drive pass proceeds; any other 403 still fails the read.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-driver-resilience-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_real_ghrestclient.py#test_a_free_plan_rulesets_403_means_no_rulesets
+    status: ci
+    notes: 'Unit tests: the free-plan 403 means no rulesets; other 403s and host refusals
+      still raise'
     verify: none
   - id: triage-scope-groups
     capability: triage-scope
