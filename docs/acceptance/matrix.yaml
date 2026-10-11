@@ -6765,9 +6765,12 @@ rows:
       and non-dispatching passes are unchanged.'
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-driver-resilience-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_single_pass.py#test_once_yes_whose_plan_dispatches_refuses_before_acting
+    status: ci
+    notes: 'Unit tests drive batch_drive_command: refusal, --single-pass warning, dry-run
+      and no-dispatch passes unchanged'
     verify: none
   - id: driver-unreadable-visibility-retries
     capability: triage-batch-drive
