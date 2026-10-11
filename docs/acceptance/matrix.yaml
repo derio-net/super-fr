@@ -5039,11 +5039,11 @@ rows:
       - super-fr:tests/unit/test_github_rest_contract.py
       - super-fr:tests/unit/test_github_rest_no_graphql.py
       - super-fr:tests/unit/test_forgeapi.py
-    status: walked
-    notes: 'Walk 16 passed live in a cloud session (after #1092 moved the state ref
-      under refs/heads/). Not in CI, so skipped. Still owed: the board-matches-a-host-render
-      comparison (needs the operator''s host). Gaps found under rest: verify-merge and
-      pickup still read the PR over GraphQL, and a repo allowing several merge methods
+    status: walk-owed
+    notes: 'walk-owed (p1-r4): walk 16 passed live in a cloud session (recorded) after
+      #1092 moved the state ref under refs/heads/; the board-matches-a-host-render comparison
+      is still owed and needs the operator''s host. Gaps found under rest: verify-merge
+      and pickup still read the PR over GraphQL, and a repo allowing several merge methods
       needs merge_method (derio-net/super-fr#1100).'
     verify: client-live
     walks:
