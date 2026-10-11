@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""A fake `gh` for tests/scenarios/merge-train-label-gate.sh (FR_FORGE_API=rest).
+"""A fake `gh` for tests/scenarios/merge-train-label-gate.sh and merge-train-red-recovery.sh
+(FR_FORGE_API=rest).
 
 One repo (derio-net/super-fr), one open issue (#1074) and one batch PR (#1080), for
 the routes `fr triage batch drive` and `fr triage render` read and write under REST.
@@ -12,6 +13,12 @@ labels and merge state; the issue's labels and comments. A pending head re-serve
 captured check runs with `status: in_progress` and no conclusion, GitHub's own shape for
 a run still going. The world lives in $FAKE_FORGE (JSON), which the scenario edits to
 act as the operator; every call is appended to $FAKE_GH_LOG. Anything else fails loudly.
+
+Two more world keys serve the red-recovery scenario: `red` lists heads whose `test` check
+run is re-served with the captured run's own `failure` conclusion shape (`conclusion:
+failure`), and `strict` adds one `required_status_checks` rule (context `test`, a name the
+captured runs carry) with `strict_required_status_checks_policy: true` to the captured
+ruleset list, in the captured rules' own key shape.
 """
 
 from __future__ import annotations
@@ -85,6 +92,8 @@ def check_runs(world: dict, sha: str) -> dict:
         r["head_sha"] = sha
         if sha in world["pending"]:
             r["status"], r["conclusion"], r["completed_at"] = "in_progress", None, None
+        elif sha in world.get("red", []) and r["name"] == "test":
+            r["conclusion"] = "failure"
     return runs
 
 
@@ -129,7 +138,19 @@ def answer(world: dict, method: str, route: str, fields: dict[str, str]) -> obje
         if path == f"{REPO}/branches/main":
             return cap("repo_branches_main.json")
         if path == f"{REPO}/rules/branches/main":
-            return cap("repo_rules_branches_main.json")
+            rules = cap("repo_rules_branches_main.json")
+            if world.get("strict"):
+                rules.append(
+                    {**rules[0], "type": "required_status_checks",
+                     "parameters": {"strict_required_status_checks_policy": True,
+                                    "required_status_checks": [{"context": "test"}]}}
+                )  # fmt: skip
+            return rules
+        if path == f"{REPO}/branches/main/protection":
+            err = cap("repo_branches_main_protection.error.json")  # the captured 404
+            sys.stdout.write(err["stdout"])
+            sys.stderr.write(err["stderr"])
+            sys.exit(err["exit"])
         if path == f"{REPO}/releases/latest":
             return cap("repo_releases_latest.json")
         if path == f"{REPO}/labels/approved-fr":

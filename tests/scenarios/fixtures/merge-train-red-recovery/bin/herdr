@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""A fake `herdr` for tests/scenarios/merge-train-red-recovery.sh.
+
+`tab list` replays what herdr 0.9.1 printed live (../../herdr-restart/tab-list.json, one
+real tab per batch session, the `derio-net/super-fr/run/batch-archive-followups` one
+idle); with `$HERDR_NO_TAB` set to a tab label that tab is left out, as a closed session
+is. `agent prompt` is answered with an empty reply (synthetic: herdr prints nothing the
+runner reads) and its text is appended to `$HERDR_PROMPTS`, so the scenario can count and
+read what the driver sent. Every call is logged to `$HERDR_FAKE_LOG`; anything else
+fails loudly.
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+TABS = HERE.parents[1] / "herdr-restart" / "tab-list.json"
+
+args = sys.argv[1:]
+with open(os.environ["HERDR_FAKE_LOG"], "a") as log:
+    log.write(" ".join(args[:2]) + "\n")
+if args[:2] == ["tab", "list"]:
+    answer = json.loads(TABS.read_text())
+    gone = os.environ.get("HERDR_NO_TAB")
+    if gone:
+        tabs = answer["result"]["tabs"]
+        answer["result"]["tabs"] = [t for t in tabs if t.get("label") != gone]
+    print(json.dumps(answer))
+elif args[:2] == ["agent", "prompt"]:
+    with open(os.environ["HERDR_PROMPTS"], "a") as prompts:
+        prompts.write(args[3] + "\n--END--\n")
+else:
+    print(f"fake herdr: unscripted call: {' '.join(args)}", file=sys.stderr)
+    sys.exit(64)
