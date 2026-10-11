@@ -50,6 +50,9 @@ def conversions(path: Path) -> dict[str, str]:
     report (`fr validate artifacts` does)."""
     from fr.acceptance.anchors import collected_node_at, is_python, line_of
     from fr.acceptance.check import resolve_identity
+
+    # Live parser: a pre-v5 matrix still carrying `skipped` fails it, so this
+    # returns {} until the 4 -> 5 hop (`matrix_status_split`) has run.
     from fr.acceptance.model import AcceptanceError, parse_matrix, split_ref
 
     root = _root(path)
