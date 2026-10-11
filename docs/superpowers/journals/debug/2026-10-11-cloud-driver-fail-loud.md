@@ -53,3 +53,8 @@ Tests (all red first): test_triage_worker_brief.py (stale fr, skill required, de
 ### db70bccbcaeb · ruled-out · Proxy-origin hypothesis refuted: a cloud clone's origin is https://github.com/<owner>/<repo>
 
 Operator, 2026-10-11: a cloud session's origin is https://github.com/derio-net/super-fr. origin_slug gives derio-net/super-fr and host_for gives None, so neither the slug nor GH_HOST explains the failure.
+
+<!-- fr:journal kind=finding scope=debug id=deferred-1100-comment created=2026-10-11T21:06:42+00:00 state=open -->
+### deferred-1100-comment · finding [open] · #1100 comment deferred to #1142: GraphQL read despite api: rest needs a cloud repro
+
+Operator chose a follow-up (2026-10-11).
