@@ -7187,10 +7187,18 @@ rows:
       int:
       - super-fr:docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): all
-      three post-merge Test Plan items driven live 2026-10-06 inside herdr against a
-      real fr triage batch drive (101 batches); evidence in the int ref.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): all three
+      post-merge Test Plan items driven live 2026-10-06 inside herdr; evidence in the
+      int ref.'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: 'docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md: all
+        three post-merge Test Plan items driven inside herdr over 101 batches'
   - id: triage-dedupe-candidates
     capability: triage-dedupe
     acceptance: fr triage check lists candidate duplicate groups among open issues,
