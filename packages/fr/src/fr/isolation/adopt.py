@@ -32,8 +32,14 @@ def enter_workspace(repo_root: Path, branch: str) -> Path:
 
     Always calls `up`, never skips it on an existing workspace: `up` is a documented
     resume, so a container whose first start failed after its state was recorded
-    (gh#578) is started now (R9). Raises `IsolationError`."""
-    state = _select_target(repo_root).up(profile=None, branch=branch)
+    (gh#578) is started now (R9). A workspace already recorded is resumed at its
+    recorded worktree, which `--path` may have put anywhere. Raises `IsolationError`."""
+    target = _select_target(repo_root)
+    recorded = load_state(repo_root, branch)
+    if recorded is None:
+        state = target.up(profile=None, branch=branch)
+    else:
+        state = target.up(profile=None, branch=branch, path=Path(recorded.worktree))
     return Path(state.worktree)
 
 
@@ -53,7 +59,7 @@ def bind_session(repo_root: Path, branch: str, session_id: str, harness: str) ->
     adopt (as `run_cmd._bind_session` rules)."""
     try:
         attach(repo_root, branch, session_id, harness)
-    except (IsolationError, OSError) as exc:
+    except (IsolationError, OSError, ValueError) as exc:  # ValueError: a corrupt record
         return f"warning: could not bind session {session_id} to {branch}: {exc}"
     return None
 

@@ -20,7 +20,7 @@ import pytest
 from fr.cli import app  # noqa: F401  (import order: the CLI before its commands)
 from fr.commands import triage_batch_cmd
 from fr.isolation import adopt as isolation_adopt
-from fr.isolation.sessions import read_session_index
+from fr.isolation.sessions import attach, read_session_index
 from fr.isolation.types import IsolationError, load_state
 from fr.triage.gitseam import Checkout
 
@@ -325,3 +325,46 @@ def test_a_failed_mark_resumes_the_workspace_and_finishes(
         assert len([c for c in gh.issue_comments[(REPO, n)] if ITEM in c["body"]]) == 1
     ((_, text),) = runner.messages
     assert "HOLD" not in text
+
+
+# ------------------------------------------- where the agent works (p2-r1, p2-r6)
+
+
+def test_a_session_in_a_linked_worktree_on_another_branch_is_refused(world: Any) -> None:
+    runner, clone = world[2], world[3]
+    linked = clone.parent / "feat-foo-wt"
+    _git(clone, "worktree", "add", "-q", "-b", "feat/foo", str(linked), "origin/main")
+    runner.targets[TAB] = replace(runner.targets[TAB], cwd=str(linked))
+    out = _refused(world, f"the agent works in {linked} on feat/foo, not in this checkout")
+    assert "--branch feat/foo" in " ".join(out.split())
+
+
+def test_a_rerun_from_inside_the_batch_workspace_is_accepted(world: Any) -> None:
+    tmp_path, gh, runner, clone = world
+    where = isolation_adopt.enter_workspace(clone, NEW)
+    runner.targets[TAB] = replace(runner.targets[TAB], cwd=str(where))
+    code, out = _adopt(tmp_path, *_main_args("--yes"))
+    assert code == 0, out
+    assert runner.adopted == [(ITEM, TAB)] and _workspace(clone) == where
+
+
+def test_a_bound_sessions_workspace_with_commits_is_reused(world: Any) -> None:
+    tmp_path, gh, runner, clone = world
+    where = isolation_adopt.enter_workspace(clone, NEW)
+    attach(clone, NEW, SESSION, "claude")
+    (where / "work.txt").write_text("w\n")
+    _git(where, "add", ".")
+    _git(where, "commit", "-qm", "the session's own work")
+    head = _git(where, "rev-parse", "HEAD")
+    code, out = _adopt(tmp_path, *_main_args("--yes"))
+    assert code == 0, out
+    assert f"resume workspace {where}" in " ".join(out.split())
+    assert runner.adopted == [(ITEM, TAB)]
+    assert _git(where, "rev-parse", "HEAD") == head
+
+
+def test_a_batch_branch_only_on_origin_with_no_workspace_is_refused(world: Any) -> None:
+    clone = world[3]
+    _git(clone, "push", "-q", "origin", f"origin/main:refs/heads/{NEW}")
+    assert not _git(clone, "branch", "--list", NEW)
+    _refused(world, f"branch {NEW} already exists on origin")

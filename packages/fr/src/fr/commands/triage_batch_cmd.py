@@ -85,6 +85,7 @@ from fr.isolation.adopt import (
     bind_session,
     enter_workspace,
     reusable_workspace,
+    workspace_containing,
     workspace_path,
 )
 from fr.isolation.rename import IsolationError, rename_branch
@@ -2222,6 +2223,39 @@ def _run_adopt_steps(
         done.append(what)
 
 
+def _refuse_agent_elsewhere(cwd: Path, root: Path, new: str) -> None:
+    """Refuse a default-branch adopt unless the agent works inside *root* (the main
+    worktree) or inside *new*'s own recorded workspace, which a re-run needs (R7). An
+    agent in any other worktree, a linked one on its own branch included, was adopted
+    with a mistaken `--branch <default>`: name its branch and the rename path."""
+    where = cwd.resolve()
+    if where == root or root in where.parents:
+        return
+    mine = workspace_containing(root, where)
+    if mine is not None and mine.resolve() == workspace_path(root, new).resolve():
+        return
+    try:
+        theirs = Checkout.at(where)
+        if theirs.main_worktree() != root:
+            raise TriageError("another repository")
+        branch = theirs.head_branch()
+    except TriageError:
+        _fail(
+            f"the agent works in {cwd}, not in this checkout {root}; pass --checkout with "
+            "the clone it works in"
+        )
+    on = f" on {branch}" if branch else " on a detached HEAD"
+    hint = (
+        f"adopt it with --branch {branch} to rename its branch instead"
+        if branch
+        else "check out a branch there, or adopt from the default branch in the main worktree"
+    )
+    _fail(
+        f"the agent works in {cwd}{on}, not in this checkout {root} nor in {new}'s fr "
+        f"workspace: {hint}"
+    )
+
+
 def _adopt_from_default(
     target: Path,
     facts: Facts,
@@ -2273,15 +2307,7 @@ def _adopt_from_default(
                 "Push or move them first: the workspace is cut from origin, without them"
             )
         if session.cwd:
-            try:
-                agent_root: Path | None = Checkout.at(Path(session.cwd)).main_worktree()
-            except TriageError:
-                agent_root = None
-            if agent_root != root:
-                _fail(
-                    f"the agent works in {session.cwd}, not in this checkout {root}; pass "
-                    "--checkout with the clone it works in"
-                )
+            _refuse_agent_elsewhere(Path(session.cwd), root, new)
         local = checkout.has_branch(new)
         remote = checkout.remote_branch_exists(new)
         reuse: Path | None = None

@@ -468,3 +468,19 @@ def test_current_branch_reads_the_main_worktree_and_none_when_detached(tmp_path:
     assert Checkout(linked).current_branch() == "main"
     _git(checkout.path, "checkout", "--quiet", "--detach")
     assert checkout.current_branch() is None
+
+
+def test_current_branch_is_the_branch_name_even_when_a_tag_shares_it(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "tag", "main")  # `rev-parse --abbrev-ref` would say `heads/main`
+    assert checkout.current_branch() == "main"
+
+
+def test_head_branch_reads_this_worktree_and_none_when_detached(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    linked = tmp_path / "linked"
+    _git(checkout.path, "worktree", "add", "--quiet", "-b", "feat/x", str(linked))
+    assert Checkout(linked).head_branch() == "feat/x"
+    assert checkout.head_branch() == "main"
+    _git(linked, "checkout", "--quiet", "--detach")
+    assert Checkout(linked).head_branch() is None

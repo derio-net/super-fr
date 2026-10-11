@@ -116,6 +116,17 @@ def show_text(cwd: Path, ref: str, file: str) -> str | None:
         raise GitError(f"{file} at {ref} is not UTF-8 text ({exc.reason}); cannot read it") from exc
 
 
+def _head_branch(worktree: Path) -> str | None:
+    """The branch *worktree* has checked out, or None when its HEAD is detached.
+    `symbolic-ref`, not `rev-parse --abbrev-ref`: the latter says `heads/main` when a
+    tag `main` also exists."""
+    try:
+        out = git(["symbolic-ref", "-q", "HEAD"], worktree).strip()
+    except GitError:  # non-zero: HEAD is detached
+        return None
+    return out.removeprefix("refs/heads/") or None
+
+
 def git_ok(args: list[str], cwd: Path) -> bool:
     """Whether `git <args>` exits 0 (for predicates such as `merge-base --is-ancestor`)."""
     try:
@@ -440,8 +451,11 @@ class Checkout:
 
     def current_branch(self) -> str | None:
         """The branch checked out in the MAIN worktree, or None when HEAD is detached."""
-        out = git(["rev-parse", "--abbrev-ref", "HEAD"], self.main_worktree()).strip()
-        return None if out == "HEAD" else out
+        return _head_branch(self.main_worktree())
+
+    def head_branch(self) -> str | None:
+        """The branch checked out in THIS checkout's worktree, or None when detached."""
+        return _head_branch(self.path)
 
     def dirty_paths(self) -> tuple[str, ...]:
         """The paths `git status --porcelain` reports in the MAIN worktree, tracked or

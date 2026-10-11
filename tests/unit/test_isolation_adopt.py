@@ -127,3 +127,27 @@ def test_workspace_path_is_the_recorded_worktree_else_where_up_will_put_it(repo:
     assert planned.name == "feat__batch-x" and not planned.exists()
     assert adopt.enter_workspace(repo, "feat/batch-x") == planned
     assert adopt.workspace_path(repo, "feat/batch-x") == planned
+
+
+def test_enter_workspace_resumes_a_workspace_recorded_at_a_custom_path(
+    repo: Path, tmp_path: Path
+) -> None:
+    custom = tmp_path / "custom-wt"
+    state = adopt._select_target(repo).up(profile=None, branch="feat/batch-x", path=custom)
+    assert Path(state.worktree) == custom
+    attach(repo, "feat/batch-x", "sess-1", "claude")
+    assert adopt.enter_workspace(repo, "feat/batch-x") == custom
+    resumed = load_state(repo, "feat/batch-x")
+    assert resumed is not None and Path(resumed.worktree) == custom
+    assert [b.session_id for b in resumed.sessions] == ["sess-1"]
+
+
+def test_bind_session_warns_on_a_corrupt_state_record(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def corrupt(*a: object, **k: object) -> None:
+        raise ValueError("1 validation error for IsolationState")
+
+    monkeypatch.setattr(adopt, "attach", corrupt)
+    warning = adopt.bind_session(repo, "feat/batch-x", "s", "claude")
+    assert warning is not None and "validation error" in warning
