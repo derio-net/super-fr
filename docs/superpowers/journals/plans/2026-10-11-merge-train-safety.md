@@ -174,3 +174,48 @@ Archive (_archive) and export (_export_merge) PRs are fr's own housekeeping PRs,
 ### p1-triage-batch-cmd-import-cycle-resolved · finding [out-of-scope] · resolves p1-triage-batch-cmd-import-cycle: Importing fr.commands.triage_batch_cmd before fr.cli fails on a cycle (phase 1)
 
 Importing fr.commands.triage_batch_cmd before fr.cli fails on origin/main too (1248d439); this change neither introduced nor worsened the cycle.
+
+<!-- fr:journal kind=decision scope=plan id=p2-warn-every-pass created=2026-10-11T22:26:27+00:00 phase=2 -->
+### p2-warn-every-pass · decision · The walk warns on every pass for a failing PR; the dedup is the recorded events (phase 2)
+
+The walk no longer dedups a failing PR's warn by head in Snapshot.warned. Each red warn carries red=True and checks; _Driver._recover decides from red_decision whether the pass has anything to say, and the pass prints nothing for a skip. _Driver.warned stays: _report_once and the close reports still read it.
+
+<!-- fr:journal kind=decision scope=plan id=p2-red-session-status-lazy created=2026-10-11T22:26:27+00:00 phase=2 -->
+### p2-red-session-status-lazy · decision · The session is read only when rules 1-3 leave the decision to it (phase 2)
+
+_recover asks red_decision with status idle first; only a handback result reads the runner's status and decides again. A runner that cannot be messaged reads as absent, so its red PR is a needs-you. A wait prints its line once per (batch, head, status) from self.reported, since it records nothing.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-positive-rule-shapes-not-captured created=2026-10-11T22:26:27+00:00 phase=2 -->
+### p2-positive-rule-shapes-not-captured · discovery · Positive merge_queue/strict rule shapes are not captures (phase 2)
+
+The repo's own ruleset has neither rule, so the positive base_rules cases in tests/unit/test_merge_train_base_rules.py and the scenario's strict rule are built from the captured rule record's key shape plus the documented parameters, stated in the fake's docstring. The 404 of branches/main/protection and the negative rules are live captures.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-scenario-drive-exit-3 created=2026-10-11T22:26:27+00:00 phase=2 -->
+### p2-scenario-drive-exit-3 · discovery · A pass waiting on checks exits 3 (phase 2)
+
+The red-recovery scenario accepts drive exit 0 or 3, since a pass whose only PR is pending exits 3 by design.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-git-fake-lacked-base-rules created=2026-10-11T22:26:27+00:00 phase=2 -->
+### p2-git-fake-lacked-base-rules · discovery · CI red: the integration GitForge fake had no base_rules (phase 2)
+
+Phase 2 made batch merge read GhClient.base_rules once per command. tests/integration/test_triage_batch_merge_git.py's GitForge (its labels were already approved) had no such method, so the command died before merging (merged == []). Fixed by giving the fake base_rules returning BaseRules(); the gate is untouched. I had run only unit files locally, which hid it.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-11T22:26:27+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+red_decision and red_brief are new pure functions beside conflict_decision and conflict_brief; nothing duplicated.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-11T22:26:27+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+base_rules is one method per backend beside required_check_names; the strict change is one condition in _land.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-10-11T22:26:27+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+_skip_held is a small helper beside _refuse_held, whose with-ids path is unchanged.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-10-11T22:26:27+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+Two scenario scripts, a fake herdr and two keys on the existing fake gh; no production code.
