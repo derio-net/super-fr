@@ -30,9 +30,11 @@ def _default_mode(monkeypatch: pytest.MonkeyPatch):
     `FR_ISOLATION_TARGET` is a HOST-level declaration, and the docker-less pods
     this repo is developed on export `=worktree` — leaving it ambient silently
     reroutes every unqualified CLI test to `HostWorktreeTarget` and fails eight
-    of them for environmental reasons. Mode tests set the var explicitly.
+    of them for environmental reasons. Mode tests set the var explicitly. A cloud
+    session's `CLAUDE_CODE_REMOTE=true` selects worktree mode the same way (gh#1098).
     """
     monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
 
 
 @pytest.fixture()
