@@ -18,7 +18,9 @@ Two more world keys serve the red-recovery scenario: `red` lists heads whose `te
 run is re-served with the captured run's own `failure` conclusion shape (`conclusion:
 failure`), and `strict` adds one `required_status_checks` rule (context `test`, a name the
 captured runs carry) with `strict_required_status_checks_policy: true` to the captured
-ruleset list, in the captured rules' own key shape.
+ruleset list, in the captured rules' own key shape. `queue` likewise adds a `merge_queue`
+rule (the documented ruleset parameters: the repo's own ruleset has none, so the shape is not
+a capture) for the merge-train-queue scenario.
 """
 
 from __future__ import annotations
@@ -144,6 +146,11 @@ def answer(world: dict, method: str, route: str, fields: dict[str, str]) -> obje
                     {**rules[0], "type": "required_status_checks",
                      "parameters": {"strict_required_status_checks_policy": True,
                                     "required_status_checks": [{"context": "test"}]}}
+                )  # fmt: skip
+            if world.get("queue"):
+                rules.append(
+                    {**rules[0], "type": "merge_queue",
+                     "parameters": {"merge_method": "SQUASH", "grouping_strategy": "ALLGREEN"}}
                 )  # fmt: skip
             return rules
         if path == f"{REPO}/branches/main/protection":
