@@ -6790,8 +6790,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R14
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at plan time; the phase that builds it writes the file.
     verify: candidate
+    scenario: tests/scenarios/merge-train-red-recovery.sh
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
