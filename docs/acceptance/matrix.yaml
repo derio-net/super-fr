@@ -8287,9 +8287,13 @@ rows:
       naming each, and merges the rest; naming a held batch still refuses.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; the phase that builds it writes the file.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_batch_merge_skip_held
+    status: ci
+    notes: 'Phase 2: batch merge with no ids partitions held batches.'
     verify: candidate
     scenario: tests/scenarios/batch-merge-skip-held.sh
   - id: approval-board-and-briefs
