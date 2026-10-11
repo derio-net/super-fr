@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import errno
 import fcntl
+import hashlib
 import json
 import os
 import shutil
@@ -44,6 +45,28 @@ from fr.isolation.types import (
 from fr.plan_validator_wrapper import REPAIR_COMMAND
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
+
+_BASE32 = "0123456789abcdefghijklmnopqrstuv"
+
+
+def devcontainer_id(local_folder: str, config_file: str) -> str:
+    """The devcontainer CLI's `${devcontainerId}` for a container's id labels:
+    sha256 of the sorted label JSON, as a base-32 number padded to 52 chars.
+
+    Features key per-workspace named volumes on it (docker-in-docker:
+    `dind-var-lib-docker-<id>`), so it is how teardown tells a volume this
+    workspace owns from one it merely shares."""
+    labels = {
+        "devcontainer.config_file": config_file,
+        "devcontainer.local_folder": local_folder,
+    }
+    raw = json.dumps(labels, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    n = int.from_bytes(hashlib.sha256(raw.encode("utf-8")).digest(), "big")
+    digits = ""
+    while n:
+        n, r = divmod(n, 32)
+        digits = _BASE32[r] + digits
+    return digits.rjust(52, "0")
 
 
 def _missing_binary(err: FileNotFoundError, context: str) -> str:
@@ -2019,6 +2042,7 @@ class LocalWorktreeDevcontainerTarget:
         # Capture the image id BEFORE `docker rm` (the container must still exist
         # to inspect it); reclaim it AFTER the container is confirmed gone.
         image = self._image_for(container) if container else None
+        volumes = self._workspace_volumes(container) if container else []
         if container:
             self.run(["docker", "stop", container])
             self.run(["docker", "rm", container])
@@ -2030,6 +2054,7 @@ class LocalWorktreeDevcontainerTarget:
                     "status`); retry `fr isolation down` once docker recovers."
                 )
             self._reclaim_image(image)
+            self._reclaim_volumes(volumes)
 
     def _spawn_gc(self) -> None:
         """Fire the opportunistic background sweep — best-effort, never raises
@@ -2426,9 +2451,11 @@ class LocalWorktreeDevcontainerTarget:
         """Reap a container found only by docker label (worktree already gone):
         stop + rm + best-effort image rmi."""
         image = self._image_for(container_id)
+        volumes = self._workspace_volumes(container_id)
         self.run(["docker", "stop", container_id])
         self.run(["docker", "rm", container_id])
         self._reclaim_image(image)
+        self._reclaim_volumes(volumes)
 
     def _sweep_dangling_images(self, dry_run: bool) -> list[GcAction]:
         """rmi `vsc-*` devcontainer images no live container references — the
@@ -2941,6 +2968,43 @@ class LocalWorktreeDevcontainerTarget:
                 f"warning: could not remove image {image} (shared or in use?): {detail}",
                 file=sys.stderr,
             )
+
+    def _workspace_volumes(self, container: str) -> list[str]:
+        """Named volumes this container's workspace owns, read BEFORE `docker rm`.
+
+        `docker rm` never removes a named volume, and docker-in-docker keeps the
+        inner dockerd's whole /var/lib/docker in `dind-var-lib-docker-<id>` — a
+        leak of many GB per torn-down workspace. Ownership is the
+        `${devcontainerId}` in the volume name: a shared volume (a cache mounted
+        by every workspace) carries no id and is never touched."""
+        result = self.run(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                '{{index .Config.Labels "devcontainer.local_folder"}}\t'
+                '{{index .Config.Labels "devcontainer.config_file"}}\n'
+                '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}',
+                container,
+            ]
+        )
+        lines = (result.stdout or "").splitlines()
+        if result.returncode != 0 or len(lines) < 2:
+            return []
+        folder, _, config = lines[0].partition("\t")
+        if not folder or not config:
+            return []
+        dc_id = devcontainer_id(folder, config)
+        return [v for v in lines[1].split() if dc_id in v]
+
+    def _reclaim_volumes(self, volumes: list[str]) -> None:
+        """Best-effort `docker volume rm`, after the container is gone (a mounted
+        volume cannot be removed). Like image reclaim, never fatal."""
+        for volume in volumes:
+            result = self.run(["docker", "volume", "rm", volume])
+            detail = (result.stderr or result.stdout or "").strip()
+            if result.returncode != 0 and "no such volume" not in detail.lower():
+                print(f"warning: could not remove volume {volume}: {detail}", file=sys.stderr)
 
     def _shown_container_state(self, state: IsolationState) -> str:
         """`status`'s rendering of the docker state: `exited` reads as `stopped`
