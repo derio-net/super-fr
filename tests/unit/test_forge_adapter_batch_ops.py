@@ -398,6 +398,7 @@ _ISOLATION_ALLOWED = frozenset(
         "from fr.isolation.adopt import bind_session",
         "from fr.isolation.adopt import enter_workspace",
         "from fr.isolation.adopt import reusable_workspace",
+        "from fr.isolation.adopt import workspace_path",
     }
 )
 _GIT_SEAM = "packages/fr/src/fr/triage/gitseam.py"
@@ -434,6 +435,7 @@ def test_the_isolation_allowance_is_the_rename_and_adopt_seams_alone(tmp_path: P
     plant.write_text(
         "from fr.isolation.rename import rename_branch, IsolationError\n"
         "from fr.isolation.adopt import bind_session, enter_workspace, reusable_workspace\n"
+        "from fr.isolation.adopt import workspace_path\n"
         "from fr.isolation.adopt import _select_target\n"
         "from fr.isolation.types import save_state\n"
         "from fr.isolation import local\n",

@@ -113,12 +113,17 @@ def test_session_worktree_reads_the_session_index(repo: Path) -> None:
     assert adopt.session_worktree("sess-1") == where
 
 
-def test_workspace_containing_finds_the_workspace_around_a_path(
-    repo: Path, tmp_path: Path
-) -> None:
+def test_workspace_containing_finds_the_workspace_around_a_path(repo: Path, tmp_path: Path) -> None:
     where = adopt.enter_workspace(repo, "feat/batch-x")
     (where / "sub").mkdir()
     assert adopt.workspace_containing(repo, where / "sub") == where
     assert adopt.workspace_containing(repo, where) == where
     assert adopt.workspace_containing(repo, repo) is None
     assert adopt.workspace_containing(tmp_path / "not-a-repo", tmp_path) is None
+
+
+def test_workspace_path_is_the_recorded_worktree_else_where_up_will_put_it(repo: Path) -> None:
+    planned = adopt.workspace_path(repo, "feat/batch-x")
+    assert planned.name == "feat__batch-x" and not planned.exists()
+    assert adopt.enter_workspace(repo, "feat/batch-x") == planned
+    assert adopt.workspace_path(repo, "feat/batch-x") == planned

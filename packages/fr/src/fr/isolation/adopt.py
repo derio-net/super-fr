@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .sessions import attach, read_session_index
-from .types import IsolationError, list_states, load_state
+from .types import IsolationError, default_worktree_path, list_states, load_state
 
 
 def _select_target(repo_root: Path) -> Any:
@@ -35,6 +35,16 @@ def enter_workspace(repo_root: Path, branch: str) -> Path:
     (gh#578) is started now (R9). Raises `IsolationError`."""
     state = _select_target(repo_root).up(profile=None, branch=branch)
     return Path(state.worktree)
+
+
+def workspace_path(repo_root: Path, branch: str) -> Path:
+    """Where *branch*'s workspace is, or will be once `enter_workspace` makes it: the
+    recorded worktree, else where `up` puts a new one. For the plan, before any write."""
+    try:
+        state = load_state(repo_root, branch)
+    except (ValueError, OSError):
+        state = None
+    return Path(state.worktree) if state is not None else default_worktree_path(repo_root, branch)
 
 
 def bind_session(repo_root: Path, branch: str, session_id: str, harness: str) -> str | None:

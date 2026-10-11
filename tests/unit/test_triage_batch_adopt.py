@@ -610,13 +610,6 @@ def test_a_forge_clock_behind_ours_clamps_the_event_to_the_prs_creation(
     assert event.at == behind
 
 
-def test_the_default_branch_is_refused(world: Any) -> None:
-    """p1-r3: adopting `main` would rename and delete the default branch."""
-    checkout = world[3]
-    checkout.worktrees["main"] = checkout.path.parent / "wt-main"
-    _refused(*world, *_args("--yes", branch="main"), match="default branch")
-
-
 def test_a_branch_checked_out_in_the_main_worktree_is_refused(world: Any) -> None:
     """p1-r3: only a linked worktree's branch is renamed."""
     checkout = world[3]

@@ -438,6 +438,11 @@ class Checkout:
                 return Path(line.removeprefix("worktree ")).resolve()
         return self.path.resolve()
 
+    def current_branch(self) -> str | None:
+        """The branch checked out in the MAIN worktree, or None when HEAD is detached."""
+        out = git(["rev-parse", "--abbrev-ref", "HEAD"], self.main_worktree()).strip()
+        return None if out == "HEAD" else out
+
     def dirty_paths(self) -> tuple[str, ...]:
         """The paths `git status --porcelain` reports in the MAIN worktree, tracked or
         untracked; empty when it is clean (default-branch adopt, R7)."""

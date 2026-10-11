@@ -81,6 +81,12 @@ from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
+from fr.isolation.adopt import (
+    bind_session,
+    enter_workspace,
+    reusable_workspace,
+    workspace_path,
+)
 from fr.isolation.rename import IsolationError, rename_branch
 from fr.labels import FR_IN_PROGRESS
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
@@ -1902,10 +1908,19 @@ def adopt_batch(
     checkout = _open_checkout(checkout_path, owner_repo)
     try:
         default = checkout.default_branch()
-        if old == default:
-            _fail(f"--branch {old} is {owner_repo}'s default branch: adopt never renames it")
-        if new == default:
-            _fail(f"batch branch {new} is {owner_repo}'s default branch: refusing")
+    except TriageError as exc:
+        _fail(str(exc))
+    if new == default:
+        _fail(f"batch branch {new} is {owner_repo}'s default branch: refusing")
+    if old == default:  # 2026-10-11 §B: a session in a base clone moves to a workspace
+        _adopt_from_default(
+            target, facts, judgements, batch, checkout=checkout, default=default,
+            tab=tab, session=session, runner=runner, runner_name=runner_name, probe=probe,
+            client=client, owner_repo=owner_repo, recorded=recorded, last=last,
+            checkout_path=checkout_path, yes=yes, hold=hold,
+        )  # fmt: skip
+        return
+    try:
         worktree = (checkout.worktree_of(old) if old != new else None) or checkout.worktree_of(new)
         if worktree is None:
             _fail(f"no worktree of {checkout.path} has {old} (or {new}) checked out")
@@ -1960,25 +1975,10 @@ def adopt_batch(
     publish = not remote_new and (remote_old or old_pr is not None)
 
     # 5. The version (R11), the event time (§D) and a dry run of the write.
-    if recorded and isinstance(last, DispatchEvent):
-        reserved = last.reserved_version
-    else:
-        reserved = _reservation(checkout, facts, judgements, batch, owner_repo)
-    # Whole seconds, as the forge's createdAt is: a PR opened in the same second as
-    # the event is still of it (`of_dispatch`, created >= at). Never before the last event.
-    floor = batch.events[-1].at if batch.events else None
-    at = _now_after(batch).replace(microsecond=0)
-    at = max(at, floor) if floor is not None else at
-    opened = _pr_time(new_pr)
-    if opened is not None and opened < at:  # a re-run: that PR was opened by this adoption
-        at = max(opened, floor) if floor is not None else opened
-    event = DispatchEvent(
-        kind="dispatch", at=at, runner=runner_name, handle=tab, branch=new,
-        reserved_version=reserved,
+    reserved, floor, event, after = _adopt_event(
+        target, facts, judgements, batch, checkout, owner_repo, recorded=recorded,
+        last=last, runner_name=runner_name, tab=tab, new=new, opened=_pr_time(new_pr),
     )  # fmt: skip
-    after = _with_event(judgements, batch, event)
-    if not recorded:
-        _write(target, after, facts, read=judgements.batches, dry_run=True)
 
     # 6. The plan (R8).
     state: dict[str, Any] = {"pr": new_pr, "event": event, "after": after}
@@ -1987,53 +1987,37 @@ def adopt_batch(
         pr = state["pr"]
         return f"#{pr['number']} ({pr['url']})" if pr else None
 
-    def say(line: str) -> None:
-        console.print(line, markup=False, soft_wrap=True, highlight=False)
-
-    say(f"adopt tab {tab} as batch {batch.id} ({probe.id})")
-    say(f"  session: {session.label!r} in {session.group or '-'}, agent {session.agent} "
-        f"({session.status}); runner {runner_name}")  # fmt: skip
-    say(f"  branch: {old} -> {new} in {worktree}")
+    _say_session(tab, batch, probe, session, runner_name)
+    _say(f"  branch: {old} -> {new} in {worktree}")
     for step in renames:
-        say(f"    {step}")
+        _say(f"    {step}")
     if old != new and not renames:
-        say("    already renamed")
+        _say("    already renamed")
     if publish:
-        say(f"  remote: publish {new} (git push -u origin {new})")
+        _say(f"  remote: publish {new} (git push -u origin {new})")
     elif not remote_new:
-        say(f"  remote: {old} was never pushed; nothing to publish")
+        _say(f"  remote: {old} was never pushed; nothing to publish")
     if old_pr is not None and old_view is not None:
         kind = "draft PR" if old_view.get("draft") else "PR"
         if new_pr is None:
-            say(f"  forge: supersede PR #{old_pr['number']} with a new {kind} from {new} into "
-                f"{old_view.get('base_ref')} ({old_view.get('title')!r}), then comment and close "
-                f"#{old_pr['number']}")  # fmt: skip
+            _say(f"  forge: supersede PR #{old_pr['number']} with a new {kind} from {new} into "
+                 f"{old_view.get('base_ref')} ({old_view.get('title')!r}), then comment and "
+                 f"close #{old_pr['number']}")  # fmt: skip
         else:
-            say(f"  forge: supersede PR #{old_pr['number']} by the open #{new_pr['number']}")
+            _say(f"  forge: supersede PR #{old_pr['number']} by the open #{new_pr['number']}")
     if remote_old:
-        say(f"  forge: delete remote branch {old}")
-    say(f"  runner: rename tab {tab} to {probe.id}, and its agent")
-    if recorded:
-        say("  record: the dispatch event is recorded already")
-    else:
-        say(f"  record: dispatch event (runner {runner_name}, handle {tab}, branch {new}, "
-            f"reserved version {reserved or '(none)'})")  # fmt: skip
-    say(f"  forge: add {FR_IN_PROGRESS.name} and the marker comment on every member")
-    if callable(getattr(runner, "message", None)):
-        say(f"  runner: message the agent ({'held' if hold else 'not held'})")
-        shown_pr = _pr_ref()
-        if shown_pr is None and old_pr is not None and new_pr is None:
-            shown_pr = "#<new PR>"
-        for line in adopt_message(batch, probe.id, old, new, shown_pr, reserved,
-                                  hold=hold).splitlines():  # fmt: skip
-            say(f"    | {line}")
+        _say(f"  forge: delete remote branch {old}")
+    shown_pr = _pr_ref()
+    if shown_pr is None and old_pr is not None and new_pr is None:
+        shown_pr = "#<new PR>"
+    _say_tail(tab, probe, runner, runner_name, recorded=recorded, new=new, reserved=reserved,
+              hold=hold, message=adopt_message(batch, probe.id, old, new, shown_pr, reserved,
+                                               hold=hold))  # fmt: skip
     if not yes:
-        say("nothing written; re-run with --yes to act")
+        _say("nothing written; re-run with --yes to act")
         return
 
     # 7. Each step not done yet, in §A.7's order (R10).
-    done: list[str] = []
-
     def _not_default(*names: str) -> None:  # refused above; held again at each write
         for name in names:
             if name == default:
@@ -2085,7 +2069,109 @@ def adopt_batch(
         steps.append((f"close #{number}", lambda: client.close_pr(owner_repo, number)))
     if remote_old:
         steps.append((f"delete remote branch {old}", _delete_old))
-    steps.append((f"adopt tab {tab}", lambda: runner.adopt(probe, tab)))
+    steps += _adopt_tail_steps(
+        target, facts, judgements, batch, state, tab=tab, runner=runner, probe=probe,
+        client=client, owner_repo=owner_repo, recorded=recorded,
+        message=lambda: adopt_message(batch, probe.id, old, new, _pr_ref(), reserved,
+                                      hold=hold),
+    )  # fmt: skip
+    _run_adopt_steps(steps, batch=batch, tab=tab, old=old, checkout_path=checkout_path, hold=hold)
+    _say(f"adopted tab {tab} as batch {batch.id} on {new}")
+
+
+def _adopt_event(
+    target: Path,
+    facts: Facts,
+    judgements: Judgements,
+    batch: Batch,
+    checkout: Checkout,
+    owner_repo: str,
+    *,
+    recorded: bool,
+    last: object,
+    runner_name: str,
+    tab: str,
+    new: str,
+    opened: datetime | None,
+) -> tuple[str | None, datetime | None, DispatchEvent, list[Batch]]:
+    """Adopt's step 5, on both paths: the reserved version (R11; a re-run keeps the
+    recorded one), the event, its time (§D), and a dry run of its write. Returns
+    (reserved, floor, event, the batches once it is appended)."""
+    if recorded and isinstance(last, DispatchEvent):
+        reserved = last.reserved_version
+    else:
+        reserved = _reservation(checkout, facts, judgements, batch, owner_repo)
+    # Whole seconds, as the forge's createdAt is: a PR opened in the same second as
+    # the event is still of it (`of_dispatch`, created >= at). Never before the last event.
+    floor = batch.events[-1].at if batch.events else None
+    at = _now_after(batch).replace(microsecond=0)
+    at = max(at, floor) if floor is not None else at
+    if opened is not None and opened < at:  # a re-run: that PR was opened by this adoption
+        at = max(opened, floor) if floor is not None else opened
+    event = DispatchEvent(
+        kind="dispatch", at=at, runner=runner_name, handle=tab, branch=new,
+        reserved_version=reserved,
+    )  # fmt: skip
+    after = _with_event(judgements, batch, event)
+    if not recorded:
+        _write(target, after, facts, read=judgements.batches, dry_run=True)
+    return reserved, floor, event, after
+
+
+def _say_session(tab: str, batch: Batch, probe: WorkItem, session: Any, runner_name: str) -> None:
+    _say(f"adopt tab {tab} as batch {batch.id} ({probe.id})")
+    _say(f"  session: {session.label!r} in {session.group or '-'}, agent {session.agent} "
+         f"({session.status}); runner {runner_name}")  # fmt: skip
+
+
+def _say_tail(
+    tab: str,
+    probe: WorkItem,
+    runner: Any,
+    runner_name: str,
+    *,
+    recorded: bool,
+    new: str,
+    reserved: str | None,
+    hold: bool,
+    message: str,
+) -> None:
+    """The plan's last lines on both paths: the tab, the record, the marks, and the
+    exact message the agent will get (R4)."""
+    _say(f"  runner: rename tab {tab} to {probe.id}, and its agent")
+    if recorded:
+        _say("  record: the dispatch event is recorded already")
+    else:
+        _say(f"  record: dispatch event (runner {runner_name}, handle {tab}, branch {new}, "
+             f"reserved version {reserved or '(none)'})")  # fmt: skip
+    _say(f"  forge: add {FR_IN_PROGRESS.name} and the marker comment on every member")
+    if callable(getattr(runner, "message", None)):
+        _say(f"  runner: message the agent ({'held' if hold else 'not held'})")
+        for line in message.splitlines():
+            _say(f"    | {line}")
+
+
+def _adopt_tail_steps(
+    target: Path,
+    facts: Facts,
+    judgements: Judgements,
+    batch: Batch,
+    state: dict[str, Any],
+    *,
+    tab: str,
+    runner: Any,
+    probe: WorkItem,
+    client: GhClient,
+    owner_repo: str,
+    recorded: bool,
+    message: Callable[[], str],
+) -> list[tuple[str, Callable[[], object]]]:
+    """The steps both adopt paths end with: adopt the tab, record the event (unless a
+    re-run recorded it), mark every member, message the agent. *state*["after"] is
+    the batches once the event is appended; *message* builds the text when sent."""
+    steps: list[tuple[str, Callable[[], object]]] = [
+        (f"adopt tab {tab}", lambda: runner.adopt(probe, tab))
+    ]
     if not recorded:
         steps.append(("record the dispatch event",
                       lambda: _save(target, state["after"], facts,
@@ -2098,9 +2184,22 @@ def adopt_batch(
 
     steps.append(("mark every member on the forge", _marks))
     if callable(getattr(runner, "message", None)):
-        steps.append(("message the agent", lambda: runner.message(
-            probe, adopt_message(batch, probe.id, old, new, _pr_ref(), reserved,
-                                 hold=hold))))  # fmt: skip
+        steps.append(("message the agent", lambda: runner.message(probe, message())))
+    return steps
+
+
+def _run_adopt_steps(
+    steps: list[tuple[str, Callable[[], object]]],
+    *,
+    batch: Batch,
+    tab: str,
+    old: str,
+    checkout_path: Path | None,
+    hold: bool,
+) -> None:
+    """Run each step in order; the first failure ends in the stop report, which names
+    what was done, what remains and the command that finishes it (R10; 2026-10-11 R9)."""
+    done: list[str] = []
     for i, (what, act) in enumerate(steps):
         try:
             act()
@@ -2121,7 +2220,133 @@ def adopt_batch(
                 code=1,
             )
         done.append(what)
-    say(f"adopted tab {tab} as batch {batch.id} on {new}")
+
+
+def _adopt_from_default(
+    target: Path,
+    facts: Facts,
+    judgements: Judgements,
+    batch: Batch,
+    *,
+    checkout: Checkout,
+    default: str,
+    tab: str,
+    session: Any,
+    runner: Any,
+    runner_name: str,
+    probe: WorkItem,
+    client: GhClient,
+    owner_repo: str,
+    recorded: bool,
+    last: object,
+    checkout_path: Path | None,
+    yes: bool,
+    hold: bool,
+) -> None:
+    """`adopt --branch <default>` (spec 2026-10-11-batch-adopt-safety-2 §B, R5–R9): the
+    default branch stays where it is, and the session moves to the batch branch's fr
+    workspace. Every git read runs in the main worktree; every refusal comes before the
+    first write; nothing here writes the default branch, the main worktree's files,
+    index or HEAD (R8)."""
+    new = batch_branch(batch)
+    root = checkout.main_worktree()
+    # 1. Refusals (R7), in the spec's order.
+    try:
+        on = checkout.current_branch()
+        if on != default:
+            _fail(
+                f"the base clone is on {on or 'a detached HEAD'}, not {default} ({root}): "
+                f"adopting from the default branch needs {default} checked out there"
+            )
+        dirty = checkout.dirty_paths()
+        if dirty:
+            _fail(
+                f"the base clone {root} has uncommitted changes: {', '.join(dirty)}. Commit "
+                "or stash them first: the workspace is cut from origin, so they would be lost "
+                "to the batch"
+            )
+        checkout.fetch()
+        unpushed = checkout.unpushed(default)
+        if unpushed:
+            _fail(
+                f"local {default} has commits origin/{default} lacks: {'; '.join(unpushed)}. "
+                "Push or move them first: the workspace is cut from origin, without them"
+            )
+        if session.cwd:
+            try:
+                agent_root: Path | None = Checkout.at(Path(session.cwd)).main_worktree()
+            except TriageError:
+                agent_root = None
+            if agent_root != root:
+                _fail(
+                    f"the agent works in {session.cwd}, not in this checkout {root}; pass "
+                    "--checkout with the clone it works in"
+                )
+        local = checkout.has_branch(new)
+        remote = checkout.remote_branch_exists(new)
+        reuse: Path | None = None
+        if local or remote:
+            ahead = max(
+                checkout.ahead(f"refs/heads/{new}", f"origin/{default}") if local else 0,
+                checkout.ahead(f"refs/remotes/origin/{new}", f"origin/{default}")
+                if remote else 0,
+            )  # fmt: skip
+            reuse = reusable_workspace(root, new, session.session, ahead=ahead)
+            if reuse is None:
+                place = "on origin" if remote and not local else "here"
+                _fail(
+                    f"branch {new} already exists {place}, and is neither an fr workspace of "
+                    f"this checkout with no commits beyond origin/{default} nor one this "
+                    "session is bound to: refusing"
+                )
+    except TriageError as exc:
+        _fail(str(exc))
+    where = reuse or workspace_path(root, new)
+
+    # 2. The version and the event (step 5), then the plan.
+    reserved, _floor, event, after = _adopt_event(
+        target, facts, judgements, batch, checkout, owner_repo, recorded=recorded,
+        last=last, runner_name=runner_name, tab=tab, new=new, opened=None,
+    )  # fmt: skip
+    state: dict[str, Any] = {"event": event, "after": after, "workspace": where}
+    _say_session(tab, batch, probe, session, runner_name)
+    if reuse is not None:
+        _say(f"  branch: {default} stays; resume workspace {where} on {new}")
+    else:
+        _say(f"  branch: {default} stays; workspace {where} on {new} from origin/{default}")
+    if session.session:
+        _say(f"  isolation: bind session {session.session} to the workspace")
+    _say_tail(tab, probe, runner, runner_name, recorded=recorded, new=new, reserved=reserved,
+              hold=hold, message=adopt_message(batch, probe.id, default, new, None, reserved,
+                                               hold=hold, workspace=where))  # fmt: skip
+    if not yes:
+        _say("nothing written; re-run with --yes to act")
+        return
+
+    # 3. The steps (R9: entering is always run, so a re-run resumes the workspace).
+    def _enter() -> None:
+        if new == default:  # refused above; held again at the one git write
+            raise RuntimeError(f"{new} is the default branch: refusing to touch it")
+        state["workspace"] = enter_workspace(root, new)
+
+    def _bind() -> None:
+        warning = bind_session(root, new, session.session, session.harness or "unknown")
+        if warning:
+            _say(warning)
+
+    steps: list[tuple[str, Callable[[], object]]] = [(f"enter workspace {where}", _enter)]
+    if session.session:
+        steps.append((f"bind session {session.session}", _bind))
+    steps += _adopt_tail_steps(
+        target, facts, judgements, batch, state, tab=tab, runner=runner, probe=probe,
+        client=client, owner_repo=owner_repo, recorded=recorded,
+        message=lambda: adopt_message(batch, probe.id, default, new, None, reserved,
+                                      hold=hold, workspace=state["workspace"]),
+    )  # fmt: skip
+    _run_adopt_steps(
+        steps, batch=batch, tab=tab, old=default, checkout_path=checkout_path, hold=hold
+    )
+    _say(f"adopted tab {tab} as batch {batch.id} in workspace {state['workspace']} on {new}")
 
 
 def _scope_driver(

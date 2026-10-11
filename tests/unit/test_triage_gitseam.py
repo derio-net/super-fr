@@ -459,3 +459,12 @@ def test_ahead_counts_the_commits_ref_has_beyond_base(tmp_path: Path) -> None:
     (checkout.path / "a.txt").write_text("two\n")
     _git(checkout.path, "commit", "--quiet", "-am", "two")
     assert checkout.ahead("feat/batch-x", "origin/main") == 2
+
+
+def test_current_branch_reads_the_main_worktree_and_none_when_detached(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    linked = tmp_path / "linked"
+    _git(checkout.path, "worktree", "add", "--quiet", "-b", "feat/x", str(linked))
+    assert Checkout(linked).current_branch() == "main"
+    _git(checkout.path, "checkout", "--quiet", "--detach")
+    assert checkout.current_branch() is None
