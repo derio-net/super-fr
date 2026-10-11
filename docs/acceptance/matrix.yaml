@@ -6024,6 +6024,20 @@ rows:
     verify: live
     issues:
     - derio-net/super-fr#924
+  - id: acceptance-ci-built-reports
+    capability: acceptance-matrix
+    acceptance: In a repo that gitignores the generated acceptance reports, fr's commits
+      (record resolve, acceptance add/set-status, archive, init, migrations) succeed
+      without them and fr acceptance check / report --check report no drift for them,
+      while report --deterministic still writes them.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
@@ -6999,6 +7013,19 @@ rows:
     status: ci
     notes: gates/status/check answer a drifted cursor with one warning (check now tested,
       review p1-r2); schema mismatch still refuses gates
+  - id: run-claim-first-wins
+    capability: run-cursor
+    acceptance: Re-claiming an open unit by the agent that holds it never rewrites the
+      recorded harness, model or agent type and makes no commit when nothing changes;
+      a different agent is refused; a held unit is not re-briefed after an interrupted
+      orchestrator restarts.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
   - id: adopt-supersede-carries-provenance
     capability: run-adoption
     acceptance: Adopting a plan that already has a run supersedes it on request, and
@@ -8178,3 +8205,17 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: verification-unrunnable-strategy
+    capability: verification-strategies
+    acceptance: 'A repo that cannot run a strategy''s install program is never owed
+      that strategy''s walk from the shape default, and an explicitly named unrunnable
+      strategy is reported by plan self-review (error) and the brainstorm resolve (warning)
+      before deliver; a malformed strategy: line names the accepted form.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
