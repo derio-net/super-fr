@@ -31,3 +31,8 @@ R19 (cloud-triage) already made a Claude-Code home without installed_plugins.jso
 ### f3c800abbac1 · finding [fixed] · #1124 fixed: WorktreeCreate lock now precedes the agent-* branch
 
 fr-worktree-create.sh takes its mkdir lock (keyed repo+name) before `case agent-*) mimic_default`, so the second registered copy waits and then returns the existing path. Pinned by tests/unit/test_hooks_worktree.py#test_two_concurrent_agent_worktree_creations_both_succeed (slow git worktree add shim; red before: 'already exists'). Both registrations are kept: dropping settings.json's would re-break `claude --worktree` on the CC versions that skip the plugin hook, and this cannot be verified for every version. WorktreeRemove's agent-* path stays unlocked: a losing copy's `git worktree remove` failure already falls back to rm -rf and exits 0, so it never fails the event.
+
+<!-- fr:journal kind=finding scope=debug id=13d399eb572e created=2026-10-11T23:12:51+00:00 state=fixed -->
+### 13d399eb572e · finding [fixed] · #1105 fixed: allowlist script manages qualified + bare spellings
+
+scripts/ensure-phase-executor-allowlist.sh now inserts the qualified id and its bare name into the case arm and the Exempt message, each probed as a whole member (position-independent), and no longer strips the bare name. Pinned by tests/unit/test_ensure_phase_executor_allowlist.py#test_the_bare_project_agent_name_is_allowlisted and #test_a_hook_with_only_the_qualified_name_gains_the_bare_one (red before). Dry-run against a copy of a live host hook: both spellings added to arm + message, rationale comment untouched, third run a no-op.
