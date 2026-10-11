@@ -495,6 +495,32 @@ def merge_ready(ctx: MergeContext, slot: Slot, previous: str | None) -> MergeAtt
     return MergeAttempt("merged" if new is None else "updated", head=new or head)
 
 
+def update_failing(ctx: MergeContext, slot: Slot) -> MergeAttempt:
+    """R9: bring a red PR up to date with its base once more, the green-checks
+    precondition waived (an fr-made head whose checks failed against an older base).
+    The approval is not read: nothing here merges, and the update is recorded like any
+    other, so the approval carries over it. A moved head is a `HeadMovedError`."""
+    pr = slot.step.pr
+    ctx.checkout.fetch()
+    view = ctx.client.pr_view(ctx.repo, pr.number)
+    head = _open_head_unready(ctx, slot, view)
+    return MergeAttempt("updated", head=_update(ctx, slot, head, True, None))
+
+
+def _open_head_unready(ctx: MergeContext, slot: Slot, view: dict[str, Any]) -> str:
+    """The head of an OPEN PR (a draft included) that is still the slot's, else a stop."""
+    pr, batch = slot.step.pr, slot.step.batch
+    if view.get("state") != "OPEN":
+        raise MergeStopError(f"PR #{pr.number} (batch {batch.id}) is {view.get('state')}")
+    head = str(view.get("head_oid"))
+    if head != slot.head:
+        raise HeadMovedError(
+            f"PR #{pr.number} (batch {batch.id}): head moved since it was judged "
+            f"({slot.head[:12]} -> {head[:12]}); judged again next pass"
+        )
+    return head
+
+
 def _merge(ctx: MergeContext, slot: Slot, head: str, head_version: str | None) -> None:
     pr = slot.step.pr
     main_version = ctx.version_at(ctx.main)

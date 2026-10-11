@@ -18,6 +18,7 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.gh import GhError
+from fr.ghclient import BaseRules
 from fr.triage.batch import merge_order
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig
 from typer.testing import CliRunner
@@ -97,6 +98,9 @@ class MergeForge:
             name = getattr(label, "name", label)
             self.created_labels.append(name)
             self.labels_defined.add(name)
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        return getattr(self, "rules", BaseRules())
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         self.reads.append(number)

@@ -79,7 +79,9 @@ def test_a_strict_required_status_checks_rule_sets_strict_checks() -> None:
 
 
 def test_a_loose_required_status_checks_rule_is_not_strict() -> None:
-    assert RealGhRestClient(run=_Gh([_LOOSE], _404())).base_rules(REPO, "main").strict_checks is False
+    assert (
+        RealGhRestClient(run=_Gh([_LOOSE], _404())).base_rules(REPO, "main").strict_checks is False
+    )
 
 
 def test_classic_protection_strict_sets_strict_checks() -> None:

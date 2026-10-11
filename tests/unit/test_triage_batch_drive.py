@@ -241,14 +241,16 @@ def test_a_ready_green_pr_is_merged_at_its_head() -> None:
     assert (action.kind, action.pr, action.head) == ("merge", 1000, "head-x")
 
 
-def test_a_failing_check_warns_once_per_head_sha() -> None:
+def test_a_failing_check_warns_every_pass_and_the_command_decides_what_is_new() -> None:
+    """merge-train-safety §C: the dedup is the recorded events, read by `_recover`."""
     b = _dispatched("x", 1)
     live = {"x": _live(1000, "head-x", checks="failing", failing=("lint",))}
     first = drive_pass(_snap([b], {"x": "pr-open"}, live=live))
     assert _kinds(first.actions) == [("warn", "x")]
     assert first.actions[0].head == "head-x" and "lint" in first.actions[0].detail
+    assert first.actions[0].red is True
     again = drive_pass(_snap([b], {"x": "pr-open"}, live=live, warned=frozenset({"head-x"})))
-    assert again.actions == ()
+    assert _kinds(again.actions) == [("warn", "x")]
 
 
 def _foreign(n: int, reason: str = "opened from a fork") -> ForeignPr:

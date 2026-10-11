@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import os
 import subprocess
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 FORGE_PARITY_ISSUE = "gh#611"

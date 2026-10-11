@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fr.gh import GhError
+from fr.ghclient import BaseRules
 
 
 @dataclass
@@ -257,6 +258,9 @@ class FakeGhClient:
             for (r, _), p in sorted(self.prs.items())
             if r == repo and p["head_ref"] == branch
         ]
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        return getattr(self, "rules", BaseRules())
 
     def required_check_names(self, repo: str, base: str) -> list[str]:
         self.calls.append(("required_check_names", {"repo": repo, "base": base}))

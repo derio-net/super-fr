@@ -33,7 +33,15 @@ from fr.triage.batch import (
     recorded_branch,
 )
 from fr.triage.claims import Claim, held_line, held_members
-from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
+from fr.triage.model import (
+    Batch,
+    CloseoutEvent,
+    ConflictEvent,
+    DispatchEvent,
+    Export,
+    RedHandbackEvent,
+    UpdateEvent,
+)
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
@@ -232,6 +240,8 @@ class Action:
     wave: str | None = None
     covers: tuple[str, ...] = ()  # export: every wave the PR records
     key: str = ""  # claim, refresh, release: the issue key
+    red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
+    checks: tuple[str, ...] = ()  # warn (red): the failing check names
 
 
 @dataclass(frozen=True)
@@ -558,6 +568,53 @@ def conflict_decision(
     if handed >= HANDBACKS_PER_DISPATCH:
         return ConflictDecision("held")
     return ConflictDecision("handback")
+
+
+# ------------------------------------------------- red recovery (merge-train-safety §C)
+
+RED_HANDBACKS_PER_DISPATCH = 2
+"""R10: red hand-backs a batch gets per dispatch, counted apart from conflict ones."""
+
+RedDecisionKind = Literal["reupdate", "handback", "wait", "needs_you", "skip"]
+
+
+def red_decision(
+    events: Sequence[object],
+    pr: int,
+    head: str,
+    failing: Sequence[str],
+    base_now: str,
+    status: str,
+) -> RedDecisionKind:
+    """What the driver does with PR *pr* red at *head* (*failing* names the checks), by the
+    first rule that applies (R9-R11):
+
+    1. a `red_handback` event exists for (pr, head): `skip`;
+    2. *head* is an `update` event's `head_after`, the base moved past that event's base,
+       and no later `update` starts from *head*: `reupdate`;
+    3. `RED_HANDBACKS_PER_DISPATCH` delivered hand-backs have gone out since the latest
+       dispatch: `needs_you`;
+    4. the session's *status*: `idle` is a `handback`, `absent` or `done` a `needs_you`,
+       anything else `wait`.
+    """
+    red = [e for e in events if isinstance(e, RedHandbackEvent)]
+    if any(e.pr == pr and e.head == head for e in red):
+        return "skip"
+    updates = [e for e in events if isinstance(e, UpdateEvent) and e.pr == pr]
+    made = [e for e in updates if e.head_after == head]
+    if made and made[-1].base != base_now and not any(e.head_before == head for e in updates):
+        return "reupdate"
+    handed = 0
+    for event in reversed(events):
+        if isinstance(event, DispatchEvent):
+            break
+        if isinstance(event, RedHandbackEvent) and event.delivered == "session":
+            handed += 1
+    if handed >= RED_HANDBACKS_PER_DISPATCH:
+        return "needs_you"
+    if status == "idle":
+        return "handback"
+    return "needs_you" if status in ("absent", "done") else "wait"
 
 
 def held_conflict(batch: Batch) -> ConflictEvent | None:
@@ -915,11 +972,13 @@ def _walk_train(
         numbers[bid] = pr.number
         if pr.checks == "failing":  # wherever it sits: reported now, not when it leads
             stepped.append(bid)
-            if pr.head not in snap.warned:
-                merges.append(
-                    Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
-                           f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head)
-                )  # fmt: skip
+            # Said on every pass: the command's recovery (§C) decides whether this pass
+            # has anything new to report, from the recorded events, not from memory.
+            merges.append(
+                Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
+                       f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head, red=True,
+                       checks=pr.failing)
+            )  # fmt: skip
             continue
         if not approved:  # never the head, never a stop
             awaiting.append(bid)

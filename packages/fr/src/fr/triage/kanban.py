@@ -52,6 +52,7 @@ from fr.triage.model import (
     Facts,
     Judgements,
     Launch,
+    RedHandbackEvent,
 )
 from fr.triage.stage import Stage
 from fr.triage.views import drive_snapshot
@@ -340,6 +341,24 @@ def action_phrase(action: Action) -> str:
     return _ACTION_PHRASES[action.kind]
 
 
+def _red_phrase(batch: Batch, action: Action) -> str:
+    """The card's line for a red PR (merge-train-safety R11): still in progress while a
+    delivered hand-back covers its head, a need when none could take it; "" otherwise."""
+    if action.kind != "warn" or not action.red:
+        return ""
+    covering = [
+        e for e in batch.events
+        if isinstance(e, RedHandbackEvent) and (e.pr, e.head) == (action.pr, action.head)
+    ]  # fmt: skip
+    if not covering:
+        return ""
+    return (
+        "red: handed back to its session"
+        if covering[-1].delivered == "session"
+        else "needs you: red PR, no session can take it"
+    )
+
+
 def fallback_hint(
     batch: Batch, column: Column, facts: Facts, batches: Sequence[Batch], *, selected: bool
 ) -> str:
@@ -465,7 +484,7 @@ def _card(
         # stopped merge never lands, so it waits on it as the driver does ("held").
         hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
     elif batch.id in actions:
-        hint = action_phrase(actions[batch.id])
+        hint = _red_phrase(batch, actions[batch.id]) or action_phrase(actions[batch.id])
     elif batch.id in awaiting:
         hint = HINT_AWAITING_APPROVAL
     else:

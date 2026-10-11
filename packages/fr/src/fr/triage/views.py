@@ -53,7 +53,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_awaiting_live, stale_dispatches
-from fr.triage.model import Batch, Facts, Judgement, Judgements, Severity
+from fr.triage.model import Batch, Facts, Judgement, Judgements, RedHandbackEvent, Severity
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -217,10 +217,25 @@ def needs_you(
     for action in plan.actions:
         if action.kind == "warn":
             failing_pr = batch_pr(by_id[action.batch], facts)
-            out.append(
-                Need("failing-ci", action.batch, action.detail,
-                     failing_pr.url if failing_pr else None)
-            )  # fmt: skip
+            url = failing_pr.url if failing_pr else None
+            # R11: a red hand-back delivered at this head means its session has it in hand,
+            # so no `failing-ci` need; one nobody could take is a `red-pr` need instead.
+            covering = [
+                e for e in by_id[action.batch].events
+                if action.red and isinstance(e, RedHandbackEvent)
+                and (e.pr, e.head) == (action.pr, action.head)
+            ]  # fmt: skip
+            if covering and covering[-1].delivered == "session":
+                continue
+            if covering:
+                out.append(
+                    Need("red-pr", action.batch,
+                         f"PR #{action.pr} is red at {action.head[:12]} "
+                         f"({', '.join(action.checks) or 'checks failing'}) and no session "
+                         "can take it", url)
+                )  # fmt: skip
+                continue
+            out.append(Need("failing-ci", action.batch, action.detail, url))
     for action in plan.actions:
         if action.kind == "foreign":
             found_pr = next(

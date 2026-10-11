@@ -22,6 +22,7 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd, triage_kanban_cmd
 from fr.gh import GhError
+from fr.ghclient import BaseRules
 from fr.triage import drive_lock
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.claims import claims_from_comments, to_issue_claim
@@ -150,6 +151,10 @@ class World:
     def label_exists(self, repo: str, name: str) -> bool:
         self.calls.append(f"label_exists {name}")
         return name in self.labels_defined
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        self.calls.append("base_rules")
+        return getattr(self, "rules", BaseRules())
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
@@ -699,7 +704,10 @@ def test_a_failing_check_warns_once_per_head_across_loop_passes(
     monkeypatch.setattr(triage_batch_cmd, "_sleep", _fix_after_two)
     world.config = None
     code, out = _drive(tmp_path, "--yes", "--interval", "5")
-    assert _lines(out, "warn") == ["warn b1: PR #101 CI failing at sha-101: lint"]
+    # said once: the plain runner has no session to message, so the recovery decides
+    # needs-you once at that head (merge-train-safety §C) and the later pass is quiet
+    (line,) = _lines(out, "warn")
+    assert line.startswith("warn b1: PR #101 CI failing at sha-101: lint; ")
     assert world.merged == [(101, "sha-101", "squash")]
     assert sleeps[:2] == [5, 5]
 
@@ -4253,3 +4261,158 @@ def test_a_local_clone_tells_the_board_its_repo_is_ci_none(
     assert triage_kanban_cmd.local_ci_none(facts) == frozenset({REPO})
     monkeypatch.setattr(triage_batch_cmd, "ci_none_at", lambda checkout: False)
     assert triage_kanban_cmd.local_ci_none(facts) == frozenset()
+
+
+# --------------------------- red recovery (merge-train-safety §C, R9-R11)
+
+
+def _red(world: World, tmp_path: Path) -> None:
+    """PR #101 of b1 is red at sha-101 on `lint`."""
+    _pr_open(world, tmp_path)
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    world.all_checks[101] = {"pass": 0, "fail": 1, "pending": 0}
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+
+
+def _red_events(tmp_path: Path, bid: str = "b1") -> list[Any]:
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == bid)
+    return [e for e in batch.events if e.kind == "red_handback"]
+
+
+def _red_needs(tmp_path: Path) -> list[str]:
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    facts = load_facts(tmp_path / "facts.json")
+    needs = needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
+    return [n.kind for n in needs if n.kind in ("failing-ci", "red-pr")]
+
+
+def test_a_red_pr_is_handed_back_to_its_idle_session_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((target, text),) = messenger.messages
+    assert target == BATCH_ITEM_B1, out
+    assert "sha-101" in text and "lint" in text and "PR" in text
+    (event,) = _red_events(tmp_path)
+    assert (event.pr, event.head, event.checks, event.delivered) == (
+        101,
+        "sha-101",
+        ["lint"],
+        "session",
+    )
+    (line,) = _lines(out, "warn")
+    assert "CI failing at sha-101: lint" in line and "handed back to its session" in line
+    assert world.merged == []
+    # the same red head again: nothing sent, nothing recorded, no warn line
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert len(messenger.messages) == 1 and len(_red_events(tmp_path)) == 1
+    assert _lines(out, "warn") == []
+
+
+def test_a_red_pr_whose_session_is_working_waits_and_records_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "working"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [] and _red_events(tmp_path) == []
+    (line,) = _lines(out, "warn")
+    assert "its session is working: nothing sent, retried next pass" in line
+
+
+@pytest.mark.parametrize("status", ["absent", "done"])
+def test_a_red_pr_with_no_session_to_take_it_needs_you_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner, status: str
+) -> None:
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = status
+    code, out = _drive(tmp_path, "--once", "--yes")
+    (event,) = _red_events(tmp_path)
+    assert event.delivered == "none" and event.head == "sha-101"
+    assert messenger.messages == [] and messenger.dispatched == []  # no fresh session (§C)
+    assert _red_needs(tmp_path) == ["red-pr"]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert len(_red_events(tmp_path)) == 1 and _lines(out, "warn") == []
+
+
+def test_a_delivered_hand_back_suppresses_failing_ci_on_the_board(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    assert _red_needs(tmp_path) == ["failing-ci"]  # before anything was sent
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    _drive(tmp_path, "--once", "--yes")
+    assert _red_needs(tmp_path) == []
+    world.prs[101]["head_oid"] = "sha-newer"  # a new red head is not covered
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    assert _red_needs(tmp_path) == ["failing-ci"]
+
+
+def test_a_red_pr_at_an_fr_made_head_with_a_moved_base_is_updated_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")  # base m1; the clone now says otherwise
+    checkout.behind.add("sha-101")
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [], out  # an update, not a hand-back
+    assert world.prs[101]["head_oid"] == "sha-updated"
+    updates = [
+        e for b in load_judgements(tmp_path / "judgements.yaml").batches
+        for e in b.events if e.kind == "update"
+    ]  # fmt: skip
+    assert [(e.head_before, e.head_after) for e in updates] == [
+        ("sha-old", "sha-101"),
+        ("sha-101", "sha-updated"),
+    ]
+    assert updates[-1].base == "origin/main@fetched"
+    (line,) = _lines(out, "warn")
+    assert "updated PR #101 to sha-updated" in line
+
+
+def test_a_red_pr_at_an_fr_made_head_with_an_unmoved_base_is_handed_back(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _red(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")
+    monkeypatch.setattr(checkout, "rev_parse", lambda ref: "m1")  # the base has not moved
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    _drive(tmp_path, "--once", "--yes")
+    assert len(messenger.messages) == 1 and world.prs[101]["head_oid"] == "sha-101"
+
+
+def test_two_red_hand_backs_per_dispatch_then_the_third_needs_you(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    for head in ("sha-a", "sha-b", "sha-c"):
+        world.prs[101]["head_oid"] = head
+        _drive(tmp_path, "--once", "--yes")
+        (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    assert [e.delivered for e in _red_events(tmp_path)] == ["session", "session", "none"]
+    assert len(messenger.messages) == 2
+
+
+def test_the_base_rules_are_read_once_per_repo_per_pass_and_reach_the_merge_context(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """merge-train-safety §D: one read per pass; strict checks ride the context (R14)."""
+    seen: list[bool] = []
+
+    def _spy(ctx: Any, slot: Any, previous: Any) -> Any:
+        seen.append(ctx.strict_checks)
+        return MergeAttempt("merged", head="sha-101")
+
+    monkeypatch.setattr(triage_batch_cmd, "merge_ready", _spy)
+    world.rules = BaseRules(merge_queue=False, strict_checks=True)  # type: ignore[attr-defined]
+    _pr_open(world, tmp_path)
+    _drive(tmp_path, "--once", "--yes")
+    assert seen == [True] and world.calls.count("base_rules") == 1

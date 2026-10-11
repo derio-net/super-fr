@@ -80,7 +80,7 @@ from fr.commands.triage_cmd import (
 )
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
-from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
+from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.isolation.rename import IsolationError, rename_branch
 from fr.labels import APPROVED_FR, FR_IN_PROGRESS
@@ -136,6 +136,7 @@ from fr.triage.batch_dispatch import (
     dispatch_comment,
     dispatched_already,
     live_reservations,
+    red_brief,
     render_brief,
     worker_remedy,
 )
@@ -172,6 +173,7 @@ from fr.triage.batch_drive import (
     idle_session,
     is_archived,
     is_finished,
+    red_decision,
     settle,
     summary_line,
     train_line,
@@ -189,6 +191,7 @@ from fr.triage.batch_merge import (
     merge_ready,
     plan_queue,
     run_queue,
+    update_failing,
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
@@ -225,6 +228,7 @@ from fr.triage.model import (
     Launch,
     PostMergeEvent,
     PullRequest,
+    RedHandbackEvent,
     ReplacementEvent,
     Scope,
     UpdateEvent,
@@ -2331,6 +2335,10 @@ def batch_merge_command(
         say=lambda line: console.print(line, markup=False, soft_wrap=True),
         ci_none=ci_none,
     )
+    try:  # R14: once per command, read before anything merges
+        ctx.rules = client.base_rules(owner_repo, checkout.default_branch())
+    except FORGE_ERRORS as exc:
+        _fail(f"a forge read failed: {exc}", code=1)
     writer = event_writer(target, facts)
 
     def record(batch_id: str, event: BatchEvent) -> None:
@@ -2709,6 +2717,7 @@ class _Driver:
         self.failed_write = False  # a forge write or a dispatch failed this pass (--once exits 1)
         self._first_seen: dict[str, datetime] = {}  # merged with no merge time known
         self._ci: dict[str, bool] = {}  # per pass: repo -> origin/<default> says ci none
+        self._rules: dict[str, BaseRules] = {}  # per pass: repo -> its base branch's rules
         self._unlanded: set[str] = set()  # per pass: planned merges that did not land
         self._held = 0  # per pass: planned dispatches that did not start
         self._stopped: dict[str, str] = {}  # per pass: repo -> batch that stopped its train
@@ -2886,6 +2895,13 @@ class _Driver:
             )
         # Read each pass, as the pass's own verdict is: the context outlives a pass.
         self._merge[repo].ci_none = self._ci_none(repo)
+        if repo not in self._rules:  # once per repo per pass (merge-train-safety §D, R12)
+            ctx = self._merge[repo]
+            try:
+                self._rules[repo] = ctx.client.base_rules(repo, ctx.checkout.default_branch())
+            except FORGE_ERRORS as exc:
+                raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        self._merge[repo].rules = self._rules[repo]
         return self._merge[repo]
 
     # ------------------------------------------------------------------ snapshot
@@ -3642,6 +3658,7 @@ class _Driver:
         for ctx in self._merge.values():
             ctx.recorded.clear()  # what a context recorded last pass is on disk now
         self._ci, self._unlanded, self._held = {}, set(), 0
+        self._rules = {}
         self._clone_unread = {}
         self._restart = {}
         self._stopped, self._queued, self._conflicts = {}, 0, {}
@@ -3682,8 +3699,13 @@ class _Driver:
                 acted = acted or did
                 if self._export_refusals > refused:  # refused before any write: a warning
                     action = replace(action, kind="warn")
-                if outcome or action.kind not in ("close", "claim", "refresh", "release"):
-                    # a close reported already stays quiet, as does a claim write that wrote nothing
+                if (
+                    outcome
+                    or action.kind not in ("close", "claim", "refresh", "release")
+                    and not (action.kind == "warn" and action.red)
+                ):
+                    # a close reported already stays quiet, as does a claim write that wrote
+                    # nothing, and a red PR the recovery has nothing new to say about
                     _say(action_line(action, outcome))
             if self.yes:
                 self._record_released(facts)
@@ -3782,6 +3804,11 @@ class _Driver:
             line = self._export_act(action, facts)
             did = (self._export_refusals, self._export_failures) == (refusals, failures)
             return line, did, in_flight  # a refusal or a failed write did nothing
+        if action.kind == "warn" and action.red:  # a failing batch PR: recover it (§C)
+            if action.batch in self._held_now:
+                return "", False, in_flight  # another scope holds it (R6)
+            line, did = self._recover(action, facts)
+            return line, did, in_flight
         if action.kind in ("warn", "foreign"):
             if action.head:  # an export's warn names no head: it is said every pass
                 self.warned.add(action.head)
@@ -4152,6 +4179,142 @@ class _Driver:
             )
         return self._hand_back(exc, stopped, action, facts, judgements, batch, repo)
 
+    # ------------------------------------------------- red recovery (merge-train-safety §C)
+
+    def _recover(self, action: Action, facts: Facts) -> tuple[str, bool]:
+        """A failing batch PR the walk stepped over: what `red_decision` says, from the
+        persisted events, the base as fetched now and the session's live status (R9-R11).
+        Returns the line to print ("" when this pass has nothing new to say) and whether
+        it acted (wrote an event, updated the PR, or messaged the session)."""
+        from fr_dispatch.protocols import SessionInspector, SessionMessenger
+
+        judgements = load_judgements(self.target / "judgements.yaml")
+        batch = _find(judgements.batches, action.batch)
+        repo = batch_repo(batch, facts)
+        if repo is None or action.pr is None:
+            return action.detail, False
+        ctx = self.merge_ctx(facts, repo)
+        events = [*batch.events, *ctx.recorded.get(batch.id, [])]
+        try:
+            ctx.checkout.fetch()
+            base_now = ctx.checkout.rev_parse(ctx.main)
+        except (GitError, TriageError) as exc:
+            return f"{action.detail}; the base could not be read ({exc}): retried next pass", False
+        checks = action.checks
+        # Rules 1-3 never read the session: ask it only when they leave the decision to it.
+        decision = red_decision(events, action.pr, action.head, checks, base_now, "idle")
+        runner: Any = None
+        status = "idle"
+        if decision == "handback":
+            name, target, _ = self._hand_back_target(facts, batch, repo)
+            if not self.adapter.carries(name):  # another driver's session
+                return "", False
+            runner = self.runner(name)
+            if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
+                try:
+                    status = runner.session_statuses([target]).get(target.id, "unknown")
+                except Exception as exc_:  # noqa: BLE001 - retried next pass
+                    return f"{action.detail}; its session could not be read: {exc_}", False
+            else:
+                status = "absent"  # this runner cannot be messaged: no session can take it
+            decision = red_decision(events, action.pr, action.head, checks, base_now, status)
+        if decision == "skip":
+            return "", False
+        if decision == "reupdate":
+            return self._reupdate(action, facts, judgements, batch, repo, ctx)
+        if decision == "needs_you":
+            event = self._red_event(action, batch, "none")
+            self._append(judgements, facts, batch, event)
+            return f"{action.detail}; no session can take it: it needs you", True
+        if decision == "wait":
+            once = f"red-wait\0{batch.id}\0{action.head}\0{status}"
+            if once in self.reported:
+                return "", False
+            self.reported.add(once)
+            return (
+                f"{action.detail}; its session is {status}: nothing sent, retried next pass",
+                False,
+            )
+        return self._red_hand_back(action, facts, judgements, batch, repo, name, target, runner)
+
+    @staticmethod
+    def _red_event(action: Action, batch: Batch, delivered: str) -> RedHandbackEvent:
+        assert action.pr is not None
+        return RedHandbackEvent(
+            kind="red_handback", at=_now_after(batch), pr=action.pr, head=action.head,
+            checks=list(action.checks), delivered=delivered,  # type: ignore[arg-type]
+        )  # fmt: skip
+
+    def _red_hand_back(
+        self,
+        action: Action,
+        facts: Facts,
+        judgements: Judgements,
+        batch: Batch,
+        repo: str,
+        name: str,
+        target: Any,
+        runner: Any,
+    ) -> tuple[str, bool]:
+        pr = batch_pr(batch, facts)
+        brief = red_brief(
+            batch, pr_url=pr.url if pr else f"PR #{action.pr}", head=action.head,
+            checks=action.checks,
+        )  # fmt: skip
+        try:
+            runner.message(target, brief)
+        except Exception as exc_:  # noqa: BLE001 - retried next pass, never the drive's end
+            return (
+                f"{action.detail}; hand-back to {target.id} failed, retried next pass: {exc_}",
+                False,
+            )
+        self._append(judgements, facts, batch, self._red_event(action, batch, "session"))
+        if isinstance(runner, Mailbox):  # sent once the agent records it (§F)
+            return f"{action.detail}; handed-back (pending) to its session {target.id}", True
+        return f"{action.detail}; handed back to its session {target.id}", True
+
+    def _reupdate(
+        self,
+        action: Action,
+        facts: Facts,
+        judgements: Judgements,
+        batch: Batch,
+        repo: str,
+        ctx: MergeContext,
+    ) -> tuple[str, bool]:
+        """R9: the driver's own update went red and the base moved since: update it again
+        through the merge machinery with the green-checks precondition waived. The new
+        `update` event is what stops a second update from the same head."""
+        entries = [
+            e
+            for e in pr_open_queue(judgements.batches, facts, judgements.issues)
+            if e.batch.id == batch.id
+        ]
+        try:
+            slots, _ = plan_queue(ctx, entries)
+            if not slots or slots[0].head != action.head:
+                return "", False  # merged, or the head moved: judged again next pass
+            writer = event_writer(self.target, facts)
+            ctx.on_update = update_recorder(
+                writer, lambda pr: batch.id if pr == slots[0].step.pr.number else None
+            )
+            attempt = update_failing(ctx, slots[0])
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except MergeConflictError as exc:
+            return self._conflict(exc, action, facts, judgements, batch, repo)
+        except (MergeStopError, GitError) as exc:
+            return self._stopped_line(batch, action, exc), False
+        except TriageError as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        return (
+            f"{action.detail}; the base moved: updated PR #{action.pr} to "
+            f"{attempt.head[:12]}, its checks run again",
+            True,
+        )
+
     @staticmethod
     def _conflict_event(
         exc: MergeConflictError, batch: Batch, delivered: str, handle: str | None = None
@@ -4160,6 +4323,25 @@ class _Driver:
             kind="conflict", at=_now_after(batch), head=exc.head, paths=list(exc.paths),
             delivered=delivered, handle=handle,  # type: ignore[arg-type]
         )  # fmt: skip
+
+    def _hand_back_target(self, facts: Facts, batch: Batch, repo: str) -> tuple[str, Any, Launch]:
+        """Where a hand-back goes (conflict or red): the runner's name, the work item of
+        the latest fresh conflict session since the dispatch, else the batch's own session,
+        and the launch the batch would start a fresh one with."""
+        from fr_dispatch.work_item import WorkItem
+
+        last = last_dispatch(batch)
+        launch = self._launch(facts, batch, repo)
+        name = str(last.runner if last else launch.runner)
+        since = fresh_conflicts(batch, since_dispatch=True)
+        target = WorkItem(
+            id=conflict_item_id(repo, batch.id, fresh_conflicts(batch, since_dispatch=False))
+            if since
+            else batch_item_id(repo, batch.id),
+            unit="run", workflow=batch_workflow(batch), repo=repo, parent=None, inputs=(),
+            payload={"group": self.group_of(batch)}, tracking=None,
+        )  # fmt: skip
+        return name, target, launch
 
     def _hand_back(
         self,
@@ -4174,11 +4356,9 @@ class _Driver:
         """Deliver the brief: to the target's idle session, else nothing while it is
         working or blocked, else to a fresh conflict session (R20, R23)."""
         from fr_dispatch.protocols import SessionInspector, SessionMessenger
-        from fr_dispatch.work_item import WorkItem
 
         last = last_dispatch(batch)
-        launch = self._launch(facts, batch, repo)
-        name = str(last.runner if last else launch.runner)
+        name, target, launch = self._hand_back_target(facts, batch, repo)
         branch = last.branch if last else batch_branch(batch)
         brief = conflict_brief(
             batch, pr=action.pr, head=exc.head, paths=exc.paths, branch=branch,
@@ -4191,14 +4371,6 @@ class _Driver:
                 False,
             )
         runner = self.runner(name)
-        since = fresh_conflicts(batch, since_dispatch=True)
-        target = WorkItem(
-            id=conflict_item_id(repo, batch.id, fresh_conflicts(batch, since_dispatch=False))
-            if since
-            else batch_item_id(repo, batch.id),
-            unit="run", workflow=batch_workflow(batch), repo=repo, parent=None, inputs=(),
-            payload={"group": self.group_of(batch)}, tracking=None,
-        )  # fmt: skip
         if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
             try:
                 status = runner.session_statuses([target]).get(target.id, "unknown")
