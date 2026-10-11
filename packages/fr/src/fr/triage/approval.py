@@ -128,3 +128,37 @@ def settle_approvals(
                 verdict = Unlabelled()
         out[batch.id] = verdict
     return out
+
+
+def voided_at(events: Sequence[BatchEvent], pr: int) -> str | None:
+    """The approved head of PR *pr*'s last approval when that approval was voided, else
+    None: after fr removed a voided label the verdict is `Unlabelled`, and the board
+    still asks for a re-label naming that head (§A, R5)."""
+    last = None
+    for event in events:
+        if isinstance(event, ApprovalEvent) and event.pr == pr:
+            last = event
+    return last.head if last is not None and last.voided_at is not None else None
+
+
+def ensure_approval_label(
+    client: Any, repo: str, say: Callable[[str], None], *, seen: set[str]
+) -> None:
+    """Create the `approved-fr` label on *repo* when it is missing, saying so (§A "Label
+    creation", R4). At most one check per repo per *seen* (a pass or a command). A
+    forge that cannot check or create labels is a warning, never a failure."""
+    if repo in seen:
+        return
+    seen.add(repo)
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.hostclient import FORGE_ERRORS
+
+    soft: tuple[type[Exception], ...] = (UnsupportedForgeOperation, *FORGE_ERRORS)
+    try:
+        if client.label_exists(repo, APPROVED_FR.name):
+            return
+        client.ensure_labels(repo, [APPROVED_FR])
+    except soft as exc:
+        say(f"warning: cannot ensure label {APPROVED_FR.name} on {repo}: {exc}")
+        return
+    say(f"created label {APPROVED_FR.name} on {repo}")

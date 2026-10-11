@@ -63,6 +63,7 @@ class World:
         self.comments: dict[int, list[dict[str, Any]]] = {}
         self.config: dict[str, Any] | None = None
         self.titles: dict[int, str] = {}
+        self.labels_defined: set[str] = {"approved-fr"}
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -147,7 +148,8 @@ class World:
         self.prs[number]["draft"] = False
 
     def label_exists(self, repo: str, name: str) -> bool:
-        return True
+        self.calls.append(f"label_exists {name}")
+        return name in self.labels_defined
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
@@ -198,6 +200,7 @@ class World:
 
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         self.calls.append("ensure_labels")
+        self.labels_defined.update(getattr(x, "name", x) for x in labels)
 
     def edit_issue_labels(self, repo: str, number: int, **kw: Any) -> None:
         self.calls.append(f"label {number}")
@@ -4128,3 +4131,16 @@ def test_a_driver_update_is_recorded_and_keeps_the_approval(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert world.merged == [(101, "sha-updated", "squash")], out
     assert "voided" not in out
+
+
+def test_each_drive_pass_checks_the_label_once_per_repo_and_creates_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path, labels=[])
+    world.labels_defined.clear()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert f"created label approved-fr on {REPO}" in out
+    assert world.calls.count("label_exists approved-fr") == 1
+    _drive(tmp_path, "--once", "--yes")
+    assert world.calls.count("label_exists approved-fr") == 2  # one per pass
+    assert out.count("created label") == 1

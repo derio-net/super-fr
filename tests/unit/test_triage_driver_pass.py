@@ -252,7 +252,7 @@ def test_nothing_left_but_waiting_exits_3(
     state = tmp_path / "state"
     world.config = CONFIG
     world.issues[1] = "open"
-    world.pr(101, "feat/batch-b1", [1], draft=True)
+    world.pr(101, "feat/batch-b1", [1], draft=True, labels=[])  # an unapproved draft waits
     dispatched = ("      - {kind: dispatch, at: 2026-10-01T10:00:00Z, runner: claude-cloud, "
                   "handle: h, branch: feat/batch-b1}\n")  # fmt: skip
     state.mkdir()

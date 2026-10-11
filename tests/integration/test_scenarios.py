@@ -192,6 +192,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "cloud-triage-version-drift",
         "cloud-triage-repo-agents",
         "cloud-triage-cloud-remedy",
+        "merge-train-label-gate",
     }
     assert on_disk == here
 
@@ -270,3 +271,7 @@ def test_cloud_triage_repo_agents(installed: Path, tmp_path: Path) -> None:
 
 def test_cloud_triage_cloud_remedy(installed: Path, tmp_path: Path) -> None:
     _scenario("cloud-triage-cloud-remedy", installed, tmp_path)
+
+
+def test_merge_train_label_gate(installed: Path, tmp_path: Path) -> None:
+    _scenario("merge-train-label-gate", installed, tmp_path)

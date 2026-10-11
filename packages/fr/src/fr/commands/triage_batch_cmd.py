@@ -90,6 +90,7 @@ from fr.triage.approval import (
     ApprovalVerdict,
     EventWriter,
     approval_verdict,
+    ensure_approval_label,
     is_approved,
     settle_approvals,
 )
@@ -124,6 +125,7 @@ from fr.triage.batch_dispatch import (
     CLOUD_PREFLIGHT_RUNNERS,
     DISPATCHABLE,
     LIVE_STAGES,
+    NO_APPROVAL_LINE,
     TRIAGE_CONFIG_PATH,
     check_config_fresh,
     conflict_brief,
@@ -1748,6 +1750,8 @@ def dispatch_batch(
     if item.id in runner.existing_dispatches([item]):
         _fail(f"runner `{runner_name}` already holds {item.id} live; nothing written")
     _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
+    # The label the operator approves the batch's PR with (merge-train-safety R4).
+    ensure_approval_label(client, owner_repo, _say, seen=set())
     # R3: the claims, R4's re-read included, before the launch, which cannot be undone,
     # and before any other forge write. A member another scope holds refuses the batch.
     posted = _claim_for_dispatch(env, batch)
@@ -1817,6 +1821,7 @@ def adopt_message(
         lines.append(f"The PR is now {pr}; the earlier one was closed as superseded.")
     if reserved:
         lines.append(f"Reserved version for this batch: {reserved}.")
+    lines.append(NO_APPROVAL_LINE)
     return "\n".join(lines)
 
 
@@ -2304,6 +2309,8 @@ def batch_merge_command(
     by_pr = {e.pr.number: e.batch.id for e in queue}
     ctx.on_update = update_recorder(writer, by_pr.get)
     try:
+        if yes:  # the label the operator approves with (merge-train-safety R4)
+            ensure_approval_label(client, owner_repo, ctx.say, seen=set())
         # The approval gate (merge-train-safety §A, R1-R2): settle under --yes, say what
         # would be settled otherwise, then hold every batch without a valid approval.
         verdicts = settle_approvals(
@@ -3560,9 +3567,12 @@ class _Driver:
             writer(batch_id, event)
             wrote = True
 
+        seen: set[str] = set()  # one label check per repo per pass (R4)
         try:
             for repo, open_prs in sorted(by_repo.items()):
-                settle_approvals(self.client(facts, repo), record, repo, open_prs, _say, now=_now())
+                client = self.client(facts, repo)
+                ensure_approval_label(client, repo, _say, seen=seen)
+                settle_approvals(client, record, repo, open_prs, _say, now=_now())
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:

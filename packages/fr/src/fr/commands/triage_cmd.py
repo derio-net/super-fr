@@ -36,6 +36,7 @@ from rich.markup import escape
 from fr.artifacts.trigger import is_interactive
 from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
+from fr.triage.approval import ensure_approval_label
 from fr.triage.batch import last_dispatch, lifecycle_events
 from fr.triage.check import ClaimSets, classify
 from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
@@ -375,6 +376,10 @@ def _scope(repo: str | None, org: str | None) -> Scope:
     return Scope(kind="org", target=org)
 
 
+def _say_err(line: str) -> None:
+    err_console.print(line, markup=False, soft_wrap=True)
+
+
 def _report(facts: Facts) -> None:
     """Print what the forge could not give; every forge-sourced string escaped (r7)."""
     for s in facts.skipped:
@@ -415,6 +420,11 @@ def collect_command(
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
     _report(facts)
+    forge = make_forge()
+    if isinstance(forge, ClientForge):  # the label the operator approves with (R4)
+        seen: set[str] = set()
+        for name in facts.collected:
+            ensure_approval_label(forge.client, name, _say_err, seen=seen)
     n_open = sum(1 for i in facts.issues if i.state == "open")
     console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
 

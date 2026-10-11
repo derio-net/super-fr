@@ -6,6 +6,7 @@ Built on the fakes of `test_triage_batch_merge` (an in-memory forge and clone).
 from __future__ import annotations
 
 import dataclasses
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -21,9 +22,11 @@ from fr.triage.batch_merge import (
     routine_commit,
 )
 from fr.triage.batch_version import only_versions_bumped
-from fr.triage.model import load_facts, load_judgements
+from fr.triage.model import ApprovalEvent, UpdateEvent, load_facts, load_judgements
 
 from tests.unit.test_triage_batch_merge import REPO, FakeCheckout, MergeForge, _setup
+
+_AT = datetime(2026, 9, 26, tzinfo=UTC)
 
 
 def _never(seconds: float) -> None:
@@ -45,7 +48,20 @@ def _ctx(tmp_path: Path, forge: MergeForge, checkout: FakeCheckout) -> tuple[Mer
     )
     queue = pr_open_queue(judgements.batches, facts, judgements.issues)
     slots, _ = plan_queue(ctx, queue)
+    for slot in slots:  # approved at the planned head, as the driver's settle records it
+        ctx.recorded[slot.step.batch.id] = [_approval(slot.step.pr.number, slot.head)]
     return ctx, slots
+
+
+def _approval(pr: int, head: str) -> ApprovalEvent:
+    return ApprovalEvent(kind="approval", at=_AT, pr=pr, head=head)
+
+
+def _fr_update(ctx: MergeContext, bid: str, pr: int, before: str, after: str) -> None:
+    """A head fr itself moved (another pass's update): the approval still holds."""
+    ctx.recorded[bid].append(
+        UpdateEvent(kind="update", at=_AT, pr=pr, head_before=before, head_after=after, base="m")
+    )
 
 
 def _solo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[MergeForge, FakeCheckout]:
@@ -59,14 +75,25 @@ def test_a_ready_pr_merges_without_waiting(tmp_path: Path, monkeypatch: pytest.M
     assert forge.merged == [(1001, "head-solo", "squash")]
 
 
-def test_a_draft_is_reported_and_never_merged(
+def test_an_approved_draft_is_readied_and_merged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """merge-train-safety R3 (a draft used to be reported and never merged)."""
     forge, checkout = _solo(tmp_path, monkeypatch)
     forge.prs[1001]["draft"] = True
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
-    assert merge_ready(ctx, slot, None).outcome == "draft"
-    assert forge.merged == []
+    assert merge_ready(ctx, slot, None).outcome == "merged"
+    assert forge.readied == [1001]
+
+
+def test_an_unapproved_draft_is_reported_and_never_merged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _solo(tmp_path, monkeypatch)
+    forge.prs[1001].update(draft=True, labels=[])
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    assert merge_ready(ctx, slot, None).outcome == "unapproved"
+    assert forge.merged == [] and forge.readied == []
 
 
 def test_pending_checks_are_reported_without_waiting(
@@ -100,6 +127,7 @@ def test_a_moved_head_stops(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     forge, checkout = _solo(tmp_path, monkeypatch)
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
     forge.prs[1001]["head_oid"] = "elsewhere"
+    _fr_update(ctx, "solo", 1001, "head-solo", "elsewhere")
     with pytest.raises(MergeStopError, match="head moved"):
         merge_ready(ctx, slot, None)
 
@@ -111,6 +139,7 @@ def test_a_moved_head_is_told_from_a_refusal(
     forge, checkout = _solo(tmp_path, monkeypatch)
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
     forge.prs[1001]["head_oid"] = "elsewhere"
+    _fr_update(ctx, "solo", 1001, "head-solo", "elsewhere")
     with pytest.raises(HeadMovedError):
         merge_ready(ctx, slot, None)
     assert issubclass(HeadMovedError, MergeStopError)

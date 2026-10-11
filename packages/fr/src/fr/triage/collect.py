@@ -119,6 +119,12 @@ class ClientForge:
     def __init__(self, client: GhClient) -> None:
         self._client = client
 
+    @property
+    def client(self) -> GhClient:
+        """The adapter itself: `fr triage collect` checks the approval label through it
+        (merge-train-safety R4); collect's own reads stay behind `Forge`."""
+        return self._client
+
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         # Archived repos included: the caller counts the raw list against its limit
         # before dropping them, or a full list with archived repos would not warn.

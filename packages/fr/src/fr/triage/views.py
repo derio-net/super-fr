@@ -22,7 +22,8 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from fr.triage.approval import ApprovalVerdict, approval_verdict
+from fr.labels import APPROVED_FR
+from fr.triage.approval import ApprovalVerdict, Void, approval_verdict, is_approved, voided_at
 from fr.triage.batch import (
     QueueEntry,
     batch_item_id,
@@ -52,7 +53,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_awaiting_live, stale_dispatches
-from fr.triage.model import Batch, Facts, Judgement, Judgements, PullRequest, Severity
+from fr.triage.model import Batch, Facts, Judgement, Judgements, Severity
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -141,8 +142,8 @@ def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
 
 @dataclass(frozen=True)
 class Need:
-    # ready-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch | unplaced
-    # | merge-conflict | session-blocked
+    # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
+    # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
     text: str
@@ -150,7 +151,9 @@ class Need:
 
 
 NEED_LABELS = {
-    "ready-pr": "Ready a green draft",
+    "approve-pr": "Label a green PR approved-fr",
+    "red-pr": "Red PR its session cannot fix",
+    "queue-ejected": "PR ejected from the merge queue",
     "failing-ci": "Failing CI",
     "foreign-pr": "Foreign PR on a batch branch",
     "blocked-batch": "Blocked batch",
@@ -162,16 +165,6 @@ NEED_LABELS = {
 }
 
 
-def _all_prs(facts: Facts) -> list[PullRequest]:
-    seen: set[tuple[str, int]] = set()
-    out: list[PullRequest] = []
-    for pr in [*facts.prs, *facts.batch_prs, *(p for i in facts.issues for p in i.prs)]:
-        if (pr.repo, pr.number) not in seen:
-            seen.add((pr.repo, pr.number))
-            out.append(pr)
-    return out
-
-
 def needs_you(
     facts: Facts, judgements: Judgements, session_notes: Mapping[str, str] | None = None
 ) -> list[Need]:
@@ -181,29 +174,33 @@ def needs_you(
     snap = drive_snapshot(facts, judgements)
     plan = drive_pass(snap)
     by_id = {b.id: b for b in judgements.batches}
-    batch_of_pr = {
-        (pr.repo, pr.number): b.id
-        for b in judgements.batches
-        if (pr := batch_pr(b, facts)) is not None
-    }
     foreign = {
         (found.pr.repo, found.pr.number): found for found_all in snap.foreign.values()
         for found in found_all
     }  # fmt: skip
     out: list[Need] = []
 
-    for pr in _all_prs(facts):
-        if pr.state != "OPEN" or not pr.is_draft or (pr.repo, pr.number) in foreign:
-            continue  # a foreign PR is never one to ready (gh#936)
+    # The approval gate (merge-train-safety §A, R5): a green batch PR, draft or not,
+    # merges only once the operator labels it; a voided label is asked for again.
+    for entry in snap.queue:
+        pr = entry.pr
+        if pr.state != "OPEN" or (pr.repo, pr.number) in foreign:
+            continue  # a foreign PR is never one to approve (gh#936)
         verdict, _ = checks_verdict([], pr.checks or {}, ci_none=False)
-        if verdict != "green":
+        approval = snap.approvals.get(entry.batch.id)
+        if verdict != "green" or (approval is not None and is_approved(approval)):
             continue
-        bid = batch_of_pr.get((pr.repo, pr.number))
-        ref = bid or f"PR #{pr.number}"
-        out.append(
-            Need("ready-pr", ref, f"PR #{pr.number} is a draft and its checks are green: ready it",
-                 pr.url)
-        )  # fmt: skip
+        was = (
+            approval.approved_head
+            if isinstance(approval, Void)
+            else voided_at(entry.batch.events, pr.number)
+        )
+        text = (
+            f"PR #{pr.number} changed since you approved it at {was[:12]}: re-label to merge"
+            if was is not None
+            else f"PR #{pr.number} is green: label it {APPROVED_FR.name} to merge"
+        )
+        out.append(Need("approve-pr", entry.batch.id, text, pr.url))
 
     for action in plan.actions:
         if action.kind == "warn":

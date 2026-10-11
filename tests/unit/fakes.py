@@ -43,6 +43,8 @@ class FakeGhClient:
         self.issues: dict[tuple[str, int], FakeIssue] = {}
         self.repo_labels: dict[str, set[str]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.label_checks: list[tuple[str, str]] = []
+        self.labels_missing: set[str] = set()
         self.attempted_mutations: int = 0
         self._next_issue_number: dict[str, int] = {}
         # Fail on Nth attempted mutation (0-indexed). The mutation is NOT
@@ -282,7 +284,19 @@ class FakeGhClient:
             "mergeable": p["mergeable"],
             "title": p["title"],
             "body": p["body"],
+            "labels": list(p.get("labels", [])),
         }
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        self.calls.append(("pr_ready", {"repo": repo, "number": number}))
+        self.prs[(repo, number)]["draft"] = False
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        """The approval label is defined unless a test lists *repo* in
+        `labels_missing` (merge-train-safety R4); kept out of `calls`, which
+        the call-sequence assertions predate."""
+        self.label_checks.append((repo, name))
+        return repo not in self.labels_missing
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         """`{name, bucket, state}` rows a test preloads in `required_checks`."""

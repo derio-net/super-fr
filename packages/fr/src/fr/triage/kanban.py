@@ -33,6 +33,7 @@ from fr.triage.batch_drive import (
     Action,
     IdleSession,
     LivePr,
+    Pass,
     closeout_event,
     closeout_item_id,
     default_selection,
@@ -118,6 +119,8 @@ HINT_REVIEW = "awaiting review"
 HINT_ARCHIVE_PENDING = "archive PR pending"
 HINT_CLOSEOUT_NOT_RECORDED = "close-out not recorded"
 HINT_FINISHED = "finished"
+# A green train member without a valid `approved-fr` label (merge-train-safety R5).
+HINT_AWAITING_APPROVAL = "awaiting approval"
 
 
 def _idle_hint(idle: IdleSession, collected_at: str) -> str:
@@ -292,15 +295,27 @@ def pill_of(batch: Batch, facts: Facts) -> str | None:
 # -------------------------------------------------------------------- hints
 
 
-def first_actions(facts: Facts, judgements: Judgements) -> dict[str, Action]:
-    """The first action the driver would take per batch on these facts, selecting what
-    the drive selects by default, at its default in-flight cap (R6)."""
+def _default_plan(facts: Facts, judgements: Judgements) -> Pass:
+    """The pass the drive would make on these facts, selecting what it selects by
+    default, at its default in-flight cap (R6)."""
     snapshot = drive_snapshot(facts, judgements)
-    chosen = replace(snapshot, selected=default_selection(judgements.batches))
+    return drive_pass(replace(snapshot, selected=default_selection(judgements.batches)))
+
+
+def first_actions(facts: Facts, judgements: Judgements) -> dict[str, Action]:
+    """The first action the driver would take per batch on these facts (R6)."""
     first: dict[str, Action] = {}
-    for action in drive_pass(chosen).actions:
+    for action in _default_plan(facts, judgements).actions:
         first.setdefault(action.batch, action)
     return first
+
+
+def awaiting_approval(facts: Facts, judgements: Judgements) -> frozenset[str]:
+    """The green train members the driver holds for the operator's `approved-fr` label
+    (`Train.awaiting`, merge-train-safety R5); a pending one still reads `CI pending`."""
+    snapshot = drive_snapshot(facts, judgements)
+    held = (b for t in _default_plan(facts, judgements).trains for b in t.awaiting)
+    return frozenset(b for b in held if (pr := snapshot.live.get(b)) and pr.checks == "green")
 
 
 def action_phrase(action: Action) -> str:
@@ -407,6 +422,7 @@ def _card(
     claim_expiry: ClaimExpiry | None = None,
     now: datetime | None = None,
     notes: Mapping[str, str] | None = None,
+    awaiting: frozenset[str] = frozenset(),
 ) -> Card:
     column = column_of(batch, facts, batches)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
@@ -437,6 +453,8 @@ def _card(
         hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
     elif batch.id in actions:
         hint = action_phrase(actions[batch.id])
+    elif batch.id in awaiting:
+        hint = HINT_AWAITING_APPROVAL
     else:
         hint = fallback_hint(batch, column, facts, batches, selected=batch.id in selected)
     pr = batch_pr(batch, facts)
@@ -538,6 +556,7 @@ def build_board(
     expiries = _own_expiries(facts, me, now) if me and now else {}
     batches = judgements.batches
     actions = first_actions(facts, judgements)
+    awaiting = awaiting_approval(facts, judgements)
     selected = default_selection(batches)
     live = live_stops(batches, facts, stops or {})
     cards = [
@@ -552,6 +571,7 @@ def build_board(
             claim_expiry=expiries.get(b.id),
             now=now,
             notes=notes,
+            awaiting=awaiting,
         )
         for b in batches
     ]

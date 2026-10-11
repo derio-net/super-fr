@@ -110,3 +110,15 @@ def test_an_update_merge_pushes_is_recorded_and_keeps_the_approval(
     assert kinds[0] == ("approval", None, None)
     assert kinds[1][0] == "update" and kinds[1][1] == "head-one"
     assert kinds[1][2] == "origin/main@fetched"
+
+
+def test_merge_creates_the_missing_label_under_yes_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, _ = _setup(tmp_path, monkeypatch, TWO[:1])
+    forge.labels_defined.clear()
+    code, out = _merge(tmp_path)
+    assert "created label" not in out and forge.created_labels == []
+    code, out = _merge(tmp_path, "--yes")
+    assert "created label approved-fr on derio-net/super-fr" in out
+    assert forge.created_labels == ["approved-fr"]

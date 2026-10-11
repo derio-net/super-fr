@@ -95,6 +95,13 @@ def _cloud_preflight(branch: str, remedy: str | None, *, repo: str) -> list[str]
     return lines
 
 
+NO_APPROVAL_LINE = (
+    "Never add the `approved-fr` label: it is the operator's approval to merge, and fr "
+    "voids it on your next push."
+)
+"""Every brief fr sends a batch session carries it (merge-train-safety §A, R6)."""
+
+
 def render_brief(
     batch: Batch,
     judgements: Judgements,
@@ -167,6 +174,7 @@ def render_brief(
             "- These members were batched as ONE root cause; if investigation finds more "
             "than one, stop and ask before fixing any.",
         ]
+    lines += ["", NO_APPROVAL_LINE]
     return "\n".join(lines) + "\n"
 
 
@@ -207,6 +215,7 @@ def conflict_brief(
             "5. Run the test suite, and fix what the merge broke.",
             f"6. Commit the merge and `git push origin {branch}`. The driver merges the PR "
             "once its checks are green.",
+            NO_APPROVAL_LINE,
         ]
     )
 

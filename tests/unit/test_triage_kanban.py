@@ -240,7 +240,8 @@ def test_the_driver_would_dispatch_a_proposed_batch() -> None:
 
 def test_the_driver_would_merge_a_green_open_pr() -> None:
     f, jd = _world(
-        [batch("a", [1], events=[dispatch("a")])], [issue(1, prs=[pr(11, "feat/batch-a")])]
+        [batch("a", [1], events=[dispatch("a")])],
+        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"])])],
     )
     assert _hint("a", f, jd) == "merge ready"
 
@@ -369,7 +370,8 @@ def test_a_merge_the_driver_stopped_on_needs_you_not_merge_ready() -> None:
 
 def test_a_merge_stop_at_a_head_since_moved_no_longer_counts() -> None:
     f, jd = _world(
-        [batch("a", [1], events=[dispatch("a")])], [issue(1, prs=[pr(11, "feat/batch-a")])]
+        [batch("a", [1], events=[dispatch("a")])],
+        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"])])],
     )
     card = build_board(f, jd, {}, stops=_stopped("sha-older")).card("a")
     assert (card.hint, card.needs_you) == ("merge ready", False)

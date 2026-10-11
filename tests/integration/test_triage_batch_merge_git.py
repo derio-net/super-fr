@@ -119,6 +119,9 @@ class GitForge:
     def edit_issue_labels(self, repo: str, number: int, **kw: Any) -> None:
         raise AssertionError("no approval is voided here")
 
+    def label_exists(self, repo: str, name: str) -> bool:
+        return True  # the approval label exists already (merge-train-safety R4)
+
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return [{"name": "test", "bucket": "pass", "state": "SUCCESS"}]
 
