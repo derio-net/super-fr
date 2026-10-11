@@ -1,0 +1,90 @@
+schema_version: 2
+phase:
+  number: 2
+  title: the fr debt engine and read-only report (R1–R4, R25)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - debt-report
+  tier: standard
+  files:
+  - packages/fr/src/fr/debt/*
+  - packages/fr/src/fr/commands/debt_cmd.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_*.py
+  - tests/unit/*
+  - tests/scenarios/debt-report.sh
+  - docs/acceptance/*
+  - AGENTS.md
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: DebtReport model and figures encoding (spec §A model/render)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED in tests/unit/test_debt_model.py: DebtReport round-trips through JSON; `debt_total()` counts acceptance debt rows + archivable + stale + owed items whose key is not `row:`; `render.markdown` carries `<!-- fr-technical-debt -->` and a base64 figures marker that survives `-->` in row notes; tables truncate at 50 rows with "… N more"; body stays < 60000 chars for a 2000-row matrix; `parse_figures` recovers counts.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: packages/fr/src/fr/debt/{__init__,model,render}.py.
+- number: 2
+  title: Engine — acceptance, plans (archivable / stale / manual-open), merge age
+    (spec §A engine, R3, R4)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED in tests/unit/test_debt_engine.py with git fixture repos, a fake forge and a fixed clock: archivable plan listed with its `fr archive` command and merge age (last default-ref commit touching the plan dir); in-progress plan stale after 14 days of no commits on plan dir/run branch and no PR updatedAt activity, not listed when active; `stale_days` from `.fr/debt.yaml` and `--stale-days`, unknown key refused; offline fallback says so in `sources`; an unmigrated/unreadable matrix reports acceptance unavailable, never zero.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/debt/engine.py reusing `fr.closeout.plan_sweep` and `fr.archive.merge_evidence`; add `updatedAt` to `pr_for_branch` across clients (ghclient.py protocol + real clients).
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: owed folding stub `fold_owed(sources)` keyed by owed key with dedup (walk-owed rows as `row:<id>`, held manual phases `plan:<name>#p<n>`, fr:owed/awaiting-live issues by marker or `issue:<ref>`), tested for dedup; journal-entry source left to phase 3.
+- number: 3
+  title: fr debt CLI, exemption, shared status set (R1, R25)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED in tests/unit/test_debt_cmd.py: `fr debt` prints text, `--json` validates as DebtReport, `--offline` skips the forge; `debt` is in READ_ONLY_COMMANDS (update the pinned line in tests/unit/test_migration_trigger.py::test_the_exemption_list_is_exactly_these_things); `fr acceptance digest` renders the report's Acceptance section with the legacy marker.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: commands/debt_cmd.py registered in cli.py; digest/status use DEBT_STATUSES; add `debt` to `fr.artifacts.trigger.READ_ONLY_COMMANDS`; AGENTS.md gains an `fr/debt` paragraph and the triage facts schema "3" corrected to 8; candidate scenario tests/scenarios/debt-report.sh runs `fr debt` and `fr debt --json` on a fixture repo (set it on debt-report).
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

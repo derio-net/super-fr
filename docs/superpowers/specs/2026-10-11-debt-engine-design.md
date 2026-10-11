@@ -327,3 +327,9 @@ Post-merge rows only. The pre-merge walk is set out in `## Verification`.
 
 1. `debt-weekly-issue-rename` (`live`). After `fr migrate artifacts --yes` has landed on `main`, dispatch `acceptance-report.yml` with `debt: true`. The open "Acceptance debt" issue (#363) is renamed `super-fr: Technical debt` in place, and its body carries Acceptance, Plans and Owed sections plus the encoded figures. No second issue is opened.
 2. `debt-archive-pr-weekly` (`live`). In the same run, with at least one plan merged complete and unarchived for more than 14 days, one draft PR from `chore/debt-archive-sweep` is opened (or refreshed), or the permission refusal is reported by name. A second dispatch refreshes the PR rather than opening another.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-11-debt-engine | `derio-net/super-fr` | `2026-10-11-debt-engine` | — |
