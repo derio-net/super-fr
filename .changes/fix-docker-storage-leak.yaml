@@ -1,2 +1,0 @@
-bump: patch
-summary: "`fr isolation down` and gc now remove the workspace's own docker-in-docker volume, which used to leak the whole inner Docker store (many GB) per workspace"
