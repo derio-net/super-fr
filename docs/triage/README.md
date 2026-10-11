@@ -30,11 +30,13 @@ the batch Kanban `board.html`). `fr triage state export|import` copies exactly t
 ### authored-src/
 
 - `pipeline.py` draws the pipeline-and-driver diagram with open issues pinned on steps, into
-  `architecture/pipeline.html`. The pins are a table in the script; the build stops if a
-  pinned issue has closed, so refresh the table first.
+  `architecture/pipeline.html`. The pins are a table in the script, judged by hand; a pin whose
+  issue has closed drops off the diagram and is named under it (and on stderr), so refresh the
+  table when that list grows, but a stale table never stops the build.
 - `build.py` runs `pipeline.py` and writes the three dated fragments into `history/`: the
   2026-10-02 closing order with its outcome (looked up with `gh`), the 2026-10-02 origins
-  analysis, and the history to 2026-10-02.
+  analysis, and the history to 2026-10-02. If `pipeline.py` fails, the history fragments are
+  still written and `build.py` exits non-zero naming the failure.
 - `old/` are the three hand-built pages published on 2026-10-02, the only source of their
   diagrams and analysis. `extracted/` holds their sections with styles inlined, made by
   running `extract.js` in a browser on those pages; `build.py` reads these, not `old/`.

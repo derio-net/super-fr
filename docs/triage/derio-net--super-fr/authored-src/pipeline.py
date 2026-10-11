@@ -1,6 +1,6 @@
 """Build architecture/pipeline.html: the 5.5.0 diagram with open issues pinned on the
 steps they break, plus the old page's nine diagram snapshots as an evolution tab set."""
-import html, json, os, re
+import html, json, os, re, sys
 
 SP = os.path.dirname(os.path.abspath(__file__))
 D = os.path.dirname(SP)  # the triage state directory this folder sits in
@@ -57,10 +57,18 @@ STRIPS = [
         (1003, "d", "sync symlink race")]),
 ]
 
-placed = {n for _, _, ps in DRIVER for n, _, _ in ps} | {n for _, ps in PIPE for n, _, _ in ps} \
+# Issues close, so the table goes stale by design. A pin whose issue is no longer open drops
+# off the diagram and is named under it and on stderr, rather than failing the build (gh#1005).
+pinned = {n for _, _, ps in DRIVER for n, _, _ in ps} | {n for _, ps in PIPE for n, _, _ in ps} \
     | {n for _, ps in STRIPS for n, _, _ in ps}
-missing_closed = sorted(placed - set(open_issues))
-assert not missing_closed, f"pinned issues no longer open: {missing_closed}"
+dropped = sorted(pinned - set(open_issues))
+if dropped:
+    print(f"pipeline.py: dropped {len(dropped)} pins whose issue is no longer open: {dropped}", file=sys.stderr)
+keep = lambda ps: [p for p in ps if p[0] in open_issues]
+DRIVER = [(name, sub, keep(ps)) for name, sub, ps in DRIVER]
+PIPE = [(name, keep(ps)) for name, ps in PIPE]
+STRIPS = [(title, keep(ps)) for title, ps in STRIPS]
+placed = pinned - set(dropped)
 other = sorted(set(open_issues) - placed)
 
 COL = {"d": "var(--warn)", "g": "var(--gap)"}
@@ -173,6 +181,9 @@ TOK = ("--new:var(--accent);--new-soft:color-mix(in srgb,var(--accent) 14%,trans
        "--bg:var(--ground);--faint:var(--sev-4);--accent-soft:color-mix(in srgb,var(--accent) 12%,transparent);"
        "--c-open:var(--sev-1);--c-closed:var(--sev-3)")
 other_html = ", ".join(f'<a class="gh" href="{GH}{n}" title="{esc(open_issues[n])}">#{n}</a>' for n in other)
+dropped_html = (f'<p style="font-size:13px;color:var(--muted)">{len(dropped)} pins were dropped because their issue '
+                f'is no longer open: {", ".join(f"<a class=\"gh\" href=\"{GH}{n}\">#{n}</a>" for n in dropped)}.</p>\n'
+                if dropped else "")
 frag = f'''<div style="{TOK}">
 <h2>The pipeline and its driver, with open issues on the steps they break</h2>
 <p style="color:var(--muted);max-width:75ch">Authored, not measured: each pin is a judgement of where an open issue acts,
@@ -182,9 +193,9 @@ title; click it to open the issue. The tabs step through every version of this d
 page on 2026-09-25 to now; the older ones show issues as they stood that day.</p>
 {tabs("pipeline", "Diagram versions", panels, len(panels) - 1)}
 <p style="font-size:13px;color:var(--muted)">{len(placed)} of {len(open_issues)} open issues are pinned above
-({ndef} defects). The other {len(other)} act on no pipeline or driver step (docs, harness parity, forges, other
-runners, live-evidence owed): {other_html}.</p>
-</div>
+({ndef} defects). The other {len(other)} are not pinned: they act on no pipeline or driver step (docs, harness
+parity, forges, other runners, live-evidence owed), or opened after the pins were judged: {other_html}.</p>
+{dropped_html}</div>
 '''
 open(f"{D}/architecture/pipeline.html", "w").write(frag)
 print("placed", len(placed), "other", len(other), "defects", ndef, "H", H)

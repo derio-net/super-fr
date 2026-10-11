@@ -39,7 +39,9 @@ def _facts(state: Path) -> None:
     (state / "facts.json").write_text(json.dumps({"issues": issues}))
 
 
-def _run(state: Path, script: str, env: dict[str, str] | None = None):
+def _run(
+    state: Path, script: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(state / "authored-src" / script)],
         cwd="/",
