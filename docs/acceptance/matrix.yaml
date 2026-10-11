@@ -8096,9 +8096,21 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R20
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R21
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R22
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at planning; phase 3 writes it.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_owed.py#test_open_finding_ids_ignores_records_naming_an_owed_entry
+      - super-fr:tests/unit/test_journal_owed.py#test_the_journal_kind_is_reachable_from_version_one
+      - super-fr:tests/unit/test_archive_owed.py#test_open_owed_entries_are_filed_even_under_no_issues
+      - super-fr:tests/unit/test_archive_owed.py#test_an_open_issue_with_the_owed_marker_is_reused
+      - super-fr:tests/unit/test_archive_owed.py#test_nothing_is_filed_under_tracking_none
+      - super-fr:tests/unit/test_archive_owed.py#test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: the owed journal kind (journal 1->2), owed filing outside --issues/--no-issues,
+      reuse by marker, nothing filed under tracking none, and the manual-phase owed
+      entry are unit-tested in CI; the candidate scenario closeout-owed runs in CI via
+      test_scenarios'
     scenario: tests/scenarios/closeout-owed.sh
   - id: herdr-opencode-launch
     capability: herdr OpenCode batch lifecycle
