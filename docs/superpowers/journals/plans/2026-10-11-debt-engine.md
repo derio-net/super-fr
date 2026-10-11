@@ -432,3 +432,118 @@ owed filing sits beside the open-ends filer on purpose (its own marker grammar, 
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 one close helper and one engine source; the security follow-up tightened it in place
+
+<!-- fr:journal kind=review scope=plan id=p3-review-r1 created=2026-10-11T23:36:23+00:00 phase=3 -->
+### p3-review-r1 · review · phase 3 code review (owed actions, journal 1→2): 11 findings (phase 3)
+
+Independent reviewer (separate context, read-only) over the phase-3 commits: journal 1→2, the owed fold and every other finding-folding caller, closeout outcome, the archive hold in every mode, owed filing, the two automated security notices on journal_cmd.py, the executor-reported ArchiveError, tests and the scenario. 77 targeted tests passed. Receiving: p3-r1 confirmed by reading archive_cmd._repo_slug/resolve_identity (matrix keys win over the remote); p3-r3 was the executor-reported crash. p3-r8 decided (exit-0 --branch convention kept). Fixes in c080d4e8 (395 targeted tests + 2 scenarios passed; CI is the full-suite evidence).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · owed close/file 'own repo' identity came from committed matrix.yaml org/repo, not the origin remote — a commit could redirect forge writes (phase 3)
+
+owed close/file 'own repo' identity came from committed matrix.yaml org/repo, not the origin remote — a commit could redirect forge writes
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Test Plan section ended at a '# ' line inside a code fence (and could start at a fenced heading), silently dropping steps (phase 3)
+
+Test Plan section ended at a '# ' line inside a code fence (and could start at a fenced heading), silently dropping steps
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · an outcome recorded on the default branch stayed uncommitted; the spec sweep's unguarded _archive_journal raised an unhandled ArchiveError mid-move (phase 3)
+
+an outcome recorded on the default branch stayed uncommitted; the spec sweep's unguarded _archive_journal raised an unhandled ArchiveError mid-move
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · resolve's close check accepted the marker on any line and skipped the author check (phase 3)
+
+resolve's close check accepted the marker on any line and skipped the author check
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · untrusted filed_as ref echoed raw (control characters) (phase 3)
+
+untrusted filed_as ref echoed raw (control characters)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · owed discharge through a step record never closed the issue (phase 3)
+
+owed discharge through a step record never closed the issue
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · closeout outcome could append an owed entry to an unstamped (v1) archived journal (phase 3)
+
+closeout outcome could append an owed entry to an unstamped (v1) archived journal
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · --branch hold exits 0 though the plan step said exit 2 (phase 3)
+
+--branch hold exits 0 though the plan step said exit 2
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · empty Test Plan gave a step with empty text; outcome_command printed a non-pasteable 'a | b | c' line (phase 3)
+
+empty Test Plan gave a step with empty text; outcome_command printed a non-pasteable 'a | b | c' line
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=out -->
+### p3-r10 · finding [open] (reviewer: out of scope) · a refused archive still writes/stages manual-phase owed entries and files issues, even on the default branch (phase 3)
+
+a refused archive still writes/stages manual-phase owed entries and files issues, even on the default branch
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11 created=2026-10-11T23:36:23+00:00 phase=3 state=open review_scope=out -->
+### p3-r11 · finding [open] (reviewer: out of scope) · _existing_owed's 200-issue listing cap can miss an existing marker and file a duplicate (phase 3)
+
+_existing_owed's 200-issue listing cap can miss an existing marker and file a duplicate
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: owed close/file 'own repo' identity came from committed matrix.yaml org/repo, not the origin remote — a commit could redirect forge writes (phase 3)
+
+c080d4e8: every owed forge write takes the repo from remote.origin.url only; matrix disagreement refuses and prints the command; mallory/x vs acme/widgets tests.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Test Plan section ended at a '# ' line inside a code fence (and could start at a fenced heading), silently dropping steps (phase 3)
+
+c080d4e8: line-by-line scan tracking ``` and ~~~ fences for heading and end; both cases tested.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: an outcome recorded on the default branch stayed uncommitted; the spec sweep's unguarded _archive_journal raised an unhandled ArchiveError mid-move (phase 3)
+
+c080d4e8: archive refuses a dirty/untracked spec journal before any move; closeout outcome warns when uncommitted; the sweep reports an unmovable journal as a note. Tested, no traceback, unchanged tree.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: resolve's close check accepted the marker on any line and skipped the author check (phase 3)
+
+c080d4e8: one shared predicate (viewer-authored, fr:owed, numeric, last line is the marker) for reuse and close.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: untrusted filed_as ref echoed raw (control characters) (phase 3)
+
+c080d4e8: filed_as must be printable ASCII; non-printables echoed via repr.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: owed discharge through a step record never closed the issue (phase 3)
+
+c080d4e8: a step record's fixed resolution of an owed entry is refused, pointing to fr journal resolve.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: closeout outcome could append an owed entry to an unstamped (v1) archived journal (phase 3)
+
+c080d4e8: appending an owed entry restamps a sub-2 journal in the same write; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: --branch hold exits 0 though the plan step said exit 2 (phase 3)
+
+Decision: keep --branch's existing 'held:' exit-0 convention (it reports holds for every plan it touched); the plan step's 'exit 2' applies to plan-dir mode, which does exit 2. Comment added at the test and --force help states it does not lift the Test Plan hold (c080d4e8).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: empty Test Plan gave a step with empty text; outcome_command printed a non-pasteable 'a | b | c' line (phase 3)
+
+c080d4e8: placeholder step text; one pasteable line per alternative.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=open resolves=p3-r10 out_of_scope=true -->
+### p3-r10-resolved · finding [out-of-scope] · resolves p3-r10: a refused archive still writes/stages manual-phase owed entries and files issues, even on the default branch (phase 3)
+
+Out of scope: R22's design (owed entries are written when archive holds a plan); not a defect of this phase's code.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved created=2026-10-11T23:36:23+00:00 phase=3 state=open resolves=p3-r11 out_of_scope=true -->
+### p3-r11-resolved · finding [out-of-scope] · resolves p3-r11: _existing_owed's 200-issue listing cap can miss an existing marker and file a duplicate (phase 3)
+
+Out of scope: the same cap already bounds the existing open-ends dedup (archive_followups); not introduced here.
