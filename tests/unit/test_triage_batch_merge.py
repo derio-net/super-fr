@@ -930,7 +930,7 @@ def test_batch_merge_reads_the_base_rules_once_and_strict_checks_update_a_routin
     checkout.base_commits["head-one"] = (("arc", (("A", "docs/superpowers/implemented/x.md"),)),)
     code, out = _merge(tmp_path, "--yes")
     assert reads == ["main"], out
-    assert forge.merged == [], out
+    assert "pushed new-1" in out, out  # updated first, then merged at the new head
     assert checkout.worktrees, "strict checks must start an update, not merge as it is"
 
 
