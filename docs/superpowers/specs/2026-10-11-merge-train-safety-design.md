@@ -523,8 +523,10 @@ set.
     rather than reading it as having no queue.
   - **Ejected and refused PRs reach the board.** An ejected PR whose base has
     not moved, and an enqueue that is refused again at the same head, are
-    recorded. `needs_you` then raises the `queue-ejected` Need from events
-    alone.
+    recorded. `needs_you` then raises the `queue-ejected` or `enqueue-refused`
+    Need from events alone. A refusal fr cannot tell apart from a conflict
+    becomes the Need, with the forge's words. `EnqueueEvent` carries `outcome`
+    (enqueued | ejected | dequeued | refused) and `detail`.
   - **The kanban reads queue membership from events.** A PR whose last
     `EnqueueEvent` is at its current head shows as "in merge queue".
   - **Red recovery skips rule 2 in a queue repo.** fr never pushes an update

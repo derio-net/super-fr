@@ -1,0 +1,125 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-merge-train-safety
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: finding
+  id: p3-r1
+  phase: 3
+  title: queue-ejected Need unreachable (facts-only needs_you)
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r2
+  phase: 3
+  title: _enqueue skips _approved_and_ready
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r3
+  phase: 3
+  title: a queue hold suppresses red recovery
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r4
+  phase: 3
+  title: kanban in-merge-queue never renders
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r5
+  phase: 3
+  title: an enqueue refusal is a held line said once
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r6
+  phase: 3
+  title: a just-merged PR reads as ejected
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r7
+  phase: 3
+  title: rule 2 applies in queue repos
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r8
+  phase: 3
+  title: _queue_reads swallows errors as no queue
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r9
+  phase: 3
+  title: removing approved-fr after enqueue is not honoured
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r10
+  phase: 3
+  title: weak tests
+  body: Raised by the phase 3 reviewer.
+  review_scope: in
+- kind: finding
+  id: p3-r11
+  phase: 3
+  title: a repo without origin/HEAD and an approved green PR aborts every pass at merge_ctx
+  body: Raised by the phase 3 reviewer.
+  review_scope: out
+- kind: review
+  id: p3-review-1
+  phase: 3
+  title: 'phase 3 review: 11 findings (10 in, 1 out)'
+  body: Independent reviewer raised p3-r1..p3-r11; check 4 confirmed no merge around a queue. All 10 in-scope
+    findings fixed with tests; spec §D updated.
+resolves:
+- id: p3-r1
+  state: fixed
+  body: 'Ejection with an unmoved base is recorded once per (pr, head); queue_needs reads events. Test:
+    test_an_ejected_green_pr_with_the_base_unmoved_needs_you_and_is_not_enqueued_again'
+- id: p3-r2
+  state: fixed
+  body: 'Enqueue goes through the shared gate (label re-read, pr_ready, head re-check); the fake refuses
+    drafts. Test: test_an_approved_draft_is_readied_then_enqueued'
+- id: p3-r3
+  state: fixed
+  body: 'A held queue repo still emits red warns. Test: test_a_held_queue_repo_still_reports_a_red_member_so_recovery_runs'
+- id: p3-r4
+  state: fixed
+  body: 'Facts-only views infer queue membership from the last enqueued event at the current head. Test:
+    test_facts_only_views_show_an_enqueued_pr_in_the_merge_queue_not_merge_ready'
+- id: p3-r5
+  state: fixed
+  body: 'Each refusal is recorded with the forge''s words; a second at the same head stops retries and
+    raises an enqueue-refused Need (a conflict cannot be told apart from the refusal text, so it is the
+    Need, per spec). Test: test_two_refusals_at_one_head_become_a_need_and_stop_the_retries'
+- id: p3-r6
+  state: fixed
+  body: 'State/merged fetched in the queue-state read; a merged/closed PR is never ejected. Test: test_a_merged_pr_read_after_the_view_is_never_taken_for_ejected'
+- id: p3-r7
+  state: fixed
+  body: 'red_decision(queue=True) skips rule 2. Test: test_a_queue_repo_red_pr_is_never_re_updated'
+- id: p3-r8
+  state: fixed
+  body: 'Catch narrowed to the default-branch lookup; such a repo is held with a once-said warning. Test:
+    test_an_unknown_default_branch_holds_the_candidate_repo_and_says_so_once'
+- id: p3-r9
+  state: fixed
+  body: 'pr_dequeue added; settle_approvals dequeues an fr-enqueued PR whose label is gone or voided.
+    Test: test_removing_the_label_after_the_enqueue_dequeues_the_pr_and_a_relabel_enqueues_it'
+- id: p3-r10
+  state: fixed
+  body: 'Specific assertions; the ejected test asserts the Need; the fake refuses drafts. Test: test_a_pr_ejected_with_the_base_moved_is_enqueued_again'
+- id: p3-r11
+  state: out-of-scope
+  body: merge_ctx's _fresh_config default-branch lookup raising ForgeReadError on a clone with no origin/HEAD
+    predates phase 3 (origin/main behaves the same); phase 3 only stopped its own queue read from triggering
+    it earlier.
+evidence:
+  review: p3-review-1
+  reviewer: a1a6fbf9083c2949c
+  model: claude-opus-5-5
