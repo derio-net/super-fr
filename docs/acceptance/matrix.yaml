@@ -361,9 +361,16 @@ rows:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_skills_sync.py
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): Test
-      Plan step 1 walked live post-merge 2026-07-09 (opencode debug skill discovered
-      all fr-* skills from the checkout); mirror drift guarded in CI.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      step 1 walked live post-merge 2026-07-09; mirror drift guarded in CI.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-09T00:00:00Z'
+      evidence: 'Test Plan step 1 post-merge walk: opencode debug skill in a fresh isolation
+        devcontainer on merged main discovered all fr-* skills'
   - id: opencode-skills-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get super-fr's skills available
