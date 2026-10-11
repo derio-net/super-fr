@@ -176,3 +176,8 @@ Phase 2 serves only #1069's requirements and its own acceptance row.
 ### phase-split-2026-10-11-batch-adopt-safety-2-p3 · decision · ask: #1071 the adopt --list columns and ref classification (R11–R18) is its own independently reviewable ask
 
 Phase 3 serves only #1071's requirements and its own acceptance row.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-11-batch-adopt-safety-2-p2 created=2026-10-11T19:05:58+00:00 -->
+### tier-2026-10-11-batch-adopt-safety-2-p2 · decision · hard: phase 2 widens a tripwire allowance (batch modules vs fr.isolation) and adds a path that creates isolation workspaces and must provably leave the base clone untouched
+
+The isolation seam and the R7/R8/R9 refusal and resume semantics are gate-like code every adopt run relies on.
