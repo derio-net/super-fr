@@ -131,11 +131,34 @@ def test_init_scaffold_creates_the_label_on_a_github_origin(
     assert labels.calls[-1] == "create o/r ['approved-fr']"
 
 
-def test_init_scaffold_reads_only_a_github_origin(tmp_path: Path) -> None:
-    from fr.commands.init_cmd import approval_label_target
+@pytest.mark.parametrize(
+    ("origin", "slug"),
+    [
+        (None, None),
+        ("https://github.com/derio-net/widgets.git", "derio-net/widgets"),
+        ("git@github.com:derio-net/widgets.git", "derio-net/widgets"),
+        ("https://gitlab.com/derio-net/widgets.git", None),
+    ],
+    ids=["no-origin", "github-https", "github-ssh", "gitlab"],
+)
+def test_init_scaffold_targets_only_a_github_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, origin: str | None, slug: str | None
+) -> None:
+    """p1-r3: the REAL `approval_label_target` (the autouse conftest stub undone)."""
+    monkeypatch.undo()  # also undoes the suite's sandbox: set back what this reads
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("FR_FORGE_API", "graphql")
+    from fr.commands import init_cmd
+    from fr.real_ghclient import RealGhClient
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    assert approval_label_target(tmp_path) is None  # no origin at all
+    if origin is not None:
+        subprocess.run(["git", "-C", str(tmp_path), "remote", "add", "origin", origin], check=True)
+    got = init_cmd.approval_label_target(tmp_path)
+    if slug is None:
+        assert got is None
+    else:
+        assert got is not None and got[1] == slug and isinstance(got[0], RealGhClient)
 
 
 # ------------------------------------------------------------------ the board (R5)

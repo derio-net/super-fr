@@ -40,10 +40,13 @@ SHIPPED_GLOBS = (
 
 _ASKS = (
     re.compile(r"--add-label[ =]approved-fr"),
-    re.compile(r"\b(add|apply|put|set)\b[^.]{0,40}approved-fr", re.IGNORECASE),
+    re.compile(r"labels\[\]=approved-fr"),  # the REST form
+    re.compile(r"\b(add|apply|put|set|label)\b[^.]{0,40}approved-fr", re.IGNORECASE),
 )
 _EXEMPT = re.compile(r"\bnever\b|\bdo not\b|\bdon't\b|\boperator\b", re.IGNORECASE)
-_SENTENCE = re.compile(r"(?<=[.!?])\s+|\n\s*\n")
+# A sentence ends at . ! ? or at a line end: a period-less Markdown bullet is its own
+# sentence, so one bullet's "never" does not exempt the next (p1-r4).
+_SENTENCE = re.compile(r"(?<=[.!?])\s+|\n")
 
 
 def offending_sentences(text: str) -> list[str]:
@@ -68,6 +71,10 @@ def _shipped() -> list[Path]:
         "When CI is green, add the approved-fr label.",
         "Run `gh pr edit 5 --add-label approved-fr` once green.",
         "Then put approved-fr on the PR.",
+        # p1-r4: the three it used to miss
+        "When it is green, label the PR approved-fr",
+        "Run `gh api repos/o/r/issues/5/labels -f labels[]=approved-fr` once green.",
+        "- Never push to main\n- add the approved-fr label when CI passes",
     ],
 )
 def test_an_instruction_to_add_the_label_is_caught(text: str) -> None:
