@@ -219,3 +219,68 @@ _skip_held is a small helper beside _refuse_held, whose with-ids path is unchang
 ### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
 
 Two scenario scripts, a fake herdr and two keys on the existing fake gh; no production code.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-11T22:39:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · base_rules raises on the free-plan rules 403 and on a protection 403: batch merge exits 1 and the driver skips every pass (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-11T22:39:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · _recover builds merge_ctx and fetches before rule 1 (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-11T22:39:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · a red PR held by another driver's runner is silent (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-11T22:39:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · status-read and hand-back-failure lines print every pass (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-11T22:39:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · untested: batch merge base_rules -> ctx.rules, the forge-error path, _red_phrase, a reupdate keeping the approval (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-11T22:39:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · red-recovery scenario never exercises rule 2's head_before dedup (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-10-11T22:39:53+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 review: 6 findings, all in scope (phase 2)
+
+Independent reviewer raised p2-r1..p2-r6 (p2-r1 Important); all fixed by the implementer with tests.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-11T22:39:53+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: base_rules raises on the free-plan rules 403 and on a protection 403: batch merge exits 1 and the driver skips every pass (phase 2)
+
+Free-plan 403 on rules reads as no rules; protection 403 degrades to not strict with one warning; transient failures still raise; RealGhClient delegates. Test: test_merge_train_base_rules.py#test_a_protection_403_degrades_to_not_strict_and_warns_once
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-11T22:39:53+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: _recover builds merge_ctx and fetches before rule 1 (phase 2)
+
+Rule 1 is checked from persisted events before any context or base read. Test: test_triage_batch_drive_cmd.py#test_an_already_handed_back_red_head_builds_no_context_and_reads_no_base
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-11T22:39:53+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: a red PR held by another driver's runner is silent (phase 2)
+
+Says once: left to that runner's driver. Test: test_triage_batch_drive_cmd.py#test_a_red_pr_whose_runner_this_driver_lacks_says_so_once
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-11T22:39:53+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: status-read and hand-back-failure lines print every pass (phase 2)
+
+All recovery lines go through one _said_once helper. Test: test_triage_batch_drive_cmd.py#test_a_failing_status_read_and_a_failing_send_are_each_said_once
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-11T22:39:53+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: untested: batch merge base_rules -> ctx.rules, the forge-error path, _red_phrase, a reupdate keeping the approval (phase 2)
+
+Four tests added. Test: test_triage_batch_merge.py#test_batch_merge_reads_the_base_rules_once_and_strict_checks_update_a_routinely_behind_pr
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-11T22:39:53+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: red-recovery scenario never exercises rule 2's head_before dedup (phase 2)
+
+Phase A makes h2 red with an unmoved base and asserts a hand-back and exactly two update events. Test: tests/integration/test_scenarios.py#test_merge_train_red_recovery
