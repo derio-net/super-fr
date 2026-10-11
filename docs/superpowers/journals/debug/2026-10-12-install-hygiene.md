@@ -21,3 +21,8 @@ The hook's per-repo+branch mkdir lock wraps only the `fr isolation up` path. `ca
 ### d6fd32c98720 · root-cause · #1105: allowlist script treats the bare name as stale
 
 ensure-phase-executor-allowlist.sh was written when only the plugin-qualified id was ever dispatched; it strips the bare name. Since cloud-triage §H, `fr init agents` renders .claude/agents/fr-{phase-executor,spec-reviewer}.md, which Claude Code dispatches by the BARE name, so both spellings are legitimate.
+
+<!-- fr:journal kind=root-cause scope=debug id=b61fd4ac175a created=2026-10-11T23:07:57+00:00 -->
+### b61fd4ac175a · root-cause · #1087: preflight is first-miss, OS-blind
+
+R19 (cloud-triage) already made a Claude-Code home without installed_plugins.json/settings.json exit non-zero. What remains: install.sh's `for cmd in jq uv rsync git` and bootstrap.sh's `for cmd in git uv jq` (no rsync) exit on the first missing command with no install command. Fix: collect every missing prerequisite and print the install command for the detected OS / package manager.
