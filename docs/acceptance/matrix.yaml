@@ -2172,9 +2172,18 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): LIVE-VERIFIED
-      2026-09-21: a real headless /fr-goal on OpenCode dispatched a phase as a child
-      session on the declared tier.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): LIVE-VERIFIED
+      2026-09-21 (and a discriminating four-model run 2026-09-22): a real headless /fr-goal
+      on OpenCode dispatched each phase to its tier''s child session.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: github-copilot/gpt-5.6-terra
+      outcome: pass
+      at: '2026-09-21T00:00:00Z'
+      evidence: headless /fr-goal on OpenCode dispatched a phase to fr-phase-executor-mechanical
+        as a child session; gh#494 phase-6 and gh#498 phase-4 journals (p6-live-evidence,
+        p4-live-evidence)
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
