@@ -3165,21 +3165,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_skill_tokens.py
-    status: unwired
-    notes: 'Moved not-implemented → skipped, NOT ci, deliberately: verification now
-      exists but it is prose-level only, and calling that ci would be an overclaim.
-      test_skill_tokens.py::test_fr_phase_executor_names_the_dispatch_refusal and ::test_fr_execute_names_the_dispatch_refusal
-      pin that the BLOCKER-not-a-tick contract is PRESENT on both surfaces — the canonical
-      agent file and the fr-execute skill. They cannot show an executor OBEYED it: that
-      behaviour is agent-side and not unit-testable, and the only thing that could demonstrate
-      it is a live run against a plan containing a dispatch step — which #428''s lint
-      now refuses to let anyone author. So the enforcement is a pair: the lint stops
-      the step being written (executably pinned by goal-agentic-dispatch-purity and
-      goal-dispatch-lint-precision) and this prose catches a step that predates the
-      lint or arrives from outside. On Hermes the prose IS the whole enforcement — nothing
-      there denies a further delegate_task — which is why the contract lives in the
-      skill and not only in the Claude Code agent file. Backfill owed: a live executor
-      run against a pre-lint dispatch step.'
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      unit tests pin only that the BLOCKER-not-a-tick contract is present in the prose;
+      the refusal itself is behaviour only a live executor run proves, so a walk is
+      owed.'
   - id: run-resolve-requires-briefing
     capability: Run cursor
     acceptance: A grouped unit cannot be resolved through its own member resolve until
