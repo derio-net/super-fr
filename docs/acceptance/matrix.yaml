@@ -3655,9 +3655,17 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): walked
-      live post-merge 2026-09-22 (Test Plan 12) on OpenCode with a non-Claude model;
-      evidence in plan journal walk-opencode.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): walked
+      live post-merge 2026-09-22 (Test Plan 12) with a non-Claude model; evidence in
+      plan journal walk-opencode.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: github-copilot/gpt-5.6-terra
+      outcome: pass
+      at: '2026-09-22T00:00:00Z'
+      evidence: 'Test Plan 12 post-merge walk on OpenCode: first-run repo triage; plan
+        journal walk-opencode'
   - id: triage-skill-hermes
     capability: Backlog triage
     acceptance: An agent on Hermes can follow fr-triage end to end
