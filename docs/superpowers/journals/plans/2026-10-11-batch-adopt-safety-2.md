@@ -164,3 +164,33 @@ Tests added: bound workspace with commits reused, origin-only batch branch refus
 ### p2-r7-resolved · finding [out-of-scope] · resolves p2-r7: resume picks the backend from FR_ISOLATION_TARGET, not the workspace's recorded mode (phase 2)
 
 Not caused by this change: the spec chose fr isolation up's own backend selection, and `fr isolation up` itself resumes by FR_ISOLATION_TARGET the same way; belongs to isolation up's resume (gh#569 territory).
+
+<!-- fr:journal kind=decision scope=plan id=p3-list-output-not-rich created=2026-10-11T22:26:42+00:00 phase=3 -->
+### p3-list-output-not-rich · decision · adopt --list writes with typer.echo, not the rich console (phase 3)
+
+The rich console expands tabs to spaces, which breaks the tab-separated columns (R11); typer.echo keeps them literal. The header and every row go through it.
+
+<!-- fr:journal kind=decision scope=plan id=p3-facts-branch-is-worktree-head created=2026-10-11T22:26:42+00:00 phase=3 -->
+### p3-facts-branch-is-worktree-head · decision · Checkout.facts branch is the HEAD of the agent's own worktree (phase 3)
+
+R13 says the session's current branch; an agent may sit in a linked worktree, so facts uses head_branch (the worktree at cwd), not current_branch (the main worktree). main_worktree is returned separately for the fr-workspace lookup.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-scenario-fixtures-projected created=2026-10-11T22:26:42+00:00 phase=3 -->
+### p3-scenario-fixtures-projected · discovery · scenario gh fixtures are projections of captured REST payloads (phase 3)
+
+tests/scenarios/fixtures/triage-adopt-list/ pulls-head.json and issue-N.json keep only the fields the REST client reads, projected from tests/fixtures/github_rest captures with the repo renamed to example-org/widgets; the PR-flavoured issue payload adds the pull_request key GitHub's issues route carries on a PR.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-11T22:26:42+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+pure helpers were written once, small and side-effect free; nothing duplicated to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-11T22:26:42+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+Checkout.facts reuses origin_url, default_branch, main_worktree and _head_branch; ref_kind is one short method per client
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-10-11T22:26:42+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+scenario, skill sentence, mirrors and matrix move only; no production code to clean
