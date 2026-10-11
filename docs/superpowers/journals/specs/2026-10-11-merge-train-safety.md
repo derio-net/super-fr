@@ -276,3 +276,8 @@ ask: red-PR recovery, strict up-to-date and skip-held (#1082, #1076) are their o
 ### phase-split-2026-10-11-merge-train-safety-p3 · decision · ask: driver merge-queue support and merge_group CI (#1062 piece 3)
 
 ask: driver merge-queue support and merge_group CI (#1062 piece 3)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-11-merge-train-safety-p4 created=2026-10-11T17:27:40+00:00 -->
+### phase-split-2026-10-11-merge-train-safety-p4 · decision · ask: release identity, protection script and runbook (#1062 pieces 1-2)
+
+ask: release identity, protection script and runbook (#1062 pieces 1-2)
