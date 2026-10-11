@@ -8128,9 +8128,16 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R6
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R7
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at planning; phase 1 writes it.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_matrix_status_split.py#test_skipped_rows_map_by_the_fixed_rule_and_nothing_else_moves
+      - super-fr:tests/unit/test_acceptance_status_split.py#test_a_skipped_row_is_refused_by_name_with_the_migrate_command
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_matrix_status_split
+    status: ci
+    notes: 'phase 1: the 4->5 migration, the refused-by-name validator and every surface
+      renamed, unit-tested in CI; the candidate scenario migrates a fixture matrix and
+      runs in CI via test_scenarios'
     scenario: tests/scenarios/matrix-status-split.sh
   - id: debt-ci-scaffold-refresh
     capability: acceptance
