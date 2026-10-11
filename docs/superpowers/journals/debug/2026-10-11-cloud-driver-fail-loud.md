@@ -12,3 +12,8 @@ Confirmed by reading main @ 1248d439, not reproduced live (needs a Claude Code c
 - #1098.1 batch_dispatch.py:68 brief installs fr only when missing, never when outdated.
 - #1098.2 brief does not require the batch skill nor end BLOCKED without it.
 - #1100 comment: verify-merge / pickup read PRs over GraphQL regardless of forge.api.
+
+<!-- fr:journal kind=hypothesis scope=debug id=92bf67c16b08 created=2026-10-11T19:11:50+00:00 -->
+### 92bf67c16b08 · hypothesis · Not one root cause: ~14 independent defects across 6 subsystems sharing a theme
+
+Shared theme only: cloud code paths assume host-like preconditions (current fr, skills loaded, origin/HEAD set, base clone on default branch, PR readable over GraphQL, session started) and proceed or misreport instead of checking. Each defect has its own cause and fix site: worker brief (batch_dispatch), claude-cloud runner + mailbox, gitseam, binary_identity, cloud doctor/docs, isolation verify-merge + pickup forge seam. Per the batch's debugging rule, stopping to ask before fixing.
