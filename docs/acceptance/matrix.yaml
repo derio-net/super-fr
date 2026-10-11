@@ -8222,7 +8222,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_the_shape_default_is_dropped_without_the_install_program
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_walk_owed_owes_nothing_from_the_default_when_every_row_says_none
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_unrunnable_strategies_names_each_explicit_strategy_once
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_self_review_errors_on_an_explicit_unrunnable_strategy
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_the_brainstorm_resolve_warns_and_still_resolves
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_a_malformed_strategy_line_shows_the_accepted_form
+    status: ci
+    notes: 'R4-R6 tested: install_problem, effective_shape_default, walk_owed, unrunnable_strategies,
+      self-review error, brainstorm warning, R6 message'
     verify: none
