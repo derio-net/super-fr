@@ -3,7 +3,7 @@ run: 2026-10-11-feat-batch-merge-train-safety
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1]
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1, P1.T6.S2]
 refactor:
   P1.T3: "Each new verb is a few lines beside its siblings in each client (pr_merge, close_pr, file_exists shapes); nothing duplicated beyond the per-backend argv/route, which is the seam's point."
   P1.T5: "Folded as written: views lost the dead ready-pr loop and its _all_prs/batch_of_pr helpers, kanban's first_actions and awaiting_approval share one _default_plan; nothing further to clean."
@@ -47,4 +47,4 @@ journal:
     body: |
       `import fr.commands.triage_batch_cmd` on its own raises ImportError (triage_claim_cmd imports `_fail` from a partially initialised triage_kanban_cmd). It predates this branch (checked on a stash of it). Tests import `fr.cli` first; the new tripwire does too.
 resolves: []
-evidence: {}
+evidence: {tests: ci}
