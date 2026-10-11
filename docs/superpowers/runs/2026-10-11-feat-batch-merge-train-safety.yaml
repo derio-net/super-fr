@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-11-merge-train-safety-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-10-11T17:14:04+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-11T17:14:04+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: opus
+          session: 18d22629-51bd-4e47-a633-0a7f83c6a95f
   plan:
     state: pending
   plan-review:
