@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-10-11-feat-batch-driver-resilience
+captures:
+- host: h-7d215777
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-11T17:07:49+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: eec4ae1c-46ee-477e-a504-53739a3455a3
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 64
+        cache_write: 151791
+        cache_read: 4674790
+        output: 24989
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 17
+      other:
+        usd: null
+        turns: 6
+      paperwork:
+        usd: null
+        turns: 9
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 6
+        cache_write: 85035
+        cache_read: 239560
+        output: 983
+      brainstorm:
+        usd: null
+        turns: 29
+        input: 58
+        cache_write: 66756
+        cache_read: 4435230
+        output: 24006
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 6
+          cache_write: 85035
+          cache_read: 239560
+          output: 983
+        brainstorm:
+          usd: null
+          turns: 29
+          input: 58
+          cache_write: 66756
+          cache_read: 4435230
+          output: 24006
