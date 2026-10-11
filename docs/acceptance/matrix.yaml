@@ -7623,9 +7623,15 @@ rows:
       unpushed default-branch commits, never changes the base clone, and is resumable'
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_yes_enters_the_workspace_binds_adopts_records_marks_and_messages
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_a_dirty_base_clone_is_refused_with_its_paths
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_a_local_default_ahead_of_origin_is_refused_with_its_commits
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_the_base_clone_is_left_untouched
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_a_failed_mark_resumes_the_workspace_and_finishes
+    status: ci
+    notes: default-branch adopt pinned by unit tests over a real temp repo
     verify: none
   - id: triage-adopt-list-columns
     capability: triage
