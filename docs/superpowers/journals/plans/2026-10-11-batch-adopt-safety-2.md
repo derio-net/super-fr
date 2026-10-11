@@ -194,3 +194,18 @@ Checkout.facts reuses origin_url, default_branch, main_worktree and _head_branch
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 scenario, skill sentence, mirrors and matrix move only; no production code to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-11T22:35:07+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · parse_refs reads feat-#12 as a named ref (phase 3)
+
+_ANY_REF let a name end in '-' or '.', so a hyphen-prefixed bare #n printed as an unresolved feat-#12 (?).
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-10-11T22:35:07+00:00 phase=3 -->
+### p3-review-1 · review · Phase 3 code review (phase 3)
+
+Dispatched read-only reviewer verified R11-R18 (header, state precedence, workspace/PR/ref lookups with once-per-key memoisation, per-row failure isolation, ref_kind on every client with @_hosted, Checkout.facts, import direction, exact _ISOLATION_ALLOWED growth, SKILL.md sentence and the origin/main merge keeping both sides, scenario fixtures redacted). Raised p3-r1, in scope; fixed with a test.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-11T22:35:07+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: parse_refs reads feat-#12 as a named ref (phase 3)
+
+Names must end in a word character and a bare #n may follow a hyphen; test_parse_refs_reads_a_hyphen_prefixed_number_as_bare.

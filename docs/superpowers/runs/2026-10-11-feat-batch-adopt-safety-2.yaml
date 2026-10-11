@@ -3,7 +3,7 @@ run: 2026-10-11-feat-batch-adopt-safety-2
 workflow: fr-goal@1
 branch: feat/batch-adopt-safety-2
 started: '2026-10-11T17:54:36+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-11T22:26:50+00:00'
+    state: done
+    at: '2026-10-11T22:35:08+00:00'
     members:
     - implement-phase
     - review-phase
@@ -135,12 +135,19 @@ steps:
           tests: ci:9e4400044e1220fa8581d7040d6a40f25929c8f5+d7266583d0a8f30bce7b3ee87ec6680d24a87eea;tree=dc7a889d3e87a23366a9461feabdae741c1d452fbb287409e8ff20088a750255
           visual: none
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-11T22:26:50+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: 001b79bf-4eda-417c-8701-d4296af10928
+          returned: '2026-10-11T22:35:08+00:00'
+          outcome: done
+        evidence:
+          review: p3-review-1
+          reviewer: ab0c1061d5009ab10
+          visual: none
+          findings: p3-r1
   journal-check:
     state: pending
   deliver:
