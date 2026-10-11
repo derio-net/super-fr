@@ -78,6 +78,7 @@ steps:
         state: running
         attempts:
         - dispatched: '2026-10-11T20:59:27+00:00'
+          agent: a82601398d935ab79
           harness: claude-code
           model: claude-opus-5-5
           session: b07de151-7e3f-41a2-8b47-0d0eb080c573
