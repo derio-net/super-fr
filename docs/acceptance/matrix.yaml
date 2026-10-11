@@ -661,10 +661,11 @@ rows:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_phase_executor_agent.py
       - super-fr:tests/unit/test_install_allowlists_phase_executor.py
-    status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
-      live per-phase dispatch was demonstrated by the feature''s own fr-goal run; wiring
-      unit-pinned. A CI integration test stays a backfill wish.'
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the live per-phase dispatch
+      was demonstrated by the feature''s own fr-goal run, but name no dated evidence
+      to record as a walk; wiring unit-pinned. Re-walk and record it with set-status
+      --walk.'
   - id: fr-goal-journal-handoff-complete
     capability: fr-goal subagent execution
     acceptance: A fresh subagent given only fr journal render + spec + its phase yaml
