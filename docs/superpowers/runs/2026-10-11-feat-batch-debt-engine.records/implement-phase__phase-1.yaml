@@ -1,4 +1,4 @@
-schema_version: 8
+schema_version: 9
 run: 2026-10-11-feat-batch-debt-engine
 step: implement-phase
 item: phase/1

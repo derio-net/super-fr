@@ -26,7 +26,7 @@
 # the last row of the same capability, and appends to the end of this file only
 # for a new capability — so keep `rows:` as the LAST top-level key.
 
-schema_version: 4
+schema_version: 5
 org: derio-net
 repo: super-fr
 rows:
@@ -75,7 +75,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_plan_acceptance_links.py
-    status: skipped
+    status: unwired
     notes: Mechanics unit-pinned per-PR; end-to-end toy walk (Test Plan item 4) owed
       post-merge.
   - id: acceptance-added-since
@@ -87,7 +87,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_status_add.py
-    status: skipped
+    status: unwired
     notes: 'CLI diff ci-pinned; the PR-body defense is process — demonstrated in PR
       #352, not automated.'
   - id: acceptance-nag-channels
@@ -101,7 +101,7 @@ rows:
       - super-fr:tests/unit/test_hooks_acceptance_nag.py
       - super-fr:tests/unit/test_plan_acceptance_links.py
       - super-fr:tests/unit/test_acceptance_init.py
-    status: skipped
+    status: unwired
     notes: Hook, digest formatter, and branch/PR/main Actions summary scaffold are
       ci-pinned; live weekly upsert/close remains unverified until the first scheduled
       run.
@@ -116,7 +116,7 @@ rows:
       - super-fr:tests/unit/test_isolation.py
       - super-fr:tests/unit/test_isolation_cmd.py
       - super-fr:tests/unit/test_init_scaffold.py
-    status: skipped
+    status: unwired
     notes: CLI + scaffold unit-pinned; the live worktree+container walk was proven at
       the 2.4.0 release, not in CI.
   - id: isolation-guard-base-deny
@@ -349,7 +349,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_skills_sync.py
-    status: skipped
+    status: unwired
     notes: >-
       Unit test guards mirror drift (CI). Test Plan step 1 walked post-merge
       (2026-07-09, fresh isolation devcontainer on merged main, no prior
@@ -368,7 +368,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_skills.py
-    status: skipped
+    status: unwired
     notes: >-
       Unit test guards the install.sh wiring (CI). Test Plan step 2 walked
       post-merge (2026-07-09, fresh isolation devcontainer, scratch $HOME,
@@ -404,7 +404,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
-    status: skipped
+    status: unwired
     notes: Unit test guards mirror drift (CI) — tests/unit/test_tripwire_opencode_commands_sync.py
       passes (2026-07-08). Test Plan steps 1-2 walked post-merge (2026-07-08, fresh
       clone of merged main) — `opencode debug config` resolved all 9 generated commands
@@ -423,7 +423,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_commands.py
-    status: skipped
+    status: unwired
     notes: Unit test guards the install.sh wiring (CI) — tests/unit/test_install_copies_opencode_commands.py
       passes (2026-07-08). Live-verified twice — pre-merge (2026-07-08, scratch HOME,
       VK_INSTALL_SKIP_PREFLIGHT=1) and re-confirmed post-merge as Test Plan step 3
@@ -459,7 +459,7 @@ rows:
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test_hostclient.py
       - super-fr:tests/unit/test__urls.py
-    status: skipped
+    status: unwired
     notes: 'LIVE-VERIFIED 2026-09-19 against a self-hosted GitLab (gh-486): fr apply
       rendered, observed, diffed and applied two phases as GitLab Issues with correctly-shaped
       labels (#-prefixed 6-hex, applied once), re-ran clean, and propagated a state
@@ -656,7 +656,7 @@ rows:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_phase_executor_agent.py
       - super-fr:tests/unit/test_install_allowlists_phase_executor.py
-    status: skipped
+    status: unwired
     notes: Skill wiring + agent def + allowlist helper unit-pinned per-PR; the live
       per-phase dispatch was demonstrated by this feature's own fr-goal run, not yet a
       CI integration test (backfill owed).
@@ -671,7 +671,7 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_journal_cmd.py
-    status: skipped
+    status: unwired
     notes: render/check unit-pinned; the completeness bar (a fresh subagent implements
       from journal+spec+phase alone) was met live in this feature's own run — a CI
       integration test dispatching fr-phase-executor is owed.
@@ -727,7 +727,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_fr_debugging_journal.py
-    status: skipped
+    status: unwired
     notes: 'SKILL.md wiring (debug-scope add/render, hypothesis/ruled-out trail) content-pinned
       per-PR; the live debugging walk that records to a debug journal is demonstrated-not-
       automated (backfill owed). First live walk recorded at
@@ -811,7 +811,7 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_goal_hermes_dispatch.py
       - super-fr:tests/unit/test_models_hermes_first_run.py
-    status: skipped
+    status: unwired
     notes: Wiring unit-tested (fr-goal names delegate_task; no guessed hermes model
       bindings ship, so fr-goal asks the operator per tier on first run). End-to-end
       run is post-merge manual Test Plan item 6 (toy feature in real Hermes).
@@ -1362,7 +1362,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_no_direct_click_import.py
-    status: skipped
+    status: unwired
     notes: Spec 8.0. 4.0.0 shipped a direct import of click - typer's TRANSITIVE dep,
       not one fr declares - so the installed CLI could not start while the full local
       suite stayed green; only CI's uv-tool path caught it. The tripwire pins that one
@@ -2087,7 +2087,7 @@ rows:
       unit:
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test__urls.py
-    status: skipped
+    status: unwired
     notes: 'Unit half in CI asserts the REQUEST (every contents read pins ref=HEAD,
       captured via a recording double rather than an arg-discarding mock). Live half
       hand-run 2026-09-19 against a self-hosted GitLab whose default branch is ''master'',
@@ -2108,7 +2108,7 @@ rows:
       - super-fr:tests/unit/test_hostclient.py
       - super-fr:tests/unit/test_glab.py
       - super-fr:tests/unit/test_pr_observe.py
-    status: skipped
+    status: unwired
     notes: 'All three clauses now hold. (a) ''backend: gitlab'' ALONE suffices — verified
       live from a checkout with no host: key: host_for derived gitlab.internal.example
       from the git remote and client_for built a RealGlabClient carrying it. (b) ''host:''
@@ -2166,7 +2166,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
-    status: skipped
+    status: unwired
     notes: 'LIVE-VERIFIED 2026-09-21 — the post-merge run this row was owed. A real
       headless /fr-goal on OpenCode (github-copilot/gpt-5.6-terra) dispatched a phase:
       opencode.db child session ses_f3b00175… with parent_id set, agent=fr-phase-executor-mechanical
@@ -2542,7 +2542,7 @@ rows:
     levels:
       int:
       - super-fr:docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md
-    status: skipped
+    status: unwired
     notes: 'not-implemented -> skipped on 2026-09-21: driven live post-merge on the
       installed fr 4.12.0, one throwaway one-phase /fr-goal per harness (Claude Code
       and OpenCode; ids and the OpenCode model redacted in the evidence file). Both
@@ -3272,7 +3272,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_skill_tokens.py
-    status: skipped
+    status: unwired
     notes: 'Moved not-implemented → skipped, NOT ci, deliberately: verification now
       exists but it is prose-level only, and calling that ci would be an overclaim.
       test_skill_tokens.py::test_fr_phase_executor_names_the_dispatch_refusal and ::test_fr_execute_names_the_dispatch_refusal
@@ -3461,7 +3461,7 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cli.py#test_advance_records_the_observed_model_of_an_orchestrator_run_step
       - super-fr:tests/unit/test_run_cli.py#test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model
-    status: skipped
+    status: unwired
     notes: 'C3. The cursor stored ''opus'' (the claim) while the transcript fr already
       read said claude-opus-5; the whole fr-goal run''s orchestrator was claude-sonnet-5
       and nothing recorded it. Record + warn, never block. LIVE, Run C (#592, a real
@@ -3670,7 +3670,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
-    status: skipped
+    status: unwired
     notes: 'Walked live post-merge 2026-09-22 (Test Plan 11) on Claude Code 2.1.278
       / Opus 5: repo scope as a SYNC of an OpenCode-written ranking (1 new issue judged,
       0 existing changed) and org scope over live derio-net (18/19 repos collected,
@@ -3684,7 +3684,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
-    status: skipped
+    status: unwired
     notes: 'Walked live post-merge 2026-09-22 (Test Plan 12) on OpenCode with github-copilot/gpt-5.6-terra,
       a non-Claude model: first-run repo triage (33 issues judged into a new judgements.yaml,
       board rendered, no forge writes); fr-triage discovered from a plain ask. It surfaced
@@ -4046,7 +4046,7 @@ rows:
       - super-fr:tests/unit/test_scaffold_java_version.py
       - super-fr:tests/unit/test_init_scaffold.py
       - super-fr:tests/unit/test_scaffold_tools.py
-    status: skipped
+    status: unwired
     notes: 'gh#574: --tool java/maven map to the java devcontainer feature (installMaven).
       The version is detected from version files, then the root pom.xml; unit tests
       pin this. Live walk 2026-09-23 on arm64 (journal p6-live-574, recorded in the
@@ -4193,7 +4193,7 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_usage_capture.py
-    status: skipped
+    status: unwired
     notes: 'Both harnesses walked live: Claude Code (PR #609) and OpenCode in devcontainer
       mode (PR #679, usage/2026-09-26-fix-659-isolation-gc-fetch.yaml, 7/7 steps). Stays
       skipped until #637 (Claude Code omits subagent cost) is fixed; OpenCode needs
@@ -4540,7 +4540,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-is-the-contract-design.md#R2
     levels: {}
-    status: skipped
+    status: walk-owed
     notes: 'Verified live 2026-09-29 (super-fr-3 take 12: feature-C brief, OpenCode
       1.18.33, gpt-6-sol everywhere, fr 5.0.0, fr-goal-light@1, self-hosted GitLab without
       CI): the spec journal carries the brief verbatim (basket-goal-brief, input=true)
@@ -5051,7 +5051,7 @@ rows:
       - super-fr:tests/unit/test_github_rest_contract.py
       - super-fr:tests/unit/test_github_rest_no_graphql.py
       - super-fr:tests/unit/test_forgeapi.py
-    status: skipped
+    status: walked
     notes: 'Walk 16 passed live in a cloud session (after #1092 moved the state ref
       under refs/heads/). Not in CI, so skipped. Still owed: the board-matches-a-host-render
       comparison (needs the operator''s host). Gaps found under rest: verify-merge and
@@ -5364,7 +5364,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
-    status: skipped
+    status: unwired
     notes: 'Live-verified 2026-09-26 (Test Plan 15, #628 phase 4): /fr-goal on #624
       in devcontainer mode (PR #635) captured a readable session (host label only, no
       host names); fr run/usage refused inside the container. Manual walk, not in CI.
@@ -5764,7 +5764,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_ci_shards.py
-    status: skipped
+    status: unwired
     notes: shard layout + partition unit-pinned; branch CI run 36247922786 took 155s;
       post-merge main observation owed
   - id: ci-budget-ticket-dedup
@@ -5816,7 +5816,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_actions_pinned.py
-    status: skipped
+    status: unwired
     notes: test_tripwire_actions_pinned.py pins .github/dependabot.yml's shape (github-actions
       ecosystem, weekly, one *-group), so config is pinned; the first weekly Dependabot
       run is a post-merge observation not exercised in CI (spec 2026-09-27-ci-hardening
@@ -5974,7 +5974,7 @@ rows:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
       - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
-    status: skipped
+    status: walk-owed
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
     verify: live
   - id: pages-explainers-preserved
@@ -5986,7 +5986,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
-    status: skipped
+    status: walk-owed
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
     verify: live
   - id: pages-acceptance-report-discoverable
@@ -6017,7 +6017,7 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_publishes_a_placeholder_before_upload
       - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_still_fails_the_run_after_deploying
       - super-fr:tests/unit/test_pages_workflow.py#test_the_placeholder_says_the_report_was_not_rendered
-    status: skipped
+    status: walk-owed
     notes: Workflow shape unit-pinned and the placeholder script executed in the unit
       suite; a live deploy over a gate refusal has not been observed (it needs stale
       artifacts on main).
@@ -6181,7 +6181,7 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R1
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R3
     levels: {}
-    status: skipped
+    status: walk-owed
     notes: 'Proven live 2026-09-29 in a fresh session from the base clone: fr pickup
       --run 2026-09-28-feat-batch-closeout-always-2 named fr archive --branch feat/batch-closeout-always-2;
       run in the chore/archive workspace it archived spec, plan, run, usage and both
@@ -7195,7 +7195,7 @@ rows:
     levels:
       int:
       - super-fr:docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md
-    status: skipped
+    status: walk-owed
     notes: 'not-implemented -> skipped on 2026-10-06: all three post-merge Test Plan
       items driven live inside herdr against a real fr triage batch drive over 101 batches
       (columns vs an independent gh oracle, cards moving on acting and non-acting passes,
@@ -7504,7 +7504,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R24
     levels: {}
-    status: skipped
+    status: walk-owed
     notes: 'Live-verified 2026-10-06 at closeout: `fr verification prerelease --branch
       chore/archive-2026-10-06-verification-strategies` dispatched prerelease.yml (run
       37498798304, success); tag rc/chore-archive-2026-10-06-verification-strategies/09352274256d
@@ -7590,7 +7590,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
     levels: {}
-    status: skipped
+    status: walk-owed
     notes: 'Verified live 2026-10-06 on fr 5.11.2/5.12.0 (wave 9 of a real drive): batch
       model-bindings'' PR #1042 conflicted with main in docs/acceptance/matrix.yaml;
       the driver logged ''handed back to its session derio-net/super-fr/run/batch-model-bindings'',
@@ -8174,7 +8174,7 @@ rows:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_live_instructions
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_documented_no_argument_walk_and_explicit_mode_use_tty_with_captured_output
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_noninteractive_default_still_reports_owed_and_never_passes
-    status: skipped
+    status: walked
     notes: 'Scoped pre-merge walk recorded under explicit operator proxy-verdict and
       Ready authorization. Actual native candidate observations and real read-only #1107
       current-head/conflict recovery proof supplied; runtime packages unchanged from
@@ -8201,7 +8201,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
     levels: {}
-    status: skipped
+    status: walked
     notes: 'Live post-merge walk on 2026-10-10: new OpenCode 1.18.35 / openai/gpt-6.1-sol
       control session stayed in stable primary checkout through real pickup, merge verification,
       scoped archive and delivered feature-session/tab cleanup. Initial stale-record
