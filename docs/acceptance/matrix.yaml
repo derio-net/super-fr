@@ -8062,7 +8062,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R19
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at planning; phase 3 writes it.
+    scenario: tests/scenarios/closeout-owed.sh
   - id: owed-durable-at-archive
     capability: closeout
     acceptance: Every owed step and every unticked manual phase at archive leaves an
