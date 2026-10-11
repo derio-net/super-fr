@@ -1294,9 +1294,7 @@ def test_the_board_copies_the_drives_repo_and_dir_only_when_given(
     outside.mkdir()
     monkeypatch.chdir(outside)  # no clone here: no --workspace to carry either
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
-    CliRunner().invoke(
-        app, ["triage", "batch", "drive", "--once", "--yes", "--single-pass", "--repo", REPO]
-    )
+    CliRunner().invoke(app, ["triage", "batch", "drive", "--once", "--yes", "--repo", REPO])
     assert seen == [["--repo", REPO]]
 
 
@@ -1479,7 +1477,7 @@ def test_a_second_run_after_a_pass_repeats_nothing(
 ) -> None:
     _proposed(world, tmp_path, 2)
     assert _drive(tmp_path, "--once", "--yes", "--single-pass")[0] == 0
-    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
+    code, out = _drive(tmp_path, "--once", "--yes")  # nothing left to dispatch
     assert len(runner.dispatched) == 2
     assert _lines(out, "dispatch") == []
     assert code == 3  # both in flight, nothing to do

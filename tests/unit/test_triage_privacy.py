@@ -388,6 +388,34 @@ def test_state_export_proceeds_with_a_private_state_repo(tmp_path: Path, gh: Fak
     assert (tmp_path / "repo" / SCOPE.name / "judgements.yaml").exists()
 
 
+def test_state_export_with_an_unreadable_state_repo_visibility_exits_2(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    """R9: only a looping drive retries an unreadable visibility; export refuses."""
+    state = _state(tmp_path / "s", state_repo="example-org/gone")
+
+    code, out = _export(state, tmp_path / "repo")
+
+    assert code == 2
+    assert "cannot read the visibility" in out and "example-org/gone" in out
+    assert not (tmp_path / "repo").exists()
+
+
+def test_guard_state_reads_the_visibility_live_on_every_call(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    """R11: no answer is cached between calls."""
+    from fr.triage.privacy import guard_state
+
+    state = _state(tmp_path / "s", state_repo=REFS)
+    for _ in range(2):
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda r: gh)
+
+    assert [c for c in gh.calls if c == ("repo_visibility", {"repo": REFS})] == [
+        ("repo_visibility", {"repo": REFS})
+    ] * 2
+
+
 # ------------------------------------------- a key outside the scope (p3-r8)
 
 

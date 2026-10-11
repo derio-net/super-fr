@@ -423,7 +423,6 @@ def test_the_host_loop_takes_and_releases_the_lease_with_a_state_repo(
             "drive",
             "--once",
             "--yes",
-            "--single-pass",
             "--repo",
             REPO,
             "--dir",

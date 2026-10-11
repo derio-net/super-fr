@@ -2651,6 +2651,7 @@ class _Driver:
         self.scope, self.target, self.named = scope, target, named
         self.single_pass = single_pass  # `--once --yes` on the host only (gh#1127)
         self.planned_dispatch = False  # the last pass's plan held a dispatch
+        self._single_pass_warned = False
         self.adapter = driver  # the runner and post_merge of where this runs (R10, R20)
         self.statuses = statuses  # the session statuses a mailbox runner reads (§E step 4)
         self.lease, self.leased = lease, False  # R9: renewed every pass, when given
@@ -2781,6 +2782,19 @@ class _Driver:
             raise ForgeReadError(str(exc), code=2) from exc
         except TriageError as exc:
             _fail(str(exc))
+
+    def warn_single_pass(self) -> None:
+        """Once: the single-pass notice, when this pass planned a dispatch (R4). It is
+        called when the pass ends, and when a refusal inside it (a runner's preflight)
+        ends it, so the warning follows whichever way the pass exits."""
+        if self.single_pass is None or not self.single_pass.allowed:
+            return  # refused (the error carries the notice) or no guard
+        if not self.planned_dispatch or self._single_pass_warned:
+            return
+        self._single_pass_warned = True
+        err_console.print(
+            f"[yellow]warning:[/yellow] {escape(self.single_pass.notice)}", soft_wrap=True
+        )
 
     def release_lease(self) -> None:
         """On a clean stop: remove this driver's lease and push that. Soft: a failure is
@@ -4677,11 +4691,7 @@ def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
         if not driver.yes:
             return None  # the plan of one pass, in loop mode too
         if once:
-            if driver.single_pass is not None and driver.planned_dispatch:
-                err_console.print(
-                    f"[yellow]warning:[/yellow] {escape(driver.single_pass.notice)}",
-                    soft_wrap=True,
-                )
+            driver.warn_single_pass()
             code = pass_exit(driver, acted, summary)
             if code:
                 raise typer.Exit(code=code)
@@ -4794,6 +4804,8 @@ def batch_drive_command(
             driver.release_lease()
             raise
         except typer.Exit as stop:
+            if once:
+                driver.warn_single_pass()
             if stop.exit_code != 2:  # a clean stop; a refusal keeps what it found
                 driver.release_lease()
             raise
