@@ -3001,12 +3001,19 @@ class _Driver:
         return self._rules[repo]
 
     def _queue_reads(
-        self, facts: Facts, queue: Sequence[QueueEntry], repos: Mapping[str, str]
+        self,
+        facts: Facts,
+        queue: Sequence[QueueEntry],
+        repos: Mapping[str, str],
+        live: Mapping[str, LivePr],
     ) -> dict[str, Any]:
         """The Snapshot's merge-queue fields (§D "Queue mode", R13): the repos whose base
         requires a queue, those held (a `version:` block, `forge.api rest`), the queue state
         of each batch the driver enqueued before, and the base now. Reads only what a decision
-        needs: no state for a batch never enqueued, no base without one."""
+        needs: no state for a batch never enqueued, no base without one, and no rules for a
+        repo with no PR that could merge or be enqueued (open and not failing, or enqueued
+        before). A clone that cannot name its default branch (no `origin/HEAD`) is no queue:
+        the pass has nothing to merge there, or the merge path says so itself."""
         from fr import forgeapi
 
         try:
@@ -3015,13 +3022,19 @@ class _Driver:
             _fail(str(exc))
         by_repo: dict[str, list[QueueEntry]] = {}
         for e in queue:
-            by_repo.setdefault(repos[e.batch.id], []).append(e)
+            pr = live.get(e.batch.id)
+            enqueued = any(isinstance(x, EnqueueEvent) for x in e.batch.events)
+            if pr is not None and pr.state == "OPEN" and (pr.checks != "failing" or enqueued):
+                by_repo.setdefault(repos[e.batch.id], []).append(e)
         queued: set[str] = set()
         versioned: set[str] = set()
         states: dict[str, QueueState] = {}
         bases: dict[str, str] = {}
         for repo, entries in sorted(by_repo.items()):
-            if not self._base_rules(facts, repo).merge_queue:
+            try:
+                if not self._base_rules(facts, repo).merge_queue:
+                    continue
+            except (GitError, TriageError):  # the default branch is unknown: no queue read
                 continue
             queued.add(repo)
             if facts.config_for(repo).version is not None:
@@ -3165,7 +3178,7 @@ class _Driver:
                 )
                 if now - event.at >= STALE_CLOSEOUT:  # is its tab still live? (gh#1025)
                     stale.append(b)
-            queue_reads = self._queue_reads(facts, queue, repos)
+            queue_reads = self._queue_reads(facts, queue, repos, live)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:

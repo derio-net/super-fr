@@ -4668,3 +4668,28 @@ def test_a_repo_without_a_queue_merges_as_before(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert world.merged == [(101, "sha-101", "squash")] and not hasattr(world, "enqueued")
     assert "pr_queue_state" not in " ".join(world.calls)
+
+
+def test_a_clone_without_origin_head_does_not_abort_a_pass_that_has_nothing_to_enqueue(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Queue reads are for repos with a candidate, and an unknowable default branch is no
+    queue, never a failed pass (the cloud driver's clone has no origin/HEAD)."""
+    from fr.triage.gitseam import GitError
+
+    def _unset() -> str:
+        raise GitError("cannot tell the default branch (origin/HEAD is unset)")
+
+    _pr_open(world, tmp_path, draft=True, labels=[])
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    world.all_checks[101] = {"pass": 0, "fail": 1, "pending": 0}
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    monkeypatch.setattr(checkout, "default_branch", _unset)
+    code, out = _drive(tmp_path)  # plan mode: a failing PR is no candidate
+    assert "base_rules" not in world.calls, out
+    world.checks[101] = [{"name": "test", "bucket": "pass"}]
+    world.all_checks[101] = {"pass": 1, "fail": 0, "pending": 0}
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    code, out = _drive(tmp_path)  # a candidate, but the branch is unknowable: read as no queue
+    assert code == 0 and "Traceback" not in out, out
