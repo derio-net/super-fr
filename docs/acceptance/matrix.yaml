@@ -8416,7 +8416,11 @@ rows:
       the bypass is in place and a release was pushed by the app.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R17
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_configure_main_protection.py#test_require_adds_the_strict_ci_ok_check_and_keeps_every_other_rule
+      - super-fr:tests/unit/test_configure_main_protection.py#test_require_refuses_when_the_newest_release_was_not_pushed_by_the_app
+    status: ci
+    notes: 'configure-main-protection.sh tested with a stub gh: merge-not-overwrite
+      body, both refusals, --force, --dry-run, idempotence'
     verify: none
