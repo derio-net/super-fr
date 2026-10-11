@@ -7643,9 +7643,16 @@ rows:
       writing nothing'
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_adopt_list.py#test_the_listing_has_one_row_per_state
+      - super-fr:tests/unit/test_triage_adopt_list.py#test_session_state_precedence
+      - super-fr:tests/unit/test_triage_adopt_list.py#test_each_distinct_ref_and_branch_is_read_once
+      - super-fr:tests/unit/test_triage_adopt_list.py#test_one_rows_failures_degrade_only_that_row
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_adopt_list
+    status: ci
+    notes: listing pinned by unit tests; scenario on candidate
     verify: candidate
     scenario: tests/scenarios/triage-adopt-list.sh
   - id: triage-adopt-live-sweep
