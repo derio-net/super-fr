@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-10-11-feat-batch-adopt-safety-2
+captures:
+- host: h-7518cc5d
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-11T18:49:01+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 001b79bf-4eda-417c-8701-d4296af10928
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 52
+        cache_write: 149517
+        cache_read: 3649317
+        output: 23936
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 15
+      other:
+        usd: null
+        turns: 4
+      paperwork:
+        usd: null
+        turns: 8
+    steps:
+      (outside run):
+        usd: null
+        turns: 1
+        input: 2
+        cache_write: 84119
+        cache_read: 28770
+        output: 348
+      brainstorm:
+        usd: null
+        turns: 25
+        input: 50
+        cache_write: 65398
+        cache_read: 3620547
+        output: 23588
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 1
+          input: 2
+          cache_write: 84119
+          cache_read: 28770
+          output: 348
+        brainstorm:
+          usd: null
+          turns: 25
+          input: 50
+          cache_write: 65398
+          cache_read: 3620547
+          output: 23588

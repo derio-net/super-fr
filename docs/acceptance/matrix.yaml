@@ -7600,6 +7600,55 @@ rows:
       same day #1031''s session was working when its conflict arrived; the driver waited
       (''nothing sent, retried next pass'') rather than interrupt it.'
     verify: live
+  - id: triage-adopt-holds-agent
+    capability: triage
+    acceptance: batch adopt's message to an adopted agent ends with an explicit hold
+      by default (acknowledge only, no commits/merges/migrations/pushes/runs, wait for
+      the operator), --no-hold drops it, and the plan without --yes prints the exact
+      text
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/triage-adopt-hold.sh
+  - id: triage-adopt-default-branch
+    capability: triage
+    acceptance: 'batch adopt takes a session on the default branch: it creates the batch
+      branch''s fr workspace from origin/<default>, binds the session, records the dispatch
+      and tells the held agent the workspace path; it refuses a dirty base clone or
+      unpushed default-branch commits, never changes the base clone, and is resumable'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-adopt-list-columns
+    capability: triage
+    acceptance: 'batch adopt --list shows each session''s state (adoptable / on default
+      branch / batch / no agent / unknown), repo, branch, fr workspace and open PR,
+      and classifies every label ref, bare #n included, as issue or PR through the forge,
+      writing nothing'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/triage-adopt-list.sh
+  - id: triage-adopt-live-sweep
+    capability: triage
+    acceptance: On a real herdr host, adopt --list correlates live agents with their
+      repo, branch, workspace and PR, and adopted agents (feature branch and main) acknowledge
+      and wait without acting
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
   - id: triage-claims-identity
     capability: triage-claims
     acceptance: Each triage scope on a host has a stable scope id that carries no hostname,
