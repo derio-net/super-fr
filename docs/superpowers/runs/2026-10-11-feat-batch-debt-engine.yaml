@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-11-debt-engine-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-10-11T17:23:46+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-11T17:23:46+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: opus
+          session: b07de151-7e3f-41a2-8b47-0d0eb080c573
   plan:
     state: pending
   plan-review:
