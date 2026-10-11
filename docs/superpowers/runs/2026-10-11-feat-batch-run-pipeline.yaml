@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-10-11T22:04:23+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-11T22:04:23+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: opus
+          session: d3a3e30a-6d89-48d8-a54b-7fdb0b4e4e99
   plan:
     state: pending
   plan-review:
