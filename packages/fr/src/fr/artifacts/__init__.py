@@ -67,6 +67,7 @@ from fr.artifacts import matrix_status_split as _matrix_status_split  # noqa: F4
 from fr.artifacts import matrix_anchors as _matrix_anchors  # noqa: F401  (isort: skip)
 from fr.artifacts import profiles_services as _profiles_services  # noqa: F401  (isort: skip)
 from fr.artifacts import agents_kind as _agents_kind  # noqa: F401  (isort: skip)
+from fr.artifacts import journal_owed as _journal_owed  # noqa: F401  (isort: skip)
 
 __all__ = [
     "ARTIFACT_KINDS",

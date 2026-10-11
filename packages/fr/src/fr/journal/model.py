@@ -34,6 +34,11 @@ JournalKind = Literal[
     "hypothesis",
     "ruled-out",
     "root-cause",
+    # An action the operator OWES (spec 2026-10-11-debt-engine §E, R20): what,
+    # why, how it is completed, and its owed key, as `key: value` body lines
+    # (`owed_body`). It folds apart from findings — see `open_owed_ids`.
+    # Journal kind 2: an fr that predates it cannot parse the entry at all.
+    "owed",
 ]
 JournalScope = Literal["spec", "plan", "debug"]
 FindingState = Literal["fixed", "refuted", "open"]
@@ -54,6 +59,17 @@ EffectiveFindingState = Literal["fixed", "refuted", "open", "deferred", "out-of-
 # Where deferred work may be tracked: `#N`, `owner/repo#N`, or an http(s) URL.
 # A reference, not prose — so a deferral always says where the work went.
 TRACKED_BY_RE = re.compile(r"^(#\d+|[\w.-]+/[\w.-]+#\d+|https?://\S+)$")
+
+# One owed item, one key (spec §A): a Test Plan step, a manual phase, a
+# walk-owed row, or a labelled issue that carries no fr key. The key rides in
+# an issue's `<!-- fr-owed:<key> -->` marker, so it is never free text: no
+# spaces, no `-->`, and no leading `-` (it can reach an argv).
+OWED_KEY_RE = re.compile(
+    r"^(spec:[\w.][\w.-]*#step\d+|plan:[\w.][\w.-]*#p\d+|row:[\w.][\w.-]*"
+    r"|issue:[\w.][\w.-]*/[\w.-]+#\d+)$"
+)
+OWED_FIELDS = ("what", "why", "how", "owed_key")
+"""The body lines an `owed` entry carries, in this order (spec §E)."""
 
 JOURNALS_REL = Path("docs/superpowers/journals")
 IMPLEMENTED_JOURNALS_REL = Path("docs/superpowers/implemented/journals")
@@ -128,6 +144,10 @@ class JournalEntry(BaseModel):
     # (`operator`) on a `fixed` record that follows an effective out-of-scope:
     # see `unauthorized_fixes`.
     answered_by: AnsweredBy | None = None
+    # FILED: an `open` resolution record naming the issue an `owed` entry was
+    # filed as at archive (spec 2026-10-11-debt-engine §E). Still owed — the
+    # fold reads it as open. Header token `filed_as=`, appended last.
+    filed_as: str | None = None
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -161,6 +181,22 @@ class JournalEntry(BaseModel):
                 raise ValueError(
                     "`tracked_by` must name an issue — `#N`, `owner/repo#N` or an "
                     f"http(s) URL — got {self.tracked_by!r}"
+                )
+        if self.filed_as is not None:
+            if (
+                self.resolves is None
+                or self.state != "open"
+                or self.tracked_by is not None
+                or self.out_of_scope
+            ):
+                raise ValueError(
+                    "`filed_as` is only valid on an `open` resolution record: it says "
+                    "the owed action it names is still owed, and where it was filed"
+                )
+            if not TRACKED_BY_RE.match(self.filed_as):
+                raise ValueError(
+                    "`filed_as` must name an issue — `#N`, `owner/repo#N` or an "
+                    f"http(s) URL — got {self.filed_as!r}"
                 )
         if self.out_of_scope and (
             self.resolves is None or self.state != "open" or self.tracked_by is not None
@@ -248,6 +284,7 @@ _HEADER_FIELDS = (
     "review_scope",
     "answered_by",
     "input",
+    "filed_as",
 )
 
 
@@ -266,6 +303,8 @@ def serialize_entry(entry: JournalEntry) -> str:
     state_bit = f" [{entry.state}]" if entry.state is not None else ""
     if entry.tracked_by is not None:
         state_bit = f" [deferred → {entry.tracked_by}]"
+    elif entry.filed_as is not None:
+        state_bit = f" [filed → {entry.filed_as}]"
     elif entry.out_of_scope:
         state_bit = " [out-of-scope]"
     if entry.review_scope is not None:
@@ -348,6 +387,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 review_scope=_review_scope_token(fields.get("review_scope")),
                 answered_by=_answered_by_token(fields.get("answered_by")),
                 input=fields.get("input") == "true",
+                filed_as=fields.get("filed_as"),
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
@@ -556,18 +596,77 @@ def open_finding_ids(entries: list[JournalEntry]) -> list[str]:
     as records accumulate.
     """
     states = effective_finding_states(entries)
+    owed = _owed_ids(entries)
     ordered: list[str] = []
     seen: set[str] = set()
     for e in entries:
         if e.kind != "finding":
             continue
         fid = e.resolves if e.resolves is not None else e.id
-        if fid in seen:
+        if fid in seen or fid in owed:
             continue
         seen.add(fid)
         if states.get(fid) == "open":
             ordered.append(fid)
     return ordered
+
+
+def _owed_ids(entries: list[JournalEntry]) -> set[str]:
+    return {e.id for e in entries if e.kind == "owed"}
+
+
+def open_owed_ids(entries: list[JournalEntry]) -> list[str]:
+    """`owed` entries still owed, in file order (spec §E, R20).
+
+    The sibling of `open_finding_ids`, over the SAME fold: a resolution record
+    naming an owed entry speaks about it exactly as one naming a finding does,
+    so `fixed` (discharged) closes it and an `open` record carrying `filed_as`
+    leaves it owed. An owed entry no record names is owed.
+    """
+    states = effective_finding_states(entries)
+    return [
+        e.id
+        for e in entries
+        if e.kind == "owed" and e.resolves is None and states.get(e.id, "open") == "open"
+    ]
+
+
+def owed_filed_as(entries: list[JournalEntry]) -> dict[str, str]:
+    """Owed id -> the issue its LAST `filed_as` record names."""
+    owed = _owed_ids(entries)
+    refs: dict[str, str] = {}
+    for e in entries:
+        if e.resolves in owed and e.filed_as is not None:
+            refs[e.resolves] = e.filed_as
+    return refs
+
+
+def owed_body(*, what: str, why: str, how: str, key: str) -> str:
+    """The body of an `owed` entry — one `key: value` line per field. Raises
+    `ValueError` on a key that is not one of the four owed-key shapes."""
+    if not OWED_KEY_RE.match(key):
+        raise ValueError(
+            f"owed key {key!r} is not spec:<slug>#step<n>, plan:<name>#p<n>, row:<id> "
+            "or issue:<owner/repo#n>"
+        )
+    values = {"what": what, "why": why, "how": how, "owed_key": key}
+    return "\n".join(f"{name}: {' '.join(values[name].split())}" for name in OWED_FIELDS)
+
+
+def owed_fields(entry: JournalEntry) -> dict[str, str]:
+    """The `owed_body` fields of an entry (missing ones absent)."""
+    found: dict[str, str] = {}
+    for line in entry.body.splitlines():
+        name, sep, value = line.partition(": ")
+        if sep and name in OWED_FIELDS and name not in found:
+            found[name] = value.strip()
+    return found
+
+
+def owed_key(entry: JournalEntry) -> str | None:
+    """The entry's owed key when it is well-formed, else `None`."""
+    key = owed_fields(entry).get("owed_key")
+    return key if key and OWED_KEY_RE.match(key) else None
 
 
 def phase_finding_states(
@@ -611,9 +710,19 @@ def appended_journal_text(prior: str | None, slug: str, entry: JournalEntry) -> 
     step-record engine uses to build every write before any byte moves."""
     block = serialize_entry(entry)
     if prior is None:
-        return f"# Journal: {slug}\n\n{block}"
+        return f"{journal_header(slug)}\n{block}"
     sep = "" if prior.endswith("\n\n") else ("\n" if prior.endswith("\n") else "\n\n")
     return prior + sep + block
+
+
+def journal_header(slug: str) -> str:
+    """A NEW journal's first lines: the stamp at the journal kind's current
+    version, then the title. A journal fr creates is written for the fr that
+    creates it — unstamped it would read as version 1 and be stale on arrival."""
+    from fr.artifacts.registry import artifact_kind
+
+    version = artifact_kind("journal").current_version
+    return f"<!-- fr:journal-schema={version} -->\n# Journal: {slug}\n"
 
 
 def resolution_record_id(finding_id: str, taken: set[str]) -> str:
@@ -644,6 +753,7 @@ def resolution_entry(
     phase: int | None = None,
     tracked_by: str | None = None,
     answered_by: AnsweredBy | None = None,
+    filed_as: str | None = None,
 ) -> JournalEntry:
     """The resolution record that closes `target` — THE one builder, used by
     the step-record engine (`fr journal resolve`, `resolves:`) and by `fr
@@ -662,6 +772,7 @@ def resolution_entry(
         tracked_by=tracked_by,
         out_of_scope=state == "out-of-scope",
         answered_by=answered_by,
+        filed_as=filed_as,
     )
 
 

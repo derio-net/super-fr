@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: 2026-10-11-debt-engine
 
 <!-- fr:journal kind=decision scope=plan id=plan-shape created=2026-10-11T17:47:38+00:00 -->

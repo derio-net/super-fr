@@ -408,7 +408,9 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
         ),
         ArtifactKind(
             name="journal",
-            current_version=1,
+            # 2: the `owed` entry kind (spec `2026-10-11-debt-engine-design` §E,
+            # R20), migration `fr.artifacts.journal_owed` — stamp-only.
+            current_version=2,
             locator="docs/superpowers/journals/**/*.md",
             stamp="`<!-- fr:journal-schema=N -->` header comment",
             read_stamp=_read_journal_stamp,

@@ -32,6 +32,8 @@ from fr.journal.model import (
     journal_now,
     journal_path,
     open_finding_ids,
+    open_owed_ids,
+    owed_filed_as,
     parse_journal,
     resolution_record_id,
     resolve_journal_read_path,
@@ -523,7 +525,16 @@ _SECTION_KINDS = {
     "decisions": {"decision"},
     "discoveries": {"discovery"},
     "reviews": {"review"},
+    "owed": {"owed"},
 }
+
+
+def _split_owed(entries: list[JournalEntry]) -> tuple[list[JournalEntry], list[JournalEntry]]:
+    """(everything else, the `owed` entries and every record naming one) — an
+    owed action renders in its own block, never among the findings (spec §E)."""
+    owed = {e.id for e in entries if e.kind == "owed"}
+    rest = [e for e in entries if e.id not in owed and e.resolves not in owed]
+    return rest, [e for e in entries if e.id in owed or e.resolves in owed]
 
 
 @journal_app.command("render")
@@ -531,7 +542,7 @@ def render(
     scope: str = typer.Option(..., "--scope"),
     slug: str = typer.Option(..., "--slug"),
     section: str = typer.Option(
-        "all", "--section", help="findings | decisions | discoveries | reviews | all."
+        "all", "--section", help="findings | decisions | discoveries | reviews | owed | all."
     ),
 ) -> None:
     """Emit journal entries as Markdown (fail-open: missing/bad file → nothing)."""
@@ -544,14 +555,19 @@ def render(
     except JournalParseError:
         return  # fail-open: never block a render on a malformed file
     states = effective_finding_states(entries)
+    entries, owed = _split_owed(entries)
     keep = _SECTION_KINDS.get(section)
     if keep is not None:
         entries = [e for e in entries if e.kind in keep]
-    if not entries:
+        if "owed" not in keep:
+            owed = []
+    if not entries and not owed:
         return
     main, out = _group_findings(entries, states)
     if out:
         main.append("## Out-of-scope findings\n\n" + "\n".join(out))
+    if owed:
+        main.append("## Owed actions\n\n" + "\n".join(serialize_entry(e) for e in owed))
     # Emit RAW — this feeds a PR body. A Rich console would treat `[...]` in a
     # finding title/body (Markdown links, `[PR #12]`) as markup and drop it.
     typer.echo("\n".join(main))
@@ -635,6 +651,17 @@ def check(
     out_of_scope = [fid for fid, st in states.items() if st == "out-of-scope"]
     if out_of_scope:
         console.print(f"{len(out_of_scope)} out-of-scope finding(s): " + ", ".join(out_of_scope))
+    # Owed actions pass the gate (spec §E, R20) and are listed: they are the
+    # operator's to do after the change, never this change's to fix.
+    owed = open_owed_ids(entries)
+    if owed:
+        filed = owed_filed_as(entries)
+        console.print(
+            f"{len(owed)} owed action(s) open: "
+            + ", ".join(f"{oid} → {filed[oid]}" if oid in filed else oid for oid in owed),
+            soft_wrap=True,
+            markup=False,
+        )
     unauthorized = unauthorized_fixes(entries)
     if unauthorized:
         err_console.print(

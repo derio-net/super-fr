@@ -47,6 +47,7 @@ from fr.journal.model import (
     JournalEntry,
     JournalParseError,
     appended_journal_text,
+    owed_key,
     journal_path,
     parse_journal,
     resolution_entry,
@@ -350,6 +351,11 @@ def _journal_writes(
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid journal entry {eid!r}: {e}") from e
+        if entry.kind == "owed" and owed_key(entry) is None:
+            raise RecordRefusedError(
+                f"owed entry {eid!r} needs an `owed_key: <key>` body line "
+                "(spec:<slug>#step<n>, plan:<name>#p<n>, row:<id>) — every owed item has one key"
+            )
         add(entry)
         key: str = "open finding" if entry.kind == "finding" and state == "open" else entry.kind
         if entry.resolves is not None:
