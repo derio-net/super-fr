@@ -202,3 +202,138 @@ pure model and renderers written once; nothing to clean
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 thin CLI over the engine; the digest was reduced to the shared section renderer in the same step
+
+<!-- fr:journal kind=review scope=plan id=p2-review-r1 created=2026-10-11T22:07:18+00:00 phase=2 -->
+### p2-review-r1 · review · phase 2 code review (fr debt engine): 13 findings, all in scope (phase 2)
+
+Independent reviewer (separate context, read-only) over ed236f30 + the mirror fix: engine against R2-R4, figures encoding, fold_owed, R1/R25 exemption, the automated security finding, and test quality. 32 targeted tests passed. Receiving: p2-r1 and p2-r3 confirmed by reading engine.py:165,207 and debt_cmd.py:40; p2-r1 was reproduced by the reviewer as an arbitrary file write. All fixed in f9d21dae (193 targeted tests passed; CI is the full-suite evidence).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · run-cursor branch reached git log / pr_for_branch unvalidated (`--output=<f>` arbitrary file write, reproduced) (phase 2)
+
+run-cursor branch reached git log / pr_for_branch unvalidated (`--output=<f>` arbitrary file write, reproduced)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · fr debt ignored tracking: none (R4 git-only fallback) (phase 2)
+
+fr debt ignored tracking: none (R4 git-only fallback)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · _forge swallowed every exception and the report claimed offline; an unreadable matrix dropped the forge (phase 2)
+
+_forge swallowed every exception and the report claimed offline; an unreadable matrix dropped the forge
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · owed-issue scan capped at 200 open issues with client-side label filtering: silent undercount (phase 2)
+
+owed-issue scan capped at 200 open issues with client-side label filtering: silent undercount
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · unescaped sources[*].why plus first-match parse_figures let a forged figures comment win (phase 2)
+
+unescaped sources[*].why plus first-match parse_figures let a forged figures comment win
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · StalePlan.basis said git+forge when the forge was never consulted (phase 2)
+
+StalePlan.basis said git+forge when the forge was never consulted
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · plans with no readable activity were silently omitted (phase 2)
+
+plans with no readable activity were silently omitted
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · merge_evidence fetch_error never surfaced in sources (phase 2)
+
+merge_evidence fetch_error never surfaced in sources
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r9 · finding [open] (reviewer: in scope) · engine hard-coded a status set beside DEBT_STATUSES (against R1) (phase 2)
+
+engine hard-coded a status set beside DEBT_STATUSES (against R1)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r10 · finding [open] (reviewer: in scope) · figures owed counted row: items while total excluded them (phase 2)
+
+figures owed counted row: items while total excluded them
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r11 · finding [open] (reviewer: in scope) · markdown hard cut could slice the trailing marker/figures (phase 2)
+
+markdown hard cut could slice the trailing marker/figures
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r12 · finding [open] (reviewer: in scope) · digest lost open_rows' oldest-first order (phase 2)
+
+digest lost open_rows' oldest-first order
+
+<!-- fr:journal kind=finding scope=plan id=p2-r13 created=2026-10-11T22:07:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r13 · finding [open] (reviewer: in scope) · weak/missing tests: tautological assert, no ClientDebtForge tests, updatedAt only as None (phase 2)
+
+weak/missing tests: tautological assert, no ClientDebtForge tests, updatedAt only as None
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: run-cursor branch reached git log / pr_for_branch unvalidated (`--output=<f>` arbitrary file write, reproduced) (phase 2)
+
+f9d21dae: _run_branches drops a branch starting with '-' or failing git check-ref-format --branch; --end-of-options in _last_commit; test proves no file written and forge never asked.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: fr debt ignored tracking: none (R4 git-only fallback) (phase 2)
+
+f9d21dae: tracking none gives git-only with that reason; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: _forge swallowed every exception and the report claimed offline; an unreadable matrix dropped the forge (phase 2)
+
+f9d21dae: _forge returns (forge, why), compute takes forge_why; slug from the origin remote.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: owed-issue scan capped at 200 open issues with client-side label filtering: silent undercount (phase 2)
+
+f9d21dae: PartialIssuesError at the cap; the source reports read with a partial note (the adapter has no label filter).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: unescaped sources[*].why plus first-match parse_figures let a forged figures comment win (phase 2)
+
+f9d21dae: why escaped through _cell; parse_figures takes the last match; forged-why test.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: StalePlan.basis said git+forge when the forge was never consulted (phase 2)
+
+f9d21dae: basis git+forge only when pr_for_branch returned.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: plans with no readable activity were silently omitted (phase 2)
+
+f9d21dae: listed with idle_days=None; HEAD fallback when no default ref.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: merge_evidence fetch_error never surfaced in sources (phase 2)
+
+f9d21dae: fetch failure shown in sources['git'].
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r9 -->
+### p2-r9-resolved · finding [fixed] · resolves p2-r9: engine hard-coded a status set beside DEBT_STATUSES (against R1) (phase 2)
+
+f9d21dae: LISTED_STATUSES = DEBT_STATUSES | {walked, manual}.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r10 -->
+### p2-r10-resolved · finding [fixed] · resolves p2-r10: figures owed counted row: items while total excluded them (phase 2)
+
+f9d21dae: owed = counted total, owed_items = list length.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r11 -->
+### p2-r11-resolved · finding [fixed] · resolves p2-r11: markdown hard cut could slice the trailing marker/figures (phase 2)
+
+f9d21dae: truncate content first, append the tail once; near-limit sweep test.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r12 -->
+### p2-r12-resolved · finding [fixed] · resolves p2-r12: digest lost open_rows' oldest-first order (phase 2)
+
+f9d21dae: debt rows sorted oldest origin first.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r13-resolved created=2026-10-11T22:07:18+00:00 phase=2 state=fixed resolves=p2-r13 -->
+### p2-r13-resolved · finding [fixed] · resolves p2-r13: weak/missing tests: tautological assert, no ClientDebtForge tests, updatedAt only as None (phase 2)
+
+f9d21dae: assert fixed; test_debt_forge.py; populated updatedAt fixtures; origin/<branch>, raising pr_for_branch, complete-unmerged, --stale-days 0.
