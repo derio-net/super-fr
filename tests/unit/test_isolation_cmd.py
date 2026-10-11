@@ -154,6 +154,18 @@ def test_target_worktree_is_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert type(isolation_cmd._target(tmp_path)) is HostWorktreeTarget
 
 
+def test_target_default_in_a_cloud_session_is_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gh#1098: a Claude Code cloud session has no docker, so the devcontainer default
+    failed there and left state `down` could not remove without docker."""
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+    assert type(isolation_cmd._target(tmp_path)) is HostWorktreeTarget
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "devcontainer")  # an explicit choice stands
+    assert type(isolation_cmd._target(tmp_path)) is LocalWorktreeDevcontainerTarget
+
+
 def test_target_unknown_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
     with pytest.raises(IsolationError) as ei:

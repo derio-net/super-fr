@@ -389,14 +389,21 @@ class Checkout:
         return repo_of_url(self.origin_url())
 
     def default_branch(self) -> str:
-        """`origin/HEAD`'s branch, which `git clone` records."""
+        """`origin/HEAD`'s branch, which `git clone` records. A clone without it (a
+        cloud session's, gh#1100) asks origin once and records the answer."""
+        head = ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]
         try:
-            ref = git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], self.path)
-        except GitError as exc:
-            raise GitError(
-                f"cannot tell {self.path}'s default branch (origin/HEAD is unset); run "
-                "`git remote set-head origin --auto` there"
-            ) from exc
+            ref = git(head, self.path)
+        except GitError:
+            try:
+                git(["remote", "set-head", "origin", "--auto"], self.path)
+                ref = git(head, self.path)
+            except GitError as exc:
+                raise GitError(
+                    f"cannot tell {self.path}'s default branch (origin/HEAD is unset, and "
+                    f"origin did not say: {exc}); run `git remote set-head origin --auto` "
+                    "there"
+                ) from exc
         return ref.strip().removeprefix("origin/")
 
     def fetch(self) -> None:
@@ -514,13 +521,23 @@ class Checkout:
 
     # ------------------------------------------------------ the wave driver
 
-    def fast_forward(self) -> None:
+    def fast_forward(self, *, switch: bool = False) -> None:
         """Fetch, then fast-forward the checked-out default branch to origin's
         (wave-driver §B). A clone on any other branch is refused by name: the
-        driver never switches an operator's branch for them."""
+        driver never switches an operator's branch for them. With *switch* — a clone
+        that is the driver's own, a cloud session's (gh#1100) — a clean one on another
+        branch or a detached HEAD is checked out on the default branch first."""
         self.fetch()
         default = self.default_branch()
         current = git(["rev-parse", "--abbrev-ref", "HEAD"], self.path).strip()
+        if current != default and switch:
+            if git(["status", "--porcelain", "--untracked-files=no"], self.path).strip():
+                raise GitError(
+                    f"{self.path} is on {current} with local changes, so the driver does "
+                    f"not check out {default} there; commit or discard them"
+                )
+            git(["checkout", "--quiet", default], self.path)  # tracks origin's when new
+            current = default
         if current != default:
             raise GitError(
                 f"{self.path} is on {current}, not {default}; the driver fast-forwards "

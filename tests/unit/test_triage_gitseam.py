@@ -206,6 +206,48 @@ def test_fast_forward_refuses_a_checkout_on_another_branch(tmp_path: Path) -> No
         checkout.fast_forward()
 
 
+def test_the_default_branch_is_resolved_when_origin_head_is_unset(tmp_path: Path) -> None:
+    """gh#1100: a cloud session's clone has no `origin/HEAD`; fr asks origin itself
+    (`git remote set-head origin --auto`) instead of refusing the first drive pass."""
+    checkout = _repo(tmp_path)  # cloned while origin was empty: no origin/HEAD
+    _git(tmp_path / "origin.git", "symbolic-ref", "HEAD", "refs/heads/main")
+    assert checkout.default_branch() == "main"
+    assert _git(checkout.path, "symbolic-ref", "--short", "refs/remotes/origin/HEAD").strip() == (
+        "origin/main"
+    )
+
+
+def test_an_unresolvable_default_branch_still_refuses_with_the_remedy(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with pytest.raises(GitError, match="origin/HEAD is unset"):
+        checkout.default_branch()
+
+
+def test_fast_forward_with_switch_takes_a_detached_clone_onto_the_default_branch(
+    tmp_path: Path,
+) -> None:
+    """gh#1100: the cloud driver's own clone is detached (at a release commit); with
+    `switch` it is checked out on the default branch, then fast-forwarded."""
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _git(checkout.path, "checkout", "--quiet", "--detach")
+    _pushed_elsewhere(tmp_path, checkout, "merged batch")
+    checkout.fast_forward(switch=True)
+    assert _git(checkout.path, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
+    assert (checkout.path / "b.txt").read_text() == "merged batch\n"
+
+
+def test_fast_forward_with_switch_never_moves_a_dirty_clone(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "remote", "set-head", "origin", "main")
+    _git(checkout.path, "checkout", "--quiet", "-b", "work")
+    (checkout.path / "a.txt").write_text("unsaved\n")
+    with pytest.raises(GitError, match="local changes"):
+        checkout.fast_forward(switch=True)
+    assert _git(checkout.path, "rev-parse", "--abbrev-ref", "HEAD").strip() == "work"
+
+
 def _head(tmp_path: Path) -> str:
     return _git(tmp_path / "other", "rev-parse", "HEAD").strip()
 
