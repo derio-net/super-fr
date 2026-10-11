@@ -12,4 +12,4 @@ refactor:
 journal:
   - {kind: discovery, id: p1-scenario-origin-shim, phase: 1, title: "adopt scenario needs a git shim for origin", body: "fr requires `remote get-url origin` to look like the batch's forge repo, and `get-url` applies insteadOf, so an offline clone cannot satisfy both that and fetch. tests/scenarios/fixtures/triage-adopt/bin/git answers only that call; every other git call is the real git."}
 resolves: []
-evidence: {tests: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/001b79bf-4eda-417c-8701-d4296af10928/scratchpad/p1-full-suite.log}
+evidence: {tests: ci}
