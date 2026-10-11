@@ -90,7 +90,7 @@ def test_check_reports_no_drift_for_absent_or_stale_ignored_reports(tmp_path: Pa
 def test_check_still_reports_drift_for_a_stale_tracked_report_only(tmp_path: Path) -> None:
     root = _repo(tmp_path, "docs/acceptance/report_linked.md\n")
     _write_reports(root, *REPORT_SET)
-    _write_reports(root, LOCAL, stale=True)
+    _write_reports(root, LOCAL, LINKED_MD, stale=True)  # the ignored one is stale too
     drift = _drift(root)
     assert len(drift) == 1
     assert all(LINKED_MD not in e for e in drift)
@@ -103,7 +103,9 @@ def test_report_check_passes_with_ignored_reports_absent_and_names_them(
     root = _repo(tmp_path, IGNORE_ALL)
     result = _report(root, monkeypatch, "--check")
     assert result.exit_code == 0, result.output
+    assert "no tracked reports to check" in result.output
     assert "CI-built, skipped" in result.output
+    assert all(rel in result.output for rel in REPORT_SET)
 
 
 def test_report_check_still_exits_3_on_a_stale_tracked_report(
@@ -111,8 +113,23 @@ def test_report_check_still_exits_3_on_a_stale_tracked_report(
 ) -> None:
     root = _repo(tmp_path, "docs/acceptance/report_linked.md\n")
     _write_reports(root, LOCAL, "docs/acceptance/report_linked.html", stale=True)
+    # the ignored report is absent: only the two stale tracked ones may be named
     result = _report(root, monkeypatch, "--check")
     assert result.exit_code == 3, result.output
+    assert LOCAL in result.output
+    assert "docs/acceptance/report_linked.html" in result.output
+    assert LINKED_MD not in result.output
+
+
+def test_report_check_ignores_a_stale_ignored_report_beside_fresh_tracked_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path, "docs/acceptance/report_linked.md\n")
+    _write_reports(root, LOCAL, "docs/acceptance/report_linked.html")
+    _write_reports(root, LINKED_MD, stale=True)
+    result = _report(root, monkeypatch, "--check")
+    assert result.exit_code == 0, result.output
+    assert f"CI-built, skipped: {LINKED_MD}" in result.output
 
 
 def test_report_check_with_an_explicit_out_compares_an_ignored_file(

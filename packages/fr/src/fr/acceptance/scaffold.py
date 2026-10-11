@@ -424,6 +424,9 @@ class InitOutcome:
     # Legacy reports deleted by `prune_stale_reports` — a deletion dirties the
     # tree as surely as a write does.
     removed: list[str] = field(default_factory=list)
+    # Reports the repo gitignores: CI builds them, init neither writes nor
+    # commits them (spec 2026-10-12 R1).
+    ci_built: list[str] = field(default_factory=list)
 
     @property
     def written(self) -> list[str]:
@@ -544,14 +547,15 @@ def init(
     # the other files are written — mirrors add_cmd's warn-don't-roll-back
     # policy. The scaffolded matrix always carries the keys, so this only guards
     # a pre-existing partial state; re-running init (write-if-missing) recovers.
+    ci_built = ci_built_reports(root)
+    tracked = tracked_reports(root, ci_built)
     try:
         rendered = render_committed_set(
-            load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root
+            load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root, only=tracked
         )
     except Exception:  # noqa: BLE001 — a render hiccup never fails init
         rendered = None
-    ci_built = ci_built_reports(root)
-    for report_rel in tracked_reports(root):
+    for report_rel in tracked:
         report_path = root / report_rel
         if report_path.exists():
             skipped.append(report_rel)
@@ -560,7 +564,6 @@ def init(
             created.append(report_rel)
         else:
             skipped.append(report_rel)
-    skipped.extend(sorted(ci_built))  # CI builds these (spec 2026-10-12 R1)
     removed = prune_stale_reports(root) if rendered is not None else []
 
     # `report.html` is the ad-hoc / uncommitted render — gitignore it.
@@ -572,5 +575,10 @@ def init(
     else:
         skipped.append(".gitignore")
     return InitOutcome(
-        created=created, skipped=skipped, notices=notices, modified=modified, removed=removed
+        created=created,
+        skipped=skipped,
+        notices=notices,
+        modified=modified,
+        removed=removed,
+        ci_built=sorted(ci_built),
     )

@@ -436,20 +436,16 @@ def ci_built_reports(root: Path) -> frozenset[str]:
     """The `REPORT_SET` paths the repo gitignores and does not track — CI builds
     them, so no fr commit path or sync check touches them (spec 2026-10-12 R1).
 
-    One `git check-ignore --stdin` call (a tracked file is never reported
-    ignored, so tracked wins). Outside a git repo, or when git fails, the empty
-    set: the old behaviour."""
-    import subprocess
+    One `git check-ignore` call through `fr.git.git_answer` (C locale,
+    prompt-free, time-boxed; a tracked file is never reported ignored, so
+    tracked wins). Outside a git repo, or when git fails, the empty set: the
+    old behaviour. Compute it once per operation and pass it to
+    `tracked_reports`."""
+    from fr.git import GitUnavailableError, git_answer
 
     try:
-        proc = subprocess.run(
-            ["git", "-C", str(root), "check-ignore", "--stdin"],
-            input="\n".join(REPORT_SET) + "\n",
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except (OSError, ValueError):
+        proc = git_answer(root, "check-ignore", "--", *REPORT_SET)
+    except GitUnavailableError:
         return frozenset()
     if proc.returncode not in (0, 1):
         return frozenset()
@@ -458,10 +454,13 @@ def ci_built_reports(root: Path) -> frozenset[str]:
     )
 
 
-def tracked_reports(root: Path) -> dict[str, tuple[str, str]]:
+def tracked_reports(
+    root: Path, ci_built: frozenset[str] | None = None
+) -> dict[str, tuple[str, str]]:
     """`REPORT_SET` minus `ci_built_reports(root)` — the reports fr commits and
-    keeps in sync (spec 2026-10-12 R1)."""
-    skipped = ci_built_reports(root)
+    keeps in sync (spec 2026-10-12 R1). Pass `ci_built` when the caller already
+    computed it, so one operation asks git once."""
+    skipped = ci_built_reports(root) if ci_built is None else ci_built
     return {rel: spec for rel, spec in REPORT_SET.items() if rel not in skipped}
 
 
