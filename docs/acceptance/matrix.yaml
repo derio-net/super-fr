@@ -5003,9 +5003,11 @@ rows:
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_dispatched_or_pr_open_batch_is_refused
       - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_the_base_clone_is_left_untouched
     status: ci
-    notes: the default-branch refusal became the default-branch adopt path (2026-10-11
+    notes: 'Code review p1: adds untrusted-PR (fork/foreign/unread author, either branch),
+      default-branch, main-worktree, same-branch-R9 and real dispatched/pr-open stage
+      refusals. The default-branch refusal became the default-branch adopt path (2026-10-11
       R5); its safety (never renaming or touching the default branch) is pinned by the
-      base-clone snapshot test
+      base-clone snapshot test.'
   - id: triage-batch-adopt-list
     capability: Backlog triage
     acceptance: An operator can list every running herdr session with the issue refs
