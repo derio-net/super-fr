@@ -8381,9 +8381,12 @@ rows:
       merge group.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R15
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_merge_group.py#test_the_workflow_triggers_on_merge_group
+    status: ci
+    notes: 'Phase 3: both workflows trigger on merge_group; change-fragment stays pull-request-only
+      and ci-ok treats its skip as a pass.'
     verify: none
   - id: release-pushes-as-app
     capability: release
