@@ -44,6 +44,13 @@ from fr.labels import LabelDef
 _PR_URL_RE = re.compile(r"^https://[^/]+/([^/]+/[^/]+)/pulls/(\d+)/?$")
 
 
+def _login(author: Any) -> str:
+    """A login from tea's `author` field: a bare name or a user object."""
+    if isinstance(author, dict):
+        return str(author.get("login") or author.get("username") or "")
+    return str(author or "")
+
+
 class RealTeaClient(UnsupportedBatchOps):
     """Wraps `fr.tea` to satisfy the `GhClient` Protocol for Gitea repos."""
 
@@ -184,6 +191,13 @@ class RealTeaClient(UnsupportedBatchOps):
     def edit_issue_body(self, repo: str, number: int, body: str) -> None:
         _tea.edit_issue_body(repo=repo, number=number, body=body)
 
+    def viewer_login(self) -> str:
+        out = _tea._run_tea(["api", "user"])
+        try:
+            return str(json.loads(out)["login"])
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise _tea.TeaError(f"unreadable `tea api user` output: {exc}") from exc
+
     def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
         _tea.edit_issue(repo=repo, number=number, title=title, body=body)
 
@@ -195,7 +209,7 @@ class RealTeaClient(UnsupportedBatchOps):
     ) -> list[dict[str, Any]]:
         out = _tea._run_tea(
             ["issues", "list", "--repo", repo, "--state", "open", "--limit", str(limit)]
-            + ["--fields", "index,title,body,labels", "--output", "json"]
+            + ["--fields", "index,title,body,labels,author", "--output", "json"]
         )
         try:
             got = json.loads(out) if out.strip() else []
@@ -216,6 +230,7 @@ class RealTeaClient(UnsupportedBatchOps):
                     "title": i.get("title") or "",
                     "body": i.get("body") or "",
                     "labels": [str(x) for x in labels],
+                    "author": {"login": _login(i.get("author"))},
                 }
             )
         return filter_issues_by_body(raw, search, limit)

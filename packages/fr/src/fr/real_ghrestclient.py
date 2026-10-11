@@ -763,10 +763,19 @@ class RealGhRestClient:
         page — no per-PR file list (p2-r7). `RealGhClient` calls this too."""
         owner = repo.split("/", 1)[0]
         head = urllib.parse.quote(f"{owner}:{branch}", safe=":/")
-        pulls = self._paged(f"repos/{repo}/pulls?head={head}&state=open", limit=1)
-        if not pulls:
-            return None
-        return {"number": int(pulls[0]["number"]), "url": str(pulls[0].get("html_url") or "")}
+        pulls = self._paged(f"repos/{repo}/pulls?head={head}&state=open", limit=30)
+        # A fork can carry the same head name (a same-owner fork of another repo
+        # matches the `owner:branch` filter), so only a PR whose head lives in
+        # THIS repo is reported, and it says so.
+        for pr in pulls:
+            head_repo = str(((pr.get("head") or {}).get("repo") or {}).get("full_name") or "")
+            if head_repo.lower() == repo.lower():
+                return {
+                    "number": int(pr["number"]),
+                    "url": str(pr.get("html_url") or ""),
+                    "same_repo": True,
+                }
+        return None
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
         """Every check on *sha* (spec §I): `commits/{sha}/check-runs?filter=latest`,
@@ -1001,7 +1010,7 @@ class RealGhRestClient:
     def list_open_issues_with_body(
         self, repo: str, *, search: tuple[str, ...], limit: int
     ) -> list[dict[str, Any]]:
-        raw = self.list_issues(repo, "open", limit, "number,title,body,labels")
+        raw = self.list_issues(repo, "open", limit, "number,title,body,labels,author")
         return filter_issues_by_body(raw, search, limit)
 
     def close_issue(self, repo: str, number: int, comment: str) -> None:
@@ -1065,6 +1074,9 @@ class RealGhRestClient:
             fields={"head": head, "base": base, "title": title, "body": body, "draft": draft},
         )
         return {"number": int(made["number"]), "url": str(made["html_url"])}
+
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        self._api(f"repos/{repo}/pulls/{number}", method="PATCH", fields={"body": body})
 
     def close_pr(self, repo: str, number: int) -> None:
         self._api(f"repos/{repo}/pulls/{number}", method="PATCH", fields={"state": "closed"})

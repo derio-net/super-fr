@@ -261,7 +261,7 @@ class RealGhClient:
         self, repo: str, *, search: tuple[str, ...], limit: int
     ) -> list[dict[str, Any]]:
         # Client-side: GitHub search does not index HTML-comment markers.
-        raw = self.list_issues(repo, "open", limit, "number,title,body,labels")
+        raw = self.list_issues(repo, "open", limit, "number,title,body,labels,author")
         return filter_issues_by_body(raw, search, limit)
 
     @_hosted
@@ -498,6 +498,10 @@ class RealGhClient:
             raise _gh.GhError(f"`gh pr create` printed no PR URL: {out.strip()!r}", stdout=out)
         url = out[: found.end()].strip().splitlines()[-1].strip()
         return {"number": int(found.group(1)), "url": url}
+
+    @_hosted
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        _gh._run_gh(["pr", "edit", str(number), "--repo", repo, "--body", body])
 
     @_hosted
     def close_pr(self, repo: str, number: int) -> None:

@@ -297,8 +297,9 @@ class GhClient(Protocol):
         ...
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
-        """`{number, url}` of the open PR whose head is *branch*, None when there
-        is none. Reads no file list (§I step 6, p2-r7): `pr_view` gives the rest."""
+        """`{number, url, same_repo}` of the open PR whose head is *branch*, None
+        when there is none; `same_repo` is False for a fork's PR, which a caller
+        must never reuse or edit. Reads no file list (§I step 6, p2-r7)."""
         ...
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
@@ -323,6 +324,11 @@ class GhClient(Protocol):
 
     def close_pr(self, repo: str, number: int) -> None:
         """Close PR *number* unmerged (batch adopt's supersede, §C)."""
+        ...
+
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        """Replace PR *number*'s description (`fr debt archive-pr` refreshes its
+        one draft PR, R12)."""
         ...
 
     def delete_branch(self, repo: str, branch: str) -> None:
@@ -473,6 +479,9 @@ class UnsupportedBatchOps:
 
     def close_pr(self, repo: str, number: int) -> None:
         raise self._unsupported("close_pr")
+
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        raise self._unsupported("edit_pr")
 
     def delete_branch(self, repo: str, branch: str) -> None:
         raise self._unsupported("delete_branch")

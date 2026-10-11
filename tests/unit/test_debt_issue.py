@@ -179,3 +179,26 @@ def test_an_unusable_issue_number_is_refused(env: tuple[Gh, dict]) -> None:
     ]
     r = runner.invoke(app, ["debt", "issue", "--yes"])
     assert r.exit_code == 1 and "unusable issue number" in r.output
+
+
+def test_a_marker_bearing_issue_by_another_author_is_ignored_not_edited(
+    env: tuple[Gh, dict],
+) -> None:
+    gh, _ = env
+    gh.add_issue(SLUG, 8, body=f"{render.MARKER}\n")
+    gh.issue_authors[(SLUG, 8)] = "mallory\x1b[31m"
+    r = runner.invoke(app, ["debt", "issue", "--yes"])
+    assert r.exit_code == 0, r.output
+    assert "ignoring issue #8 by mallory?[31m" in r.output and "\x1b" not in r.output
+    assert gh.issues[(SLUG, 8)].body == f"{render.MARKER}\n"
+    assert _mutations(gh) == ["create_issue"]
+
+
+def test_the_bot_authored_legacy_issue_is_renamed(env: tuple[Gh, dict]) -> None:
+    gh, _ = env
+    gh.add_issue(SLUG, 363, body=LEGACY)
+    gh.issue_titles[(SLUG, 363)] = "Acceptance debt"
+    gh.issue_authors[(SLUG, 363)] = "github-actions[bot]"
+    assert runner.invoke(app, ["debt", "issue", "--yes"]).exit_code == 0
+    assert gh.issue_titles[(SLUG, 363)] == "widgets: Technical debt"
+    assert _mutations(gh) == ["edit_issue"]

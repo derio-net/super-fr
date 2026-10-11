@@ -42,6 +42,7 @@ class FakeGhClient:
     def __init__(self) -> None:
         self.issues: dict[tuple[str, int], FakeIssue] = {}
         self.issue_titles: dict[tuple[str, int], str] = {}
+        self.issue_authors: dict[tuple[str, int], str] = {}
         self.repo_labels: dict[str, set[str]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.attempted_mutations: int = 0
@@ -207,6 +208,9 @@ class FakeGhClient:
         self.calls.append(("edit_issue_body", {"repo": repo, "number": number, "body": body}))
         self.issues[(repo, number)].body = body
 
+    def viewer_login(self) -> str:
+        return self.comment_author
+
     def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
         self._gate()
         self.calls.append(
@@ -227,6 +231,7 @@ class FakeGhClient:
                 "title": self.issue_titles.get((r, n), ""),
                 "body": i.body,
                 "labels": sorted(i.labels),
+                "author": {"login": self.issue_authors.get((r, n), self.comment_author)},
             }
             for (r, n), i in sorted(self.issues.items())
             if r == repo and i.state == "OPEN"
@@ -296,7 +301,11 @@ class FakeGhClient:
         self.calls.append(("open_pr_for_head", {"repo": repo, "branch": branch}))
         for (r, _), p in sorted(self.prs.items()):
             if r == repo and p["head_ref"] == branch and p["state"] == "OPEN":
-                return {"number": p["number"], "url": p["url"]}
+                return {
+                    "number": p["number"],
+                    "url": p["url"],
+                    "same_repo": not p.get("cross_repo", False),
+                }
         return None
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
@@ -340,6 +349,11 @@ class FakeGhClient:
             created_at=self.pr_created_at or datetime.now(UTC).replace(microsecond=0).isoformat(),
         )  # fmt: skip
         return {"number": number, "url": made["url"]}
+
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        self._gate()
+        self.calls.append(("edit_pr", {"repo": repo, "number": number, "body": body}))
+        self.prs[(repo, number)]["body"] = body
 
     def close_pr(self, repo: str, number: int) -> None:
         self._gate()

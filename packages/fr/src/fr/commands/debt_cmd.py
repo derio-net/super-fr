@@ -12,9 +12,10 @@ file names.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
@@ -61,7 +62,7 @@ def _identity(root: Path) -> str:
 
     slug, why = owed_identity(root, allow_nested=True)
     if slug is None:
-        typer.echo(f"error: {why}", err=True)
+        typer.echo(f"error: {_clean(why, 300)}", err=True)
         raise typer.Exit(1)
     return slug
 
@@ -111,7 +112,7 @@ def debt(
             root, forge=forge, now=_now(), stale_days=stale_days, fetch=not offline, forge_why=why
         )
     except DebtConfigError as e:
-        typer.echo(f"error: {e}", err=True)
+        typer.echo(f"error: {_clean(e, 300)}", err=True)
         raise typer.Exit(2) from e
     typer.echo(report.model_dump_json(indent=2) if json_out else render.text(report))
 
@@ -154,7 +155,7 @@ def issue_cmd(
         except ListingCapped as e:
             found, capped = e.issues, True
             _warn(f"partial: only the first {e.limit} open issues were scanned for the debt issue")
-        found = [i for i in found if _marked(i)]
+        found = _trusted(client, found)
         zero = _is_zero(report)
         body = render.markdown(report)
         number = _number(found[0]) if found else None
@@ -178,7 +179,9 @@ def issue_cmd(
             typer.echo(body)
             return
         if number is None:
-            typer.echo(client.create_issue(slug, title=title, body=body, labels=frozenset()))
+            typer.echo(
+                _clean(client.create_issue(slug, title=title, body=body, labels=frozenset()), 300)
+            )
         elif zero:
             client.close_issue(
                 slug, number, "No technical debt as of this run; closing. `fr debt` has the report."
@@ -186,17 +189,54 @@ def issue_cmd(
         else:
             client.edit_issue(slug, number, title=title, body=body)
     except DebtConfigError as e:
-        typer.echo(f"error: {e}", err=True)
+        typer.echo(f"error: {_clean(e, 300)}", err=True)
         raise typer.Exit(2) from e
     except UnsupportedForgeOperation as e:
-        typer.echo(f"error: this forge cannot do `{e.op}` ({e})", err=True)
+        typer.echo(f"error: this forge cannot do `{_clean(e.op)}` ({_clean(e)})", err=True)
         raise typer.Exit(1) from e
     except FORGE_ERRORS as e:
-        typer.echo(f"error: the forge refused: {e}", err=True)
+        typer.echo(f"error: the forge refused: {_clean(e, 300)}", err=True)
         raise typer.Exit(1) from e
 
 
 LEGACY_MARKER = "<!-- fr-acceptance-digest -->"
+
+
+BOT_LOGINS = frozenset({"github-actions[bot]", "github-actions", "app/github-actions"})
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _clean(value: object, limit: int = 120) -> str:
+    """A forge-returned string made safe to echo: no control characters."""
+    return _CONTROL.sub("?", str(value))[:limit]
+
+
+def _login(issue: dict[str, Any]) -> str:
+    a = issue.get("author")
+    return str(a.get("login") or "") if isinstance(a, dict) else str(a or "")
+
+
+def _trusted(client: GhClient, found: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The marker-bearing issues fr may edit, rename or close: written by the
+    viewer or by the workflow's own bot. A marker anyone can paste selects
+    nothing by itself; any other match is named and left alone."""
+    allowed = set(BOT_LOGINS)
+    try:
+        allowed.add(client.viewer_login().lower())
+    except Exception as e:  # any failure: trust the bot accounts only
+        _warn(f"cannot tell who the viewer is ({_clean(type(e).__name__)}); trusting bots only")
+    out = []
+    for i in found:
+        if not _marked(i):
+            continue
+        if _login(i).lower() in allowed:
+            out.append(i)
+        else:
+            _warn(
+                f"ignoring issue #{_clean(i.get('number'))} by {_clean(_login(i))}: it carries "
+                "the debt marker but was not written by this account or the workflow's bot"
+            )
+    return out
 
 
 def _marked(issue: dict[str, Any]) -> bool:
@@ -212,6 +252,205 @@ def _number(issue: dict[str, Any]) -> int:
     """An issue number that is plain ASCII digits, or a refusal (argv safety)."""
     n = str(issue.get("number", ""))
     if not (n.isascii() and n.isdigit()):
-        typer.echo(f"error: the forge returned an unusable issue number {n!r}", err=True)
+        typer.echo(f"error: the forge returned an unusable issue number {_clean(n)!r}", err=True)
         raise typer.Exit(1)
     return int(n)
+
+
+REFUSAL_REMEDIES = (
+    "enable Settings > Actions > General > 'Allow GitHub Actions to create and approve "
+    "pull requests', or set the FR_DEBT_TOKEN secret to a token that may open pull requests"
+)
+
+
+def _git(root: Path, *args: str, check: bool = True) -> str:
+    import subprocess
+
+    done = subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
+    )
+    if check and done.returncode != 0:
+        raise RuntimeError(f"git {args[0]} failed: {(done.stderr or done.stdout).strip()}")
+    return done.stdout.strip()
+
+
+def _held(root: Path, name: str) -> list[str]:
+    """R19's reason lines for a plan the Test Plan hold keeps, else []."""
+    from fr.archive import outcome_hold
+    from fr.parser import PlanSchemaError, parse
+
+    rel = Path("docs/superpowers/plans") / name
+    try:
+        return outcome_hold(root, parse(root / rel), rel)
+    except PlanSchemaError:
+        return []
+
+
+def _archive_one(root: Path, name: str, env: dict[str, str]) -> tuple[bool, str]:
+    """`fr archive <plan-dir>` as a subprocess; (ok, last stderr/stdout line)."""
+    import subprocess
+    import sys
+
+    done = subprocess.run(
+        [sys.executable, "-m", "fr", "archive", f"docs/superpowers/plans/{name}"],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    text = (done.stderr or done.stdout or "").strip()
+    return done.returncode == 0, (text.splitlines() or [""])[-1]
+
+
+@debt_app.command("archive-pr")
+def archive_pr_cmd(
+    yes: Annotated[
+        bool, typer.Option("--yes", help="Push and open the PR (else preview).")
+    ] = False,
+    stale_days: Annotated[int | None, typer.Option("--stale-days")] = None,
+) -> None:
+    """Open or refresh the one draft PR archiving long-merged plans (R12)."""
+    import os
+
+    from fr.archive import merge_evidence
+    from fr.debt import sweep as sw
+    from fr.debt.engine import DebtConfigError
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.hostclient import FORGE_ERRORS
+
+    root = resolve_repo_root()
+    slug = _identity(root)
+    token = os.environ.get("FR_DEBT_TOKEN", "").strip()
+    if token:
+        # The forge writes below (PR, owed issues) act with the dedicated token.
+        os.environ["GH_TOKEN"] = token
+        os.environ["GITLAB_TOKEN"] = token
+    try:
+        client = _client(root)
+        report = _compute(root, client, slug, stale_days)
+    except DebtConfigError as e:
+        typer.echo(f"error: {_clean(e, 300)}", err=True)
+        raise typer.Exit(2) from e
+    except FORGE_ERRORS as e:
+        typer.echo(f"error: the forge refused: {_clean(e, 300)}", err=True)
+        raise typer.Exit(1) from e
+    chosen = sw.select(report)
+    if not chosen:
+        typer.echo(
+            f"No plan has been merged and unarchived for more than {report.stale_days} days."
+        )
+        return
+    result = sw.Sweep()
+    for plan in chosen:
+        why = _held(root, plan.name)
+        if why:
+            result.held.append((plan, why))
+        else:
+            result.archived.append(plan)
+    for plan, why in result.held:
+        typer.echo(f"{sw.HELD_REASON}: {plan.name}")
+        for line in why[1:]:
+            typer.echo(line)
+    if not result.archived:
+        typer.echo("Every selected plan is held; nothing to archive.")
+        return
+    typer.echo("archive: " + ", ".join(p.name for p in result.archived))
+    if not yes:
+        typer.echo("(preview; re-run with --yes to push the branch and open the draft PR)")
+        return
+
+    if _git(root, "status", "--porcelain", "--untracked-files=no"):
+        typer.echo("error: the checkout has uncommitted changes; refusing to sweep", err=True)
+        raise typer.Exit(1)
+    ev = merge_evidence(root, fetch=False)
+    if ev.ref is None or not sw.SAFE_REF.match(ev.ref.ref):
+        typer.echo(f"error: the default branch is unknown ({ev.ref_error})", err=True)
+        raise typer.Exit(1)
+    start = _git(root, "rev-parse", "--verify", "--end-of-options", f"{ev.ref.ref}^{{commit}}")
+    came_from = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    if came_from == "HEAD":
+        came_from = _git(root, "rev-parse", "HEAD")
+    base = ev.ref.ref.split("/", 1)[-1]
+    try:
+        _git(root, "switch", "-C", sw.BRANCH, start)
+        env = dict(os.environ)
+        landed: list[Any] = []
+        for plan, _ in [(p, None) for p in result.archived]:
+            ok, last = _archive_one(root, plan.name, env)
+            if ok:
+                landed.append(plan)
+            else:
+                result.failed.append((plan, last))
+        result.archived = landed
+        for plan, last in result.failed:
+            typer.echo(f"not archived: {plan.name}: {_clean(last, 300)}")
+        _git(root, "add", "-A", "--", "docs")
+        if not result.archived or not _git(root, "diff", "--cached", "--name-only"):
+            typer.echo("Nothing was archived; no branch pushed.")
+            return
+        _commit(root)
+        _push(root)
+        _open_or_refresh(root, client, slug, base, result, report.stale_days, bool(token))
+    except RuntimeError as e:
+        typer.echo(f"error: {_clean(e, 300)}", err=True)
+        raise typer.Exit(1) from e
+    except UnsupportedForgeOperation as e:
+        _warn(
+            f"this forge cannot do `{e.op}`; the branch {sw.BRANCH} is pushed, open the PR by hand"
+        )
+    except FORGE_ERRORS as e:
+        _warn(
+            f"the forge refused to open the archive PR: {_clean(' '.join(str(e).split()), 300)}. "
+            f"Remedies: {REFUSAL_REMEDIES}. The branch {sw.BRANCH} is pushed."
+        )
+    finally:
+        detached = re.fullmatch(r"[0-9a-f]{40}", came_from) is not None
+        _git(root, "switch", *(["--detach"] if detached else []), came_from, check=False)
+
+
+def _commit(root: Path) -> None:
+    ident: list[str] = []
+    if not _git(root, "config", "user.email", check=False):
+        ident = ["-c", "user.name=fr-debt", "-c", "user.email=fr-debt@users.noreply.invalid"]
+    _git(root, *ident, "commit", "-q", "-m", "chore(fr): archive merged plans (debt sweep)")
+
+
+def _push(root: Path) -> None:
+    """Force-push the bot-owned branch, leased on what the remote holds NOW."""
+    from fr.debt import sweep as sw
+
+    ref = f"refs/heads/{sw.BRANCH}"
+    held = _git(root, "ls-remote", "--heads", "origin", ref)
+    expect = held.split()[0] if held else ""
+    _git(root, "push", f"--force-with-lease={ref}:{expect}", "origin", f"{sw.BRANCH}:{ref}")
+
+
+def _open_or_refresh(
+    root: Path,
+    client: GhClient,
+    slug: str,
+    base: str,
+    result: Any,
+    stale_days: int,
+    own_token: bool,
+) -> None:
+    from fr.debt import sweep as sw
+
+    body = sw.pr_body(result, stale_days=stale_days, own_token=own_token)
+    existing = client.open_pr_for_head(slug, sw.BRANCH)
+    if existing is not None and existing.get("same_repo") is not True:
+        # A fork's PR on the same head name is never pushed to or edited.
+        _warn("an open PR on the sweep branch name is not from this repository; opening our own")
+        existing = None
+    if existing is None:
+        made = client.create_pr(
+            slug, head=sw.BRANCH, base=base, title=sw.PR_TITLE, body=body, draft=True
+        )
+        typer.echo(f"opened draft PR: {_clean(made.get('url') or made.get('number'), 300)}")
+        return
+    number = existing.get("number")
+    if not (isinstance(number, int) or (str(number).isascii() and str(number).isdigit())):
+        raise RuntimeError(f"the forge returned an unusable PR number {number!r}")
+    client.edit_pr(slug, int(number), body=body)
+    typer.echo(f"refreshed draft PR #{int(number)}")

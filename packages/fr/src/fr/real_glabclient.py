@@ -287,6 +287,14 @@ class RealGlabClient(UnsupportedBatchOps):
         self._glab(["issue", "note", str(number), "--repo", repo, "--message", body])
 
     @_hosted
+    def viewer_login(self) -> str:
+        out = self._api("user")
+        try:
+            return str(json.loads(out)["username"])
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise _glab.GlabError(f"unreadable `glab api user` output: {exc}") from exc
+
+    @_hosted
     def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
         _glab.edit_issue(repo=repo, number=number, title=title, body=body, host=self._host)
 
@@ -320,12 +328,17 @@ class RealGlabClient(UnsupportedBatchOps):
                             "title": i.get("title") or "",
                             "body": i.get("description") or "",
                             "labels": [str(x) for x in (i.get("labels") or [])],
+                            "author": {"login": (i.get("author") or {}).get("username", "")},
                         }
                     )
             if len(got) < per:
                 break
             page += 1
         return filter_issues_by_body(raw, search, limit)
+
+    @_hosted
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        self._glab(["mr", "update", str(number), "--repo", repo, "--description", body])
 
     @_hosted
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
@@ -338,7 +351,11 @@ class RealGlabClient(UnsupportedBatchOps):
             raise _glab.GlabError(f"unreadable `glab mr list` output: {exc}") from exc
         if not isinstance(mrs, list) or not mrs or not isinstance(mrs[0], dict):
             return None
-        return {"number": int(mrs[0]["iid"]), "url": str(mrs[0].get("web_url") or "")}
+        mr = mrs[0]
+        same = mr.get("source_project_id") is not None and mr.get("source_project_id") == mr.get(
+            "target_project_id"
+        )
+        return {"number": int(mr["iid"]), "url": str(mr.get("web_url") or ""), "same_repo": same}
 
     @_hosted
     def create_pr(

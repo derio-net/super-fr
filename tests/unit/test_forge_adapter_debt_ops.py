@@ -263,3 +263,22 @@ def test_the_protocol_declares_the_debt_operations() -> None:
         "open_pr_for_head",
     ):
         assert hasattr(GhClient, op), op
+
+
+def test_edit_pr_builds_the_command_or_route_on_each_forge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gh = Recorder()
+    monkeypatch.setattr(_gh, "_run_gh", gh)
+    RealGhClient().edit_pr(REPO, 4, body="B")
+    assert gh.calls == [["pr", "edit", "4", "--repo", REPO, "--body", "B"]]
+    client, rest = _rest()
+    client.edit_pr(REPO, 4, body="B")
+    assert f"repos/{REPO}/pulls/4" in rest.calls[0] and "PATCH" in rest.calls[0]
+    gl = Recorder()
+    monkeypatch.setattr(_glab, "_run_glab", gl)
+    RealGlabClient().edit_pr(REPO, 4, body="B")
+    assert gl.calls == [["mr", "update", "4", "--repo", REPO, "--description", "B"]]
+    with pytest.raises(UnsupportedForgeOperation) as info:
+        RealTeaClient().edit_pr(REPO, 4, body="B")
+    assert info.value.op == "edit_pr"
