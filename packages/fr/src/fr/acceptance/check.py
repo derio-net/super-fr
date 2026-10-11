@@ -293,7 +293,7 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
 
     from fr.acceptance.model import walked_error
 
-    result.errors.extend(e for row in matrix.rows if (e := walked_error(row)) is not None)
+    result.errors.extend(why for row in matrix.rows if (why := walked_error(row)) is not None)
     result.failing_ids = [r.id for r in matrix.rows if r.status == "failing"]
     result.warning_rows = open_rows(matrix)
     result.summary = (

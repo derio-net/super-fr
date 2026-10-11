@@ -62,8 +62,12 @@ def test_walked_recording_a_passing_walk_moves_the_row(repo: Path) -> None:
 
 
 def test_walked_over_an_existing_passing_walk_needs_no_new_one(repo: Path) -> None:
-    assert _fr("set-status", "--id", "target", "--status", "walk-owed", "--notes", "n", *WALK)\
-        .exit_code == 0
+    assert (
+        _fr(
+            "set-status", "--id", "target", "--status", "walk-owed", "--notes", "n", *WALK
+        ).exit_code
+        == 0
+    )
     out = _walked()
     assert out.exit_code == 0, out.output
     assert _status(repo) == "walked"
@@ -85,7 +89,9 @@ def test_the_record_engine_refuses_walked_without_a_passing_walk(repo: Path) -> 
 
 
 def test_check_errors_on_a_walked_row_with_no_passing_walk(tmp_path: Path) -> None:
-    fail = Walk(strategy="live", harness="h", model="m", outcome="fail", at="2026-10-01", evidence="e")
+    fail = Walk(
+        strategy="live", harness="h", model="m", outcome="fail", at="2026-10-01", evidence="e"
+    )
     rows = (
         Row(id="bare", capability="c", acceptance="a", status="walked"),
         Row(id="failed", capability="c", acceptance="a", status="walked", walks=(fail,)),
