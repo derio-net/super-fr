@@ -312,6 +312,7 @@ def test_pr_for_branch_derives_the_repo_from_origin(tmp_path: Path) -> None:
         "state": "OPEN",
         "url": "https://github.com/derio-net/super-fr/pull/852",
         "mergedAt": None,
+        "updatedAt": "2026-09-29T19:16:46Z",
     }
 
 

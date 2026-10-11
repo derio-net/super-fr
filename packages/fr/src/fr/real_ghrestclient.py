@@ -809,6 +809,7 @@ class RealGhRestClient:
             "state": _pr_state(chosen),
             "url": chosen.get("html_url", ""),
             "mergedAt": chosen.get("merged_at"),
+            "updatedAt": chosen.get("updated_at"),
         }
 
     # ---- GhClient: repo and files ----

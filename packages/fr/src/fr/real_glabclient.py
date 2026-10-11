@@ -328,7 +328,12 @@ class RealGlabClient(UnsupportedBatchOps):
             state = "CLOSED"
         else:
             state = "OPEN"
-        return {"state": state, "url": raw.get("web_url", ""), "mergedAt": raw.get("merged_at")}
+        return {
+            "state": state,
+            "url": raw.get("web_url", ""),
+            "mergedAt": raw.get("merged_at"),
+            "updatedAt": raw.get("updated_at"),
+        }
 
     @_hosted
     def issues_enabled(self, repo: str | None = None) -> bool | None:

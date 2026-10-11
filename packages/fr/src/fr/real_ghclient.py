@@ -606,7 +606,7 @@ class RealGhClient:
         self, branch: str, *, cwd: Path, run: CommandRunner | None = None
     ) -> dict[str, Any] | None:
         result = _gh_runner(run)(
-            ["gh", "pr", "view", branch, "--json", "state,url,mergedAt"],
+            ["gh", "pr", "view", branch, "--json", "state,url,mergedAt,updatedAt"],
             cwd=cwd,
         )
         if result.returncode != 0 or not (result.stdout or "").strip():

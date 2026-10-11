@@ -64,11 +64,11 @@ _DEFAULT_BRANCH_OUT = {
 }
 
 _PR_ARGV = {
-    "github": ["gh", "pr", "view", "feat/x", "--json", "state,url,mergedAt"],
+    "github": ["gh", "pr", "view", "feat/x", "--json", "state,url,mergedAt,updatedAt"],
     "gitlab": ["glab", "mr", "view", "feat/x", "--output", "json"],
     "gitea": [
         "tea", "pulls", "list", "--state", "all",
-        "--fields", "state,merged,url,head", "--output", "json",
+        "--fields", "state,merged,url,head,updated", "--output", "json",
     ],
 }  # fmt: skip
 
@@ -77,7 +77,9 @@ def _pr_out(backend: str, native_state: str) -> str:
     """One forge-native PR record for branch `feat/x` in *native_state*."""
     if backend == "github":
         merged_at = "2026-10-01T00:00:00Z" if native_state == "MERGED" else None
-        return json.dumps({"state": native_state, "url": "u", "mergedAt": merged_at})
+        return json.dumps(
+            {"state": native_state, "url": "u", "mergedAt": merged_at, "updatedAt": None}
+        )
     if backend == "gitlab":
         merged_at = "2026-10-01T00:00:00Z" if native_state == "merged" else None
         return json.dumps({"state": native_state, "web_url": "u", "merged_at": merged_at})
@@ -135,14 +137,14 @@ def test_pr_for_branch_sends_todays_argv_and_normalises_the_record(
     run = _Scripted(out=_pr_out(backend, _NATIVE[backend][state]))
     pr = _client(backend).pr_for_branch("feat/x", cwd=tmp_path, run=run)
     merged_at = "2026-10-01T00:00:00Z" if state == "MERGED" else None
-    assert pr == {"state": state, "url": "u", "mergedAt": merged_at}
+    assert pr == {"state": state, "url": "u", "mergedAt": merged_at, "updatedAt": None}
     assert run.calls == [(_PR_ARGV[backend], tmp_path)]
 
 
 def test_gitlab_locked_reads_as_closed(tmp_path: Path) -> None:
     run = _Scripted(out=json.dumps({"state": "locked", "web_url": "u"}))
     pr = RealGlabClient().pr_for_branch("feat/x", cwd=tmp_path, run=run)
-    assert pr == {"state": "CLOSED", "url": "u", "mergedAt": None}
+    assert pr == {"state": "CLOSED", "url": "u", "mergedAt": None, "updatedAt": None}
 
 
 def test_gitea_finds_no_pr_for_an_unlisted_branch(tmp_path: Path) -> None:

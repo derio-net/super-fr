@@ -251,7 +251,7 @@ class RealTeaClient(UnsupportedBatchOps):
                 "--state",
                 "all",
                 "--fields",
-                "state,merged,url,head",
+                "state,merged,url,head,updated",
                 "--output",
                 "json",
             ],
@@ -275,7 +275,12 @@ class RealTeaClient(UnsupportedBatchOps):
             state = "MERGED" if merged else ("CLOSED" if entry.get("state") == "closed" else "OPEN")
             # tea renders `merged` as the merge time when there is one.
             merged_at = merged if isinstance(merged, str) else None
-            return {"state": state, "url": entry.get("url", ""), "mergedAt": merged_at}
+            return {
+                "state": state,
+                "url": entry.get("url", ""),
+                "mergedAt": merged_at,
+                "updatedAt": entry.get("updated"),
+            }
         return None
 
     def issues_enabled(self, repo: str | None = None) -> bool | None:

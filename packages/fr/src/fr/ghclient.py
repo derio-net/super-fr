@@ -353,9 +353,10 @@ class GhClient(Protocol):
         self, branch: str, *, cwd: Path, run: CommandRunner | None = None
     ) -> dict[str, Any] | None:
         """The PR/MR whose head is *branch* in the repository at *cwd*:
-        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str, "mergedAt": str|None}`,
-        each forge's own state vocabulary coerced to that one. None when there
-        is none, or the CLI fails, is missing or prints something unparseable."""
+        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str, "mergedAt": str|None,
+        "updatedAt": str|None}`, each forge's own state vocabulary coerced to that
+        one. None when there is none, or the CLI fails, is missing or prints something
+        unparseable."""
         ...
 
     def issues_enabled(self, repo: str | None = None) -> bool | None:

@@ -1,0 +1,38 @@
+schema_version: 9
+run: 2026-10-11-feat-batch-debt-engine
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2]
+refactor:
+  P2.T1: "pure model and renderers written once; nothing to clean"
+  P2.T3: "thin CLI over the engine; the digest was reduced to the shared section renderer in the same step"
+journal:
+  - kind: decision
+    id: p2-forge-protocol
+    phase: 2
+    title: The engine asks a DebtForge protocol; the real adapter lists issues via GhClient.list_issues
+    body: |
+      compute() takes a DebtForge (pr_for_branch, owed_issues) or None for offline. debt/forge.py
+      adapts GhClient (list_issues with fields number,title,body,labels, filtered to fr:owed and
+      fr:awaiting-live). A forge that cannot do it raises, and compute reports the forge as
+      unavailable rather than failing. Phase 4 widens the adapters (R26). pr_for_branch gained
+      updatedAt on gh, glab, tea and the REST client.
+  - kind: decision
+    id: p2-run-branch-activity
+    phase: 2
+    title: Run-branch activity means commits on the branch not on the default ref
+    body: |
+      A plain git log -1 on the run branch would see shared main history and keep every plan
+      active, so staleness uses the branch's commits excluding the default ref, plus the plan
+      dir on the default ref and the branch, plus the PR updatedAt. Run branches are found by
+      reading cursors' emitted.plan as raw YAML (any cursor version).
+  - kind: discovery
+    id: p2-fold-extension
+    phase: 2
+    title: fold_owed extension point for phase 3
+    body: |
+      Add a field to OwedSources (journal already exists, empty) and name it in OWED_PRECEDENCE;
+      phase 3 fills journal with owed-entry items keyed spec:/plan:/row:.
+resolves: []
+evidence: {tests: ci}

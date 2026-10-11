@@ -24,6 +24,7 @@ from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
 from fr.commands.cloud_cmd import cloud_app
+from fr.commands.debt_cmd import debt_app
 from fr.commands.harness_cmd import harness_app
 from fr.commands.hermes_cmd import hermes_app
 from fr.commands.init_cmd import init_app
@@ -86,6 +87,7 @@ app.add_typer(run_app, name="run")
 app.add_typer(validate_app, name="validate")
 app.add_typer(triage_app, name="triage")
 app.add_typer(usage_app, name="usage")
+app.add_typer(debt_app, name="debt")
 app.command(name="skills")(skills_command)
 app.command(name="services", help="Read-only: the resolved forge / ci / tracking services.")(
     services_command
