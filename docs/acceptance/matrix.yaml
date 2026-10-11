@@ -8074,7 +8074,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R22
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at planning; phase 3 writes it.
+    scenario: tests/scenarios/closeout-owed.sh
   - id: herdr-opencode-launch
     capability: herdr OpenCode batch lifecycle
     acceptance: OpenCode batches launch autonomously with the selected model from the
