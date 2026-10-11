@@ -98,7 +98,11 @@ def parse_section(text: str) -> Section | None:
         if line.startswith("strategy:"):
             m = _STRATEGY_LINE.match(line)
             if m is None:
-                raise SectionError(f"line {n}: malformed `strategy:` line: {raw!r}")
+                raise SectionError(
+                    f"line {n}: malformed `strategy:` line: {raw!r} — it holds only the name "
+                    "(`strategy: <name>`); put reasons on the per-row lines "
+                    "(`- <row-id>: <strategy|none> — <reason>`)"
+                )
             if strategy is not None:
                 raise SectionError(f"line {n}: a second `strategy:` line (already {strategy!r})")
             strategy = m["name"]

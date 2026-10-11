@@ -6691,12 +6691,34 @@ def _resolve_with_record(
         raise typer.Exit(2) from e
     for notice in outcome.notices:
         err_console.print(notice, markup=False, soft_wrap=True)
+    if record.outcome == "done" and record.emitted.get("spec"):
+        for message in _unrunnable_spec_warnings(repo_root, record.emitted["spec"]):
+            err_console.print(f"warning: {message}", markup=False, soft_wrap=True)
     typer.echo(outcome.line)
     # deliver's closeout handoff is NOT printed here: the body prints it into
     # the held stdout, and `resolve_in_process` replays it among the notices
     # above — printing it again duplicated it on a real terminal.
     if advance and record.outcome == "done":
         _advance_after_record(repo_root, run_id)
+
+
+def _unrunnable_spec_warnings(repo_root: Path, spec_rel: str) -> list[str]:
+    """R5: the explicit strategies of the spec a record just emitted that the
+    repo cannot run. A missing or malformed section, or an unreadable matrix,
+    says nothing here — `fr plan self-review` reports those."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.requirements import load_spec_matrix, rows_citing
+    from fr.verification.rows import spec_section_at, unrunnable_strategies
+    from fr.verification.spec_section import SectionError
+
+    try:
+        section = spec_section_at(repo_root, spec_rel)
+        if section is None:
+            return []
+        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
+        return unrunnable_strategies(repo_root, section, rows_citing(matrix, spec_ref))
+    except (SectionError, AcceptanceError, OSError):
+        return []
 
 
 def _advance_after_record(repo_root: Path, run_id: str) -> None:
