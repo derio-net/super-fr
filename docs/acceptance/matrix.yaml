@@ -6759,6 +6759,50 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: driver-once-dispatch-refused
+    capability: triage-batch-drive
+    acceptance: '`fr triage batch drive --once --yes` whose pass would dispatch refuses
+      (exit 2) before acting and prints the looping command with the caller''s arguments,
+      unless --single-pass is given, which acts and ends with that warning; dry runs
+      and non-dispatching passes are unchanged.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-driver-resilience-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_single_pass.py#test_once_yes_whose_plan_dispatches_refuses_before_acting
+    status: ci
+    notes: 'Unit tests drive batch_drive_command: refusal, --single-pass warning, dry-run
+      and no-dispatch passes unchanged'
+    verify: none
+  - id: driver-unreadable-visibility-retries
+    capability: triage-batch-drive
+    acceptance: A looping driver that cannot read its state repo's visibility skips
+      the pass (nothing pushed), warns once and retries after --interval instead of
+      exiting; --once and the cloud pass still refuse, and a public state repo with
+      a private member is still refused.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-driver-resilience-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_lease_push_cannot_read_the_visibility
+    status: ci
+    notes: 'Unit tests: a looping drive skips and retries, once/cloud/export still refuse,
+      a leak still ends the driver'
+    verify: none
+  - id: rest-rulesets-free-plan-403
+    capability: triage-batch-drive
+    acceptance: Under the REST forge, a private repo on GitHub's free plan (rulesets
+      endpoint 403 with the plan-upgrade notice) yields its classic-protection required
+      checks and the drive pass proceeds; any other 403 still fails the read.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-driver-resilience-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_real_ghrestclient.py#test_a_free_plan_rulesets_403_means_no_rulesets
+    status: ci
+    notes: 'Unit tests: the free-plan 403 means no rulesets; other 403s and host refusals
+      still raise'
+    verify: none
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group

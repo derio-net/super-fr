@@ -802,3 +802,43 @@ def test_every_field_set_fr_requests_is_produced(fields: str) -> None:
     client.PER_PAGE = 2  # type: ignore[misc]
     [got] = client.list_issues(REPO, "open", limit=1, fields=fields)
     assert sorted(got) == sorted(fields.split(","))
+
+
+# ---- free-plan rulesets 403 (super-fr#1135, R12/R13) ----
+
+_FREE_PLAN_403 = (
+    "gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)"
+)
+
+
+def _rules_run(error: Exception) -> Any:
+    """A `gh api` fake: classic protection requires `ci`, the rules route raises *error*."""
+
+    def run(argv: list[str]) -> str:
+        route = parse_api(argv)[2]
+        if route.endswith("/rules/branches/main"):
+            raise error
+        assert route.endswith("/branches/main"), route
+        return '{"protection": {"required_status_checks": {"contexts": ["ci"]}}}'
+
+    return run
+
+
+def test_a_free_plan_rulesets_403_means_no_rulesets() -> None:
+    client = RealGhRestClient(run=_rules_run(GhError(_FREE_PLAN_403)))
+    assert client.required_check_names(REPO, "main") == ["ci"]
+
+
+def test_any_other_403_on_the_rules_route_still_raises() -> None:
+    err = GhError("gh: Resource not accessible by integration (HTTP 403)")
+    client = RealGhRestClient(run=_rules_run(err))
+    with pytest.raises(GhError, match="not accessible"):
+        client.required_check_names(REPO, "main")
+
+
+def test_a_host_refusal_on_the_rules_route_is_reraised() -> None:
+    from fr.gh import GhHostRefusedError
+
+    client = RealGhRestClient(run=_rules_run(GhHostRefusedError(_FREE_PLAN_403)))
+    with pytest.raises(GhHostRefusedError):
+        client.required_check_names(REPO, "main")
