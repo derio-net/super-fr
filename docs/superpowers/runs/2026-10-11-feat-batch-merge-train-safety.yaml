@@ -3,11 +3,14 @@ run: 2026-10-11-feat-batch-merge-train-safety
 workflow: fr-goal@1
 branch: feat/batch-merge-train-safety
 started: '2026-10-11T16:29:05+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-11T16:29:30+00:00'
+    state: done
+    at: '2026-10-11T17:14:02+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-11-merge-train-safety-design.md
   spec-review:
     state: pending
   plan:

@@ -6757,6 +6757,29 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: merge-train-red-recovery
+    capability: triage-batch-drive
+    acceptance: A batch PR made red by the driver's own update is updated again once
+      the base moves; a PR red at a session commit is handed back to an idle session
+      once per head; repeated passes over the same red head send nothing new; an unreachable
+      session puts it on Needs-you.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: merge-train-queue
+    capability: triage-batch-drive
+    acceptance: Where the base branch requires a merge queue, the driver enqueues approved
+      green batch PRs instead of merging, treats queued PRs as in flight, and re-enqueues
+      or hands back an ejected PR; a repo with no queue keeps its train unchanged.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
@@ -8178,3 +8201,78 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: merge-train-label-gate
+    capability: triage-batch-merge
+    acceptance: 'fr merges a batch PR only with a valid approved-fr label bound to its
+      head: an unlabelled green PR is held naming the label, a labelled green draft
+      is readied and merged, a session push after labelling voids the approval and removes
+      the label, and the driver''s own update-from-base keeps it.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: approval-label-created
+    capability: triage-batch-merge
+    acceptance: fr init scaffold and the triage commands that touch a repo's PRs create
+      the approved-fr label when it is missing, warning once, and never fail on a forge
+      that cannot.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: batch-merge-skip-held
+    capability: triage-batch-merge
+    acceptance: fr triage batch merge with no ids skips batches another scope holds,
+      naming each, and merges the rest; naming a held batch still refuses.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: approval-board-and-briefs
+    capability: triage-board
+    acceptance: The board asks the operator to label (or re-label) a green unapproved
+      batch PR, and no brief, skill, agent or rule fr ships tells a session to add the
+      approved-fr label.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: ci-merge-group-trigger
+    capability: ci
+    acceptance: super-fr's CI and acceptance workflows report ci-ok for a merge queue's
+      merge group.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: release-pushes-as-app
+    capability: release
+    acceptance: With the app configured, super-fr's release commit and tag are pushed
+      as derio-fr-automation, CI runs on the release commit, and the follow-up release
+      run is a no-op.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: main-requires-ci-ok
+    capability: release
+    acceptance: super-fr's main requires ci-ok with up-to-date branches, blocks a behind
+      PR until it is updated, and still accepts the release bot's push through its bypass.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R17
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live

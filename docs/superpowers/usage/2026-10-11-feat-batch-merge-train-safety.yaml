@@ -1,0 +1,81 @@
+schema_version: 2
+run: 2026-10-11-feat-batch-merge-train-safety
+captures:
+- host: h-b697e43e
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-11T17:14:02+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 18d22629-51bd-4e47-a633-0a7f83c6a95f
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 126
+        cache_write: 281202
+        cache_read: 6639064
+        output: 36977
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 33
+      other:
+        usd: null
+        turns: 21
+      paperwork:
+        usd: null
+        turns: 9
+    steps:
+      (outside run):
+        usd: null
+        turns: 6
+        input: 12
+        cache_write: 90723
+        cache_read: 568763
+        output: 1481
+      brainstorm:
+        usd: null
+        turns: 56
+        input: 114
+        cache_write: 190479
+        cache_read: 6070301
+        output: 35496
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 6
+          input: 12
+          cache_write: 90723
+          cache_read: 568763
+          output: 1481
+        brainstorm:
+          usd: null
+          turns: 26
+          input: 54
+          cache_write: 66571
+          cache_read: 3801473
+          output: 35110
+      subagent:
+        brainstorm:
+          usd: null
+          turns: 30
+          input: 60
+          cache_write: 123908
+          cache_read: 2268828
+          output: 386
+    units:
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 30
+          input: 60
+          cache_write: 123908
+          cache_read: 2268828
+          output: 386
+    briefs:
+      a346ae771c9996df3: 3225
+      toolu_01VoRf1nYZGTuGfeNAYiQYJf: 81
