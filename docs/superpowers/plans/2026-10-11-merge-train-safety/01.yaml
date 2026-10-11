@@ -1,0 +1,154 @@
+schema_version: 2
+phase:
+  number: 1
+  title: approved-fr label gate on every fr merge path (R1–R6, R8)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - merge-train-label-gate
+  - approval-label-created
+  - approval-board-and-briefs
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/labels.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/triage/*
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/init_cmd.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/unit/*
+  - tests/scenarios/*
+  - tests/fixtures/*
+  - docs/acceptance/*
+  - .changes/feat-batch-merge-train-safety.yaml
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: Walking skeleton — the smoke
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Smoke the toolchain and CI: add tests/unit/test_merge_train_safety_smoke.py with one trivial assertion (APPROVED_FR is importable once added — start with `assert True` naming the spec), run `uv run pytest tests/unit/test_merge_train_safety_smoke.py -q --no-cov`, commit, push, and confirm the draft PR's CI picks up the commit. Add the minor fragment `.changes/feat-batch-merge-train-safety.yaml` (`bump: minor`, summary covering the label gate, red recovery, merge queues, skip-held and release-as-app).
+- number: 2
+  title: Facts labels, judgements schema 9 events, and the pure verdict
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests for `PullRequest.labels` (None = never read; FACTS_SCHEMA 9 read range 3–9; a facts file at 8 parses with labels None), for the four new BatchEvent kinds (`update`, `approval`, `red_handback`, `enqueue`) gated to JUDGEMENTS schema 9 (reads 1–9, writes 9; a schema-8 file carrying one is refused), and for `approval_verdict` covering Unlabelled, First (none / last voided), Approved (same head; reached through a chain of UpdateEvents) and Void (a head the chain does not reach).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add the field and schema moves in triage/model.py (SCHEMA_9_EVENTS beside the existing sets), fill `labels` in collect.py's GraphQL field list and the REST collector, and create triage/approval.py with the `ApprovalVerdict` union and `approval_verdict` exactly as spec §A "The verdict" defines it. Add APPROVED_FR to fr/labels.py.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: fold any duplicated event-kind gating into the existing schema-gated helper; keep approval.py free of I/O.
+- number: 3
+  title: Forge seams — labels in pr_view, pr_ready, label_exists
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: GhClient protocol tests (in-process fake + RealGhClient argv capture + RealGhRestClient route capture) for `pr_view` returning labels, `pr_ready` (gh pr ready / REST `POST pulls/{n}/ccr/ready_for_review`), `label_exists` (`GET repos/{repo}/labels/{name}`, 404 → False); UnsupportedBatchOps raises UnsupportedForgeOperation for both new verbs. Keep the forge-adapter tripwire green.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement in ghclient.py, real_ghclient.py, real_ghrestclient.py and the in-process fake in tests/unit/triage_fixtures.py.
+- number: 4
+  title: Settle approvals each pass; the walk, the shared merge gate, batch merge
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: `settle_approvals` records First at the current head whatever the checks, voids (label removed via edit_issue_labels, ApprovalEvent voided_at) on a non-chain head, is a no-op on Approved; `_walk_train` admits an Approved/First draft as a member, puts unapproved members in `Train.awaiting` without stopping the walk or blocking the PRs behind; `merge_ready` and `merge_one` both return `unapproved` without a valid approval and call `pr_ready` before landing an approved green draft (`unready` on UnsupportedForgeOperation); `_stops_train` steps over both; MergeContext.on_update records an UpdateEvent with base = rev_parse(ctx.main) after `_update` pushes (CheckoutSeam gains rev_parse); `batch merge` with no ids prints `held <id>: PR #n awaits the approved-fr label` and never hands that batch to run_queue, with ids exits 2 naming the label, and settles approvals only under --yes.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: implement per spec §A "Recording and voiding", "The walk", "Merging" and §B in triage/approval.py, batch_drive.py (Snapshot.approvals, Train.awaiting), batch_merge.py (`_approved_and_ready`, MergeReadiness, on_update, CheckoutSeam.rev_parse) and commands/triage_batch_cmd.py (the drive pass calls settle_approvals before the walk; the driver and batch merge pass on_update callbacks through the one judgements writer).
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: one code path computes the verdict for the walk, the board and the merge gate; delete the now-dead draft early return only if no caller bypasses the gate (keep `_open_head`'s refusal).
+- number: 5
+  title: Label creation, the board, and the briefs
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: `ensure_approval_label` creates a missing label once per repo per pass/command and warns "created label approved-fr on <repo>", is silent when it exists, warns on UnsupportedForgeOperation; it is called by triage collect, batch dispatch, batch merge, every drive pass and `fr init scaffold` (a GitHub origin; failure is a warning). Board: `approve-pr` Need (both R5 texts, draft or not, green and not Approved/First) replaces `ready-pr`; kanban renders `Train.awaiting` as "awaiting approval"; NEED_LABELS gains approve-pr. Briefs: render_brief, conflict_brief and adopt_message output contains NO_APPROVAL_LINE.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: implement the helper and call sites, views.py/kanban.py/render changes, and NO_APPROVAL_LINE in batch_dispatch.py and adopt_message.
+  - id: P1.T5.S3
+    text: |-
+      RED→GREEN: tests/unit/test_tripwire_approval_label_prose.py per spec §A "Briefs and the tripwire" (renderer output carries the line; no shipped skill/agent/rule or OpenCode/Hermes mirror instructs adding the label outside a never/do not/don't/operator sentence). Then add the gate to the fr-triage skill's driver section in operator-subject sentences (respect the skill line cap), run `uv run --no-project python scripts/sync-opencode.py` AND `uv run --no-project python scripts/sync-hermes.py`, and commit the mirrors.
+- number: 6
+  title: Candidate scenario and acceptance
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Write tests/scenarios/merge-train-label-gate.sh on the existing shell fake-forge pattern (tests/scenarios/fixtures/<name>/bin/gh answering REST routes, FR_FORGE_API=rest, bare remote via url.insteadOf, a call log): first pass creates the missing label and warns; an unlabelled green PR is held and the board's Needs-you asks to label it; a labelled draft is readied and merged; a session push after labelling voids it (label-removal call logged, re-label Need); a driver update keeps it. Register the rows' scenario and level with `fr acceptance set-status` (merge-train-label-gate, approval-label-created, approval-board-and-briefs → ci with their unit refs and the scenario).
+  - id: P1.T6.S2
+    text: |-
+      Run the full suite after the last code commit (`uv run pytest -q --no-cov -n auto > <host-visible log> 2>&1`), plus `uv run ruff check packages/ tests/`, `uv run ruff format packages/ tests/`, and mypy per AGENTS.md; fix anything red.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

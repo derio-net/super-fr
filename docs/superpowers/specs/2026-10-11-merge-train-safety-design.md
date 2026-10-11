@@ -638,3 +638,9 @@ Post-merge, operator plus agent (R18):
    confirm on a real PR behind `main` that GitHub blocks the merge until the
    PR is updated, and that the following release still pushes. This flips
    `main-requires-ci-ok`.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-11-merge-train-safety | `derio-net/super-fr` | `2026-10-11-merge-train-safety` | — |
