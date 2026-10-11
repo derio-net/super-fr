@@ -169,3 +169,36 @@ Not caused by this change (pre-existing live-parser read in matrix_anchors); a c
 ### p1-r7-resolved · finding [out-of-scope] · resolves p1-r7: record 8→9 reads the row's raw verify; an unmigrated v3 `post-merge` row gives a misleading refusal (phase 1)
 
 Not caused by this phase: the registry migrates the matrix before records, so the raw v3 spelling is unreachable in order.
+
+<!-- fr:journal kind=decision scope=plan id=p2-forge-protocol created=2026-10-11T21:56:32+00:00 phase=2 -->
+### p2-forge-protocol · decision · The engine asks a DebtForge protocol; the real adapter lists issues via GhClient.list_issues (phase 2)
+
+compute() takes a DebtForge (pr_for_branch, owed_issues) or None for offline. debt/forge.py
+adapts GhClient (list_issues with fields number,title,body,labels, filtered to fr:owed and
+fr:awaiting-live). A forge that cannot do it raises, and compute reports the forge as
+unavailable rather than failing. Phase 4 widens the adapters (R26). pr_for_branch gained
+updatedAt on gh, glab, tea and the REST client.
+
+<!-- fr:journal kind=decision scope=plan id=p2-run-branch-activity created=2026-10-11T21:56:32+00:00 phase=2 -->
+### p2-run-branch-activity · decision · Run-branch activity means commits on the branch not on the default ref (phase 2)
+
+A plain git log -1 on the run branch would see shared main history and keep every plan
+active, so staleness uses the branch's commits excluding the default ref, plus the plan
+dir on the default ref and the branch, plus the PR updatedAt. Run branches are found by
+reading cursors' emitted.plan as raw YAML (any cursor version).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fold-extension created=2026-10-11T21:56:32+00:00 phase=2 -->
+### p2-fold-extension · discovery · fold_owed extension point for phase 3 (phase 2)
+
+Add a field to OwedSources (journal already exists, empty) and name it in OWED_PRECEDENCE;
+phase 3 fills journal with owed-entry items keyed spec:/plan:/row:.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-11T21:56:32+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+pure model and renderers written once; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-11T21:56:32+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+thin CLI over the engine; the digest was reduced to the shared section renderer in the same step
