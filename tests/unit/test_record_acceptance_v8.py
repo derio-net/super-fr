@@ -159,7 +159,9 @@ def test_a_v7_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == plain.replace("schema_version: 7", f"schema_version: {RECORD_SCHEMA_VERSION}")
+    assert path.read_text() == plain.replace(
+        "schema_version: 7", f"schema_version: {RECORD_SCHEMA_VERSION}"
+    )
 
 
 def test_the_frozen_v7_reader_reads_a_v7_record() -> None:

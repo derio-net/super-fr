@@ -197,7 +197,7 @@ def test_the_body_renders_post_merge_rows_and_tests_and_no_input_section(
     write_matrix(
         root,
         [
-            row("docs/spec.md", status="skipped"),
+            row("docs/spec.md", status="unwired"),
             row("docs/spec.md", rid="live-run", status="not-implemented", verify="live"),
         ],
     )

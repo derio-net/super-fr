@@ -165,4 +165,6 @@ def test_a_v1_matrix_with_post_merge_climbs_the_whole_chain(tmp_path: Path) -> N
 
 def test_the_live_model_refuses_the_old_spelling() -> None:
     with pytest.raises(AcceptanceError, match="post-merge"):
-        parse_matrix(_V3.replace("schema_version: 3", "schema_version: 5").replace("skipped", "unwired"))
+        parse_matrix(
+            _V3.replace("schema_version: 3", "schema_version: 5").replace("skipped", "unwired")
+        )
