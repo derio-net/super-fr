@@ -176,6 +176,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "awaiting-live-triage",
         "matrix-status-split",
         "debt-report",
+        "closeout-owed",
         "prerelease-command-shape",
         "triage-claims-held",
         "triage-claims-expired",
@@ -224,6 +225,10 @@ def test_matrix_status_split(installed: Path, tmp_path: Path) -> None:
 
 def test_debt_report(installed: Path, tmp_path: Path) -> None:
     _scenario("debt-report", installed, tmp_path)
+
+
+def test_closeout_owed(installed: Path, tmp_path: Path) -> None:
+    _scenario("closeout-owed", installed, tmp_path)
 
 
 def test_prerelease_command_shape(installed: Path, tmp_path: Path) -> None:

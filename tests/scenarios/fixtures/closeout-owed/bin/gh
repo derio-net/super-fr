@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# A recording forge double for tests/scenarios/closeout-owed.sh. It records every
+# call, one argv per line, to $FAKE_GH_LOG and answers the four `gh` calls `fr
+# archive`'s owed filing makes on the default (graphql/CLI) client:
+#   gh api user --jq .login            -> the viewer's login
+#   gh issue list ... --json ...       -> no open issues ([])
+#   gh label create ...                -> ok, no output
+#   gh issue create ...                -> the new issue's URL, which is all
+#                                         `gh issue create` prints on stdout
+# Anything else fails loudly, so a new forge call cannot slip through unseen.
+[ -n "${FAKE_GH_LOG:-}" ] && printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+case "$1 ${2:-}" in
+  "api user") echo scenario-bot ;;
+  "issue list") echo '[]' ;;
+  "label create") : ;;
+  "issue create") echo "https://github.com/example-org/widgets/issues/1" ;;
+  *) echo "fake gh: unexpected call: gh $*" >&2; exit 1 ;;
+esac

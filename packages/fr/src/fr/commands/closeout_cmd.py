@@ -132,17 +132,21 @@ def outcome(
             )
             body = owed_body(what=what, why=text, how=how, key=f"spec:{slug}#step{n}")
             items.append(
-                JournalItem(kind="owed", id=sid, title=f"Test Plan step {n} owed", body=body)
+                JournalItem.model_validate(
+                    {"kind": "owed", "id": sid, "title": f"Test Plan step {n} owed", "body": body}
+                )
             )
         else:
             label = "ran" if kind == "ran" else "n/a"
             field = "Evidence" if kind == "ran" else "Reason"
             items.append(
-                JournalItem(
-                    kind="discovery",
-                    id=sid,
-                    title=f"Test Plan step {n}: {label}",
-                    body=f"Step: {what}\n\n{field}: {text}",
+                JournalItem.model_validate(
+                    {
+                        "kind": "discovery",
+                        "id": sid,
+                        "title": f"Test Plan step {n}: {label}",
+                        "body": f"Step: {what}\n\n{field}: {text}",
+                    }
                 )
             )
     try:

@@ -304,10 +304,17 @@ def _journal_writes(
         if advisory is not None:
             notices.append(advisory)
 
-    def finding(fid: str) -> JournalEntry:
+    def finding(fid: str, *, discharge: bool = False) -> JournalEntry:
         hit = next((e for e in [*existing, *new] if e.id == fid), None)
         if hit is None:
             raise RecordRefusedError(f"no journal entry {fid!r} in {path.name} — nothing resolved")
+        if hit.kind == "owed" and discharge:
+            return hit  # discharging an owed action (spec 2026-10-11 §E, R24)
+        if hit.kind == "owed":
+            raise RecordRefusedError(
+                f"entry {fid!r} is an owed action — it is discharged with state fixed and the "
+                "evidence as its note, never refuted, deferred or scoped out"
+            )
         if hit.kind != "finding":
             raise RecordRefusedError(f"entry {fid!r} is a {hit.kind!r}, not a finding")
         return hit
@@ -363,7 +370,7 @@ def _journal_writes(
         counts[key] = counts.get(key, 0) + 1
 
     for res in record.resolves:
-        target_entry = finding(res.id)
+        target_entry = finding(res.id, discharge=res.state == "fixed")
         try:
             entry = resolution_entry(
                 target=target_entry,

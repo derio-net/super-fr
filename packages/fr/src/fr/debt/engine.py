@@ -154,6 +154,61 @@ def _plan_owed(manual_open: Iterable[ManualOpenPlan]) -> list[OwedItem]:
     ]
 
 
+def journal_owed(repo_root: Path) -> tuple[list[OwedItem], set[str], list[str]]:
+    """The journal-entry owed source (R23): every unresolved `owed` entry of
+    every journal, live and archived (`implemented/`), one item per key.
+
+    Returns `(items, discharged keys, unreadable journals)`. A discharged key
+    is one whose entry was resolved `fixed` and that no journal still owes —
+    the fold drops a still-open issue carrying it, so a discharge whose issue
+    could not be closed does not linger as debt.
+    """
+    from fr.journal.model import (
+        IMPLEMENTED_JOURNALS_REL,
+        JOURNALS_REL,
+        JournalParseError,
+        open_owed_ids,
+        owed_fields,
+        owed_filed_as,
+        owed_key,
+        parse_journal,
+    )
+
+    items: dict[str, OwedItem] = {}
+    discharged: set[str] = set()
+    unreadable: list[str] = []
+    for base in (JOURNALS_REL, IMPLEMENTED_JOURNALS_REL):
+        root = repo_root / base
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("**/*.md")):
+            try:
+                entries = parse_journal(path.read_text())
+            except (JournalParseError, OSError, UnicodeDecodeError):
+                unreadable.append(path.relative_to(repo_root).as_posix())
+                continue
+            still = set(open_owed_ids(entries))
+            filed = owed_filed_as(entries)
+            for e in entries:
+                key = owed_key(e) if e.kind == "owed" else None
+                if key is None:
+                    continue
+                if e.id not in still:
+                    discharged.add(key)
+                    continue
+                items.setdefault(
+                    key,
+                    OwedItem(
+                        key=key,
+                        source="journal",
+                        title=e.title,
+                        how=owed_fields(e).get("how", ""),
+                        ref=filed.get(e.id, ""),
+                    ),
+                )
+    return list(items.values()), discharged - set(items), unreadable
+
+
 def _issue_owed(issues: Iterable[dict[str, Any]]) -> list[OwedItem]:
     out = []
     for i in issues:
@@ -383,11 +438,17 @@ def compute(
         else SourceStatus(state="unavailable", why=forge_why)
     )
 
+    journal_items, discharged, unreadable = journal_owed(repo_root)
+    sources["journals"] = SourceStatus(
+        state="read",
+        why=f"unreadable, skipped: {', '.join(unreadable)}" if unreadable else "",
+    )
     owed = fold_owed(
         OwedSources(
+            journal=journal_items,
             rows=_row_owed(matrix),
             plans=_plan_owed(manual_open),
-            issues=_issue_owed(issues),
+            issues=[i for i in _issue_owed(issues) if i.key not in discharged],
         )
     )
     return DebtReport(

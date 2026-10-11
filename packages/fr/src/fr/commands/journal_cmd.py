@@ -15,8 +15,9 @@ Verbs:
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
-from typing import get_args
+from typing import TYPE_CHECKING, get_args
 
 import typer
 from rich.console import Console
@@ -42,6 +43,9 @@ from fr.journal.model import (
     unauthorized_fixes,
 )
 from fr.run.model import AnsweredBy
+
+if TYPE_CHECKING:
+    from fr.ghclient import GhClient
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
@@ -444,7 +448,13 @@ def resolve(
             "(`fr journal render` lists the ids this journal carries)"
         )
         raise typer.Exit(2)
-    if target.kind != "finding":
+    if target.kind == "owed" and state != "fixed":
+        err_console.print(
+            f"[red]entry `{entry_id}` is an owed action[/red] — it is discharged with "
+            "`--state fixed --note <evidence>`, never refuted, deferred or scoped out"
+        )
+        raise typer.Exit(2)
+    if target.kind not in ("finding", "owed"):
         err_console.print(
             f"[red]entry `{entry_id}` is a `{target.kind}`, not a finding[/red] — only a "
             "finding has a state to resolve"
@@ -474,6 +484,78 @@ def resolve(
     )
     shown = f"deferred → {tracked_by}" if tracked_by else state
     typer.echo(f"{entry_id} → {shown} (record {record_id})")
+    if target.kind == "owed":
+        filed = owed_filed_as(entries).get(entry_id)
+        if filed is not None:
+            _close_owed_issue(root, filed, note)
+
+
+def _make_gh_client() -> GhClient:
+    """Factory seam — tests monkeypatch it (the archive command's own shape)."""
+    from fr.hostclient import client_for
+
+    return client_for(Path.cwd())
+
+
+_SAFE_REPO = re.compile(r"^[\w.][\w.-]*/[\w.-]+$")
+_URL_ISSUE = re.compile(r"/([\w.][\w.-]*/[\w.-]+)/(?:-/)?(?:issues|work_items)/(\d+)/?$")
+
+
+def _issue_target(root: Path, ref: str) -> tuple[str, int] | None:
+    """`(owner/repo, number)` for a `filed_as` reference, or `None` when it
+    cannot be read safely — the repo reaches the forge CLI's argv, so it must
+    be a plain `owner/repo` path (no leading `-`)."""
+    repo: str | None
+    if ref.startswith("#") and ref[1:].isdigit():
+        from fr.commands.archive_cmd import _repo_slug
+
+        repo, number = _repo_slug(root), int(ref[1:])
+    elif (m := re.match(r"^([\w.-]+/[\w.-]+)#(\d+)$", ref)) is not None:
+        repo, number = m.group(1), int(m.group(2))
+    elif (u := _URL_ISSUE.search(ref)) is not None:
+        repo, number = u.group(1), int(u.group(2))
+    else:
+        return None
+    return (repo, number) if _SAFE_REPO.match(repo) else None
+
+
+def _close_owed_issue(root: Path, ref: str, note: str) -> None:
+    """R24: close a discharged owed action's issue through the forge, the
+    note as its comment — or print the command when the forge cannot be
+    reached or the repo declares `tracking: none`. The discharge itself is
+    already recorded; this never changes the exit code."""
+    from fr.hostclient import issue_command
+    from fr.services import ServicesError, TrackerRequiredError, require_tracker
+
+    target = _issue_target(root, ref)
+    comment = f"Discharged: {note}"
+    command = f"close {ref} with the note as its comment"
+    if target is not None:
+        try:
+            command = issue_command(
+                root, "issue-close", ref=f"{target[0]}#{target[1]}", comment=comment
+            )
+        except Exception:  # noqa: BLE001 — fall back to the plain instruction
+            pass
+    try:
+        require_tracker(root)
+    except (TrackerRequiredError, ServicesError):
+        typer.echo(f"no tracker configured — close it yourself: {command}")
+        return
+    if target is None:
+        typer.echo(f"cannot read {ref!r} as an issue — close it yourself: {command}")
+        return
+    repo, number = target
+    try:
+        gh = _make_gh_client()
+        gh.comment_issue(repo, number, comment)
+        gh.edit_issue_state(repo, number, state="CLOSED")
+    except Exception as e:  # noqa: BLE001 — the forge is unreachable: say what to run
+        typer.echo(
+            f"could not close {ref} ({type(e).__name__}: {e}) — close it yourself: {command}"
+        )
+        return
+    typer.echo(f"closed {ref}")
 
 
 def _deferrals(entries: list[JournalEntry]) -> list[tuple[str, str]]:
@@ -653,12 +735,12 @@ def check(
         console.print(f"{len(out_of_scope)} out-of-scope finding(s): " + ", ".join(out_of_scope))
     # Owed actions pass the gate (spec §E, R20) and are listed: they are the
     # operator's to do after the change, never this change's to fix.
-    owed = open_owed_ids(entries)
-    if owed:
+    owed_open = open_owed_ids(entries)
+    if owed_open:
         filed = owed_filed_as(entries)
         console.print(
-            f"{len(owed)} owed action(s) open: "
-            + ", ".join(f"{oid} → {filed[oid]}" if oid in filed else oid for oid in owed),
+            f"{len(owed_open)} owed action(s) open: "
+            + ", ".join(f"{oid} → {filed[oid]}" if oid in filed else oid for oid in owed_open),
             soft_wrap=True,
             markup=False,
         )
