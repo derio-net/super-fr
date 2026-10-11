@@ -89,3 +89,78 @@ the seam's five functions are thin wrappers over sessions/types; the one duplica
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 RED-only task (tests added); nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-11T21:46:34+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · cwd refusal accepts an agent in any linked worktree of the clone (phase 2)
+
+Only main_worktree was compared; an agent on feat/foo adopted with a mistaken --branch main would be stranded.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-11T21:46:34+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · enter_workspace resumes via up(path=None) (phase 2)
+
+A workspace recorded at a non-default path failed worktree add on every re-run and lost its session bindings.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-11T21:46:34+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · bind_session misses ValueError from a corrupt state record (phase 2)
+
+pydantic ValidationError stopped adopt instead of warning.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-11T21:46:34+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · current_branch uses rev-parse --abbrev-ref (phase 2)
+
+Yields heads/main on an ambiguous ref (a tag named main), falsely refusing.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-11T21:46:34+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · triage-batch-adopt-refusals notes overwritten (phase 2)
+
+Lost the description of the phase-1 refusals.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-11T21:46:34+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · missing command-level tests for R7 reuse and cwd rules (phase 2)
+
+No tests for bound-session reuse with commits, a remote-only batch branch, or cwd in a linked worktree.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-10-11T21:46:34+00:00 phase=2 state=open review_scope=out -->
+### p2-r7 · finding [open] (reviewer: out of scope) · resume picks the backend from FR_ISOLATION_TARGET, not the workspace's recorded mode (phase 2)
+
+isolation_cmd._target reads the env even for an existing workspace (gh#569 wants the recorded mode).
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-10-11T21:46:34+00:00 phase=2 -->
+### p2-review-1 · review · Phase 2 code review (phase 2)
+
+Dispatched read-only reviewer verified R7 ordering, R8 untouched base clone, R9 resume, R6 message, the closed tripwire allowance and the refactor's phase-1 parity; raised p2-r1..p2-r6 in scope (all fixed with tests in 4a98cad6 / c282122b) and p2-r7 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-11T21:46:34+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: cwd refusal accepts an agent in any linked worktree of the clone (phase 2)
+
+_refuse_agent_elsewhere accepts cwd only inside the main worktree or the batch branch's recorded workspace; refused/accepted tests added.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-11T21:46:34+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: enter_workspace resumes via up(path=None) (phase 2)
+
+enter_workspace passes path=Path(recorded.worktree) to up; custom-path resume test keeps the binding.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-11T21:46:34+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: bind_session misses ValueError from a corrupt state record (phase 2)
+
+bind_session also catches ValueError; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-11T21:46:34+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: current_branch uses rev-parse --abbrev-ref (phase 2)
+
+current_branch uses symbolic-ref -q HEAD; tested with a tag named main.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-11T21:46:34+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: triage-batch-adopt-refusals notes overwritten (phase 2)
+
+Phase-1 notes restored with the default-branch sentence appended via fr acceptance set-status; reports regenerated; fr acceptance check passes.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-11T21:46:34+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: missing command-level tests for R7 reuse and cwd rules (phase 2)
+
+Tests added: bound workspace with commits reused, origin-only batch branch refused, cwd cases.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-10-11T21:46:34+00:00 phase=2 state=open resolves=p2-r7 out_of_scope=true -->
+### p2-r7-resolved · finding [out-of-scope] · resolves p2-r7: resume picks the backend from FR_ISOLATION_TARGET, not the workspace's recorded mode (phase 2)
+
+Not caused by this change: the spec chose fr isolation up's own backend selection, and `fr isolation up` itself resumes by FR_ISOLATION_TARGET the same way; belongs to isolation up's resume (gh#569 territory).
