@@ -8248,8 +8248,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R7
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at plan time; the phase that builds it writes the file.
     verify: candidate
+    scenario: tests/scenarios/batch-merge-skip-held.sh
   - id: approval-board-and-briefs
     capability: triage-board
     acceptance: The board asks the operator to label (or re-label) a green unapproved
