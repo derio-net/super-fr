@@ -476,9 +476,16 @@ rows:
       - super-fr:tests/unit/test_hostclient.py
       - super-fr:tests/unit/test__urls.py
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): LIVE-VERIFIED
-      2026-09-19 against a self-hosted GitLab (host redacted): render, observe, diff
-      and apply converged; unit refs in CI.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): LIVE-VERIFIED
+      2026-09-19 against a self-hosted GitLab (host redacted); unit refs in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-19T00:00:00Z'
+      evidence: 'gh-486 live run against a self-hosted GitLab (host redacted): render,
+        observe, diff, apply converged; transcript in the PR'
   - id: multibackend-gitea-tracking
     capability: Multi-backend git hosting
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
