@@ -7053,12 +7053,10 @@ rows:
     levels:
       int:
       - super-fr:docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md
-    status: walk-owed
-    notes: 'not-implemented -> skipped on 2026-10-06: all three post-merge Test Plan
-      items driven live inside herdr against a real fr triage batch drive over 101 batches
-      (columns vs an independent gh oracle, cards moving on acting and non-acting passes,
-      reloads keeping expansion, jump switching the tab, two blocked sessions shown
-      as needs-you). Manual and post-merge only, so not in CI.'
+    status: walked
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): all
+      three post-merge Test Plan items driven live 2026-10-06 inside herdr against a
+      real fr triage batch drive (101 batches); evidence in the int ref.'
     verify: live
   - id: triage-dedupe-candidates
     capability: triage-dedupe
