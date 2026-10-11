@@ -41,8 +41,8 @@ journal:
       goal-executor-refuses-tick, fr-goal-main-session-cost, ci-under-time-budget,
       ci-actions-dependabot-updates); manual 1 (acceptance-added-since). Left
       unwired: 1 (cli-starts-from-a-clean-install: no test asserts the installed CLI runs).
-      Final: ci 391 (+2 this phase), walked 26, walk-owed 10, unwired 1, manual 1,
-      not-implemented 39 (-2), scheduled 1.
+      Final: ci 393 (+2 this phase), walked 26, walk-owed 10, unwired 1, manual 1,
+      not-implemented 37 (-2), scheduled 1.
   - kind: discovery
     id: p1-index-lock-timing-under-load
     phase: 1
@@ -53,4 +53,4 @@ journal:
       phase does not touch the record commit path. If the full suite reds on it,
       it is load, not a regression.
 resolves: []
-evidence: {}
+evidence: {tests: ci}
