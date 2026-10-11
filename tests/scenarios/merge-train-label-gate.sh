@@ -7,13 +7,15 @@
 # `url.<base>.insteadOf`: `git remote get-url` expands insteadOf, and the driver reads the
 # batch's repo from that URL. Five passes:
 #   1. the label is missing: the pass creates it and says so; the PR is green and
-#      unlabelled, so it is held as awaiting approval, and the board asks for the label;
-#   2. the operator labels it while main moved ahead: the pass records the approval at the
-#      head and updates the PR (an `update` event with the fetched base);
+#      unlabelled, so it is held as awaiting approval, the board asks for the label and
+#      its card awaits approval; `batch merge` holds it, and refuses it by name (exit 2);
+#   2. the operator labels it while main moved ahead: a `batch merge` preview only says
+#      what it would record; the pass records the approval at the head and updates the PR
+#      (an `update` event with the fetched base);
 #   3. the driver's own update keeps the approval (its CI is still running);
 #   4. a session pushes: the approval is void, the label removed (logged), and the board
 #      asks for a re-label;
-#   5. the operator re-labels a draft: the pass marks it ready and merges it.
+#   5. the operator re-labels a draft: the pass marks it ready, then merges it.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 export FR_HOST_ID=0123456789abcdef FR_FORGE_API=rest
@@ -95,13 +97,32 @@ expect_grep "created label approved-fr on $repo" "$out" "the first pass creates 
 expect_grep "awaiting approval b1 \(#1080\)" "$out" "the unlabelled green PR awaits approval"
 refuse_grep "merged PR" "$out" "an unlabelled PR is never merged"
 refuse_grep "pulls/1080/merge" "$(log)" "no merge call for an unlabelled PR"
-expect_grep "label it approved-fr to merge" "$(board)" "the board's Needs you asks for the label"
+page="$(board)"
+expect_grep "label it approved-fr to merge" "$page" "the board's Needs you asks for the label"
+expect_grep 'data-need="approve-pr"' "$page" "the ask is an approve-pr Need"
+expect_grep "awaiting approval" "$(cat "$state/board.html")" "the kanban card awaits approval"
+
+# `batch merge` holds the unapproved batch; naming it is refused; nothing is written.
+merge() { run_fr out triage batch merge "$@" --repo "$repo" --dir "$state" --checkout "$PWD"; }
+before="$(cat "$state/judgements.yaml")"
+merge
+require_exit 0 "$out"
+expect_grep "held b1: PR #1080 awaits the approved-fr label" "$out" "a default merge holds it"
+expect_grep "nothing to merge" "$out" "with every batch held there is nothing to merge"
+merge b1 --yes
+require_exit 2 "$out"
+expect_grep "approved-fr" "$out" "naming an unapproved batch is refused naming the label"
+refuse_grep "pulls/1080/merge" "$(log)" "batch merge never merges an unlabelled PR"
+[ "$(cat "$state/judgements.yaml")" = "$before" ] || fail "an unapproved batch merge wrote state"
 
 # 2. The operator labels it; main has moved: the approval is recorded and fr updates it.
 forge 'w["pr"]["labels"] = ["approved-fr"]'
 git -C "$seed" checkout -q main && printf 'more code\n' >> "$seed/code.py" \
   && git -C "$seed" commit -qam "main moves" && git -C "$seed" push -q origin main || fail "move main"
 labelled="$(git -C "$bare" rev-parse feat/batch-b1)"
+merge  # a preview says what --yes would record, and records nothing
+expect_grep "would record approval of PR #1080 at ${labelled:0:12}" "$out" "the preview names it"
+refuse_grep "kind: approval" "$(cat "$state/judgements.yaml")" "a preview settles nothing"
 drive
 expect_grep "approval of PR #1080 recorded at ${labelled:0:12}" "$out" "the approval is recorded at the head"
 expect_grep "updated PR #1080" "$out" "the PR behind main is updated"
@@ -139,5 +160,8 @@ forge 'w["pr"]["labels"] = ["approved-fr"]; w["pr"]["draft"] = True'
 drive
 expect_grep "^-X POST $R/pulls/1080/ccr/ready_for_review" "$(log)" "the approved draft is marked ready"
 expect_grep "^-X PUT $R/pulls/1080/merge" "$(log)" "the approved PR is merged"
+ready_at="$(grep -n "^-X POST $R/pulls/1080/ccr/ready_for_review" "$FAKE_GH_LOG" | head -1 | cut -d: -f1)"
+merge_at="$(grep -n "^-X PUT $R/pulls/1080/merge" "$FAKE_GH_LOG" | head -1 | cut -d: -f1)"
+[ "$ready_at" -lt "$merge_at" ] || fail "the draft was merged before it was marked ready"
 expect_grep "merged PR #1080 at ${pushed:0:12}" "$out" "the merge names the approved head"
 echo "ok: merge-train-label-gate"
