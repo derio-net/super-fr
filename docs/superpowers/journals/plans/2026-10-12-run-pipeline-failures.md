@@ -84,3 +84,88 @@ install_problem was lifted out of walk._contract (the refactor itself); nothing 
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 unrunnable_strategies is a single new helper with two thin callers; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-11T23:56:51+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · R5 tests never isolate the per-row-line and row-verify: sources; self-review covers only section strategy: (phase 2)
+
+A section-only unrunnable_strategies passed every test.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-11T23:56:51+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · R5 fix advice cannot clear a row's own verify:, which outranks spec lines; message does not name the source row (phase 2)
+
+effective_strategy lets verify: win; 'strategy: none' would not clear it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-11T23:56:51+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · effective_shape_default bindings in plan_ops._verification_issues and run/visual.py are untested (phase 2)
+
+Spec ## Tests asks that visual.py's binding agrees.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-11T23:56:51+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · brainstorm warning catches only SectionError/AcceptanceError/OSError; other errors escape after commit (phase 2)
+
+UnicodeDecodeError would exit non-zero after the record committed and skip the advance.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-11T23:56:51+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · R5 warning fires only on resolve --record, not the flag form with --emitted spec= (phase 2)
+
+R5 says the brainstorm resolve that emits the spec warns.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-11T23:56:51+00:00 phase=2 state=open review_scope=out -->
+### p2-r6 · finding [open] (reviewer: out of scope) · explicit row verify: on a spec with no ## Verification section is never flagged though walk_owed still owes it (phase 2)
+
+Spec-mandated exemption: a spec with no section passes unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-10-11T23:56:51+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · fr verification walk without the install program says 'names no strategy' once R4 drops the default (phase 2)
+
+verification_cmd.py advice points the user at adding strategy: candidate, which then fails.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-10-11T23:56:51+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · fr-brainstorming SKILL.md still says strategy defaults to the shape's without the R4 drop / R5 error (phase 2)
+
+plugins/super-fr/skills/fr-brainstorming/SKILL.md:79.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-10-11T23:56:51+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 independent review: 8 findings (7 in, 1 out) (phase 2)
+
+Read-only reviewer over diff b93b7896..HEAD against spec §B / R4-R6: install_problem is the one rule; effective_shape_default at all three binding sites and nowhere else; walk_owed behaviour correct; brainstorm hook only warns; R6 message exact; fixture changes sound; the two never-red tests verified red by monkeypatching. Findings p2-r1..r5, r7, r8 (in) fixed in fa06614d (+ matrix 0f0c5b6d); p2-r6 (out).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-11T23:56:51+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: R5 tests never isolate the per-row-line and row-verify: sources; self-review covers only section strategy: (phase 2)
+
+fa06614d: test_p2_r1_a_per_row_line_alone_is_flagged_and_names_its_row, test_p2_r1_a_rows_verify_alone_is_flagged_and_names_the_row_and_the_fix (fail on old src), test_p2_r1_self_review_flags_a_per_row_line_with_no_strategy_line.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-11T23:56:51+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: R5 fix advice cannot clear a row's own verify:, which outranks spec lines; message does not name the source row (phase 2)
+
+fa06614d: one message per strategy listing every source; a row verify: source names the row and gives `fr acceptance set-status ... --verify none`; spec R5/§B updated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-11T23:56:51+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: effective_shape_default bindings in plan_ops._verification_issues and run/visual.py are untested (phase 2)
+
+fa06614d: test_p2_r3_self_review_binds_the_shape_default_only_when_the_repo_can_run_it, test_p2_r3_visual_verification_binds_the_shape_default_like_self_review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-11T23:56:51+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: brainstorm warning catches only SectionError/AcceptanceError/OSError; other errors escape after commit (phase 2)
+
+fa06614d: _unrunnable_spec_warnings catches Exception (advisory, post-commit); test_p2_r4_a_non_utf8_spec_never_fails_the_resolve and ..._still_resolves_and_advances.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-11T23:56:51+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: R5 warning fires only on resolve --record, not the flag form with --emitted spec= (phase 2)
+
+fa06614d: shared _print_unrunnable_warnings on the flag path; test_p2_r5_the_flag_form_resolve_prints_the_same_warning.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-11T23:56:51+00:00 phase=2 state=open resolves=p2-r6 out_of_scope=true -->
+### p2-r6-resolved · finding [out-of-scope] · resolves p2-r6: explicit row verify: on a spec with no ## Verification section is never flagged though walk_owed still owes it (phase 2)
+
+The spec deliberately exempts a spec with no ## Verification section (pre-strategies world passes unchanged); not caused by this change. Worth a follow-up if row-level verify: without a section should be flagged too.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-10-11T23:56:51+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: fr verification walk without the install program says 'names no strategy' once R4 drops the default (phase 2)
+
+fa06614d: walk names the filtered default's install problem and suggests per-row none / strategy: none (raw_shape_default helper); test_p2_r7_a_default_the_repo_cannot_run_says_so_instead_of_naming_no_strategy.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-10-11T23:56:51+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: fr-brainstorming SKILL.md still says strategy defaults to the shape's without the R4 drop / R5 error (phase 2)
+
+fa06614d: SKILL.md line 79 amended in place (still 119 lines); sync-opencode.py and sync-hermes.py mirrors regenerated; mirror/validation guards green.
