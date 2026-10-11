@@ -7592,10 +7592,17 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
     levels: {}
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): verified
-      live 2026-10-06 on fr 5.11.2/5.12.0 (wave 9 of a real drive): a conflicted PR
-      was handed back to its session, resolved and pushed.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): verified
+      live 2026-10-06 (wave 9 of a real drive).'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: 'wave 9 of a real drive on fr 5.11.2/5.12.0: PR #1042''s conflict was
+        handed back to its herdr session, resolved and pushed'
   - id: triage-debt-panel
     capability: triage
     acceptance: Triage keeps debt digests and fr:owed issues out of ranking in their
