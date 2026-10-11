@@ -17,3 +17,8 @@ Confirmed by reading main @ 1248d439, not reproduced live (needs a Claude Code c
 ### 92bf67c16b08 · hypothesis · Not one root cause: ~14 independent defects across 6 subsystems sharing a theme
 
 Shared theme only: cloud code paths assume host-like preconditions (current fr, skills loaded, origin/HEAD set, base clone on default branch, PR readable over GraphQL, session started) and proceed or misreport instead of checking. Each defect has its own cause and fix site: worker brief (batch_dispatch), claude-cloud runner + mailbox, gitseam, binary_identity, cloud doctor/docs, isolation verify-merge + pickup forge seam. Per the batch's debugging rule, stopping to ask before fixing.
+
+<!-- fr:journal kind=decision scope=debug id=fa423899838d created=2026-10-11T19:52:50+00:00 -->
+### fa423899838d · decision · Operator: fix all ~14 defects in this one PR
+
+Asked at the multi-cause stop (2026-10-11). Answer: fix everything here, one failing test per defect, all three members close. Order: E,F (runner/mailbox) → H,I (gitseam/close-out) → G (pass exit) → L (restore line) → K (re-pin noise) → J (merge_method doctor) → D (isolation default in cloud) → M (verify-merge/pickup over forge.api) → A,B,C (worker brief).
