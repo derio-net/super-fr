@@ -127,6 +127,10 @@ resolves:
   body: Archive (_archive) and export (_export_merge) PRs are fr's own housekeeping PRs, not batch PRs;
     spec §A scopes the approval gate to batch PRs, so this change did not cause it. It belongs to the
     follow-up proper-gate design.
+- id: p1-triage-batch-cmd-import-cycle
+  state: out-of-scope
+  body: Importing fr.commands.triage_batch_cmd before fr.cli fails on origin/main too (1248d439); this
+    change neither introduced nor worsened the cycle.
 evidence:
   review: p1-review-1
   reviewer: a59bed1318285f96a
