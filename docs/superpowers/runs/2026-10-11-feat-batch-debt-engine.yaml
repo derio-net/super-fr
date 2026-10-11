@@ -121,7 +121,7 @@ steps:
           visual: none
           findings: p2-r1,p2-r2,p2-r3,p2-r4,p2-r5,p2-r6,p2-r7,p2-r8,p2-r9,p2-r10,p2-r11,p2-r12,p2-r13
       phase/3/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-11T22:07:21+00:00'
           agent: ad5fcb0fc99e23e0a
@@ -131,6 +131,11 @@ steps:
           tier: hard
           bound: opus
           session: b07de151-7e3f-41a2-8b47-0d0eb080c573
+          returned: '2026-10-11T23:07:26+00:00'
+          outcome: done
+        evidence:
+          tests: ci:f8e572c88aed9309a2992e773737d6b0413d2989+45b43272e9c9c2f4dbcb7c29e8f1932174b78f9d;tree=d99b7e1f5aabde76d7262ffb13c110cf81d9406a7eb39c5dcb02b0425b0b8613
+          visual: none
   journal-check:
     state: pending
   deliver:
