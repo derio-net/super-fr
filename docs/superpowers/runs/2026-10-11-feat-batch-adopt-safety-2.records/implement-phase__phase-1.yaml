@@ -1,0 +1,15 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-adopt-safety-2
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2]
+refactor:
+  P1.T2: "RED-only task (tests added); nothing to clean"
+  P1.T3: "adopt_message and the plan/step wiring were written once, with _pr_ref hoisted above the plan so plan and send share it; nothing duplicated left"
+  P1.T5: "scenario, fragment and matrix move only; no production code to clean"
+  P1.T4: "no existing harness-mapping helper in fr_herdr.restart is reusable (it only checks for claude/opencode kinds in-line); runner.py gets one small _HARNESSES map"
+journal:
+  - {kind: discovery, id: p1-scenario-origin-shim, phase: 1, title: "adopt scenario needs a git shim for origin", body: "fr requires `remote get-url origin` to look like the batch's forge repo, and `get-url` applies insteadOf, so an offline clone cannot satisfy both that and fetch. tests/scenarios/fixtures/triage-adopt/bin/git answers only that call; every other git call is the real git."}
+resolves: []
+evidence: {tests: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/001b79bf-4eda-417c-8701-d4296af10928/scratchpad/p1-full-suite.log}
