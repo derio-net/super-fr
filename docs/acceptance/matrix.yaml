@@ -2096,9 +2096,17 @@ rows:
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test__urls.py
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): live
-      half hand-run 2026-09-19 against a self-hosted GitLab (host redacted, default
-      branch master); the request shape is unit-pinned in CI.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live half
+      hand-run 2026-09-19 against a self-hosted GitLab (host redacted); request shape
+      unit-pinned in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-19T00:00:00Z'
+      evidence: 'hand-run against a self-hosted GitLab (host redacted, default branch
+        master): file_exists, list_dir and read_file all real'
   - id: gitlab-selfhosted-host-targeting
     capability: Multi-backend git hosting
     acceptance: 'An operator whose GitLab is self-hosted reaches it by declaring ''backend:
