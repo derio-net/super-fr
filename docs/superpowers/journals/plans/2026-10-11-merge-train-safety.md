@@ -284,3 +284,48 @@ Four tests added. Test: test_triage_batch_merge.py#test_batch_merge_reads_the_ba
 ### p2-r6-resolved · finding [fixed] · resolves p2-r6: red-recovery scenario never exercises rule 2's head_before dedup (phase 2)
 
 Phase A makes h2 red with an unmoved base and asserts a hand-back and exactly two update events. Test: tests/integration/test_scenarios.py#test_merge_train_red_recovery
+
+<!-- fr:journal kind=decision scope=plan id=p3-queue-reads-in-snapshot created=2026-10-11T23:16:49+00:00 phase=3 -->
+### p3-queue-reads-in-snapshot · decision · Queue state and the base are read in the driver's snapshot, and only for batches already enqueued (phase 3)
+
+Snapshot gains queue_repos, queue_versioned, queue_rest, queue_states and bases. _Driver._queue_reads asks base_rules once per repo per pass (the cache merge_ctx also uses), then pr_queue_state and the fetched base only for a batch with an EnqueueEvent. An unreadable base leaves the repo's states out, so the walk decides nothing rather than guessing an ejection.
+
+<!-- fr:journal kind=decision scope=plan id=p3-queue-walk-branch created=2026-10-11T23:16:49+00:00 phase=3 -->
+### p3-queue-walk-branch · decision · Queue mode is a separate _walk_queue; _walk_train only branches at its entry (phase 3)
+
+The merge train's loop is renamed _walk_merge_train and untouched, so a repo with no queue keeps its train byte for byte. A queue Train has no head or candidates; it carries enqueue and in_merge_queue, and train_line prints them.
+
+<!-- fr:journal kind=decision scope=plan id=p3-queue-ejected-need-live-only created=2026-10-11T23:16:49+00:00 phase=3 -->
+### p3-queue-ejected-need-live-only · decision · The queue-ejected Need comes from a driver pass, not the facts-only board (phase 3)
+
+The ejection is a warn action with ejected=True (dedup key per head in Snapshot.warned); views.queue_needs turns it into the queue-ejected Need. The board and drive --plan read no forge, so they leave queue_repos empty and show the ordinary train; the driver prints the line. Likewise a card reads 'in merge queue' only from a plan built with queue state.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-once-warn-dedup-per-process created=2026-10-11T23:16:49+00:00 phase=3 -->
+### p3-once-warn-dedup-per-process · discovery · A warn dedup in Snapshot.warned lasts one driver process, so two --once passes each say the ejection (phase 3)
+
+self.warned is per driver object, as for red-CI warns, so the scenario-level test asserts the line once and the pure walk test pins the per-head dedup.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-merge-queue-rule-not-captured created=2026-10-11T23:16:49+00:00 phase=3 -->
+### p3-merge-queue-rule-not-captured · discovery · The merge_queue rule shape in the fake gh is documented, not captured (phase 3)
+
+The repo's ruleset has no merge queue, so the fake adds a rule in the captured rules' key shape with the documented merge_queue parameters, stated in its docstring. The GraphQL isInMergeQueue/autoMergeRequest answers in the unit tests are likewise the documented pullRequest shape.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-queue-read-needs-origin-head created=2026-10-11T23:16:49+00:00 phase=3 -->
+### p3-queue-read-needs-origin-head · discovery · CI red: _queue_reads resolved the default branch through origin/HEAD for every repo with an open PR (phase 3)
+
+The cloud driver's clone has no origin/HEAD, so gitseam.default_branch raised inside the per-pass queue read even for draft or failing PRs with nothing to merge or enqueue (the version-drift scenario passed locally, where origin/HEAD happens to be set). Fixed: rules are read only for a repo with an open, non-failing PR (or one enqueued before), and a GitError/TriageError from the default branch reads as no queue. A unit test pins both.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-11T23:16:49+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+pr_enqueue and pr_queue_state are two new methods beside pr_merge in each backend; nothing duplicated.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-11T23:16:49+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+Two one-line trigger additions to existing workflows; nothing to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-10-11T23:16:49+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+A scenario script, one fake-gh key and matrix rows; no production code.
