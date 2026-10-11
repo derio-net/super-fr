@@ -446,6 +446,11 @@ def _drive(tmp_path: Path, *args: str) -> tuple[int, str]:
     return result.exit_code, result.output
 
 
+def _summary(out: str) -> str:
+    """The pass's last line before any closing `warning:` (the single-pass notice)."""
+    return [x for x in out.rstrip().splitlines() if not x.startswith("warning:")][-1]
+
+
 def _lines(out: str, kind: str) -> list[str]:
     return [line for line in out.splitlines() if line.startswith(f"{kind} ")]
 
@@ -484,7 +489,7 @@ def test_once_yes_dispatches_up_to_the_cap_with_one_line_each(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _proposed(world, tmp_path, 3)
-    code, out = _drive(tmp_path, "--once", "--yes", "--max-inflight", "2")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass", "--max-inflight", "2")
     assert code == 0, out
     assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1", f"{REPO}/run/batch-b2"]
     assert _lines(out, "dispatch") == [
@@ -494,14 +499,14 @@ def test_once_yes_dispatches_up_to_the_cap_with_one_line_each(
     assert "brief:" not in out  # dispatch_batch's own plan is not echoed
     assert _events(tmp_path, "b1") == ["dispatch"]
     assert _events(tmp_path, "b3") == []
-    assert out.rstrip().splitlines()[-1] == "in flight 2, merged 0, pending 1, closing 0"
+    assert _summary(out) == "in flight 2, merged 0, pending 1, closing 0"
 
 
 def test_a_driven_dispatch_carries_its_waves_group(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _proposed(world, tmp_path, 1)
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     (item,) = runner.dispatched
     assert item.payload["group"] == "drive-wave-1"
@@ -511,7 +516,7 @@ def test_workspace_prefix_renames_the_group(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _proposed(world, tmp_path, 1)
-    code, out = _drive(tmp_path, "--once", "--yes", "--workspace-prefix", "bugfix")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass", "--workspace-prefix", "bugfix")
     assert code == 0, out
     assert runner.dispatched[0].payload["group"] == "bugfix-wave-1"
 
@@ -548,7 +553,9 @@ def test_a_driven_batch_with_no_wave_opens_in_the_no_wave_group(
 ) -> None:
     world.issues[1] = "open"
     _state(tmp_path, world, _batch("b1", 1).replace("wave: 1", "wave: null"))
-    code, out = _drive(tmp_path, "--once", "--yes", "b1", "--workspace-prefix", "bugfix")
+    code, out = _drive(
+        tmp_path, "--once", "--yes", "--single-pass", "b1", "--workspace-prefix", "bugfix"
+    )
     assert code == 0, out
     assert runner.dispatched[0].payload["group"] == "bugfix-no-wave"
 
@@ -626,7 +633,7 @@ def test_a_runner_preflight_refusal_exits_2_and_is_reported_once(
 ) -> None:
     _proposed(world, tmp_path, 2)
     runner.refusal = "not inside a herdr session"
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 2
     assert out.count("not inside a herdr session") == 1
     assert runner.dispatched == []
@@ -1176,7 +1183,7 @@ def test_a_wave_less_archived_batch_is_adopted_by_an_unnamed_drive(
     checkout.added["m101"] = ("docs/superpowers/journals/debug/b1.md",)
     loose = _batch("b1", 1, events=_dispatch_event("b1")).replace("    wave: 1\n", "")
     _state(tmp_path, world, loose, _batch("b2", 2))
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     assert _lines(out, "adopt") == ["adopt b1: archived on the default branch already"]
     assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
@@ -1197,7 +1204,7 @@ def test_a_wave_less_batch_still_owed_is_not_closed_out_outside_the_selection(
     checkout.released = True
     loose = _batch("b1", 1, events=_dispatch_event("b1")).replace("    wave: 1\n", "")
     _state(tmp_path, world, loose, _batch("b2", 2))
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     assert _lines(out, "adopt") == [] and _lines(out, "closeout") == []
     assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
@@ -1269,7 +1276,7 @@ def test_an_acting_once_pass_writes_the_board_and_shows_its_own_dispatch(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _proposed(world, tmp_path, 1)
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     page = _page(tmp_path)
     start = page.index('data-column="running"')
@@ -1301,7 +1308,7 @@ def test_the_board_copies_the_drives_repo_and_dir_only_when_given(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
     _proposed(world, tmp_path, 1)
-    _drive(tmp_path, "--once", "--yes")
+    _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert f"focus b1 --repo {REPO} --dir {tmp_path.resolve()}" in _page(tmp_path)
     seen: list[list[str]] = []
 
@@ -1364,7 +1371,7 @@ def test_a_stale_lock_is_taken_over_and_released(
     _proposed(world, tmp_path, 1)
     (tmp_path / "drive.lock").write_text(json.dumps({"pid": 999_999_999, "started": "x"}))
     monkeypatch.setattr(drive_lock, "pid_alive", lambda pid: pid == os.getpid())
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     assert not (tmp_path / "drive.lock").exists()
 
@@ -1391,7 +1398,9 @@ def test_the_checkout_map_reaches_dispatch(
         triage_batch_cmd, "make_checkout", lambda path: seen.append(path) or checkout
     )
     _proposed(world, tmp_path, 1)
-    code, out = _drive(tmp_path, "--once", "--yes", "--checkout", f"{REPO}={checkout.path}")
+    code, out = _drive(
+        tmp_path, "--once", "--yes", "--single-pass", "--checkout", f"{REPO}={checkout.path}"
+    )
     assert code == 0, out
     assert set(seen) == {checkout.path}
 
@@ -1495,8 +1504,8 @@ def test_a_second_run_after_a_pass_repeats_nothing(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _proposed(world, tmp_path, 2)
-    assert _drive(tmp_path, "--once", "--yes")[0] == 0
-    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _drive(tmp_path, "--once", "--yes", "--single-pass")[0] == 0
+    code, out = _drive(tmp_path, "--once", "--yes")  # nothing left to dispatch
     assert len(runner.dispatched) == 2
     assert _lines(out, "dispatch") == []
     assert code == 3  # both in flight, nothing to do
@@ -1507,7 +1516,7 @@ def test_a_kill_between_launch_and_event_never_launches_twice(
 ) -> None:
     _proposed(world, tmp_path, 1)
     runner.live.add(f"{REPO}/run/batch-b1")  # launched, event never written
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 2
     assert runner.dispatched == []
     assert "already holds" in out
@@ -1545,13 +1554,13 @@ def test_a_dependent_is_not_dispatched_when_its_dependencys_merge_did_not_land(
     checkout.behind.add("sha-101")
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
            _batch("b2", 2, after="[b1]"))  # fmt: skip
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out  # the update push is an act
     assert world.merged == [] and runner.dispatched == []
     assert _lines(out, "dispatch") == [
         "dispatch b2: held: waits on b1, whose merge did not land this pass"
     ]
-    assert out.rstrip().splitlines()[-1] == "in flight 1, merged 0, pending 1, closing 0"
+    assert _summary(out) == "in flight 1, merged 0, pending 1, closing 0"
 
 
 def test_a_merge_held_at_act_time_holds_its_dependent(
@@ -1572,7 +1581,7 @@ def test_a_merge_held_at_act_time_holds_its_dependent(
         return [{"name": "test", "bucket": bucket}]
 
     monkeypatch.setattr(world, "pr_required_checks", _checks)
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 3, out
     assert world.merged == [] and runner.dispatched == []
     assert _lines(out, "merge") == ["merge b1: held: PR #101 is pending: test"]
@@ -1632,7 +1641,7 @@ def test_a_merged_dependency_outside_the_selection_is_not_blocking(
     world.pr(101, "feat/batch-b1", [1], state="MERGED", merged_at=NOW.isoformat())
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")),
            _batch("b2", 2, after="[b1]"))  # fmt: skip
-    code, out = _drive(tmp_path, "--once", "--yes", "b2")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass", "b2")
     assert code == 0, out
     assert _lines(out, "blocked") == []
     assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
@@ -1647,7 +1656,7 @@ def test_a_waved_batch_on_an_unwaved_merged_batch_is_not_blocked(
     world.pr(101, "feat/batch-b0", [1], state="MERGED", merged_at=NOW.isoformat())
     _state(tmp_path, world, _unwaved("b0", 1, events=_dispatch_event("b0")),
            _batch("b2", 2, after="[b0]"))  # fmt: skip
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     assert _lines(out, "blocked") == []
     assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
@@ -1755,7 +1764,7 @@ def test_an_unparsable_lock_past_its_grace_period_is_taken_over(
     lock.write_text("")
     old = lock.stat().st_mtime - 3600
     os.utime(lock, (old, old))
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     assert not lock.exists()
 
@@ -1799,7 +1808,7 @@ def test_a_driver_does_not_remove_a_lock_it_no_longer_owns(
         real(scope, target)
 
     monkeypatch.setattr(triage_batch_cmd, "recollect", _recollect)
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     assert lock.read_text() == rival
 
@@ -1820,7 +1829,7 @@ def test_the_lock_is_written_whole_before_it_is_visible(
         real(scope, target)
 
     monkeypatch.setattr(triage_batch_cmd, "recollect", _recollect)
-    assert _drive(tmp_path, "--once", "--yes")[0] == 0
+    assert _drive(tmp_path, "--once", "--yes", "--single-pass")[0] == 0
     assert json.loads(seen[0])["pid"] == os.getpid()
     assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith("drive.lock")) == []
 
@@ -1841,7 +1850,7 @@ def test_closeout_and_batch_dispatch_resolve_the_same_model(
     b2 = _batch("b2", 2).replace(LAUNCH, no_model)
     _state(tmp_path, world, b1, b2)
     checkout.released = True
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     models_by_item = {i.id: i.payload["model"] for i in runner.dispatched}
     assert models_by_item == {
@@ -3851,7 +3860,7 @@ def test_a_claim_that_turns_out_held_stops_the_pass_acting_on_that_batch(
 
     world.facts = _stale  # type: ignore[method-assign]
     _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2))
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert "super-fr#1 is claimed by triage scope s-22222222" in out
     assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
     assert _events(tmp_path, "b1") == []
@@ -3878,9 +3887,9 @@ def test_a_dispatch_dropped_for_a_lost_claim_is_not_counted_in_flight(
     _put(world, 1, "s-22222222", "theirs", cid=5)
     _stale_claims(world)
     _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2))
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b2"]
-    assert out.rstrip().splitlines()[-1] == "in flight 1, merged 0, pending 1, closing 0", out
+    assert _summary(out) == "in flight 1, merged 0, pending 1, closing 0", out
     assert code == 0
 
 
@@ -3930,7 +3939,7 @@ def test_a_forge_error_in_a_claim_write_exits_1_and_the_pass_goes_on(
         real(repo, number, body)
 
     monkeypatch.setattr(world, "comment_issue", _flaky)
-    result = _drive_named(tmp_path, "--once", "--yes")
+    result = _drive_named(tmp_path, "--once", "--yes", "--single-pass")
     assert result.exit_code == 1, result.output
     assert isinstance(result.exception, SystemExit), result.exception  # an exit, not a crash
     assert "claim super-fr#1 (b1): failed:" in result.output
@@ -4053,7 +4062,7 @@ def test_a_drive_pass_publishes_the_board_it_rendered(
 ) -> None:
     _proposed(world, tmp_path, 1)
     out = _publish_config(tmp_path, ["{name}"])
-    code, said = _drive(tmp_path, "--once", "--yes")
+    code, said = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, said
     assert out.read_text(encoding="utf-8") == "super-fr batches\n"
 
@@ -4091,7 +4100,7 @@ def test_a_failing_publish_leaves_a_once_drive_exit_code_alone(
 ) -> None:
     _proposed(world, tmp_path, 1)
     (tmp_path / "scope.yaml").write_text(yaml.safe_dump({"publish": ["/no/such"]}))
-    code, said = _drive(tmp_path, "--once", "--yes")
+    code, said = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0 and "could not publish the board" in said
 
 
@@ -4202,7 +4211,7 @@ def test_a_pass_dispatching_several_batches_checks_the_label_once(
 ) -> None:
     """p1-r5 (R4: at most once per repo per pass), whatever the pass dispatches."""
     _proposed(world, tmp_path, 3)
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert len(runner.dispatched) == 3, out
     assert world.calls.count("label_exists approved-fr") == 1
 

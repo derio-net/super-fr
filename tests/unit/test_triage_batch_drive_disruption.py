@@ -221,7 +221,7 @@ def test_once_exits_1_on_a_failed_batch_dispatch_and_the_pass_goes_on(
     batch in the same pass is still dispatched."""
     _proposed(world, tmp_path, 2)
     _failing_first(runner, 1)
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 1, out
     first, second = _lines(out, "dispatch")
     assert first.startswith("dispatch b1: stopped: runner `fake` failed to dispatch")
@@ -511,7 +511,7 @@ def test_a_config_key_this_fr_does_not_know_does_not_stop_a_dispatch(
         checkout, "show",
         lambda ref, file: yaml.safe_dump(FUTURE) if file == ".fr/triage.yaml" else None,
     )  # fmt: skip
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     assert len(runner.dispatched) == 1
 

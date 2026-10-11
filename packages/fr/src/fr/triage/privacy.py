@@ -14,6 +14,8 @@ for a state repo that is public. Two guards call it:
   and whether or not `facts.json` exists, and an unreadable answer refuses: a repo whose
   visibility changed, or a hand-edited file, is caught before it leaves the workspace.
 
+A looping drive skips the pass on an unreadable answer and retries, nothing written.
+
 A key's repo whose visibility cannot be read counts as private: the guard never lets an
 unknown through to a public state repo. A scope with no state repo is never checked: its
 state stays in the workspace.
@@ -35,6 +37,12 @@ ClientFor = Callable[[str], Any]
 class PrivacyError(TriageError):
     """A write would put a private repo's issue into a public state repo, or the state
     repo's visibility could not be read."""
+
+
+class VisibilityUnreadable(PrivacyError):  # noqa: N818 - named by the spec
+    """The state repo's visibility could not be read (rate limit, timeout, 5xx, an
+    unsupported backend). Nothing is known to leak, so a looping drive skips the pass and
+    retries (gh#1134); every other caller still refuses."""
 
 
 def refusal(issue: str, repo: str, state_repo: str) -> str:
@@ -81,7 +89,7 @@ def check_or_refuse(
     when the state repo's visibility is unknown and some key is not public."""
     if visibility.get(state_repo) is None:
         if any(not is_public(visibility.get(r)) for r in keys.values()):
-            raise PrivacyError(unreadable(state_repo))
+            raise VisibilityUnreadable(unreadable(state_repo))
         return
     found = leaks(keys, state_repo, visibility)
     if found:
@@ -184,7 +192,7 @@ def guard_state(state_dir: Path, *, scope: Scope, state_repo: str, client_for: C
     for this scope) or read live."""
     now = live_visibility(client_for(state_repo), state_repo)
     if now is None:
-        raise PrivacyError(unreadable(state_repo))
+        raise VisibilityUnreadable(unreadable(state_repo))
     if not is_public(now):
         return
     facts_path = state_dir / "facts.json"
