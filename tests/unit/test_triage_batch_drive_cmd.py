@@ -4187,3 +4187,37 @@ def test_a_foreign_push_after_the_snapshot_is_stepped_over_not_a_stop(
         "not make; its approved-fr approval is void"
     )
     assert train.calls == [102, 103], out
+
+
+def test_a_pass_dispatching_several_batches_checks_the_label_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r5 (R4: at most once per repo per pass), whatever the pass dispatches."""
+    _proposed(world, tmp_path, 3)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert len(runner.dispatched) == 3, out
+    assert world.calls.count("label_exists approved-fr") == 1
+
+
+def test_the_pass_that_voids_an_approval_leaves_facts_and_board_without_the_label(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r9: the pass's facts were collected before it voided; the board it writes must
+    not show the voided PR as approved."""
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    _pr_open(world, tmp_path)
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    _drive(tmp_path, "--once", "--yes")  # records the approval at sha-101
+    world.prs[101]["head_oid"] = "sha-session"
+    world.checks[101] = [{"name": "lint", "bucket": "pass"}]
+    _drive(tmp_path, "--once", "--yes")  # voids it
+    facts = load_facts(tmp_path / "facts.json")
+    every = [*facts.prs, *facts.batch_prs, *(p for i in facts.issues for p in i.prs)]
+    found = [p for p in every if p.number == 101]
+    assert found and all("approved-fr" not in (p.labels or []) for p in found)
+    rows = needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
+    assert [r.text for r in rows if r.kind == "approve-pr"] == [
+        "PR #101 changed since you approved it at sha-101: re-label to merge"
+    ]

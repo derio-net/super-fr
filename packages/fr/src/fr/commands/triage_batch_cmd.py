@@ -59,6 +59,7 @@ from rich.markup import escape
 
 from fr import __version__
 from fr.acceptance.ci import CI_CONFIG_PATHS
+from fr.artifacts.atomic import write_text_atomic
 from fr.commands import triage_kanban_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
@@ -91,6 +92,7 @@ from fr.triage.approval import (
     EventWriter,
     approval_verdict,
     ensure_approval_label,
+    facts_without_label,
     is_approved,
     reaches,
     settle_approvals,
@@ -208,6 +210,7 @@ from fr.triage.gitseam import Checkout, GitError
 from fr.triage.lease import acquire, load_lease, mark_pass, release
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
+    ApprovalEvent,
     Batch,
     BatchEvent,
     CancelEvent,
@@ -1612,8 +1615,11 @@ def dispatch_batch(
     read_errors: bool = False,
     driver: Driver = HOST,
     load: Callable[[str], Runner] | None = None,
+    label_seen: set[str] | None = None,
 ) -> None:
     """The body of `batch dispatch`, callable: one batch, one runner, one dispatch.
+    *label_seen* is the caller's set of repos whose approval label was checked already
+    (a driver pass's, so R4's at-most-once-per-pass holds); None is this call alone.
 
     `batch dispatch` and the wave driver share it, so a driver dispatch runs the same
     preflight, version reservation, brief, event write and forge labels. A refusal is
@@ -1752,7 +1758,9 @@ def dispatch_batch(
         _fail(f"runner `{runner_name}` already holds {item.id} live; nothing written")
     _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
     # The label the operator approves the batch's PR with (merge-train-safety R4).
-    ensure_approval_label(client, owner_repo, _say, seen=set())
+    ensure_approval_label(
+        client, owner_repo, _say, seen=label_seen if label_seen is not None else set()
+    )
     # R3: the claims, R4's re-read included, before the launch, which cannot be undone,
     # and before any other forge write. A member another scope holds refuses the batch.
     posted = _claim_for_dispatch(env, batch)
@@ -3548,9 +3556,12 @@ class _Driver:
         self._observed_last = True
         return True
 
-    def _settle_approvals(self, facts: Facts, judgements: Judgements) -> bool:
+    def _settle_approvals(
+        self, facts: Facts, judgements: Judgements
+    ) -> tuple[bool, set[tuple[str, int]]]:
         """Record or void each selected open batch PR's approval before the walk
-        (merge-train-safety §A "Recording and voiding", R2); whether it wrote any.
+        (merge-train-safety §A "Recording and voiding", R2); whether it wrote any, and
+        the `(repo, PR)` whose label it removed.
         Read-only passes never settle: the walk then reads a first label as approved."""
         repos = {b.id: r for b in judgements.batches if (r := batch_repo(b, facts)) is not None}
         chosen = {b.id for b in _chosen(judgements.batches, self.named)}
@@ -3561,24 +3572,27 @@ class _Driver:
             if e.batch.id in chosen and repo is not None and repo not in unread:
                 by_repo.setdefault(repo, []).append((e.batch, e.pr.number))
         wrote = False
+        voided: set[tuple[str, int]] = set()
         writer = event_writer(self.target, facts)
+        repo_of = {b.id: r for b, r in ((b, repos.get(b.id)) for b in judgements.batches) if r}
 
         def record(batch_id: str, event: BatchEvent) -> None:
             nonlocal wrote
             writer(batch_id, event)
             wrote = True
+            if isinstance(event, ApprovalEvent) and event.voided_at is not None:
+                voided.add((repo_of[batch_id], event.pr))
 
-        seen: set[str] = set()  # one label check per repo per pass (R4)
         try:
             for repo, open_prs in sorted(by_repo.items()):
                 client = self.client(facts, repo)
-                ensure_approval_label(client, repo, _say, seen=seen)
+                ensure_approval_label(client, repo, _say, seen=self._label_seen)
                 settle_approvals(client, record, repo, open_prs, _say, now=_now())
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
-        return wrote
+        return wrote, voided
 
     def run_pass(self) -> tuple[bool, Summary, list[str]]:
         """One pass: re-collect, decide, act (with --yes) or print the plan.
@@ -3592,8 +3606,17 @@ class _Driver:
                 "ignored until an fr that knows them runs",
             )
         _, facts, judgements = _load_state(self.scope, self.target, None)
-        if self.yes and self._settle_approvals(facts, judgements):
-            _, facts, judgements = _load_state(self.scope, self.target, None)
+        self._label_seen: set[str] = set()  # one approval-label check per repo per pass (R4)
+        if self.yes:
+            wrote, voided = self._settle_approvals(facts, judgements)
+            if voided:  # what the forge says now: this pass's views never show them approved
+                facts = facts_without_label(facts, voided, APPROVED_FR.name)
+                write_text_atomic(
+                    self.target / "facts.json",
+                    json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n",
+                )
+            if wrote:
+                _, facts, judgements = _load_state(self.scope, self.target, None)
         for ctx in self._merge.values():
             ctx.recorded.clear()  # what a context recorded last pass is on disk now
         self._ci, self._unlanded, self._held = {}, set(), 0
@@ -3814,6 +3837,7 @@ class _Driver:
                     read_errors=True,
                     driver=self.adapter,
                     load=self.runner,
+                    label_seen=self._label_seen,
                 )
         except RunnerDispatchError as exc:
             return self._dispatch_failed(batch, str(exc), exc.__cause__), False, in_flight

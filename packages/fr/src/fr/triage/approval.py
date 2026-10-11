@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Any
 
 from fr.labels import APPROVED_FR
-from fr.triage.model import ApprovalEvent, Batch, BatchEvent, UpdateEvent
+from fr.triage.model import ApprovalEvent, Batch, BatchEvent, Facts, PullRequest, UpdateEvent
 
 
 @dataclass(frozen=True)
@@ -136,6 +136,28 @@ def settle_approvals(
                 verdict = Unlabelled()
         out[batch.id] = verdict
     return out
+
+
+def facts_without_label(facts: Facts, prs: set[tuple[str, int]], name: str) -> Facts:
+    """*facts* with label *name* dropped from each PR in *prs* (`(OWNER/REPO, number)`),
+    wherever the facts hold it: what the forge says once fr removed a voided approval's
+    label, so a view rendered from this pass's facts never shows it (p1-r9)."""
+
+    def drop(pr: PullRequest) -> PullRequest:
+        if (pr.repo, pr.number) not in prs or pr.labels is None:
+            return pr
+        return pr.model_copy(update={"labels": [x for x in pr.labels if x != name]})
+
+    return facts.model_copy(
+        update={
+            "prs": [drop(p) for p in facts.prs],
+            "batch_prs": [drop(p) for p in facts.batch_prs],
+            "judged_prs": [drop(p) for p in facts.judged_prs],
+            "issues": [
+                i.model_copy(update={"prs": [drop(p) for p in i.prs]}) for i in facts.issues
+            ],
+        }
+    )
 
 
 def voided_at(events: Sequence[BatchEvent], pr: int) -> str | None:
