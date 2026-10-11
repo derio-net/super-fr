@@ -33,3 +33,8 @@ Candidate: _hosts.origin_slug keeps the WHOLE remote path (git/<owner>/<repo> fo
 ### 6b5b07dd25ea · root-cause · Shared class, separate causes: cloud paths assumed host preconditions
 
 #1099.1 runner dispatched payload.branch for close-outs. #1099.2 the status row never asked for last_init_error. #1099.3 _conflict built its line with _stopped_line, which always set failed_write. #1100.1 default_branch refused on unset origin/HEAD. #1100.2 fast_forward refused any non-default checkout, even the driver's own. #1100.3 the doctor never ran choose_method. #1100.4 judge warned on any same-dir upgrade. #1100.5 drive pass discarded fetch_now's result. #1098.1-3 the brief installed fr only when missing, never named the skill, and accepted agents by file. #1098.4 _target defaulted to devcontainer with no cloud check.
+
+<!-- fr:journal kind=finding scope=debug id=fixed-1099 created=2026-10-11T20:56:54+00:00 state=fixed -->
+### fixed-1099 · finding [fixed] · #1099 fixed: close-out base branch, init error blocks, handled conflict no failed write
+
+Tests (all red first): test_claude_cloud_mailbox.py#test_a_closeout_starts_on_the_default_branch_never_the_deleted_batch_branch, test_claude_cloud_status.py#test_a_session_that_failed_to_start_is_blocked_with_its_init_error, test_triage_batch_drive_cmd.py#test_a_conflict_the_pass_handles_is_no_failed_write, test_triage_driver_adapter.py#test_the_cloud_close_out_switches_its_own_clone_and_starts_on_the_default_branch.
