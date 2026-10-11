@@ -39,7 +39,7 @@ class PrivacyError(TriageError):
     repo's visibility could not be read."""
 
 
-class VisibilityUnreadable(PrivacyError):
+class VisibilityUnreadable(PrivacyError):  # noqa: N818 - named by the spec
     """The state repo's visibility could not be read (rate limit, timeout, 5xx, an
     unsupported backend). Nothing is known to leak, so a looping drive skips the pass and
     retries (gh#1134); every other caller still refuses."""

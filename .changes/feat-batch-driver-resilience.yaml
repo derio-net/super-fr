@@ -1,0 +1,2 @@
+bump: minor
+summary: "fr triage batch drive: --once --yes that would dispatch refuses unless --single-pass, a looping drive skips and retries a pass whose state-repo visibility is unreadable, and the REST client treats the free-plan rulesets 403 as no rulesets"

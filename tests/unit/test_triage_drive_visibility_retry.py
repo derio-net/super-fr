@@ -1,3 +1,4 @@
+# ruff: noqa: F811 - pytest fixtures imported from the sibling test modules
 """An unreadable state-repo visibility skips a looping drive's pass (gh#1134, spec
 2026-10-11-driver-resilience §B, R8-R11).
 

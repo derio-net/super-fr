@@ -81,7 +81,9 @@ def test_loop_command_carries_ids_non_defaults_and_absolute_checkouts() -> None:
     assert "--once" not in argv and "--single-pass" not in argv
     checkouts = [argv[i + 1] for i, a in enumerate(argv) if a == "--checkout"]
     assert checkouts[0] == "org-a/one=/abs/one"
-    assert checkouts[1].startswith("org-a/two=/") and Path(checkouts[1].split("=", 1)[1]).is_absolute()
+    assert (
+        checkouts[1].startswith("org-a/two=/") and Path(checkouts[1].split("=", 1)[1]).is_absolute()
+    )
 
 
 def test_the_notice_names_what_a_single_pass_leaves_undone_then_the_command() -> None:
@@ -119,7 +121,11 @@ def test_once_yes_whose_plan_dispatches_refuses_before_acting(
     code, out = _drive(tmp_path, "--once", "--yes")
     flat = " ".join(out.split())
     assert code == 2, out
-    assert "fr triage batch drive" in flat and "--yes" in flat and "--once" not in flat.split("fr triage batch drive")[-1]
+    assert (
+        "fr triage batch drive" in flat
+        and "--yes" in flat
+        and "--once" not in flat.split("fr triage batch drive")[-1]
+    )
     assert "--single-pass" not in flat.split("fr triage batch drive")[-1]
     assert runner.dispatched == [] and world.merged == []
     assert released, "the lease the pass took was released before the refusal"
