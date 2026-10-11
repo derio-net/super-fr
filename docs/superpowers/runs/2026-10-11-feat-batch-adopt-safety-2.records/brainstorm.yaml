@@ -1,0 +1,84 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-adopt-safety-2
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: "Batch adopt-safety-2 brief (#1081, #1069, #1071), verbatim"
+    body: |
+      batch adopt: hold adopted agents, adopt sessions on main, better --list
+
+      Batch `adopt-safety-2` of derio-net/super-fr: 3 issues, delivered as ONE pull request.
+
+      ## super-fr#1081: triage batch adopt: the R6 message sets adopted agents working; add --hold
+      Confirmed: the adopt message still says the session is `driven by fr triage batch drive` (`triage_batch_cmd.py:1730`) with no hold; 3 of 9 idle agents started work unasked (one pushed, one merged main).
+
+      ## super-fr#1069: triage batch adopt: a session on the default branch cannot be adopted
+      `triage_batch_cmd.py:1581` still refuses the default branch. Held by scope `s-c8805331` (its driver stopped refreshing 2026-10-09 ~20:05 UTC; operator released these to this scope 2026-10-10) (batch `adopt-safety-and-discovery`).
+
+      ## super-fr#1071: triage batch adopt --list: show branch, workspace and PR, and recognise all ref shapes
+      `adopt --list` found refs for 3 of 42 tabs, 2 wrong. Held by scope `s-c8805331` (its driver stopped refreshing 2026-10-09 ~20:05 UTC; operator released these to this scope 2026-10-10).
+
+      ## Why these belong together
+      Re-run of adopt-safety, whose dispatch failed on 2026-10-11 (herdr: the brief was never submitted, no turn began). Adopt's message set idle agents working unasked.
+
+      ## Delivery rules
+      - Work on branch `feat/batch-adopt-safety-2`.
+      - Open a draft PR as soon as the spec is committed. Its body contains these lines, one per member, so every member closes when it merges:
+        Closes derio-net/super-fr#1081
+        Closes derio-net/super-fr#1069
+        Closes derio-net/super-fr#1071
+      - Do not name any member issue as a phase `tracking_issue` in the plan: the bridge would then own that issue's `fr:` labels.
+  - kind: decision
+    id: hold-default
+    title: "Hold is the default; --no-hold opts out"
+    body: "Operator chose: adopt's message always ends with an explicit hold (acknowledge only; no commits, merges, migrations, pushes or pipeline runs; wait for the operator); `--no-hold` drops it. Matches the operator's 'nothing without express confirmation' rule. (R1-R4)"
+  - kind: decision
+    id: default-branch-cuts-workspace
+    title: "A default-branch session gets a new fr workspace; dirty base clone refused"
+    body: "Operator chose: adopt runs the in-process `fr isolation up --branch feat/batch-<id>` from origin/<default>, binds the agent's session, and the held message names the workspace path for the agent to move to. A dirty base clone is refused; uncommitted work is never carried. (R5-R9)"
+  - kind: decision
+    id: unpushed-default-refused
+    title: "Unpushed commits on the local default branch are refused"
+    body: "Operator chose: commits on local <default> that origin lacks refuse the adoption, listing them; adopt never resets or rewrites main. (R7)"
+  - kind: decision
+    id: list-forge-reads
+    title: "--list reads the forge once per distinct ref and per repo+branch"
+    body: "Operator chose: classify each distinct ref issue-vs-PR once per listing, one open-PR lookup per session branch; a failed read prints `(?)` and the listing continues; no --offline flag. (R15-R17)"
+  - kind: decision
+    id: verification-strategy
+    title: "Verification: candidate scenarios + one post-merge live row"
+    body: "Operator chose: candidate strategy (installed build, scenarios over a fake herdr and fake gh for the held message and --list), default-branch path verified by CI unit tests over a real temp repo, plus one post-merge live row on the herdr host."
+acceptance:
+  - id: triage-adopt-holds-agent
+    capability: triage
+    acceptance: "batch adopt's message to an adopted agent ends with an explicit hold by default (acknowledge only, no commits/merges/migrations/pushes/runs, wait for the operator), --no-hold drops it, and the plan without --yes prints the exact text"
+    origin: ["super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R1"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/triage-adopt-hold.sh
+  - id: triage-adopt-default-branch
+    capability: triage
+    acceptance: "batch adopt takes a session on the default branch: it creates the batch branch's fr workspace from origin/<default>, binds the session, records the dispatch and tells the held agent the workspace path; it refuses a dirty base clone or unpushed default-branch commits, never changes the base clone, and is resumable"
+    origin: ["super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R5"]
+    status: not-implemented
+    verify: none
+  - id: triage-adopt-list-columns
+    capability: triage
+    acceptance: "batch adopt --list shows each session's state (adoptable / on default branch / batch / no agent / unknown), repo, branch, fr workspace and open PR, and classifies every label ref, bare #n included, as issue or PR through the forge, writing nothing"
+    origin: ["super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R11"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/triage-adopt-list.sh
+  - id: triage-adopt-live-sweep
+    capability: triage
+    acceptance: "On a real herdr host, adopt --list correlates live agents with their repo, branch, workspace and PR, and adopted agents (feature branch and main) acknowledge and wait without acting"
+    origin: ["super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R1"]
+    status: not-implemented
+    verify: live
+emitted:
+  spec: docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md
+evidence: {}
