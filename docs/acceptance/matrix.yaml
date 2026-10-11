@@ -103,10 +103,18 @@ rows:
       - super-fr:tests/unit/test_hooks_acceptance_nag.py
       - super-fr:tests/unit/test_plan_acceptance_links.py
       - super-fr:tests/unit/test_acceptance_init.py
-    status: walk-owed
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): hook,
-      digest formatter and Actions summary scaffold are ci-pinned; the live weekly upsert/close
-      is owed until the first scheduled run is observed.'
+    status: walked
+    notes: 'walked (p1-r4): the live weekly upsert has been observed, issue #363 refreshed
+      by the schedule on 2026-10-05; hook, digest formatter and Actions summary scaffold
+      are ci-pinned. The close at zero debt is not yet observed.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-05T00:00:00Z'
+      evidence: issue derio-net/super-fr#363 'Acceptance debt' is open and was last
+        refreshed by the scheduled acceptance-report run (github-actions) on 2026-10-05
   - id: isolation-suite-lifecycle
     capability: Isolation
     acceptance: 'Operator can init a devcontainer profile and run isolated work: up
