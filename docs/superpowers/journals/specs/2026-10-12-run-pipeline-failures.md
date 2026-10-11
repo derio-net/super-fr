@@ -158,3 +158,8 @@ Added ## Tests mapping tests to R1-R8 and the three rows. Not a '## Test Plan': 
 ### sr-r9-resolved · finding [fixed] · resolves sr-r9: R2 does not say what report --check --out <ignored path> does
 
 R2 + §A: an explicit --out is compared regardless; tested.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-12-run-pipeline-failures-p2 created=2026-10-11T22:13:31+00:00 -->
+### phase-split-2026-10-12-run-pipeline-failures-p2 · decision · ask: phase 2 serves its own member issue (#1091, R4-R6)
+
+Independently reviewable ask; separate files and tests from the other phases.
