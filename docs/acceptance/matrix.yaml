@@ -6780,9 +6780,12 @@ rows:
       a private member is still refused.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-driver-resilience-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_lease_push_cannot_read_the_visibility
+    status: ci
+    notes: 'Unit tests: a looping drive skips and retries, once/cloud/export still refuse,
+      a leak still ends the driver'
     verify: none
   - id: rest-rulesets-free-plan-403
     capability: triage-batch-drive
