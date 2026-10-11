@@ -19,3 +19,8 @@ pipeline.py keeps pins whose issue is open, and lists the dropped (closed or no 
 ### fix-closed-pins · finding [fixed] · Closed pins drop off visibly; history fragments build even if the diagram fails
 
 dac3f687: pipeline.py filters pins to open issues, names the dropped ones under the diagram and on stderr; build.py runs pipeline.py guarded, writes history/ regardless, exits non-zero on a diagram failure. Pinned by tests/unit/test_triage_docs_authored_src.py (both red before the fix, green after). Live: the scratch repro with the scope's real facts.json and real gh now exits 0, drops 30 pins, writes all three history fragments. Not done here: re-judging which of today's open issues pin to which step (issue item 1, an operator judgement).
+
+<!-- fr:journal kind=review scope=debug id=14133a5cd277 created=2026-10-11T23:39:31+00:00 -->
+### 14133a5cd277 · review · Self-review of the fix diff: no findings
+
+Reviewed by the debugging session itself, not an independent reviewer (docs-tree scripts + one test file). Checked: defect count and placed set are computed after filtering; an all-empty pin column still renders 'no open pins'; the 'other' sentence no longer claims unpinned issues act on no step, since new issues are unpinned until re-judged; committed fragments were deliberately not regenerated (the state export flow owns them). No change fragment: docs/ and tests/ only.
