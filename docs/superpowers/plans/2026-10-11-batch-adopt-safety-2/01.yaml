@@ -1,0 +1,159 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Held adopt message, --no-hold, plan prints the message, session description
+    fields (R1–R4, R10, R9 stop-report flags)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-adopt-holds-agent
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - tests/unit/test_triage_batch_adopt*.py
+  - tests/unit/test_fr_herdr_runner.py
+  - tests/unit/test_fr_dispatch*.py
+  - tests/scenarios/triage-adopt-hold.sh
+  - tests/scenarios/fixtures/triage-adopt/**
+  - .changes/feat-batch-adopt-safety-2.yaml
+  - docs/acceptance/**
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Smoke — the suite and the existing adopt tests are green on a trivial pin
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Locate the existing adopt tests (grep tests/unit for "adopt_message" and "adopt_batch"). Add one trivial
+      test pinning that adopt_message's output still names the batch id, run that file with
+      `uv run pytest <file> -q --no-cov`, and confirm green. This proves the harness before behaviour changes.
+- number: 2
+  title: RED — held message text, --no-hold, plan prints the message
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in the adopt test module, add tests that pin, line by line, the held message of spec §A: first line
+      "fr triage batch adopt: this session is now tracked as batch <id> (<item-id>)." (no word "driven"); the
+      rename/keep-branch line as today; optional PR and reserved-version lines; then the HOLD block exactly:
+      "HOLD: acknowledge this message only. Make no commits, merges, rebases, artifact migrations, pushes or PR
+      edits, and start no skill or pipeline run. Wait for the operator's go-ahead." (wrap as the spec shows, but
+      the test pins the final text). Add: hold=False omits the HOLD block; the default is held.
+  - id: P1.T2.S2
+    text: |-
+      RED: an adopt_batch plan-only (no --yes) test using the existing adopt test fixtures asserts the plan prints
+      "  runner: message the agent (held)" followed by every message line prefixed "    | ", with "#<new PR>" where
+      a PR will be opened; and with no_hold=True prints "(not held)" and no HOLD line. A CliRunner test asserts
+      `batch adopt --no-hold` is accepted and reaches adopt_batch with hold disabled.
+  - id: P1.T2.S3
+    text: |-
+      RED: a test that forces a step failure under --yes (as the existing resumable-stop tests do) and asserts the
+      stop report's re-run command contains `--no-hold` when given and `--checkout <path>` when given (R9). Run
+      the file; confirm these fail for the right reason.
+- number: 3
+  title: GREEN — implement the held message and the flag
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/triage_batch_cmd.py give adopt_message `hold: bool = True` and
+      `workspace: Path | None = None` (the workspace line is used by phase 2; implement the default-branch branch
+      line text now per spec §A/R6 so its test can be pinned in phase 2). Rewrite the first line, append the HOLD
+      block unless hold is False.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: thread `hold` through adopt_batch (keyword, default True) and batch_adopt_command (`--no-hold`
+      typer option). In step 6 print "(held)"/"(not held)" and the message lines under "    | ", using
+      "#<new PR>" when old_pr exists and new_pr is None. Make the stop report's re-run command echo `--no-hold`
+      and `--checkout <path>` when given. Run the adopt tests: green.
+- number: 4
+  title: RED/GREEN — AdoptTarget gains cwd, session, harness; herdr fills them (R10)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_fr_herdr_runner.py extend the list_sessions expectations (the exact-equality test
+      near the AdoptTarget assertions) with cwd (from foreground_cwd, else cwd), session (agent_session.value),
+      harness (agent mapped claude|opencode|hermes, else None); add a case where the tab holds no single agent and
+      all three are None, and an `opencode` agent mapping to "opencode". Use the existing herdr agent-list fixture
+      (tests/fixtures/herdr/agent-list.json); extend it only with fields herdr really prints (copy shapes from
+      tests/scenarios/fixtures/herdr-restart/agent-list.json, never invent). Confirm red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `cwd: str | None = None`, `session: str | None = None`, `harness: str | None = None` at the end of
+      fr_dispatch.protocols.AdoptTarget (docstring updated); fill them in HerdrRunner.list_sessions. Run the herdr
+      and fr_dispatch testing-contract tests: green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: if the harness mapping duplicates a helper in fr_herdr.restart, reuse it; otherwise record a
+      refactor reason in the step record.
+- number: 5
+  title: Scenario, fragment, acceptance row
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Write tests/scenarios/triage-adopt-hold.sh in the style of tests/scenarios/triage-claims-held.sh and
+      herdr-restart-idle.sh (source _common.sh; fake herdr and fake gh on PATH from
+      tests/scenarios/fixtures/triage-adopt/; a temp git repo with a linked worktree on a feature branch; a triage
+      state dir with one proposed batch). Run the installed `fr triage batch adopt <id> --tab <t> --branch <b>`
+      (no --yes) and expect_grep the HOLD line under "    | "; then with --no-hold expect "(not held)" and no
+      HOLD. Run it via `bash tests/scenarios/triage-adopt-hold.sh` with the worktree's fr on PATH; green.
+      Confirm tests/integration/test_scenarios.py picks it up.
+  - id: P1.T5.S2
+    text: |-
+      Add .changes/feat-batch-adopt-safety-2.yaml with `bump: minor` and summary "triage batch adopt: holds the
+      adopted agent by default (--no-hold), adopts sessions on the default branch, and --list shows each
+      session's state, repo, branch, workspace, PR and classified refs". Move triage-adopt-holds-agent with
+      `uv run fr acceptance set-status --id triage-adopt-holds-agent --status ci --level unit=super-fr:<test
+      file>#<test name> --notes "held message pinned by unit tests; scenario on candidate"`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

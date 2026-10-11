@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Adopt a session on the default branch through an isolation seam (R5–R9)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-adopt-default-branch
+  tier: hard
+  files:
+  - packages/fr/src/fr/isolation/adopt.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_forge_adapter_batch_ops.py
+  - tests/unit/test_isolation_adopt.py
+  - tests/unit/test_triage_gitseam*.py
+  - tests/unit/test_triage_batch_adopt*.py
+  - docs/acceptance/**
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: RED/GREEN — gitseam reads (dirty_paths, unpushed, ahead)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests over a real temporary git repo (origin as a bare repo, as existing gitseam tests build them) for
+      new Checkout methods: dirty_paths() lists `git status --porcelain` paths of the MAIN worktree (empty when
+      clean); unpushed(branch) lists "<sha> <subject>" for commits on <branch> not on origin/<branch>;
+      ahead(ref, base) counts commits in base..ref. Confirm red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: implement them on gitseam.Checkout, each running in self.main_worktree(). Green. The gitseam
+      tripwire's admitted surface (Checkout, Worktree, GitError) stays unchanged.
+- number: 2
+  title: RED/GREEN — fr/isolation/adopt.py, the seam (spec §B "The isolation seam")
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_isolation_adopt.py, with FR_ISOLATION_TARGET=worktree and a temp repo with origin:
+      enter_workspace(root, "feat/batch-x") creates the worktree on a branch cut from origin/<default> and a
+      second call resumes it (calls up again, same path); bind_session returns None on success and a warning
+      string (never raising) on an IsolationError; reusable_workspace accepts a workspace with no commits beyond
+      origin/<default>, accepts one whose sessions hold the given id, refuses (None) one with a commit;
+      session_worktree reads a session index (FR_SESSIONS_DIR in tmp); workspace_containing finds the workspace
+      whose worktree contains a path. Confirm red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/isolation/adopt.py implementing those five functions. enter_workspace selects
+      the backend the way fr.run.workspace._select_target does (lazy import of fr.commands.isolation_cmd._target)
+      and ALWAYS calls `.up(profile=None, branch=branch)`. Green.
+  - id: P2.T2.S3
+    text: |-
+      In tests/unit/test_forge_adapter_batch_ops.py grow _ISOLATION_ALLOWED by exactly the `from
+      fr.isolation.adopt import ...` lines the command will use (one name per line as the existing two are
+      written), rename test_the_isolation_allowance_is_the_rename_alone to name the rename-and-adopt set, and pin
+      that a planted `from fr.isolation.types import save_state` is still refused. Run that file: green.
+- number: 3
+  title: RED — the default-branch adopt path
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: adopt tests (same fixtures as the existing adopt tests, FR_ISOLATION_TARGET=worktree, fake runner and
+      fake forge) for `--branch <default>`: plan prints "branch: <default> stays; workspace <path> on
+      feat/batch-<id> from origin/<default>" and the held message with the workspace path and "Publish it only
+      with `git push -u origin feat/batch-<id>`; never push <default>."; --yes creates the workspace, binds the
+      session when the fake runner reports one (and only warns when binding fails), adopts the tab, records the
+      dispatch event with branch feat/batch-<id>, marks members, sends the message.
+  - id: P2.T3.S2
+    text: |-
+      RED: refusals before any write (assert nothing changed: no workspace, no event, no forge write): main
+      worktree on another branch; dirty main worktree (paths listed); local default ahead of origin (commits
+      listed); session cwd outside this checkout; batch branch present with a commit beyond origin/<default> and
+      no binding to this session.
+  - id: P2.T3.S3
+    text: |-
+      RED: R8 — snapshot `git rev-parse HEAD`, `git status --porcelain` and `git rev-parse <default>` in the main
+      worktree before and after a --yes run; assert equal. R9 — make the forge-mark step fail once, re-run the
+      same command, assert it resumes the existing workspace (enter_workspace called again), records nothing
+      twice and finishes. Confirm all red.
+- number: 4
+  title: GREEN — _adopt_from_default
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      GREEN: in triage_batch_cmd.py replace the default-branch refusal at step 4 with a call to a new
+      _adopt_from_default(...) that reuses steps 1–3 and step 5 (reservation, event, dry-run write), runs R7's
+      refusals in the spec §B order (git reads in checkout.main_worktree(), fetch before unpushed), prints the
+      plan, and under --yes runs the steps enter workspace → bind session → adopt tab → record → mark → message in
+      the existing resumable step loop and stop report. Keep the `_not_default` guard: nothing on this path may
+      write the default branch. Run all adopt tests: green.
+  - id: P2.T4.S2
+    text: |-
+      REFACTOR: extract the shared step-loop and stop-report code so both paths use one implementation, if it is
+      now duplicated; else record a refactor reason. Then move triage-adopt-default-branch with
+      `uv run fr acceptance set-status --id triage-adopt-default-branch --status ci --level
+      unit=super-fr:<file>#<test> --notes "default-branch adopt pinned by unit tests over a real temp repo"`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

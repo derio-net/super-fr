@@ -244,5 +244,6 @@ strategy: candidate
 
 ## Implementation Plans
 
-| Plan | Status |
-|------|--------|
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-11-batch-adopt-safety-2 | `derio-net/super-fr` | `2026-10-11-batch-adopt-safety-2` | — |
