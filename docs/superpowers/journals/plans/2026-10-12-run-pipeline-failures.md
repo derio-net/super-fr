@@ -69,3 +69,18 @@ fr acceptance set-status added unit #test_report_deterministic_writes_ignored_re
 ### p1-r6-resolved · finding [out-of-scope] · resolves p1-r6: pre-existing _committable runs its own git check-ignore instead of a shared helper (phase 1)
 
 Pre-existing helper not touched by this change; it checks init's non-report paths too, so it is not a duplicate of ci_built_reports' job. Correct today.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-selfreview-fixture created=2026-10-11T23:40:05+00:00 phase=2 -->
+### p2-selfreview-fixture · discovery · self-review verification tests needed an executable .fr/candidate-install (phase 2)
+
+R5 makes an explicit `strategy: candidate` an error in a repo without the program, so test_plan_self_review_verification._setup now installs one by default (install=False for the R5 case). Tests were written red-first for the new module; implementation then written in one pass.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-11T23:40:05+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+install_problem was lifted out of walk._contract (the refactor itself); nothing further to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-11T23:40:05+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+unrunnable_strategies is a single new helper with two thin callers; nothing to clean
