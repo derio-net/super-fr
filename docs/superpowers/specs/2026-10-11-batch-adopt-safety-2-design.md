@@ -39,19 +39,19 @@ R1. By default, the one message adopt sends the agent (R6 of the 2026-10-06 spec
 R2. The held message no longer presents the wave driver as the agent's instruction: it states the batch identity ("now tracked as batch X") and the push target, then the hold.
 R3. `fr triage batch adopt --no-hold` sends the message without the hold lines, and the plan output names which form will be sent.
 R4. Without `--yes`, adopt's plan prints the exact message text the agent will receive, with a placeholder where a PR adopt has yet to open will be named.
-R5. Given `--branch` equal to the repo's default branch, adopt does not refuse. It creates the batch branch's fr isolation workspace from freshly-fetched `origin/<default>` (what `fr isolation up --branch <batch-branch>` does) and binds the adopted agent's session to that workspace when the runner reports a session id. It records the dispatch event on the batch branch, marks every member issue on the forge as a dispatch does, and sends the message.
-R6. On the default-branch path, the message names both the batch branch and the new workspace's path, and tells the agent that all further work on this batch happens in that workspace, not the base clone. The hold of R1 applies unless `--no-hold`.
-R7. The default-branch path refuses before any write when: the base clone has uncommitted changes (the refusal lists the paths); the local default branch has commits that `origin/<default>` lacks (the refusal lists them); the runner reports the agent's working directory and it is outside this checkout; or the batch branch already exists, locally or on the remote, and is not this adoption's own earlier work.
-R8. The default-branch path never changes the base clone's working tree, index, HEAD or default branch.
-R9. The default-branch path is resumable: re-run with the same arguments, an existing fr workspace for the batch branch in this checkout counts as done, and adopt finishes the remaining steps.
-R10. A runner's session description gains three optional fields: the agent's working directory, its harness session id and its harness. Each defaults to unknown, so a runner that reports none of them still works unchanged. The herdr runner fills all three from `herdr agent list`.
+R5. Given `--branch` equal to the repo's default branch, adopt does not refuse. It enters the batch branch's fr isolation workspace in the checkout's main worktree (what `fr isolation up --branch <batch-branch>` does: a new branch cut from freshly-fetched `origin/<default>`, or a resume of the existing workspace). It binds the adopted agent's session to that workspace when the runner reports a session id, records the dispatch event on the batch branch, marks every member issue on the forge as a dispatch does, and sends the message.
+R6. On the default-branch path, the message names the batch branch and the new workspace's path. It tells the agent to do all further work on this batch in that workspace, never in the base clone, and to publish the branch only with `git push -u origin <batch-branch>`, never pushing the default branch. The hold of R1 applies unless `--no-hold`.
+R7. The default-branch path refuses before any write when: the main worktree does not have the default branch checked out; the main worktree has uncommitted changes (the refusal lists the paths); the local default branch has commits that `origin/<default>` lacks (the refusal lists them); the runner reports the agent's working directory and it is outside this checkout's main worktree; or the batch branch already exists locally or on the remote, unless it is an fr workspace of this checkout whose branch has no commits beyond `origin/<default>`, or one this session is already bound to.
+R8. The default-branch path never changes the main worktree's tracked files, index, HEAD or default branch.
+R9. The default-branch path is resumable: re-run with the same arguments, it resumes the batch branch's existing workspace (allowed by R7) as `fr isolation up` resumes one, starting a container that never started, and finishes the remaining steps. A stop report that names the re-run command repeats `--no-hold` and `--checkout` when they were given.
+R10. A runner's session description gains three optional fields: the agent's working directory, its harness session id and its harness. Each defaults to unknown, so a runner that reports none of them still works unchanged. The herdr runner fills them from `herdr agent list`: the working directory from `foreground_cwd`, else `cwd`; the session id from `agent_session.value`; the harness from `agent` when it is `claude`, `opencode` or `hermes`, else unknown.
 R11. `adopt --list` prints a header line, then one tab-separated line per runner tab with these columns: tab, workspace label, agent status, state, repo, branch, fr workspace, PR, refs, tab label. An unknown value prints `-`.
-R12. The listing's state is one of: `no agent` (no single agent in the tab); `batch` (the tab is already labelled with a batch's item id); `on default branch` (the agent's checkout has the repo's default branch checked out); `adoptable` (any other branch); or `unknown` (the working directory is not reported or is not in a git checkout).
-R13. The repo and branch columns come from the agent's working directory: the checkout's `origin` repo, and its current branch.
+R12. The listing's state is the first that applies: `no agent` (the tab holds no single agent); `batch` (the tab label contains `/run/batch-`, the test adopt's own refusal uses); `unknown` (the working directory is unreported, is not in a git checkout, or its default branch cannot be read); `on default branch` (the checkout has the default branch checked out); `detached` (no branch is checked out); `adoptable` (any other branch).
+R13. The repo and branch columns come from the agent's working directory: the checkout's `origin` repo as `owner/name`, and its current branch.
 R14. The fr workspace column is the workspace whose session binding holds the agent's session id; otherwise the fr workspace whose worktree contains the working directory; otherwise `-`.
-R15. The PR column is the open PR whose head is that branch (`#<n>`), with the issues it closes. Each distinct repo-and-branch pair is read from the forge once per listing.
-R16. The refs column contains every `<repo>#<n>` in the tab label, and every bare `#<n>`, resolved against the agent's repo. Each ref is classified through the forge as an issue or a PR (`super-fr#314 (pr)`). Each distinct ref is read once per listing, and a ref whose read fails or whose forge cannot classify it prints `(?)`.
-R17. `adopt --list` writes nothing, and a forge read failure never fails it; only a failure to list the runner's sessions does.
+R15. The PR column is the newest OPEN PR whose head is the session's branch, from the session's own repo (not a fork), with the issues it closes. It is looked up only for `adoptable` rows, and each distinct repo-and-branch pair is read from the forge once per listing.
+R16. The refs column holds every issue or PR reference in the tab label: `owner/name#<n>` as written; `name#<n>` resolved to the agent's `owner/name` when the names match, and otherwise left unresolved; and a bare `#<n>` resolved against the agent's repo. A resolved ref is classified through the forge as an issue or a PR (`derio-net/super-fr#314 (pr)`), each distinct ref read once per listing. An unresolved ref, or one whose read fails or whose forge cannot classify it, prints with `(?)`.
+R17. `adopt --list` writes nothing. A failure of one session's git read, forge client construction or forge read degrades only that row's cells to `-` or `(?)`; only a failure to list the runner's sessions fails the command.
 R18. The fr-triage skill documents `--no-hold`, adopting a session on the default branch, and the listing's state column, within its 120-line cap.
 
 ## Design
@@ -65,7 +65,8 @@ builds its lines as follows:
 fr triage batch adopt: this session is now tracked as batch <id> (<item-id>).
 <branch line — today's rename line, or "Your branch is <new>; keep pushing to it.",
  or on the default-branch path: "Your batch branch is <new>, in the fr workspace
- <path>. Do all further work on this batch there, never in the base clone.">
+ <path>. Do all further work on this batch there, never in the base clone. Publish
+ it only with `git push -u origin <new>`; never push <default>.">
 [The PR is now <pr>; the earlier one was closed as superseded.]
 [Reserved version for this batch: <v>.]
 HOLD: acknowledge this message only. Make no commits, merges, rebases, artifact
@@ -88,48 +89,69 @@ never adopts, so no other caller exists.
 ### B. Adopting a session on the default branch (R5–R9)
 
 `adopt_batch` splits at step 4 on `old == default`. Today that case raises the
-refusal. It now takes a new branch `_adopt_from_default(...)`, which reuses steps
+refusal. It now takes a new function `_adopt_from_default(...)`, which reuses steps
 1–3 (batch, runner, session refusals) and step 5's reservation and event, and
-replaces the git and PR part:
+replaces the git and PR part. Every git read runs with cwd `checkout.main_worktree()`,
+never `checkout.path`, which may be a linked worktree.
 
 1. **Refusals (R7)**, every one before the first write:
+   - `checkout.worktree_of(default)` is not the main worktree → refuse ("the base
+     clone is on <branch>, not <default>").
    - `checkout.dirty_paths()` is not empty → refuse and list them. This is a new
-     `gitseam.Checkout` method, `git status --porcelain` in the main worktree; git
-     runs only in `gitseam` (its tripwire).
+     `gitseam.Checkout` method (`git status --porcelain` in the main worktree).
    - `checkout.unpushed(default)` is not empty → refuse and list `<sha> <subject>`.
-     This is a new method, `git log origin/<default>..<default> --format=%h %s`, run
+     This is a new method (`git log origin/<default>..<default> --format=%h %s`), run
      after `checkout.fetch()`.
-   - `session.cwd` is known, and its git toplevel is not `checkout.main_worktree()` →
-     refuse ("the agent works in <cwd>, not in this checkout; pass --checkout").
-   - The batch branch exists locally or on the remote and no fr workspace for it is
-     recorded in this checkout → refuse. This is the same rule as R9 of the 2026-10-06
-     spec, keyed on the workspace instead of a rename.
-2. **Plan**: `branch: <default> stays; new workspace <path> on <new> from
-   origin/<default>` (or `workspace exists: <path>` on a re-run), then the record,
-   forge marks and held-message lines as today. There is no PR to supersede and no
-   remote branch to publish or delete. The batch branch carries no commits yet, so
-   the agent publishes it on its first push once released.
-3. **Steps, under `--yes`**: `create workspace` (skipped when it exists, R9), `bind
-   session` (only when `session.session` is known), `adopt tab`, `record the dispatch
-   event`, `mark every member on the forge`, `message the agent`. These run in the
-   same resumable step loop as today, with the same stop report.
+   - `session.cwd` is known and `Checkout.at(cwd).main_worktree()` is not this
+     checkout's main worktree → refuse ("the agent works in <cwd>, not in this
+     checkout; pass --checkout").
+   - The batch branch exists locally or on the remote → refuse, unless
+     `fr.isolation.adopt.reusable_workspace(...)` (below) accepts it: an fr workspace
+     recorded in this checkout for that branch, whose branch has no commits beyond
+     `origin/<default>` (`checkout.unpushed`-style count, a new `Checkout.ahead(ref,
+     base)`), or one whose session list already holds this session. A workspace left
+     with commits by an earlier failed dispatch is refused, never silently reused.
+2. **Plan**: `branch: <default> stays; workspace <path> on <new> from origin/<default>`
+   (`resume workspace <path>` on a re-run), then the record, forge marks and the
+   printed message as today. There is no PR to supersede and no remote branch to
+   publish or delete. The batch branch carries no commits yet; the message tells the
+   agent how to publish it once released (R6).
+3. **Steps, under `--yes`**: `enter workspace` (always run; R9's resume), `bind
+   session` (only when `session.session` is known; a failure is a printed warning,
+   never a stop, as `run_cmd._bind_session` rules), `adopt tab`, `record the dispatch
+   event`, `mark every member on the forge`, `message the agent`. They run in the
+   same resumable step loop as today. Its stop report's re-run command echoes
+   `--no-hold` and `--checkout <path>` when given, on both paths.
 
-**Creating the workspace.** Use the in-process API `fr isolation up` itself calls:
-`fr.commands.isolation_cmd._target(checkout.path).up(profile=None, branch=new,
-base=f"origin/{default}")`, then `fr.isolation.sessions.attach(state.repo_root, new,
-session_id, harness=...)`. This needs no subprocess and no second `fr`, and it honours
-`FR_ISOLATION_TARGET` exactly as the CLI does. The target selection moves to a public
-`fr.isolation.routing`-level helper if `_target` stays private; the plan decides which,
-and the move is a refactor with no behaviour change. A binding failure is a warning,
-not a stop, because bindings are traceability (`run_cmd._bind_session`'s rule).
+**The isolation seam.** The batch tripwire
+(`tests/unit/test_forge_adapter_batch_ops.py`, `_FORGE_CLIS` bans `fr.isolation` in
+every `batch*` module, `_ISOLATION_ALLOWED` admits only the rename) stays the rule.
+A new module `fr/isolation/adopt.py` owns every isolation call adopt and `--list`
+make, and `_ISOLATION_ALLOWED` grows by exactly its imports, with
+`test_the_isolation_allowance_is_the_rename_alone` renamed and updated in the same
+diff to pin the new, still closed, set:
 
-**R8, enforced.** The only git commands on this path are read-only ones (`status`,
-`fetch`, `log`) plus `worktree add`, which `up` runs and which never touches the main
-worktree's checkout. A test snapshots `git rev-parse HEAD`, `git status --porcelain`
-and the default branch's sha before and after a `--yes` run, and asserts equality.
+- `enter_workspace(repo_root, branch) -> Path` calls the backend selection that
+  `fr.run.workspace._select_target` already wraps (`isolation_cmd._target`, which
+  honours `FR_ISOLATION_TARGET`), then `.up(profile=None, branch=branch)`. It always
+  calls `up`: on an existing workspace `up` is a documented resume, so a devcontainer
+  whose first start failed after its state was recorded (local.py's "record before
+  the side effect", gh#578) is started on the re-run rather than skipped.
+- `bind_session(repo_root, branch, session_id, harness) -> str | None` wraps
+  `sessions.attach` and returns a warning instead of raising.
+- `reusable_workspace(repo_root, branch, session_id) -> Path | None` and
+  `session_worktree(session_id) -> Path | None` (from `read_session_index`), and
+  `workspace_containing(repo_root, path) -> Path | None` (from `list_states`).
 
-The harness for `attach` comes from the runner's report (herdr's `agent` field,
-`claude` → `claude`), else `unknown`.
+`repo_root` is always `checkout.main_worktree()`. The default devcontainer mode starts
+a container, exactly as `fr isolation up` would for this branch; that is the
+operator's chosen behaviour (decision `default-branch-cuts-workspace`).
+
+**R8, enforced.** `up` runs `worktree add` plus config writes (the new branch's
+upstream, `info/exclude`), none of which touch the main worktree's checkout, index or
+the default branch. A test snapshots `git rev-parse HEAD`, `git status --porcelain`
+and the default branch's sha in the main worktree before and after a `--yes` run, and
+asserts equality.
 
 ### C. Session description fields (R10)
 
@@ -141,39 +163,50 @@ session: str | None = None
 harness: str | None = None
 ```
 
-Each is defaulted, so every existing constructor and the `fr_dispatch.testing`
-contract keep working. `HerdrRunner.list_sessions` fills them from the single agent's
-`cwd`, `agent_session.value` and `agent` keys, and leaves them None when the tab has
-no single agent. `fr-claude-cloud` implements no `SessionAdopter` and is untouched.
+Each is defaulted and appended after the existing fields, so every existing
+constructor and `fr_dispatch.testing.check_adopt_contract` keep working.
+`HerdrRunner.list_sessions` fills them from the single agent's `foreground_cwd` (else
+`cwd`), `agent_session.value` and `agent` (mapped to `claude`, `opencode` or
+`hermes`, else None), the order `fr_herdr.restart` already reads them in, and leaves
+them None when the tab has no single agent. The exact-equality test in
+`tests/unit/test_fr_herdr_runner.py` gains the new fields. `fr-claude-cloud`
+implements no `SessionAdopter` and is untouched.
 
 ### D. `adopt --list` (R11–R17)
 
-Classification is a pure function in `fr/triage/batch.py`, beside `label_refs`:
-`session_row(target, facts) -> SessionRow`. Here `facts` is a small, fully read
-record per session (repo, branch, default branch, workspace, PR, classified refs), so
-the state rules of R12 are unit-tested without git or a forge. The command gathers
-those facts:
+`fr.triage` may not import `fr_dispatch` (`tests/unit/test_import_direction.py`), so
+the pure part takes plain values. In `fr/triage/batch.py`, beside `label_refs`:
 
-- **git**, per distinct cwd: a new read-only `gitseam` helper `checkout_facts(cwd)`
-  returning toplevel, origin repo, current branch, default branch and whether the
-  toplevel is a linked worktree, or None when cwd is not a checkout. It reuses
-  `Checkout.at`, `origin_repo`, `default_branch`, plus `git branch --show-current`.
-- **fr workspace**: `read_session_index(target.session)["worktree"]`, else the
-  `list_states` entry of that checkout whose worktree contains cwd.
-- **forge**, through `make_client` for the repo's host: one `list_prs_by_head` per
-  distinct (repo, branch); its records already carry `closingIssuesReferences`. For
-  refs, one new `GhClient.ref_kind(repo, number) -> "issue" | "pr" | None` per
-  distinct ref. GitHub's implementation reads `repos/<repo>/issues/<n>` through
-  `gh api`, where a `pull_request` key means a PR. The REST client uses the same
-  route. glab and tea raise `UnsupportedForgeOperation`, which prints `(?)`. Every
-  forge exception in the listing is caught per read (R17).
-- **bare `#<n>`**: a new `label_bare_refs(label)` returns the numbers that
-  `_LABEL_REF` did not already match. They resolve against the session's repo name.
-  When the repo is unknown, they print as `#<n> (?)`.
+- `parse_refs(label) -> list[LabelRef]` is new (`label_refs` keeps its
+  callers) and recognises `owner/name#n`, `name#n` and bare `#n`, each once, in
+  order. A `LabelRef` holds `owner` (or None), `name` (or None) and `number`.
+  `resolve_ref(ref, repo) -> str | None` gives `owner/name` per R16.
+- `session_state(*, has_agent, label, toplevel, branch, default) -> str` returns R12's
+  state. Every edge (detached, unreadable default, batch label) has a unit test.
+
+The command (`_list_sessions`) unpacks each runner session and gathers, per row,
+inside its own `try` (R17):
+
+- **git**: a new classmethod `gitseam.Checkout.facts(cwd) -> CheckoutFacts | None`
+  (toplevel, origin URL, `owner/name`, current branch or None, default branch or
+  None, main worktree), None when cwd is not a checkout. It stays on `Checkout`, so
+  the gitseam tripwire's admitted surface (`Checkout`, `Worktree`, `GitError`) is
+  unchanged.
+- **fr workspace**: `fr.isolation.adopt.session_worktree(session)`, else
+  `workspace_containing(facts.main_worktree, cwd)`.
+- **forge**: one client per host, built by `make_client(<origin URL>)` inside the
+  row's guard, and cached by host. For each distinct (repo, branch) of an
+  `adoptable` row: `list_prs_by_head`, filtered to `state == OPEN` and
+  `isCrossRepository` false, newest first; its `closingIssuesReferences` give the
+  closed issues. For each distinct resolved ref: a new
+  `GhClient.ref_kind(repo, number) -> "issue" | "pr" | None`. GitHub (`@_hosted`, per
+  `tests/unit/test_gh_host.py`) reads `gh api repos/<repo>/issues/<n>`, where a
+  `pull_request` key means a PR; the REST client reads the same route; glab and tea
+  raise `UnsupportedForgeOperation`, which prints `(?)`.
 
 The output is a header line `TAB\tWORKSPACE\tSTATUS\tSTATE\tREPO\tBRANCH\tFR
 WORKSPACE\tPR\tREFS\tLABEL` and then the rows. The fr workspace column prints the
-worktree path, abbreviated with `~`. The PR column prints `#<n> closes a#1,b#2`.
+worktree path with `$HOME` shown as `~`. The PR column prints `#<n> closes a#1,b#2`.
 
 ### E. Docs (R18)
 

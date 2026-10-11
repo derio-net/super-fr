@@ -1,0 +1,106 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-adopt-safety-2
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: sr-f1
+  title: Design B/D imports fr.isolation and new gitseam helpers the batch tripwire forbids; no allowance change named
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f2
+  title: Reuse the existing workspace selection; R9 'exists counts as done' strands a half-started devcontainer
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f3
+  title: Default-branch message gives no push command though the new branch's upstream is origin/<default>
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f4
+  title: R16 leaves undefined how a <repo>#<n> ref becomes owner/repo, and drops owner/repo#n
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f5
+  title: checkout_facts loses the forge host; R17 does not cover client-build or git failures
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f6
+  title: 'session_row(target) in fr/triage/batch.py cannot take an AdoptTarget: fr.triage may not import fr_dispatch'
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f7
+  title: R12 leaves the batch predicate, detached HEAD and unreadable default branch undefined
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f8
+  title: R15 matches PRs by head name with no OPEN or trust filter
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f9
+  title: 'herdr mapping: prefer foreground_cwd, map opencode/hermes harness too'
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f10
+  title: 'R7/R9: any existing workspace counts as this adoption''s; nothing checks main worktree is on <default>'
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: finding
+  id: sr-f11
+  title: Resumable stop report's re-run command drops --no-hold
+  review_scope: in
+  body: See the fr-spec-reviewer return (spec-review-1) for file:line evidence.
+- kind: review
+  id: spec-review-1
+  title: Spec review of 2026-10-11-batch-adopt-safety-2-design
+  body: Dispatched fr-spec-reviewer raised 11 findings, sr-f1..sr-f11, all in scope (tripwire seam, workspace resume, push target, ref grammar, per-row robustness, import direction, state precedence, PR
+    trust filter, herdr field mapping, reuse refusal, --no-hold in the stop report). All five operator decisions verified honoured. All fixed in the spec.
+resolves:
+- id: sr-f1
+  state: fixed
+  body: "Fixed in spec \xA7B 'The isolation seam': a new fr/isolation/adopt.py owns every isolation call; _ISOLATION_ALLOWED grows by exactly its imports with the pinned allowance test updated in the same\
+    \ diff; checkout facts become a Checkout classmethod (Checkout.facts) so the gitseam surface stays Checkout/Worktree/GitError."
+- id: sr-f2
+  state: fixed
+  body: "Fixed in \xA7B: enter_workspace uses the same backend selection fr.run.workspace._select_target wraps and ALWAYS calls up() (documented resume), so a container that never started is started on\
+    \ re-run; repo_root is main_worktree(); the R8 paragraph now names up's config writes."
+- id: sr-f3
+  state: fixed
+  body: "Fixed in R6 and \xA7A: the default-branch message says publish only with `git push -u origin <new>`, never push <default>; pinned by the held-text test."
+- id: sr-f4
+  state: fixed
+  body: "Fixed in R16 and \xA7D: parse_refs recognises owner/name#n, name#n (resolved to the agent's owner/name when names match, else unresolved `(?)`) and bare #n; resolve_ref specified."
+- id: sr-f5
+  state: fixed
+  body: "Fixed in R17 and \xA7D: Checkout.facts returns the origin URL; make_client built per host inside each row's guard; any per-row git/client/forge failure degrades only that row."
+- id: sr-f6
+  state: fixed
+  body: "Fixed in \xA7D: the pure helpers (parse_refs, resolve_ref, session_state) take plain values; the command unpacks the runner's object."
+- id: sr-f7
+  state: fixed
+  body: 'Fixed in R12: ordered precedence with batch = label contains /run/batch- (adopt''s own test), unknown for unreadable default, a new `detached` state.'
+- id: sr-f8
+  state: fixed
+  body: "Fixed in R15 and \xA7D: OPEN only, isCrossRepository false, newest first, looked up only for adoptable rows (never the default branch)."
+- id: sr-f9
+  state: fixed
+  body: "Fixed in R10 and \xA7C: cwd from foreground_cwd else cwd; harness claude|opencode|hermes else None; the exact-equality herdr test is named as updated."
+- id: sr-f10
+  state: fixed
+  body: "Fixed in R7 and \xA7B: refuse when the main worktree is not on <default>; an existing batch-branch workspace is reusable only with no commits beyond origin/<default> or when this session is already\
+    \ bound; git reads run in main_worktree()."
+- id: sr-f11
+  state: fixed
+  body: "Fixed in R9 and \xA7B step 3: the stop report echoes --no-hold and --checkout on both paths."
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: a48b46ba71843428d
