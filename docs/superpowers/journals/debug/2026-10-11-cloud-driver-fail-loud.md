@@ -38,3 +38,8 @@ Candidate: _hosts.origin_slug keeps the WHOLE remote path (git/<owner>/<repo> fo
 ### fixed-1099 · finding [fixed] · #1099 fixed: close-out base branch, init error blocks, handled conflict no failed write
 
 Tests (all red first): test_claude_cloud_mailbox.py#test_a_closeout_starts_on_the_default_branch_never_the_deleted_batch_branch, test_claude_cloud_status.py#test_a_session_that_failed_to_start_is_blocked_with_its_init_error, test_triage_batch_drive_cmd.py#test_a_conflict_the_pass_handles_is_no_failed_write, test_triage_driver_adapter.py#test_the_cloud_close_out_switches_its_own_clone_and_starts_on_the_default_branch.
+
+<!-- fr:journal kind=finding scope=debug id=fixed-1100 created=2026-10-11T20:56:57+00:00 state=fixed -->
+### fixed-1100 · finding [fixed] · #1100 items 1-5 fixed: origin/HEAD, own-clone switch, doctor merge_method, re-pin silence, restore line
+
+Tests (all red first): test_triage_gitseam.py (origin_head_is_unset, switch x2), test_cloud_remedy.py (merge_method x4), test_fr_binary_identity.py#test_an_upgraded_install_in_a_cloud_session_is_silent, test_triage_driver_pass.py#test_a_pass_that_restored_the_state_says_so_and_a_warm_pass_does_not. The comment (verify-merge/pickup 403) is NOT fixed: see hypothesis 926aa6ecdc62.
