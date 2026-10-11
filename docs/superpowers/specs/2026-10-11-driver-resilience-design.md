@@ -39,13 +39,13 @@ skips every drive pass. It is the only reader of that route.
 
 R1. `fr triage batch drive --once --yes`, when the pass's plan holds at least one `dispatch` action, refuses with exit 2 before acting on any action, unless `--single-pass` is given.
 R2. That refusal releases the drive lease the pass took, and writes nothing else beyond what planning already writes (collected facts).
-R3. The refusal message names what a single pass leaves undone: ready PRs merged, merged batches closed out, held batches dispatched when their wave or `--after` clears, the board refreshed. It also prints the looping command: `fr triage batch drive`, the caller's batch ids, the scope arguments (`triage_kanban_cmd.scope_args`), every non-default `--max-inflight`, `--interval`, `--workspace-prefix`, `--keep-sessions`, each `--checkout REPO=PATH` with PATH absolute, and `--yes`, without `--once`.
-R4. With `--single-pass`, a `--once --yes` pass whose plan holds a dispatch acts as today, then ends with a warning carrying R3's text and command; its exit code is `pass_exit`'s, unchanged.
+R3. The refusal message names what a single pass leaves undone: ready PRs merged, merged batches closed out, held batches dispatched when their wave or `--after` clears, the board refreshed. It also prints the looping command: `fr triage batch drive`, the caller's batch ids, the scope arguments (`triage_kanban_cmd.scope_args`), every non-default `--max-inflight`, `--interval`, `--workspace-prefix`, `--keep-sessions`, each `--checkout REPO=PATH` with PATH absolute (a single-repo scope's defaulted checkout, the working directory's toplevel, is printed explicitly as `--checkout OWNER/REPO=<abs toplevel>` so the command drives the same clone from any pane), and `--yes`, without `--once`.
+R4. With `--single-pass`, a `--once --yes` pass whose plan holds a dispatch (the same condition as R1, whether or not the dispatch then starts) acts as today, then ends with a warning carrying R3's text and command; its exit code is `pass_exit`'s, unchanged.
 R5. Unchanged: `--once` without `--yes` (the dry-run plan); a `--once --yes` pass whose plan holds no dispatch; loop mode; the cloud pass `fr triage drive pass`.
 R6. `--single-pass` without `--once` is refused (exit 2), naming that it only applies to `--once`.
 R7. The fr-triage skill states that starting or dispatching waves means the looping driver, and that `--once --yes` is a deliberate single pass that must say `--single-pass` when it dispatches.
-R8. In loop mode, a state-repo visibility that cannot be read when the drive takes its lease or saves its pass, for any cause, skips the rest of that pass. Nothing more is written or pushed, it is reported once per distinct cause, and the drive reads again after `--interval`. The next pass whose read succeeds proceeds and pushes the state the skipped pass left.
-R9. `--once`, plan mode, the cloud pass and `fr triage state export` keep refusing (exit 2) on an unreadable state-repo visibility.
+R8. In loop mode, a state-repo visibility that cannot be read when the drive takes its lease or saves its pass, for any cause, skips the rest of that pass. Nothing more is written or pushed, it is reported once per distinct cause, and the drive reads again after `--interval`. The next pass whose read succeeds proceeds and pushes the state the skipped pass left. When the skipped pass's `post_merge` installed a newer fr (`restart_to` set), the loop restarts on it instead of sleeping, as an unskipped pass would.
+R9. `--once --yes`, the cloud pass and `fr triage state export` keep refusing (exit 2) on an unreadable state-repo visibility. (Plan mode takes no lease and pushes nothing, so it never reads that visibility.)
 R10. A readable public state repo with a private member's key is refused in every mode, as today, and ends a looping driver as today.
 R11. The state repo's visibility is read live before every push, as cloud-triage R8 requires; no answer is cached.
 R12. The REST client's `required_check_names` treats a 403 from `rules/branches/{b}` whose message carries GitHub's plan-upgrade notice ("Upgrade to GitHub Pro or make this repository public") as "no rulesets": it returns the classic-protection contexts alone and reports nothing.
@@ -63,18 +63,31 @@ helper in `triage_batch_cmd` takes the command's own parameters, so it is unit-t
 driver. It also builds the shared message text: what a single pass leaves undone, then that
 command (R3).
 
-`_Driver` gets one field, `single_pass_notice: str | None`, plus a mode flag. The host command
-sets it for `--once --yes`; `build_driver`'s other callers (the cloud pass) never set it, so R5
-holds for the cloud pass by construction. In `run_pass`, right after `plan = drive_pass(snap)` and
-before the action loop, the driver checks whether the plan holds an action whose `kind ==
-"dispatch"` (`batch_drive.ActionKind`):
+`build_driver` gains a keyword `single_pass: SinglePass | None = None`, where `SinglePass` is a
+small frozen dataclass `(notice: str, allowed: bool)`; `_Driver` stores it as `single_pass` and
+adds a memo `planned_dispatch: bool = False`. `batch_drive_command` passes it for `--once --yes`
+only (`allowed` = `--single-pass`); the cloud pass (`triage_drive_cmd`, the only other
+`build_driver` caller) never passes it, so R5 holds for the cloud pass by construction. In
+`run_pass`, right after `plan = drive_pass(snap)` and before the action loop, when
+`single_pass` is set the driver sets `planned_dispatch` iff the plan holds an action whose
+`kind == "dispatch"` (`batch_drive.ActionKind`). Both R1 and R4 key on that one condition, the
+plan, not on whether a dispatch then started (a held claim, a preflight refusal or a
+`RunnerDispatchError` may stop it):
 
 - the notice is set and `--single-pass` was not given → release the lease, then `_fail(notice,
   code=2)`. `batch_drive_command`'s `typer.Exit` handler keeps the lease on exit 2 ("a refusal
   keeps what it found"), so the release must happen before the raise (R2);
-- the notice is set and `--single-pass` was given → act as today, and remember that the pass
-  dispatched. `_host_loop`'s `once` branch prints the notice as a `warning:` line after the pass,
-  before returning or raising its exit code (R4).
+- `planned_dispatch` and `allowed` → act as today. `_host_loop`'s `once` branch prints the
+  notice as a `warning:` line after the pass, before returning or raising its exit code (R4).
+
+The loop command's checkout list comes from the same map the driver uses (`_checkout_map`), so a
+single-repo scope's defaulted toplevel is printed as an explicit `--checkout` (R3).
+
+Existing host tests that drive a dispatching `--once --yes` pass
+(`tests/unit/test_triage_batch_drive_cmd.py`, `…_disruption.py`, `…_idle.py`, `…_restart.py`,
+`test_triage_driver_pass.py` where it uses the host command) add `--single-pass`; that they then
+pass unchanged otherwise is R4's "acts as today". Tests whose pass dispatches nothing are left
+alone, which pins R5.
 
 No action runs before the check, so a refused pass merges nothing either; the issue asks for the
 refusal "before dispatching anything", and the plan is the first point where dispatch is known.
@@ -97,8 +110,13 @@ carries the policy:
 
 - `_host_loop` in loop mode with `--yes` prints `warning: …; pass skipped, retrying every Ns` once
   per distinct message, sleeps `--interval` and runs the next pass (R8);
-- `_host_loop` with `--once`, or without `--yes`, calls `_fail(code=2)`, and so does the cloud
+- `_host_loop` with `--once` calls `_fail(code=2)`, and so does the cloud
   pass (`triage_drive_cmd`, `except batch.ForgeReadError`) (R9).
+
+`_host_loop`'s `ForgeReadError` branch, in loop mode, returns `driver.restart_to` when it is set
+instead of sleeping (R8): a skipped `save_pass` comes after the pass, so its `post_merge` may
+have installed a newer fr (gh#998), and the restarted process's first `take_lease` keeps the
+unpushed local state (`fetch_state`) and pushes it.
 
 A failed `take_lease` happens before the pass, so the whole pass is skipped. A failed `save_pass`
 happens after the pass acted: the acts happened, but the state is not pushed. The next pass's
