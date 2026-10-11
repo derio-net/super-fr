@@ -6775,7 +6775,7 @@ rows:
       green batch PRs instead of merging, treats queued PRs as in flight, and re-enqueues
       or hands back an ejected PR; a repo with no queue keeps its train unchanged.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R12
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R13
     levels: {}
     status: not-implemented
     notes: ''
@@ -8250,7 +8250,7 @@ rows:
     acceptance: super-fr's CI and acceptance workflows report ci-ok for a merge queue's
       merge group.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R14
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R15
     levels: {}
     status: not-implemented
     notes: ''
@@ -8261,7 +8261,7 @@ rows:
       as derio-fr-automation, CI runs on the release commit, and the follow-up release
       run is a no-op.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R15
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R16
     levels: {}
     status: not-implemented
     notes: ''
@@ -8271,7 +8271,7 @@ rows:
     acceptance: super-fr's main requires ci-ok with up-to-date branches, blocks a behind
       PR until it is updated, and still accepts the release bot's push through its bypass.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R18
     levels: {}
     status: not-implemented
     notes: ''

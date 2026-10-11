@@ -1,0 +1,185 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-merge-train-safety
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: sr-r1-1
+  title: batch merge does not go through merge_ready, so R1/R3 are not covered on that path
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-2
+  title: _walk_train drops every draft, so the labelled-draft merge never reaches merge_ready
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-3
+  title: Approval recording/voiding only runs in merge_ready, so first sighting and void removal are undecided
+    for non-candidates
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-4
+  title: red_decision inputs are not in Snapshot; hand-back target and budget unspecified
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-5
+  title: R11 contradicts keeping warn, which the board turns into failing-ci
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-6
+  title: Strict up-to-date livelocks the routine-commit skip
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-7
+  title: --stage require's pushed-by-app check reads the commit identity
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-8
+  title: New action kinds are not in ActionKind or kanban's phrase table
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-9
+  title: How UpdateEvent is written from _update, and what base is, is undefined
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-10
+  title: Ejection ignores auto-merge state; isInMergeQueue is not a gh pr view field
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-11
+  title: Queue mode is silent on version-slot reservation
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-12
+  title: rules/branches misses a queue from classic branch protection
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-13
+  title: change-fragment merge_group equivalent is moot and wrong as written
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-14
+  title: Candidate scenarios claim a fake forge that does not exist
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-15
+  title: R16's script refusal logic has no test or row
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-16
+  title: R4 per-pass vs per-process label creation disagree; tripwire would match operator prose
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: finding
+  id: sr-r1-17
+  title: Line citations drifted
+  body: Raised by the independent spec reviewer; see the review entry spec-review-r1.
+  review_scope: in
+- kind: review
+  id: spec-review-r1
+  title: 'independent spec review: 17 findings, all in scope'
+  body: fr-spec-reviewer raised sr-r1-1 … sr-r1-17, all in scope; decisions d1–d11 each restated in the
+    requirements, none contradicted. All 17 fixed in the spec.
+resolves:
+- id: sr-r1-1
+  state: fixed
+  body: Shared _approved_and_ready gate called by merge_ready and merge_one; batch merge filters unapproved
+    before the plan prints, ids path exits 2; labels read live via pr_view (§A Merging).
+- id: sr-r1-2
+  state: fixed
+  body: The walk admits a draft whose verdict is Approved/First; unapproved members go to Train.awaiting
+    (§A The walk).
+- id: sr-r1-3
+  state: fixed
+  body: settle_approvals runs every pass for every open batch PR whatever its checks, records First and
+    executes Void with label removal; batch merge only under --yes; the residual one-pass window is stated
+    in Out of scope.
+- id: sr-r1-4
+  state: fixed
+  body: Decision moved into the command beside _conflict (pure red_decision, impure inputs); target =
+    _hand_back's target; separate RED_HANDBACKS_PER_DISPATCH = 2; absent/done → Needs-you, with the reason
+    (§C).
+- id: sr-r1-5
+  state: fixed
+  body: needs_you suppresses failing-ci under a delivered red hand-back at the current head; red-pr raised
+    from delivered:none; NEED_LABELS gains approve-pr, red-pr, queue-ejected.
+- id: sr-r1-6
+  state: fixed
+  body: New R14 + base_rules.strict_checks (rulesets and classic protection); _land skips _behind_only_routinely
+    when strict; new row merge-train-strict-up-to-date.
+- id: sr-r1-7
+  state: fixed
+  body: The check reads the push-event Actions run on the release sha and its triggering_actor (a GITHUB_TOKEN
+    push triggers none); Test Plan step 3 corrected.
+- id: sr-r1-8
+  state: fixed
+  body: enqueue is a new ActionKind with a phrase; approval/void is the impure settle step, not an action;
+    awaiting approval and in merge queue come from Train.awaiting / Train.in_merge_queue.
+- id: sr-r1-9
+  state: fixed
+  body: MergeContext.on_update callback; base = rev_parse(ctx.main) via a new CheckoutSeam.rev_parse;
+    a re-slot-only update records the fetched base (§B).
+- id: sr-r1-10
+  state: fixed
+  body: 'pr_queue_state via gh api graphql (isInMergeQueue, autoMergeRequest), REST auto_merge; ejected
+    requires auto-merge cleared (verified: gh pr view --json rejects isInMergeQueue).'
+- id: sr-r1-11
+  state: fixed
+  body: 'A queue-required repo with a version: block is held with a warning.'
+- id: sr-r1-12
+  state: fixed
+  body: Stated as a limit in R12 and Out of scope.
+- id: sr-r1-13
+  state: fixed
+  body: change-fragment stays pull-request-only and is skipped on merge_group; ci-ok passes a skip; a
+    unit test pins it (R15).
+- id: sr-r1-14
+  state: fixed
+  body: Named the existing shell-level pattern (tests/scenarios/fixtures/<name>/bin/gh, REST routes, FR_FORGE_API=rest,
+    bare remote via insteadOf); the queue row's GraphQL path is unit-tested, stated in Verification.
+- id: sr-r1-15
+  state: fixed
+  body: tests/unit/test_configure_main_protection.py with a stub gh; new row main-protection-script citing
+    R17.
+- id: sr-r1-16
+  state: fixed
+  body: Once per repo per pass or command (seen set); the tripwire exempts sentences naming never/do not/don't/operator.
+- id: sr-r1-17
+  state: fixed
+  body: Re-cited triage_batch_cmd.py:2220-2221 and views.py:182-193; §E now partitions the shared loop
+    before the one-repo check.
+acceptance:
+- id: merge-train-strict-up-to-date
+  capability: triage-batch-drive
+  acceptance: Where the base branch requires strict up-to-date status checks, the train updates a behind
+    batch PR before merging it, even when it is behind only by routine commits.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R14
+  status: not-implemented
+  verify: candidate
+- id: main-protection-script
+  capability: release
+  acceptance: configure-main-protection.sh merges the bypass actor and the strict ci-ok rule into main's
+    ruleset without overwriting it, and refuses the rule until the bypass is in place and a release was
+    pushed by the app.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R17
+  status: not-implemented
+  verify: none
+evidence:
+  review: spec-review-r1
+  reviewer: a7abc760834ff36da

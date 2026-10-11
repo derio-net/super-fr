@@ -9,391 +9,632 @@
 Four failures share a root: **what lands on a default branch is not what anybody
 checked.**
 
-- **super-fr#1062.** Two PRs that each passed CI broke `main` on 2026-10-07.
-  CI tests a PR's merge ref as of its last push, and GitHub does not re-run it
-  when `main` moves. #1041 moved the `run`/`usage` stamps; #1058 merged six
-  minutes later at the old stamps, and the release refused to publish. The only
-  ruleset on `main` (`protect main`, id 17365086) enforces `deletion` and
-  `non_fast_forward`. There are no required checks, no up-to-date rule and no
-  merge queue (`GET repos/derio-net/super-fr/rules/branches/main`, read
-  2026-10-11).
+- **super-fr#1062.** Two PRs, each green on its own CI, broke `main` on
+  2026-10-07.
+  - CI tests a PR's merge ref as of its last push, and GitHub does not re-run it
+    when `main` moves.
+  - #1041 moved the `run`/`usage` stamps. #1058 merged six minutes later at the
+    old stamps, and the release refused to publish.
+  - The only ruleset on `main` (`protect main`, id 17365086) enforces
+    `deletion` and `non_fast_forward`. There are no required checks, no
+    up-to-date rule and no merge queue (`GET
+    repos/derio-net/super-fr/rules/branches/main`, read 2026-10-11).
 - **super-fr#1082.** The driver's train updated batch PR #1052 from a
-  momentarily broken `main` (`chore: update from main`). The PR went red, and
-  the driver then stepped over it for three hours. It updates only a PR whose
-  CI passes (`_walk_train`, `packages/fr/src/fr/triage/batch_drive.py:883-929`),
-  and it records nothing about the merges it produces. The only trace is its
-  stdout (`_update`, `packages/fr/src/fr/triage/batch_merge.py:498-536`). The
-  `warn … CI failing at <sha>` dedup set is per process (`snap.warned`,
-  `packages/fr/src/fr/commands/triage_batch_cmd.py:2591`). No session was told.
-- **super-fr#1076.** `fr triage batch merge` with no ids calls `_refuse_held`
-  for each queued batch (`triage_batch_cmd.py:275-283`, the call at
-  `:2184-2185`). "Held" means another triage scope holds a claim on a member.
-  So one held batch refuses the whole default merge.
-- **super-fr#1129.** The merge rule `merge_ready` (`batch_merge.py:387-409`)
-  merges any open, non-draft, green PR. Author trust is applied earlier, when
-  the queue is built (`packages/fr/src/fr/triage/batch.py:182-199`). The
-  operator, every agent session and the driver all use one forge identity, so
-  an agent's `gh pr ready` is the operator's. On 2026-10-10 the driver merged
-  a ~5,000-line PR 78 s after a session readied it. Nothing in
-  `packages/fr/src/fr/triage` knows the word "approval" (grep, 2026-10-11). The
-  dispatch brief (`packages/fr/src/fr/triage/batch_dispatch.py:98-170`) says
-  nothing about ready or merge. The board's Needs-you item reads "ready it"
-  (`packages/fr/src/fr/triage/views.py:178-189`).
+  momentarily broken `main` (`chore: update from main`), and the PR went red.
+  - The driver then stepped over it for three hours. It updates only a PR whose
+    CI passes (`_walk_train`, `packages/fr/src/fr/triage/batch_drive.py:883-929`).
+  - It records nothing about the merges it produces; the only trace is its
+    stdout (`_update`, `packages/fr/src/fr/triage/batch_merge.py:498-536`).
+  - The `warn … CI failing at <sha>` dedup set lives per process
+    (`_Driver.warned`, `packages/fr/src/fr/commands/triage_batch_cmd.py:2591`).
+  - No session was told.
+- **super-fr#1076.** `fr triage batch merge` runs `_refuse_held`
+  (`triage_batch_cmd.py:275-283`) over every batch it is about to merge
+  (`:2220-2221`). That holds for both the ids and the no-ids path. "Held"
+  means another triage scope holds a claim on a member, so one held batch
+  refuses the whole default merge.
+- **super-fr#1129.** The driver's merge rule merges any open, non-draft, green
+  PR (`merge_ready`, `batch_merge.py:387-409`).
+  - Author trust is applied earlier, when the queue is built
+    (`packages/fr/src/fr/triage/batch.py:182-199`).
+  - The operator, every agent session and the driver share one forge identity.
+    So an agent's `gh pr ready` is the operator's. On 2026-10-10 the driver
+    merged a ~5,000-line PR 78 s after a session readied it.
+  - Nothing in `packages/fr/src/fr/triage` knows the word "approval".
+  - The dispatch brief (`packages/fr/src/fr/triage/batch_dispatch.py:98-170`)
+    says nothing about ready or merge.
+  - The board's Needs-you item says "ready it"
+    (`packages/fr/src/fr/triage/views.py:182-193`).
 
-The operator settled the design space in the question round. The record is in
-the spec journal; the decisions are restated below as requirements.
+The operator settled the design space in the question round. The spec journal
+holds the record; the requirements below restate it. Two decisions frame the
+whole change:
 
-- **#1129: a label, not a cryptographic gate.** "A proper design" (signed
+- **#1129 gets a label, not a cryptographic gate.** A proper design (signed
   approvals, a second forge identity, credential injection by fr-isolation) is
-  explicitly later work. Signed approvals are a placeholder and are not built.
+  explicitly later work.
 - **No Bash guard.** Agents may legitimately mark a PR ready or merge outside
-  fr, so the label is the whole gate.
+  fr. The label is the whole gate.
 
 ## Requirements
 
-R1. A repo label `approved-fr` (green) is fr's merge approval. Every fr merge path
-    merges a PR only when it carries a valid `approved-fr` label: the driver's
-    train, `fr triage batch merge` with or without ids, and the merge-queue
-    enqueue. A PR without the label is not refused as an error. It is held, and the
-    reason line names the label.
+R1. **The approval label.** A repo label `approved-fr` (green) is fr's merge
+    approval.
+    - Every fr merge path merges or enqueues a PR only when it carries a valid
+      `approved-fr` label. The paths are the driver's train,
+      `fr triage batch merge`, and the merge-queue enqueue.
+    - In the driver and in a default (no ids) `batch merge`, an unapproved PR
+      is held, not failed. Its line names the label, and it never stops the PRs
+      behind it.
+    - A `batch merge` that names an unapproved batch's id refuses with exit 2,
+      naming the label.
 
-R2. An approval is bound to a head. The first time an fr merge path sees the label
-    on a PR, it records the PR's current head as the approved head. The approval
-    stays valid while every commit after that head is an update the driver itself
-    produced (R8's `update` event). Any other new head voids it: fr removes the
-    label, records the void, and the board asks the operator to re-label.
+R2. **An approval is bound to a head.**
+    - On every pass, the driver records the current head of each open batch PR
+      that carries the label and has no live approval. That head is the
+      approved head. It does this whatever the PR's checks say.
+    - `batch merge --yes` does the same for the PRs it is about to merge.
+    - The approval stays valid while every commit after that head is an update
+      fr itself produced (R8's `update` events).
+    - Any other new head voids it. fr removes the label, records the void, and
+      the board asks the operator to re-label.
 
-R3. With a valid approval and green checks, a draft PR merges too. fr marks it
-    ready first (`gh pr ready`, or the REST ready route under `forge.api: rest`), so
-    labelling is the operator's single act. A forge that cannot mark ready
-    (glab/tea, `UnsupportedForgeOperation`) leaves the PR held, with a reason
-    naming the step.
+R3. **A draft with a valid approval merges.**
+    - Given a valid approval and green checks, a draft PR merges too. fr marks
+      it ready first (`gh pr ready`, or the REST ready route under
+      `forge.api: rest`), so labelling is the operator's single act.
+    - A forge that cannot mark ready (glab/tea, `UnsupportedForgeOperation`)
+      leaves the PR held, with a reason naming the step.
 
-R4. fr creates the `approved-fr` label idempotently, with one warning line naming
-    the repo the first time it creates it. It does so in `fr triage collect`,
-    `fr triage batch dispatch`, `fr triage batch merge`, `fr triage drive` (each
-    pass, for each repo it may merge in) and `fr init scaffold`. No other fr
-    command makes a forge call for it.
+R4. **Label creation.** fr creates the `approved-fr` label when it is missing,
+    idempotently.
+    - It warns once, naming the repo, each time it creates the label.
+    - It checks in `fr triage collect`, `fr triage batch dispatch` and
+      `fr triage batch merge` (per target repo), on every `fr triage drive`
+      pass (per repo the pass may merge in, at most once per pass), and in
+      `fr init scaffold`.
+    - A forge that cannot create labels gets a warning, never a failure.
+    - No other fr command makes a forge call for it.
 
-R5. The board's Needs-you list shows "PR #n is green: label it `approved-fr` to
-    merge" for a green batch PR, draft or not, with no valid approval. A voided
-    approval shows "PR #n changed since you approved it at <sha>: re-label to
-    merge". The old "ready it" item is gone.
+R5. **The board asks for the label.** Needs-you shows:
+    - "PR #n is green: label it `approved-fr` to merge" for a green batch PR,
+      draft or not, with no valid approval;
+    - "PR #n changed since you approved it at <sha>: re-label to merge" for a
+      voided approval.
 
-R6. Every brief fr sends a batch session tells it never to add the
-    `approved-fr` label: the batch dispatch brief, the conflict brief, the red
-    hand-back brief (R10) and the adopt message. A tripwire test fails if any
-    shipped brief, skill, agent or rule instructs a session to add that label.
+    The old "ready it" item is gone. The kanban shows "awaiting approval" for
+    an unapproved green train member.
 
-R7. `fr triage batch merge` with no ids skips each queued batch that another
-    scope holds, printing one `skipped <batch>: held by <scope>` line each, and
-    merges the rest. Naming a held batch's id explicitly still refuses with exit 2.
+R6. **Briefs never ask for the label.** Every brief fr sends a batch session
+    tells it never to add the `approved-fr` label. That covers the batch
+    dispatch brief, the conflict brief, the red hand-back brief (R10) and the
+    adopt message.
+    - A tripwire test fails if a shipped brief, skill, agent or rule (or one of
+      their generated mirrors) instructs anyone to add that label, other than
+      in a sentence whose subject is the operator.
 
-R8. Every update the driver or `batch merge` pushes to a batch PR is recorded as an
-    `update` event on that batch: PR number, head before, head after, and the base
-    sha it merged. Approval and recovery decisions read these events. The
-    judgements schema moves to 9 to carry `update`, `approval`, `red_handback` and
-    `enqueue` events. fr reads 1–9 and writes 9.
+R7. **`batch merge` skips held batches.** `fr triage batch merge` with no ids
+    skips each queued batch that another scope holds.
+    - It prints one `skipped <batch>: held by <scope>` line each and merges the
+      rest.
+    - When every queued batch is held it prints "nothing to merge" and exits 0.
+    - Naming a held batch's id explicitly still refuses with exit 2.
 
-R9. Red recovery, case 1. A batch PR whose checks fail at a head the driver
-    produced (an `update` event's head after), and whose base has moved past that
-    event's base sha, is updated again despite the red checks. This happens at most
-    once per new base sha.
+R8. **fr records its own updates.**
+    - Every update the driver or `batch merge` pushes to a batch PR is recorded
+      as an `update` event on that batch: PR number, head before, head after,
+      and the base sha fetched at the time of the update.
+    - Approval and recovery decisions read these events.
+    - The judgements schema moves from 8 to 9, adding the `update`, `approval`,
+      `red_handback` and `enqueue` event kinds. fr reads 1–9 and writes 9.
 
-R10. Red recovery, case 2. A batch PR that is red at a head no `update` event
-    produced, or still red at a driver head with an unmoved base, is handed back to
-    its batch session. The hand-back sends the PR, the failing sha and the failing
-    check names, and says to fix and push without touching the draft/ready state or
-    the label. It is sent once per (PR, head), only while the session is idle;
-    otherwise nothing is sent and the next pass retries. At most two red hand-backs
-    are sent per dispatch.
+R9. **Red recovery, case 1: the driver's own update went red.** The driver
+    updates the PR again, despite the red checks, when all of these hold:
+    - the PR's checks fail at a head fr produced (some `update` event's head
+      after);
+    - the base has moved past that event's base sha;
+    - no later `update` already starts from that head.
 
-R11. A red PR the driver has handed back stays "in progress" on the board. It moves
-    to Needs-you only when hand-backs are exhausted, the session is gone (absent or
-    done), or the forge cannot deliver. Repeated passes over the same red head send
-    nothing new.
+    This happens at most once per new base sha.
 
-R12. The driver detects whether a repo's base branch requires a merge queue, by
-    reading `GET repos/{repo}/rules/branches/{branch}` for a rule of type
-    `merge_queue`. That goes through a `GhClient` method; glab and tea report "no
-    queue". When a queue is required, the driver enqueues an approved, green PR
-    (`gh pr merge --auto --match-head-commit`) instead of merging it. It does no
-    update-from-base of its own for that repo. It records an `enqueue` event, and
-    treats a queued PR as in flight across passes, so `--max-inflight` counts it as
-    it counts any open batch PR. A repo whose base requires no queue keeps today's
-    train.
+R10. **Red recovery, case 2: hand back to the session.** The driver hands the PR
+    back to its batch session when the PR is red at a head no `update` event
+    produced, or is still red at an fr-made head with an unmoved base.
+    - The hand-back sends the PR, the failing sha and the failing check names.
+      It says to fix and push, leaving the draft/ready state and the labels
+      alone.
+    - It goes to the same session a conflict hand-back would reach.
+    - It is sent at most once per (PR, head), and only while that session is
+      idle. Otherwise nothing is sent and the next pass retries.
+    - At most two red hand-backs go out per dispatch, counted apart from
+      conflict hand-backs.
 
-R13. An enqueued PR that has left the queue unmerged is ejected. If its own checks
-    are green, it is re-enqueued, once per new base sha. If they are red, it goes
-    down R10's hand-back path. Under `forge.api: rest`, which cannot enqueue, a
-    queue-required repo is held with a warning naming the limit.
+R11. **A handed-back red PR is in progress, not blocked.**
+    - It stays "in progress" on the board. Its `failing-ci` Need is suppressed
+      while a delivered red hand-back covers its current head.
+    - It reaches Needs-you as a `red-pr` item only when red hand-backs are
+      exhausted or its session is gone (absent or done).
+    - Repeated passes over the same red head send nothing new.
 
-R14. `ci.yml` and `acceptance-report.yml` also run on `merge_group`, so `ci-ok`
-    reports for a queue's merge group. Every job that reads pull-request context
-    has a merge-group equivalent.
+R12. **Detecting the base branch's rules.** The driver reads them through one
+    `GhClient` method from `GET repos/{repo}/rules/branches/{branch}`:
+    - whether a `merge_queue` rule is present;
+    - whether a `required_status_checks` rule is strict (up to date).
 
-R15. `release.yml` pushes the release commit and tag as the `derio-fr-automation`
-    GitHub App when the repo variable `FR_AUTOMATION_APP_ID` is set, minting a
-    token from secret `FR_AUTOMATION_APP_KEY` with `actions/create-github-app-token`.
-    It falls back to `GITHUB_TOKEN` when the variable is unset. Its header,
-    AGENTS.md's "Release / version bumping", and
-    `tests/unit/test_release_workflow.py` describe both modes and the fact that an
-    app-pushed release commit now runs CI.
+    glab and tea report neither. Merge queues configured only through classic
+    branch protection are not detected (Out of scope).
 
-R16. `scripts/configure-main-protection.sh` (idempotent, `set -euo pipefail`, reads
-    nothing secret) brings `main`'s `protect main` ruleset to a declared state in
-    two stages. `--stage bypass` sets the app-id variable and adds the app as a
-    bypass actor. `--stage require` adds the required `ci-ok` status check with
-    "require branches to be up to date". Each stage prints the resulting ruleset.
-    A runbook in `docs/merge-protection.md` gives the order and how a consumer repo
-    adopts it.
+R13. **Queue mode.** When a merge queue is required, the driver enqueues an
+    approved, green PR instead of merging it
+    (`gh pr merge --auto --match-head-commit`).
+    - It does no update-from-base of its own for that repo.
+    - It records an `enqueue` event, and treats a queued PR as in flight across
+      passes. `--max-inflight` counts it as it counts any open batch PR.
+    - An enqueued PR that is open, not in the queue, and no longer has
+      auto-merge set has been ejected:
+      - own checks green: re-enqueue once per new base sha, otherwise Needs-you;
+      - own checks red: R10's path.
+    - Holds, each with a warning:
+      - a repo with a `version:` block (version reservation needs the serial
+        train);
+      - `forge.api: rest` (it cannot enqueue).
+    - A repo whose base requires no queue keeps today's train.
 
-R17. super-fr's `main` ends this change requiring `ci-ok` and up-to-date branches,
-    with the app as a bypass actor. A release published after that pushes as the
-    app. This is a post-merge operator/agent step (Test Plan).
+R14. **Strict up-to-date checks.** When the base requires strict status checks,
+    the train never merges a PR that is behind its base, even when the gap is
+    only routine commits. It updates the PR first.
+
+R15. **CI on merge groups.** `ci.yml` and `acceptance-report.yml` also run on
+    `merge_group`, so `ci-ok` reports for a queue's merge group.
+    `change-fragment` stays pull-request-only. It is skipped on a merge group,
+    and `ci-ok` treats a skip as a pass.
+
+R16. **The release pushes as the app.**
+    - When the repo variable `FR_AUTOMATION_APP_ID` is set, `release.yml`
+      pushes the release commit and tag as the `derio-fr-automation` GitHub
+      App, minting a token from secret `FR_AUTOMATION_APP_KEY` with
+      `actions/create-github-app-token`.
+    - It falls back to `GITHUB_TOKEN` when the variable is unset.
+    - Its header, AGENTS.md's "Release / version bumping" and
+      `tests/unit/test_release_workflow.py` describe both modes, and that an
+      app-pushed release commit now runs CI.
+
+R17. **`scripts/configure-main-protection.sh`** is idempotent, `set -euo
+    pipefail`, and reads nothing secret. It brings `main`'s `protect main`
+    ruleset to a declared state in two stages.
+    - `--stage bypass` sets the app-id variable and adds the app as a bypass
+      actor.
+    - `--stage require` adds the required `ci-ok` check with "require branches
+      to be up to date". It refuses until the bypass is in place and the newest
+      release commit was pushed by the app, unless `--force`.
+    - Each stage merges into the existing ruleset, never overwriting it, and
+      prints the result. `--dry-run` prints the request body instead.
+    - A runbook, `docs/merge-protection.md`, gives the order and tells a
+      consumer repo how to adopt it.
+
+R18. **The end state of `main`.** super-fr's `main` ends this change requiring
+    `ci-ok` and up-to-date branches, with the app as a bypass actor. A release
+    published after that pushes as the app. This is a post-merge step (Test
+    Plan).
 
 ## Design
 
 ### A. The approval gate (R1–R6)
 
-`fr/labels.py` gains `APPROVED_FR = LabelDef("approved-fr", "0E8A16",
-"Operator approval: fr may merge this PR at its approved head")`.
+#### Facts and the label
 
-**Facts.** `PullRequest` gains `labels: list[str] | None` (open PRs only,
-`None` = never read, same rule as `checks`). It is filled by both the GraphQL
-(`collect.py`) and REST (`real_ghrestclient.py`) collectors. `FACTS_SCHEMA`
-goes 8 → 9 (`triage/model.py:55`). Reading facts at 8 is tolerated, since
-facts are re-collected each pass; `labels: None` there reads as no approval.
-
-**Approval check.** A new pure module, `fr/triage/approval.py`:
+`fr/labels.py` gains:
 
 ```python
-def approval_verdict(batch: Batch, pr_number: int, head: str, labels: list[str] | None
-                     ) -> ApprovalVerdict   # valid | missing | void(approved_head) | first(head)
+APPROVED_FR = LabelDef("approved-fr", "0E8A16",
+                       "Operator approval: fr may merge this PR at its approved head")
 ```
 
-- `missing`: no label.
-- `first(head)`: the label is present and no unvoided `approval` event exists for
-  this PR. The caller records `ApprovalEvent(pr, head)` and treats the approval
-  as valid.
-- `valid`: an `approval` event exists at head `A`, and walking `update` events
-  from `A` (`head_before → head_after`) reaches the current `head`.
-- `void(A)`: anything else. The caller removes the label
-  (`edit_issue_labels`, existing), records `ApprovalEvent(pr, head=A,
-  voided_at=head)`, and holds the PR.
+`PullRequest` (`triage/model.py:273`) gains `labels: list[str] | None`. It is
+filled for open PRs only, and `None` means never read, the same rule as
+`checks`.
+- Both collectors fill it: GraphQL (`collect.py:222-230` field list) and REST
+  (`real_ghrestclient.py`).
+- `FACTS_SCHEMA` goes 8 → 9 and `FACTS_READS` widens to 3–9
+  (`model.py:55-65`). A facts file at 8 reads `labels` as `None`, which never
+  approves.
 
-A label re-added after a void is a `first` again.
+`GhClient.pr_view` also returns labels:
+- `RealGhClient`: `--json …,labels`, `real_ghclient.py:375-386`.
+- `RealGhRestClient`: `pulls/{n}` `.labels[].name`.
 
-**Where it runs.** `merge_ready` (`batch_merge.py:387`) gains the check after
-`_open_head` and before `live_checks`. An invalid approval returns a new
-`MergeAttempt` outcome, `unapproved`, which `_stops_train` treats as a step-over
-(`triage_batch_cmd.py:2543-2548`). For a valid approval on a draft, the order
-is checks green, then `pr_ready`, then `_land`. `merge_one`, the `batch merge`
-path, goes through the same function, so R1 covers both. The pure
-`_walk_train` sees approval in the `Snapshot` (facts `labels` plus batch
-events), so the board and the train agree. An `unapproved` PR is never the
-train's head, and never `waiting` either: it does not block the PRs behind it.
+The merge paths therefore read the label live, never from a possibly stale
+facts file. `batch merge` does not re-collect facts.
 
-**Forge.** `GhClient` gains `pr_ready(repo, number)`.
+#### The verdict (pure)
 
+`fr/triage/approval.py`:
+
+```python
+def approval_verdict(events: Sequence[BatchEvent], pr: int, head: str,
+                     labels: Sequence[str] | None) -> ApprovalVerdict
+# Approved(approved_head) | Unlabelled | First(head) | Void(approved_head)
+```
+
+- **`Unlabelled`:** the label is absent. A recorded approval does not outlive
+  its label.
+- **`First(head)`:** the label is present, and there is no live
+  `ApprovalEvent` for `pr` (none, or the last one is voided).
+- **`Approved(A)`:** the label is present and the live approval is at `A`.
+  Walking `UpdateEvent`s for `pr` from `A` (`head_before → head_after`, in
+  order) reaches `head`.
+- **`Void(A)`:** the label is present and the walk does not reach `head`.
+
+#### Recording and voiding (impure, R2)
+
+`settle_approvals(client, writer, repo, batches_with_open_prs, say)` lives in
+`fr/triage/approval.py` and runs every drive pass, before the walk.
+- For each open batch PR, it calls `pr_view` (labels and head).
+- On `First`, it appends `ApprovalEvent(pr, head)`.
+- On `Void(A)`, it removes the label with `edit_issue_labels(remove=…)`
+  (existing) and appends `ApprovalEvent(pr, head=A, voided_at=head)`. It says
+  "approval of PR #n at <A> voided: head moved to <head>".
+
+`batch merge` calls the same function for the batches it is about to merge,
+but only under `--yes`. The preview prints what it would record or void.
+
+**Known limit of the stop-gap.** A push between the operator's labelling and
+the next pass is approved, because no head was recorded before the push. Out of
+scope says so.
+
+#### The walk (pure)
+
+`Snapshot` gains `approvals: Mapping[str, ApprovalVerdict]`, keyed by batch
+id, computed from facts `labels` and the batch events. The board and `drive
+--plan` compute it the same way with no forge call.
+
+In `_walk_train` (`batch_drive.py:883-929`):
+- **A draft is a member** when its verdict is `Approved` or `First`. Today
+  every draft is skipped (`:900-901`). An unapproved draft stays a
+  non-member, as today.
+- **A member that is not `Approved`/`First` is held.** It never becomes a
+  candidate, the head or `waiting`, and never stops the walk. It goes into a
+  new `Train.awaiting` tuple.
+- **Otherwise** the walk is unchanged: `failing` is stepped over, `pending`
+  waits, and `green` becomes a candidate with a `merge` action.
+
+`kanban.py` renders `Train.awaiting` as "awaiting approval" and `train_line`
+lists it.
+
+`views.needs_you` replaces `ready-pr` (`views.py:182-193`) with `approve-pr`
+(the R5 texts). The trigger is an OPEN batch PR, draft or not, that is green
+by `checks_verdict` and whose verdict is not `Approved`/`First`. A `Void`
+verdict gets the re-label text. `NEED_LABELS` (`views.py:139-149`) gains
+`approve-pr`, `red-pr` (§C) and `queue-ejected` (§D), and drops `ready-pr`.
+
+#### Merging (R1, R3)
+
+There is one shared gate, `_approved_and_ready(ctx, slot, pr) -> None |
+MergeAttempt`, in `batch_merge.py`. Both `merge_ready` (`:387`) and
+`merge_one` (`:265`) call it before `_open_head`'s draft refusal
+(`:287-293`).
+- It re-runs `approval_verdict` on the live `pr_view`.
+- If the verdict is not `Approved`, it returns `MergeAttempt("unapproved")`.
+  `MergeReadiness` (`:374`) gains that value.
+- If the PR is a draft and the checks are green, it calls the new
+  `GhClient.pr_ready`. An `UnsupportedForgeOperation` there returns
+  `MergeAttempt("unready", reason)`.
+- `_open_head` keeps its draft refusal for any path that bypasses the gate.
+
+How each caller treats `unapproved`/`unready`:
+- **The driver:** `_stops_train` (`triage_batch_cmd.py:2541-2548`) steps over
+  both.
+- **`batch merge` with no ids:** before the plan prints, it filters unapproved
+  and held batches out using the live `pr_view` labels plus the events, and
+  prints `held <id>: PR #n awaits the approved-fr label`. `run_queue` never
+  sees them, so a `MergeStopError` can never stop the batches behind them.
+- **`batch merge` with ids:** an unapproved named batch exits 2 naming the
+  label.
+
+`GhClient.pr_ready(repo, number)`:
 - `RealGhClient`: `gh pr ready`.
-- `RealGhRestClient`: the CCR ready route `hostclient.py:114` already names.
+- `RealGhRestClient`: `POST pulls/{n}/ccr/ready_for_review`, the route
+  `hostclient.py:114` names.
 - `UnsupportedBatchOps`: raises.
 
-The event writes reuse the one judgements writer (`batch.py`).
+#### Label creation (R4)
 
-**Label creation (R4).** `ensure_approval_label(client, repo, say)` calls
-`client.ensure_labels(repo, [APPROVED_FR])` once per repo per process. "First
-time" is detected by listing first: `ensure_labels` is idempotent but silent,
-so the helper checks existence via a new `label_exists` (GhClient), creates
-the label, and warns only when it created it. On `UnsupportedForgeOperation`
-it warns and carries on. `fr init scaffold` calls it when the repo's origin is
-a forge fr knows; a failure there is a warning, never a scaffold failure.
+`ensure_approval_label(client, repo, say, *, seen: set[str])`:
+- calls the new `GhClient.label_exists(repo, name)`;
+- if the label is missing, calls `client.ensure_labels(repo, [APPROVED_FR])`
+  and says "created label approved-fr on <repo>";
+- on `UnsupportedForgeOperation`, warns and returns;
+- uses `seen` to cap the calls at one per repo per pass or command.
 
-**Board (R5).** `views.py`'s `ready-pr` need becomes `approve-pr`, with the
-two texts above (the label `NEED_LABELS` updated). `kanban.py` shows
-"awaiting approval" for an `unapproved` stop.
+`label_exists`:
+- `RealGhClient`/REST: `GET repos/{repo}/labels/{name}`, where 404 means
+  false;
+- `UnsupportedBatchOps`: raises.
 
-**Briefs (R6).** One constant, `NO_APPROVAL_LINE`, is used by
-`render_brief`, `conflict_brief`, the new `red_brief` and `adopt_message`.
-The tripwire `tests/unit/test_tripwire_approval_label_prose.py` scans shipped
-skills, agents, rules and their OpenCode/Hermes mirrors, plus the brief
-renderers' output, for `approved-fr` near an add verb (`--add-label`, `add
-the … label`, `label it`) outside a negation. fr-goal's SKILL.md is not
-changed (it already reserves ready/merge for the operator). The fr-triage
-skill's driver section gains the gate.
+`fr init scaffold` (`commands/init_cmd.py:27`) calls it when the origin is
+GitHub. Any failure is a warning.
 
-### B. Recording what the driver did (R8)
+#### Briefs and the tripwire (R6)
+
+One constant, `NO_APPROVAL_LINE` ("Never add the `approved-fr` label: it is
+the operator's approval to merge, and fr voids it on your next push."). It is
+appended by `render_brief` (`batch_dispatch.py:98`), `conflict_brief`
+(`:173`), `red_brief` (§C) and `adopt_message`
+(`triage_batch_cmd.py:1760`).
+
+`tests/unit/test_tripwire_approval_label_prose.py` checks two things:
+1. Each of the four renderers' output contains `NO_APPROVAL_LINE`.
+2. No shipped canonical skill, agent or rule, nor its OpenCode/Hermes mirror,
+   has a sentence matching `--add-label[ =]approved-fr` or
+   `\b(add|apply|put|set)\b[^.]{0,40}approved-fr` unless that sentence also
+   contains `never`, `do not`, `don't` or `operator`.
+
+The fr-triage skill's driver section states the gate in operator-subject
+sentences. fr-goal's SKILL.md is unchanged.
+
+### B. Recording what fr did (R8)
 
 `model.py` gains four event kinds, schema-gated like the existing eight
-(`model.py:774-781, 987-1006`):
+(`model.py:767-787, 987-1022`, a new `SCHEMA_9_EVENTS`):
 
-- `UpdateEvent{kind: update, at, pr, head_before, head_after, base}`, written
-  by `_update` after a successful push. `_update` returns `(sha, base)`.
-- `ApprovalEvent{kind: approval, at, pr, head, voided_at: str | None}`.
-- `RedHandbackEvent{kind: red_handback, at, pr, head, checks: list[str],
-  delivered: session|none}`.
-- `EnqueueEvent{kind: enqueue, at, pr, head, base}` (R12).
+```python
+UpdateEvent       {kind: update, at, pr, head_before, head_after, base}
+ApprovalEvent     {kind: approval, at, pr, head, voided_at: str | None}
+RedHandbackEvent  {kind: red_handback, at, pr, head, checks: list[str], delivered: session|none}
+EnqueueEvent      {kind: enqueue, at, pr, head, base}
+```
 
-That makes four kinds. The schema moves 8 → 9, and readers accept 1–9.
-`Judgements` written at 9 are refused by an older fr in the usual way, which
-the existing writer stamp already handles.
+`JUDGEMENTS_SCHEMA` goes 8 → 9 and the read range widens to 1–9.
 
-### C. Red recovery (R9–R11)
+**How an update is recorded.** `MergeContext` (`batch_merge.py:109-124`)
+gains `on_update: Callable[[int, str, str, str], None] | None`, called as
+`(pr, head_before, head_after, base)`. `_update` (`:498-536`) calls it after
+a successful push.
+- `base` is `rev_parse(ctx.main)` in the scratch checkout at update time.
+  `CheckoutSeam` (`:86-96`) gains `rev_parse`, backed by
+  `gitseam.Checkout.rev_parse` (`gitseam.py:448`).
+- A re-slot-only update merges no base, but records the fetched base sha all
+  the same. A later base move then re-qualifies it under R9.
+- The driver and `batch merge` each pass a callback that appends through the
+  one judgements writer.
 
-A pure function `red_decision(batch, pr, head, failing, base_now, events,
-session_status) -> reupdate | handback | wait | needs_you | skip` lives in
-`batch_drive.py` beside `conflict_decision`:
+### C. Red recovery (R9–R11), decided in the command
 
-1. `head` is some `UpdateEvent.head_after`, and `base_now != that event.base`,
-   and there is no `UpdateEvent` with `head_before == head` already: `reupdate`.
-   The re-update's own event then dedups it.
-2. A `RedHandbackEvent` already exists for (pr, head): `skip`.
-3. Two `delivered: session` red hand-backs since the last `dispatch`:
-   `needs_you`.
-4. Session `idle`: `handback`. `absent`/`done`: `needs_you`. Any other
-   status: `wait`, with the line "its session is <status>: nothing sent,
-   retried next pass".
+The pure walk still steps over a failing PR and emits its `warn` action. The
+recovery decision sits beside `_conflict` in the command, because it needs
+impure inputs: the fetched base sha and the runner's live session statuses.
 
-`_walk_train` already steps over a failing PR with a `warn`. It now also emits
-a `recover` action carrying the decision. The command executes `reupdate`
-through the existing `_update` path, skipping the green-checks precondition
-for this call only, and `handback` through `runner.message(red_brief(...))`.
-A `needs_you` decision becomes a `red-pr` Need: "PR #n is red at <sha>
-(<checks>) and its session cannot take it". The `warn` line stays. Its dedup
-moves from the in-memory `snap.warned` to the events: a warn is printed only
-on a pass that sends or decides something new.
+`batch_drive.red_decision(events, pr, head, failing, base_now, status) ->
+Literal["reupdate", "handback", "wait", "needs_you", "skip"]` is pure and
+unit-tested. It takes the first rule that applies:
 
-`red_brief` sits next to `conflict_brief` in `batch_dispatch.py`. It carries
-the PR url, the failing sha, the failing check names, "fix on the branch,
-commit, push; leave draft/ready state and labels alone", and
-`NO_APPROVAL_LINE`.
+1. A `RedHandbackEvent` exists for (pr, head) → `skip`.
+2. `head` is some `UpdateEvent.head_after`, `base_now != that.base`, and no
+   `UpdateEvent.head_before == head` → `reupdate`.
+3. `RED_HANDBACKS_PER_DISPATCH = 2` delivered red hand-backs have gone out
+   since the last `dispatch` → `needs_you`.
+4. `status` decides:
+   - `idle` → `handback`;
+   - `absent`/`done` → `needs_you`;
+   - anything else → `wait`.
 
-### D. Merge queues (R12–R14)
+`_Driver._recover(entry)` runs after the walk for every stepped-over failing
+PR:
+- **`reupdate`:** calls `_update` through `merge_one`'s machinery with the
+  green-checks precondition waived for this call only. The new `UpdateEvent`
+  dedups it.
+- **`handback`:** sends `red_brief` to the target `_hand_back` already
+  resolves (`triage_batch_cmd.py:3998-4008`: the latest fresh conflict
+  session, else the batch's session). It records
+  `RedHandbackEvent(delivered=session)`.
+- **`needs_you`:** records `RedHandbackEvent(delivered=none)` once per
+  (pr, head).
+- **`wait`:** says "its session is <status>: nothing sent, retried next pass"
+  and records nothing.
 
-`GhClient.merge_queue_required(repo, branch) -> bool`:
+**Why `absent`/`done` is a Needs-you, not a fresh session as with
+conflicts.** A conflict is mechanical: any session can resolve it. A red CI
+needs the batch's own context. Starting a replacement session is already the
+operator's tool (`fr triage batch replace`).
 
-- REST `rules/branches/{branch}`, any `type == "merge_queue"`, in both GitHub
-  backends.
-- `UnsupportedBatchOps` returns `False`. A forge without the concept has no
-  queue; that is not an error.
+`views.needs_you` suppresses a PR's `failing-ci` need while a `delivered:
+session` `RedHandbackEvent` covers its current head (R11). It raises `red-pr`
+("PR #n is red at <sha> (<checks>) and no session can take it") for a
+`delivered: none` event at the current head.
 
-`GhClient.pr_enqueue(repo, number, *, head_sha)`:
+The `warn` line's dedup moves from `_Driver.warned` to the events. The line
+is printed only on a pass whose `_recover` sends or decides something new, so
+a restarted driver does not re-warn.
 
-- `RealGhClient`: `gh pr merge --auto --match-head-commit <sha> --<method>`.
-- REST and unsupported backends: raise.
+`red_brief(batch, pr_url, head, checks)` sits next to `conflict_brief` in
+`batch_dispatch.py`. It tells the session:
+- the PR is red at <sha>, and these checks failed;
+- fix it on the branch, commit and push, with no force-push;
+- leave the draft/ready state and the labels alone;
+- plus `NO_APPROVAL_LINE`.
 
-`pr_view` gains `in_merge_queue: bool | None` (GraphQL `isInMergeQueue`; REST
-leaves it `None`).
+### D. Base rules and merge queues (R12–R15)
 
-The driver reads `merge_queue_required` once per repo per pass. In queue mode:
+```python
+GhClient.base_rules(repo, branch) -> BaseRules{merge_queue: bool, strict_checks: bool}
+```
 
-- `_walk_train` does not pick a single head. Every approved, green, unqueued
-  member gets an `enqueue` action. A queued member is `in-queue`: neither a
-  candidate nor a stop.
-- `_land`'s behind-update is not used; the queue tests on top of base.
-- **Ejection:** the last event for the PR is an `EnqueueEvent` at the current
-  head, the PR is open, `in_merge_queue` is false, and it is not merged. Then:
-  - checks green → re-enqueue if `base_now != event.base`, otherwise a
-    `needs_you` "ejected from the merge queue";
-  - checks red → `red_decision`, case 2.
-- Under `forge.api: rest`, the `enqueue` action is replaced by a held line,
-  "`<repo>` requires a merge queue and forge.api rest cannot enqueue", warned
-  once per pass.
-- `--max-inflight` is unchanged: a queued PR's batch is still at stage
-  `pr-open`, which it already counts (`batch_drive.py:52`).
-- Board: `kanban.py` shows "in merge queue".
+- **Both GitHub backends:** REST `rules/branches/{branch}`. `merge_queue` is
+  any rule of `type == "merge_queue"`. `strict_checks` is any
+  `required_status_checks` rule whose
+  `parameters.strict_required_status_checks_policy` is true.
+- **`strict_checks` also from classic protection.** Both backends also read
+  `GET branches/{branch}/protection`'s `required_status_checks.strict` (404
+  means false), because `required_check_names` (`real_ghrestclient.py:719-732`)
+  already reads it.
+- **`UnsupportedBatchOps`** returns `BaseRules(False, False)`. A forge without
+  the concepts has neither, which is not an error.
 
-**CI (R14).** `ci.yml` and `acceptance-report.yml` add `merge_group:` to `on:`.
-Jobs that read `github.event.pull_request.*` or `github.base_ref` take the
-merge-group equivalent (`github.event.merge_group.base_ref`/`base_sha`): in
-particular `change-fragment`'s base ref and any `head_ref` use. A test pins
-that both files carry the trigger. `ci-budget.yml` needs no change: it watches
-workflow names, not events.
+The driver reads `base_rules` once per repo per pass, and `batch merge` reads
+it once per command. Both store the result on `MergeContext`.
+
+**Strict up-to-date (R14).** `_land` (`batch_merge.py:303-313`) skips the
+routine-commit exemption `_behind_only_routinely` when `ctx.strict_checks` is
+set. A behind PR is then always updated first.
+
+**Queue mode (R13).** It is active only when the repo's `merge_queue` rule is
+set.
+- **The walk.** The pure walk gets `Snapshot.queue_repos`. For such a repo it
+  picks no head. Every `Approved`, green member not already queued gets an
+  `enqueue` action (a new `ActionKind`, phrase "enqueue PR #n"). A queued
+  member goes into `Train.in_merge_queue`, rendered "in merge queue".
+- **Holds.** A repo with a `version:` block is held with a `held` action:
+  "<repo> requires a merge queue, and fr does not reserve versions through
+  one". Under `forge.api: rest` the line reads "…forge.api rest cannot
+  enqueue".
+- **Enqueueing.** `GhClient.pr_enqueue(repo, number, *, head_sha, method)` is
+  `gh pr merge --auto --match-head-commit <sha> --<method>` on
+  `RealGhClient`. REST and unsupported backends raise. The driver records
+  `EnqueueEvent(pr, head, base)`.
+- **Queue state.** `GhClient.pr_queue_state(repo, number) ->
+  QueueState{in_queue: bool | None, auto_merge: bool}`. On `RealGhClient` it
+  is `gh api graphql` for `isInMergeQueue` and `autoMergeRequest`, since
+  `gh pr view --json` exposes neither. On REST, `pulls/{n}.auto_merge` and
+  `in_queue=None`. `UnsupportedBatchOps` returns `(None, False)`.
+- **Ejection.** A PR is ejected when its last event is an `EnqueueEvent` at the
+  current head, and it is open, not merged, not `in_queue`, and not
+  `auto_merge`. Auto-merge is set from enqueue until GitHub merges the PR or
+  clears it on ejection, so a PR waiting to enter the queue is never mistaken
+  for ejected.
+  - Own checks green and `base_now != event.base`: re-enqueue.
+  - Own checks green and the base unmoved: a `queue-ejected` Need ("PR #n left
+    the merge queue unmerged").
+  - Own checks red: §C (`red_decision`). Rule 2 never applies, because a queue
+    PR has no `UpdateEvent`.
+- **`--max-inflight`** is unchanged. A queued batch is still at stage
+  `pr-open`, which `IN_FLIGHT` already counts (`batch_drive.py:52`).
+
+**CI (R15).**
+- `ci.yml` (`:4-7`) and `acceptance-report.yml` (`:17-23`) add
+  `merge_group:` to `on:`.
+- `change-fragment` keeps `if: github.event_name == 'pull_request'`
+  (`ci.yml:161-170`). The PR already passed it, and `ci-ok` treats a skip as a
+  pass.
+- `acceptance-report.yml:48` already falls back to `github.sha`.
+- `tests/unit/test_ci_merge_group.py` pins the trigger in both files and the
+  `change-fragment` condition.
 
 ### E. `batch merge` and held batches (R7)
 
-In the no-ids branch of `batch merge` (`triage_batch_cmd.py:2187-2272`), the
-held batches are partitioned out before the plan prints. Each is printed as
-`skipped <id>: held by <scope>`, the rest proceed, and an all-held queue exits
-0 with "nothing to merge". The ids path keeps `_refuse_held`.
+The loop at `triage_batch_cmd.py:2220-2221` runs for both paths. With
+`batch_ids` empty, it partitions instead:
+- held batches print `skipped <id>: held by <scope>`;
+- the rest continue to the one-repo check (`:2222-2227`).
 
-### F. Release identity and protection (R15–R17)
+If none remain, the command prints "nothing to merge" and exits 0, before the
+mixed-repo refusal. With ids, `_refuse_held` is unchanged.
+
+### F. Release identity and protection (R16–R18)
 
 `release.yml`:
 
 ```yaml
 - id: app-token
   if: vars.FR_AUTOMATION_APP_ID != ''
-  uses: actions/create-github-app-token@<pinned v1 sha>
+  uses: actions/create-github-app-token@<pinned sha of a v1 release>
   with: {app-id: "${{ vars.FR_AUTOMATION_APP_ID }}", private-key: "${{ secrets.FR_AUTOMATION_APP_KEY }}"}
 - uses: actions/checkout@…
   with: {token: "${{ steps.app-token.outputs.token || github.token }}", …}
 ```
 
-Any later `gh` call in the job uses the same token. The header's "no CI runs
-on the release commit" becomes two sentences, one per mode. With the app, CI
-and release.yml run once more on the release commit; that release run is a
-no-op, as `test_two_runs_back_to_back_are_safe` already covers.
-`test_header_states_the_no_ci_property_and_the_bypass_actor` is rewritten to
-pin both modes. `release.py`'s protection-refusal message names the app.
+- The job's `GH_TOKEN` env takes the same expression.
+- `release.py`'s git identity stays `github-actions[bot]`. Who pushed is a
+  property of the token, not the commit.
+- The header's "no CI runs on the release commit" becomes one sentence per
+  mode.
+- With the app, CI and release.yml run once more on the release commit. That
+  second release run is a no-op, which `test_two_runs_back_to_back_are_safe`
+  (`tests/unit/test_release_script.py:288`) already covers.
+- `test_header_states_the_no_ci_property_and_the_bypass_actor`
+  (`tests/unit/test_release_workflow.py:67-70`) is rewritten to pin both modes
+  and the `if:`/fallback expression.
+- `release.py`'s protection-refusal message (`:439-452`) names the app and
+  the variable.
 
-`scripts/configure-main-protection.sh` drives `gh api` against
-`repos/{repo}/rulesets/{id}` (`PUT`, merged from a `GET`, never a blind
-overwrite):
+`scripts/configure-main-protection.sh [--repo O/R] --stage bypass|require
+[--dry-run] [--force]`:
+- **Common.** It resolves the ruleset by name (`protect main`) from `gh api
+  repos/{repo}/rulesets`, and the app id from `gh api
+  orgs/{org}/installations` (`app_slug == derio-fr-automation`). It builds the
+  PUT body from a `GET` with `jq`, adding only what is missing.
+- **`bypass`:** `{actor_type: Integration, actor_id: <app id>, bypass_mode:
+  always}` plus `gh variable set FR_AUTOMATION_APP_ID`.
+- **`require`:** a `required_status_checks` rule, `[{context: ci-ok}]`,
+  `strict_required_status_checks_policy: true`. It refuses unless the bypass
+  actor is present and the newest `v*` tag's commit has a `push`-event Actions
+  run whose `triggering_actor.login` is the app's bot login (`gh api
+  "repos/{repo}/actions/runs?head_sha=<sha>&event=push"`). A `GITHUB_TOKEN`
+  push triggers no run, so the run's existence and its actor prove the pusher.
+  `--force` skips the release check, never the bypass check.
+- **Tests.** `tests/unit/test_configure_main_protection.py` runs the script
+  with a stub `gh` on PATH and covers the merge-not-overwrite body, both
+  refusals, `--force`, `--dry-run` and idempotence.
 
-- **`--stage bypass`** adds `{actor_type: Integration, actor_id: <app id>,
-  bypass_mode: always}` and sets `FR_AUTOMATION_APP_ID` via `gh variable
-  set`. The app id is resolved from `gh api orgs/{org}/installations`.
-- **`--stage require`** adds `required_status_checks` (`ci-ok`,
-  `strict_required_status_checks_policy: true`). It refuses unless `--stage
-  bypass` is already in place, and unless the newest release tag's commit was
-  pushed by the app (`gh api repos/{repo}/commits/<sha>` committer/author
-  login) or `--force` is given.
-- `--dry-run` prints the PUT body.
-
-The runbook `docs/merge-protection.md` covers:
-
+`docs/merge-protection.md` covers:
 - the operator's one UI step: generate the app key, then `gh secret set
   FR_AUTOMATION_APP_KEY < key.pem`;
 - the two stages, in order;
-- how a consumer repo adopts the same protection;
-- that the driver needs no config for a merge queue.
+- consumer-repo adoption;
+- the driver's merge-queue and strict-check behaviour, which needs no config.
+
+AGENTS.md "Release / version bumping" is updated to match.
 
 ## Out of scope
 
-- Signed (`ssh-keygen -Y`) approvals, a second forge identity, credential
-  injection by fr-isolation, and a Bash guard denying ready/merge. The label is
-  a deliberate stop-gap. A future design replaces it, and this change files that
-  as a follow-up issue at close-out.
-- GitLab/Gitea merge trains (detection reports "no queue" there).
-- Changing who may mark a PR ready outside fr.
+- **A proper merge gate.** That means signed (`ssh-keygen -Y`) approvals, a
+  second forge identity, credential injection by fr-isolation, and a Bash guard
+  denying ready/merge. The label is a deliberate stop-gap. Its known gaps:
+  - any session can add the label, because the identity is shared;
+  - a push between labelling and the driver's next pass is approved.
+
+  Filed as a follow-up issue at close-out.
+- **Merge queues required only by classic branch protection.** The driver does
+  not detect them (R12).
+- **GitLab/Gitea merge trains.**
+- **Who may mark a PR ready outside fr.**
 
 ## Verification
 
 strategy: candidate
-- merge-train-label-gate: candidate — scenario `tests/scenarios/merge-train-label-gate.sh` over the fake forge.
+
+The scenarios follow the existing shell-level fake-forge pattern:
+`tests/scenarios/fixtures/<name>/bin/gh`, a `gh api` stub answering REST routes
+(as `cloud-triage-driver/bin/gh` does), with `FR_FORGE_API=rest`, and a bare
+git remote reached through `url.<base>.insteadOf` for the driver's update
+pushes. Each stub logs its calls, so the scenario asserts on the writes
+(label removal, merge, ready).
+
+- merge-train-label-gate: candidate — scenario `tests/scenarios/merge-train-label-gate.sh`: an unlabelled green PR is held, a labelled draft is readied and merged, a session push voids the label, and a driver update keeps it.
+- approval-label-created: candidate — the label-gate scenario's first pass creates the missing label and warns.
+- approval-board-and-briefs: candidate — the label-gate scenario renders the board's Needs-you; the prose tripwire runs in CI.
 - merge-train-red-recovery: candidate — scenario `tests/scenarios/merge-train-red-recovery.sh`.
-- merge-train-queue: candidate — scenario `tests/scenarios/merge-train-queue.sh`.
+- merge-train-queue: candidate — scenario `tests/scenarios/merge-train-queue.sh` covers detection and the REST-mode hold; the GraphQL enqueue/ejection path is unit-tested against the in-process fake forge (`tests/unit/triage_fixtures.py`), because the shell stub speaks REST only.
 - batch-merge-skip-held: candidate — scenario `tests/scenarios/batch-merge-skip-held.sh`.
-- approval-label-created: candidate — covered by the label-gate scenario's first pass.
-- approval-board-and-briefs: candidate — the label-gate scenario renders the board; the prose tripwire runs in CI.
+- merge-train-strict-up-to-date: candidate — the red-recovery scenario's base rules carry a strict check, so a PR behind only by a routine commit is updated before it merges.
 - ci-merge-group-trigger: none — a unit test over the workflow YAML is the whole claim; there is nothing to walk.
+- main-protection-script: none — the script's unit test with a stub `gh` is the pre-merge proof; its real run is the Test Plan.
 - release-pushes-as-app: live — only a real release on GitHub with the app's secret shows who pushed it.
 - main-requires-ci-ok: live — only the real ruleset shows a behind PR blocked and the release bot bypassing it.
 
 ## Test Plan
 
-Post-merge, operator plus agent (R17):
+Post-merge, operator plus agent (R18):
 
-1. Operator: generate a `derio-fr-automation` private key in the GitHub UI and
-   run `gh secret set FR_AUTOMATION_APP_KEY -R derio-net/super-fr < <key.pem>`.
-2. Agent: `scripts/configure-main-protection.sh --stage bypass`. Confirm the
-   variable and bypass actor in the printed ruleset.
-3. The next release (any merged PR with a fragment): confirm the `release:`
-   commit's pusher is the app, that CI ran on it, and that the second
-   release.yml run was a no-op. This flips `release-pushes-as-app`.
-4. Agent: `scripts/configure-main-protection.sh --stage require`. Then
-   confirm on a real PR behind `main` that GitHub blocks merge until it is
-   updated, and that the following release still pushes. This flips
+1. **Operator:** generate a `derio-fr-automation` private key in the GitHub UI
+   and run `gh secret set FR_AUTOMATION_APP_KEY -R derio-net/super-fr <
+   <key.pem>`.
+2. **Agent:** run `scripts/configure-main-protection.sh --stage bypass`, and
+   confirm the variable and the bypass actor in the printed ruleset.
+3. **The next release** (any merged PR with a fragment): confirm a `push`
+   Actions run exists on the `release:` commit with the app as
+   `triggering_actor`, and that the second release.yml run was a no-op. This
+   flips `release-pushes-as-app`.
+4. **Agent:** run `scripts/configure-main-protection.sh --stage require`. Then
+   confirm on a real PR behind `main` that GitHub blocks the merge until the
+   PR is updated, and that the following release still pushes. This flips
    `main-requires-ci-ok`.
