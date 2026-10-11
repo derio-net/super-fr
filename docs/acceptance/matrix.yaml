@@ -8234,8 +8234,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R4
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at plan time; the phase that builds it writes the file.
     verify: candidate
+    scenario: tests/scenarios/merge-train-label-gate.sh
   - id: batch-merge-skip-held
     capability: triage-batch-merge
     acceptance: fr triage batch merge with no ids skips batches another scope holds,
