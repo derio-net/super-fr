@@ -43,3 +43,8 @@ Tests (all red first): test_claude_cloud_mailbox.py#test_a_closeout_starts_on_th
 ### fixed-1100 · finding [fixed] · #1100 items 1-5 fixed: origin/HEAD, own-clone switch, doctor merge_method, re-pin silence, restore line
 
 Tests (all red first): test_triage_gitseam.py (origin_head_is_unset, switch x2), test_cloud_remedy.py (merge_method x4), test_fr_binary_identity.py#test_an_upgraded_install_in_a_cloud_session_is_silent, test_triage_driver_pass.py#test_a_pass_that_restored_the_state_says_so_and_a_warm_pass_does_not. The comment (verify-merge/pickup 403) is NOT fixed: see hypothesis 926aa6ecdc62.
+
+<!-- fr:journal kind=finding scope=debug id=fixed-1098 created=2026-10-11T20:56:59+00:00 state=fixed -->
+### fixed-1098 · finding [fixed] · #1098 fixed: worker updates stale fr, requires its skill, checks agents by type; cloud isolation defaults to host-worktree
+
+Tests (all red first): test_triage_worker_brief.py (stale fr, skill required, debug skill, agents by dispatchability), test_isolation_cmd.py#test_target_default_in_a_cloud_session_is_host.
