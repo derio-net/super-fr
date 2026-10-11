@@ -118,3 +118,9 @@ def test_the_brief_names_the_pr_sha_checks_and_the_rules() -> None:
     assert "force" in text  # no force-push
     assert "draft" in text and "label" in text  # leave both alone
     assert text.rstrip().endswith(NO_APPROVAL_LINE)
+
+
+def test_rule_2_does_not_apply_in_a_merge_queue_repo() -> None:
+    events = [_update("h1", HEAD, "m0")]
+    assert _decide(events, base_now="m1") == "reupdate"
+    assert red_decision(events, PR, HEAD, ("test",), "m1", "idle", queue=True) == "handback"

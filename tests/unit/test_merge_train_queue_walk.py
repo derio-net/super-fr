@@ -20,14 +20,24 @@ from fr.triage.batch_drive import (
 )
 from fr.triage.kanban import action_phrase
 from fr.triage.model import Batch, EnqueueEvent, PullRequest
-from fr.triage.views import NEED_LABELS
+from fr.triage.views import NEED_LABELS, queue_needs
 
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
 
 
-def _enq(pr: int, head: str, base: str) -> EnqueueEvent:
-    return EnqueueEvent(kind="enqueue", at=NOW, pr=pr, head=head, base=base)
+def _enq(
+    pr: int, head: str, base: str, outcome: str = "enqueued", detail: str = ""
+) -> EnqueueEvent:
+    return EnqueueEvent(
+        kind="enqueue",
+        at=NOW,
+        pr=pr,
+        head=head,
+        base=base,
+        outcome=outcome,
+        detail=detail,  # type: ignore[arg-type]
+    )
 
 
 def _batch(bid: str, *events: Any) -> Batch:
@@ -141,25 +151,64 @@ def test_ejected_green_with_the_base_moved_is_enqueued_again() -> None:
     assert [(a.kind, a.batch) for a in plan.actions] == [("enqueue", "a")]
 
 
-def test_ejected_green_with_the_base_unmoved_needs_you_once() -> None:
-    snap = _snap(
-        [("a", "green", Approved("h-a"), QueueState(False, False), [_enq(100, "h-a", "base-2")])]
-    )
-    plan = drive_pass(snap)
+def test_ejected_green_with_the_base_unmoved_is_recorded_then_a_need_from_events() -> None:
+    members = [
+        ("a", "green", Approved("h-a"), QueueState(False, False), [_enq(100, "h-a", "base-2")])
+    ]
+    plan = drive_pass(_snap(members))
     (action,) = plan.actions
-    assert action.kind == "warn" and not action.red and action.ejected
+    assert action.kind == "warn" and not action.red and action.ejected and action.head == "h-a"
     assert action.detail == "PR #100 left the merge queue unmerged"
-    needs = [n for n in needs_you_from(snap) if n.kind == "queue-ejected"]
-    assert [n.ref for n in needs] == ["a"] and "left the merge queue" in needs[0].text
+    # the driver records it (an `ejected` event); the walk then says nothing, and the Need
+    # is read from the events, so the facts-only needs_you shows it
+    recorded = _snap(
+        [("a", "green", Approved("h-a"), QueueState(False, False),
+          [_enq(100, "h-a", "base-2"), _enq(100, "h-a", "base-2", "ejected")])]
+    )  # fmt: skip
+    assert drive_pass(recorded).actions == ()
+    (need,) = [n for n in queue_needs(recorded) if n.kind == "queue-ejected"]
+    assert need.ref == "a" and "left the merge queue unmerged" in need.text
     assert NEED_LABELS["queue-ejected"]
-    said = Snapshot(**{**snap.__dict__, "warned": frozenset({action.head})})
-    assert drive_pass(said).actions == ()  # said once per head
 
 
-def needs_you_from(snap: Snapshot) -> list[Any]:
-    from fr.triage.views import queue_needs
+def test_an_ejected_event_with_the_base_moved_since_enqueues_again() -> None:
+    snap = _snap(
+        [("a", "green", Approved("h-a"), QueueState(False, False),
+          [_enq(100, "h-a", "base-1"), _enq(100, "h-a", "base-1", "ejected")])]
+    )  # fmt: skip
+    assert _kinds(snap) == [("enqueue", "a")]
 
-    return queue_needs(drive_pass(snap), snap)
+
+def test_a_dequeued_pr_is_enqueued_afresh_when_it_is_approved_again() -> None:
+    snap = _snap(
+        [("a", "green", Approved("h-a"), QueueState(False, False),
+          [_enq(100, "h-a", "base-2"), _enq(100, "h-a", "base-2", "dequeued")])]
+    )  # fmt: skip
+    assert _kinds(snap) == [("enqueue", "a")]
+
+
+def test_a_merged_pr_read_after_the_view_is_never_taken_for_ejected() -> None:
+    snap = _snap(
+        [("a", "green", Approved("h-a"), QueueState(False, False, open=False),
+          [_enq(100, "h-a", "base-2")])]
+    )  # fmt: skip
+    assert _kinds(snap) == []
+
+
+def test_two_refusals_at_a_head_stop_the_retries_and_are_a_need() -> None:
+    one = [_enq(100, "h-a", "base-2", "refused", "not mergeable")]
+    assert _kinds(_snap([("a", "green", Approved("h-a"), None, one)])) == [("enqueue", "a")]
+    two = [*one, _enq(100, "h-a", "base-2", "refused", "not mergeable")]
+    snap = _snap([("a", "green", Approved("h-a"), None, two)])
+    assert _kinds(snap) == []
+    (need,) = queue_needs(snap)
+    assert need.kind == "enqueue-refused" and "not mergeable" in need.text
+    assert queue_needs(_snap([("a", "green", Approved("h-a"), None, one)])) == []
+
+
+def test_a_new_head_resets_the_refusals() -> None:
+    old = [_enq(100, "old", "base-2", "refused"), _enq(100, "old", "base-2", "refused")]
+    assert _kinds(_snap([("a", "green", Approved("h-a"), None, old)])) == [("enqueue", "a")]
 
 
 def test_ejected_red_goes_down_the_red_path() -> None:
@@ -204,3 +253,35 @@ def test_a_repo_without_a_queue_keeps_its_train() -> None:
     plan = drive_pass(snap)
     assert [(a.kind, a.batch) for a in plan.actions] == [("merge", "a")]
     assert plan.trains[0].head == "a" and plan.trains[0].enqueue == ()
+
+
+def test_a_held_queue_repo_still_reports_a_red_member_so_recovery_runs() -> None:
+    snap = _snap(
+        [("a", "failing", Approved("h-a"), None, []), ("b", "green", Approved("h-b"), None, [])],
+        queue_rest=True,
+    )
+    kinds = [(a.kind, a.batch, a.red) for a in drive_pass(snap).actions]
+    assert kinds == [("held", "a", False), ("warn", "a", True)]
+
+
+def test_an_unknown_default_branch_holds_the_repo_with_its_words() -> None:
+    snap = _snap([("a", "green", Approved("h-a"), None, [])], queue_unknown=frozenset({REPO}))
+    (action,) = drive_pass(snap).actions
+    assert action.kind == "held"
+    assert action.detail == f"cannot tell {REPO}'s default branch: queue mode unknown"
+
+
+def test_facts_only_views_show_an_enqueued_pr_in_the_merge_queue_not_merge_ready() -> None:
+    snap = _snap(
+        [("a", "green", Approved("h-a"), None, [_enq(100, "h-a", "base-1")]),
+         ("b", "green", Approved("h-b"), None, [])],
+        queue_repos=frozenset(),
+        queue_inferred=True,
+    )  # fmt: skip
+    plan = drive_pass(snap)
+    assert [(a.kind, a.batch) for a in plan.actions] == [("merge", "b")]
+    assert plan.trains[0].in_merge_queue == ("a",)
+    assert "in merge queue a (#100)" in train_line(plan.trains[0])
+    live = _snap([("a", "green", Approved("h-a"), None, [_enq(100, "h-a", "base-1")])],
+                 queue_repos=frozenset())  # fmt: skip
+    assert [a.kind for a in drive_pass(live).actions] == ["merge"]  # a live pass reads the rules

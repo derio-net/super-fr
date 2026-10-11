@@ -15,7 +15,15 @@ from datetime import datetime
 from typing import Any
 
 from fr.labels import APPROVED_FR
-from fr.triage.model import ApprovalEvent, Batch, BatchEvent, Facts, PullRequest, UpdateEvent
+from fr.triage.model import (
+    ApprovalEvent,
+    Batch,
+    BatchEvent,
+    EnqueueEvent,
+    Facts,
+    PullRequest,
+    UpdateEvent,
+)
 
 
 @dataclass(frozen=True)
@@ -113,6 +121,7 @@ def settle_approvals(
             continue
         head = str(view.get("head_oid") or "")
         verdict = approval_verdict(batch.events, number, head, view.get("labels"))
+        voided_head = _voided_head(verdict)
         if isinstance(verdict, First):
             if dry_run:
                 say(f"would record approval of PR #{number} at {head[:12]}")
@@ -134,8 +143,51 @@ def settle_approvals(
                 )
                 say(f"approval of PR #{number} at {was[:12]} voided: head moved to {head[:12]}")
                 verdict = Unlabelled()
+        _dequeue_unapproved(
+            client, writer, repo, batch, number, {head, voided_head}, verdict, say, now, dry_run
+        )
         out[batch.id] = verdict
     return out
+
+
+def _dequeue_unapproved(
+    client: Any, writer: EventWriter, repo: str, batch: Batch, number: int, heads: set[str],
+    verdict: ApprovalVerdict, say: Callable[[str], None], now: datetime, dry_run: bool,
+) -> None:  # fmt: skip
+    """A PR fr enqueued whose approval is gone is taken out of the queue (merge-train-safety
+    §D, R13: GitHub would otherwise merge a PR the operator un-approved). Its last event is
+    an `enqueued` one at the current head, or at the head a void names; a `dequeued` event
+    supersedes it, so a later re-label enqueues it afresh. A forge that cannot dequeue is
+    said, never fatal."""
+    if is_approved(verdict):
+        return
+    last = next(
+        (e for e in reversed(batch.events) if isinstance(e, EnqueueEvent) and e.pr == number),
+        None,
+    )
+    if last is None or last.outcome != "enqueued" or last.head not in heads:
+        return
+    if dry_run:
+        say(f"would dequeue PR #{number}: its {APPROVED_FR.name} approval is gone")
+        return
+    from fr.gh import GhError
+    from fr.ghclient import UnsupportedForgeOperation
+
+    try:
+        client.pr_dequeue(repo, number)
+    except (UnsupportedForgeOperation, GhError) as exc:
+        say(f"cannot dequeue PR #{number} though its {APPROVED_FR.name} approval is gone: {exc}")
+        return
+    writer(
+        batch.id,
+        EnqueueEvent(kind="enqueue", at=now, pr=number, head=last.head, base=last.base,
+                     outcome="dequeued"),
+    )  # fmt: skip
+    say(f"dequeued PR #{number}: its {APPROVED_FR.name} approval is gone")
+
+
+def _voided_head(verdict: ApprovalVerdict) -> str:
+    return verdict.approved_head if isinstance(verdict, Void) else ""
 
 
 def facts_without_label(facts: Facts, prs: set[tuple[str, int]], name: str) -> Facts:

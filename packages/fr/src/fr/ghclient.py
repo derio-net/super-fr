@@ -39,6 +39,8 @@ class QueueState:
 
     in_queue: bool | None = None
     auto_merge: bool = False
+    # False once the PR is merged or closed: such a PR never left a queue unmerged.
+    open: bool = True
 
 
 class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec (§3.J) fixes
@@ -311,6 +313,11 @@ class GhClient(Protocol):
         """The PR's `QueueState` (§D): `in_queue` None where the backend cannot say."""
         ...
 
+    def pr_dequeue(self, repo: str, number: int) -> None:
+        """Take the PR out of the merge queue / clear its auto-merge (§D, R13: an approval
+        removed after the enqueue is honoured). A backend that cannot raises."""
+        ...
+
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
         """Open a ready (never draft) PR from *head* into *base*; its number. The
         driver's per-wave state export (pages-goal R13). A refusal raises with the
@@ -471,6 +478,9 @@ class UnsupportedBatchOps:
 
     def pr_queue_state(self, repo: str, number: int) -> QueueState:
         return QueueState(None, False)  # no queue concept: not an error (§D)
+
+    def pr_dequeue(self, repo: str, number: int) -> None:
+        raise self._unsupported("pr_dequeue")
 
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         return BaseRules()  # a forge without the concepts has neither: not an error (R12)

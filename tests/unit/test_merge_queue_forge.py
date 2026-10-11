@@ -45,8 +45,9 @@ def test_an_unsupported_forge_cannot_enqueue_and_reads_no_queue() -> None:
     assert ops.pr_queue_state(REPO, 12) == QueueState(None, False)
 
 
-def _graphql(in_queue: bool, auto: bool) -> str:
-    pr = {"isInMergeQueue": in_queue, "autoMergeRequest": {"enabledAt": "t"} if auto else None}
+def _graphql(in_queue: bool, auto: bool, state: str = "OPEN", merged: bool = False) -> str:
+    pr = {"state": state, "merged": merged, "isInMergeQueue": in_queue,
+          "autoMergeRequest": {"enabledAt": "t"} if auto else None}  # fmt: skip
     return json.dumps({"data": {"repository": {"pullRequest": pr}}})
 
 
@@ -84,3 +85,43 @@ def test_rest_queue_state_is_auto_merge_with_unknown_queue_membership() -> None:
 
 def test_the_verbs_are_on_the_protocol() -> None:
     assert "pr_enqueue" in GhClient.__dict__ and "pr_queue_state" in GhClient.__dict__
+
+
+def test_a_merged_or_closed_pr_reads_as_not_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    """p3-r6: the query asks for state and merged, so a PR merged after the view is never
+    read as ejected."""
+    seen: list[list[str]] = []
+    answers = iter([_graphql(False, False, "MERGED", True), _graphql(False, False, "CLOSED")])
+
+    def run(args: list[str]) -> str:
+        seen.append(args)
+        return next(answers)
+
+    monkeypatch.setattr(_gh, "_run_gh", run)
+    assert RealGhClient().pr_queue_state(REPO, 12) == QueueState(False, False, open=False)
+    assert RealGhClient().pr_queue_state(REPO, 12).open is False
+    assert "state merged" in " ".join(seen[0])
+
+
+def test_rest_queue_state_reads_merged_and_closed() -> None:
+    class Pull:
+        def __init__(self, **pull: Any) -> None:
+            self.pull = pull
+
+        def __call__(self, args: list[str]) -> str:
+            return json.dumps(self.pull)
+
+    assert RealGhRestClient(run=Pull(state="open", merged=False)).pr_queue_state(REPO, 1).open
+    assert not RealGhRestClient(run=Pull(state="closed", merged=True)).pr_queue_state(REPO, 1).open
+
+
+def test_dequeue_argv_and_unsupported_backends(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[list[str]] = []
+    monkeypatch.setattr(_gh, "_run_gh", lambda args: seen.append(args) or "")
+    RealGhClient().pr_dequeue(REPO, 12)
+    assert seen == [["pr", "merge", "12", "--repo", REPO, "--disable-auto"]]
+    with pytest.raises(UnsupportedForgeOperation, match="pr_dequeue"):
+        RealGhRestClient().pr_dequeue(REPO, 12)
+    with pytest.raises(UnsupportedForgeOperation, match="pr_dequeue"):
+        UnsupportedBatchOps().pr_dequeue(REPO, 12)
+    assert "pr_dequeue" in GhClient.__dict__

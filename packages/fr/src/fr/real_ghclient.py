@@ -500,7 +500,8 @@ class RealGhClient:
         query = (
             "query($owner: String!, $name: String!, $number: Int!) {"
             " repository(owner: $owner, name: $name) {"
-            " pullRequest(number: $number) { isInMergeQueue autoMergeRequest { enabledAt } } } }"
+            " pullRequest(number: $number) { state merged isInMergeQueue"
+            " autoMergeRequest { enabledAt } } } }"
         )
         out = _gh._run_gh(
             ["api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}",
@@ -510,8 +511,14 @@ class RealGhClient:
             ((json.loads(out).get("data") or {}).get("repository") or {}).get("pullRequest")
         ) or {}
         return QueueState(
-            in_queue=bool(pr.get("isInMergeQueue")), auto_merge=bool(pr.get("autoMergeRequest"))
+            in_queue=bool(pr.get("isInMergeQueue")),
+            auto_merge=bool(pr.get("autoMergeRequest")),
+            open=pr.get("state") == "OPEN" and not pr.get("merged"),
         )
+
+    @_hosted
+    def pr_dequeue(self, repo: str, number: int) -> None:
+        _gh._run_gh(["pr", "merge", str(number), "--repo", repo, "--disable-auto"])
 
     @_hosted
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:

@@ -822,6 +822,12 @@ class EnqueueEvent(_Strict):
     pr: int
     head: str = Field(min_length=1)
     base: str = Field(min_length=1)
+    # What this event records about the PR at *head*: `enqueued` (the write), `ejected` (it
+    # left the queue unmerged with the base unmoved: a need, said once), `dequeued` (fr took
+    # it out when its approval went), `refused` (the forge refused the enqueue; *detail* has
+    # its words). Only `enqueued` means "in the queue".
+    outcome: Literal["enqueued", "ejected", "dequeued", "refused"] = "enqueued"
+    detail: str = ""
 
 
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})

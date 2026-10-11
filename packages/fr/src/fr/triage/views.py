@@ -40,14 +40,16 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
     LANDED,
+    REFUSALS_BEFORE_NEED,
     LivePr,
-    Pass,
     Snapshot,
     checks_verdict,
     closeout_event,
     closeout_item_id,
     drive_pass,
+    enqueue_refusals,
     held_conflict,
+    last_enqueue,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
@@ -132,6 +134,7 @@ def drive_snapshot(
         foreign={b.id: found for b in batches if (found := tuple(foreign_batch_prs(b, facts)))},
         awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
         approvals=fact_approvals(queue),
+        queue_inferred=True,
     )
 
 
@@ -151,7 +154,7 @@ def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
 @dataclass(frozen=True)
 class Need:
     # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
-    # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected
+    # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
     text: str
@@ -162,6 +165,7 @@ NEED_LABELS = {
     "approve-pr": "Label a green PR approved-fr",
     "red-pr": "Red PR its session cannot fix",
     "queue-ejected": "PR ejected from the merge queue",
+    "enqueue-refused": "PR the merge queue refuses",
     "failing-ci": "Failing CI",
     "foreign-pr": "Foreign PR on a batch branch",
     "blocked-batch": "Blocked batch",
@@ -173,16 +177,33 @@ NEED_LABELS = {
 }
 
 
-def queue_needs(plan: Pass, snap: Snapshot) -> list[Need]:
-    """A queued PR that left the merge queue unmerged with the base unmoved, and is green:
-    nothing the driver can do (merge-train-safety §D "Ejection"). Only a driver pass, which
-    reads the queue, plans one; the facts-only board never does."""
-    urls = {e.batch.id: e.pr.url for e in snap.queue}
-    return [
-        Need("queue-ejected", a.batch, a.detail, urls.get(a.batch))
-        for a in plan.actions
-        if a.kind == "warn" and a.ejected
-    ]
+def queue_needs(snap: Snapshot) -> list[Need]:
+    """What the driver recorded about a PR it enqueued, as needs (merge-train-safety §D):
+    one that left the merge queue unmerged with the base unmoved (`ejected`), and one the
+    forge refused to enqueue twice at its current head (`refused`). Read from the events,
+    like `red-pr`, so the facts-only board shows them too."""
+    out: list[Need] = []
+    for entry in snap.queue:
+        live = snap.live.get(entry.batch.id)
+        if live is None or live.state != "OPEN":
+            continue
+        event = last_enqueue(entry.batch, live.number)
+        if event is None or event.head != live.head:
+            continue
+        if event.outcome == "ejected":
+            out.append(
+                Need("queue-ejected", entry.batch.id,
+                     f"PR #{live.number} left the merge queue unmerged", entry.pr.url)
+            )  # fmt: skip
+        elif event.outcome == "refused":
+            refused = enqueue_refusals(entry.batch, live.number, live.head)
+            if len(refused) >= REFUSALS_BEFORE_NEED:
+                why = f": {event.detail}" if event.detail else ""
+                out.append(
+                    Need("enqueue-refused", entry.batch.id,
+                         f"PR #{live.number} cannot be put in the merge queue{why}", entry.pr.url)
+                )  # fmt: skip
+    return out
 
 
 def needs_you(
@@ -227,7 +248,7 @@ def needs_you(
         )
         out.append(Need("approve-pr", entry.batch.id, text, pr.url))
 
-    out.extend(queue_needs(plan, snap))
+    out.extend(queue_needs(snap))
     for action in plan.actions:
         if action.kind == "warn" and not action.ejected:
             failing_pr = batch_pr(by_id[action.batch], facts)

@@ -512,6 +512,23 @@ set.
     PR has no `UpdateEvent`.
 - **`--max-inflight`** is unchanged. A queued batch is still at stage
   `pr-open`, which `IN_FLIGHT` already counts (`batch_drive.py:52`).
+- **Additions from the phase 3 review:**
+  - **Enqueue goes through the merge gate.** It passes through
+    `_approved_and_ready`, so an approved draft is readied first (R3).
+  - **Un-approval dequeues.** If a queued PR loses its approval (its label
+    removed, or voided), `settle_approvals` takes it out of the queue with
+    `GhClient.pr_dequeue` (`gh pr merge --disable-auto`).
+  - **Unknown default branch holds the repo.** When fr cannot tell a repo's
+    default branch, it holds the repo with a warning ("queue mode unknown"),
+    rather than reading it as having no queue.
+  - **Ejected and refused PRs reach the board.** An ejected PR whose base has
+    not moved, and an enqueue that is refused again at the same head, are
+    recorded. `needs_you` then raises the `queue-ejected` Need from events
+    alone.
+  - **The kanban reads queue membership from events.** A PR whose last
+    `EnqueueEvent` is at its current head shows as "in merge queue".
+  - **Red recovery skips rule 2 in a queue repo.** fr never pushes an update
+    from base in a queue repo.
 
 **CI (R15).**
 - `ci.yml` (`:4-7`) and `acceptance-report.yml` (`:17-23`) add

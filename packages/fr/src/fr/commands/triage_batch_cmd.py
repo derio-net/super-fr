@@ -173,6 +173,7 @@ from fr.triage.batch_drive import (
     idle_session,
     is_archived,
     is_finished,
+    last_enqueue,
     red_decision,
     settle,
     summary_line,
@@ -186,6 +187,7 @@ from fr.triage.batch_merge import (
     MergeConflictError,
     MergeContext,
     MergeStopError,
+    _approved_and_ready,
     choose_method,
     describe,
     merge_ready,
@@ -3006,14 +3008,16 @@ class _Driver:
         queue: Sequence[QueueEntry],
         repos: Mapping[str, str],
         live: Mapping[str, LivePr],
+        approvals: Mapping[str, ApprovalVerdict],
     ) -> dict[str, Any]:
         """The Snapshot's merge-queue fields (§D "Queue mode", R13): the repos whose base
         requires a queue, those held (a `version:` block, `forge.api rest`), the queue state
         of each batch the driver enqueued before, and the base now. Reads only what a decision
         needs: no state for a batch never enqueued, no base without one, and no rules for a
-        repo with no PR that could merge or be enqueued (open and not failing, or enqueued
-        before). A clone that cannot name its default branch (no `origin/HEAD`) is no queue:
-        the pass has nothing to merge there, or the merge path says so itself."""
+        repo with no PR that could merge or be enqueued (open, not failing, approved; or
+        enqueued before). A candidate repo whose clone cannot name its default branch (no
+        `origin/HEAD`) is HELD, with a warning said once: whether it has a queue is unknown,
+        and merging as if it had none could bypass one."""
         from fr import forgeapi
 
         try:
@@ -3024,17 +3028,30 @@ class _Driver:
         for e in queue:
             pr = live.get(e.batch.id)
             enqueued = any(isinstance(x, EnqueueEvent) for x in e.batch.events)
-            if pr is not None and pr.state == "OPEN" and (pr.checks != "failing" or enqueued):
+            verdict = approvals.get(e.batch.id)
+            candidate = pr is not None and pr.checks != "failing" and (
+                verdict is not None and is_approved(verdict)
+            )  # fmt: skip
+            if pr is not None and pr.state == "OPEN" and (candidate or enqueued):
                 by_repo.setdefault(repos[e.batch.id], []).append(e)
         queued: set[str] = set()
+        unknown: set[str] = set()
         versioned: set[str] = set()
         states: dict[str, QueueState] = {}
         bases: dict[str, str] = {}
         for repo, entries in sorted(by_repo.items()):
             try:
-                if not self._base_rules(facts, repo).merge_queue:
-                    continue
-            except (GitError, TriageError):  # the default branch is unknown: no queue read
+                self._reader(repo).default_branch()
+            except (GitError, TriageError) as exc:
+                unknown.add(repo)
+                queued.add(repo)
+                self._report_once(
+                    f"queue-unknown\0{repo}",
+                    f"cannot tell {repo}'s default branch ({exc}): queue mode unknown, "
+                    "its batches are held",
+                )
+                continue
+            if not self._base_rules(facts, repo).merge_queue:
                 continue
             queued.add(repo)
             if facts.config_for(repo).version is not None:
@@ -3059,6 +3076,7 @@ class _Driver:
             "queue_repos": frozenset(queued),
             "queue_versioned": frozenset(versioned),
             "queue_rest": rest,
+            "queue_unknown": frozenset(unknown),
             "queue_states": states,
             "bases": bases,
         }
@@ -3178,7 +3196,7 @@ class _Driver:
                 )
                 if now - event.at >= STALE_CLOSEOUT:  # is its tab still live? (gh#1025)
                     stale.append(b)
-            queue_reads = self._queue_reads(facts, queue, repos, live)
+            queue_reads = self._queue_reads(facts, queue, repos, live, approvals)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
@@ -3981,6 +3999,9 @@ class _Driver:
                 return "", False, in_flight  # another scope holds it (R6)
             line, did = self._recover(action, facts)
             return line, did, in_flight
+        if action.kind == "warn" and action.ejected:
+            line, did = self._record_ejected(action, facts)
+            return line, did, in_flight
         if action.kind in ("warn", "foreign"):
             if action.head:  # an export's warn names no head: it is said every pass
                 self.warned.add(action.head)
@@ -4307,34 +4328,77 @@ class _Driver:
     def _enqueue(
         self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
     ) -> tuple[str, bool]:
-        """§D: put the PR in the base's merge queue, pinned to the head whose checks were
-        judged, then record an `enqueue` event with the base as fetched BEFORE the write (a
-        base that moves meanwhile reads as moved, so an ejection re-enqueues, never strands).
-        A refusal is a held line, said once per head, and records nothing."""
+        """§D: put the PR in the base's merge queue through the merge path's own gate (the
+        live label, a draft marked ready, the head re-checked), pinned to the head whose
+        checks were judged; then record an `enqueue` event with the base as fetched BEFORE
+        the write (a base that moves meanwhile reads as moved, so an ejection re-enqueues,
+        never strands). A refusal is a held line and a `refused` event: the walk retries once
+        more at the same head, then asks the operator (`enqueue-refused`)."""
         assert action.pr is not None
         ctx = self.merge_ctx(facts, repo)
+        entries = [
+            e
+            for e in pr_open_queue(judgements.batches, facts, judgements.issues)
+            if e.batch.id == batch.id
+        ]
+        n, head = action.pr, action.head
+        moved = f"held: PR #{n} head moved from {head[:12]} since its checks were judged"
         try:
+            slots, _ = plan_queue(ctx, entries)
+            if not slots:
+                return f"PR #{n} is already merged", False
+            if slots[0].head != head:
+                return f"{moved}; it is judged again next pass", False
+            view = ctx.client.pr_view(repo, n)
+            held = _approved_and_ready(ctx, slots[0], view, wait=False)
+            if held is not None:
+                if held.outcome in ("unapproved", "unready"):
+                    return (
+                        f"held: PR #{n} {held.reason or f'awaits the {APPROVED_FR.name} label'}",
+                        False,
+                    )
+                names = f": {', '.join(held.checks)}" if held.checks else ""
+                return f"held: PR #{n} is {held.outcome}{names}", False
+            if str(view.get("head_oid") or "") != head:
+                return f"{moved}; it is judged again next pass", False
             base = self._base_now(repo)
-            ctx.client.pr_enqueue(repo, action.pr, head_sha=action.head, method=ctx.method)
+            try:
+                ctx.client.pr_enqueue(repo, n, head_sha=head, method=ctx.method)
+            except FORGE_ERRORS as exc:
+                self.failed_write = True
+                self._append(
+                    judgements, facts, batch,
+                    EnqueueEvent(kind="enqueue", at=_now_after(batch), pr=n, head=head,
+                                 base=base, outcome="refused", detail=str(exc).strip()[:300]),
+                )  # fmt: skip
+                return f"held: PR #{n} enqueue refused: {exc}", False
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except (GitError, TriageError) as exc:
             why = f"the base could not be read ({exc}): retried next pass"
             return self._said_once(batch, action, "enqueue-base", why), False
-        except FORGE_ERRORS as exc:
-            self.failed_write = True
-            why = f"held: PR #{action.pr} enqueue refused: {exc}"
-            key = f"enqueue\0{batch.id}\0{action.head}\0{why}"
-            if key in self.reported:
-                return "", False
-            self.reported.add(key)
-            return why, False
+        except FORGE_ERRORS as exc:  # a re-read of the PR or its checks
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         self._append(
             judgements, facts, batch,
-            EnqueueEvent(kind="enqueue", at=_now_after(batch), pr=action.pr, head=action.head,
-                         base=base),
+            EnqueueEvent(kind="enqueue", at=_now_after(batch), pr=n, head=head, base=base),
         )  # fmt: skip
-        return f"enqueued PR #{action.pr} at {action.head[:12]}", True
+        return f"enqueued PR #{n} at {head[:12]}", True
+
+    def _record_ejected(self, action: Action, facts: Facts) -> tuple[str, bool]:
+        """A queued PR that left the queue unmerged with the base unmoved: recorded once
+        per (PR, head) as an `ejected` event, which is the `queue-ejected` need (§D)."""
+        judgements = load_judgements(self.target / "judgements.yaml")
+        batch = _find(judgements.batches, action.batch)
+        last = last_enqueue(batch, action.pr or 0)
+        if last is None or last.outcome != "enqueued" or last.head != action.head:
+            return "", False
+        self._append(
+            judgements, facts, batch,
+            EnqueueEvent(kind="enqueue", at=_now_after(batch), pr=last.pr, head=last.head,
+                         base=last.base, outcome="ejected"),
+        )  # fmt: skip
+        return f"{action.detail}; it needs you", True
 
     def _stopped_line(self, batch: Batch, action: Action, exc: MergeStopError | GitError) -> str:
         """A refusal ends neither the loop nor the pass (rg-4): it is reported in full
@@ -4416,7 +4480,9 @@ class _Driver:
             ), False
         checks = action.checks
         # Rules 1-3 never read the session: ask it only when they leave the decision to it.
-        decision = red_decision(events, action.pr, action.head, checks, base_now, "idle")
+        decision = red_decision(
+            events, action.pr, action.head, checks, base_now, "idle", queue=ctx.rules.merge_queue
+        )
         runner: Any = None
         status = "idle"
         if decision == "handback":
@@ -4437,7 +4503,10 @@ class _Driver:
                     ), False
             else:
                 status = "absent"  # this runner cannot be messaged: no session can take it
-            decision = red_decision(events, action.pr, action.head, checks, base_now, status)
+            decision = red_decision(
+                events, action.pr, action.head, checks, base_now, status,
+                queue=ctx.rules.merge_queue,
+            )  # fmt: skip
         if decision == "skip":
             return "", False
         if decision == "reupdate":

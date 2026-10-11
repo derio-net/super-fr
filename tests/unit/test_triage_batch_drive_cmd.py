@@ -161,12 +161,19 @@ class World:
         self.calls.append(f"pr_enqueue {number}")
         if getattr(self, "refuse_enqueue", None):
             raise GhError(self.refuse_enqueue, returncode=1)  # type: ignore[attr-defined]
+        if self.prs[number]["draft"]:  # GitHub refuses to enqueue a draft
+            raise GhError("GraphQL: Pull request is in draft state", returncode=1)
         assert self.prs[number]["head_oid"] == head_sha
         self.enqueued: list[tuple[int, str, str]] = [
             *getattr(self, "enqueued", []),
             (number, head_sha, method),
         ]
         self.queue_states[number] = QueueState(in_queue=True, auto_merge=True)
+
+    def pr_dequeue(self, repo: str, number: int) -> None:
+        self.calls.append(f"pr_dequeue {number}")
+        self.dequeued: list[int] = [*getattr(self, "dequeued", []), number]
+        self.queue_states[number] = QueueState(in_queue=False, auto_merge=False)
 
     def pr_queue_state(self, repo: str, number: int) -> QueueState:
         self.calls.append(f"pr_queue_state {number}")
@@ -4560,7 +4567,7 @@ def _queue_repo(world: World, tmp_path: Path) -> None:
     _pr_open(world, tmp_path)
 
 
-def _enqueued(tmp_path: Path, bid: str, pr: int, head: str, base: str) -> None:
+def _enqueued(tmp_path: Path, bid: str, pr: int, head: str, base: str, *outcomes: str) -> None:
     """Record, on *bid*, the driver's earlier enqueue of *pr* at *head* with the base at *base*."""
     path = tmp_path / "judgements.yaml"
     text = path.read_text("utf-8").replace("schema: 3\n", "schema: 9\n", 1)
@@ -4569,6 +4576,11 @@ def _enqueued(tmp_path: Path, bid: str, pr: int, head: str, base: str) -> None:
         f"      - {{kind: approval, at: 2026-10-01T10:30:00Z, pr: {pr}, head: {head}}}\n"
         f"      - {{kind: enqueue, at: 2026-10-01T10:40:00Z, pr: {pr}, head: {head}, "
         f"base: {base}}}\n"
+        + "".join(
+            f"      - {{kind: enqueue, at: 2026-10-01T10:50:00Z, pr: {pr}, head: {head}, "
+            f"base: {base}, outcome: {o}, detail: not mergeable}}\n"
+            for o in outcomes
+        )
     )
     assert marker in text
     path.write_text(text.replace(marker, marker + extra, 1), "utf-8")
@@ -4606,7 +4618,9 @@ def test_a_pr_ejected_with_the_base_moved_is_enqueued_again(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert len(world.enqueued) == 1  # type: ignore[attr-defined]
-    assert "the base moved since it was enqueued" in out or "enqueued PR #101" in out
+    assert "enqueue b1: enqueued PR #101 at sha-101" in out
+    events = [e for e in _enqueue_events(tmp_path) if e.outcome == "enqueued"]
+    assert [e.base for e in events] == ["old-base", "origin/main@fetched"]
 
 
 def test_a_pr_ejected_with_the_base_unmoved_needs_you_and_is_not_enqueued_again(
@@ -4618,6 +4632,11 @@ def test_a_pr_ejected_with_the_base_unmoved_needs_you_and_is_not_enqueued_again(
     assert not hasattr(world, "enqueued")
     assert "PR #101 left the merge queue unmerged" in out
     assert world.merged == []
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["enqueued", "ejected"]
+    assert _queue_needs(tmp_path) == ["queue-ejected"]  # facts-only needs_you, from the events
+    code, out = _drive(tmp_path, "--once", "--yes")  # recorded once per head: not again
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["enqueued", "ejected"]
+    assert "left the merge queue" not in out
 
 
 def test_a_pr_waiting_to_enter_the_queue_is_left_alone(
@@ -4630,14 +4649,15 @@ def test_a_pr_waiting_to_enter_the_queue_is_left_alone(
     assert not hasattr(world, "enqueued") and "left the merge queue" not in out
 
 
-def test_a_refused_enqueue_is_a_held_line_and_records_nothing(
+def test_a_refused_enqueue_is_a_held_line_and_records_only_the_refusal(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _queue_repo(world, tmp_path)
     world.refuse_enqueue = "gh: Pull request is not mergeable"  # type: ignore[attr-defined]
     code, out = _drive(tmp_path, "--once", "--yes")
     assert "held: PR #101 enqueue refused" in out
-    assert "enqueue" not in _events(tmp_path, "b1")
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["refused"]
+    assert _queue_needs(tmp_path) == []  # one refusal is a retry, not yet a need
 
 
 def test_a_version_block_holds_a_queue_repo(
@@ -4693,3 +4713,98 @@ def test_a_clone_without_origin_head_does_not_abort_a_pass_that_has_nothing_to_e
     (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
     code, out = _drive(tmp_path)  # a candidate, but the branch is unknowable: read as no queue
     assert code == 0 and "Traceback" not in out, out
+
+
+def _enqueue_events(tmp_path: Path, bid: str = "b1") -> list[Any]:
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == bid)
+    return [e for e in batch.events if e.kind == "enqueue"]
+
+
+def _queue_needs(tmp_path: Path) -> list[str]:
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    facts = load_facts(tmp_path / "facts.json")
+    needs = needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
+    return [n.kind for n in needs if n.kind in ("queue-ejected", "enqueue-refused")]
+
+
+def test_an_approved_draft_is_readied_then_enqueued(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    _pr_open(world, tmp_path, draft=True)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.prs[101]["draft"] is False
+    assert world.calls.index("pr_ready 101") < world.calls.index("pr_enqueue 101")
+    assert world.enqueued == [(101, "sha-101", "squash")]  # type: ignore[attr-defined]
+
+
+def test_a_draft_whose_label_is_gone_is_not_enqueued(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    _pr_open(world, tmp_path, draft=True, labels=[])
+    _drive(tmp_path, "--once", "--yes")
+    assert "pr_enqueue 101" not in world.calls
+
+
+def test_two_refusals_at_one_head_become_a_need_and_stop_the_retries(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    world.refuse_enqueue = "gh: Pull request is not mergeable"  # type: ignore[attr-defined]
+    for _ in range(3):
+        _drive(tmp_path, "--once", "--yes")
+        (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    assert world.calls.count("pr_enqueue 101") == 2  # the third pass does not try
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["refused", "refused"]
+    assert _queue_needs(tmp_path) == ["enqueue-refused"]
+
+
+def test_an_unknown_default_branch_holds_the_candidate_repo_and_says_so_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.gitseam import GitError
+
+    def _unset() -> str:
+        raise GitError("origin/HEAD is unset")
+
+    _pr_open(world, tmp_path)
+    monkeypatch.setattr(checkout, "default_branch", _unset)
+    code, out = _drive(tmp_path)
+    assert "cannot tell derio-net/super-fr's default branch: queue mode unknown" in out
+    assert out.count("queue mode unknown") >= 1 and world.merged == []
+
+
+def test_removing_the_label_after_the_enqueue_dequeues_the_pr_and_a_relabel_enqueues_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    _drive(tmp_path, "--once", "--yes")
+    assert len(world.enqueued) == 1  # type: ignore[attr-defined]
+    world.prs[101]["labels"] = []  # the operator un-approves it
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "dequeued PR #101: its approved-fr approval is gone" in out
+    assert world.dequeued == [101]  # type: ignore[attr-defined]
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["enqueued", "dequeued"]
+    world.prs[101]["labels"] = ["approved-fr"]
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    _drive(tmp_path, "--once", "--yes")
+    assert len(world.enqueued) == 2 and _queue_needs(tmp_path) == []  # type: ignore[attr-defined]
+
+
+def test_a_queue_repo_red_pr_is_never_re_updated(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """p3-r7: a pre-queue update event does not make fr push an update in a queue repo."""
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    _red(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    _drive(tmp_path, "--once", "--yes")
+    assert world.prs[101]["head_oid"] == "sha-101" and len(messenger.messages) == 1
