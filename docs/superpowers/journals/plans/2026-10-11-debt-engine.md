@@ -88,3 +88,84 @@ the 8->9 hop reuses matrix_status_split.split_status (R6's rule, one definition)
 ### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
 
 a migration run, set-status calls and doc/skill edits; no code to restructure
+
+<!-- fr:journal kind=review scope=plan id=p1-review-r1 created=2026-10-11T21:27:35+00:00 phase=1 -->
+### p1-review-r1 · review · phase 1 code review (skipped split, matrix 4→5, record 8→9): 7 findings (phase 1)
+
+Independent reviewer (separate context, read-only) over 18e354b9^..4d0bae58: every matrix
+and record hop, MatrixV4/RecordV8 freezing and pins, the R6 mapping, the one-write and crash
+window, the status validator, the R8 surfaces, the reclassification spot-check, and test
+quality. 94 targeted tests passed. Findings p1-r1..p1-r7 (five in scope, two out).
+Receiving: each verified against the code; p1-r1 (closeout.py prints row.verify) and p1-r3
+(matrix header) confirmed by reading, p1-r4's #363 claim confirmed live (open, refreshed
+2026-10-05). p1-r2 resolved by enforcing the spec's meaning rather than amending it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-11T21:27:35+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · close-out walked line printed `--strategy None` for a row held by the spec's Verification section (phase 1)
+
+run/closeout.py printed row.verify; holds_open_for_run also holds spec-section rows with no verify.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-11T21:27:35+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · walked rows without a passing walk; nothing enforced R5's "dated by its walk" (phase 1)
+
+23 walked rows carried no walk and set-status --status walked accepted it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-10-11T21:27:35+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · this repo's v5 matrix header still documented `skipped` (phase 1)
+
+docs/acceptance/matrix.yaml header comment kept the old status list; the line-surgery migration never refreshed it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-10-11T21:27:35+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · stale notes after the split (cloud-triage-github-rest, fr-goal-phase-tiering, acceptance-nag-channels) (phase 1)
+
+Notes still said "skipped"/"owed" where the state had moved; acceptance-nag-channels' weekly upsert was already observed (#363).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-10-11T21:27:35+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · 4→5 tests missed render-failure, crash-window report regeneration, fail-only walk, and the live-parser tripwire (phase 1)
+
+test_migration_matrix_status_split.py lacked four edge cases.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-10-11T21:27:35+00:00 phase=1 state=open review_scope=out -->
+### p1-r6 · finding [open] (reviewer: out of scope) · matrix_anchors repair reads with the live parse_matrix (silently a no-op on a pre-v5 matrix) (phase 1)
+
+Pre-existing; this change only makes it reachable, and the repair retries after the 4→5 hop.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-10-11T21:27:35+00:00 phase=1 state=open review_scope=out -->
+### p1-r7 · finding [open] (reviewer: out of scope) · record 8→9 reads the row's raw verify; an unmigrated v3 `post-merge` row gives a misleading refusal (phase 1)
+
+Kind ordering migrates the matrix first; an edge case not caused by this phase.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-11T21:27:35+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: close-out walked line printed `--strategy None` for a row held by the spec's Verification section (phase 1)
+
+c61bf7d6: prints the effective strategy (row verify, else spec section/shape default, else <strategy>); test for a spec-held row.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-11T21:27:35+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: walked rows without a passing walk; nothing enforced R5's "dated by its walk" (phase 1)
+
+b15e9bf4/f5a990ac: walked needs a passing walk in set-status, the record engine and fr acceptance check (new --walk-at); 20 rows got walks recorded from their notes' evidence, 3 with no date moved to walk-owed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-10-11T21:27:35+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: this repo's v5 matrix header still documented `skipped` (phase 1)
+
+84b759a0/3de11247: header replaced with the scaffold's comment; the 4→5 rewrite swaps an exact old-template header, tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-10-11T21:27:35+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: stale notes after the split (cloud-triage-github-rest, fr-goal-phase-tiering, acceptance-nag-channels) (phase 1)
+
+set-status --notes on the three rows; acceptance-nag-channels walked by #363; cloud-triage-github-rest to walk-owed for its owed comparison.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-10-11T21:27:35+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: 4→5 tests missed render-failure, crash-window report regeneration, fail-only walk, and the live-parser tripwire (phase 1)
+
+84b759a0: four new hop tests and the widened tripwire.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-10-11T21:27:35+00:00 phase=1 state=open resolves=p1-r6 out_of_scope=true -->
+### p1-r6-resolved · finding [out-of-scope] · resolves p1-r6: matrix_anchors repair reads with the live parse_matrix (silently a no-op on a pre-v5 matrix) (phase 1)
+
+Not caused by this change (pre-existing live-parser read in matrix_anchors); a clarifying comment was added at 632a5f5c, behaviour unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-10-11T21:27:35+00:00 phase=1 state=open resolves=p1-r7 out_of_scope=true -->
+### p1-r7-resolved · finding [out-of-scope] · resolves p1-r7: record 8→9 reads the row's raw verify; an unmigrated v3 `post-merge` row gives a misleading refusal (phase 1)
+
+Not caused by this phase: the registry migrates the matrix before records, so the raw v3 spelling is unreachable in order.
