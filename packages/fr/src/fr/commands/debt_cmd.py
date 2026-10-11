@@ -208,7 +208,9 @@ _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 def _clean(value: object, limit: int = 120) -> str:
     """A forge-returned string made safe to echo: no control characters."""
-    return _CONTROL.sub("?", str(value))[:limit]
+    from fr.debt.render import redact
+
+    return _CONTROL.sub("?", redact(str(value)))[:limit]
 
 
 def _login(issue: dict[str, Any]) -> str:
@@ -390,7 +392,11 @@ def archive_pr_cmd(
             typer.echo("Nothing was archived; no branch pushed.")
             return
         _commit(root)
-        _push(root)
+        try:
+            _push(root)
+        except RuntimeError as e:
+            _warn(f"could not push {sw.BRANCH}: {_clean(e, 300)}. Remedies: {REFUSAL_REMEDIES}")
+            return
         _open_or_refresh(root, client, slug, base, result, report.stale_days, bool(token))
     except RuntimeError as e:
         typer.echo(f"error: {_clean(e, 300)}", err=True)
@@ -450,7 +456,8 @@ def _open_or_refresh(
         typer.echo(f"opened draft PR: {_clean(made.get('url') or made.get('number'), 300)}")
         return
     number = existing.get("number")
-    if not (isinstance(number, int) or (str(number).isascii() and str(number).isdigit())):
-        raise RuntimeError(f"the forge returned an unusable PR number {number!r}")
-    client.edit_pr(slug, int(number), body=body)
-    typer.echo(f"refreshed draft PR #{int(number)}")
+    text = str(number)
+    if not (text.isascii() and text.isdigit()):
+        raise RuntimeError(f"the forge returned an unusable PR number {_clean(text)!r}")
+    client.edit_pr(slug, int(text), body=body)
+    typer.echo(f"refreshed draft PR #{int(text)}")

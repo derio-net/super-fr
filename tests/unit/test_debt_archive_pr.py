@@ -179,3 +179,21 @@ def test_the_identity_is_the_origin_remote_not_the_matrix(world: dict) -> None:
 
 def test_forge_errors_are_class_exported() -> None:
     assert issubclass(FakeGhError, Exception)
+
+
+def test_a_failed_archive_never_publishes_its_stderr_in_the_pr_body(
+    world: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def archive(root: Path, name: str, env: dict) -> tuple[bool, str]:
+        if name == "old-plan":
+            return False, "fatal: https://x-access-token:SECRET@github.com/o/r"
+        _git(root, "mv", f"docs/superpowers/plans/{name}", f"docs/superpowers/plans/{name}-x")
+        return True, ""
+
+    world["box"]["report"] = _report(("old-plan", 30), ("other", 30))
+    (world["work"] / "docs/superpowers/plans/other").mkdir()
+    monkeypatch.setattr(debt_cmd, "_archive_one", archive)
+    r = runner.invoke(app, ["debt", "archive-pr", "--yes"])
+    assert "SECRET" not in r.output
+    for pr in _calls(world["gh"], "create_pr"):
+        assert "SECRET" not in pr["body"] and "x-access-token" not in pr["body"]

@@ -10,6 +10,7 @@ backend, or when the caller asks (`--with-ci`) — see `fr.acceptance.ci`.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -286,90 +287,50 @@ acceptance-report:
 """
 
 
-# The weekly "Acceptance debt" issue step, split out of each template so it is
+# The weekly technical-debt steps, split out of each template so they are
 # included only when the tracker is the ci type's own platform (#774 §3.E): the
-# step files through that platform's CLI with the pipeline's own credentials.
+# steps file through that platform's CLI with the pipeline's own credentials.
+# `fr debt issue --yes` keeps the one `<repo>: Technical debt` issue and
+# `fr debt archive-pr --yes` the one draft archive PR (spec 2026-10-11-debt-engine
+# R9-R13); both run on the schedule and on a manual dispatch with `debt: true`.
 _DEBT_COMMENT_ACTIONS = (
-    '# - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).\n'
+    '# - The weekly run (and a dispatch with `debt`) upserts one "<repo>: Technical debt"\n'
+    "#   issue (closed at zero debt) and refreshes a draft PR archiving long-merged plans.\n"
 )
 DEBT_COMMENT = {
     "github-actions": _DEBT_COMMENT_ACTIONS,
     "gitea-actions": _DEBT_COMMENT_ACTIONS,
-    "gitlab-ci": '# - The weekly (scheduled) run upserts one "Acceptance debt" issue.\n',
+    "gitlab-ci": '# - The weekly (scheduled) run upserts one "<repo>: Technical debt" issue and\n'
+    "#   refreshes a draft PR archiving long-merged plans.\n",
 }
 DEBT_STEP_GITHUB = """\
-      - name: Upsert acceptance-debt issue (weekly digest)
-        if: github.event_name == 'schedule'
+      - name: Technical debt issue (weekly)
+        if: github.event_name == 'schedule' || inputs.debt
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          fr acceptance digest > /tmp/digest.md
-          # Idempotence keyed on the body marker `fr acceptance digest` emits,
-          # not the title — a pre-existing issue that merely says "Acceptance
-          # debt" in its title must not be hijacked.
-          num=$(gh issue list --state open --search '"fr-acceptance-digest" in:body' \\
-                --json number --jq '.[0].number // empty')
-          if grep -q "No open acceptance debt." /tmp/digest.md; then
-            if [ -n "$num" ]; then
-              gh issue close "$num" --comment "Acceptance debt cleared — closing."
-            fi
-          elif [ -n "$num" ]; then
-            gh issue edit "$num" --body-file /tmp/digest.md
-          else
-            gh issue create --title "Acceptance debt" --body-file /tmp/digest.md
-          fi
+        run: fr debt issue --yes
+      - name: Archive sweep PR (weekly)
+        if: github.event_name == 'schedule' || inputs.debt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
+        run: fr debt archive-pr --yes
 """
 DEBT_STEP_GITEA = """\
-      - name: Upsert acceptance-debt issue (weekly digest)
-        if: gitea.event_name == 'schedule'
-        run: |
-          fr acceptance digest > /tmp/digest.md
-          # Idempotence keyed on the body marker `fr acceptance digest` emits,
-          # not the title — a pre-existing issue that merely says "Acceptance
-          # debt" in its title must not be hijacked.
-          num=$(tea issues list --state open --output json \\
-                --fields index,body | python3 -c '
-          import json, sys
-          rows = json.load(sys.stdin)
-          for r in rows:
-              if "fr-acceptance-digest" in (r.get("body") or ""):
-                  print(r["index"])
-                  break
-          ')
-          if grep -q "No open acceptance debt." /tmp/digest.md; then
-            if [ -n "$num" ]; then
-              tea comments add "$num" "Acceptance debt cleared — closing."
-              tea issues close "$num"
-            fi
-          elif [ -n "$num" ]; then
-            tea issues edit "$num" --description "$(cat /tmp/digest.md)"
-          else
-            tea issues create --title "Acceptance debt" --description "$(cat /tmp/digest.md)"
-          fi
+      - name: Technical debt issue (weekly)
+        if: gitea.event_name == 'schedule' || inputs.debt
+        run: fr debt issue --yes
+      - name: Archive sweep PR (weekly)
+        if: gitea.event_name == 'schedule' || inputs.debt
+        env:
+          FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
+        run: fr debt archive-pr --yes
 """
 DEBT_STEP_GITLAB = """\
     - |
-      if [ "$CI_PIPELINE_SOURCE" = "schedule" ]; then
-        fr acceptance digest > /tmp/digest.md
-        # Idempotence keyed on the body marker `fr acceptance digest` emits.
-        iid=$(glab api "projects/:id/issues?search=fr-acceptance-digest&in=description" \\
-              | python3 -c '
-        import json, sys
-        rows = json.load(sys.stdin)
-        for r in rows:
-            if "fr-acceptance-digest" in (r.get("description") or ""):
-                print(r["iid"])
-                break
-        ')
-        if grep -q "No open acceptance debt." /tmp/digest.md; then
-          if [ -n "$iid" ]; then
-            glab api "projects/:id/issues/$iid" -X PUT -F state_event=close
-          fi
-        elif [ -n "$iid" ]; then
-          glab api "projects/:id/issues/$iid" -X PUT -F description=@/tmp/digest.md
-        else
-          glab api projects/:id/issues -F title="Acceptance debt" -F description=@/tmp/digest.md
-        fi
+      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "$DEBT" = "true" ]; then
+        fr debt issue --yes
+        fr debt archive-pr --yes
       fi
 """
 DEBT_STEP = {
@@ -384,18 +345,88 @@ WORKFLOW_TEMPLATES = {
 }
 
 
-DEBT_PERMS = "  issues: write\n"
+DEBT_PERMS = "  issues: write\n  pull-requests: write\n"
+_DISPATCH = "  workflow_dispatch:\n"
+_DISPATCH_DEBT = (
+    "  workflow_dispatch:\n    inputs:\n      debt:\n"
+    "        description: Run the technical-debt steps now\n"
+    "        type: boolean\n        default: false\n"
+)
+_CHECKOUT_DEBT = {
+    "github-actions": "        with:\n          fetch-depth: 0\n"
+    "          token: ${{ secrets.FR_DEBT_TOKEN || github.token }}\n",
+    "gitea-actions": "        with:\n          fetch-depth: 0\n",
+}
 
 
 def render_workflow(ci_type: str, *, debt: bool) -> str:
-    """The scaffolded pipeline for `ci_type`, with or without the debt step
-    (and the `issues: write` permission only that step needs)."""
+    """The scaffolded pipeline for `ci_type`, with or without the debt steps
+    (and what only they need: `issues`/`pull-requests`/`contents: write`, full
+    history, and the `debt` dispatch input)."""
     text = WORKFLOW_TEMPLATES[ci_type]
+    if debt:
+        if ci_type == "gitlab-ci":
+            text = text.replace(
+                "  image: python:3.12\n", '  image: python:3.12\n  variables:\n    GIT_DEPTH: "0"\n'
+            )
+        else:
+            text = text.replace(_DISPATCH, _DISPATCH_DEBT)
+            text = text.replace("  contents: read\n", "  contents: write\n")
+            text = re.sub(
+                r"(      - uses: actions/checkout@[^\n]*\n)",
+                lambda m: m.group(1) + _CHECKOUT_DEBT[ci_type],
+                text,
+                count=1,
+            )
     return (
         text.replace("@@DEBT_PERMS@@", DEBT_PERMS if debt else "")
         .replace("@@DEBT_COMMENT@@", DEBT_COMMENT[ci_type] if debt else "")
         .replace("@@DEBT_STEP@@", DEBT_STEP[ci_type] if debt else "")
     )
+
+
+@dataclass(frozen=True)
+class RefreshOutcome:
+    """What `fr acceptance init --refresh-ci` did, or why it did not."""
+
+    status: str  # rewritten | current | foreign | missing | paste
+    path: str
+    text: str = ""
+    """For `paste` (GitLab): the exact job to paste over the existing one."""
+
+
+_FR_STEP = re.compile(r"fr acceptance digest|fr debt issue")
+
+
+def refresh_ci(root: Path, ci_type: str, *, debt: bool) -> RefreshOutcome:
+    """Bring an fr-scaffolded pipeline up to the current scaffold (R13).
+
+    GitHub and Gitea files are recognised by their `name: acceptance-report`
+    header plus an `fr acceptance digest` or `fr debt issue` step, and rewritten
+    whole; a file without both is someone else's and is never touched. GitLab's
+    `.gitlab-ci.yml` is shared by every job in the repo, so it is never
+    rewritten: the current job is returned to paste."""
+    from fr.acceptance.ci import SCAFFOLD_PATHS
+
+    rel = SCAFFOLD_PATHS[ci_type]
+    path = root / rel
+    if not path.is_file():
+        return RefreshOutcome("missing", rel)
+    current = path.read_text()
+    fresh = render_workflow(ci_type, debt=debt)
+    if ci_type == "gitlab-ci":
+        if not re.search(r"^acceptance-report:\s*$", current, re.MULTILINE):
+            return RefreshOutcome("foreign", rel)
+        job = fresh[fresh.index("acceptance-report:") :]
+        return RefreshOutcome("paste", rel, job)
+    if not re.search(
+        r"^name:\s*acceptance-report\s*$", current, re.MULTILINE
+    ) or not _FR_STEP.search(current):
+        return RefreshOutcome("foreign", rel)
+    if current == fresh:
+        return RefreshOutcome("current", rel)
+    path.write_text(fresh)
+    return RefreshOutcome("rewritten", rel)
 
 
 # The matrix header's gate line, and the rule's CI bullet. GitHub's wording is
@@ -409,8 +440,8 @@ _CI_BULLET_GITHUB = """\
 _CI_BULLET = """\
 - CI: the acceptance job in `{path}` runs `fr acceptance check` on every
   pipeline{debt}."""
-_DEBT_TAIL_GITHUB = ', and upserts the weekly "Acceptance debt" issue'
-_DEBT_TAIL = ' and upserts the weekly "Acceptance debt" issue'
+_DEBT_TAIL_GITHUB = ', and upserts the weekly "Technical debt" issue'
+_DEBT_TAIL = ' and upserts the weekly "Technical debt" issue'
 _NO_CI_BULLET = """\
 - CI: none is configured. `fr acceptance check` runs locally, and no row may
   move to `ci` until the repo has a CI config (`fr acceptance init --with-ci`
@@ -517,7 +548,7 @@ def init(
         write_if_missing(scaffold_path, render_workflow(ci_type, debt=debt))
         if not debt:
             notices.append(
-                f'no debt  the weekly "Acceptance debt" issue step is omitted from '
+                f'no debt  the weekly "Technical debt" steps are omitted from '
                 f"{scaffold_path} — tracking is {tracking_type!r}, not the {ci_type} platform's "
                 f"own ({DEBT_PLATFORM[ci_type]}); see `fr services`"
             )

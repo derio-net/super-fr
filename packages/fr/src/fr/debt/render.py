@@ -14,7 +14,7 @@ import re
 from typing import Any
 
 from fr.acceptance.model import DEBT_STATUSES
-from fr.debt.model import AcceptanceDebt, DebtReport
+from fr.debt.model import AcceptanceDebt, DebtReport, SourceStatus
 
 MARKER = "<!-- fr-technical-debt -->"
 FIGURES_PREFIX = "<!-- fr-debt-figures:"
@@ -22,6 +22,43 @@ ROW_LIMIT = 50
 BODY_LIMIT = 60000
 CELL_LIMIT = 200
 _FIGURES_RE = re.compile(r"<!-- fr-debt-figures:([A-Za-z0-9+/=]*) -->")
+
+
+_URL_CREDS = re.compile(r"(?<=://)[^/\s@]+@")
+_TOKENS = re.compile(
+    r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{10,})"
+)
+_HOME = re.compile(r"(?:/Users|/home)/[^/\s]+")
+
+
+def redact(text: str) -> str:
+    """*text* with URL credentials, token-shaped strings and home paths removed.
+    Applied to everything fr echoes from a forge or a subprocess, and to every
+    cell published in a body."""
+    text = _URL_CREDS.sub("***@", text)
+    text = _TOKENS.sub("***", text)
+    return _HOME.sub("~", text)
+
+
+def source_category(name: str, st: SourceStatus) -> str:
+    """The fixed, publishable category of a source's state. The detailed reason
+    stays in `fr debt`'s terminal output and the CI log, never in a body."""
+    why = st.why.lower()
+    if st.state == "unavailable":
+        if "offline" in why:
+            return "offline"
+        if "tracking" in why:
+            return "tracking none"
+        if name == "matrix":
+            return "matrix unreadable"
+        return "forge error" if name == "forge" else f"{name} unavailable"
+    if "fetch failed" in why:
+        return "fetch failed"
+    if "partial" in why:
+        return "partial: listing cap reached"
+    if "unreadable" in why:
+        return "unreadable, skipped"
+    return "see `fr debt`"
 
 
 def figures(report: DebtReport) -> dict[str, Any]:
@@ -62,7 +99,7 @@ def _encode(report: DebtReport) -> str:
 
 
 def _cell(s: str) -> str:
-    s = " ".join((s or "").split()).replace("|", "\\|").replace("<", "&lt;")
+    s = redact(" ".join((s or "").split())).replace("|", "\\|").replace("<", "&lt;")
     return s if len(s) <= CELL_LIMIT else s[: CELL_LIMIT - 1] + "…"
 
 
@@ -152,12 +189,16 @@ def markdown(report: DebtReport) -> str:
     """The `<repo>: Technical debt` issue body (R9, R11); under 60,000 chars."""
     lines = [f"# Technical debt ({report.generated_at[:10]})", ""]
     unavailable = [
-        f"{k}: {_cell(v.why)}" for k, v in report.sources.items() if v.state == "unavailable"
+        f"{k}: {source_category(k, v)}"
+        for k, v in report.sources.items()
+        if v.state == "unavailable"
     ]
     if unavailable:
         lines += ["Unavailable sources: " + "; ".join(unavailable), ""]
     partial = [
-        f"{k}: {_cell(v.why)}" for k, v in report.sources.items() if v.state == "read" and v.why
+        f"{k}: {source_category(k, v)}"
+        for k, v in report.sources.items()
+        if v.state == "read" and v.why
     ]
     if partial:
         lines += ["Notes: " + "; ".join(partial), ""]
@@ -179,7 +220,7 @@ def text(report: DebtReport) -> str:
     out = [f"Technical debt — {report.debt_total()} item(s), generated {report.generated_at}", ""]
     for name, st in report.sources.items():
         if st.state == "unavailable":
-            out.append(f"! {name} unavailable: {st.why}")
+            out.append(f"! {name} unavailable: {redact(st.why)}")
     out.append("Acceptance:")
     if not acc.available:
         out.append("  unavailable (the matrix could not be read)")

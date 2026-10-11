@@ -81,7 +81,7 @@ def test_init_with_ci_flag_scaffolds_the_pipeline(
     root = _repo(tmp_path)
     result = _invoke(root, monkeypatch, "init", "--with-ci")
     assert result.exit_code == 0, result.output
-    assert "glab " in (root / ".gitlab-ci.yml").read_text()
+    assert "fr debt issue --yes" in (root / ".gitlab-ci.yml").read_text()
 
 
 def test_init_scaffolds_the_workflow_beside_an_existing_github_ci(tmp_path: Path) -> None:

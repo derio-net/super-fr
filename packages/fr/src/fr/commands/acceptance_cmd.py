@@ -6,6 +6,7 @@ Spec: docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md §4.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -778,6 +779,13 @@ def init_cmd(
         help="Scaffold the CI workflow even though the repo has no CI config for its "
         "backend yet (by default one is written only beside existing CI).",
     ),
+    refresh_ci: bool = typer.Option(
+        False,
+        "--refresh-ci",
+        help="Rewrite an existing fr-scaffolded GitHub/Gitea workflow to the current "
+        "scaffold (a file that is not fr's is refused). For GitLab, whose "
+        ".gitlab-ci.yml is shared, print the job to paste instead.",
+    ),
 ) -> None:
     """Scaffold matrix + CI workflow + backfill rule + gitignore (idempotent).
 
@@ -803,6 +811,9 @@ def init_cmd(
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     ci = services.ci
+    if refresh_ci:
+        _refresh_ci(root, services, with_ci=with_ci)
+        return
     if ci.source == "declared" and ci.type == "none":
         if with_ci:
             err_console.print(
@@ -845,6 +856,49 @@ def init_cmd(
     paths = _committable(root, outcome.written, outcome.removed)
     if paths:
         commit_records(root, [Path(rel) for rel in paths], "chore(fr): acceptance init")
+
+
+def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
+    """`init --refresh-ci`: exit 0 rewritten/current, 1 refused (foreign file,
+    nothing to refresh, or GitLab's shared file with the job to paste)."""
+    from fr.acceptance.ci import DEBT_PLATFORM, SCAFFOLD_PATHS
+    from fr.acceptance.scaffold import refresh_ci
+    from fr.records_commit import commit_records
+
+    if with_ci:
+        err_console.print("[red]error:[/red] --refresh-ci takes no --with-ci")
+        raise typer.Exit(2)
+    ci_type = services.ci.type
+    if ci_type not in SCAFFOLD_PATHS:
+        err_console.print(
+            f"[red]error:[/red] this repo's ci service is {ci_type!r}: nothing to refresh"
+        )
+        raise typer.Exit(1)
+    debt = services.tracking.type == DEBT_PLATFORM[ci_type]
+    out = refresh_ci(root, ci_type, debt=debt)
+    if out.status == "missing":
+        err_console.print(f"[red]error:[/red] {out.path} does not exist; run `fr acceptance init`")
+        raise typer.Exit(1)
+    if out.status == "foreign":
+        err_console.print(
+            f"[red]error:[/red] {out.path} is not an fr-scaffolded acceptance pipeline; "
+            "not touching it"
+        )
+        raise typer.Exit(1)
+    if out.status == "paste":
+        typer.echo(
+            f"{out.path} is shared by every job in the repo, so fr will not rewrite it. "
+            "Replace the `acceptance-report:` job with this one (keep `acceptance` in `stages:`):\n"
+        )
+        typer.echo(out.text)
+        raise typer.Exit(1)
+    if out.status == "current":
+        typer.echo(f"{out.path} is already current")
+        return
+    typer.echo(
+        f"rewrote {out.path} to the current scaffold (review the diff: local edits are replaced)"
+    )
+    commit_records(root, [Path(out.path)], "chore(fr): acceptance init --refresh-ci")
 
 
 def _committable(root: Path, written: list[str], removed: list[str]) -> list[str]:

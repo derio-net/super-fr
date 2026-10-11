@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field
 
 from fr.debt.model import ArchivablePlan, DebtReport
+from fr.debt.render import redact
 
 BRANCH = "chore/debt-archive-sweep"
 PR_TITLE = "chore: archive merged plans (debt sweep)"
@@ -65,9 +66,10 @@ def pr_body(sweep: Sweep, *, stale_days: int, own_token: bool) -> str:
     if sweep.held:
         lines += ["", f"## {HELD_REASON}", ""]
         for p, why in sweep.held:
-            lines += [f"- `{p.name}`", "", "  ```", *[f"  {ln}" for ln in why], "  ```"]
+            lines += [f"- `{p.name}`", "", "  ```", *[f"  {redact(ln)}" for ln in why], "  ```"]
     if sweep.failed:
         lines += ["", "## Not archived", ""]
-        lines += [f"- `{p.name}`: {' '.join(why.split())[:300]}" for p, why in sweep.failed]
+        # Fixed text: the detail (stderr) stays in the job log, never in a body.
+        lines += [f"- `{p.name}`: `fr archive` refused (see the job log)" for p, _ in sweep.failed]
     lines += ["", token_note(own_token=own_token), "", MARKER]
     return "\n".join(lines)

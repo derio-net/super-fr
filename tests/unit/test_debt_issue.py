@@ -202,3 +202,47 @@ def test_the_bot_authored_legacy_issue_is_renamed(env: tuple[Gh, dict]) -> None:
     assert runner.invoke(app, ["debt", "issue", "--yes"]).exit_code == 0
     assert gh.issue_titles[(SLUG, 363)] == "widgets: Technical debt"
     assert _mutations(gh) == ["edit_issue"]
+
+
+SECRET = "https://x-access-token:SECRET@github.com/o/r.git"
+
+
+def test_an_error_source_shows_only_its_category_in_the_body() -> None:
+    report = DebtReport(
+        acceptance=AcceptanceDebt(by_status={"ci": 1}),
+        sources={
+            "forge": SourceStatus(
+                state="unavailable", why=f"fatal: {SECRET} /Users/me/x ghp_" + "a" * 30
+            ),
+            "git": SourceStatus(state="read", why=f"local ref; fetch failed: {SECRET}"),
+        },
+        generated_at="2026-10-11T00:00:00+00:00",
+    )
+    body = render.markdown(report)
+    assert "forge: forge error" in body and "git: fetch failed" in body
+    for leak in ("SECRET", "x-access-token", "/Users/me", "ghp_"):
+        assert leak not in body
+
+
+def test_redact_removes_credentials_tokens_and_home_paths() -> None:
+    out = render.redact(
+        f"{SECRET} glpat-abcdefghij1234 github_pat_{'b' * 25} gho_{'c' * 25} /home/ann/repo"
+    )
+    assert "SECRET" not in out and "glpat" not in out and "github_pat" not in out
+    assert "gho_" not in out and "/home/ann" not in out and "~/repo" in out
+    assert "https://***@github.com" in out
+
+
+def test_a_forge_error_carrying_a_credential_url_is_redacted_on_the_terminal(
+    env: tuple[Gh, dict],
+) -> None:
+    from tests.unit.fakes import FakeGhError
+
+    gh, _ = env
+
+    def boom(*a: object, **k: object) -> None:
+        raise FakeGhError(f"cannot reach {SECRET}")
+
+    gh.create_issue = boom  # type: ignore[method-assign]
+    r = runner.invoke(app, ["debt", "issue", "--yes"])
+    assert r.exit_code == 1 and "SECRET" not in r.output and "***@" in r.output

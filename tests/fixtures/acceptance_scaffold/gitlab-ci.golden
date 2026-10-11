@@ -3,7 +3,8 @@
 # - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as
 #   warnings; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - The built report is kept as a pipeline artifact.
-# - The weekly (scheduled) run upserts one "Acceptance debt" issue.
+# - The weekly (scheduled) run upserts one "<repo>: Technical debt" issue and
+#   refreshes a draft PR archiving long-merged plans.
 # - No step-summary equivalent — GitLab CI has none (see module comment).
 # Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
 # check` warns and verifies them on local runs, where siblings exist.
@@ -17,6 +18,8 @@ stages:
 acceptance-report:
   stage: acceptance
   image: python:3.12
+  variables:
+    GIT_DEPTH: "0"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "push"
@@ -30,27 +33,9 @@ acceptance-report:
     - fr acceptance check
     - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA"
     - |
-      if [ "$CI_PIPELINE_SOURCE" = "schedule" ]; then
-        fr acceptance digest > /tmp/digest.md
-        # Idempotence keyed on the body marker `fr acceptance digest` emits.
-        iid=$(glab api "projects/:id/issues?search=fr-acceptance-digest&in=description" \
-              | python3 -c '
-        import json, sys
-        rows = json.load(sys.stdin)
-        for r in rows:
-            if "fr-acceptance-digest" in (r.get("description") or ""):
-                print(r["iid"])
-                break
-        ')
-        if grep -q "No open acceptance debt." /tmp/digest.md; then
-          if [ -n "$iid" ]; then
-            glab api "projects/:id/issues/$iid" -X PUT -F state_event=close
-          fi
-        elif [ -n "$iid" ]; then
-          glab api "projects/:id/issues/$iid" -X PUT -F description=@/tmp/digest.md
-        else
-          glab api projects/:id/issues -F title="Acceptance debt" -F description=@/tmp/digest.md
-        fi
+      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "$DEBT" = "true" ]; then
+        fr debt issue --yes
+        fr debt archive-pr --yes
       fi
   artifacts:
     paths:
