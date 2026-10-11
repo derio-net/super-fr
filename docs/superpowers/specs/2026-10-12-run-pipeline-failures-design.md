@@ -77,8 +77,9 @@ R5. A verification strategy the spec names explicitly (a `strategy:` line, a
 per-row line, or a row's `verify:`) whose install program the repo cannot run
 is an error in `fr plan self-review`, and a warning printed by the
 `brainstorm` resolve that emits the spec — naming the strategy, the missing
-program and the two fixes (`strategy: none` / per-row `none`, or add the
-executable).
+program, every source naming it, and the fix for that source (`strategy: none` /
+per-row `none`; for a row's own `verify:`, which outranks the spec's lines,
+`fr acceptance set-status --verify none`; or add the executable).
 
 R6. A malformed `strategy:` line's error shows the accepted form:
 `strategy: <name>` alone, with reasons on the per-row lines.
@@ -184,8 +185,10 @@ def unrunnable_strategies(
 in `fr/verification/rows.py` returns one message per distinct strategy named
 explicitly — the section's `strategy:`, a per-row line, or a `verify:` of a
 row in `rows` — that resolves and has an `install_problem`. Each message names
-the strategy, the problem and both fixes (`strategy: none` or a per-row `none`
-line with a reason; or add the executable). It never consults the shape
+the strategy, the problem, every source naming it (section line, per-row
+line, a row's `verify:`) and that source's fix (`strategy: none` or a per-row
+`none` line with a reason; `--verify none` for a row's own `verify:`; or add
+the executable). It never consults the shape
 default (R4 handles that) and needs no plan. Callers:
 
 - `_verification_issues` passes the rows citing the spec and turns each

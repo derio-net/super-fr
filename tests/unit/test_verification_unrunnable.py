@@ -208,3 +208,183 @@ def test_a_malformed_strategy_line_shows_the_accepted_form() -> None:
     assert "strategy: <name>" in msg
     assert "- <row-id>: <strategy|none> — <reason>" in msg
     assert "line" in msg
+
+
+# --- review findings (phase 2) ---------------------------------------------------
+
+
+def test_p2_r1_a_per_row_line_alone_is_flagged_and_names_its_row(tmp_path: Path) -> None:
+    section = parse_section("## Verification\n\n- a: candidate — x\n")
+    assert isinstance(section, Section) and section.strategy is None
+    (msg,) = unrunnable_strategies(tmp_path, section, [])
+    assert "candidate" in msg and "`- a:` line" in msg
+    assert "- <row-id>: none" in msg and "set-status" not in msg
+    assert "`strategy: none`" not in msg
+
+
+def test_p2_r1_a_rows_verify_alone_is_flagged_and_names_the_row_and_the_fix(
+    tmp_path: Path,
+) -> None:
+    from fr.acceptance.model import Row
+
+    section = parse_section("## Verification\n\n- b: none — covered\n")
+    assert isinstance(section, Section) and section.strategy is None
+    rows = [Row.model_validate({**row("docs/spec.md", rid="c", verify="candidate")})]
+    (msg,) = unrunnable_strategies(tmp_path, section, rows)
+    assert "row `c`'s own `verify:`" in msg
+    assert "--verify none" in msg and "outranks" in msg
+    assert "`strategy: none`" not in msg
+
+
+def test_p2_r1_self_review_flags_a_per_row_line_with_no_strategy_line(tmp_path: Path) -> None:
+    from tests.unit.test_plan_self_review_verification import _row, _setup
+
+    errors = _setup(
+        tmp_path,
+        "- c: candidate — x\n",
+        [_row("c", "    scenario: s.sh\n")],
+        install=False,
+    )
+    assert any("candidate" in e and ".fr/candidate-install" in e for e in errors), errors
+
+
+def _shape_default_plan(tmp_path: Path, install: bool):
+    """A fr-goal plan whose spec section has no `strategy:` line and one row
+    with neither a per-row line nor a scenario."""
+    from fr.parser import parse as parse_plan
+
+    from tests.unit.test_plan_acceptance_links import _create_plan, _repo
+    from tests.unit.test_plan_self_review_verification import SPEC_REL, _row
+
+    repo = _repo(tmp_path, matrix=True)
+    if install:
+        _install(repo)
+    other = _row("other")
+    (repo / "docs" / "acceptance" / "matrix.yaml").write_text(
+        "schema_version: 4\norg: derio-net\nrepo: own\nrows:\n" + other + _row("c")
+    )
+    (repo / SPEC_REL).write_text(
+        "# Toy\n\n## Requirements\n\nR1. x\n\n## Verification\n\n- other: none — covered\n\n"
+        "## Implementation Plans\n\n| Plan | Repo | File | Depends on |\n|--|--|--|--|\n"
+    )
+    plan_dir = _create_plan(repo)
+    with (plan_dir / "_meta.yaml").open("a") as f:
+        f.write("workflow: fr-goal\n")
+    return repo, parse_plan(plan_dir)
+
+
+def test_p2_r3_self_review_binds_the_shape_default_only_when_the_repo_can_run_it(
+    tmp_path: Path,
+) -> None:
+    from fr.plan_ops import self_review
+
+    def scenario_errors(sub: str, install: bool) -> list[str]:
+        _, plan = _shape_default_plan(tmp_path / sub, install)
+        return [
+            i.message
+            for i in self_review(plan)
+            if i.severity == "error" and "scenario" in i.message.lower()
+        ]
+
+    assert scenario_errors("no", install=False) == []
+    assert any("row `c`" in m for m in scenario_errors("yes", install=True))
+
+
+def test_p2_r3_visual_verification_binds_the_shape_default_like_self_review(
+    tmp_path: Path,
+) -> None:
+    from fr.run.visual import _verification
+
+    from tests.unit.test_plan_self_review_verification import SPEC_REL
+
+    repo, plan = _shape_default_plan(tmp_path / "a", install=False)
+    assert _verification(repo, SPEC_REL, plan).shape_default is None
+    repo, plan = _shape_default_plan(tmp_path / "b", install=True)
+    assert _verification(repo, SPEC_REL, plan).shape_default == "candidate"
+
+
+def test_p2_r4_a_non_utf8_spec_never_fails_the_resolve(tmp_path: Path) -> None:
+    from fr.commands.run_cmd import _unrunnable_spec_warnings
+
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs/spec.md").write_bytes(b"# spec\n\n## Verification\n\n\xff\xfe\n")
+    assert _unrunnable_spec_warnings(tmp_path, "docs/spec.md") == []
+
+
+def _brainstorm_root(tmp_path: Path, spec_body: str):
+    from tests.integration.test_fr_goal_shape import _workspace
+
+    root = _workspace(tmp_path, "feat/unrun")
+    spec_rel = "docs/spec.md"
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / spec_rel).write_bytes(spec_body.encode("utf-8", "surrogateescape"))
+    seed_requirements(root, spec_rel)
+    (root / spec_rel).write_bytes(spec_body.encode("utf-8", "surrogateescape"))
+    commit_all(root, "spec")
+    for argv in (
+        ["run", "start", "fr-goal", "--branch", "feat/unrun", "--run-id", RUN],
+        ["run", "advance", RUN],
+    ):
+        out = fr(root, argv)
+        assert out.exit_code == 0, (argv, out.output)
+    return root, spec_rel
+
+
+def test_p2_r4_a_spec_that_cannot_be_decoded_still_resolves_and_advances(
+    tmp_path: Path,
+) -> None:
+    root, spec_rel = _brainstorm_root(
+        tmp_path, "# spec\n\n## Verification\n\nstrategy: candidate\n"
+    )
+    record = write_record(
+        root,
+        {
+            "schema_version": __import__("fr.record.model", fromlist=["x"]).RECORD_SCHEMA_VERSION,
+            "run": RUN,
+            "step": "brainstorm",
+            "outcome": "done",
+            "emitted": {"spec": spec_rel},
+            "evidence": {"answered_by": "agent"},
+        },
+    )
+    import fr.verification.rows as rows_mod
+
+    orig = rows_mod.spec_section_at
+
+    def boom(*a, **k):
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    rows_mod.spec_section_at = boom
+    try:
+        out = fr(root, ["run", "resolve", RUN, "--step", "brainstorm", "--record", str(record)])
+    finally:
+        rows_mod.spec_section_at = orig
+    assert out.exit_code == 0, out.output
+    assert "warning:" not in out.output
+    status = fr(root, ["run", "status", RUN])
+    assert "brainstorm" in status.output and status.exit_code == 0
+
+
+def test_p2_r5_the_flag_form_resolve_prints_the_same_warning(tmp_path: Path) -> None:
+    root, spec_rel = _brainstorm_root(
+        tmp_path, "# spec\n\n## Verification\n\nstrategy: candidate\n"
+    )
+    out = fr(
+        root,
+        [
+            "run",
+            "resolve",
+            RUN,
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            f"spec={spec_rel}",
+            "--answered-by",
+            "agent",
+        ],
+    )
+    assert out.exit_code == 0, out.output
+    assert "warning:" in out.output and "candidate" in out.output
+    assert "strategy: none" in out.output

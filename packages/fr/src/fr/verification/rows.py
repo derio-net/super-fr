@@ -79,19 +79,25 @@ def spec_verification(
     return SpecVerification(repo_root, spec_section_at(repo_root, spec_rel), shape_default)
 
 
+def raw_shape_default(repo_root: Path, state: RunState) -> str | None:
+    """The run's workflow shape's declared default strategy, BEFORE the
+    `effective_shape_default` filter (`None` when it declares none)."""
+    from fr.workflow.model import WorkflowError
+    from fr.workflow.resolve import resolve_workflow
+
+    try:
+        return resolve_workflow(state.workflow.partition("@")[0], repo_root).verification
+    except (WorkflowError, OSError):
+        return None
+
+
 def shape_default(repo_root: Path, state: RunState) -> str | None:
     """The run's workflow shape's default strategy, or `None` when the shape
     does not resolve or declares none, or when the repo cannot run it
     (`effective_shape_default`)."""
     from fr.verification.effective import effective_shape_default
-    from fr.workflow.model import WorkflowError
-    from fr.workflow.resolve import resolve_workflow
 
-    try:
-        name = resolve_workflow(state.workflow.partition("@")[0], repo_root).verification
-        return effective_shape_default(name, repo_root)
-    except (WorkflowError, OSError):
-        return None
+    return effective_shape_default(raw_shape_default(repo_root, state), repo_root)
 
 
 def run_verification(repo_root: Path, state: RunState) -> tuple[str | None, SpecVerification]:
@@ -110,21 +116,40 @@ def unrunnable_strategies(repo_root: Path, section: Section, rows: Sequence[Row]
     that resolves and whose install program the repo cannot run (spec
     2026-10-12 §B, R5). Never consults the shape default (R4 drops that) and
     needs no plan; an unresolvable name is another check's to report."""
-    named: list[str] = []
-    candidates = [section.strategy, *(line.strategy for line in section.rows.values())]
-    candidates += [r.verify for r in rows]
-    for name in candidates:
-        if name and name != RESERVED and name not in named:
-            named.append(name)
+    sources: dict[str, list[tuple[str, str]]] = {}
+
+    def add(name: str | None, kind: str, where: str) -> None:
+        if name and name != RESERVED and (kind, where) not in sources.setdefault(name, []):
+            sources[name].append((kind, where))
+
+    add(section.strategy, "section", "the section's `strategy:` line")
+    for rid, line in section.rows.items():
+        add(line.strategy, "line", f"the `- {rid}:` line")
+    for r in rows:
+        add(r.verify, "verify", f"row `{r.id}`'s own `verify:`")
     out: list[str] = []
-    for name in named:
+    for name, named_by in sources.items():
         try:
             problem = install_problem(resolve_strategy(name, repo_root), repo_root)
         except StrategyError:
             continue
-        if problem is not None:
-            out.append(
-                f"{problem}. Either say the spec does not need it — `strategy: none`, or "
-                "a per-row `- <row-id>: none — <reason>` line — or add the executable"
+        if problem is None:
+            continue
+        where = "; ".join(w for _, w in named_by)
+        fixes: list[str] = []
+        if any(k == "section" for k, _ in named_by):
+            fixes.append("`strategy: none`")
+        if any(k in ("section", "line") for k, _ in named_by):
+            fixes.append("a per-row `- <row-id>: none — <reason>` line")
+        verify_rows = [w for k, w in named_by if k == "verify"]
+        if verify_rows:
+            fixes.append(
+                "for the row(s) naming it in `verify:`, which outranks the spec's lines, "
+                "`fr acceptance set-status --id <row> --status <status> --notes <why> "
+                "--verify none`"
             )
+        out.append(
+            f"{problem} (named by {where}). Either say it does not need it — "
+            f"{', or '.join(fixes)} — or add the executable"
+        )
     return out

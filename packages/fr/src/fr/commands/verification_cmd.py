@@ -119,7 +119,8 @@ def walk_cmd(
     from fr.requirements import load_spec_matrix
     from fr.run.code_tree import code_tree, dirty_code_paths
     from fr.run.model import RunStateError, load_run_state
-    from fr.verification.rows import run_verification
+    from fr.verification.effective import install_problem
+    from fr.verification.rows import raw_shape_default, run_verification
     from fr.verification.spec_section import SectionError
     from fr.verification.walk import WalkError, plan_rows, run_walk
 
@@ -141,6 +142,18 @@ def walk_cmd(
             or verification.shape_default
         )
         if name is None:
+            raw = raw_shape_default(repo_root, state)
+            if raw is not None:
+                try:
+                    problem = install_problem(resolve_strategy(raw, repo_root), repo_root)
+                except StrategyError:
+                    problem = None
+                if problem is not None:
+                    raise refuse(
+                        f"the workflow's default strategy {raw!r} does not apply: {problem}. "
+                        "Say the spec needs no walk — per-row `- <row-id>: none — <reason>` "
+                        "lines or `strategy: none` — or add the executable"
+                    )
             raise refuse(
                 f"run {run!r} names no strategy — give --strategy or add a "
                 "`strategy:` line to the spec's `## Verification`"
