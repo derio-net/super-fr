@@ -151,3 +151,7 @@ strategy: none
 - Detecting a looping driver on another host of a scope with no state repo (invisible to this host).
 
 ## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-10-11-driver-resilience | `derio-net/super-fr` | `2026-10-11-driver-resilience` | — |

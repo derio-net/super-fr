@@ -1,0 +1,201 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Drive resilience — free-plan rulesets 403, unreadable-visibility retry, single-pass
+    guard
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - rest-rulesets-free-plan-403
+  - driver-unreadable-visibility-retries
+  - driver-once-dispatch-refused
+  tier: standard
+  files:
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/triage/privacy.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/unit/test_real_ghrestclient.py
+  - tests/unit/test_triage_privacy.py
+  - tests/unit/test_triage_batch_drive*.py
+  - tests/unit/test_triage_driver_pass.py
+  - tests/unit/test_triage_batch_single_pass.py
+  - tests/unit/test_triage_drive_visibility_retry.py
+  - docs/acceptance/*
+  - .changes/feat-batch-driver-resilience.yaml
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: '§C (R12, R13): the rules endpoint''s free-plan 403 means no rulesets'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_real_ghrestclient.py (reuse its fake `gh` run style), add:
+      (a) `branches/main` answers protection with contexts ["ci"], and `rules/branches/main` raises
+      GhError("gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)")
+      → required_check_names(repo, "main") == ["ci"];
+      (b) `rules/branches/main` raises GhError("gh: Resource not accessible by integration (HTTP 403)") → GhError raised;
+      (c) the rules route raising HostRefusedError → re-raised.
+      Run `uv run pytest tests/unit/test_real_ghrestclient.py -q --no-cov`; (a) fails.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/real_ghrestclient.py add a module constant
+      `FREE_PLAN_RULESETS_NOTICE = "Upgrade to GitHub Pro or make this repository public"` (comment: GitHub's
+      plan-upgrade message for rulesets on a private free-plan repo, super-fr#1135). In required_check_names,
+      wrap the `rules/branches/{b}` call: `except GhError as exc:` re-raise HostRefusedError and anything whose
+      text lacks both "HTTP 403" and the notice; otherwise use []. Re-run the tests: green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: keep the predicate as one small private helper (`_plan_lacks_rulesets(exc)`) if it reads better;
+      confirm tests/unit/test_github_rest_contract.py still passes.
+- number: 2
+  title: '§B (R8–R11): unreadable state-repo visibility skips the pass in loop mode'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_privacy.py: guard_state with a client whose repo_visibility raises →
+      raises VisibilityUnreadable, which is a PrivacyError; a public state repo with a private member key
+      still raises a PrivacyError that is NOT a VisibilityUnreadable (R10). Run: fails (no class).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/triage/privacy.py: add `class VisibilityUnreadable(PrivacyError)` with a docstring;
+      raise it in guard_state's unreadable branch and check_or_refuse's unknown-state-repo branch. Tests green.
+  - id: P1.T2.S3
+    text: |-
+      RED: new tests/unit/test_triage_drive_visibility_retry.py, built on the fixtures
+      tests/unit/test_triage_batch_drive_cmd.py already uses for a leased drive (read it first; reuse its
+      helpers rather than copying). Cases:
+      (a) loop mode `--yes`: the first take_lease's push hits a visibility client that raises (monkeypatch
+      triage_cmd.make_visibility_client), the second answers "private" → exactly one
+      "pass skipped, retrying every" warning, nothing pushed on the first pass, the second pass runs;
+      (b) the same failure at save_pass on pass 1, then readable → pass 2 pushes the state pass 1 left;
+      (c) `--once --yes` with an unreadable visibility → exit 2 with the unreadable message;
+      (d) the cloud pass (`fr triage drive pass`) with an unreadable visibility → exit 2;
+      (e) loop mode, save_pass unreadable on a pass that set driver.restart_to → _host_loop returns the restart
+      version (no sleep, no further pass);
+      (f) loop mode with a public state repo and a private member key → still ends the driver with exit 2 (R10).
+      Run: (a), (b), (e) fail.
+  - id: P1.T2.S4
+    text: |-
+      GREEN: packages/fr/src/fr/commands/triage_batch_cmd.py: in _Driver.take_lease and _Driver.save_pass catch
+      VisibilityUnreadable before the generic TriageError and `raise ForgeReadError(str(exc), code=2) from exc`.
+      In _host_loop's ForgeReadError branch (loop mode), after the once-per-message warning and before
+      `_sleep`, `if driver.restart_to is not None: return driver.restart_to`. Update ForgeReadError's docstring
+      to name the state repo's visibility. Tests green.
+  - id: P1.T2.S5
+    text: |-
+      REFACTOR: re-read the privacy module docstring (its "unreadable answer refuses" paragraph) and add one
+      sentence: a looping drive skips the pass and retries, nothing written; run
+      `uv run pytest tests/unit/test_triage_privacy.py tests/unit/test_triage_drive_visibility_retry.py -q --no-cov`.
+- number: 3
+  title: '§A (R1–R6): --once --yes that would dispatch refuses unless --single-pass'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: new tests/unit/test_triage_batch_single_pass.py — unit tests of a pure helper
+      `loop_command(...)` (name it in the test): batch ids, scope args, non-default --max-inflight/--interval/
+      --workspace-prefix/--keep-sessions, checkouts with absolute paths, `--yes`, never `--once`/`--single-pass`;
+      a single-repo scope with no --checkout prints `--checkout OWNER/REPO=<abs toplevel>`; and the notice text
+      names merges, close-outs, held dispatches and the board refresh, then the shlex-joined command. Fails.
+  - id: P1.T3.S2
+    text: |-
+      RED: same file, through batch_drive_command with the drive test fixtures: (a) `--once --yes` whose plan
+      dispatches → exit 2, the notice printed, no runner dispatch called, nothing merged, lease released;
+      (b) the same with `--single-pass` → dispatched, ends with a `warning:` line carrying the notice, exit code
+      as pass_exit; (c) `--once` without `--yes` → plan printed, exit unchanged; (d) `--once --yes` with no
+      dispatch in the plan (only a merge) → acts, no notice; (e) `--single-pass` without `--once` → exit 2
+      naming --once. Fails.
+  - id: P1.T3.S3
+    text: |-
+      GREEN: triage_batch_cmd.py — add the frozen dataclass `SinglePass(notice: str, allowed: bool)`, the pure
+      `loop_command` + notice builder (checkouts from `_checkout_map`), `--single-pass` option on
+      batch_drive_command (refuse without --once, before build_driver), `build_driver(..., single_pass:
+      SinglePass | None = None)` stored on `_Driver.single_pass`, memo `_Driver.planned_dispatch = False`.
+      In run_pass right after `plan = drive_pass(snap)`: when single_pass is set, set planned_dispatch iff any
+      action kind == "dispatch"; if planned_dispatch and not allowed: `self.release_lease()` then
+      `_fail(notice, code=2)`. In _host_loop's once branch, print the notice as a `warning:` when
+      planned_dispatch, before the exit. Never pass single_pass from triage_drive_cmd. Tests green.
+  - id: P1.T3.S4
+    text: |-
+      GREEN: run `uv run pytest tests/unit -q --no-cov -n auto -k "drive or driver or triage_batch"`; every
+      existing test that now exits 2 because its `--once --yes` plan dispatches gains `--single-pass` (and only
+      those); re-run until green.
+  - id: P1.T3.S5
+    text: |-
+      plugins/super-fr/skills/fr-triage/SKILL.md, driver paragraph, the `--once` sentence (stay at ≤120 lines —
+      edit the existing line): starting or dispatching waves means the looping driver (no `--once`);
+      `--once --yes` whose pass would dispatch refuses with the loop command unless `--single-pass` says the
+      single pass is deliberate. Then `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`; run the skill tripwires
+      (`uv run pytest tests/unit -q --no-cov -k "sync or skill"`).
+  - id: P1.T3.S6
+    text: |-
+      REFACTOR + gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src`; add the change fragment `.changes/feat-batch-driver-resilience.yaml`
+      (`bump: minor`, summary naming the three fixes); move the three rows to `ci` with
+      `fr acceptance set-status --id <row> --status ci --notes "<why>" --level unit=super-fr:<test path>#<test name>`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
