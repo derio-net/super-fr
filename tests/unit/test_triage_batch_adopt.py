@@ -746,6 +746,18 @@ def test_a_held_adoption_sends_the_hold_by_default(world: Any, old_pr: dict[str,
     assert runner.messages[0][1].splitlines()[-3:] == HOLD_LINES
 
 
+def test_the_stop_report_echoes_neither_flag_when_not_given(
+    world: Any, old_pr: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p1-r2: an always-echoed `--no-hold` would silently un-hold the re-run."""
+    _fail_at(world, "adopt", monkeypatch)
+    code, out = _adopt(world[0], *_args("--yes"))
+    assert code == 1, out
+    flat = " ".join(out.split())
+    assert "Re-run the same command" in flat
+    assert "--no-hold" not in flat and "--checkout" not in flat
+
+
 def test_the_stop_report_reruns_with_no_hold_and_checkout_when_given(
     world: Any, old_pr: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

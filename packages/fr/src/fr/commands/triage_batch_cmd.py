@@ -2114,8 +2114,9 @@ def adopt_batch(
             _fail(
                 f"adopt stopped at: {what}: {detail}. Done: {'; '.join(done) or 'nothing'}. "
                 f"Still remain: {'; '.join(remaining)}. Re-run the same command to finish: "
-                f"`fr triage batch adopt {batch.id} --tab {tab} --branch {old}"
-                f"{f' --checkout {checkout_path}' if checkout_path else ''}"
+                f"`fr triage batch adopt {shlex.quote(batch.id)} --tab {shlex.quote(tab)} "
+                f"--branch {shlex.quote(old)}"
+                f"{f' --checkout {shlex.quote(str(checkout_path))}' if checkout_path else ''}"
                 f"{'' if hold else ' --no-hold'} --yes`",
                 code=1,
             )
