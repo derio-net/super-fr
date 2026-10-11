@@ -1,0 +1,44 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-adopt-safety-2
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T4.S1, P2.T4.S2]
+refactor:
+  P2.T1: "three small read methods, each one git call in the main worktree; nothing duplicated to clean"
+  P2.T2: "the seam's five functions are thin wrappers over sessions/types; the one duplication it would have caused (the default worktree path) was extracted at once as types.default_worktree_path, now used by local.py's _worktree_up_core too"
+  P2.T3: "RED-only task (tests added); nothing to clean"
+journal:
+  - kind: decision
+    id: p2-reusable-workspace-takes-ahead
+    phase: 2
+    title: reusable_workspace takes the caller's ahead count instead of running git
+    body: >-
+      The spec gives `reusable_workspace(repo_root, branch, session_id)`. It now takes a
+      keyword `ahead: int`: the command computes it with the new `Checkout.ahead` (the max
+      of the local branch and `origin/<branch>` against `origin/<default>`), so
+      `fr.isolation.adopt` runs no git and never imports `fr.triage.gitseam`, and the git
+      read stays in the seam the spec names for it.
+  - kind: decision
+    id: p2-two-extra-seam-reads
+    phase: 2
+    title: adopt.workspace_path and Checkout.current_branch added beyond the plan's list
+    body: >-
+      The plan prints the workspace path before `--yes`, so `fr.isolation.adopt` gains
+      `workspace_path(repo_root, branch)` (the recorded worktree, else
+      `types.default_worktree_path`, which `local.py` now also uses), and
+      `_ISOLATION_ALLOWED` admits it with the other three adopt imports. R7's first
+      refusal names the branch the base clone is on, read by a new
+      `Checkout.current_branch()` (None when detached), which phase 3's listing can reuse.
+      Both have unit tests.
+  - kind: discovery
+    id: p2-default-refusal-test-retired
+    phase: 2
+    title: the old default-branch refusal test was removed and its matrix anchor re-pointed
+    body: >-
+      `test_triage_batch_adopt.py::test_the_default_branch_is_refused` pinned the
+      behaviour R5 replaces. It is deleted; row `triage-batch-adopt-refusals` now cites
+      `test_triage_batch_adopt_default.py#test_the_base_clone_is_left_untouched` (via
+      `fr acceptance set-status --drop-level/--level`), and `fr acceptance check` passes.
+resolves: []
+evidence: {tests: ci}
