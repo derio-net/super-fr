@@ -1576,8 +1576,10 @@ def test_a_head_that_moves_after_the_snapshot_is_not_merged(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch, required: bool,
 ) -> None:  # fmt: skip
-    """rg-2: the merge is pinned to the head whose checks were judged."""
+    """rg-2: the merge is pinned to the head whose checks were judged. Here the move is
+    fr's own update (recorded), so the train waits for it (p1-r10)."""
     _pr_open(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-101", "sha-pushed")
     if not required:
         world.checks[101] = []
     views: list[int] = []
@@ -2349,6 +2351,21 @@ def train(monkeypatch: pytest.MonkeyPatch) -> ScriptedMerge:
     return fake
 
 
+def _fr_moved(tmp_path: Path, bid: str, pr: int, before: str, after: str) -> None:
+    """Record, on *bid*, the operator's approval at *before* and fr's own update from it
+    to *after* (merge-train-safety §B): a head that moves there is fr's move."""
+    path = tmp_path / "judgements.yaml"
+    text = path.read_text("utf-8").replace("schema: 3\n", "schema: 9\n", 1)
+    marker = f"branch: feat/batch-{bid}}}\n"
+    extra = (
+        f"      - {{kind: approval, at: 2026-10-01T10:30:00Z, pr: {pr}, head: {before}}}\n"
+        f"      - {{kind: update, at: 2026-10-01T10:40:00Z, pr: {pr}, head_before: {before}, "
+        f"head_after: {after}, base: m1}}\n"
+    )
+    assert marker in text
+    path.write_text(text.replace(marker, marker + extra, 1), "utf-8")
+
+
 def _three_ready(world: World, tmp_path: Path) -> None:
     batches = []
     for i in (1, 2, 3):
@@ -2445,6 +2462,7 @@ def test_a_head_moved_since_the_checks_were_judged_stops_the_train(
     train: ScriptedMerge, monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
     _three_ready(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-101", "sha-pushed")  # fr's own move (p1-r10)
     seen: list[int] = []
     real_view = world.pr_view
 
@@ -2464,7 +2482,7 @@ def test_a_head_moved_since_the_checks_were_judged_stops_the_train(
     ]
 
 
-@pytest.mark.parametrize("outcome", ["failing", "draft", "unapproved", "unready"])
+@pytest.mark.parametrize("outcome", ["failing", "unapproved", "unready"])
 def test_a_head_that_is_failing_or_draft_at_merge_time_is_stepped_over(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge,
     outcome: str,
@@ -4144,3 +4162,28 @@ def test_each_drive_pass_checks_the_label_once_per_repo_and_creates_it(
     _drive(tmp_path, "--once", "--yes")
     assert world.calls.count("label_exists approved-fr") == 2  # one per pass
     assert out.count("created label") == 1
+
+
+def test_a_foreign_push_after_the_snapshot_is_stepped_over_not_a_stop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge, monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """p1-r10: a push fr did not make voids the approval, so the PR is stepped over like
+    any unapproved one and the PRs behind it are tried."""
+    _three_ready(world, tmp_path)
+    seen: list[int] = []
+    real_view = world.pr_view
+
+    def _view(repo: str, number: int) -> dict[str, Any]:
+        seen.append(number)
+        if number == 101 and seen.count(101) == 3:  # after the settle and the snapshot
+            world.prs[101]["head_oid"] = "sha-pushed"
+        return real_view(repo, number)
+
+    monkeypatch.setattr(world, "pr_view", _view)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "merge")[0] == (
+        "merge b1: held: PR #101 head moved from sha-101 to sha-pushed by a push fr did "
+        "not make; its approved-fr approval is void"
+    )
+    assert train.calls == [102, 103], out

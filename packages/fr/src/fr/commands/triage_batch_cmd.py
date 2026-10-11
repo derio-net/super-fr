@@ -92,6 +92,7 @@ from fr.triage.approval import (
     approval_verdict,
     ensure_approval_label,
     is_approved,
+    reaches,
     settle_approvals,
 )
 from fr.triage.batch import (
@@ -3989,6 +3990,20 @@ class _Driver:
                     f"PR #{action.pr} is already merged", False, in_flight - 1, False
                 )
             if slots[0].head != action.head:  # pinned to the head whose checks were judged
+                # A move fr made (its own update) is judged again next pass and stops the
+                # train; any other push voids the approval, so the PR is stepped over
+                # like every unapproved one (merge-train-safety §A, p1-r10).
+                events = [*batch.events, *ctx.recorded.get(batch.id, [])]
+                ours = reaches(events, slots[0].step.pr.number, action.head, slots[0].head)
+                if not ours:
+                    return _MergeOutcome(
+                        f"held: PR #{action.pr} head moved from {action.head[:12]} to "
+                        f"{slots[0].head[:12]} by a push fr did not make; its "
+                        f"{APPROVED_FR.name} approval is void",
+                        False,
+                        in_flight,
+                        False,
+                    )
                 return _MergeOutcome(
                     f"held: PR #{action.pr} head moved from {action.head[:12]} to "
                     f"{slots[0].head[:12]} since its checks were judged; it is judged "

@@ -507,7 +507,8 @@ def test_a_named_batch_that_is_not_pr_open_is_refused(
             lambda f: f.checks.__setitem__(1001, [{"name": "lint", "bucket": "fail"}]),
             "lint",
         ),
-        (lambda f: f.prs[1001].update(head_oid="someone-pushed"), "head moved"),
+        # a push fr did not make voids the approval: that is the stop's real cause
+        (lambda f: f.prs[1001].update(head_oid="someone-pushed"), "approved-fr label is void"),
     ],
     ids=["label-removed", "failing-check", "moved-head"],
 )

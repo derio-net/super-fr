@@ -62,15 +62,23 @@ def approval_verdict(
         return First(head)
     approved = events[live]
     assert isinstance(approved, ApprovalEvent)
-    reached = approved.head
-    if reached == head:
+    if reaches(events[live + 1 :], pr, approved.head, head):
         return Approved(approved.head)
-    for event in events[live + 1 :]:
+    return Void(approved.head)
+
+
+def reaches(events: Sequence[BatchEvent], pr: int, start: str, head: str) -> bool:
+    """Whether fr's own recorded updates of PR *pr*, in order, lead from *start* to
+    *head* (*start* itself included): a move fr made, never one a push made."""
+    reached = start
+    if reached == head:
+        return True
+    for event in events:
         if isinstance(event, UpdateEvent) and event.pr == pr and event.head_before == reached:
             reached = event.head_after
             if reached == head:
-                return Approved(approved.head)
-    return Void(approved.head)
+                return True
+    return False
 
 
 def is_approved(verdict: ApprovalVerdict) -> bool:

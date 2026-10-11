@@ -418,3 +418,80 @@ def test_an_update_is_recorded_with_the_fetched_base_and_keeps_the_approval(
     forge.pr["head_oid"] = "h2"
     again = merge_ready(ctx, _slot(_batch("a", _approval(7, "h1")), "h2"), None)
     assert again.outcome == "merged"
+
+
+# ------------------------------------------------------------------ review fixes
+
+
+def test_a_forge_refusing_to_ready_leaves_the_draft_unready_with_its_words(
+    tmp_path: Path,
+) -> None:
+    """p1-r1: a refusal of `pr_ready` (a 403, a 422) is `unready`, never an escape."""
+    from fr.gh import GhError
+
+    forge = GateForge({"draft": True, "head_oid": "h1", "labels": [LABEL]})
+
+    def refuse(repo: str, number: int) -> None:
+        raise GhError("HTTP 422: Pull request is in clean status", returncode=1)
+
+    forge.pr_ready = refuse  # type: ignore[method-assign]
+    slot = _slot(_batch("a", _approval(7, "h1")))
+    attempt = merge_ready(_ctx(forge, tmp_path), slot, None)
+    assert attempt.outcome == "unready" and "422" in attempt.reason
+    assert forge.merged == []
+    held = merge_one(_ctx(forge, tmp_path), slot, None)
+    assert held is not None and held.outcome == "unready"
+
+
+def test_a_head_that_moves_while_the_draft_is_readied_is_not_merged(tmp_path: Path) -> None:
+    """p1-r7: the ready is head-pinned; a push in between voids the approval."""
+    forge = GateForge({"draft": True, "head_oid": "h1", "labels": [LABEL]})
+    real_ready = forge.pr_ready
+
+    def ready_then_push(repo: str, number: int) -> None:
+        real_ready(repo, number)
+        forge.pr["head_oid"] = "h-session"
+
+    forge.pr_ready = ready_then_push  # type: ignore[method-assign]
+    slot = _slot(_batch("a", _approval(7, "h1")))
+    attempt = merge_ready(_ctx(forge, tmp_path), slot, None)
+    assert attempt.outcome == "unapproved" and attempt.head == "h-session"
+    assert "h-session" in attempt.reason
+    assert forge.merged == []
+
+
+def test_an_update_is_recorded_before_its_push(tmp_path: Path) -> None:
+    """p1-r6: a push that fails still leaves the update recorded (a spare event for an
+    unpushed head is harmless; a lost one would void a valid approval)."""
+    forge = GateForge({"draft": False, "head_oid": "h1", "labels": [LABEL]})
+    checkout = Behind(forge)
+    calls: list[tuple[int, str, str, str]] = []
+    real_add = checkout.add_worktree
+
+    def failing_push(where: Path, ref: str) -> Any:
+        wt = real_add(where, ref)
+
+        def push(branch: str) -> None:
+            raise RuntimeError("push rejected")
+
+        wt.push = push
+        return wt
+
+    checkout.add_worktree = failing_push  # type: ignore[method-assign]
+    ctx = _ctx(forge, tmp_path, checkout)
+    ctx.on_update = lambda *a: calls.append(a)
+    with pytest.raises(RuntimeError):
+        merge_ready(ctx, _slot(_batch("a", _approval(7, "h1"))), None)
+    assert calls == [(7, "h1", "h2", "m7")]
+    assert [e.kind for e in ctx.recorded["a"]] == ["update"]
+
+
+def test_reaches_follows_only_frs_own_updates() -> None:
+    from fr.triage.approval import reaches
+
+    update = UpdateEvent(
+        kind="update", at=datetime(2026, 10, 11, 11, 30, tzinfo=UTC), pr=7,
+        head_before="h1", head_after="h2", base="m1",
+    )  # fmt: skip
+    assert reaches([update], 7, "h1", "h2") and reaches([], 7, "h1", "h1")
+    assert not reaches([update], 7, "h1", "h9") and not reaches([update], 8, "h1", "h2")

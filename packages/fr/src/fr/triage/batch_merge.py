@@ -394,7 +394,7 @@ def _is_archive(changes: Sequence[tuple[str, str]]) -> bool:
 
 
 MergeReadiness = Literal[
-    "merged", "updated", "already-merged", "draft", "failing", "pending", "unapproved", "unready"
+    "merged", "updated", "already-merged", "failing", "pending", "unapproved", "unready"
 ]
 
 
@@ -441,6 +441,18 @@ def _approved_and_ready(
         ctx.client.pr_ready(ctx.repo, pr.number)
     except UnsupportedForgeOperation as exc:
         return MergeAttempt("unready", head=head, reason=f"cannot be marked ready: {exc}")
+    except FORGE_ERRORS as exc:  # a refusal, in the forge's own words (p1-r1)
+        return MergeAttempt(
+            "unready", head=head, reason=f"cannot be marked ready: the forge refused: {exc}"
+        )
+    # Head-pinned (p1-r7): a push that landed while it was readied is not approved.
+    now = str(ctx.client.pr_view(ctx.repo, pr.number).get("head_oid") or "")
+    if now != head:
+        why = (
+            f"head moved to {now[:12]} while it was marked ready; the {APPROVED_FR.name} "
+            f"approval at {verdict.approved_head[:12]} does not cover it"
+        )
+        return MergeAttempt("unapproved", head=now, reason=why)
     ctx.say(f"PR #{pr.number}: marked ready (approved at {verdict.approved_head[:12]})")
     view["draft"] = False
     return None
@@ -596,7 +608,9 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
     new = wt.commit_all(message, ctx.version.files if ctx.version else [])
     if new is None:
         raise MergeStopError(f"PR #{pr.number}: the update produced no change to push")
-    wt.push(pr.head_ref)
+    # Recorded BEFORE the push (p1-r6): a push that fails leaves a spare event for a
+    # head nobody pushed, which is harmless; a recorded-after one could be lost, and the
+    # next settle would void a valid approval over fr's own update.
     base = ctx.checkout.rev_parse(ctx.main)  # fetched by `_land` before this update
     ctx.recorded.setdefault(slot.step.batch.id, []).append(
         UpdateEvent(
@@ -605,5 +619,6 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
     )
     if ctx.on_update is not None:
         ctx.on_update(pr.number, head, new, base)
+    wt.push(pr.head_ref)
     ctx.say(f"PR #{pr.number}: pushed {new[:12]} ({message}); waiting for its checks")
     return new
