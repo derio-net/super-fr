@@ -39,6 +39,31 @@ class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec 
         )
 
 
+class ListingCapped(Exception):  # noqa: N818 — a signal carrying the partial answer, not a fault
+    """A bulk issue listing hit its cap: `.issues` is what the scan found, and
+    "nothing found" must not be read from it (no silent caps)."""
+
+    def __init__(self, issues: list[dict[str, Any]], limit: int) -> None:
+        super().__init__(f"listing capped at {limit} issues; the answer is partial")
+        self.issues = issues
+        self.limit = limit
+
+
+def filter_issues_by_body(
+    raw: list[dict[str, Any]], search: tuple[str, ...], limit: int
+) -> list[dict[str, Any]]:
+    """The scanned issues whose body holds any of *search*, oldest first.
+
+    Raises `ListingCapped` (carrying the matches) when the scan hit *limit*:
+    an issue past the cap is unseen, so the caller must not read "none found".
+    """
+    hits = [i for i in raw if any(s in (i.get("body") or "") for s in search)]
+    hits.sort(key=lambda i: int(i.get("number") or 0))
+    if len(raw) >= limit:
+        raise ListingCapped(hits, limit)
+    return hits
+
+
 class HostRefusedError(Exception):
     """A forge adapter's host trust gate refused to point its CLI at a host
     the CLI is not logged into (spec 2026-10-06-forge-remainder §4.E; gh#1014).
@@ -149,6 +174,25 @@ class GhClient(Protocol):
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         """Post a comment on an Issue (`fr undispatch` leaves its trail here)."""
+        ...
+
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        """Replace an Issue's title and body in one call (`fr debt issue`, R26)."""
+        ...
+
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        """Open issues whose body contains any of the *search* substrings, as
+        `{number, title, body, labels}` oldest first. At most *limit* issues are
+        scanned: a caller that gets back `limit` scanned issues must treat the
+        answer as partial (the scan count is `len(raw)` before filtering, so
+        implementations return the filtered list and raise `ListingCapped`
+        carrying it when the cap was hit)."""
+        ...
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        """Comment on an Issue, then close it (`fr debt issue` at zero debt, R26)."""
         ...
 
     def create_issue(

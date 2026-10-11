@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from fr import gh as _gh
-from fr.ghclient import MERGE_METHODS, CommandRunner, run_cli
+from fr.ghclient import MERGE_METHODS, CommandRunner, filter_issues_by_body, run_cli
 from fr.labels import LabelDef
 
 # Re-exported for `fr.triage.collect`, which reads the forge only through the
@@ -249,6 +249,24 @@ class RealGhClient:
     @_hosted
     def edit_issue_body(self, repo: str, number: int, body: str) -> None:
         _gh.edit_issue_body(repo=repo, number=number, body=body)
+
+    @_hosted
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        _gh._run_gh(
+            ["issue", "edit", str(number), "--repo", repo, "--title", title, "--body", body]
+        )
+
+    @_hosted
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        # Client-side: GitHub search does not index HTML-comment markers.
+        raw = self.list_issues(repo, "open", limit, "number,title,body,labels")
+        return filter_issues_by_body(raw, search, limit)
+
+    @_hosted
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        _gh._run_gh(["issue", "close", str(number), "--repo", repo, "--comment", comment])
 
     @_hosted
     def create_issue(

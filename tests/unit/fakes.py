@@ -41,6 +41,7 @@ class FakeGhClient:
 
     def __init__(self) -> None:
         self.issues: dict[tuple[str, int], FakeIssue] = {}
+        self.issue_titles: dict[tuple[str, int], str] = {}
         self.repo_labels: dict[str, set[str]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.attempted_mutations: int = 0
@@ -205,6 +206,37 @@ class FakeGhClient:
         self._gate()
         self.calls.append(("edit_issue_body", {"repo": repo, "number": number, "body": body}))
         self.issues[(repo, number)].body = body
+
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        self._gate()
+        self.calls.append(
+            ("edit_issue", {"repo": repo, "number": number, "title": title, "body": body})
+        )
+        self.issues[(repo, number)].body = body
+        self.issue_titles[(repo, number)] = title
+
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        from fr.ghclient import filter_issues_by_body
+
+        self.calls.append(("list_open_issues_with_body", {"repo": repo, "search": search}))
+        raw = [
+            {
+                "number": n,
+                "title": self.issue_titles.get((r, n), ""),
+                "body": i.body,
+                "labels": sorted(i.labels),
+            }
+            for (r, n), i in sorted(self.issues.items())
+            if r == repo and i.state == "OPEN"
+        ]
+        return filter_issues_by_body(raw, search, limit)
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        self._gate()
+        self.calls.append(("close_issue", {"repo": repo, "number": number, "comment": comment}))
+        self.issues[(repo, number)].state = "CLOSED"
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         self._gate()

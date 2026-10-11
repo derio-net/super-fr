@@ -350,6 +350,8 @@ _CALLS: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
 def test_glab_and_tea_declare_each_batch_operation_unsupported(
     client: Any, backend: str, op: str
 ) -> None:
+    if backend == "gitlab" and op == "create_pr":
+        pytest.skip("glab implements create_pr since the debt engine (R26)")
     args, kwargs = _CALLS[op]
     with pytest.raises(UnsupportedForgeOperation) as info:
         getattr(client, op)(*args, **kwargs)

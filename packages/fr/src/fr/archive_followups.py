@@ -375,7 +375,7 @@ def _issue_ref(repo: str, number: object, url: object) -> str | None:
 _OWED_MARKER_LINE = re.compile(r"^<!-- fr-owed:(\S+) -->$")
 
 
-def owed_identity(repo_root: Path) -> tuple[str | None, str]:
+def owed_identity(repo_root: Path, *, allow_nested: bool = False) -> tuple[str | None, str]:
     """`(owner/repo, "")` — the repo every owed forge write acts on — or
     `(None, why)` when it cannot be trusted (review p3-r1).
 
@@ -384,7 +384,8 @@ def owed_identity(repo_root: Path) -> tuple[str | None, str]:
     be able to redirect owed filing, reuse or closing to another repo. When the
     matrix names a different repo than the remote, that disagreement is itself
     a refusal. The configured url, not `git remote get-url`, so a local
-    `insteadOf` mirror never changes whose tracker this is."""
+    `insteadOf` mirror never changes whose tracker this is. *allow_nested*
+    accepts a GitLab `group/sub/project` path (the weekly debt commands)."""
     import subprocess
 
     from fr import _hosts
@@ -400,7 +401,7 @@ def owed_identity(repo_root: Path) -> tuple[str | None, str]:
         return None, f"cannot read the origin remote ({e})"
     url = done.stdout.strip() if done.returncode == 0 else ""
     slug = _hosts.slug_from_url(url) if url else None
-    if not slug or not _SAFE_REPO.match(slug) or slug.count("/") != 1:
+    if not slug or not _SAFE_REPO.match(slug) or (slug.count("/") != 1 and not allow_nested):
         return None, f"the origin remote {url!r} does not name an owner/repo"
     matrix = _matrix_identity(repo_root)
     if matrix is not None and matrix.lower() != slug.lower():

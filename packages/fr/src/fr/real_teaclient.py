@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from fr import tea as _tea
-from fr.ghclient import CommandRunner, UnsupportedBatchOps, run_cli
+from fr.ghclient import CommandRunner, UnsupportedBatchOps, filter_issues_by_body, run_cli
 from fr.labels import LabelDef
 
 # Gitea-specific PR URL shape (https://{host}/{owner}/{repo}/pulls/{n}).
@@ -183,6 +183,42 @@ class RealTeaClient(UnsupportedBatchOps):
 
     def edit_issue_body(self, repo: str, number: int, body: str) -> None:
         _tea.edit_issue_body(repo=repo, number=number, body=body)
+
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        _tea.edit_issue(repo=repo, number=number, title=title, body=body)
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        _tea.comment_close_issue(repo=repo, number=number, comment=comment)
+
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        out = _tea._run_tea(
+            ["issues", "list", "--repo", repo, "--state", "open", "--limit", str(limit)]
+            + ["--fields", "index,title,body,labels", "--output", "json"]
+        )
+        try:
+            got = json.loads(out) if out.strip() else []
+        except json.JSONDecodeError as exc:
+            raise _tea.TeaError(f"unreadable `tea issues list` output: {exc}") from exc
+        if not isinstance(got, list):
+            raise _tea.TeaError("unreadable `tea issues list` output: not a JSON list")
+        raw: list[dict[str, Any]] = []
+        for i in got:
+            if not isinstance(i, dict):
+                continue
+            labels = i.get("labels") or []
+            if isinstance(labels, str):
+                labels = [x.strip() for x in labels.split(",") if x.strip()]
+            raw.append(
+                {
+                    "number": i.get("index"),
+                    "title": i.get("title") or "",
+                    "body": i.get("body") or "",
+                    "labels": [str(x) for x in labels],
+                }
+            )
+        return filter_issues_by_body(raw, search, limit)
 
     def create_issue(
         self,

@@ -32,7 +32,13 @@ from typing import Any
 from fr import _hosts
 from fr import gh as _gh
 from fr.gh import GhError
-from fr.ghclient import MERGE_METHODS, CommandRunner, HostRefusedError, run_cli
+from fr.ghclient import (
+    MERGE_METHODS,
+    CommandRunner,
+    HostRefusedError,
+    filter_issues_by_body,
+    run_cli,
+)
 from fr.labels import LabelDef
 
 GhRun = Callable[[list[str]], str]
@@ -986,6 +992,21 @@ class RealGhRestClient:
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         self._api(f"repos/{repo}/issues/{number}/comments", method="POST", fields={"body": body})
+
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        self._api(
+            f"repos/{repo}/issues/{number}", method="PATCH", fields={"title": title, "body": body}
+        )
+
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        raw = self.list_issues(repo, "open", limit, "number,title,body,labels")
+        return filter_issues_by_body(raw, search, limit)
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        self.comment_issue(repo, number, comment)
+        self.edit_issue_state(repo, number, state="CLOSED", reason="completed")
 
     def create_issue(self, repo: str, *, title: str, body: str, labels: frozenset[str]) -> str:
         fields: dict[str, Any] = {"title": title, "body": body}
