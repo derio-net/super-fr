@@ -99,6 +99,7 @@ from fr.triage.approval import (
 )
 from fr.triage.batch import (
     CLOSED_OUT,
+    QueueEntry,
     allowed_authors,
     batch_branch,
     batch_item_id,
@@ -296,6 +297,21 @@ def _refuse_held(env: ClaimEnv, keys: Iterable[str], what: str) -> None:
             f"{what}: another triage scope holds "
             + "; ".join(held_line(k, h, now) for k, h in found)
         )
+
+
+def _skip_held(env: ClaimEnv, queue: Sequence[QueueEntry]) -> list[QueueEntry]:
+    """R7 for `batch merge` with no ids: print `skipped <batch>: held by <scope>` for each
+    batch another scope holds a member of, and return the rest."""
+    held = held_map(env.facts, env.me)
+    kept: list[QueueEntry] = []
+    for e in queue:
+        found = held_members(e.batch.ids, held)
+        if not found:
+            kept.append(e)
+            continue
+        scopes = ", ".join(dict.fromkeys(h.signer for _, h in found))
+        console.print(f"skipped {e.batch.id}: held by {scopes}", markup=False, soft_wrap=True)
+    return kept
 
 
 def _admit_held(env: ClaimEnv, keys: Iterable[str], what: str) -> list[tuple[str, Claim]]:
@@ -2274,8 +2290,14 @@ def batch_merge_command(
         console.print("no pr-open batches to merge", markup=False)
         return
     env = claim_env(target, facts)
-    for e in queue:  # R6: a batch another scope holds a member of is never merged here
-        _refuse_held(env, e.batch.ids, f"batch {e.batch.id!r} cannot be merged")
+    if batch_ids:
+        for e in queue:  # R6: a batch another scope holds a member of is never merged here
+            _refuse_held(env, e.batch.ids, f"batch {e.batch.id!r} cannot be merged")
+    else:  # R7: with no ids, a held batch is skipped, named, and the rest merge
+        queue = _skip_held(env, queue)
+        if not queue:
+            console.print("nothing to merge", markup=False)
+            return
     repos = {batch_repo(e.batch, facts) for e in queue}
     if len(repos) != 1 or None in repos:
         _fail(

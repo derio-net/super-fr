@@ -781,7 +781,7 @@ def test_merge_refuses_a_batch_held_elsewhere(
     facts = load_facts(path)
     claimed = facts.issues[0].model_copy(update=held(marker(OTHER, "theirs", expires=FAR)))
     path.write_text(json.dumps(facts.model_copy(update={"issues": [claimed]}).to_json()), "utf-8")
-    code, out = _merge(tmp_path, "--yes")
+    code, out = _merge(tmp_path, "one", "--yes")  # naming it: still a refusal (R7)
     assert code == 2
     assert OTHER in out and "super-fr#1" in out
     assert forge.merged == [] and checkout.worktrees == []
@@ -847,3 +847,61 @@ def test_merge_uses_the_repos_configured_merge_method(
     code, out = _merge(tmp_path, "--yes")
     assert code == 0, out
     assert forge.merged == [(1001, "head-solo", "squash")]
+
+
+# ------------------------- batch merge skips held batches (merge-train-safety §E, R7)
+
+
+def _hold(tmp_path: Path, *issue_indexes: int) -> None:
+    from fr.triage.model import load_facts
+
+    from tests.unit.triage_claim_fixtures import FAR, OTHER, held, marker
+
+    path = tmp_path / "facts.json"
+    facts = load_facts(path)
+    issues = [
+        i.model_copy(update=held(marker(OTHER, "theirs", expires=FAR))) if n in issue_indexes else i
+        for n, i in enumerate(facts.issues)
+    ]
+    path.write_text(json.dumps(facts.model_copy(update={"issues": issues}).to_json()), "utf-8")
+
+
+_TWO = [
+    ("one", 1, None, "patch", "4.21.2", ["a.py"]),
+    ("two", 2, None, "patch", "4.21.3", ["b.py"]),
+]
+
+
+def test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.triage_claim_fixtures import OTHER
+
+    forge, _ = _setup(tmp_path, monkeypatch, _TWO, config=None)
+    _hold(tmp_path, 0)
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 0, out
+    assert f"skipped one: held by {OTHER}" in out
+    assert [n for n, *_ in forge.merged] == [1002]
+
+
+def test_merge_with_no_ids_says_nothing_to_merge_when_every_batch_is_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _setup(tmp_path, monkeypatch, _TWO, config=None)
+    _hold(tmp_path, 0, 1)
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 0, out
+    assert "skipped one: held by" in out and "skipped two: held by" in out
+    assert "nothing to merge" in out
+    assert forge.merged == [] and checkout.worktrees == []
+
+
+def test_merge_naming_a_held_batch_still_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, _ = _setup(tmp_path, monkeypatch, _TWO, config=None)
+    _hold(tmp_path, 0)
+    code, out = _merge(tmp_path, "one", "--yes")
+    assert code == 2 and "cannot be merged" in out
+    assert forge.merged == []

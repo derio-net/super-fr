@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
+from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.labels import APPROVED_FR
 from fr.triage.approval import Approved, Void, approval_verdict
@@ -132,7 +132,15 @@ class MergeContext:
     # batch id -> the events this context recorded or was told of after the batch was
     # read (an approval settled this run, an update pushed): the gate reads them too.
     recorded: dict[str, list[BatchEvent]] = field(default_factory=dict)
+    # The base branch's rules, read once per repo per pass (batch merge: per command),
+    # merge-train-safety §D, R12.
+    rules: BaseRules = field(default_factory=BaseRules)
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+
+    @property
+    def strict_checks(self) -> bool:
+        """R14: the base requires PRs to be up to date, so no commit on it is routine."""
+        return self.rules.strict_checks
 
     @property
     def main(self) -> str:
@@ -326,7 +334,9 @@ def _land(ctx: MergeContext, slot: Slot, head: str, previous: str | None) -> str
     """Steps 2-3: merge a PR that is current and on its slot (returns None), else push
     the update that brings it there (returns the new head)."""
     ctx.checkout.fetch()
-    behind = not ctx.checkout.is_ancestor(ctx.main, head) and not _behind_only_routinely(ctx, head)
+    behind = not ctx.checkout.is_ancestor(ctx.main, head) and (
+        ctx.strict_checks or not _behind_only_routinely(ctx, head)  # R14: strict has no exemption
+    )
     head_version = ctx.version_at(head)
     wrong_slot = slot.slot is not None and head_version != slot.slot
     if not behind and not wrong_slot:

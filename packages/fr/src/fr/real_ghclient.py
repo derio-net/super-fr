@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from fr import gh as _gh
-from fr.ghclient import MERGE_METHODS, CommandRunner, run_cli
+from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, run_cli
 from fr.labels import LabelDef
 
 # Re-exported for `fr.triage.collect`, which reads the forge only through the
@@ -428,6 +428,12 @@ class RealGhClient:
         from fr.real_ghrestclient import RealGhRestClient
 
         return RealGhRestClient(host=self._host).required_check_names(repo, base)
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        """Merge-train-safety §D: the `github-rest` backend's REST routes, on this host."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).base_rules(repo, branch)
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         """Spec §I (p2-r7): one REST page, no file list, on this host."""

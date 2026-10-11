@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from fr.ghclient import BaseRules
 from fr.triage.batch import pr_open_queue
 from fr.triage.batch_merge import (
     HeadMovedError,
@@ -241,6 +242,29 @@ def test_a_pr_behind_only_by_a_release_commit_merges_in_the_same_pass(
     assert merge_ready(ctx, slot, None) == MergeAttempt("merged", head="head-solo")
     assert forge.merged == [(1001, "head-solo", "squash")]
     assert checkout.worktrees == []  # no update was even started
+
+
+def test_strict_checks_update_a_pr_behind_only_by_a_release_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R14: a base requiring up-to-date checks refuses the routine-commit exemption."""
+    forge, checkout = _unversioned(tmp_path, monkeypatch)
+    checkout.base_commits["head-solo"] = (RELEASE,)
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    ctx.rules = BaseRules(merge_queue=False, strict_checks=True)
+    assert ctx.strict_checks is True
+    assert merge_ready(ctx, slot, None).outcome == "updated"
+    assert forge.merged == []
+
+
+def test_without_strict_checks_the_routine_exemption_stands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _unversioned(tmp_path, monkeypatch)
+    checkout.base_commits["head-solo"] = (RELEASE,)
+    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
+    assert ctx.strict_checks is False
+    assert merge_ready(ctx, slot, None).outcome == "merged"
 
 
 def test_a_pr_behind_only_by_an_archive_merge_merges_in_the_same_pass(

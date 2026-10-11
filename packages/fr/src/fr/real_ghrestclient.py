@@ -32,7 +32,7 @@ from typing import Any
 from fr import _hosts
 from fr import gh as _gh
 from fr.gh import GhError
-from fr.ghclient import MERGE_METHODS, CommandRunner, HostRefusedError, run_cli
+from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, HostRefusedError, run_cli
 from fr.labels import LabelDef
 
 GhRun = Callable[[list[str]], str]
@@ -750,6 +750,30 @@ class RealGhRestClient:
                 params = rule.get("parameters") or {}
                 required |= {c.get("context") for c in params.get("required_status_checks") or []}
         return sorted(str(n) for n in required if n)
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        """`GET rules/branches/{branch}` for a `merge_queue` rule and a strict
+        `required_status_checks` rule, plus classic protection's
+        `required_status_checks.strict` (a 404 is no protection: false), because
+        `required_check_names` reads that protection already (merge-train-safety §D, R12).
+        `RealGhClient.base_rules` is this method."""
+        b = _q(branch)
+        queue = strict = False
+        for rule in self._api(f"repos/{repo}/rules/branches/{b}") or []:
+            if rule.get("type") == "merge_queue":
+                queue = True
+            elif rule.get("type") == "required_status_checks":
+                params = rule.get("parameters") or {}
+                strict = strict or bool(params.get("strict_required_status_checks_policy"))
+        if not strict:
+            try:
+                protection = self._api(f"repos/{repo}/branches/{b}/protection") or {}
+            except GhError as exc:
+                if not _is_404(exc):
+                    raise
+                protection = {}
+            strict = bool((protection.get("required_status_checks") or {}).get("strict"))
+        return BaseRules(merge_queue=queue, strict_checks=strict)
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         """`{number, url}` of *branch*'s open PR from one `pulls?head=&state=open`

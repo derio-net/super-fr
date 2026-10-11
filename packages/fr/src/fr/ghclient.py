@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 FORGE_PARITY_ISSUE = "gh#611"
@@ -18,6 +19,16 @@ FORGE_PARITY_ISSUE = "gh#611"
 2026-09-25-triage-batches §3.J, decision d6)."""
 
 MERGE_METHODS = frozenset({"merge", "squash", "rebase"})
+
+
+@dataclass(frozen=True)
+class BaseRules:
+    """What a base branch's rules require of a merge (2026-10-11-merge-train-safety §D,
+    R12): *merge_queue* when a merge queue is required, *strict_checks* when a
+    required status check must pass on a head that is up to date with the base."""
+
+    merge_queue: bool = False
+    strict_checks: bool = False
 
 
 class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec (§3.J) fixes
@@ -264,6 +275,12 @@ class GhClient(Protocol):
         required. Spec 2026-10-07-cloud-triage §I, gate checks (p2-r1)."""
         ...
 
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        """The rules on *branch* (merge-train-safety §D, R12): a `merge_queue` rule, and a
+        strict required-status-checks rule (rulesets, and classic protection's `strict`).
+        A forge without the concepts has neither."""
+        ...
+
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         """`{number, url}` of the open PR whose head is *branch*, None when there
         is none. Reads no file list (§I step 6, p2-r7): `pr_view` gives the rest."""
@@ -429,6 +446,9 @@ class UnsupportedBatchOps:
 
     def required_check_names(self, repo: str, base: str) -> list[str]:
         raise self._unsupported("required_check_names")
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        return BaseRules()  # a forge without the concepts has neither: not an error (R12)
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         raise self._unsupported("open_pr_for_head")
