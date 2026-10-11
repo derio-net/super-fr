@@ -320,6 +320,10 @@ Pre-merge, per requirement group: unit and CLI tests in CI, and candidate scenar
 strategy: candidate
 - debt-weekly-issue-rename: live — renaming a real legacy issue needs the workflow on `main` against GitHub; no pre-merge strategy reaches it.
 - debt-archive-pr-weekly: live — the bot PR and its token behaviour exist only in a real run on `main`.
+- forge-adapter-debt-ops: none — CI unit tests against recorded-command doubles for every client verify it (## Testing, R26); a candidate walk has no forge to exercise.
+- step-record-status-migration: none — the record 8→9 hop is unit-tested in CI on fixture records (## Testing, R27); no installed-build behaviour differs.
+- debt-ci-scaffold-refresh: none — the regenerated goldens and `--refresh-ci` refusals are CI unit tests (## Testing, R13); the scheduled run itself is the two live rows above.
+- triage-debt-panel: none — CI render tests cover the sets and panel states, and the phase's browser capture of the `visual` states verifies the board (## Testing, R14–R16).
 
 ## Test Plan
 
