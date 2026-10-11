@@ -446,7 +446,9 @@ def push(repo: Path) -> str:
         raise ReleaseError(
             "the push to main was refused by branch protection, not lost to a race: "
             "the release bot needs a bypass actor on main's rules "
-            "(Settings > Rules > protect main > Bypass list).\n" + reply.strip()
+            "(Settings > Rules > protect main > Bypass list): the derio-fr-automation "
+            "app, which pushes when the repo variable FR_AUTOMATION_APP_ID is set "
+            "(scripts/configure-main-protection.sh --stage bypass does both).\n" + reply.strip()
         )
     if any(m in reply for m in _RACE_MARKERS):
         return "race"

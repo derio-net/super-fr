@@ -7,9 +7,14 @@ name: Release
 # Idempotent: with no fragments and the version already tagged it is a no-op,
 # and a rerun reads its notes from the release commit's body.
 #
-# No CI runs on the release commit. It is pushed with the GITHUB_TOKEN, and a
-# push made with the GITHUB_TOKEN triggers no workflow. So release.py checks it
-# twice before the push. The staged diff may carry nothing but
+# Two modes, by the repo variable FR_AUTOMATION_APP_ID (spec
+# 2026-10-11-merge-train-safety §F). Unset: the push uses the GITHUB_TOKEN, and
+# a push made with the GITHUB_TOKEN triggers no workflow, so no CI runs on the
+# release commit. Set: the app-token step mints a token for the
+# derio-fr-automation GitHub App from secret FR_AUTOMATION_APP_KEY and the
+# release commit and tag are pushed as the app, so CI runs on the release
+# commit and release.yml runs once more on it, as a no-op. Either way
+# release.py checks it twice before the push. The staged diff may carry nothing but
 # version_surfaces() lines, the consumed fragments and the live plans'
 # fr_version ceilings that `fr migrate artifacts --yes` widens at a major
 # (gh#861), and a stale uv.lock is refused rather than re-resolved: that
@@ -22,7 +27,8 @@ name: Release
 #
 # Pushing to main works today because main's ruleset forbids only force-push
 # and deletion. If a required-PR or required-checks rule is ever added, the
-# release bot needs a bypass actor on that rule; release.py reports a
+# release bot needs a bypass actor on that rule (the app, once
+# scripts/configure-main-protection.sh --stage bypass has run); release.py reports a
 # protection refusal (GH006) as exactly that, never as a lost race.
 
 on:
@@ -52,8 +58,16 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - id: app-token
+        if: vars.FR_AUTOMATION_APP_ID != ''
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ vars.FR_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.FR_AUTOMATION_APP_KEY }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          token: ${{ steps.app-token.outputs.token || github.token }}
           ref: main
           fetch-depth: 0
 
@@ -61,7 +75,7 @@ jobs:
 
       - name: Release pending change fragments
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           if [ -n "${RELEASE_VERSION}" ]; then

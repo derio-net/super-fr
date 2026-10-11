@@ -1,0 +1,15 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-merge-train-safety
+step: implement-phase
+item: phase/4
+outcome: done
+ticks: [P4.T1.S1, P4.T1.S2, P4.T2.S1, P4.T2.S2, P4.T3.S1, P4.T3.S2]
+refactor:
+  "P4.T1": "a conditional step and two token expressions in one workflow plus a message string; nothing to clean"
+  "P4.T2": "one new script and its test; no existing code touched"
+  "P4.T3": "docs, AGENTS.md prose and a matrix status; no code"
+journal:
+  - {kind: decision, id: p4-action-pin, title: "create-github-app-token pinned to v1.12.0's commit sha", body: "The newest v1.x tag is v1.12.0, resolved with REST (git/ref/tags) to a commit sha d72941d7...; the workflow carries the tag name in a trailing comment like its other pinned actions.", phase: 4}
+  - {kind: decision, id: p4-explainers-not-affected, title: "No explainer update owed: 01-fr-goal.md does not describe release identity or main protection", body: "docs/explainers/01-fr-goal.md says the agent never self-merges and describes post-merge verification, but nothing about who pushes the release commit, CI on it, or main's ruleset. The change is invisible to a reader of the published page, so under explainers-currency no .md or .html regeneration is owed.", phase: 4}
+  - {kind: discovery, id: p4-script-not-run-live, title: "The protection script was exercised only against a stub gh", body: "Per the spec, applying it to the live repo is a post-merge step; the tests stub gh on PATH and the live ruleset JSON shape (name,target,enforcement,conditions,rules,bypass_actors as the PUT body, installations .app_id/.app_slug, actions runs .triggering_actor.login) is taken from the documented REST shapes, not captured.", phase: 4}
+evidence: {tests: ci}

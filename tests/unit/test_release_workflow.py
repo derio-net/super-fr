@@ -7,6 +7,7 @@ drives `scripts/release.py`.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -64,10 +65,32 @@ def test_checks_out_full_history_and_runs_release_py_with_a_token() -> None:
     assert "inputs.version" not in run["run"]
 
 
-def test_header_states_the_no_ci_property_and_the_bypass_actor() -> None:
-    header = WORKFLOW.read_text().split("\non:", 1)[0]
+def test_header_states_both_token_modes_and_the_bypass_actor() -> None:
+    header = " ".join(WORKFLOW.read_text().split("\non:", 1)[0].replace("#", " ").split())
     assert "GITHUB_TOKEN" in header
+    assert "no CI" in header  # fallback mode: a GITHUB_TOKEN push triggers nothing
     assert "bypass actor" in header
+    assert "FR_AUTOMATION_APP_ID" in header
+    assert "no-op" in header  # app mode: CI runs and release.yml re-runs as a no-op
+
+
+def test_app_token_step_is_conditional_and_pinned_to_a_sha() -> None:
+    step = next(s for s in _steps() if s.get("id") == "app-token")
+    assert step["if"] == "vars.FR_AUTOMATION_APP_ID != ''"
+    uses = step["uses"]
+    assert uses.startswith("actions/create-github-app-token@")
+    assert re.fullmatch(r"[0-9a-f]{40}", uses.split("@", 1)[1])
+    assert step["with"]["app-id"] == "${{ vars.FR_AUTOMATION_APP_ID }}"
+    assert step["with"]["private-key"] == "${{ secrets.FR_AUTOMATION_APP_KEY }}"
+
+
+def test_checkout_and_release_step_take_the_app_token_or_the_default() -> None:
+    expr = "${{ steps.app-token.outputs.token || github.token }}"
+    steps = _steps()
+    checkout = next(s for s in steps if str(s.get("uses", "")).startswith("actions/checkout"))
+    assert checkout["with"]["token"] == expr
+    run = next(s for s in steps if "scripts/release.py" in str(s.get("run", "")))
+    assert run["env"]["GH_TOKEN"] == expr
 
 
 def test_header_no_longer_claims_the_staged_diff_check_is_enough() -> None:

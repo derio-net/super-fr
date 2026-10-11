@@ -359,6 +359,8 @@ def test_a_protection_refusal_fails_at_once_naming_the_bypass_actor(
     assert len(world.bump_calls) == 1  # never retried as a lost race
     err = capsys.readouterr().err
     assert "bypass actor" in err
+    assert "derio-fr-automation" in err
+    assert "FR_AUTOMATION_APP_ID" in err
     assert "protection" in err
     assert "lost the push race" not in err
 
