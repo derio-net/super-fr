@@ -396,16 +396,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
-    status: unwired
-    notes: Unit test guards mirror drift (CI) — tests/unit/test_tripwire_opencode_commands_sync.py
-      passes (2026-07-08). Test Plan steps 1-2 walked post-merge (2026-07-08, fresh
-      clone of merged main) — `opencode debug config` resolved all 9 generated commands
-      (fr-goal, fr-plan, ... — zero install), and a live `opencode run --command fr-progress`
-      call (opencode/north-mini-code-free, no arguments) correctly invoked the skill
-      tool with name=fr-progress and got a sensible response — confirms the empty-$ARGUMENTS
-      case end to end. Not automated in CI (requires a live opencode binary + model
-      call) — backfill owed if that becomes scriptable, same pattern as the sibling
-      opencode-skills-in-repo row.
+    status: walked
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): Test
+      Plan steps 1-2 walked live post-merge 2026-07-08 (generated commands resolved,
+      opencode run --command invoked one); mirror drift guarded in CI.'
   - id: opencode-commands-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get /fr-goal etc. available
