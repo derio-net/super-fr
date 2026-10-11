@@ -14,3 +14,8 @@ pipeline.py's DRIVER/PIPE/STRIPS tables pin the issues open on 2026-10-05. Issue
 ### 714ab0c4c387 · hypothesis · Fix: drop closed pins visibly instead of aborting; build history even if the diagram fails
 
 pipeline.py keeps pins whose issue is open, and lists the dropped (closed or no longer collected) ones in the fragment and on stderr, so the guard's intent (no pin pointing at a closed issue) holds without a fatal build. build.py runs pipeline.py in a try, writes the history fragments regardless, and exits non-zero naming the failure. Re-pinning today's open issues stays an operator judgement (issue item 1), not part of this fix.
+
+<!-- fr:journal kind=finding scope=debug id=fix-closed-pins created=2026-10-11T23:39:23+00:00 state=fixed -->
+### fix-closed-pins · finding [fixed] · Closed pins drop off visibly; history fragments build even if the diagram fails
+
+dac3f687: pipeline.py filters pins to open issues, names the dropped ones under the diagram and on stderr; build.py runs pipeline.py guarded, writes history/ regardless, exits non-zero on a diagram failure. Pinned by tests/unit/test_triage_docs_authored_src.py (both red before the fix, green after). Live: the scratch repro with the scope's real facts.json and real gh now exits 0, drops 30 pins, writes all three history fragments. Not done here: re-judging which of today's open issues pin to which step (issue item 1, an operator judgement).
