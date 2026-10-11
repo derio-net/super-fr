@@ -1,0 +1,338 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-debt-engine
+step: brainstorm
+outcome: done
+questions:
+  rounds: 2
+  trigger: design-risk
+  reason: Round 1's archive-PR, owed-kind and scope answers left four code-level gaps (GITHUB_TOKEN PRs
+    run no CI; --no-issues opt-out; no structured outcome record; legacy Test Plan bullets) checked against
+    the code before round 2.
+journal:
+- kind: discovery
+  input: true
+  id: operator-brief
+  title: Operator brief (batch debt-engine, super-fr#1121)
+  body: "Batch brief (as typed): `/fr-goal fr debt: one debt engine, a weekly Technical debt issue, split\
+    \ the skipped status` — batch `debt-engine` of derio-net/super-fr, 1 issue, ONE PR; branch `feat/batch-debt-engine`;\
+    \ draft PR once the spec is committed with `Closes derio-net/super-fr#1121`; no member issue as a\
+    \ phase tracking_issue. Why together: operator priority (2026-10-11); brainstorm first, the skipped\
+    \ split is an artifact migration; replaces the five parked acceptance-debt digests.\n\n## super-fr#1121:\
+    \ Technical debt digest: one weekly '<repo>: Technical debt' issue (acceptance + plans) via an fr\
+    \ debt engine; triage reads it; split the overloaded 'skipped' status\n\n## Problem\n\nDebt is invisible\
+    \ and keeps growing. Every repo carries two kinds of it, and today nothing surfaces either one where\
+    \ the operator actually looks:\n\n- **Acceptance debt.** `acceptance-report.yml` upserts a weekly\
+    \ \"Acceptance debt\" issue per repo (marker `fr-acceptance-digest`). The SessionStart nag (`fr-acceptance-nag.sh`)\
+    \ only fires inside the repo the session sits in.\n- **Plan debt.** Plans that merged complete but\
+    \ were never archived, and in-progress plans that went stale. `fr status` and `fr-progress` list them\
+    \ on demand only. `test_tripwire_unarchived_plans.py` warns in super-fr's own CI only. There's no\
+    \ weekly issue and no session nag.\n\nThe org-wide triages run on 2026-10-10 (three scopes, about\
+    \ 240 issues) parked every \"Acceptance debt\" issue as a tier-6 tracker. A digest issue holding 60\
+    \ rows can't be ranked, batched or closed, so in practice the debt drops out of view.\n\n## Proposal\n\
+    \n### A. One engine: `fr debt`\n\nAdd an `fr debt` command to the `fr` wheel that computes a repo's\
+    \ debt as structured data. Everything below calls it; nothing re-derives debt.\n\n- **acceptance:**\
+    \ rows by status (but see C, which changes what counts).\n- **plans, three categories that need different\
+    \ responses:**\n  - **merged complete, not archived:** bookkeeping that `fr archive` fixes mechanically.\
+    \ Uses `fr.archive.merge_evidence(...).complete_on_ref`, the one definition of \"merged\".\n  - **in\
+    \ progress, stale:** no commits on the branch and no PR activity in N days (configurable). Real debt\
+    \ that needs an operator decision: resume, re-scope or abandon.\n  - **in progress, active:** not\
+    \ debt, so not listed. Listing it would turn the issue into noise.\n- Possibly: specs with no plan,\
+    \ and journals with open findings (`fr journal check`).\n\n### B. The weekly issue becomes `<repo>:\
+    \ Technical debt`\n\n- It has two sections, Acceptance and Plans, rendered from `fr debt`.\n- Keep\
+    \ recognizing the old `fr-acceptance-digest` marker, so existing open issues are **renamed in place**,\
+    \ not duplicated. Write a new marker going forward.\n- **One attached action, where it's mechanical:**\
+    \ for merged-complete-unarchived plans, the weekly job opens (or refreshes) one archive PR, rather\
+    \ than only reporting them.\n\n### C. Triage reads the debt; it doesn't rank the issue\n\n- `fr triage\
+    \ collect` recognizes the digest marker and reads `fr debt` per repo.\n- The digest gets a set of\
+    \ its own (like `awaiting live`): never ranked, never \"unplaced\".\n- The board gets a **Debt** panel\
+    \ per repo, with counts and a trend from the existing snapshots (for example \"acceptance not-implemented\
+    \ 28 → 30 since the last report\").\n- The work inside it becomes ordinary batches, such as \"archive\
+    \ sweep\" or \"backfill acceptance rows for theme X\".\n\n## \"skipped\" is overloaded, and that blocks\
+    \ any honest debt count\n\n`skipped` is documented as \"verification exists, not in CI\". In practice\
+    \ it covers at least four different situations. Live examples from this repo's matrix (SessionStart\
+    \ nag, 2026-10-10):\n\n| row | what \"skipped\" actually means here |\n|---|---|\n| `isolation-suite-lifecycle`\
+    \ | **Proven once, live:** \"the live worktree+container walk was proven at the 2.4.0 release, not\
+    \ in CI\" |\n| `acceptance-pipeline-rows` | **Live walk owed:** \"end-to-end toy walk (Test Plan item\
+    \ 4) owed post-merge\" |\n| `acceptance-added-since` | **Process, not automatable:** \"the PR-body\
+    \ defense is process — demonstrated in PR #352, not automated\" |\n| (others) | **Automatable but\
+    \ unwired:** a test exists and could run in CI, but doesn't |\n\nOnly the last one is plainly debt.\
+    \ \"Proven once\" is evidence that may have gone stale. \"Walk owed\" is a scheduled obligation (and\
+    \ overlaps `fr:awaiting-live` and the matrix's `verify` / `walks` fields from the verification-strategies\
+    \ work). \"Process\" may never move. Counting all four as one number gives a figure that grows for\
+    \ good reasons and bad, and can't be acted on.\n\n**Ask:** split `skipped` into explicit statuses,\
+    \ or derive the meaning from the row's `verify` strategy and `walks`, which may already carry it.\
+    \ Suggested names: `unwired`, `walk-owed`, `walked` (with a date or release, and maybe an age-out),\
+    \ and `manual` / `process`. Migrate existing rows through the artifact-migration framework (a matrix-kind\
+    \ stamp bump, `.claude/rules/artifact-versioning.md`). The term itself is easy to misread: \"skipped\"\
+    \ sounds like \"a test was skipped\", not \"verification lives outside CI\".\n\n## D. Owed operator\
+    \ actions: nothing slips through, and one place to find them\n\n**Gap (found 2026-10-11).** A close-out\
+    \ (`fr/run/closeout.py`) says \"run the spec's Test Plan\", and what happens to a step the session\
+    \ can't or shouldn't run is left to its judgement. Real case: derio-net/frank#835 ran Test Plan steps\
+    \ 1–3, and left step 4 to the operator because it means a ~10-minute bot outage. The session happened\
+    \ to file it as frank#834. Had it only written \"left to the operator\" in the PR body, the step would\
+    \ have disappeared when the housekeeping PR merged.\n\nToday owed actions survive only through:\n\
+    - `fr:awaiting-live`, but only for steps that are post-merge matrix rows;\n- a held plan with an unticked\
+    \ `[manual]` phase, visible only via `fr status`;\n- whatever the session chose to file.\n\n### D.1\
+    \ No silent skip\n\n- Every Test Plan step gets an **explicit outcome at close-out**: `run` (with\
+    \ evidence), `owed` (an operator action, saying why) or `n/a` (with a reason).\n- The close-out can't\
+    \ finish, and `fr archive --branch` holds, until every step has one, the same way an open journal\
+    \ finding blocks `fr journal check` today.\n- An `owed` step is made durable mechanically, never by\
+    \ session judgement:\n  - one journal entry recording the step, why it's owed and who owes it;\n \
+    \ - one issue labelled as an owed walk (reuse `fr:awaiting-live`, or add a sibling such as `fr:owed`,\
+    \ a design decision) that names the step and the command or check that completes it.\n- The same applies\
+    \ to a `[manual]` plan phase left unticked at archive. \"Held\" stays the archive behaviour, but it\
+    \ also gets an owed entry and an issue, so it stops being visible only through `fr status`.\n\n###\
+    \ D.2 One query: what does this repo owe?\n\n`fr debt` (proposal A) gets an **Owed** section, folded\
+    \ from sources that already exist:\n- open `fr:awaiting-live` / owed issues;\n- held plans with an\
+    \ unticked manual phase;\n- unwalked post-merge acceptance rows;\n- journal entries of the owed kind\
+    \ with no resolution, **including in archived journals**.\n\nJournals are a natural record for this.\
+    \ They're append-only, `fr journal resolve` already closes an entry with a RESOLUTION RECORD, and\
+    \ `fr.archive_followups` already reads archived journals' open ends. So an owed step logged at close-out\
+    \ stays queryable after `fr archive` moves the journal to `implemented/`, and it's discharged by `fr\
+    \ journal resolve <id> --fixed` with the walk's evidence, which also closes its issue.\n\nThe weekly\
+    \ `<repo>: Technical debt` issue (B) and the triage Debt panel (C) render this section like the others.\n\
+    \n### D.3 Constraints\n\n- A new journal entry kind is a **shape change**: the kinds are a closed\
+    \ vocabulary (`decision`, `review`, `discovery`, `finding`, `repro`, `hypothesis`, `ruled-out`, `root-cause`).\
+    \ It ships with a stamp bump, a registered migration and the structure validator, per `.claude/rules/artifact-versioning.md`.\
+    \ Reusing `finding` with an `owed` state is the alternative to weigh.\n- The close-out brief is read\
+    \ by a fresh session with no memory, so the per-step outcome must come from a structured source (the\
+    \ spec's Test Plan, parsed), not from the session's recollection.\n\n## Deliberately out of scope:\
+    \ the ratchet\n\nA CI gate that fails a PR adding net-new debt was considered and **deferred**. It's\
+    \ not always practical (a new spec legitimately creates `not-implemented` rows). It's worth revisiting\
+    \ only after `skipped` is split, at which point a ratchet on `unwired` alone might be cheap and fair.\n\
+    \n## Acceptance\n\n- `fr debt` on this repo reports the three plan categories and acceptance by (new)\
+    \ status, as JSON and as text.\n- The weekly workflow renames an existing \"Acceptance debt\" issue\
+    \ to `<repo>: Technical debt` in place, and opens or refreshes one archive PR when merged-unarchived\
+    \ plans exist.\n- `fr triage check` lists the digest in its own set, and the board shows a per-repo\
+    \ Debt panel with a trend.\n- The `skipped` split ships with a registered matrix migration, and every\
+    \ existing row lands in exactly one new status.\n- A close-out with a Test Plan step that has no recorded\
+    \ outcome can't finish, and every `owed` step leaves a journal entry plus an issue (scenario test:\
+    \ a skipped step is never silently dropped).\n- `fr debt` lists owed actions from open owed/awaiting-live\
+    \ issues, held manual phases, unwalked post-merge rows and unresolved owed journal entries, archived\
+    \ journals included, and `fr journal resolve` with evidence removes an entry from that list.\n\n\n\
+    --- comment ---\n## Another instance: derio-net/agent-images, 2026-10-11\n\nFound while delivering\
+    \ derio-net/agent-images#164. fr 5.19.3 asked to migrate artifacts, and `fr migrate artifacts` reported\
+    \ **\"2 in-flight plan(s) have no run cursor\"**, offering adoption. Neither plan was in flight. Both\
+    \ delivery PRs had **merged**:\n\n| plan | PR | what's left unticked |\n|---|---|---|\n| `2026-07-23--agents--agent-images-version-sweep`\
+    \ | #155, merged | phase 6 \"Branch build validation\" (3 steps) · phase 7 `[manual] omnictl target\
+    \ discovery` (2 steps) |\n| `2026-08-03-hermes-ssh-bun-runtime` | #158, merged | phase 3 `[manual]\
+    \ Operator: build the branch, merge, hand the SHA to frank` (2 steps) |\n\nThis is the \"merged, not\
+    \ archived\" category (A) colliding with D.1's held `[manual]` phase:\n\n- **Nothing surfaced it for\
+    \ about two months.** Neither plan was archived, and the unticked manual phases were visible only\
+    \ through fr's own tooling. The operator's working assumption was \"they're stalled\".\n- **The leftover\
+    \ steps are a mix of dead and owed work.** Hermes phase 3 and version-sweep phase 6 are effectively\
+    \ done or moot: the PR merged, and main's push build replaced the branch build. Version-sweep phase\
+    \ 7 (omnictl target discovery) may be a **real owed operator action**. Today nothing records which\
+    \ is which: no owed entry, no issue.\n- **Adoption can't express \"merged, steps owed\".** `fr run\
+    \ adopt <plan> --branch feat/... --pr <merged PR URL>` lands both cursors on **`implement pending`**,\
+    \ because the manual phases are unticked and no `kind=review` entries exist. A run whose PR merged\
+    \ weeks ago now reads as in implementation. Under D.1 these would be `owed` outcomes, or `n/a` with\
+    \ a reason, recorded at close-out, and `fr debt` would list version-sweep phase 7 under **Owed** instead\
+    \ of inventing a cursor.\n- **Adoption has a pitfall.** Without `--branch`, `fr run adopt` derives\
+    \ the run id from the checked-out branch. Run from an unrelated fix branch, it bound the version-sweep\
+    \ plan to `2026-10-11-fix-batch-agent-session-once`, and the second plan's adopt then collided on\
+    \ that id. I caught it and reverted it before pushing. For a plan whose PR merged, the branch could\
+    \ be inferred from the PR, or adopt could refuse when the checked-out branch isn't the plan's.\n\n\
+    The runs are now adopted as `2026-10-11-feat-upstream-version-sweep` and `2026-10-11-feat-hermes-ssh-bun-runtime`,\
+    \ riding in agent-images#164.\n"
+- kind: decision
+  id: scope-all
+  title: 'Scope: all of A–D in one PR'
+  body: 'Operator chose all of #1121 (engine, weekly issue, triage panel, skipped split, owed actions
+    incl. the close-out per-step gate) in this one PR.
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: status-names
+  title: skipped → unwired / walk-owed / walked / manual
+  body: 'Four explicit statuses; 27 of 38 skipped rows carry no verify/walks, so derivation from existing
+    fields was ruled out by measurement.
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: migration-rule
+  title: Mechanical migration rule + hand reclassification here
+  body: 'pass walk → walked; effective post-merge strategy → walk-owed; else → unwired. super-fr''s own
+    rows are then reclassified by hand with set-status (R7).
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: walked-not-debt
+  title: walked is not debt; show its age
+  body: 'walked rows are listed with the latest passing walk''s date; no age-out rule in this PR.
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: stale-days
+  title: 'Stale in-progress plan: 14 days, configurable'
+  body: 'No commit on plan dir or run branch and no PR activity for 14 days; `stale_days` in .fr/debt.yaml
+    or --stale-days.
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: archive-pr
+  title: Weekly job opens/refreshes one draft archive PR, all forges
+  body: 'Fixed branch chore/debt-archive-sweep; never marked ready or merged by the bot. Only plans merged
+    longer than stale_days ago, so a just-merged plan''s own close-out is not pre-empted (#660/#664).
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: panel-source
+  title: Triage Debt panel reads JSON embedded in the issue body
+  body: 'collect stays forge-only; one engine, no re-derivation; trend from triage snapshots.
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: owed-kind
+  title: New `owed` journal kind
+  body: 'Journal stamp 1 → 2 with migration + validator; an open owed entry never fails `fr journal check`
+    (the finding+token alternative would fail closed on older fr).
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: owed-label
+  title: New `fr:owed` label
+  body: 'Sibling of fr:awaiting-live, with its own never-ranked triage set.
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: verification
+  title: 'Verification: candidate + live rows'
+  body: 'Run strategy candidate; the weekly issue rename and the CI archive PR rows are `live`.
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: pr-token
+  title: 'Archive PR token: optional FR_DEBT_TOKEN, fallback to the workflow token'
+  body: 'With the fallback the PR body says CI will not run until a push (GitHub does not run workflows
+    on PRs opened with GITHUB_TOKEN).
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: owed-always-filed
+  title: Owed entries are always filed at archive
+  body: 'Independent of --issues/--no-issues; skipped only under tracking: none.
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: outcome-verb
+  title: '`fr closeout outcome` records Test Plan step outcomes'
+  body: '--ran --evidence | --owed --why | --na --reason, step ranges; writes spec-journal entries test-plan-step-<n>;
+    `fr archive --branch` holds until every step has one.
+
+
+    decider: operator (Round 1/2 question round)'
+- kind: decision
+  id: gate-reach
+  title: The archive hold applies to every close-out
+  body: 'Older Test Plans with unit-test bullets take one ranged `--na --reason ''in CI''` command.
+
+
+    decider: operator (Round 1/2 question round)'
+resolves: []
+acceptance:
+- id: debt-report
+  capability: debt
+  acceptance: '`fr debt` reports acceptance by status, the three plan categories (archivable, stale, manual-open)
+    and owed actions, as text and JSON, read-only.'
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R1
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R2
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R3
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R4
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R25
+  status: not-implemented
+- id: matrix-status-split
+  capability: acceptance
+  acceptance: '`skipped` is replaced by unwired / walk-owed / walked / manual; the matrix migration moves
+    every existing skipped row into exactly one new status and every surface uses the new names.'
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R5
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R6
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R7
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R8
+  status: not-implemented
+- id: debt-weekly-issue-rename
+  capability: debt
+  acceptance: 'The weekly job keeps one `<repo>: Technical debt` issue, renaming a legacy Acceptance debt
+    issue in place, never duplicating, closing at zero debt.'
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R9
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R10
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R11
+  verify: live
+  status: not-implemented
+- id: debt-archive-pr-weekly
+  capability: debt
+  acceptance: The weekly job opens or refreshes one draft archive PR for plans merged complete and unarchived
+    beyond the stale threshold, never ready, never merged.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R12
+  verify: live
+  status: not-implemented
+- id: debt-ci-scaffold-refresh
+  capability: acceptance
+  acceptance: The CI scaffolds on all three forges call `fr debt`, and `fr acceptance init --refresh-ci`
+    updates an fr-scaffolded workflow while refusing a foreign file.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R13
+  status: not-implemented
+- id: triage-debt-panel
+  capability: triage
+  acceptance: Triage keeps debt digests and fr:owed issues out of ranking in their own sets, and the board
+    shows a per-repo Debt panel with figures and a trend.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R14
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R15
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R16
+  visual:
+    states:
+    - panel-with-figures
+    - trend-vs-previous
+    - repo-without-report
+    - legacy-digest-without-figures
+    interactions:
+    - expand-repo-section
+  status: not-implemented
+- id: closeout-step-outcomes
+  capability: closeout
+  acceptance: Every Test Plan step gets an explicit ran / owed / n/a outcome, and `fr archive --branch`
+    holds a close-out with a step missing one (a skipped step is never silently dropped).
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R17
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R18
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R19
+  status: not-implemented
+- id: owed-durable-at-archive
+  capability: closeout
+  acceptance: Every owed step and every unticked manual phase at archive leaves an `owed` journal entry
+    plus one fr:owed issue, idempotently, whatever --issues says.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R20
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R21
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R22
+  status: not-implemented
+- id: debt-owed-discharge
+  capability: debt
+  acceptance: '`fr debt` lists owed actions from owed/awaiting-live issues, held manual phases, walk-owed
+    rows and unresolved owed entries (archived included), and resolving an owed entry with evidence removes
+    it and closes its issue.'
+  origin:
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R23
+  - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R24
+  status: not-implemented
+emitted:
+  spec: docs/superpowers/specs/2026-10-11-debt-engine-design.md
+evidence: {}
