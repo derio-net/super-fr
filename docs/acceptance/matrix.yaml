@@ -6783,9 +6783,19 @@ rows:
       or hands back an ejected PR; a repo with no queue keeps its train unchanged.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; the phase that builds it writes the file.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_queue_repo_enqueues_an_approved_green_pr_and_records_it
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_pr_ejected_with_the_base_moved_is_enqueued_again
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_pr_ejected_with_the_base_unmoved_needs_you_and_is_not_enqueued_again
+      - super-fr:tests/unit/test_merge_train_queue_walk.py#test_every_approved_green_unqueued_member_is_enqueued_and_none_is_merged
+      - super-fr:tests/unit/test_merge_queue_forge.py#test_queue_state_reads_graphql
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_queue
+    status: ci
+    notes: 'Phase 3: queue mode built. Scenario holds a queue repo under forge.api rest
+      and merges when the rule is gone; the GraphQL enqueue, ejection and re-enqueue
+      path is unit-tested over fakes (no live merge queue exists to capture).'
     verify: candidate
     scenario: tests/scenarios/merge-train-queue.sh
   - id: merge-train-strict-up-to-date
