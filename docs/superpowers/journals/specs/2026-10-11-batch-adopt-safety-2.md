@@ -171,3 +171,8 @@ Fixed in R9 and §B step 3: the stop report echoes --no-hold and --checkout on b
 ### phase-split-2026-10-11-batch-adopt-safety-2-p2 · decision · ask: #1069 adopting a session on the default branch (R5–R9) is its own independently reviewable ask
 
 Phase 2 serves only #1069's requirements and its own acceptance row.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-11-batch-adopt-safety-2-p3 created=2026-10-11T19:05:55+00:00 -->
+### phase-split-2026-10-11-batch-adopt-safety-2-p3 · decision · ask: #1071 the adopt --list columns and ref classification (R11–R18) is its own independently reviewable ask
+
+Phase 3 serves only #1071's requirements and its own acceptance row.
