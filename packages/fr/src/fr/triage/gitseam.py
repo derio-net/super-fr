@@ -438,6 +438,36 @@ class Checkout:
                 return Path(line.removeprefix("worktree ")).resolve()
         return self.path.resolve()
 
+    def dirty_paths(self) -> tuple[str, ...]:
+        """The paths `git status --porcelain` reports in the MAIN worktree, tracked or
+        untracked; empty when it is clean (default-branch adopt, R7)."""
+        raw = git(["status", "--porcelain", "-z"], self.main_worktree()).split("\0")
+        paths: list[str] = []
+        skip = False
+        for entry in raw:
+            if skip:  # the source path of a rename or copy
+                skip = False
+                continue
+            if len(entry) < 4:
+                continue
+            paths.append(entry[3:])
+            skip = entry[0] in "RC"
+        return tuple(paths)
+
+    def unpushed(self, branch: str) -> tuple[str, ...]:
+        """`<sha> <subject>` for each commit on local *branch* that `origin/<branch>`
+        lacks, newest first, read in the main worktree (R7). Fetch first."""
+        out = git(
+            ["log", "--format=%h %s", f"origin/{branch}..refs/heads/{branch}"],
+            self.main_worktree(),
+        )
+        return tuple(line for line in out.splitlines() if line)
+
+    def ahead(self, ref: str, base: str) -> int:
+        """How many commits *ref* has that *base* lacks (`base..ref`)."""
+        out = git(["rev-list", "--count", f"{base}..{ref}"], self.main_worktree())
+        return int(out.strip() or "0")
+
     def publish_branch(self, branch: str) -> None:
         """Push local *branch* to origin and make that its upstream (batch adopt, §C)."""
         git(
