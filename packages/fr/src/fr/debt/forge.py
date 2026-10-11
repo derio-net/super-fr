@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from fr.debt.engine import PartialIssuesError
 from fr.ghclient import GhClient
 
 OWED_LABELS = ("fr:owed", "fr:awaiting-live")
@@ -46,4 +47,9 @@ class ClientDebtForge:
                         "labels": labels,
                     }
                 )
+        if len(raw) >= ISSUE_LIMIT:
+            raise PartialIssuesError(
+                out,
+                f"partial: only the first {ISSUE_LIMIT} open issues were scanned for owed labels",
+            )
         return out

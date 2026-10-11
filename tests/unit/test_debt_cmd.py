@@ -72,3 +72,49 @@ def test_digest_renders_the_acceptance_section_with_the_legacy_marker(repo: Path
     assert r.output.startswith("## Acceptance debt")
     assert "| a | unwired |" in r.output
     assert "<!-- fr-acceptance-digest -->" in r.output
+
+
+def test_tracking_none_means_git_only_and_says_why(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import types
+
+    monkeypatch.setattr(
+        "fr.services.resolve.resolve_tracking", lambda *_a, **_k: types.SimpleNamespace(type="none")
+    )
+    forge, why = debt_cmd._forge(repo)
+    assert forge is None and why == "tracking: none"
+    r = runner.invoke(app, ["debt", "--json"])
+    assert r.exit_code == 0, r.output
+    report = DebtReport.model_validate(json.loads(r.output))
+    assert report.sources["forge"].why.startswith("tracking: none")
+
+
+def test_a_repo_without_a_remote_says_so_rather_than_offline(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import types
+
+    monkeypatch.setattr(
+        "fr.services.resolve.resolve_tracking",
+        lambda *_a, **_k: types.SimpleNamespace(type="github"),
+    )
+    forge, why = debt_cmd._forge(repo)
+    assert forge is None and "origin" in why
+
+
+def test_an_unreadable_matrix_does_not_drop_the_forge(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import types
+
+    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("not: [valid")
+    monkeypatch.setattr(
+        "fr.services.resolve.resolve_tracking",
+        lambda *_a, **_k: types.SimpleNamespace(type="github"),
+    )
+    monkeypatch.setattr("fr._hosts.origin_slug", lambda _root: "o/r")
+    monkeypatch.setattr(debt_cmd, "_make_gh_client", lambda: object(), raising=False)
+    monkeypatch.setattr("fr.commands.archive_cmd._make_gh_client", lambda: object())
+    forge, why = debt_cmd._forge(repo)
+    assert forge is not None and why == ""

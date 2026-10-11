@@ -16,7 +16,15 @@ from typing import Any, Protocol
 
 import yaml
 
-from fr.acceptance.model import AcceptanceError, Matrix, latest_passing_walk_at, load_matrix
+from fr.acceptance.check import _age_key
+from fr.acceptance.model import (
+    DEBT_STATUSES,
+    LISTED_STATUSES,
+    AcceptanceError,
+    Matrix,
+    latest_passing_walk_at,
+    load_matrix,
+)
 from fr.archive import MergeEvidence, merge_evidence
 from fr.closeout import plan_sweep
 from fr.debt.model import (
@@ -42,6 +50,15 @@ _CONFIG_KEYS = frozenset({"stale_days"})
 
 class DebtConfigError(ValueError):
     """`.fr/debt.yaml` (or `--stale-days`) could not be honoured."""
+
+
+class PartialIssuesError(Exception):
+    """`owed_issues` raises this when its list may be incomplete (a cap was hit);
+    `items` is what it did read, and the report says the source is partial."""
+
+    def __init__(self, items: list[dict[str, Any]], why: str) -> None:
+        super().__init__(why)
+        self.items = items
 
 
 class DebtForge(Protocol):
@@ -162,7 +179,7 @@ def _last_commit(
 ) -> datetime | None:
     """Committer time of the newest commit on *ref* touching *rel* (any path
     when None), leaving out what *exclude* already holds; None when there is none."""
-    argv = ["git", "-C", str(repo_root), "log", "-1", "--format=%cI", ref]
+    argv = ["git", "-C", str(repo_root), "log", "-1", "--format=%cI", "--end-of-options", ref]
     if exclude:
         argv.append(f"^{exclude}")
     if rel:
@@ -189,6 +206,23 @@ def _parse(text: str | None) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
+def _safe_branch(repo_root: Path, branch: str) -> bool:
+    """A branch name from a run cursor is untrusted input: it reaches `git log`
+    and the forge CLI, so one that is an option or not a valid ref name is dropped."""
+    if not branch or branch.startswith("-"):
+        return False
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(repo_root), "check-ref-format", "--branch", branch],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0
+
+
 def _run_branches(repo_root: Path) -> dict[str, str]:
     """plan name -> run branch, from every run cursor that emitted the plan."""
     out: dict[str, str] = {}
@@ -203,7 +237,7 @@ def _run_branches(repo_root: Path) -> dict[str, str]:
         for step in (data.get("steps") or {}).values():
             emitted = step.get("emitted") if isinstance(step, dict) else None
             plan = emitted.get("plan") if isinstance(emitted, dict) else None
-            if isinstance(plan, str):
+            if isinstance(plan, str) and _safe_branch(repo_root, data["branch"]):
                 out[Path(plan).name] = data["branch"]
     return out
 
@@ -216,6 +250,11 @@ def acceptance_from_matrix(matrix: Matrix) -> AcceptanceDebt:
     by_status: dict[str, int] = {}
     for r in matrix.rows:
         by_status[r.status] = by_status.get(r.status, 0) + 1
+    listed = [r for r in matrix.rows if r.status in LISTED_STATUSES]
+    # Debt rows oldest origin first, as `open_rows` orders the nag; the rest keep matrix order.
+    ordered = sorted((r for r in listed if r.status in DEBT_STATUSES), key=_age_key) + [
+        r for r in listed if r.status not in DEBT_STATUSES
+    ]
     rows = tuple(
         DebtRow(
             id=r.id,
@@ -224,8 +263,7 @@ def acceptance_from_matrix(matrix: Matrix) -> AcceptanceDebt:
             notes=r.notes,
             walked_at=latest_passing_walk_at(r) if r.status == "walked" else None,
         )
-        for r in matrix.rows
-        if r.status in {"not-implemented", "unwired", "walk-owed", "failing", "walked", "manual"}
+        for r in ordered
     )
     return AcceptanceDebt(by_status=by_status, rows=rows, available=True)
 
@@ -249,8 +287,10 @@ def compute(
     stale_days: int | None = None,
     evidence: MergeEvidence | None = None,
     fetch: bool = False,
+    forge_why: str = "",
 ) -> DebtReport:
-    """The repo's debt as one report. *forge* None means offline (R4)."""
+    """The repo's debt as one report. *forge* None means no forge was used (R4);
+    *forge_why* says why (offline, tracking none, no remote), else "offline"."""
     days = load_stale_days(repo_root, stale_days)
     ev = evidence if evidence is not None else merge_evidence(repo_root, fetch=fetch)
     sources: dict[str, SourceStatus] = {}
@@ -261,6 +301,10 @@ def compute(
     if ev.ref is None:
         sources["git"] = SourceStatus(
             state="unavailable", why=ev.ref_error or "default branch unknown"
+        )
+    elif ev.fetch_error:
+        sources["git"] = SourceStatus(
+            state="read", why=f"local ref; fetch failed: {ev.fetch_error}"
         )
     else:
         sources["git"] = SourceStatus(state="read")
@@ -279,7 +323,8 @@ def compute(
         )
 
     forge_ok = forge is not None
-    forge_why = "offline: staleness comes from git alone" if forge is None else ""
+    forge_why = f"{forge_why or 'offline'}: staleness comes from git alone" if forge is None else ""
+    forge_note = ""
     branches = _run_branches(repo_root)
     stale = []
     for name in [*sweep.in_progress, *sweep.complete_unmerged]:
@@ -287,6 +332,8 @@ def compute(
         times: list[datetime | None] = []
         if ref:
             times.append(_last_commit(repo_root, ref, rel))
+        else:
+            times.append(_last_commit(repo_root, "HEAD", rel))
         branch = branches.get(name)
         if branch:
             for b in (f"origin/{branch}", branch):
@@ -298,14 +345,14 @@ def compute(
                 pr = forge.pr_for_branch(branch)
             except Exception as e:  # a forge failure degrades the report, never fails it
                 forge_ok, forge_why = False, f"{type(e).__name__}: {e}"
-                pr = None
-            basis = "git+forge"
-            if pr:
-                times.append(_parse(pr.get("updatedAt")))
-        elif forge is not None:
-            basis = "git+forge"
+            else:
+                basis = "git+forge"
+                if pr:
+                    times.append(_parse(pr.get("updatedAt")))
         seen = [t for t in times if t is not None]
         if not seen:
+            # No readable activity is not "active": list it, with the age unknown.
+            stale.append(StalePlan(name=name, last_activity=None, idle_days=None, basis=basis))
             continue
         last = max(seen)
         if now - last > timedelta(days=days):
@@ -326,10 +373,12 @@ def compute(
     if forge is not None and forge_ok:
         try:
             issues = forge.owed_issues()
+        except PartialIssuesError as e:
+            issues, forge_note = e.items, str(e)
         except Exception as e:
             forge_ok, forge_why = False, f"{type(e).__name__}: {e}"
     sources["forge"] = (
-        SourceStatus(state="read")
+        SourceStatus(state="read", why=forge_note)
         if forge_ok and forge is not None
         else SourceStatus(state="unavailable", why=forge_why)
     )

@@ -14,6 +14,7 @@ import yaml
 from fr.debt.engine import (
     DebtConfigError,
     OwedSources,
+    PartialIssuesError,
     compute,
     fold_owed,
     load_stale_days,
@@ -31,7 +32,7 @@ def _commit_at(repo: Path, msg: str, iso: str) -> None:
     base = ["git", "-C", str(repo), "-c", "user.email=t@e", "-c", "user.name=t"]
     subprocess.run([*base, "add", "-A"], check=True, capture_output=True, env=env)
     subprocess.run(
-        [*base, "-c", "commit.gpgsign=false", "commit", "-qm", msg],
+        [*base, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", msg],
         check=True,
         capture_output=True,
         env=env,
@@ -214,7 +215,7 @@ def test_an_unreadable_matrix_is_unavailable_never_zero(repo: Path) -> None:
     report = compute(repo, forge=None, now=NOW, stale_days=14)
     assert report.acceptance.available is False
     assert report.sources["matrix"].state == "unavailable"
-    assert "skipped" in report.sources["matrix"].why or report.sources["matrix"].why
+    assert "skipped" in report.sources["matrix"].why
 
 
 def test_owed_folds_rows_held_manual_phases_and_issues(repo: Path) -> None:
@@ -266,3 +267,137 @@ def test_fold_owed_dedups_by_key_with_journal_then_row_winning() -> None:
 
 def test_fold_owed_with_no_journal_source_is_the_phase_two_shape() -> None:
     assert fold_owed(OwedSources(rows=[_item("row:a", "row")])) == (_item("row:a", "row"),)
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+
+def test_a_hostile_run_branch_creates_no_file_and_asks_no_forge(repo: Path, tmp_path: Path) -> None:
+    target = tmp_path / "pwned"
+    _write_plan(repo, "evil", [("agentic", False)])
+    _run_cursor(repo, "evil", f"--output={target}")
+    _publish_at(repo, "2026-09-01T12:00:00+00:00")
+    forge = FakeForge()
+    report = compute(repo, forge=forge, now=NOW, stale_days=14)
+    assert not target.exists()
+    assert forge.asked == []
+    assert [s.name for s in report.plans.stale] == ["evil"]
+
+
+def test_a_branch_that_is_not_a_ref_name_is_skipped(repo: Path) -> None:
+    _write_plan(repo, "odd", [("agentic", False)])
+    _run_cursor(repo, "odd", "feat/a..b")
+    _publish_at(repo, "2026-09-01T12:00:00+00:00")
+    forge = FakeForge()
+    compute(repo, forge=forge, now=NOW, stale_days=14)
+    assert forge.asked == []
+
+
+def test_a_forge_that_raises_on_a_pr_lookup_leaves_the_basis_git(repo: Path) -> None:
+    class Boom(FakeForge):
+        def pr_for_branch(self, branch: str) -> dict[str, Any] | None:
+            raise RuntimeError("rate limited")
+
+    _write_plan(repo, "p", [("agentic", False)])
+    _run_cursor(repo, "p", "feat/p")
+    _publish_at(repo, "2026-09-01T12:00:00+00:00")
+    report = compute(repo, forge=Boom(), now=NOW, stale_days=14)
+    assert report.plans.stale[0].basis == "git"
+    assert report.sources["forge"].state == "unavailable"
+
+
+def test_a_plan_with_no_readable_activity_is_listed_not_dropped(repo: Path) -> None:
+    _publish_at(repo, "2026-10-01T12:00:00+00:00")
+    _write_plan(repo, "uncommitted", [("agentic", False)])
+    [s] = compute(repo, forge=None, now=NOW, stale_days=14).plans.stale
+    assert s.name == "uncommitted" and s.idle_days is None and s.last_activity is None
+
+
+def test_without_a_default_ref_activity_falls_back_to_head(tmp_path: Path) -> None:
+    r = _init(tmp_path / "solo")
+    _write_plan(r, "old", [("agentic", False)])
+    _commit_at(r, "plan", "2026-09-01T12:00:00+00:00")
+    [s] = compute(r, forge=None, now=NOW, stale_days=14).plans.stale
+    assert s.idle_days == 40
+
+
+def test_a_failed_fetch_is_surfaced_in_the_git_source(repo: Path) -> None:
+    import dataclasses
+
+    from fr.archive import merge_evidence
+
+    _publish_at(repo, "2026-10-01T12:00:00+00:00")
+    ev = dataclasses.replace(merge_evidence(repo, fetch=False), fetch_error="offline")
+    report = compute(repo, forge=None, now=NOW, stale_days=14, evidence=ev)
+    assert report.sources["git"].state == "read"
+    assert "fetch failed: offline" in report.sources["git"].why
+
+
+def test_a_complete_unmerged_plan_goes_stale_on_its_run_branch(repo: Path) -> None:
+    _publish_at(repo, "2026-09-01T12:00:00+00:00")
+    _git(repo, "checkout", "-q", "-b", "feat/cu")
+    _write_plan(repo, "cu", [("agentic", True)])
+    _run_cursor(repo, "cu", "feat/cu")
+    _commit_at(repo, "cu", "2026-09-05T12:00:00+00:00")
+    report = compute(repo, forge=None, now=NOW, stale_days=14)
+    assert report.plans.archivable == ()
+    [s] = report.plans.stale
+    assert s.name == "cu" and s.idle_days == 36
+
+
+def test_activity_on_the_remote_branch_alone_keeps_a_plan_active(repo: Path) -> None:
+    _write_plan(repo, "rb", [("agentic", False)])
+    _run_cursor(repo, "rb", "feat/rb")
+    _publish_at(repo, "2026-09-01T12:00:00+00:00")
+    _git(repo, "checkout", "-q", "-b", "feat/rb")
+    (repo / "w").write_text("1")
+    _commit_at(repo, "work", "2026-10-10T12:00:00+00:00")
+    _git(repo, "push", "-q", "origin", "feat/rb")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "branch", "-q", "-D", "feat/rb")
+    _git(repo, "fetch", "-q", "origin")
+    assert compute(repo, forge=None, now=NOW, stale_days=14).plans.stale == ()
+
+
+def test_stale_days_must_be_positive(repo: Path) -> None:
+    with pytest.raises(DebtConfigError):
+        load_stale_days(repo, 0)
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "debt.yaml").write_text("stale_days: 0\n")
+    with pytest.raises(DebtConfigError):
+        load_stale_days(repo, None)
+
+
+def test_a_partial_issue_list_is_reported_on_the_forge_source(repo: Path) -> None:
+    class Capped(FakeForge):
+        def owed_issues(self) -> list[dict[str, Any]]:
+            raise PartialIssuesError(
+                [{"ref": "o/r#8", "title": "t", "body": "", "labels": []}], "partial: cap"
+            )
+
+    _publish_at(repo, "2026-10-01T12:00:00+00:00")
+    report = compute(repo, forge=Capped(), now=NOW, stale_days=14)
+    assert report.sources["forge"].state == "read" and "partial" in report.sources["forge"].why
+    assert [o.key for o in report.owed] == ["issue:o/r#8"]
+
+
+def test_forge_why_explains_a_missing_forge(repo: Path) -> None:
+    _publish_at(repo, "2026-10-01T12:00:00+00:00")
+    report = compute(repo, forge=None, now=NOW, stale_days=14, forge_why="tracking: none")
+    assert report.sources["forge"].why.startswith("tracking: none")
+
+
+def test_debt_rows_are_listed_oldest_origin_first(repo: Path) -> None:
+    spec = "super-fr:docs/superpowers/specs/{}-x-design.md"
+    _matrix(
+        repo,
+        [
+            _row("new", "unwired", origin=[spec.format("2026-09-01")]),
+            _row("old", "unwired", origin=[spec.format("2026-01-01")]),
+            _row("fine", "ci"),
+        ],
+    )
+    _publish_at(repo, "2026-10-01T12:00:00+00:00")
+    rows = compute(repo, forge=None, now=NOW, stale_days=14).acceptance.rows
+    assert [r.id for r in rows] == ["old", "new"]

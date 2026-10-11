@@ -45,6 +45,10 @@ DEBT_STATUSES: frozenset[str] = frozenset({"not-implemented", "unwired", "walk-o
 """The acceptance debt statuses (R2), defined once: every surface that counts
 acceptance debt counts these. `walked` and `manual` are listed, never debt."""
 
+LISTED_STATUSES: frozenset[str] = DEBT_STATUSES | {"walked", "manual"}
+"""What `fr debt` lists per row: the debt statuses plus `walked` and `manual`
+(listed with their counts, never debt)."""
+
 LEGACY_SKIPPED = "skipped"
 """The matrix-v4 status `skipped`, refused by name since kind 4 -> 5
 (`fr.artifacts.matrix_status_split`)."""

@@ -233,3 +233,26 @@ def test_an_unknown_github_host_fails_closed_before_any_lookup(
     with pytest.raises(GhError, match="evil.example"):
         RealGhClient(host="evil.example").default_branch(cwd=tmp_path)
     assert rec.calls == []
+
+
+def test_gitlab_carries_updated_at(tmp_path: Path) -> None:
+    out = json.dumps({"state": "opened", "web_url": "u", "updated_at": "2026-10-02T00:00:00Z"})
+    pr = RealGlabClient().pr_for_branch("feat/x", cwd=tmp_path, run=_Scripted(out=out))
+    assert pr is not None and pr["updatedAt"] == "2026-10-02T00:00:00Z"
+
+
+def test_gitea_carries_updated(tmp_path: Path) -> None:
+    out = json.dumps(
+        [{"state": "open", "merged": False, "url": "u", "head": {"label": "feat/x"},
+          "updated": "2026-10-03T00:00:00Z"}]
+    )  # fmt: skip
+    pr = RealTeaClient().pr_for_branch("feat/x", cwd=tmp_path, run=_Scripted(out=out))
+    assert pr is not None and pr["updatedAt"] == "2026-10-03T00:00:00Z"
+
+
+def test_github_passes_updated_at_through(tmp_path: Path) -> None:
+    out = json.dumps(
+        {"state": "OPEN", "url": "u", "mergedAt": None, "updatedAt": "2026-10-04T00:00:00Z"}
+    )
+    pr = RealGhClient().pr_for_branch("feat/x", cwd=tmp_path, run=_Scripted(out=out))
+    assert pr is not None and pr["updatedAt"] == "2026-10-04T00:00:00Z"
