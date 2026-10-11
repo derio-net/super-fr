@@ -119,9 +119,17 @@ rows:
       - super-fr:tests/unit/test_isolation_cmd.py
       - super-fr:tests/unit/test_init_scaffold.py
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): CLI
-      + scaffold unit-pinned; the live worktree+container walk was proven at the 2.4.0
-      release (no walk recorded on the row, so undated).'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): CLI +
+      scaffold unit-pinned; the live worktree+container walk was proven at the 2.4.0
+      release, dated by that release''s tag.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-06-04T00:00:00Z'
+      evidence: the live worktree+container walk proven at the 2.4.0 release (tag v2.4.0,
+        2026-06-04)
   - id: isolation-guard-base-deny
     capability: Isolation
     acceptance: While an fr pipeline is active, base-repo-cwd Bash is denied and worktree
