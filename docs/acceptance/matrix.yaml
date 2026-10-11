@@ -8289,3 +8289,22 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
+  - id: step-record-status-migration
+    capability: acceptance
+    acceptance: 'An in-flight step record written before the split still applies after
+      upgrade: its `skipped` acceptance status is migrated by the same rule as the matrix.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R27
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: forge-adapter-debt-ops
+    capability: forge
+    acceptance: Every forge adapter edits an issue's title and body, lists open issues
+      with bodies, creates a draft PR, finds the open PR for a head and closes an issue,
+      or raises the unsupported error by name.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R26
+    levels: {}
+    status: not-implemented
+    notes: ''

@@ -227,3 +227,222 @@ decider: operator (Round 1/2 question round)
 ### gate-question-rounds-brainstorm · decision · Operator gate `brainstorm` took two question rounds
 
 Trigger: design-risk. Round 1's archive-PR, owed-kind and scope answers left four code-level gaps (GITHUB_TOKEN PRs run no CI; --no-issues opt-out; no structured outcome record; legacy Test Plan bullets) checked against the code before round 2.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-r1 created=2026-10-11T17:35:32+00:00 -->
+### spec-review-r1 · review · independent spec review: 21 findings
+
+Checked all 14 operator decisions against R1–R25 and Design A–E; every named file/helper/constant/kind version under packages/fr/src/fr/; R1–R25 against Design and the Test Plan; artifact-versioning obligations for matrix 4→5, journal 1→2, triage facts and snapshot schemas.
+
+Findings: sr1-matrix-hop-live-parser, sr1-migration-report-companions, sr1-effective-strategy-inputs, sr1-owed-resolution-fold, sr1-journal-resolve-syntax, sr1-forge-parity, sr1-shallow-clone-staleness, sr1-read-only-exemption, sr1-two-debt-definitions, sr1-owed-double-count, sr1-sweep-bypasses-hold, sr1-facts-schema-number, sr1-refresh-ci-gitlab, sr1-test-plan-coverage, sr1-test-plan-dispatch-path, sr1-body-size-escaping, sr1-gh-actions-pr-permission, sr1-skipped-surfaces-missed, sr1-record-kind-impact, sr1-consumer-rollout-claim, sr1-outcome-decision-kind.
+
+No decision contradicted outright; owed-kind, archive-pr (all forges) and gate-reach were undermined by the design as written.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-matrix-hop-live-parser created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-matrix-hop-live-parser · finding [open] (reviewer: in scope) · Matrix 3→4 hop validates with the live model, so the 4→5 status removal strands every v1–v3 matrix with skipped rows
+
+matrix_strategies.py:58-65 `_is_v4` and :90 use live parse_matrix; once `skipped` leaves Status a v3 matrix with skipped rows fails the 3→4 hop. Freeze MatrixV4 (superset v1–v4, StatusV4 incl skipped), move both checks to it, chain test from v1 with skipped rows.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-migration-report-companions created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-migration-report-companions · finding [open] (reviewer: in scope) · The 4→5 migration must regenerate the three committed reports as companions
+
+Statuses are rendered (report.py:200,263,313,359); after migrate the committed reports go stale and `fr acceptance check` fails. Render render_committed_set before writing, as matrix_anchors.py:113-124.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-effective-strategy-inputs created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-effective-strategy-inputs · finding [open] (reviewer: in scope) · R6's 'effective strategy is post-merge' has no defined inputs inside a migration, and StrategyError is unhandled
+
+A migration has no run/shape default/single spec (effective.py:16-51, rows.py:78-97). Define the inputs and the unresolvable-name behaviour.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-owed-resolution-fold created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-owed-resolution-fold · finding [open] (reviewer: in scope) · Resolution records on owed entries are kind=finding, so filing an owed entry makes `fr journal check` fail
+
+journal/model.py:136-143,552-570,652-665; journal_cmd.py:445-450. The filed_as record (state=open) would make the owed id an open finding, contradicting decision owed-kind.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-journal-resolve-syntax created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-journal-resolve-syntax · finding [open] (reviewer: in scope) · R24's `fr journal resolve <id> --evidence` does not match the real CLI, and the archived lookup already exists
+
+journal_cmd.py:349-372 takes --scope/--slug/--id/--state/--note; :397-407 already resolves archived journals.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-forge-parity created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-forge-parity · finding [open] (reviewer: in scope) · The forge adapters cannot do what R9/R12/R23 need on GitLab or Gitea, and no adapter can edit an issue title
+
+ghclient.py:87-461: no edit-title on any client; glab/tea raise UnsupportedForgeOperation for list_issues, create_pr, open_pr_for_head, pr_view.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-shallow-clone-staleness created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-shallow-clone-staleness · finding [open] (reviewer: in scope) · Staleness and merge age read git history CI does not have, and no source gives a merge date or PR updatedAt
+
+acceptance-report.yml checks out depth 1; MergeEvidence has no merge date (archive.py:150-172); pr_for_branch has no updatedAt (ghclient.py:352-359).
+
+<!-- fr:journal kind=finding scope=spec id=sr1-read-only-exemption created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-read-only-exemption · finding [open] (reviewer: in scope) · READ_ONLY_COMMANDS cannot exempt `fr debt` but not its subcommands, and archive-pr does mutate artifacts
+
+trigger.py:231 matches the top-level subcommand only; archive-pr runs fr archive/commit/push.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-two-debt-definitions created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-two-debt-definitions · finding [open] (reviewer: in scope) · The digest/status nag set and R2's debt set disagree on `failing`, against R1's one-engine rule
+
+acceptance_cmd.py:915-919 digest derives from open_rows, which would exclude failing.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-owed-double-count created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-owed-double-count · finding [open] (reviewer: in scope) · One held manual phase or walk-owed row is counted up to four times in debt_total
+
+R3/R22/R23/R2 surface the same item in several sections.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-sweep-bypasses-hold created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-sweep-bypasses-hold · finding [open] (reviewer: in scope) · The archive-PR sweep runs `fr archive <plan-dir>`, which skips R19's Test Plan outcome hold
+
+archive_cmd.py:612-613 plan-dir mode vs :666-677 --branch path; decision gate-reach.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-facts-schema-number created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-facts-schema-number · finding [open] (reviewer: in scope) · The triage facts schema is 8, not 3; the snapshot schema change is also unaddressed
+
+triage/model.py:55-56 FACTS_SCHEMA 8, Issue.body :327; snapshot.py:59-65 closed Snapshot schema_version 1.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-refresh-ci-gitlab created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-refresh-ci-gitlab · finding [open] (reviewer: in scope) · `--refresh-ci` cannot recognise the GitLab scaffold, and rewriting `.gitlab-ci.yml` would clobber other jobs
+
+scaffold.py:247-282: the GitLab template has no `name:` line and is the shared root file.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-test-plan-coverage created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-test-plan-coverage · finding [open] (reviewer: in scope) · No Test Plan or Verification entry covers R1–R25 before merge, including the brief's never-silently-dropped scenario
+
+Only two live rows were named; nothing traced the pre-merge proof of each group.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-test-plan-dispatch-path created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-test-plan-dispatch-path · finding [open] (reviewer: in scope) · Test Plan step 1 dispatches the workflow 'with the schedule path enabled', but nothing designs that path
+
+acceptance-report.yml debt step runs only on schedule.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-body-size-escaping created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-body-size-escaping · finding [open] (reviewer: in scope) · The embedded JSON report needs escaping and a size bound
+
+Free text containing `-->` breaks an HTML comment; GitHub bodies cap at 65,536 chars.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-gh-actions-pr-permission created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-gh-actions-pr-permission · finding [open] (reviewer: in scope) · The GITHUB_TOKEN fallback cannot open a PR unless 'Allow GitHub Actions to create … pull requests' is enabled
+
+Default-off repo/org setting refuses PR creation with the workflow token.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-skipped-surfaces-missed created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-skipped-surfaces-missed · finding [open] (reviewer: in scope) · R8's list misses several `skipped` surfaces, and §D does not design the refusal by name
+
+record/apply.py:780; acceptance_cmd.py:279; fr-execute SKILL.md:81; fr-progress SKILL.md:87; fr-acceptance-nag.sh:4; check_verify pattern model.py:167-176.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-record-kind-impact created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-record-kind-impact · finding [open] (reviewer: in scope) · The record kind is affected by the JournalKind and Status changes and is not addressed
+
+record/model.py:29,124 use live JournalKind; record/apply.py:675-683 checks live Status; record at 8.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-consumer-rollout-claim created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-consumer-rollout-claim · finding [open] (reviewer: in scope) · 'Un-refreshed consumer workflows keep working' is false once the matrix and journal kinds move
+
+Consumers run fr acceptance check (not exempt) non-interactively; it refuses until migrated.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-outcome-decision-kind created=2026-10-11T17:35:32+00:00 state=open review_scope=in -->
+### sr1-outcome-decision-kind · finding [open] (reviewer: in scope) · Recording ran/n-a Test Plan outcomes as `decision` entries mixes them with the operator's brainstorm decisions
+
+Spec-journal decisions are the operator's Q&A answers.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-matrix-hop-live-parser-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-matrix-hop-live-parser -->
+### sr1-matrix-hop-live-parser-resolved · finding [fixed] · resolves sr1-matrix-hop-live-parser: Matrix 3→4 hop validates with the live model, so the 4→5 status removal strands every v1–v3 matrix with skipped rows
+
+Fixed in the spec: §D steps 1–2 and 5: MatrixV4 frozen/pinned, 3→4 `_is_v4` and output check moved to it, chain test from v1 with skipped rows.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-migration-report-companions-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-migration-report-companions -->
+### sr1-migration-report-companions-resolved · finding [fixed] · resolves sr1-migration-report-companions: The 4→5 migration must regenerate the three committed reports as companions
+
+Fixed in the spec: R6 + §D step 3: reports rendered in memory and written with the matrix.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-effective-strategy-inputs-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-effective-strategy-inputs -->
+### sr1-effective-strategy-inputs-resolved · finding [fixed] · resolves sr1-effective-strategy-inputs: R6's 'effective strategy is post-merge' has no defined inputs inside a migration, and StrategyError is unhandled
+
+Fixed in the spec: R6 + §D step 4: the row's own `verify` only via is_post_merge; StrategyError leaves the matrix byte-identical and reported.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-owed-resolution-fold-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-owed-resolution-fold -->
+### sr1-owed-resolution-fold-resolved · finding [fixed] · resolves sr1-owed-resolution-fold: Resolution records on owed entries are kind=finding, so filing an owed entry makes `fr journal check` fail
+
+Fixed in the spec: R20 + §E: fold distinguishes by target kind (open_finding_ids skips owed ids; open_owed_ids sibling); filed_as token on an open record validated by TRACKED_BY_RE; resolve accepts owed targets.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-journal-resolve-syntax-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-journal-resolve-syntax -->
+### sr1-journal-resolve-syntax-resolved · finding [fixed] · resolves sr1-journal-resolve-syntax: R24's `fr journal resolve <id> --evidence` does not match the real CLI, and the archived lookup already exists
+
+Fixed in the spec: R24 uses the real flags with --note as the evidence; the 'only for owed' archived-lookup item dropped.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-forge-parity-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-forge-parity -->
+### sr1-forge-parity-resolved · finding [fixed] · resolves sr1-forge-parity: The forge adapters cannot do what R9/R12/R23 need on GitLab or Gitea, and no adapter can edit an issue title
+
+Fixed in the spec: New R26 + §B Adapters: edit_issue, list_open_issues_with_body, create_pr(draft), open_pr_for_head, close_issue on GhClient, RealGhRestClient, glab and tea — keeping the operator's all-forges decision.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-shallow-clone-staleness-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-shallow-clone-staleness -->
+### sr1-shallow-clone-staleness-resolved · finding [fixed] · resolves sr1-shallow-clone-staleness: Staleness and merge age read git history CI does not have, and no source gives a merge date or PR updatedAt
+
+Fixed in the spec: R13/§B fetch-depth: 0; §A merge age = last default-ref commit touching the plan dir; pr_for_branch gains updatedAt (R26).
+
+<!-- fr:journal kind=finding scope=spec id=sr1-read-only-exemption-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-read-only-exemption -->
+### sr1-read-only-exemption-resolved · finding [fixed] · resolves sr1-read-only-exemption: READ_ONLY_COMMANDS cannot exempt `fr debt` but not its subcommands, and archive-pr does mutate artifacts
+
+Fixed in the spec: R25 + §A Exemption: the whole group is exempt and argued safe because archive-pr mutates only through a nested, independently gated `fr archive`; an unmigrated matrix reports the source unavailable (R4).
+
+<!-- fr:journal kind=finding scope=spec id=sr1-two-debt-definitions-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-two-debt-definitions -->
+### sr1-two-debt-definitions-resolved · finding [fixed] · resolves sr1-two-debt-definitions: The digest/status nag set and R2's debt set disagree on `failing`, against R1's one-engine rule
+
+Fixed in the spec: R1/R2: one DEBT_STATUSES in acceptance/model.py shared by open_rows, the nag, status, digest and the engine; digest renders the report's Acceptance section.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-owed-double-count-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-owed-double-count -->
+### sr1-owed-double-count-resolved · finding [fixed] · resolves sr1-owed-double-count: One held manual phase or walk-owed row is counted up to four times in debt_total
+
+Fixed in the spec: R23 + §A Owed keys: one key per item, dedup by key, debt_total counts walk-owed rows under acceptance only and manual_open only through owed items.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-sweep-bypasses-hold-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-sweep-bypasses-hold -->
+### sr1-sweep-bypasses-hold-resolved · finding [fixed] · resolves sr1-sweep-bypasses-hold: The archive-PR sweep runs `fr archive <plan-dir>`, which skips R19's Test Plan outcome hold
+
+Fixed in the spec: R19 holds every archive mode; §B step 2 skips held plans and lists them in the PR body; owed filing runs in the sweep per R21.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-facts-schema-number-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-facts-schema-number -->
+### sr1-facts-schema-number-resolved · finding [fixed] · resolves sr1-facts-schema-number: The triage facts schema is 8, not 3; the snapshot schema change is also unaddressed
+
+Fixed in the spec: §C: no facts bump (figures parsed from Issue.body at check/render); Snapshot 1→2 reading 1; the one-time skipped-split trend is called out; AGENTS.md fix listed under Docs.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-refresh-ci-gitlab-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-refresh-ci-gitlab -->
+### sr1-refresh-ci-gitlab-resolved · finding [fixed] · resolves sr1-refresh-ci-gitlab: `--refresh-ci` cannot recognise the GitLab scaffold, and rewriting `.gitlab-ci.yml` would clobber other jobs
+
+Fixed in the spec: R13 + §B: GitLab is recognised by its `acceptance-report:` job and refused with the exact job to paste.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-test-plan-coverage-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-test-plan-coverage -->
+### sr1-test-plan-coverage-resolved · finding [fixed] · resolves sr1-test-plan-coverage: No Test Plan or Verification entry covers R1–R25 before merge, including the brief's never-silently-dropped scenario
+
+Fixed in the spec: New ## Testing section: per-group CI tests and candidate scenarios, including closeout-owed.sh (a skipped step is never silently dropped) and this repo's own matrix migration.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-test-plan-dispatch-path-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-test-plan-dispatch-path -->
+### sr1-test-plan-dispatch-path-resolved · finding [fixed] · resolves sr1-test-plan-dispatch-path: Test Plan step 1 dispatches the workflow 'with the schedule path enabled', but nothing designs that path
+
+Fixed in the spec: R13/§B: workflow_dispatch input `debt`; Test Plan step 1 uses it.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-body-size-escaping-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-body-size-escaping -->
+### sr1-body-size-escaping-resolved · finding [fixed] · resolves sr1-body-size-escaping: The embedded JSON report needs escaping and a size bound
+
+Fixed in the spec: R11 + §A render: base64 figures only (no free text), tables truncated at 50 rows, body < 60,000 chars.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-gh-actions-pr-permission-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-gh-actions-pr-permission -->
+### sr1-gh-actions-pr-permission-resolved · finding [fixed] · resolves sr1-gh-actions-pr-permission: The GITHUB_TOKEN fallback cannot open a PR unless 'Allow GitHub Actions to create … pull requests' is enabled
+
+Fixed in the spec: R12 + §B: the refusal is reported by name with both remedies as a warning, exit 0, never failing the issue step.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-skipped-surfaces-missed-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-skipped-surfaces-missed -->
+### sr1-skipped-surfaces-missed-resolved · finding [fixed] · resolves sr1-skipped-surfaces-missed: R8's list misses several `skipped` surfaces, and §D does not design the refusal by name
+
+Fixed in the spec: R8 lists the summary, record engine, fr-execute/fr-progress skills and the nag hook; §D adds a mode=before status validator modelled on check_verify.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-record-kind-impact-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-record-kind-impact -->
+### sr1-record-kind-impact-resolved · finding [fixed] · resolves sr1-record-kind-impact: The record kind is affected by the JournalKind and Status changes and is not addressed
+
+Fixed in the spec: New R27 + §D: record 8→9 with RecordV8 frozen and skipped mapped by R6's rule.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-consumer-rollout-claim-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-consumer-rollout-claim -->
+### sr1-consumer-rollout-claim-resolved · finding [fixed] · resolves sr1-consumer-rollout-claim: 'Un-refreshed consumer workflows keep working' is false once the matrix and journal kinds move
+
+Fixed in the spec: §B Rollout: the claim removed; per-consumer migrate + --refresh-ci stated as owed in the PR body's rollout note.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-outcome-decision-kind-resolved created=2026-10-11T17:35:32+00:00 state=fixed resolves=sr1-outcome-decision-kind -->
+### sr1-outcome-decision-kind-resolved · finding [fixed] · resolves sr1-outcome-decision-kind: Recording ran/n-a Test Plan outcomes as `decision` entries mixes them with the operator's brainstorm decisions
+
+Fixed in the spec: R18 + §E: ran and n/a are `discovery` entries.
