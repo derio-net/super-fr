@@ -36,3 +36,8 @@ fr-worktree-create.sh takes its mkdir lock (keyed repo+name) before `case agent-
 ### 13d399eb572e · finding [fixed] · #1105 fixed: allowlist script manages qualified + bare spellings
 
 scripts/ensure-phase-executor-allowlist.sh now inserts the qualified id and its bare name into the case arm and the Exempt message, each probed as a whole member (position-independent), and no longer strips the bare name. Pinned by tests/unit/test_ensure_phase_executor_allowlist.py#test_the_bare_project_agent_name_is_allowlisted and #test_a_hook_with_only_the_qualified_name_gains_the_bare_one (red before). Dry-run against a copy of a live host hook: both spellings added to arm + message, rationale comment untouched, third run a no-op.
+
+<!-- fr:journal kind=finding scope=debug id=cfc0c820f4a7 created=2026-10-11T23:19:35+00:00 state=fixed -->
+### cfc0c820f4a7 · finding [fixed] · #1087 fixed: preflight names every missing prerequisite with an OS install command
+
+require_prereqs (identical block in scripts/install.sh and scripts/bootstrap.sh, pinned by tests/integration/test_install_prereqs.py#test_the_two_copies_of_the_preflight_are_identical) collects every missing command and prints brew / apt-get / dnf / yum / apk / pacman / zypper install lines, plus uv's own installer. bootstrap now checks rsync too, before cloning. Pinned by TestEveryMissingPrerequisiteIsNamedWithItsInstallCommand (red before). The half-install half of #1087 was already closed by cloud-triage R19 (a Claude-Code home without installed_plugins.json/settings.json exits 1 naming them, tests/integration/test_install_sh.py#TestInstallRefusesWithoutRegistrationFiles); that refusal is kept rather than auto-seeding, as that spec decided.
