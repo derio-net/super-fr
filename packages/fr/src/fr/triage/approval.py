@@ -170,12 +170,12 @@ def _dequeue_unapproved(
     if dry_run:
         say(f"would dequeue PR #{number}: its {APPROVED_FR.name} approval is gone")
         return
-    from fr.gh import GhError
     from fr.ghclient import UnsupportedForgeOperation
+    from fr.hostclient import FORGE_ERRORS
 
     try:
         client.pr_dequeue(repo, number)
-    except (UnsupportedForgeOperation, GhError) as exc:
+    except (UnsupportedForgeOperation, *FORGE_ERRORS) as exc:
         say(f"cannot dequeue PR #{number} though its {APPROVED_FR.name} approval is gone: {exc}")
         return
     writer(
