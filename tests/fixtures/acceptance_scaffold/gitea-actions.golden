@@ -2,8 +2,8 @@ name: acceptance-report
 
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warning annotations; the
-#   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
+#   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - A Markdown summary is written to each Actions run (branch, PR, main) —
 #   Gitea Actions supports GITHUB_STEP_SUMMARY (aliased GITEA_STEP_SUMMARY,
 #   confirmed against Gitea's own Actions-variables docs).

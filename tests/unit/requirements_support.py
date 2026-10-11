@@ -60,7 +60,7 @@ def row(
     *,
     rid: str = "req-r1",
     fragment: str = "R1",
-    status: str = "skipped",
+    status: str = "unwired",
     verify: str | None = None,
 ) -> dict[str, object]:
     out: dict[str, object] = {
@@ -75,7 +75,7 @@ def row(
     return out
 
 
-def seed_requirements(repo: Path, spec_rel: str, *, status: str = "skipped") -> None:
+def seed_requirements(repo: Path, spec_rel: str, *, status: str = "unwired") -> None:
     """Give `spec_rel` a Requirements list and one matrix row (status
     `status`) citing R1 — what phase sizing and the post-merge section read."""
     spec = repo / spec_rel

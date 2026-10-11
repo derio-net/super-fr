@@ -110,11 +110,12 @@ def test_tiles_computed_from_rows(tmp_path: Path) -> None:
     root = make_repo(tmp_path, row())
     html = _render(
         root,
-        row(id="a") + row(id="b") + row(id="c", status="skipped"),
+        row(id="a") + row(id="b") + row(id="c", status="unwired"),
     )
     (tiles_line,) = [ln for ln in html.splitlines() if '<div class="tiles">' in ln]
     values = [chunk.split("</div>")[0] for chunk in tiles_line.split('<div class="v">')[1:]]
-    assert values == ["2", "0", "1", "0", "0"]  # ci, scheduled, skipped, not-impl, failing
+    # ci, scheduled, walked, manual, unwired, walk-owed, not-impl, failing
+    assert values == ["2", "0", "0", "0", "1", "0", "0", "0"]
 
 
 def test_capabilities_first_seen_order(tmp_path: Path) -> None:
@@ -197,7 +198,7 @@ def test_adhoc_report_keeps_row_count_and_tiles(
 ) -> None:
     """The ad-hoc gitignored report.html is where a human reads counts: it
     keeps the `N rows` figure, the tiles and the sharp-line panels (§3.I)."""
-    root = make_repo(tmp_path, row(id="a") + row(id="b", status="skipped"))
+    root = make_repo(tmp_path, row(id="a") + row(id="b", status="unwired"))
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
     res = runner.invoke(app, ["acceptance", "report"])
     assert res.exit_code == 0, res.output
@@ -218,7 +219,7 @@ LINKED_MD = "docs/acceptance/report_linked.md"
 def test_render_markdown_is_github_flavored(tmp_path: Path) -> None:
     from fr.acceptance.report import render_markdown
 
-    root = make_repo(tmp_path, row(id="a") + row(id="b", status="skipped"))
+    root = make_repo(tmp_path, row(id="a") + row(id="b", status="unwired"))
     matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
     md = render_markdown(matrix, _links(root, "github"), stamp="links: github", aggregates=False)
     assert md.startswith("# Acceptance coverage")
@@ -425,7 +426,7 @@ def test_report_github_mode_embeds_ref(tmp_path: Path, monkeypatch: pytest.Monke
 # survives into the committed set cannot hide behind an empty section.
 _EVERY_PANEL = (
     row(id="a")
-    + row(id="s", status="skipped")
+    + row(id="s", status="unwired")
     + row(id="n", status="not-implemented", unit="")
     + row(id="f", status="failing")
 )

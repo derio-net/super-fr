@@ -141,14 +141,15 @@ def _record_file(root: Path, text: str, stem: str) -> Path:
     return path
 
 
-def test_the_record_kind_is_at_version_eight() -> None:
-    assert RECORD_SCHEMA_VERSION == 8
-    assert artifact_kind("record").current_version == 8
+def test_the_record_kind_is_past_version_eight() -> None:
+    # 8 -> 9 (the `skipped` split) is `test_migration_record_status_split`'s.
+    assert RECORD_SCHEMA_VERSION >= 8
+    assert artifact_kind("record").current_version == RECORD_SCHEMA_VERSION
 
 
-def test_the_chain_from_one_reaches_eight_hop_by_hop() -> None:
+def test_the_chain_from_one_passes_eight_hop_by_hop() -> None:
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
-    assert [s.to_version for s in chain] == [2, 3, 4, 5, 6, 7, 8]
+    assert [s.to_version for s in chain][:7] == [2, 3, 4, 5, 6, 7, 8]
 
 
 def test_a_v7_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
@@ -158,7 +159,7 @@ def test_a_v7_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == plain.replace("schema_version: 7", "schema_version: 8")
+    assert path.read_text() == plain.replace("schema_version: 7", f"schema_version: {RECORD_SCHEMA_VERSION}")
 
 
 def test_the_frozen_v7_reader_reads_a_v7_record() -> None:
@@ -206,5 +207,5 @@ def test_a_v7_post_merge_entry_becomes_live(tmp_path: Path) -> None:
 
     assert report.ok, report.failed
     record = load_record(path)
-    assert record.schema_version == 8
+    assert record.schema_version == RECORD_SCHEMA_VERSION
     assert record.acceptance[0].verify == "live"

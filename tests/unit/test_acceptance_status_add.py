@@ -15,7 +15,7 @@ runner = CliRunner()
 
 MIXED = (
     row(id="green", status="ci")
-    + row(id="old-debt", status="skipped")
+    + row(id="old-debt", status="unwired")
     + row(id="new-debt", status="not-implemented", unit="")
 )
 
@@ -33,7 +33,7 @@ def test_status_counts_and_open_rows(tmp_path: Path, monkeypatch: pytest.MonkeyP
     result = _invoke(root, monkeypatch, "status")
     assert result.exit_code == 0
     assert "ci: 1" in result.output
-    assert "skipped: 1" in result.output
+    assert "unwired: 1" in result.output
     out = result.output
     assert out.index("old-debt") < out.index("new-debt")  # matrix order = oldest first
     assert "backfill owed" in out or "n" in out  # notes surface
@@ -50,8 +50,8 @@ def test_open_rows_are_oldest_first_by_origin_date_not_file_position(
     # OLD one in the file. Age comes from the origin spec's date, not the position.
     rows = (
         row(id="new-debt", origin=_dated("2026-09-20"), status="not-implemented")
-        + row(id="old-debt", origin=_dated("2026-07-01"), status="skipped")
-        + row(id="mid-debt", origin=_dated("2026-08-15"), status="skipped")
+        + row(id="old-debt", origin=_dated("2026-07-01"), status="unwired")
+        + row(id="mid-debt", origin=_dated("2026-08-15"), status="unwired")
     )
     result = _invoke(make_repo(tmp_path, rows), monkeypatch, "status")
     assert result.exit_code == 0
@@ -63,9 +63,9 @@ def test_open_rows_of_unknown_age_come_first_in_matrix_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rows = (
-        row(id="dated-debt", origin=_dated("2026-07-01"), status="skipped")
-        + row(id="undated-b", status="skipped")
-        + row(id="undated-a", status="skipped")
+        row(id="dated-debt", origin=_dated("2026-07-01"), status="unwired")
+        + row(id="undated-b", status="unwired")
+        + row(id="undated-a", status="unwired")
     )
     result = _invoke(make_repo(tmp_path, rows), monkeypatch, "status")
     out = result.output
@@ -73,7 +73,7 @@ def test_open_rows_of_unknown_age_come_first_in_matrix_order(
 
 
 def test_status_brief_caps_to_three(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = row(id="green") + "".join(row(id=f"debt-{i}", status="skipped") for i in range(5))
+    rows = row(id="green") + "".join(row(id=f"debt-{i}", status="unwired") for i in range(5))
     root = make_repo(tmp_path, rows)
     result = _invoke(root, monkeypatch, "status", "--brief")
     assert result.exit_code == 0
@@ -98,8 +98,8 @@ def test_summary_is_actions_friendly_markdown(
     result = _invoke(root, monkeypatch, "summary")
     assert result.exit_code == 0
     assert "## Acceptance matrix" in result.output
-    assert "| skipped | 1 |" in result.output
-    assert "<details><summary><code>old-debt</code> [skipped]</summary>" in result.output
+    assert "| unwired | 1 |" in result.output
+    assert "<details><summary><code>old-debt</code> [unwired]</summary>" in result.output
     assert "<!-- fr-acceptance-digest -->" not in result.output
     assert "Full HTML report remains attached" in result.output
 
@@ -312,7 +312,7 @@ def test_digest_table_and_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     result = _invoke(root, monkeypatch, "digest")
     assert result.exit_code == 0
     assert "## Acceptance debt" in result.output
-    assert "| old-debt | skipped |" in result.output
+    assert "| old-debt | unwired |" in result.output
     assert "| new-debt | not-implemented |" in result.output
     assert "green" not in result.output.split("## Acceptance debt")[1]
     assert "<!-- fr-acceptance-digest -->" in result.output
@@ -371,9 +371,9 @@ def test_set_status_preserves_verify(tmp_path: Path, monkeypatch: pytest.MonkeyP
     root = make_repo(tmp_path, row())
     assert _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "live").exit_code == 0
     moved = _invoke(
-        root, monkeypatch, "set-status", "--id", "new-row", "--status", "skipped",
+        root, monkeypatch, "set-status", "--id", "new-row", "--status", "unwired",
         "--notes", "verified live once",
     )  # fmt: skip
     assert moved.exit_code == 0, moved.output
     (r,) = [r for r in load_matrix(root / "docs/acceptance/matrix.yaml").rows if r.id == "new-row"]
-    assert (r.status, r.verify) == ("skipped", "live")
+    assert (r.status, r.verify) == ("unwired", "live")

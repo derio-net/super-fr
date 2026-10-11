@@ -62,7 +62,7 @@ class TestCiNone:
     def test_ci_status_refused_on_set_status_and_add(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        root = make_repo(tmp_path, row(id="target", status="skipped"), ci=True)
+        root = make_repo(tmp_path, row(id="target", status="unwired"), ci=True)
         (root / ".devcontainer").mkdir()
         (root / ".devcontainer" / "fr-profiles.yaml").write_text(
             PROFILES + "schema_version: 2\nci: {type: none}\n"
@@ -222,7 +222,7 @@ class TestMalformedCiDeclarationRefuses:
     def test_set_status_ci_refused_and_matrix_unchanged(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, block: str
     ) -> None:
-        root = make_repo(tmp_path, row(id="target", status="skipped"), ci=True)
+        root = make_repo(tmp_path, row(id="target", status="unwired"), ci=True)
         (root / ".devcontainer").mkdir()
         (root / ".devcontainer" / "fr-profiles.yaml").write_text(
             PROFILES + "schema_version: 2\n" + block

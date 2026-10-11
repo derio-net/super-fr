@@ -61,13 +61,14 @@ def _matrix(root: Path, text: str = _V3) -> Path:
     return path
 
 
-def test_the_matrix_kind_is_at_version_four() -> None:
-    assert artifact_kind("matrix").current_version == 4
+def test_the_matrix_kind_is_past_version_four() -> None:
+    # 4 -> 5 (the `skipped` split) is `test_migration_matrix_status_split`'s.
+    assert artifact_kind("matrix").current_version >= 4
 
 
-def test_the_chain_from_one_reaches_four_hop_by_hop() -> None:
+def test_the_chain_from_one_passes_four_hop_by_hop() -> None:
     chain = MIGRATIONS.chain("matrix", PRE_FRAMEWORK_VERSION)
-    assert [s.to_version for s in chain] == [2, 3, 4]
+    assert [s.to_version for s in chain][:3] == [2, 3, 4]
 
 
 def test_post_merge_becomes_live_and_nothing_else_moves(tmp_path: Path) -> None:
@@ -76,8 +77,10 @@ def test_post_merge_becomes_live_and_nothing_else_moves(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
+    # The chain continues to 5, which moves row b's `skipped` to `unwired`.
     expected = (
-        _V3.replace("schema_version: 3\n", "schema_version: 4\n")
+        _V3.replace("schema_version: 3\n", "schema_version: 5\n")
+        .replace("    status: skipped\n", "    status: unwired\n")
         .replace("    verify: post-merge\n", "    verify: live\n")
         .replace(
             "    verify: 'post-merge'   # a trailing comment\n",
@@ -86,7 +89,7 @@ def test_post_merge_becomes_live_and_nothing_else_moves(tmp_path: Path) -> None:
     )
     assert path.read_text() == expected
     m = load_matrix(path)
-    assert m.schema_version == 4
+    assert m.schema_version == 5
     assert {r.id: r.verify for r in m.rows} == {"a": "live", "b": None, "c": "live"}
 
 
@@ -119,7 +122,9 @@ def test_a_wholly_v4_body_under_a_v3_stamp_lets_the_runner_finish(tmp_path: Path
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == body.replace("schema_version: 3\n", "schema_version: 4\n")
+    assert path.read_text() == body.replace("schema_version: 3\n", "schema_version: 5\n").replace(
+        "status: skipped", "status: unwired"
+    )
 
 
 def test_an_unconvertible_matrix_is_left_byte_identical(tmp_path: Path) -> None:
@@ -154,10 +159,10 @@ def test_a_v1_matrix_with_post_merge_climbs_the_whole_chain(tmp_path: Path) -> N
 
     assert report.ok, report.failed
     m = load_matrix(path)
-    assert m.schema_version == 4
+    assert m.schema_version == 5
     assert m.rows[0].verify == "live"
 
 
 def test_the_live_model_refuses_the_old_spelling() -> None:
     with pytest.raises(AcceptanceError, match="post-merge"):
-        parse_matrix(_V3.replace("schema_version: 3", "schema_version: 4"))
+        parse_matrix(_V3.replace("schema_version: 3", "schema_version: 5").replace("skipped", "unwired"))

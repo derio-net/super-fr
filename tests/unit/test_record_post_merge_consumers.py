@@ -143,7 +143,7 @@ def _set_status(*args: str):
             "--id",
             "target",
             "--status",
-            "skipped",
+            "unwired",
             "--notes",
             "n",
             *args,

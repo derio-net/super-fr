@@ -286,7 +286,7 @@ def _move(row_id: str = "target", **fields: object):
     return StepRecord(
         acceptance=(
             AcceptanceItem.model_validate(
-                {"id": row_id, "status": "skipped", "notes": "why", **fields}
+                {"id": row_id, "status": "unwired", "notes": "why", **fields}
             ),
         )
     )
@@ -458,7 +458,7 @@ def test_a_drop_on_a_row_the_record_names_twice_is_refused(tmp_path: Path) -> No
 
     root = _matrix_repo(tmp_path)
     sha, files = head(root), snapshot(root)
-    item = AcceptanceItem.model_validate({"id": "target", "status": "skipped", "notes": "why"})
+    item = AcceptanceItem.model_validate({"id": "target", "status": "unwired", "notes": "why"})
     target = RecordTarget(
         message="m", acceptance_drops={"target": {"unit": ("own:tests/test_b.py",)}}
     )

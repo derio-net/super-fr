@@ -52,7 +52,7 @@ def test_init_scaffolds_all_artifacts(tmp_path: Path, monkeypatch: pytest.Monkey
 
     rule = (root / ".claude" / "rules" / "acceptance-matrix.md").read_text()
     assert "SAME PR" in rule
-    assert "not-implemented" in rule and "skipped" in rule  # the status ladder
+    assert "not-implemented" in rule and "unwired" in rule  # the status ladder
 
     # The committed SET (report_local.html + report_linked.html +
     # report_linked.md) is generated; ad-hoc report.html is gitignored.
@@ -293,7 +293,7 @@ def test_backfill_protocol(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert "uncited.md" in out
     assert "2026-01-01-toy" in out
     assert "one row per business acceptance" in out
-    assert "choose skipped" in out  # honesty calibration
+    assert "choose unwired" in out  # honesty calibration
     assert "fr acceptance check" in out
     assert "tests/" in out  # test-tree hint
 

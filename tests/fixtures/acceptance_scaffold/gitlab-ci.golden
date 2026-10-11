@@ -1,7 +1,7 @@
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this pipeline (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warnings; the backfill
-#   rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as
+#   warnings; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - The built report is kept as a pipeline artifact.
 # - The weekly (scheduled) run upserts one "Acceptance debt" issue.
 # - No step-summary equivalent — GitLab CI has none (see module comment).

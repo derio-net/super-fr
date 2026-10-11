@@ -78,7 +78,7 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
    # manual phases require --note describing what was done
    fr plan edit <plan-dir> --complete-phase N --note "<runbook ref>"
    ```
-   A phase carrying `acceptance: [row-ids]` — flip those matrix rows now (`not-implemented` → `skipped`/`ci`), citing the test refs; the CLI warns on unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows (`fr acceptance add`) — defended at PR time, never silent scope drift.
+   A phase carrying `acceptance: [row-ids]` — flip those matrix rows now (`not-implemented` → `unwired`/`walk-owed`/`ci`), citing the test refs; the CLI warns on unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows (`fr acceptance add`) — defended at PR time, never silent scope drift.
 
 6. **Open the PR** via `superpowers:finishing-a-development-branch`, with the
    `fr pickup` title and the body shape above. **Caveat — under fr-goal LOCAL
