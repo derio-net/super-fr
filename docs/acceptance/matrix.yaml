@@ -439,9 +439,16 @@ rows:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_commands.py
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): live-verified
-      pre- and post-merge 2026-07-08 (install.sh delivered all commands); install.sh
-      wiring guarded in CI.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      pre- and post-merge 2026-07-08; install.sh wiring guarded in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-08T00:00:00Z'
+      evidence: 'Test Plan step 3 post-merge walk: full scripts/install.sh from a fresh
+        clone of merged main delivered all commands'
   - id: cncd-runner-ingest-dispatch
     capability: CNCD runner
     acceptance: An operator can dispatch an eligible tracked plan phase to cncd via
