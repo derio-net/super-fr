@@ -352,16 +352,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_skills_sync.py
-    status: unwired
-    notes: >-
-      Unit test guards mirror drift (CI). Test Plan step 1 walked post-merge
-      (2026-07-09, fresh isolation devcontainer on merged main, no prior
-      install step): `opencode debug skill` in the checkout discovered all
-      9 `fr-*` skills, each resolving to
-      `.opencode/skills/<name>/SKILL.md` in the worktree — confirms the
-      "clone and use, no install" claim. Not automated in CI (requires a
-      live `opencode` binary) — backfill to `ci` owed if that becomes
-      scriptable.
+    status: walked
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): Test
+      Plan step 1 walked live post-merge 2026-07-09 (opencode debug skill discovered
+      all fr-* skills from the checkout); mirror drift guarded in CI.'
   - id: opencode-skills-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get super-fr's skills available
