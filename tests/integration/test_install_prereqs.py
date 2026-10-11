@@ -84,3 +84,15 @@ class TestEveryMissingPrerequisiteIsNamedWithItsInstallCommand:
         assert result.returncode != 0
         assert "'uv'" in result.stderr
         assert "astral.sh/uv/install.sh" in result.stderr, result.stderr
+
+
+def _prereq_block(script: Path) -> str:
+    text = script.read_text()
+    start = text.index("# >>> prereq preflight")
+    return text[start : text.index("# <<< prereq preflight", start)]
+
+
+def test_the_two_copies_of_the_preflight_are_identical() -> None:
+    """bootstrap.sh runs from `curl | bash` before the clone exists, so it
+    cannot source install.sh's copy; the two are kept byte-identical instead."""
+    assert _prereq_block(INSTALL_SH) == _prereq_block(BOOTSTRAP_SH)
