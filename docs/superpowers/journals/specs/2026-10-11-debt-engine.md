@@ -446,3 +446,8 @@ Fixed in the spec: §B Rollout: the claim removed; per-consumer migrate + --refr
 ### sr1-outcome-decision-kind-resolved · finding [fixed] · resolves sr1-outcome-decision-kind: Recording ran/n-a Test Plan outcomes as `decision` entries mixes them with the operator's brainstorm decisions
 
 Fixed in the spec: R18 + §E: ran and n/a are `discovery` entries.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-11-debt-engine-p2 created=2026-10-11T17:39:30+00:00 -->
+### phase-split-2026-10-11-debt-engine-p2 · decision · ask: the fr debt engine and read-only report (R1–R4, R25)
+
+Its own ask: the report every surface renders.
