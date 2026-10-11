@@ -76,7 +76,7 @@ tasks:
       RED: in tests/unit/test_fr_herdr_runner.py extend the list_sessions expectations (the exact-equality test
       near the AdoptTarget assertions) with cwd (from foreground_cwd, else cwd), session (agent_session.value),
       harness (agent mapped claude|opencode|hermes, else None); add a case where the tab holds no single agent and
-      all three are None, and an `opencode` agent mapping to "opencode". Use the existing herdr agent-list fixture
+      all three are None, and an `opencode` agent mapping to "opencode". Base the cases on the existing fixture
       (tests/fixtures/herdr/agent-list.json); extend it only with fields herdr really prints (copy shapes from
       tests/scenarios/fixtures/herdr-restart/agent-list.json, never invent). Confirm red.
   - id: P1.T4.S2

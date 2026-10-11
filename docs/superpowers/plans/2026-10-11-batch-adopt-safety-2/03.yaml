@@ -8,7 +8,6 @@ phase:
   tracking_issue: null
   acceptance:
   - triage-adopt-list-columns
-  - triage-adopt-live-sweep
   tier: standard
   files:
   - packages/fr/src/fr/triage/batch.py
