@@ -21,6 +21,9 @@ spec=docs/superpowers/specs/2026-10-11-widget-design.md
 key='spec:2026-10-11-widget#step2'
 
 git init -q -b main . || fail "git init"
+# The harness already `git init`ed this fixture with the host's default branch,
+# and a re-init ignores -b: point HEAD at main explicitly (CI defaults to master).
+git symbolic-ref HEAD refs/heads/main || fail "HEAD to main"
 git init -q --bare -b main "$world/origin.git" || fail "bare origin"
 git remote add origin "$world/origin.git"
 mkdir -p docs/acceptance "docs/superpowers/plans/$plan" docs/superpowers/specs
