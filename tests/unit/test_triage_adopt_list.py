@@ -45,6 +45,14 @@ def test_an_owner_name_ref_never_also_yields_a_bare_ref() -> None:
     assert parse_refs("acme/widgets#314") == [LabelRef("acme", "widgets", 314)]
 
 
+def test_parse_refs_reads_a_hyphen_prefixed_number_as_bare() -> None:
+    """Review p3-r1: `feat-#12` is a bare `#12` after a hyphen, never a repo `feat-`."""
+    assert parse_refs("fix feat-#12 and a/b#3") == [
+        LabelRef(None, None, 12),
+        LabelRef("a", "b", 3),
+    ]
+
+
 def test_parse_refs_finds_nothing_in_a_plain_label() -> None:
     assert parse_refs("fr-goal finish") == []
 

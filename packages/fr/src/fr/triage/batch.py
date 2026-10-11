@@ -133,8 +133,12 @@ def label_refs(label: str) -> list[str]:
     return [f"{m[1]}#{m[2]}" for m in _LABEL_REF.finditer(label)]
 
 
+_REF_NAME = r"[A-Za-z0-9](?:[\w.-]*\w)?"
+# A named ref starts clear of a word, path or hyphen; its name ends in a word
+# character, so `feat-#12` is a bare `#12` after a hyphen, never a repo `feat-`
+# (review p3-r1). A bare ref only needs no word, `.` or `/` right before its `#`.
 _ANY_REF = re.compile(
-    r"(?<![\w./-])(?:(?P<a>[A-Za-z0-9][\w.-]*)(?:/(?P<b>[A-Za-z0-9][\w.-]*))?)?#(?P<n>\d+)\b"
+    rf"(?:(?<![\w./-])(?P<a>{_REF_NAME})(?:/(?P<b>{_REF_NAME}))?|(?<![\w./]))#(?P<n>\d+)\b"
 )
 
 
