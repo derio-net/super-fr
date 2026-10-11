@@ -8288,9 +8288,22 @@ rows:
       approved-fr label.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; the phase that builds it writes the file.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_green_unlabelled_batch_pr_asks_for_the_label_draft_or_not
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_voided_approval_asks_for_a_re_label
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_the_kanban_card_of_an_unapproved_green_member_awaits_approval
+      - super-fr:tests/unit/test_tripwire_approval_label_prose.py#test_no_shipped_skill_agent_or_rule_asks_for_the_label
+      - super-fr:tests/unit/test_tripwire_approval_label_prose.py#test_every_brief_renderer_carries_the_line
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_label_gate
+    status: ci
+    notes: 'phase 1: Needs you shows approve-pr (label it / re-label after a void) for
+      a green batch PR, draft or not, in place of ready-pr; the kanban shows awaiting
+      approval; every brief carries NO_APPROVAL_LINE, and the prose tripwire fails a
+      shipped skill, agent, rule or mirror asking anyone but the operator to add the
+      label. The red hand-back brief joins in its phase. Scenario: the label-gate scenario
+      renders both asks.'
     verify: candidate
     scenario: tests/scenarios/merge-train-label-gate.sh
   - id: ci-merge-group-trigger
