@@ -677,10 +677,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_journal_cmd.py
-    status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
-      completeness bar was met live in the feature''s own run (a fresh subagent implemented
-      from journal+spec+phase); render/check unit-pinned.'
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the completeness bar was met
+      live in the feature''s own run, but name no dated evidence to record as a walk;
+      render/check unit-pinned. Re-walk and record it with set-status --walk.'
   - id: fr-goal-phase-tiering
     capability: fr-goal subagent execution
     acceptance: fr-plan annotates each phase with a tier; the orchestrator dispatches
