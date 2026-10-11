@@ -33,7 +33,15 @@ from typing import Any
 from fr import _hosts
 from fr import gh as _gh
 from fr.gh import GhError
-from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, HostRefusedError, run_cli
+from fr.ghclient import (
+    MERGE_METHODS,
+    BaseRules,
+    CommandRunner,
+    HostRefusedError,
+    QueueState,
+    UnsupportedForgeOperation,
+    run_cli,
+)
 from fr.labels import LabelDef
 
 GhRun = Callable[[list[str]], str]
@@ -1099,6 +1107,17 @@ class RealGhRestClient:
             method="PUT",
             fields={"merge_method": method, "sha": head_sha},
         )
+
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        """REST has no route to enqueue (it needs GraphQL's enqueuePullRequest): raises."""
+        raise UnsupportedForgeOperation(
+            "pr_enqueue", "github-rest", tracked_by="merge-train-safety R13"
+        )
+
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        """`pulls/{n}.auto_merge`; queue membership is not in REST: `in_queue` None."""
+        pull = self._api(f"repos/{repo}/pulls/{number}") or {}
+        return QueueState(in_queue=None, auto_merge=bool(pull.get("auto_merge")))
 
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
         made = self.create_pr(repo, head=head, base=base, title=title, body=body, draft=False)

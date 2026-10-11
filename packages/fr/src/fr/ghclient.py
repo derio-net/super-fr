@@ -31,6 +31,16 @@ class BaseRules:
     strict_checks: bool = False
 
 
+@dataclass(frozen=True)
+class QueueState:
+    """Where a PR stands with the base's merge queue (merge-train-safety §D, R13):
+    *in_queue* None when the backend cannot say (REST), *auto_merge* whether auto-merge
+    is set (from enqueue until GitHub merges the PR or clears it on ejection)."""
+
+    in_queue: bool | None = None
+    auto_merge: bool = False
+
+
 class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec (§3.J) fixes
     """A `GhClient` method this backend declares it does not implement.
 
@@ -292,6 +302,15 @@ class GhClient(Protocol):
         with the forge's own message."""
         ...
 
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        """Put the PR into the base's merge queue (auto-merge) only if its head is still
+        *head_sha* (merge-train-safety §D, R13). A backend that cannot raises."""
+        ...
+
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        """The PR's `QueueState` (§D): `in_queue` None where the backend cannot say."""
+        ...
+
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
         """Open a ready (never draft) PR from *head* into *base*; its number. The
         driver's per-wave state export (pages-goal R13). A refusal raises with the
@@ -446,6 +465,12 @@ class UnsupportedBatchOps:
 
     def required_check_names(self, repo: str, base: str) -> list[str]:
         raise self._unsupported("required_check_names")
+
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        raise self._unsupported("pr_enqueue")
+
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        return QueueState(None, False)  # no queue concept: not an error (§D)
 
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         return BaseRules()  # a forge without the concepts has neither: not an error (R12)

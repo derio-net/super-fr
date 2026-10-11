@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from fr import gh as _gh
-from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, run_cli
+from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, QueueState, run_cli
 from fr.labels import LabelDef
 
 # Re-exported for `fr.triage.collect`, which reads the forge only through the
@@ -481,6 +481,36 @@ class RealGhClient:
                 "--match-head-commit",
                 head_sha,
             ]
+        )
+
+    @_hosted
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        if method not in MERGE_METHODS:
+            raise ValueError(f"merge method must be one of {sorted(MERGE_METHODS)}, got {method!r}")
+        # `--auto` on a queue-protected base enqueues; never `--admin`.
+        _gh._run_gh(
+            ["pr", "merge", str(number), "--repo", repo, "--auto",
+             "--match-head-commit", head_sha, f"--{method}"]
+        )  # fmt: skip
+
+    @_hosted
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        """`gh pr view --json` exposes neither field, so GraphQL (§D)."""
+        owner, _, name = repo.partition("/")
+        query = (
+            "query($owner: String!, $name: String!, $number: Int!) {"
+            " repository(owner: $owner, name: $name) {"
+            " pullRequest(number: $number) { isInMergeQueue autoMergeRequest { enabledAt } } } }"
+        )
+        out = _gh._run_gh(
+            ["api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}",
+             "-F", f"name={name}", "-F", f"number={number}"]
+        )  # fmt: skip
+        pr = (
+            ((json.loads(out).get("data") or {}).get("repository") or {}).get("pullRequest")
+        ) or {}
+        return QueueState(
+            in_queue=bool(pr.get("isInMergeQueue")), auto_merge=bool(pr.get("autoMergeRequest"))
         )
 
     @_hosted
