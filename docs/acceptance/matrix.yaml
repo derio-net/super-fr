@@ -7600,6 +7600,25 @@ rows:
       same day #1031''s session was working when its conflict arrived; the driver waited
       (''nothing sent, retried next pass'') rather than interrupt it.'
     verify: live
+  - id: triage-debt-panel
+    capability: triage
+    acceptance: Triage keeps debt digests and fr:owed issues out of ranking in their
+      own sets, and the board shows a per-repo Debt panel with figures and a trend.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R14
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R15
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+    visual:
+      states:
+      - panel-with-figures
+      - trend-vs-previous
+      - repo-without-report
+      - legacy-digest-without-figures
+      interactions:
+      - expand-repo-section
   - id: triage-claims-identity
     capability: triage-claims
     acceptance: Each triage scope on a host has a stable scope id that carries no hostname,
@@ -8032,6 +8051,29 @@ rows:
     status: ci
     notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
       is still owed'
+  - id: closeout-step-outcomes
+    capability: closeout
+    acceptance: Every Test Plan step gets an explicit ran / owed / n/a outcome, and
+      `fr archive --branch` holds a close-out with a step missing one (a skipped step
+      is never silently dropped).
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R18
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R19
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: owed-durable-at-archive
+    capability: closeout
+    acceptance: Every owed step and every unticked manual phase at archive leaves an
+      `owed` journal entry plus one fr:owed issue, idempotently, whatever --issues says.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R20
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R21
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R22
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: herdr-opencode-launch
     capability: herdr OpenCode batch lifecycle
     acceptance: OpenCode batches launch autonomously with the selected model from the
@@ -8178,3 +8220,72 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: debt-report
+    capability: debt
+    acceptance: '`fr debt` reports acceptance by status, the three plan categories (archivable,
+      stale, manual-open) and owed actions, as text and JSON, read-only.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R25
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: debt-weekly-issue-rename
+    capability: debt
+    acceptance: 'The weekly job keeps one `<repo>: Technical debt` issue, renaming a
+      legacy Acceptance debt issue in place, never duplicating, closing at zero debt.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: debt-archive-pr-weekly
+    capability: debt
+    acceptance: The weekly job opens or refreshes one draft archive PR for plans merged
+      complete and unarchived beyond the stale threshold, never ready, never merged.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: debt-owed-discharge
+    capability: debt
+    acceptance: '`fr debt` lists owed actions from owed/awaiting-live issues, held manual
+      phases, walk-owed rows and unresolved owed entries (archived included), and resolving
+      an owed entry with evidence removes it and closes its issue.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R23
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R24
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: matrix-status-split
+    capability: acceptance
+    acceptance: '`skipped` is replaced by unwired / walk-owed / walked / manual; the
+      matrix migration moves every existing skipped row into exactly one new status
+      and every surface uses the new names.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: debt-ci-scaffold-refresh
+    capability: acceptance
+    acceptance: The CI scaffolds on all three forges call `fr debt`, and `fr acceptance
+      init --refresh-ci` updates an fr-scaffolded workflow while refusing a foreign
+      file.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''

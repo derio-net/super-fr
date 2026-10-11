@@ -3,11 +3,14 @@ run: 2026-10-11-feat-batch-debt-engine
 workflow: fr-goal@1
 branch: feat/batch-debt-engine
 started: '2026-10-11T16:29:42+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-11T16:30:05+00:00'
+    state: done
+    at: '2026-10-11T17:23:44+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-11-debt-engine-design.md
   spec-review:
     state: pending
   plan:
