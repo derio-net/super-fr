@@ -103,10 +103,10 @@ rows:
       - super-fr:tests/unit/test_hooks_acceptance_nag.py
       - super-fr:tests/unit/test_plan_acceptance_links.py
       - super-fr:tests/unit/test_acceptance_init.py
-    status: unwired
-    notes: Hook, digest formatter, and branch/PR/main Actions summary scaffold are
-      ci-pinned; live weekly upsert/close remains unverified until the first scheduled
-      run.
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): hook,
+      digest formatter and Actions summary scaffold are ci-pinned; the live weekly upsert/close
+      is owed until the first scheduled run is observed.'
   - id: isolation-suite-lifecycle
     capability: Isolation
     acceptance: 'Operator can init a devcontainer profile and run isolated work: up
