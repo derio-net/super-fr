@@ -451,3 +451,8 @@ Fixed in the spec: R18 + §E: ran and n/a are `discovery` entries.
 ### phase-split-2026-10-11-debt-engine-p2 · decision · ask: the fr debt engine and read-only report (R1–R4, R25)
 
 Its own ask: the report every surface renders.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-11-debt-engine-p3 created=2026-10-11T17:39:47+00:00 -->
+### phase-split-2026-10-11-debt-engine-p3 · decision · ask: owed actions — closeout outcomes, archive hold, owed kind (R16–R24)
+
+Its own ask: D.1/D.2 of #1121.
