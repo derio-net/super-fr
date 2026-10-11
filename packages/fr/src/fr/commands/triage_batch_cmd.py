@@ -216,7 +216,7 @@ from fr.triage.model import (
     load_scope_facts,
 )
 from fr.triage.operation_lock import replacement_scope_lock
-from fr.triage.privacy import guard_write
+from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -2299,7 +2299,8 @@ class RunnerDispatchError(Exception):
 
 class ForgeReadError(Exception):
     """A read a drive pass depends on failed or timed out (gh#910): the forge's, the
-    clone's fetch, or `.fr/triage.yaml` on the default branch (gh#921, gh#998). Loop
+    clone's fetch, `.fr/triage.yaml` on the default branch (gh#921, gh#998), or the state
+    repo's visibility, which the lease and the pass's save read (gh#1134). Loop
     mode skips the rest of the pass and reads again after `--interval`; `--once` and
     plan mode exit with *code*, as before."""
 
@@ -2691,6 +2692,8 @@ class _Driver:
                 generation=terms.generation,
                 push=lambda: push_now(scope, target),
             )
+        except VisibilityUnreadable as exc:  # a looping drive skips the pass (gh#1134)
+            raise ForgeReadError(str(exc), code=2) from exc
         except TriageError as exc:
             _fail(str(exc))
         self.leased = True
@@ -2703,6 +2706,8 @@ class _Driver:
         try:
             mark_pass(self.target, _now())
             push_now(self.scope, self.target)
+        except VisibilityUnreadable as exc:  # the next pass pushes what this one left
+            raise ForgeReadError(str(exc), code=2) from exc
         except TriageError as exc:
             _fail(str(exc))
 
@@ -4586,6 +4591,8 @@ def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
                     f"retrying every {interval}s",
                     soft_wrap=True,
                 )
+            if driver.restart_to is not None:  # a skipped save_pass follows a pass whose
+                return driver.restart_to  # post_merge installed a newer fr (gh#998)
             _sleep(interval)
             continue
         driver.read_failures.clear()
